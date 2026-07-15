@@ -587,6 +587,11 @@ consumes what the prior wrote (metrics → 0/1 flags → warn/raise):
   save as `f"{obs_id}_L{N}_{plotname}_{chip}_zoomable.png"` with `plt.close(fig)` after
   each. Unimplemented plots are stubbed with a docstring citing the v2.12 source and
   `raise NotImplementedError(...)`.
+- **Quicklook `run()` contract** (shared by every `PlotL{N}.run`): when `output_dir` is set,
+  each figure is saved there and closed to free memory; when `output_dir` is `None`, the
+  figures are returned **open** so a caller (e.g. an interactive notebook) can render them.
+  State this once here -- a per-level `run()` docstring should reference the contract, not
+  restate it.
 
 ---
 
@@ -833,14 +838,14 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
 
 ## 13. Docstrings & comments
 
-- **NumPy/numpydoc is the docstring standard.** Opening `"""` on its own line, summary
-  on the next line, `Parameters`/`Returns`/`Raises`/`Notes` sections with the
-  `name : type` form. Wrap referenced identifiers in backticks. The codebase is uniformly
-  numpydoc — no Google `Args:` style remains.
+- **NumPy/numpydoc is the docstring standard.** The summary **begins on the same line as
+  the opening `"""`** (never on its own line); the `Parameters`/`Returns`/`Raises`/`Notes`
+  sections follow after a blank line, in the `name : type` form. A short docstring is a
+  single line, `"""Summary."""`. The codebase is uniformly numpydoc — no Google `Args:`
+  style remains.
   ```python
   def compute_doppler_factor(v):
-      """
-      Relativistic Doppler factor f = lambda_obs / lambda_rest …
+      """Relativistic Doppler factor ``f = lambda_obs / lambda_rest`` …
 
       Parameters
       ----------
@@ -853,17 +858,23 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
           Dimensionless Doppler factor.
       """
   ```
+- **Wrap code identifiers in double backticks** (``` ``set_keyword`` ```, ``` ``obs_id`` ```):
+  in RST/Sphinx double backticks render as inline-code literals, whereas single backticks are
+  the default interpreted-text role and render as *italic*, not code.
 - **Module docstrings on every module.** One-liner for thin files
   (`"""KPF <Stage> module."""`); a rich multi-paragraph block for science modules,
   listing output HDUs with shapes/units and ending with a `Notes` section citing papers
-  (`Author (Year) — reason`). No author tags, dates, or `__author__`.
+  (`Author (Year) -- reason`). No author tags, dates, or `__author__`.
 - **Class docstrings document the `__init__` args at the class level** (in a `Parameters`
   section) — *not* on `__init__` itself. The `Attributes` section is **not** used; instead
   document instance attributes with the trailing `# populated by …` comment on the
   assignment in `__init__` (see §4).
 - **Document public methods and most private helpers.** Trivial math primitives may skip
   docstrings; short helpers may use a one-line summary, but anything with more than one
-  non-obvious argument should get full `Parameters`/`Returns` sections.
+  non-obvious argument should get full `Parameters`/`Returns` sections. On public methods,
+  document `Returns` as a section (not woven into the summary prose), and give **every
+  exception a caller can trigger** its own `Raises` entry -- do not omit one, understate its
+  cause, or bury it in `Notes`.
 - **`Examples` sections are not used.** Worked examples, where helpful, go in the prose of
   the summary (and double as test oracles for pure utils).
 - **Types are documented in the docstring, not the signature** (see §5). Array
@@ -877,6 +888,25 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
   docstrings/comments — not encoded in variable names (except unit-suffixed names like
   `..._KMS`). State the **air/vacuum convention** wherever wavelengths appear;
   use astropy `Quantity` for in-code units.
+- **Use ASCII `--`, not the em-dash `—`, inside docstrings and inline comments** (the Python
+  source is kept ASCII-only; `--` renders as an en-dash in Sphinx). This Markdown guide may
+  use `—` freely -- the rule is about `.py` docstrings/comments.
+- **State shared docstring content once, the same way everywhere.** A few descriptions recur
+  across many methods; use the canonical wording rather than re-deriving it per site:
+  - `chip : str` -- CCD identifier, e.g. `'GREEN'` or `'RED'`; `fiber : str` -- fiber
+    identifier, e.g. `'SCI1'`/…/`'CAL'`/`'SKY'`.
+  - **Calibration-source override forms** (`perform`/`make_master_*` args such as `bias`,
+    `master_wls`): `True` → resolve the path from the header; a `str` → load that path; a
+    `KPFMasterL{N}` → use in-memory. Define the meaning once (`ImageProcessing.perform`) and
+    reference it ("same forms as ``ImageProcessing.perform``") instead of re-enumerating.
+  - **Gaussian `optimize_lsq` parameters** are `theta = [b, a, mu, sigma]` (baseline,
+    amplitude, center, positive width).
+  - **Materializing memmapped FITS HDUs**: copy with `np.array(hdu.data)` (not `np.asarray`)
+    before the source file closes, so the array does not alias a freed memmap. Comment the
+    reason **once** at a canonical site; other sites just follow the idiom.
+  - **`to_fits` single-filepath shim**: KPF keeps one positional filepath; rvdata `>=0.4.0`
+    renamed the parameter to `out_filename`, so the KPF override forwards it. Explain once,
+    not per level.
 - **`TODO` is the only task marker** (`# TODO: <imperative or open question>`); no
   `FIXME`/`XXX`/`HACK`/`NOTE:`. No issue/ticket linkage is the current norm.
 - **Provenance**: legacy v2.12 compatibility choices are generally **not** annotated in

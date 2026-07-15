@@ -16,7 +16,7 @@ class QC:
         Finished data product whose QUALITY_CONTROL header receives the 0/1 flags.
     """
 
-    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
+    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
 
     def __init__(self, kpf_obj):
         self.kpf_obj = kpf_obj
@@ -43,14 +43,14 @@ class QC:
                 raise RuntimeError(f"QC check {name!r} raised: {e}") from e
 
             kw = fn._qc_key
-            # The comment is the registry Description (the single source) — the same
-            # string set_keyword writes as the FITS comment; mirror it into results.
+            # Mirror the registry Description into results (the FITS comment
+            # source; see ``_tag`` and style guide §9).
             comment = self.kpf_obj.keyword_registry.routing.get(kw, (None, ""))[1]
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
 
         # ISGOOD is the running aggregate: AND over every QC flag now on
-        # QUALITY_CONTROL — the flags this level just wrote PLUS those propagated
+        # QUALITY_CONTROL -- the flags this level just wrote PLUS those propagated
         # from lower levels (QUALITY_CONTROL accumulates L0->L1->L2->L4). Reading
         # the accumulated header makes it level-agnostic; exclude ISGOOD itself.
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
@@ -63,11 +63,11 @@ class QC:
     def _required_primary_keywords(self):
         """Registry EPRV ``Required`` PRIMARY keywords at or below this level.
 
-        The level cap *is* the level (the EPRV L2 PRIMARY set is tagged Level 1),
-        so no L1->L2 adjustment is needed. Read off the model's registry singleton
-        so qc_flags imports nothing from data_models. L0 (and an untagged
-        ``LEVEL`` None) yields the empty set -- raw WMKO L0 PRIMARY is not
-        registry-governed.
+        The level cap is the level's own number, so this runs unchanged for L1,
+        L2, and L4 -- each returns the required PRIMARY keywords tagged at or
+        below its own level. Read off the model's registry singleton so qc_flags
+        imports nothing from data_models. L0 (and an untagged ``LEVEL`` None)
+        yields the empty set -- raw WMKO L0 PRIMARY is not registry-governed.
         """
         level = str(self.LEVEL or "")
         if not (level[:1].upper() == "L" and level[1:].isdigit()):
@@ -77,9 +77,9 @@ class QC:
         return {k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap}
 
     def _iter_checks(self):
-        """Yield ``(name, bound_method)`` for each ``_qc_key``-tagged check.
+        """Yield each ``(name, method)`` tagged ``_qc_key``.
 
-        Walks ``__dict__`` across the MRO so check ordering is stable.
+        MRO-walk discovery; the mechanism is documented in style guide §9.
         """
         seen = set()
         for cls in type(self).__mro__:

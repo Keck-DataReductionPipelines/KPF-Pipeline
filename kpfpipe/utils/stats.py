@@ -18,13 +18,13 @@ def strictly_increasing(x):
 
 
 def _gaussian_dist(theta, x):
-    """Gaussian model at `x` for theta = [b, a, mu, sigma]."""
+    """Gaussian model at ``x`` for theta = [b, a, mu, sigma]."""
     b, a, mu, sigma = theta
     return b + a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
 def _gaussian_jac(theta, x):
-    """Analytic Jacobian of `_gaussian_dist` w.r.t. theta; shape (x.size, 4)."""
+    """Analytic Jacobian of ``_gaussian_dist`` w.r.t. theta; shape (x.size, 4)."""
     b, a, mu, sigma = theta
     dx = x - mu
     exp_term = np.exp(-(dx**2) / (2 * sigma**2))
@@ -80,8 +80,8 @@ def optimize_lsq(x, y, linemodel):
     """Fit a 1D line model to (x, y) by non-linear least squares.
 
     Looks up the model function, analytic Jacobian, and initial-guess
-    generator registered under `linemodel`, then fits via MINPACK's lmder
-    (`scipy.optimize.leastsq`, not `least_squares` -- see the implementation
+    generator registered under ``linemodel``, then fits via MINPACK's lmder
+    (``scipy.optimize.leastsq``, not ``least_squares`` -- see the implementation
     note below), and maps the solution back with the model's untransform.
 
     Parameters
@@ -89,7 +89,7 @@ def optimize_lsq(x, y, linemodel):
     x : ndarray
         1D independent variable (e.g. velocity or pixel grid).
     y : ndarray
-        1D dependent variable to fit, same shape as `x`.
+        1D dependent variable to fit, same shape as ``x``.
     linemodel : str
         Registered line-profile name. Currently only 'gaussian' is supported;
         an unknown name raises.
@@ -105,7 +105,7 @@ def optimize_lsq(x, y, linemodel):
     Raises
     ------
     ValueError
-        If `linemodel` is not a registered line-profile name.
+        If ``linemodel`` is not a registered line-profile name.
     """
     try:
         func, jac, theta0_generator, untransform = _FUNCTIONS[linemodel]
@@ -120,12 +120,12 @@ def optimize_lsq(x, y, linemodel):
 
     theta0 = theta0_generator(x, y)
 
-    # Call MINPACK's lmder directly via `leastsq` instead of `least_squares`.
-    # Both bottom out in the same Fortran routine, but for `method="lm"` with no
-    # bounds the `least_squares` wrapper adds per-call overhead (input checks, an
+    # Call MINPACK's lmder directly via ``leastsq`` instead of ``least_squares``.
+    # Both bottom out in the same Fortran routine, but for ``method="lm"`` with no
+    # bounds the ``least_squares`` wrapper adds per-call overhead (input checks, an
     # extra residual evaluation, building OptimizeResult) that dominates for the
-    # many tiny line fits here. The tolerances and `maxfev` below are exactly what
-    # `least_squares` forwards to lmder, so the fit is bit-for-bit identical.
+    # many tiny line fits here. The tolerances and ``maxfev`` below are exactly what
+    # ``least_squares`` forwards to lmder, so the fit is bit-for-bit identical.
     sol, _cov, info, _msg, _ier = leastsq(
         residual,
         theta0,
@@ -173,15 +173,15 @@ def _smooth_filter(x, size=None, *, axes=None):
 def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
     """Flag elements of ``x`` more than ``sigma`` robust deviations from their peers.
 
-    `axis` selects the axis along which each element is compared to its peers:
+    ``axis`` selects the axis along which each element is compared to its peers:
 
-    - ``method="median"`` computes the median and MAD *reducing over* `axis`,
+    - ``method="median"`` computes the median and MAD *reducing over* ``axis``,
       so each element is judged against the others sharing its remaining
       indices (e.g. ``axis=0`` on a (frame, row, col) cube flags, per pixel,
       the frames that deviate across the stack).
-    - ``method="trend"`` smooths `x` *along* `axis` (see `_smooth_filter`) and
+    - ``method="trend"`` smooths ``x`` *along* ``axis`` (see ``_smooth_filter``) and
       judges each element against that local trend, so it tolerates structure
-      that varies smoothly along `axis` (e.g. illumination along dispersion).
+      that varies smoothly along ``axis`` (e.g. illumination along dispersion).
 
     ``axis=None`` compares every element to a single global statistic.
     """
@@ -217,7 +217,7 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
         2D image; bad pixels are filled, good pixels pass through unchanged.
         Not modified in place (a copy is returned).
     mask : ndarray
-        Good-pixel mask broadcastable to `data`, truthy where a pixel is good.
+        Good-pixel mask broadcastable to ``data``, truthy where a pixel is good.
         Its logical complement marks the pixels to interpolate.
     method : {'local', 'global'}, default 'local'
         - ``'local'``: fill each bad pixel from a 3x3 weighted mean of its good
@@ -235,12 +235,12 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
     Returns
     -------
     ndarray
-        Copy of `data` with bad pixels interpolated.
+        Copy of ``data`` with bad pixels interpolated.
 
     Raises
     ------
     ValueError
-        If `method` is not 'local' or 'global'.
+        If ``method`` is not 'local' or 'global'.
     """
 
     good = mask.astype(bool)
@@ -249,7 +249,7 @@ def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
     data_interp = data.copy()
 
     # The local convolution-based method assumes isolated bad pixels. Cast the
-    # kernel and weight mask to the input dtype so `scipy.convolve` does not
+    # kernel and weight mask to the input dtype so ``scipy.convolve`` does not
     # promote float32 image data to float64 in its intermediates.
     if method == "local":
         kernel = np.array([[1, 2, 1], [2, 0, 2], [1, 2, 1]], dtype=data.dtype) / 12.0

@@ -3,7 +3,7 @@ KPF Level 4 (RVs and CCFs) data model.
 
 Radial velocities and cross-correlation functions. Extends the EPRV RV4
 model with KPF-friendly extension aliases for the CCF and RV data, following
-the same pattern as KPF2 — data can be accessed by either EPRV name
+the same pattern as KPF2 -- data can be accessed by either EPRV name
 (``CCF3``, ``RV3``) or KPF name (``SCI2_CCF``, ``SCI2_RV``), with per-chip
 views for the CCF cubes (``GREEN_SCI2_CCF``, ``RED_SCI2_CCF``).
 """
@@ -50,7 +50,7 @@ _ALIASES = pd.read_csv(_config_path / "aliases.csv")
 # Each maps a chip-prefixed key -> (fiber_alias, chip). CCF and CCF_VAR cubes are
 # sliced on their order axis (axis 0) and support chip-prefix read and write; RV
 # tables are row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support
-# read only — each is written whole (one BinTable per orderlet), so a chip-prefix
+# read only -- each is written whole (one BinTable per orderlet), so a chip-prefix
 # write raises.
 _CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (fiber_alias, chip)
 for _, _row in _TRACE_MAP.iterrows():
@@ -66,9 +66,9 @@ class _KPF4DataDict(AliasedOrderedDict):
     Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and
     RV tables.
 
-    Accessing `d["GREEN_SCI2_CCF"]` returns `d["SCI2_CCF"][:NORDER_GREEN]`, a
+    Accessing ``d["GREEN_SCI2_CCF"]`` returns ``d["SCI2_CCF"][:NORDER_GREEN]``, a
     numpy view into the first 35 orders of CCF3 (order axis is axis 0, like the
-    trace flux arrays). `d["GREEN_SCI2_RV"]` returns the green rows of the
+    trace flux arrays). ``d["GREEN_SCI2_RV"]`` returns the green rows of the
     SCI2_RV table (rows 0:NORDER_GREEN); RV chip-prefix access is read-only,
     since each RV table is written whole.
     """
@@ -219,17 +219,16 @@ class KPF4(KPFDataModel, RV4):
     def generate_standard_filename(self):
         """KPF L4 standard filename (EPRV-standard SL4 name).
 
-        Delegates to `kpf_filename` (the single source for KPF product naming, so
-        generation lives in one place across all levels), deriving the name from
-        `obs_id`. `check_filename_convention` still defers to rvdata's EPRV
-        validator. Raises a `ValueError` if `obs_id` is unset or invalid.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
         return kpf_filename(self.obs_id, "L4")
 
     def to_fits(self, fn=None):
-        """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
-        parameter to ``out_filename``. Delegate so all our call sites can keep
-        passing one path (``to_fits(fn)``)."""
+        """Single-filepath ``to_fits`` shim; see ``KPF2.to_fits`` for the
+        rationale (rvdata >=0.4.0 renamed the parameter to ``out_filename``)."""
         out_path = super().to_fits(out_filename=fn)
         logger.info("wrote %s to %s", type(self).__name__, out_path)
         return out_path

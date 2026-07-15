@@ -58,10 +58,10 @@ class KPFMasterModel(KPFDataModel):
         """
         Record the stacked input L0 files and the master calibration type.
 
-        `master_type` is the WMKO filename token ('bias', 'dark', 'flat', or
+        ``master_type`` is the WMKO filename token ('bias', 'dark', 'flat', or
         'thar'); it is stored in the PRIMARY ``MASTYPE`` header so that
-        `generate_standard_filename()` can always build a DRP-RUN-05-compliant
-        name, including after a `from_fits()` round-trip.
+        ``generate_standard_filename()`` can always build a DRP-RUN-05-compliant
+        name, including after a ``from_fits()`` round-trip.
         """
         self.set_data("INPUT_FILES", pd.DataFrame({"FILENAME": file_list}))
         # MASTYPE is out of EPRV scope but registered so it routes through
@@ -74,9 +74,9 @@ class KPFMasterModel(KPFDataModel):
         ``{KOAID-of-first-input}_master_{type}_L{level}.fits``.
 
         The KOAID is read from the first recorded input file and the type from
-        the PRIMARY ``MASTYPE`` header (both set by `set_input_files()`). Raises
+        the PRIMARY ``MASTYPE`` header (both set by ``set_input_files()``). Raises
         if either is missing, so a non-compliant master name can never be
-        produced; `kpf_filename` validates the type token and level.
+        produced; ``kpf_filename`` validates the type token and level.
         """
         master_type = self.headers["PRIMARY"].get("MASTYPE")
         if not master_type:

@@ -2,7 +2,7 @@
 
 The third and final read-only quality-control stage (after Diagnostics and QC).
 A Checkpoint reads the 0/1 QC flags and the product headers and emits warnings
-or raises errors — it never writes keywords. ``run()`` also folds in the paired
+or raises errors -- it never writes keywords. ``run()`` also folds in the paired
 Diagnostics and QC classes first, so the recipe drives the whole
 Diagnostics -> QC -> Checkpoints sequence through one ``CheckpointL{n}(obj).run()``
 call. Two base checkpoints are inherited by every level: ``unregistered_keywords``
@@ -22,7 +22,7 @@ class Checkpoint:
         Finished data product whose flags/headers are read (never written).
     """
 
-    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
+    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
     RAISE_FLAGS = ()  # QC keywords whose failure (0) raises; every other 0 warns.
     DIAGNOSTICS = None  # Paired Diagnostics class, run first by run() (None = skip).
     QC = None  # Paired QC class, run second; its results land in self.qc_results.
@@ -109,9 +109,9 @@ class Checkpoint:
     qc_flags._checkpoint_name = "qc_flags"
 
     def _iter_checkpoints(self):
-        """Yield ``(name, bound_method)`` for each `_checkpoint_name`-tagged method.
+        """Yield each ``(name, method)`` tagged ``_checkpoint_name``.
 
-        Walks the MRO so subclass methods precede the base and ordering is stable.
+        MRO-walk discovery; the mechanism is documented in style guide §9.
         """
         seen = set()
         for cls in type(self).__mro__:

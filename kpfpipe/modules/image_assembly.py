@@ -52,6 +52,14 @@ class ImageAssembly:
       - subtracting overscan bias
       - assembling full-frame images (FFI)
       - converting EXPMETER_SCI/SKY wavelengths from nm to Angstroms
+
+    Parameters
+    ----------
+    l0_obj : KPF0
+        Raw L0 readout to assemble. Its per-amplifier extensions
+        (``{CHIP}_AMP{n}``) are read and modified in place during assembly.
+    config : None | dict | ConfigHandler
+        Module configuration. Recognized keys: overscan_method, readnoise_sigma.
     """
 
     def __init__(self, l0_obj, config=None):
@@ -78,7 +86,8 @@ class ImageAssembly:
         self.namp = {}  # chip -> n amps; set by count_amplifiers()
         self.dims = {}  # chip -> amp shape; set by count_amplifiers()
         self.readnoise = {}  # channel ext -> RN std; set by measure_read_noise()
-        self.rn_nongauss = {}  # channel ext -> std/mad; set by measure_read_noise()
+        # channel ext -> sqrt(2/pi)*std/mad; set by measure_read_noise()
+        self.rn_nongauss = {}
         self._parse_amplifier_reference()
 
     # ------------------------------------------------------------------
@@ -140,8 +149,8 @@ class ImageAssembly:
     def _oscan_zero(self, chip, amp_no, **kwargs):
         """
         Returns overscan bias level of zero. chip/amp_no/kwargs are unused here
-        but kept for the uniform `_oscan_*` dispatch signature (see
-        subtract_overscan()); `del` marks them intentionally discarded.
+        but kept for the uniform ``_oscan_*`` dispatch signature (see
+        subtract_overscan()); ``del`` marks them intentionally discarded.
         """
         del chip, amp_no, kwargs
         return 0.0
@@ -206,8 +215,8 @@ class ImageAssembly:
         Notes
         -----
         Sets instance attributes:
-        - `self.namp[chip]` : number of amplifier regions detected.
-        - `self.dims[chip]` : shape of each amplifier channel.
+        - ``self.namp[chip]`` : number of amplifier regions detected.
+        - ``self.dims[chip]`` : shape of each amplifier channel.
         Only 2-amp and 4-amp configurations are supported.
         """
         chip = chip.upper()
@@ -244,7 +253,7 @@ class ImageAssembly:
 
         Notes
         -----
-        The transformations are flips, so each is its own inverse — calling
+        The transformations are flips, so each is its own inverse -- calling
         twice restores the input. measure_read_noise and subtract_overscan use
         this to orient to standard, do their work, then restore the original
         orientation, so a non-standard orientation never propagates between
@@ -320,8 +329,10 @@ class ImageAssembly:
         Notes
         -----
         Stores results in:
-        - `self.readnoise[channel_ext]` : standard deviation of cleaned overscan.
-        - `self.rn_nongauss[channel_ext]` : non-Gaussian factor computed as std/mad.
+        - ``self.readnoise[channel_ext]`` : standard deviation of cleaned overscan.
+        - ``self.rn_nongauss[channel_ext]`` : non-Gaussian factor, computed as
+          ``sqrt(2/pi) * std / mad`` (the ``sqrt(2/pi)`` normalization makes the
+          indicator ~1 for a Gaussian).
         """
         if sigma is None:
             sigma = self.readnoise_sigma

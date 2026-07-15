@@ -16,8 +16,7 @@ _FLUX_PERCENTILE = 95
 
 
 class PlotL2:
-    """
-    Quicklook plots for KPF L2 (extracted 1D spectra) data.
+    """Quicklook plots for KPF L2 (extracted 1D spectra) data.
 
     Parameters
     ----------
@@ -222,10 +221,13 @@ class PlotL2:
         """Overplot the science orderlets (and SKY/CAL) for a single spectral
         order vs wavelength.
 
-        Args:
-            chip: 'GREEN' or 'RED'.
-            order: 1-indexed spectral order. Defaults to a representative
-                order near the middle of the chip.
+        Parameters
+        ----------
+        chip : str
+            'GREEN' or 'RED'.
+        order : int or None
+            1-indexed spectral order. Defaults to a representative order
+            near the middle of the chip.
         """
         chip = chip.upper()
         if not self._has_chip(chip):
@@ -369,19 +371,23 @@ class PlotL2:
     # ------------------------------------------------------------------
 
     def run(self, which):
-        """Generate the requested plot(s) for every chip that has data,
-        saving each to ``output_dir``. In that save-to-disk mode the figure is
-        closed so callers don't accumulate them; when ``output_dir`` is None the
-        figures are returned open, so they display when the caller renders them
-        (e.g. interactively in a notebook).
+        """Generate the requested plot(s) for every chip that has data.
 
-        Args:
-            which: 'all' to run every implemented plot, or the name of a
-                single plot method (one of ``self._PLOT_METHODS``).
+        Follows the shared Quicklook ``run()`` contract (style guide §9):
+        saved-and-closed when ``output_dir`` is set, returned open when it
+        is ``None``.
 
-        Returns:
-            dict mapping ``{method_name}_{chip}`` to matplotlib.Figure (closed
-            only when saved to ``output_dir``; useful for tests/introspection).
+        Parameters
+        ----------
+        which : str
+            'all' to run every implemented plot, or the name of a single
+            plot method (one of ``self._PLOT_METHODS``).
+
+        Returns
+        -------
+        dict
+            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
+            for tests and introspection.
         """
         if which == "all":
             names = self._PLOT_METHODS
@@ -404,8 +410,7 @@ class PlotL2:
                 if fig is None:
                     continue
                 figures[f"{name}_{chip}"] = fig
-                # Closing frees memory in save-to-disk mode; when returning
-                # figures for interactive display, leave them open.
+                # Close only saved figures (Quicklook run() contract).
                 if self.output_dir is not None:
                     plt.close(fig)
         return figures

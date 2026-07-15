@@ -56,8 +56,8 @@ class WLS(BaseMasterModule):
         "polyorder_f": 2,
     }
 
-    # Bias+dark subtraction is standard for WLS; `_process_frame` (run before
-    # `_extract_frame`) applies whichever of these the config has enabled.
+    # Bias+dark subtraction is standard for WLS; ``_process_frame`` (run before
+    # ``_extract_frame``) applies whichever of these the config has enabled.
     _STANDARD_CALIBRATIONS = ("bias", "dark")
 
     def __init__(self, l0_file_list, config=None):
@@ -104,7 +104,7 @@ class WLS(BaseMasterModule):
 
     def _load_linelist(self, linelist=None):
         """
-        Return the cached line list DataFrame, loading/reloading if `linelist`
+        Return the cached line list DataFrame, loading/reloading if ``linelist``
         differs from the cached path.
 
         Columns: CHIP, INDEX (0-based row), ECHELLE (physical order), WAVE
@@ -121,7 +121,7 @@ class WLS(BaseMasterModule):
 
     def _load_rough_wls(self, rough_wls_file=None):
         """
-        Return the cached rough WLS dict, loading/reloading if `rough_wls_file`
+        Return the cached rough WLS dict, loading/reloading if ``rough_wls_file``
         differs from the cached path. The cache tracks the most recent path.
         """
         needs_load = not hasattr(self, "rough_wls")
@@ -157,12 +157,12 @@ class WLS(BaseMasterModule):
 
     def _line_fit_qc(self, lines, lineprofile, window, loc, amp_max=1.5e6, std_min=0.5):
         """
-        QC the per-line fits; return a boolean flag array aligned with `lines`
+        QC the per-line fits; return a boolean flag array aligned with ``lines``
         (True = passed).
 
-        Flags runaway centroids (>`window` px from the window-center `loc`),
-        amplitudes outside [0, `amp_max`] (~10x single-pixel saturation), and
-        Gaussian sigmas outside [`std_min`, `window`] px.
+        Flags runaway centroids (>``window`` px from the window-center ``loc``),
+        amplitudes outside [0, ``amp_max``] (~10x single-pixel saturation), and
+        Gaussian sigmas outside [``std_min``, ``window``] px.
         """
         if lineprofile != "gaussian":
             raise ValueError(f"Unsupported lineprofile: {lineprofile}")
@@ -185,9 +185,9 @@ class WLS(BaseMasterModule):
     ):
         """
         Run each L0 frame in the stack through the L0->L2 pipeline, returning the
-        extracted KPF2 objects (also cached on `self._l2_obj_cache`, reset at
-        entry). Raises if load failures exceed `max_fail_fraction` or
-        `max_fail_number`.
+        extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
+        entry). Raises if load failures exceed ``max_fail_fraction`` or
+        ``max_fail_number``.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -225,9 +225,9 @@ class WLS(BaseMasterModule):
         """
         Fit line positions (pixel space) along one 1D extracted order.
 
-        Fits a 1D line model over a +/-`window` px neighborhood around each
-        reference line in `line_waves`, then QCs the fits via `_line_fit_qc`.
-        A reference line outside the rough WLS span of `wave1d` raises (a
+        Fits a 1D line model over a +/-``window`` px neighborhood around each
+        reference line in ``line_waves``, then QCs the fits via ``_line_fit_qc``.
+        A reference line outside the rough WLS span of ``wave1d`` raises (a
         CHIP/ORDER labeling-inconsistency guardrail).
 
         Returns a dict of equal-length per-line arrays; all lines are retained
@@ -315,9 +315,9 @@ class WLS(BaseMasterModule):
         """
         Fit line positions across all orders and fibers of one chip.
 
-        Loops the requested fibers, calling `_fit_line_positions_1d` per
+        Loops the requested fibers, calling ``_fit_line_positions_1d`` per
         (order, fiber) and concatenating survivors into flat arrays. Returns the
-        per-line dict from `_fit_line_positions_1d` plus provenance tags 'chip',
+        per-line dict from ``_fit_line_positions_1d`` plus provenance tags 'chip',
         'fiber', 'index' (0-based row), and 'echelle' (physical order); all lines
         retained regardless of QC.
         """
@@ -410,7 +410,7 @@ class WLS(BaseMasterModule):
         Treats the grating invariant m*lambda (echelle order x wavelength) as a
         smooth function of pixel (x), order (m), and optionally fiber (f); all
         variables are rescaled to [-1, 1] before fitting. Only lines with
-        `lines['isgood']` set are used. Returns the Legendre coefficient array,
+        ``lines['isgood']`` set are used. Returns the Legendre coefficient array,
         shape (polyorder_x+1, polyorder_m+1) for a single-fiber fit or with a
         trailing (polyorder_f+1) axis for a multi-fiber fit. Raises for a fiber
         set other than 1, the 3 SCI fibers, or all 5 fibers, or when the fit is
@@ -496,9 +496,9 @@ class WLS(BaseMasterModule):
 
         The coefficients describe the grating-invariant m*lambda surface, so the
         evaluated surface is divided by the physical order to recover wavelength.
-        `orders` sets the [-1, 1] order rescaling (must match
-        `_calculate_wls_coeffs`). Returns W of shape (norder, ncol) for 2D
-        `coeffs` or (norder, ncol, nfiber) for 3D `coeffs` (`nfiber` ignored for
+        ``orders`` sets the [-1, 1] order rescaling (must match
+        ``_calculate_wls_coeffs``). Returns W of shape (norder, ncol) for 2D
+        ``coeffs`` or (norder, ncol, nfiber) for 3D ``coeffs`` (``nfiber`` ignored for
         2D).
         """
         blue, red = orders[0], orders[-1]
@@ -536,17 +536,17 @@ class WLS(BaseMasterModule):
     ):
         """
         Fit line positions and a per-frame Legendre WLS for every frame in
-        `self._l2_obj_cache`.
+        ``self._l2_obj_cache``.
 
-        Every frame is reported; a frame is flagged `rejected` (warned, never
+        Every frame is reported; a frame is flagged ``rejected`` (warned, never
         raised) and kept out of the combined solution when its line-fit QC
-        failure fraction exceeds `max_bad_frac`, or when its per-frame fit fails
+        failure fraction exceeds ``max_bad_frac``, or when its per-frame fit fails
         (too few good lines, a dropped fiber, or non-finite coefficients).
-        Survivors are gated against `min_stack_size` in `make_master_l2`.
+        Survivors are gated against ``min_stack_size`` in ``make_master_l2``.
 
         Returns a list of per-frame dicts (original order) with keys 'obs_id',
-        'lines' (the `_fit_line_positions_ffi` dict), 'coeffs' (None if
-        rejected), and 'rejected'. Raises only if `self._l2_obj_cache` is empty.
+        'lines' (the ``_fit_line_positions_ffi`` dict), 'coeffs' (None if
+        rejected), and 'rejected'. Raises only if ``self._l2_obj_cache`` is empty.
         """
         self._load_linelist(linelist)
         if lineprofile is None:
@@ -634,9 +634,9 @@ class WLS(BaseMasterModule):
         Combine surviving per-frame coefficients into a master WLS.
 
         Stacks the non-rejected frames' Legendre coefficients, combines them by
-        per-coefficient outlier-rejected averaging (median +/- `qc_sigma` MAD),
+        per-coefficient outlier-rejected averaging (median +/- ``qc_sigma`` MAD),
         and evaluates the mean to a master wavelength array. Assumes at least one
-        survivor (callers gate against `min_stack_size` first). Returns
+        survivor (callers gate against ``min_stack_size`` first). Returns
         (W, coeffs_mean). Raises if every survivor is rejected as an outlier for
         some coefficient (a cross-frame degeneracy that leaves the stack
         uncombinable).
@@ -680,13 +680,13 @@ class WLS(BaseMasterModule):
         Build a master wavelength solution from a stack of L0 frames.
 
         Processes each input L0 frame through the L0-to-L2 pipeline, fits
-        per-frame line positions and WLS coefficients (`_fit_and_qc_lines_stack`),
+        per-frame line positions and WLS coefficients (``_fit_and_qc_lines_stack``),
         then combines the surviving frames into per-chip Legendre wavelength
-        solutions (`_combine_coeffs_stack`). The resulting wavelength arrays are
+        solutions (``_combine_coeffs_stack``). The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
-        which is returned and cached on `self.ml2_obj`. Per-frame diagnostics
-        are always stashed on `self._frame_diagnostics`; pass `master_path`
-        to persist the master and, into the `thar_L2/` subdirectory
+        which is returned and cached on ``self.ml2_obj``. Per-frame diagnostics
+        are always stashed on ``self._frame_diagnostics``; pass ``master_path``
+        to persist the master and, into the ``thar_L2/`` subdirectory
         beside it, the per-frame L2s and the diagnostics HDF5.
 
         Parameters
@@ -695,8 +695,8 @@ class WLS(BaseMasterModule):
             L0 files to process. Defaults to self.l0_file_list.
         linelist : str, optional
             Path to a CSV line list. If different from the currently
-            cached `self.linelist`, the file is reloaded and the cache
-            is updated. Defaults to `self.linelist` (no reload).
+            cached ``self.linelist``, the file is reloaded and the cache
+            is updated. Defaults to ``self.linelist`` (no reload).
         lineprofile : str, optional
             Line profile model name. Defaults to self.lineprofile.
         polyorder_x : int, optional
@@ -709,14 +709,14 @@ class WLS(BaseMasterModule):
         bias, dark, flat : bool | str | KPFMasterL1, optional
             Per-call calibration overrides (same forms as ImageProcessing.perform:
             bool, a master filepath, or a KPFMasterL1 object), clamped by the WLS
-            standard of bias+dark. E.g. `dark=False` extracts with bias only, and
-            `dark="/path/master_dark.fits"` uses a specific master.
+            standard of bias+dark. E.g. ``dark=False`` extracts with bias only, and
+            ``dark="/path/master_dark.fits"`` uses a specific master.
         master_path : str, optional
             If provided, persists the master L2 to this FITS path via
-            `save_master('L2', ...)` and, into a `thar_L2/` subdirectory
+            ``save_master('L2', ...)`` and, into a ``thar_L2/`` subdirectory
             beside it, each processed ThAr frame's L2
-            (`save_reduced_frames()`) and the per-frame diagnostics HDF5
-            (`save_diagnostics()`).
+            (``save_reduced_frames()``) and the per-frame diagnostics HDF5
+            (``save_diagnostics()``).
 
         Returns
         -------
@@ -734,7 +734,7 @@ class WLS(BaseMasterModule):
         QC or per-frame fit fails is warned and dropped, never raised. The
         per-frame L2s and diagnostics HDF5 are written before the survivor gate,
         so they persist even on gate failure. Raises ValueError if any chip has
-        fewer than `self.min_stack_size` frames passing line-fit QC (the master
+        fewer than ``self.min_stack_size`` frames passing line-fit QC (the master
         is then not written).
         """
         if l0_file_list is None:
@@ -839,21 +839,21 @@ class WLS(BaseMasterModule):
     def save_diagnostics(self, master_path, *, overwrite=False):
         """
         Write the per-frame WLS diagnostics to an HDF5 file in the
-        `thar_L2/` subdirectory beside `master_path`, named
-        `{obs_id}_master_thar_diagnostics.h5` (obs_id from `master_path`).
+        ``thar_L2/`` subdirectory beside ``master_path``, named
+        ``{obs_id}_master_thar_diagnostics.h5`` (obs_id from ``master_path``).
 
         Layout: /<obs_id>/<chip>/ per input frame and chip, each holding a
-        `coeffs` dataset (per-frame Legendre coefficients; omitted for a
-        rejected frame), a `lines/` group with every key from the per-frame
+        ``coeffs`` dataset (per-frame Legendre coefficients; omitted for a
+        rejected frame), a ``lines/`` group with every key from the per-frame
         line dict (chip, fiber, index, echelle, wav, pix, std, amp, isgood), and
-        a `rejected` group attribute flagging whole-frame QC rejection for
+        a ``rejected`` group attribute flagging whole-frame QC rejection for
         that chip.
 
         Parameters
         ----------
         master_path : str
             The master L2 output path; its directory anchors the
-            `thar_L2/` subdirectory and its obs_id names the file.
+            ``thar_L2/`` subdirectory and its obs_id names the file.
         overwrite : bool, optional
             If False (default), refuse to clobber an existing file and raise
             FileExistsError. If True, replace any existing file.
@@ -864,7 +864,7 @@ class WLS(BaseMasterModule):
             If make_master_l2() has not been run yet, or raised before
             populating any chip.
         FileExistsError
-            If the file already exists and `overwrite` is False.
+            If the file already exists and ``overwrite`` is False.
         """
         if not self._frame_diagnostics:
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
@@ -901,8 +901,8 @@ class WLS(BaseMasterModule):
 
     def save_reduced_frames(self, master_path, *, overwrite=False):
         """
-        Write each processed ThAr frame's L2 to a `thar_L2/` subdirectory
-        beside `master_path`, as `{obs_id}_thar_L2.fits`.
+        Write each processed ThAr frame's L2 to a ``thar_L2/`` subdirectory
+        beside ``master_path``, as ``{obs_id}_thar_L2.fits``.
 
         Persists the per-frame L2 objects cached by make_master_l2() (every
         frame that loaded, processed, and extracted), for follow-up ThAr
@@ -912,7 +912,7 @@ class WLS(BaseMasterModule):
         ----------
         master_path : str
             The master L2 output path; its directory anchors the
-            `thar_L2/` subdirectory.
+            ``thar_L2/`` subdirectory.
         overwrite : bool, optional
             If False (default), refuse to clobber an existing per-frame file
             and raise FileExistsError. If True, replace any existing file.
@@ -923,7 +923,7 @@ class WLS(BaseMasterModule):
             If make_master_l2() has not been run yet, or raised before
             extracting any frame.
         FileExistsError
-            If a per-frame file already exists and `overwrite` is False.
+            If a per-frame file already exists and ``overwrite`` is False.
         """
         if not self._l2_obj_cache:
             raise RuntimeError("No frames available; run make_master_l2() first")

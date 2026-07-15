@@ -17,7 +17,7 @@ class Diagnostics:
         ``set_keyword``, routed to each keyword's registry-home extension).
     """
 
-    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
+    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
 
     def __init__(self, kpf_obj):
         self.kpf_obj = kpf_obj
@@ -67,10 +67,9 @@ class Diagnostics:
         return self.results
 
     def _iter_methods(self):
-        """Yield each ``(name, bound_method)`` tagged with `_diag_name`.
+        """Yield each ``(name, method)`` tagged ``_diag_name``.
 
-        Walks the MRO so subclass methods precede the base class and ordering
-        is stable across runs.
+        MRO-walk discovery; the mechanism is documented in style guide §9.
         """
         seen = set()
         for cls in type(self).__mro__:

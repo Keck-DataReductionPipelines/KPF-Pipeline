@@ -66,7 +66,7 @@ class _KPF2DataDict(AliasedOrderedDict):
     """
     Data dict that supports GREEN_/RED_ chip-prefix access.
 
-    Accessing `d["GREEN_SCI2_FLUX"]` returns `d["SCI2_FLUX"][:NORDER_GREEN]`,
+    Accessing ``d["GREEN_SCI2_FLUX"]`` returns ``d["SCI2_FLUX"][:NORDER_GREEN]``,
     a numpy view into the first 35 orders of TRACE3_FLUX.
     """
 
@@ -219,10 +219,10 @@ class KPF2(KPFDataModel, RV2):
     def generate_standard_filename(self):
         """KPF L2 standard filename (EPRV-standard SL2 name).
 
-        Delegates to `kpf_filename` (the single source for KPF product naming, so
-        generation lives in one place across all levels), deriving the name from
-        `obs_id`. `check_filename_convention` still defers to rvdata's EPRV
-        validator. Raises a `ValueError` if `obs_id` is unset or invalid.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
         return kpf_filename(self.obs_id, "L2")
 
@@ -240,7 +240,7 @@ class KPF2(KPFDataModel, RV2):
 
         Returns a KPF4 with PRIMARY header keywords forwarded from L2,
         and the receipt chain preserved. RV and CCF data extensions are
-        created but empty — the caller (RV computation) fills those in.
+        created but empty -- the caller (RV computation) fills those in.
         """
         kpf4 = KPF4()
 

@@ -88,7 +88,7 @@ class ImageProcessing:
         """
         Load a master L1 frame from an explicit path.
 
-        The single FITS-read chokepoint for masters (`BaseMasterModule` also
+        The single FITS-read chokepoint for masters (``BaseMasterModule`` also
         delegates here); raises FileNotFoundError if the path is absent.
         """
         if not os.path.isfile(master_path):
@@ -98,11 +98,11 @@ class ImageProcessing:
 
     def _resolve_master(self, cal_type, value):
         """
-        Resolve a `bias`/`dark` kwarg into a `KPFMasterL1` instance.
+        Resolve a ``bias``/``dark`` kwarg into a ``KPFMasterL1`` instance.
 
-        See `perform` for accepted input types. The resolved master is cached
-        on `self._{cal_type}_ml1` (with its path on `self._{cal_type}_path`) so
-        repeat calls — e.g. once per chip — reuse it instead of re-reading.
+        See ``perform`` for accepted input types. The resolved master is cached
+        on ``self._{cal_type}_ml1`` (with its path on ``self._{cal_type}_path``) so
+        repeat calls -- e.g. once per chip -- reuse it instead of re-reading.
         """
         cached = getattr(self, f"_{cal_type}_ml1")
         if cached is not None:
@@ -131,11 +131,11 @@ class ImageProcessing:
 
     def _get_master_path(self, cal_type):
         """
-        Read the master path for `cal_type` from the L1 RECEIPT header.
+        Read the master path for ``cal_type`` from the L1 RECEIPT header.
 
-        Returns the `{PREFIX}FILE` keyword (uppercase calibration name), the
+        Returns the ``{PREFIX}FILE`` keyword (uppercase calibration name), the
         master's full path written by CalibrationAssociation. Raises
-        FileNotFoundError if it is absent — a `True` calibration was requested
+        FileNotFoundError if it is absent -- a ``True`` calibration was requested
         on a frame that has not been through CalibrationAssociation.
         """
         prefix = cal_type.upper()
@@ -153,7 +153,7 @@ class ImageProcessing:
         Recover the per-pixel variance of a master IMG from its stored SNR.
 
         A master stores IMG = counts / exptime and SNR = |counts| / sqrt(var),
-        so var(IMG) = (IMG / SNR)**2 (= var / exptime**2) — the master's
+        so var(IMG) = (IMG / SNR)**2 (= var / exptime**2) -- the master's
         contribution to the science VAR, small because a master averages many
         frames. SNR is exactly zero only at bad / zero-flux pixels, which
         contribute zero variance rather than inf/NaN.
@@ -175,13 +175,13 @@ class ImageProcessing:
         chip : str
             CCD identifier, e.g. 'GREEN' or 'RED'.
         bias : bool | str | KPFMasterL1, optional
-            Master bias source, resolved via `_resolve_master` (see `perform`
+            Master bias source, resolved via ``_resolve_master`` (see ``perform``
             for the accepted input types). Defaults to self.bias.
 
         Returns
         -------
         None
-            Modifies `l1_obj.data['{chip}_CCD']` and `['{chip}_VAR']` in-place:
+            Modifies ``l1_obj.data['{chip}_CCD']`` and ``['{chip}_VAR']`` in-place:
             the bias is subtracted from CCD and its variance added to VAR.
         """
         if bias is None:
@@ -199,20 +199,20 @@ class ImageProcessing:
 
         The master dark is a rate (electrons/sec), so it is scaled by the
         frame's exposure time before subtraction. Otherwise identical to
-        `subtract_bias`.
+        ``subtract_bias``.
 
         Parameters
         ----------
         chip : str
             CCD identifier, e.g. 'GREEN' or 'RED'.
         dark : bool | str | KPFMasterL1, optional
-            Master dark source, resolved via `_resolve_master` (see `perform`
+            Master dark source, resolved via ``_resolve_master`` (see ``perform``
             for the accepted input types). Defaults to self.dark.
 
         Returns
         -------
         None
-            Modifies `l1_obj.data['{chip}_CCD']` and `['{chip}_VAR']` in-place:
+            Modifies ``l1_obj.data['{chip}_CCD']`` and ``['{chip}_VAR']`` in-place:
             the exposure-scaled dark is subtracted from CCD and its variance
             (scaled by exptime**2) added to VAR.
         """
@@ -263,11 +263,11 @@ class ImageProcessing:
     @staticmethod
     def calibration_applied(l1_obj, cal_type):
         """
-        Return True if `cal_type` is already flagged applied on `l1_obj`.
+        Return True if ``cal_type`` is already flagged applied on ``l1_obj``.
 
-        Reads the applied flag (`_CALIBRATION_HEADER_KEYS`: BIASSUB/DARKSUB/
-        FLATDIV) from the RECEIPT header — their registry home — written by a
-        prior `perform`. Lets callers — and `perform` itself — avoid applying a
+        Reads the applied flag (``_CALIBRATION_HEADER_KEYS``: BIASSUB/DARKSUB/
+        FLATDIV) from the RECEIPT header -- their registry home -- written by a
+        prior ``perform``. Lets callers -- and ``perform`` itself -- avoid applying a
         calibration twice (e.g. a cached frame revisited during stacking).
 
         Parameters
@@ -299,11 +299,11 @@ class ImageProcessing:
             treat as an explicit filepath. KPFMasterL1 → use this object
             directly (no disk I/O). Defaults to self.bias.
         dark : bool | str | KPFMasterL1, optional
-            Same shape as `bias`, sourced from DARKFILE. Applied
+            Same shape as ``bias``, sourced from DARKFILE. Applied
             after bias subtraction and scaled by the frame's exposure time.
             Defaults to self.dark.
         flat : bool | str | KPFMasterL1, optional
-            Same shape as `bias`. Any truthy value raises
+            Same shape as ``bias``. Any truthy value raises
             NotImplementedError until flat division is built out.
 
         Returns
@@ -319,7 +319,7 @@ class ImageProcessing:
         NotImplementedError
             If flat is truthy.
         TypeError
-            If `bias` or `dark` is not bool, str, or KPFMasterL1.
+            If ``bias`` or ``dark`` is not bool, str, or KPFMasterL1.
         RuntimeError
             If a requested calibration is already flagged applied on the frame
             (BIASSUB/DARKSUB), guarding against double subtraction.

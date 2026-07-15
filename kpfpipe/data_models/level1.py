@@ -66,17 +66,16 @@ class KPF1(KPFDataModel):
         self.set_keyword("DATALVL", self._DATALVL)
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """
-        Route L1 FITS reads to `KPF1._read`.
+        """Route L1 FITS reads to ``KPF1._read``.
 
-        `RVDataModel.read` has no lvl==1 dispatch branch, so the inherited
-        `from_fits` would never call into `_read` without this override.
+        Needed for the same reason as the L0 override; see ``KPF0.read`` for the
+        canonical rationale (``RVDataModel.read`` has no lvl==1 dispatch branch,
+        so the inherited ``from_fits`` would never call into ``_read``).
         """
         self._read(hdul)
 
     def _read(self, hdul):
-        """
-        Read all extensions from an L1 FITS HDUList.
+        """Read all extensions from an L1 FITS HDUList.
 
         Handles known extensions from the CSV definition and also
         accepts unknown extensions (with a warning).
@@ -116,8 +115,8 @@ class KPF1(KPFDataModel):
                     df = df.reindex(columns=all_cols).fillna("")
                 self.receipt = df
             elif fits_type == "ImageHDU":
-                # np.array (not asarray) materializes the memmapped HDU into RAM
-                # before from_fits closes the file; a view would dangle afterward.
+                # Materialize the memmap before from_fits closes the file
+                # (np.array, not asarray); see KPF0._read for the full rationale.
                 self.set_data(ext_name, np.array(hdu.data))
             elif fits_type == "BinTableHDU":
                 self.set_data(ext_name, Table.read(hdu))
@@ -140,13 +139,12 @@ class KPF1(KPFDataModel):
         return True
 
     def generate_standard_filename(self):
-        """
-        KPF L1 filenames follow the kpf_L1_YYYYMMDDThhmmss.fits convention.
+        """KPF L1 filenames follow the kpf_L1_YYYYMMDDThhmmss.fits convention.
 
-        Delegates to `kpf_filename` (the single source for the KPF-native naming
-        rule), deriving the timestamp from `obs_id` so the fallback name matches
-        where the recipe writes (`kpf_filepath(obs_id, "L1")`). Raises a
-        `ValueError` if `obs_id` is unset or invalid.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
         return kpf_filename(self.obs_id, "L1")
 
@@ -187,10 +185,9 @@ class KPF1(KPFDataModel):
 
         The L1 PRIMARY is already EPRV-standard (converted in KPF0.to_kpf1), so
         the PRIMARY and INSTRUMENT_HEADER headers are a pure pass-through. Pass-
-        through extensions (TELEMETRY, EXPMETER_SCI->EXPMETER,
-        CA_HK->ANCILLARY_SPECTRUM) and KPF-friendly aliases (e.g. SCI2_FLUX ->
-        TRACE3_FLUX) are handled below. Trace arrays are created empty — the
-        caller (spectral extraction) fills those in.
+        through extensions (TELEMETRY, EXPMETER_SCI->EXPMETER) and KPF-friendly
+        aliases (e.g. SCI2_FLUX -> TRACE3_FLUX) are handled below. Trace arrays
+        are created empty -- the caller (spectral extraction) fills those in.
         """
         kpf2 = KPF2()
 

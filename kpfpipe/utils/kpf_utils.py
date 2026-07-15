@@ -115,8 +115,8 @@ def utc_to_hst(timestamp):
 
 def hst_to_utc(timestamp):
     """Convert a KPF HST timestamp ('YYYYMMDD.SSSSS.FF') to UTC, in the same KPF
-    format. The inverse of `utc_to_hst`, kept as its symmetric counterpart: the
-    pipeline only calls `utc_to_hst` (the data tree is UTC-keyed), so this backs
+    format. The inverse of ``utc_to_hst``, kept as its symmetric counterpart: the
+    pipeline only calls ``utc_to_hst`` (the data tree is UTC-keyed), so this backs
     round-trip tests and any future HST-keyed input."""
     if not is_timestamp(timestamp):
         raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")
@@ -131,7 +131,7 @@ def hst_to_utc(timestamp):
 
 def kpf_timestamp_to_datetime(timestamp):
     """Parse a KPF UTC timestamp ('YYYYMMDD.SSSSS.FF', sub-second field ignored)
-    into a naive UTC `datetime`, e.g. '20240405.40113.57' ->
+    into a naive UTC ``datetime``, e.g. '20240405.40113.57' ->
     ``datetime(2024, 4, 5, 11, 8, 33)``."""
     if not is_timestamp(timestamp):
         raise ValueError(f"Invalid KPF timestamp: {timestamp!r}")

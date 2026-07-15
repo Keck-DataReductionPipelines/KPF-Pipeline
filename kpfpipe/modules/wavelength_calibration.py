@@ -23,7 +23,7 @@ class WavelengthCalibration:
     """
     Apply a precomputed wavelength solution to an extracted KPF L2 frame.
 
-    Reads the master WLS path from the L2 RECEIPT header (`WLSFILE`, written
+    Reads the master WLS path from the L2 RECEIPT header (``WLSFILE``, written
     by CalibrationAssociation), loads the corresponding KPFMasterL2, and copies
     each per-fiber {CHIP}_{FIBER}_WAVE array onto the science L2.
 
@@ -63,8 +63,8 @@ class WavelengthCalibration:
         """
         Load the master wavelength solution from disk.
 
-        If `wls_path` is provided it is used directly, bypassing the header
-        lookup. Otherwise the path is read from `WLSFILE` in the L2 RECEIPT
+        If ``wls_path`` is provided it is used directly, bypassing the header
+        lookup. Otherwise the path is read from ``WLSFILE`` in the L2 RECEIPT
         header (where CalibrationAssociation wrote it as a full path per the
         legacy WLS convention).
 
@@ -81,7 +81,7 @@ class WavelengthCalibration:
         Raises
         ------
         KeyError
-            If neither `wls_path` is given nor WLSFILE is present in the L2
+            If neither ``wls_path`` is given nor WLSFILE is present in the L2
             RECEIPT header.
         FileNotFoundError
             If the resolved path does not exist.
@@ -123,11 +123,7 @@ class WavelengthCalibration:
         self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
-        """Write PRIMARY-header keywords for wavelength calibration.
-
-        Reserved: no PRIMARY metadata written yet. Present so every module
-        consolidates header writes in one place.
-        """
+        """Reserved header-consolidation hook; writes no PRIMARY metadata yet."""
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -138,7 +134,7 @@ class WavelengthCalibration:
         Copy the master wavelength solution onto the science L2.
 
         For every (chip, fiber) in the configured chips × fibers, copies
-        `{CHIP}_{FIBER}_WAVE` from the master L2 onto the science L2. The
+        ``{CHIP}_{FIBER}_WAVE`` from the master L2 onto the science L2. The
         chip-prefix keys resolve through the KPF2 alias system into slices
         of the underlying concatenated TRACE{n}_WAVE arrays.
 
@@ -159,6 +155,15 @@ class WavelengthCalibration:
             The input L2 with per-fiber _WAVE extensions populated and a
             'wavelength_calibration' receipt entry. WLSFILE on RECEIPT is
             left untouched.
+
+        Raises
+        ------
+        KeyError
+            If the master WLS has no data for a requested
+            ``{CHIP}_{FIBER}_WAVE``, or (via ``load_wls``) if WLSFILE is absent
+            from the L2 RECEIPT and no ``wls_path`` was given.
+        FileNotFoundError
+            Via ``load_wls``, if the resolved WLS path does not exist.
         """
         if chips is None:
             chips = self.chips

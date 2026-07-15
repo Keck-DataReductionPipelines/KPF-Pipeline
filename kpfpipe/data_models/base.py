@@ -21,7 +21,7 @@ from kpfpipe.data_models.keyword_registry import keyword_registry
 from kpfpipe.utils.kpf_utils import is_obs_id
 
 # Receipt names that are data-model conversions / serialization rather than
-# pipeline modules — excluded from DRPSTATU so it names the last real stage.
+# pipeline modules -- excluded from DRPSTATU so it names the last real stage.
 # ``read``/``from_fits`` are here too: reading a product back must not clobber
 # the status the writer stamped (rvdata >=0.4.0 logs a ``read`` receipt via its
 # ``@receipt_logged`` decorator on ``RVDataModel.read``).
@@ -89,8 +89,8 @@ class KPFDataModel(RVDataModel):
         KPF stores every extension header as a ``fits.Header`` so reads and writes
         go through astropy natively, with no value-vs-``(value, comment)``
         ambiguity. A ``fits.Header`` is returned as a copy (so callers can rebuild
-        an HDU without aliasing the stored header); a plain mapping — RVData seeds
-        PRIMARY defaults as an ``OrderedDict`` of ``(value, comment)`` tuples — is
+        an HDU without aliasing the stored header); a plain mapping -- RVData seeds
+        PRIMARY defaults as an ``OrderedDict`` of ``(value, comment)`` tuples -- is
         rebuilt card by card, setting each value and comment together.
         """
         if isinstance(src, fits.Header):
@@ -117,7 +117,7 @@ class KPFDataModel(RVDataModel):
         writes ``value`` to the extension named there, with the registry
         Description as the FITS comment. This is the single write path for
         registered keywords, so a keyword always lands on the same extension with
-        the same comment — callers never name a comment.
+        the same comment -- callers never name a comment.
 
         ``ext`` targets a specific extension for EPRV per-extension cards that
         have no single routed home because they recur on every orderlet's
@@ -134,7 +134,7 @@ class KPFDataModel(RVDataModel):
             ``config/L{level}-headers.csv`` before writing it.
         ValueError
             If the target extension does not exist on this object (a config
-            error — the extension must be created before the write).
+            error -- the extension must be created before the write).
         """
         name = str(key).strip()
         if ext is None:
@@ -285,7 +285,7 @@ class KPFDataModel(RVDataModel):
     def generate_standard_filename(self):
         """Abstract: every concrete KPF model builds its own standard filename.
 
-        KPFDataModel is never instantiated directly — only inherited — so reaching
+        KPFDataModel is never instantiated directly -- only inherited -- so reaching
         this means a subclass failed to define the method.
         """
         raise NotImplementedError(
@@ -295,7 +295,7 @@ class KPFDataModel(RVDataModel):
     def check_filename_convention(self, filename):
         """Abstract: every concrete KPF model declares its own filename convention.
 
-        KPFDataModel is never instantiated directly — only inherited — so reaching
+        KPFDataModel is never instantiated directly -- only inherited -- so reaching
         this means a subclass failed to define the method.
         """
         raise NotImplementedError(

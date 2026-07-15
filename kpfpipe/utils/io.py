@@ -71,7 +71,7 @@ def load_junk_obs_ids(data_input):
 
 
 def datecode_dirs_in_range(root, start, end):
-    """Sorted datecode subdirs of `root` within the inclusive [start, end] range.
+    """Sorted datecode subdirs of ``root`` within the inclusive [start, end] range.
 
     Used by the masters orchestrator to expand a ``--date_range`` against the L0
     tree. Non-datecode names and plain files are skipped; datecodes sort
@@ -209,7 +209,7 @@ class FileHandler:
         only the calibration type; callers rarely need the return value directly.
 
         The on-disk CSV cache lives at
-        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``. `cache` selects which
+        ``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``. ``cache`` selects which
         side of it to use, read and write being independent:
 
         * read (``"r"``) -- load a *current* cache instead of re-scanning the L0
@@ -245,7 +245,7 @@ class FileHandler:
         Raises
         ------
         ValueError
-            If `cache` is not one of the allowed modes, if KPF_DATA_INPUT is
+            If ``cache`` is not one of the allowed modes, if KPF_DATA_INPUT is
             unset, or if the L0 directory holds no FITS files.
         """
         if cache not in (False, "r", "w", "rw", "wr"):
@@ -363,14 +363,14 @@ class FileHandler:
     ):
         """Return sorted file lists for all calibration stacks of the requested
         type, grouped from the mini database carried on the instance
-        (``self._mini_db``, set by `build_mini_database`).
+        (``self._mini_db``, set by ``build_mini_database``).
 
-        Drops observer-flagged junk frames (unless `exclude_junk=False`), filters
+        Drops observer-flagged junk frames (unless ``exclude_junk=False``), filters
         by OBJECT, then groups the surviving frames into stacks according to
-        `groupby`:
+        ``groupby``:
 
         * ``'time_of_day'`` (default) -- one stack per observing session, split
-          wherever consecutive frames are more than `cluster_gap_seconds` apart
+          wherever consecutive frames are more than ``cluster_gap_seconds`` apart
           (the morn/eve/night sessions). The split is purely temporal, so the
           morn/eve/night OBJECT suffix does not partition it and a mislabeled
           frame stacks with its true session. Used for bias and thar.
@@ -379,7 +379,7 @@ class FileHandler:
           datecode), spanning HST midnight. Used for darks, whose sparse sequences
           routinely straddle HST midnight and belong in a single nightly stack.
 
-        Every returned stack has at least `min_stack_size` files; undersized
+        Every returned stack has at least ``min_stack_size`` files; undersized
         stacks are dropped, and it raises when none meets the threshold.
 
         Parameters
@@ -407,9 +407,9 @@ class FileHandler:
         Raises
         ------
         ValueError
-            If `groupby` or `cal_type` is not recognized, if no mini database is
+            If ``groupby`` or ``cal_type`` is not recognized, if no mini database is
             loaded on the instance, if no calibration frames of the requested type
-            are found, or if no stack meets `min_stack_size`.
+            are found, or if no stack meets ``min_stack_size``.
         """
         if groupby not in _GROUPBY_MODES:
             raise ValueError(
@@ -462,8 +462,8 @@ class FileHandler:
         ``{root}/masters/{datecode}/*_master_{cal_type}_{level}.fits`` (the KOAID
         prefix wildcarded).
 
-        The reader counterpart to a `kpf_filepath` master path;
-        `TestFindMasters.test_finds_kpf_filepath_output` guards that the two stay
+        The reader counterpart to a ``kpf_filepath`` master path;
+        ``TestFindMasters.test_finds_kpf_filepath_output`` guards that the two stay
         in step.
 
         Raises
@@ -482,7 +482,7 @@ class FileHandler:
 
 def kpf_filename(obs_id, level, *, master=None):
     """Base filename for a KPF data product (no directory). The single source of
-    the naming rule; ``<model>.generate_standard_filename()`` and `kpf_filepath`
+    the naming rule; ``<model>.generate_standard_filename()`` and ``kpf_filepath``
     both delegate here.
 
     Science basenames by level:
@@ -510,8 +510,8 @@ def kpf_filename(obs_id, level, *, master=None):
     Raises
     ------
     ValueError
-        If `obs_id` is not a valid observation ID, `level` is unrecognized, or
-        `master` is an unrecognized type or paired with an invalid level.
+        If ``obs_id`` is not a valid observation ID, ``level`` is unrecognized, or
+        ``master`` is an unrecognized type or paired with an invalid level.
     """
     if not is_obs_id(obs_id):
         raise ValueError(
@@ -558,7 +558,7 @@ def masters_stack_subdir(masters, kind, level):
 def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
     """Output directory for a KPF product tree.
 
-    The single authority for the on-disk output layout; `kpf_filepath` and the
+    The single authority for the on-disk output layout; ``kpf_filepath`` and the
     recipes go through it rather than re-deriving ``os.path.join(data_root, ...)``
     by hand. Pure path construction -- it does not touch the filesystem.
 
@@ -600,9 +600,9 @@ def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
     Raises
     ------
     ValueError
-        If `data_root` is not a non-empty string, `kind` is unrecognized, the
-        obs_id/datecode source is missing/ambiguous/invalid, `datecode` is given
-        for ``QLP``, or `level` is missing/invalid for a kind that needs it.
+        If ``data_root`` is not a non-empty string, ``kind`` is unrecognized, the
+        obs_id/datecode source is missing/ambiguous/invalid, ``datecode`` is given
+        for ``QLP``, or ``level`` is missing/invalid for a kind that needs it.
     """
     if not isinstance(data_root, str) or not data_root:
         raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
@@ -641,13 +641,13 @@ def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
 
 def kpf_filepath(obs_id, level, *, data_root=None, master=None):
     """Build a filepath for a KPF data product: the product's directory
-    (`kpf_directory`) joined with its basename (`kpf_filename`).
+    (``kpf_directory``) joined with its basename (``kpf_filename``).
 
     The pipeline's authoritative path builder: constructs the output path from
     an obs_id string (before/without a populated data object), as every recipe
     does when deciding where to write. Its basename twin,
     ``<model>.generate_standard_filename()``, builds the same name from a
-    populated object; `TestFilenameConsistency` enforces they agree per level.
+    populated object; ``TestFilenameConsistency`` enforces they agree per level.
 
     Parameters
     ----------
@@ -658,7 +658,7 @@ def kpf_filepath(obs_id, level, *, data_root=None, master=None):
         Data level string, one of 'L0', 'L1', 'L2', 'L4'.
     data_root : str or None, optional
         Root data directory (e.g. '/data/kpf/'). When None (the default),
-        returns the bare filename (`kpf_filename`). Otherwise must be a
+        returns the bare filename (``kpf_filename``). Otherwise must be a
         non-empty string and a full path is returned.
     master : str or None, optional
         Master calibration type, one of 'bias', 'dark', 'flat', 'thar'. If
@@ -668,14 +668,14 @@ def kpf_filepath(obs_id, level, *, data_root=None, master=None):
     Returns
     -------
     str
-        Filepath (full path if `data_root` is set, bare filename if
-        `data_root` is None).
+        Filepath (full path if ``data_root`` is set, bare filename if
+        ``data_root`` is None).
 
     Raises
     ------
     ValueError
-        If `level` is unrecognized, if `obs_id` is not a valid observation
-        ID, if `master` type is unrecognized, or if `data_root` is not None
+        If ``level`` is unrecognized, if ``obs_id`` is not a valid observation
+        ID, if ``master`` type is unrecognized, or if ``data_root`` is not None
         and not a non-empty string.
     """
     if data_root is not None and (not isinstance(data_root, str) or not data_root):

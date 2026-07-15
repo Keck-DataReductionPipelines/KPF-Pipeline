@@ -23,7 +23,8 @@ class KPFMasterL1(KPFMasterModel, KPF1):
     KPF Masters Level 1 stacked FFI calibration.
 
     Thin wrapper around KPF1 with masters-specific extension names.
-    Inherits all KPF1 methods (from_fits, to_fits, _read, info).
+    Inherits KPF1's from_fits, to_fits, and info; overrides ``_read`` and
+    ``_create_hdul`` to cast the MASK extensions (bool <-> uint8) across I/O.
 
     Extensions:
         GREEN_IMG   -- stacked mean image, green chip
@@ -31,8 +32,8 @@ class KPFMasterL1(KPFMasterModel, KPF1):
         GREEN_MASK  -- bad pixel mask, green chip (1=good, 0=bad)
         RED_IMG, RED_SNR, RED_MASK -- same for red chip
 
-    Construct empty with `KPFMasterL1()`, or load a stacked product from
-    disk with `KPFMasterL1.from_fits(path)`.
+    Construct empty with ``KPFMasterL1()``, or load a stacked product from
+    disk with ``KPFMasterL1.from_fits(path)``.
     """
 
     _DATALVL = "ML1"

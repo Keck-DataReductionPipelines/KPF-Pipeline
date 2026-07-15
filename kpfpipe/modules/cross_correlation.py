@@ -206,7 +206,7 @@ class CrossCorrelation:
         return row["DEFAULT_MASK"].iloc[0]
 
     def _get_systemic_rv(self):
-        """Target systemic RV (TARGRADV) [km/s] — the stellar CCF grid center."""
+        """Target systemic RV (TARGRADV) [km/s] -- the stellar CCF grid center."""
         inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
         try:
             star_rv = float(inst.get("TARGRADV"))
@@ -222,7 +222,7 @@ class CrossCorrelation:
     def _build_line_mask(self, chip, fiber, mask_width=None):
         """
         Build (and cache) the orderlet's CCF line mask (dict of vacuum 'center',
-        'weight', and per-line top-hat 'start'/'end' at full width `mask_width`
+        'weight', and per-line top-hat 'start'/'end' at full width ``mask_width``
         about each center via relativistic Doppler). Stellar masks load from
         reference/line_masks/stellar_masks/; 'thar' is built from the ThAr line
         list with uniform weights.
@@ -261,8 +261,8 @@ class CrossCorrelation:
 
     def _build_velocity_grid(self, chip, fiber, step_size=None, window=None):
         """
-        Build (and cache) the orderlet's CCF velocity grid: `window` [min, max]
-        rounded to an integer number of exact `step_size` steps, then shifted by
+        Build (and cache) the orderlet's CCF velocity grid: ``window`` [min, max]
+        rounded to an integer number of exact ``step_size`` steps, then shifted by
         the grid center (systemic RV for stellar fibers, 0 for sky/cal).
         """
         if step_size is None:
@@ -441,9 +441,13 @@ class CrossCorrelation:
         Raises
         ------
         ValueError
-            If BARYCORR_Z is required (astronomical source) but not populated.
-        NotImplementedError
-            If the fiber's illumination source has no CCF path yet (etalon, lfc).
+            For a range of malformed or unusable inputs: an unrecognized or
+            missing illumination keyword; a missing target effective temperature
+            (``TARGTEFF``) or radial velocity (``TARGRADV``) for a stellar fiber;
+            a required but unpopulated ``BARYCORR_Z``; a descending ``WAVE``
+            array; or a ``clip_edge_pixels`` that removes every pixel of the order.
+        RuntimeError
+            If the CCF is identically zero across all orders (no usable signal).
         """
         chip = chip.upper()
         fiber = fiber.upper()
@@ -487,7 +491,7 @@ class CrossCorrelation:
 
         norder = flux.shape[0]
 
-        # Per-order barycentric redshift — only for astronomical sources (target,
+        # Per-order barycentric redshift -- only for astronomical sources (target,
         # sky). Calibration sources (thar) stay in the instrument frame (z = 0).
         if apply_barycorr:
             if np.size(self.l2_obj.data.get("BARYCORR_Z", np.array([]))) == 0:
@@ -590,10 +594,9 @@ class CrossCorrelation:
 
     def _set_headers(self, l4_obj):
         """
-        Write all CCF/RV extension headers (the module's single header-writing
-        site) from the per-orderlet caches, routing each EPRV per-extension card
-        with an explicit ext= to this orderlet's CCF{n}/RV{n}. CCF axes are
-        (velocity, order); RV axes are (columns, order).
+        Write all CCF/RV extension headers from the per-orderlet caches, routing
+        each EPRV per-extension card with an explicit ext= to this orderlet's
+        CCF{n}/RV{n}. CCF axes are (velocity, order); RV axes are (columns, order).
         """
         for fiber in self._fibers_done:
             key = f"{self._chips_done[-1]}_{fiber}"
@@ -727,10 +730,12 @@ class CrossCorrelation:
                 weight[rows] = self._get_order_weights(chip, fiber)
 
             # Per-orderlet RV table, one row per order (green then red). ORDER_ID
-            # is 1-based per chip; ECHELLE_ORDER is the physical grating order
-            # (detector.toml, blue->red); WEIGHT is the per-order CCF weight
-            # (ccf_order_weights.csv). RV/RV_ERR are NaN placeholders RadialVelocity
-            # fills from the CCFs.
+            # is a composite string label ``{CHIP}_{FIBER}_{n}`` whose ``n`` is
+            # 1-based per chip, while ORDER_INDEX holds the plain 0-based row
+            # index; ECHELLE_ORDER is the physical grating order (detector.toml,
+            # blue->red); WEIGHT is the per-order CCF weight
+            # (ccf_order_weights.csv). RV/RV_ERR are NaN placeholders
+            # RadialVelocity fills from the CCFs.
             order_id = np.array(
                 [
                     f"{chip}_{fiber}_{order}"

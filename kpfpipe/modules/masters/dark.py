@@ -25,7 +25,9 @@ class Dark(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: stack_sigma, chips.
+        Module configuration. Recognized keys: stack_sigma, min_stack_size,
+        chips, bias (master-bias calibration override), and the calibration-
+        association keys masters_search_window_days and KPF_MASTERS_OUTPUT.
     """
 
     _STANDARD_CALIBRATIONS = ("bias",)
@@ -68,8 +70,8 @@ class Dark(BaseMasterModule):
         Build master dark from stack.
 
         The constructed KPFMasterL1 is returned and cached on
-        `self.ml1_obj`; pass `master_path` to also persist it to disk
-        via `save_master('L1', ...)`.
+        ``self.ml1_obj``; pass ``master_path`` to also persist it to disk
+        via ``save_master('L1', ...)``.
 
         Parameters
         ----------
@@ -82,8 +84,8 @@ class Dark(BaseMasterModule):
         bias : bool | str | KPFMasterL1, optional
             Per-call master-bias override (same forms as ImageProcessing.perform:
             bool, a master filepath, or a KPFMasterL1 object). A dark's standard
-            is bias-only, so `bias=False` skips bias subtraction and
-            `bias="/path/master_bias.fits"` uses a specific master. Dark/flat are
+            is bias-only, so ``bias=False`` skips bias subtraction and
+            ``bias="/path/master_bias.fits"`` uses a specific master. Dark/flat are
             never applied to a dark, so they are not accepted.
         master_path : str, optional
             If provided, persist the master L1 to a FITS file at this path.

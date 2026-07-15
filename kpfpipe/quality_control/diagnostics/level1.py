@@ -1,6 +1,6 @@
 """Diagnostics for KPF Level 1 (assembled FFI) data products.
 
-Metrics recomputable from the finished L1 product — chiefly the master
+Metrics recomputable from the finished L1 product -- chiefly the master
 calibration ages (bias/dark/flat/WLS), each the signed age of the associated
 master relative to the observation time.
 """
@@ -12,8 +12,7 @@ from kpfpipe.utils.kpf_utils import get_timestamp, kpf_timestamp_to_datetime
 
 # Master-calibration age metrics: the RECEIPT path keyword (written by
 # CalibrationAssociation) -> the age keyword whose signed (master - obs) value
-# this diagnostic computes. The FITS comment comes from the registry (via the
-# _tag helper / set_keyword), so it is not duplicated here.
+# this diagnostic computes. (FITS comment from the registry -- see ``_tag``.)
 _CAL_AGE_KEYS = {
     "BIASFILE": "BIASAGE",
     "DARKFILE": "DARKAGE",

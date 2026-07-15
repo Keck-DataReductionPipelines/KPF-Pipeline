@@ -23,6 +23,14 @@ _DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
 class SpectralExtraction:
     """
     Extract per-order 1D spectra from a KPF1, producing a KPF2.
+
+    Parameters
+    ----------
+    l1_obj : KPF1
+        Assembled L1 frame carrying the per-chip ``{CHIP}_CCD`` / ``{CHIP}_VAR``
+        full-frame images to extract from.
+    config : None | dict | ConfigHandler
+        Module configuration. Recognized keys: extraction_method.
     """
 
     def __init__(self, l1_obj, config=None):
@@ -180,16 +188,18 @@ class SpectralExtraction:
     def _optimal_extraction(D, V, *, S=None, M=None, W=None, P=None):
         """Optimal extraction of a 2D trace (not yet implemented).
 
-        Follows the Horne (1986) optimal-extraction algorithm; the single-letter
-        array names (D, V, S, M, W, P) follow its convention."""
+        Follows the Horne (1986) optimal-extraction algorithm; single-letter array
+        names follow the ``_box_extraction`` convention (``P`` adds the spatial
+        profile)."""
         raise NotImplementedError("optimal extraction not yet implemented")
 
     @staticmethod
     def _flat_relative_extraction(D, V, *, S=None, M=None, W=None, F=None):
         """Flat-relative extraction of a 2D trace (not yet implemented).
 
-        Follows the Zechmeister et al. (2014) flat-relative extraction
-        algorithm; single-letter array names follow the Horne (1986) convention."""
+        Follows the Zechmeister et al. (2014) flat-relative extraction algorithm;
+        single-letter array names follow the ``_box_extraction`` convention
+        (``F`` adds the flat)."""
         raise NotImplementedError("flat relative extraction not yet implemented")
 
     # ------------------------------------------------------------------
@@ -347,12 +357,7 @@ class SpectralExtraction:
         self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
-        """Write all PRIMARY-header keywords for spectral extraction.
-
-        Reserved: this module writes no PRIMARY metadata yet. Present so every
-        module consolidates header writes in one place, called just before the
-        receipt entry.
-        """
+        """Reserved header-consolidation hook; writes no PRIMARY metadata yet."""
 
     # ------------------------------------------------------------------
     # Public entry point

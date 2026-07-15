@@ -26,7 +26,9 @@ class Bias(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: stack_sigma, chips.
+        Module configuration. Recognized keys: stack_sigma, min_stack_size,
+        chips. A bias takes no calibration, so the bias/dark/flat overrides are
+        ignored.
     """
 
     def __init__(self, l0_file_list, config=None):
@@ -60,8 +62,8 @@ class Bias(BaseMasterModule):
         Build master bias from stack.
 
         The constructed KPFMasterL1 is returned and cached on
-        `self.ml1_obj`; pass `master_path` to also persist it to disk
-        via `save_master('L1', ...)`.
+        ``self.ml1_obj``; pass ``master_path`` to also persist it to disk
+        via ``save_master('L1', ...)``.
 
         A bias receives no calibrations, so there are no bias/dark/
         flat overrides (unlike Dark/WLS).

@@ -16,7 +16,10 @@ class Flat(BaseMasterModule):
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: stack_sigma, chips.
+        Module configuration. Recognized keys: stack_sigma, min_stack_size,
+        chips, bias and dark (master-calibration overrides), and the
+        calibration-association keys masters_search_window_days and
+        KPF_MASTERS_OUTPUT.
     """
 
     _STANDARD_CALIBRATIONS = ("bias", "dark")

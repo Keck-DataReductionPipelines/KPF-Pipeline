@@ -90,8 +90,8 @@ class CalibrationAssociation:
     def _find_master_files(self, cal_type, date_obs, masters_search_window_days=None):
         """
         Return sorted (filepath, kpf_timestamp) tuples for all masters of
-        `cal_type` within the [days_before, days_after] window around
-        `date_obs`. Raises ValueError for an unsupported `cal_type`.
+        ``cal_type`` within the [days_before, days_after] window around
+        ``date_obs``. Raises ValueError for an unsupported ``cal_type``.
         """
         if cal_type not in _LEVEL_BY_CAL_TYPE:
             raise ValueError(
@@ -125,8 +125,8 @@ class CalibrationAssociation:
 
     def _select_nearest(self, date_obs, master_files):
         """
-        Return the filepath of the candidate nearest in time to `date_obs`,
-        or None if `master_files` is empty (callers treat None as a failure).
+        Return the filepath of the candidate nearest in time to ``date_obs``,
+        or None if ``master_files`` is empty (callers treat None as a failure).
         """
         if not master_files:
             return None
@@ -194,6 +194,8 @@ class CalibrationAssociation:
 
         Raises
         ------
+        ValueError
+            If any requested ``cal_type`` is unsupported.
         FileNotFoundError
             If no master file is found for any requested calibration type.
         """

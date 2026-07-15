@@ -21,15 +21,15 @@ KPF rows). The ``routing``/``allowed``/``required``/``eprv_primary_*`` lookups a
 derived from this table.
 
 The three use-cases:
-  (1) Mapping  — ``header_map`` (WMKO->EPRV), consumed by ``KPF0._map_header``;
+  (1) Mapping  -- ``header_map`` (WMKO->EPRV), consumed by ``KPF0._map_header``;
       ``eprv_primary_datatypes`` types the values it emits. ``header_map`` is
       **sanitized on load** so it holds only genuine static native->EPRV mappings:
       rows whose key is unregistered (PARANG/PARANG2) or handled elsewhere
       (``_DEFAULT_OVERRIDES``) are dropped, so ``_map_header`` needs no
       in-loop filter or per-keyword correction.
-  (2) Validation — ``allowed`` / ``required`` (per-extension, from the table)
+  (2) Validation -- ``allowed`` / ``required`` (per-extension, from the table)
       plus ``structural`` (FITS bookkeeping cards).
-  (3) Routing — ``routing`` (keyword -> (extension, comment)) for the default
+  (3) Routing -- ``routing`` (keyword -> (extension, comment)) for the default
       home-extension write, plus ``comment_for`` ((extension, keyword) ->
       comment) for ``set_keyword``'s targeted (``ext=``) write of EPRV
       per-extension cards. Both consumed by ``KPFDataModel.set_keyword``.
@@ -299,7 +299,7 @@ class KeywordRegistry:
     def comment_for(self, keyword, extension):
         """FITS comment (registry Description) for ``keyword`` on ``extension``.
 
-        Returns None when the keyword is not registered for that extension — the
+        Returns None when the keyword is not registered for that extension -- the
         membership test set_keyword's targeted (``ext=``) path uses; a registered
         keyword with an empty Description returns ``""``, distinct from None.
         """
@@ -314,7 +314,7 @@ class KeywordRegistry:
         EPRV CSVs encode per-key/per-telescope families as a "BASE1 ... BASE#"
         template; expand each to literal rows BASE1-9 (only index 1 inherits the
         Required flag, mirroring rvdata's seed). EPRV rows carry ``"EPRV"`` in the
-        ``PopulatedBy`` column — the discriminator the derived lookups use to
+        ``PopulatedBy`` column -- the discriminator the derived lookups use to
         tell EPRV rows from KPF rows.
         """
         rows = []
@@ -496,10 +496,10 @@ class KeywordRegistry:
 
         Returns ``(seed, datatypes)``:
 
-        - ``seed`` — ``{keyword: (typed_default, comment)}`` for the EPRV Required
+        - ``seed`` -- ``{keyword: (typed_default, comment)}`` for the EPRV Required
           PRIMARY keywords at Level <= 1 (the skeleton ``KPF1.__init__`` stamps),
           typed via ``parse_value_to_datatype`` like ``RV2.__init__``.
-        - ``datatypes`` — ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords,
+        - ``datatypes`` -- ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords,
           so ``_map_header`` can type the values it overlays. Scoped to EPRV PRIMARY
           so it never feeds KPF's ``int``/``str`` to ``parse_value_to_datatype``.
         """
@@ -529,10 +529,11 @@ class KeywordRegistry:
         tuple
             ``(all_flags, by_level)``. ``all_flags`` is every QUALITY_CONTROL row
             tagged by a QC populator (used for the cross-level ISGOOD aggregate).
-            ``by_level`` maps a LEVEL tag ("L0"/"L1"/"L2") to that level's own
-            ``QCL{n}`` flags (used by the per-level checkpoint). The generic "QC"
-            aggregate keyword (ISGOOD) is in ``all_flags`` only — in no per-level
-            set, so the checkpoint never warns/raises on the aggregate itself.
+            ``by_level`` maps a LEVEL tag (one per registered level, e.g.
+            "L0"/"L1"/"L2"/"L4") to that level's own ``QCL{n}`` flags (used by the
+            per-level checkpoint). The generic "QC" aggregate keyword (ISGOOD) is
+            in ``all_flags`` only -- in no per-level set, so the checkpoint never
+            warns/raises on the aggregate itself.
         """
         all_flags = set()
         by_level = {}
@@ -543,7 +544,7 @@ class KeywordRegistry:
             ):
                 continue
             all_flags.add(row.Keyword)
-            if row.PopulatedBy != "QC":  # "QCL0"/"QCL1"/"QCL2" -> "L0"/"L1"/"L2"
+            if row.PopulatedBy != "QC":  # "QCL{n}" -> "L{n}", for each registered level
                 by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
         return all_flags, by_level
 
@@ -557,7 +558,7 @@ class KeywordRegistry:
         ``LEVELn_EXTENSIONS`` DataFrame; a KPF-only extension (e.g. QUALITY_CONTROL)
         is absent there, so reading an Ln product that contains it raises ``KeyError``.
         This appends the row in-memory (idempotent). ``Required`` is False so rvdata
-        neither auto-creates it nor lists it in EXT_DESCRIPT — the KPF model
+        neither auto-creates it nor lists it in EXT_DESCRIPT -- the KPF model
         ``__init__`` creates the (empty) extension explicitly.
         """
         if name in set(level_extensions["Name"]):
@@ -574,5 +575,5 @@ class KeywordRegistry:
         level_extensions.loc[len(level_extensions)] = row
 
 
-# Module singleton — the one registry instance every consumer reaches through.
+# Module singleton -- the one registry instance every consumer reaches through.
 keyword_registry = KeywordRegistry()

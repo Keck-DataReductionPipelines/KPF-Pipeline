@@ -24,8 +24,7 @@ _RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
 
 
 class PlotL4:
-    """
-    Quicklook plots for KPF L4 (RVs and CCFs) data.
+    """Quicklook plots for KPF L4 (RVs and CCFs) data.
 
     Parameters
     ----------
@@ -59,7 +58,7 @@ class PlotL4:
         """Return the (norder, nvel) CCF cube for one chip+fiber, or None.
 
         Returns None when the extension is absent/empty OR contains no real
-        signal (all zero/NaN) — e.g. the zero-filled half of the concatenated
+        signal (all zero/NaN) -- e.g. the zero-filled half of the concatenated
         cube when RVs were only computed for the other chip.
         """
         arr = self.l4_obj.data.get(f"{chip.upper()}_{fiber.upper()}_CCF")
@@ -174,7 +173,7 @@ class PlotL4:
     def _order_weights(self, rvtab):
         """Per-order CCF-combination weights (RV table WEIGHT column) for the SCI
         annotations. Returns None if the fiber has no RV table, but *raises* if a
-        table is present yet lacks WEIGHT — the column the pipeline actually used
+        table is present yet lacks WEIGHT -- the column the pipeline actually used
         to combine CCFs (see RadialVelocity._combine_ccfs), with no meaningful
         substitute.
         """
@@ -191,9 +190,9 @@ class PlotL4:
     def _draw_ccf_panel(self, ax, chip, fiber, norder, vref):
         """Draw one orderlet panel of stacked per-order CCFs (v2.12 layout).
 
-        Panels share a `norder`-based y-range so the five line up; an
+        Panels share a ``norder``-based y-range so the five line up; an
         unilluminated orderlet (no CCF) gets a framed 'not illuminated' note
-        over the shared `vref` range instead of a blank default axis.
+        over the shared ``vref`` range instead of a blank default axis.
         """
         is_sci = fiber in _SCI_FIBERS
         top = norder * _ORDER_OFFSET
@@ -339,19 +338,23 @@ class PlotL4:
     # ------------------------------------------------------------------
 
     def run(self, which):
-        """Generate the requested plot(s) for every chip that has CCF data,
-        saving each to ``output_dir``. In that save-to-disk mode the figure is
-        closed so callers don't accumulate them; when ``output_dir`` is None the
-        figures are returned open, so they display when the caller renders them
-        (e.g. interactively in a notebook).
+        """Generate the requested plot(s) for every chip that has CCF data.
 
-        Args:
-            which: 'all' to run every implemented plot, or the name of a
-                single plot method (one of ``self._PLOT_METHODS``).
+        Follows the shared Quicklook ``run()`` contract (style guide §9):
+        saved-and-closed when ``output_dir`` is set, returned open when it
+        is ``None``.
 
-        Returns:
-            dict mapping ``{method_name}_{chip}`` to matplotlib.Figure (closed
-            only when saved to ``output_dir``; useful for tests/introspection).
+        Parameters
+        ----------
+        which : str
+            'all' to run every implemented plot, or the name of a single
+            plot method (one of ``self._PLOT_METHODS``).
+
+        Returns
+        -------
+        dict
+            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
+            for tests and introspection.
         """
         if which == "all":
             names = self._PLOT_METHODS
@@ -374,8 +377,7 @@ class PlotL4:
                 if fig is None:
                     continue
                 figures[f"{name}_{chip}"] = fig
-                # Closing frees memory in save-to-disk mode; when returning
-                # figures for interactive display, leave them open.
+                # Close only saved figures (Quicklook run() contract).
                 if self.output_dir is not None:
                     plt.close(fig)
         return figures

@@ -29,9 +29,18 @@ class BaseMasterModule:
     stacking/extraction following standard CCD reduction: a bias gets no
     calibration, a dark is bias-subtracted, and a flat and WLS are bias- and
     dark-subtracted.
+
+    Parameters
+    ----------
+    l0_file_list : list of str
+        Sorted list of L0 FITS file paths to stack (ascending order is
+        required).
+    config : None | dict | ConfigHandler
+        Module configuration. Recognized keys: stack_sigma, min_stack_size,
+        bias, dark, flat, masters_search_window_days, KPF_MASTERS_OUTPUT.
     """
 
-    # Module defaults; subclasses extend via `{**BaseMasterModule._DEFAULTS, ...}`.
+    # Module defaults; subclasses extend via ``{**BaseMasterModule._DEFAULTS, ...}``.
     # bias/dark/flat are the globally-enabled calibrations (the no-config
     # fallback; in practice resolved from the shared [MODULE_IMAGE_PROCESSING]
     # config and make_master kwargs). Keep in sync with the same keys in
@@ -46,12 +55,12 @@ class BaseMasterModule:
     }
 
     # The calibrations that are standard for this master type (the ceiling).
-    # `_process_frame` applies the intersection of this set with the resolved
+    # ``_process_frame`` applies the intersection of this set with the resolved
     # bias/dark/flat flags. Subclasses override (e.g. Dark -> ("bias",)).
     _STANDARD_CALIBRATIONS = ()
 
     # Physical pixel units (BUNIT) by master type, written to the IMG
-    # extensions in `_build_ml1_obj`. A bias master is a stacked count image
+    # extensions in ``_build_ml1_obj``. A bias master is a stacked count image
     # (electrons); a dark is normalized to a rate (electrons/sec); a flat is a
     # unitless relative throughput (no BUNIT). Unknown types get no BUNIT.
     _BUNIT_BY_TYPE = {
@@ -62,7 +71,7 @@ class BaseMasterModule:
 
     # QCL0 flags a frame must pass to enter a stack: data present, required
     # keywords present, sane exptime, and not observer-junk. A frame failing
-    # any is dropped in `_load_frame` and counted as a load failure.
+    # any is dropped in ``_load_frame`` and counted as a load failure.
     _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "KWRDPRL0", "EXPTIMOK", "NOTJUNK")
 
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
@@ -90,16 +99,16 @@ class BaseMasterModule:
         self._l1_obj_cache = {}
 
         # Masters output root; CalibrationAssociation reads masters from here
-        # when `_process_frame` associates a calibration for a stacked frame.
+        # when ``_process_frame`` associates a calibration for a stacked frame.
         self._masters_output = params.get("KPF_MASTERS_OUTPUT")
 
-        # Forwarded to CalibrationAssociation in `_process_frame` so an operator's
+        # Forwarded to CalibrationAssociation in ``_process_frame`` so an operator's
         # configured search window is honored, not silently reset to the default.
         self._masters_search_window_days = params.get("masters_search_window_days")
 
         # One cached master (KPFMasterL1) and its path per calibration type.
         # Frames in a stack are taken close in time and so almost always
-        # associate the same nearest master; caching lets `_process_frame`
+        # associate the same nearest master; caching lets ``_process_frame``
         # read each master from disk once rather than once per frame.
         self._master_ml1 = {}
         self._master_paths = {}
@@ -252,7 +261,7 @@ class BaseMasterModule:
         """
         Extract an assembled frame to L2 (for spectral masters, e.g. WLS).
 
-        Spectral extraction only — calibration is not implicit; callers needing
+        Spectral extraction only -- calibration is not implicit; callers needing
         bias/dark applied must run ``_process_frame`` first.
         """
         spectral_extraction = SpectralExtraction(l1_obj)
@@ -294,7 +303,7 @@ class BaseMasterModule:
         ``max_fail_fraction`` or ``max_fail_number``.
 
         Returns ``(stats, zero_exptime)``. ``stats`` is per-extension with 'nframe',
-        'counts_sum', 'rate_mean' (equal-weight mean of per-frame rates — the clip
+        'counts_sum', 'rate_mean' (equal-weight mean of per-frame rates -- the clip
         center, not the master IMG), 'rate_rms' (frame-to-frame sample RMS), and on
         '{chip}_CCD' only 'exptime_sum' (per-pixel total exposure over valid frames;
         the exposure-weighted-rate denominator in stack_frames, = valid-frame count
@@ -435,7 +444,7 @@ class BaseMasterModule:
         ``max_fail_fraction``/``max_fail_number`` or exposures are inconsistent.
 
         Returns ``(exact_stats, zero_exptime)``. ``exact_stats`` carries only
-        'nframe', 'counts_sum', and (on '{chip}_CCD') 'exptime_sum' — no
+        'nframe', 'counts_sum', and (on '{chip}_CCD') 'exptime_sum' -- no
         'rate_mean'/'rate_rms', since clip bounds come from the approximation and
         the master IMG is counts_sum / exptime_sum.
         """
@@ -446,7 +455,7 @@ class BaseMasterModule:
 
         ndirect = nstream - 1
 
-        # The approximation pass stacks only the first `ndirect` frames; cache
+        # The approximation pass stacks only the first ``ndirect`` frames; cache
         # them so the streaming exact pass below reuses them instead of
         # re-reading and re-assembling those files from disk.
         approx_stats, zero_exptime = self._compute_stats_from_datacube(
@@ -492,7 +501,7 @@ class BaseMasterModule:
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
 
         for fn in l0_file_list:
-            # The first `ndirect` frames are cache hits from the approximation
+            # The first ``ndirect`` frames are cache hits from the approximation
             # pass above; the rest are read once here and not worth caching.
             l1_obj = self._load_frame(fn, cache=False)
 
@@ -543,7 +552,7 @@ class BaseMasterModule:
         illuminated only for flats (in the assembled image dispersion runs along
         axis=1, cross-dispersion along axis=0):
 
-        - 'bias' : per-column median (axis=0) — judges each pixel against its own
+        - 'bias' : per-column median (axis=0) -- judges each pixel against its own
           cross-dispersion column, removing column-wise bias structure.
         - 'dark'/None : global median (no illumination/column structure to preserve).
         - 'flat' : residual deviation from the smooth illumination trend along
@@ -649,7 +658,7 @@ class BaseMasterModule:
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
         cal_type : {'bias', 'dark', 'flat', None}, optional
-            Calibration type, forwarded to `_clean_l1_arrays` to select the
+            Calibration type, forwarded to ``_clean_l1_arrays`` to select the
             final outlier-flagging mode. Defaults to the conservative
             global-median mode.
         max_fail_fraction : float, optional
@@ -664,14 +673,14 @@ class BaseMasterModule:
         -------
         l1_arrays : dict
             Dictionary containing per-chip stacked products, with bad pixels
-            interpolated and the bad-pixel mask recomputed (`_clean_l1_arrays`):
+            interpolated and the bad-pixel mask recomputed (``_clean_l1_arrays``):
             - '{chip}_IMG'  : mean count rate FFI
             - '{chip}_SNR'  : signal-to-noise ratio FFI
             - '{chip}_MASK' : boolean bad pixel mask (1 = good, 0 = bad)
 
         Notes
         -----
-        If number of frames is less than `nstream`, statistics are computed
+        If number of frames is less than ``nstream``, statistics are computed
         directly from a full data cube. Otherwise, a single-pass streaming
         accumulation is used to bound memory usage.
 
@@ -748,30 +757,30 @@ class BaseMasterModule:
 
     def save_master(self, level, path, *, overwrite=False):
         """
-        Write the cached master object to a FITS file at `path`.
+        Write the cached master object to a FITS file at ``path``.
 
         Parameters
         ----------
         level : str
             Data level of the master to save; selects which cached
             object to write. One of 'L1' or 'L2', matching the
-            subclass's `make_master_l1` / `make_master_l2` entry point.
+            subclass's ``make_master_l1`` / ``make_master_l2`` entry point.
         path : str
             Output FITS path. Parent directories are created as needed.
         overwrite : bool, optional
             If False (default), refuse to clobber an existing file and
             raise FileExistsError. If True, replace any existing file
-            at `path`. Defaults to False to protect against accidental
+            at ``path``. Defaults to False to protect against accidental
             overwrites when called directly; entry points that pass an
-            output path through `make_master_lN()` should set True
+            output path through ``make_master_lN()`` should set True
             explicitly.
 
         Raises
         ------
         ValueError
-            If `level` is not a recognized data level.
+            If ``level`` is not a recognized data level.
         FileExistsError
-            If `path` already exists and `overwrite` is False.
+            If ``path`` already exists and ``overwrite`` is False.
         RuntimeError
             If the corresponding make_master_lN() has not been run yet,
             or raised before constructing the master.

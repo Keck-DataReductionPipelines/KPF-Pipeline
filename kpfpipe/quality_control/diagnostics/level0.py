@@ -32,13 +32,12 @@ class DiagL0(Diagnostics):
 
     @staticmethod
     def _present(hdr, keys):
-        """True if every key in `keys` is present and non-None in `hdr`."""
+        """True if every key in ``keys`` is present and non-None in ``hdr``."""
         return all(hdr.get(k) is not None for k in keys)
 
     # Astrometry helpers reproduced from BarycentricCorrection._gaia_astrometry /
     # ._wmko_astrometry (there they read INSTRUMENT_HEADER; at L0 the natives are
-    # on PRIMARY). The shared copies move to utils/astro.py in a follow-up -- keep
-    # the two in sync until then.
+    # on PRIMARY). The two copies are kept in sync by hand.
 
     def _gaia_source_id(self):
         """Digit-only Gaia DR3 id from L0 GAIAID, or None if absent/malformed."""

@@ -58,11 +58,12 @@ class KPF0(KPFDataModel):
                 self.create_extension(row["Name"], row["DataType"])
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """
-        Route L0 FITS reads to `KPF0._read`, then stamp DRP provenance.
+        """Route L0 FITS reads to ``KPF0._read``, then stamp DRP provenance.
 
-        `RVDataModel.read` has no lvl==0 dispatch branch, so the inherited
-        `from_fits` would never call into `_read` without this override.
+        ``RVDataModel.read`` has no lvl==0 dispatch branch, so the inherited
+        ``from_fits`` would never call into ``_read`` without this override.
+        (This is the canonical statement of the read-override rationale; the
+        L1 and Masters-L2 overrides refer back here.)
         """
         self._read(hdul)
         # Derive obs_id before stamping: _stamp_wmko_tracking writes it as the
@@ -101,11 +102,10 @@ class KPF0(KPFDataModel):
             self.set_keyword(key, value)
 
     def _read(self, hdul):
-        """
-        Read all extensions from an L0 FITS HDUList.
+        """Read all extensions from an L0 FITS HDUList.
 
         Iterates through all HDUs and creates extensions dynamically
-        based on what is present. CompImageHDU is transparently
+        based on what is present. ``CompImageHDU`` is transparently
         decompressed by astropy.
         """
         for hdu in hdul:
@@ -166,8 +166,10 @@ class KPF0(KPFDataModel):
     def generate_standard_filename(self):
         """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern.
 
-        Delegates to `kpf_filename` (the single source for the KPF-native naming
-        rule), which raises a `ValueError` if `obs_id` is unset or invalid.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
         return kpf_filename(self.obs_id, "L0")
 
@@ -209,7 +211,7 @@ class KPF0(KPFDataModel):
 
         A pure tabular application of the registry's (sanitized) header_map: for
         each row take the instrument value if present, else the row default, and
-        type it to the EPRV DataType. ``JD_UTC`` is the sole exception — a
+        type it to the EPRV DataType. ``JD_UTC`` is the sole exception -- a
         per-frame transform of the native ``MJD-OBS``, computed below.
 
         Returns
@@ -264,7 +266,7 @@ class KPF0(KPFDataModel):
         Returns a KPF1 with EPRV PRIMARY, INSTRUMENT_HEADER, pass-through
         extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG), receipt, and
         obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
-        empty — the caller (image assembly) fills those in.
+        empty -- the caller (image assembly) fills those in.
         """
         kpf1 = KPF1()
 

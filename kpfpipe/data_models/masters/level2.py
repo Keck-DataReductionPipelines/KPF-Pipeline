@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _ML2_WLS_EXTENSIONS = pd.read_csv(_config_path / "ML2-wls-extensions.csv")
 _ML2_FLAT_EXTENSIONS = pd.read_csv(_config_path / "ML2-flat-extensions.csv")
-# Per-type authoritative extension manifests, keyed by the `kind` selector.
+# Per-type authoritative extension manifests, keyed by the ``kind`` selector.
 _ML2_MANIFESTS = {"wls": _ML2_WLS_EXTENSIONS, "flat": _ML2_FLAT_EXTENSIONS}
 
 
@@ -38,8 +38,8 @@ class KPFMasterL2(KPFMasterModel, KPF2):
     SCI2_WAVE -> TRACE3_WAVE, with chip-prefix access GREEN_SCI2_WAVE /
     RED_SCI2_WAVE).
 
-    Construct with an explicit type, e.g. `KPFMasterL2(kind="wls")`, or
-    load a product from disk with `KPFMasterL2.from_fits(path)`, which
+    Construct with an explicit type, e.g. ``KPFMasterL2(kind="wls")``, or
+    load a product from disk with ``KPFMasterL2.from_fits(path)``, which
     infers the kind from header keyword MASTYPE.
     """
 
@@ -88,13 +88,20 @@ class KPFMasterL2(KPFMasterModel, KPF2):
 
     @classmethod
     def from_fits(cls, fn, instrument=None, **kwargs):
-        """Load an L2 master, inferring `kind` from the file's PRIMARY MASTYPE.
+        """Load an L2 master, inferring ``kind`` from the file's PRIMARY MASTYPE.
 
         rvdata's RVDataModel.from_fits builds the instance via ``cls()`` with no
         args, which a required ``kind`` rejects. This override reads MASTYPE
         (always set by ``set_input_files`` on a written master), maps it to a
         schema kind, and constructs explicitly. Mirrors the base from_fits flow
         (the base also computes an unused MD5 digest, which is omitted here).
+
+        Raises
+        ------
+        OSError
+            If ``fn`` does not exist or is not a ``.fits``/``.fit`` file.
+        ValueError
+            If the PRIMARY MASTYPE is missing or maps to no known schema kind.
         """
         if not os.path.isfile(fn):
             raise OSError(f"{fn} does not exist.")
@@ -119,21 +126,21 @@ class KPFMasterL2(KPFMasterModel, KPF2):
         return obj
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """
-        Route Masters L2 FITS reads to `KPFMasterL2._read`.
+        """Route Masters L2 FITS reads to ``KPFMasterL2._read``.
 
-        `RVDataModel.read` dispatches lvl==2 to `RV2._read`, which only knows
-        the EPRV standard L2 extensions and would KeyError on masters-specific
-        ones (INPUT_FILES, *_WLS_COEFFS).
+        Same override pattern as ``KPF0.read`` (see there for the canonical
+        rationale), but for a distinct reason: ``RVDataModel.read`` *does*
+        dispatch lvl==2, to ``RV2._read``, which only knows the EPRV standard L2
+        extensions and would KeyError on masters-specific ones (INPUT_FILES,
+        ``*_WLS_COEFFS``).
         """
         self._read(hdul)
 
     def _read(self, hdul):
-        """
-        Read all extensions from a Masters L2 FITS HDUList.
+        """Read all extensions from a Masters L2 FITS HDUList.
 
         Handles known extensions and accepts unknown extensions (with a
-        warning). Mirrors KPF1._read in style and structure.
+        warning). Mirrors ``KPF1._read`` in style and structure.
         """
         for hdu in hdul:
             ext_name = hdu.name
@@ -170,8 +177,8 @@ class KPFMasterL2(KPFMasterModel, KPF2):
                     df = df.reindex(columns=all_cols).fillna("")
                 self.receipt = df
             elif fits_type == "ImageHDU":
-                # np.array (not asarray) materializes the memmapped HDU into RAM
-                # before from_fits closes the file; a view would dangle afterward.
+                # Materialize the memmap before from_fits closes the file
+                # (np.array, not asarray); see KPF0._read for the full rationale.
                 self.set_data(ext_name, np.array(hdu.data))
             elif fits_type == "BinTableHDU":
                 self.set_data(ext_name, Table.read(hdu))

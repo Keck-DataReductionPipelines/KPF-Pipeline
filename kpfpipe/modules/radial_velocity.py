@@ -135,9 +135,9 @@ class RadialVelocity:
         """
         Decorrelation length [km/s] of the CCF photon noise, for the Boisse (2010)
         N_scale oversampling correction. The CCF noise kernel is the cross-
-        correlation of two top-hats -- the mask hole (`mask_width`) and the native
-        pixel (`vel_span_per_pixel`), i.e. a trapezoid -- whose autocorrelation
-        integral length (integral^2 / integral-of-square) is `M**2 / (M - m/3)`
+        correlation of two top-hats -- the mask hole (``mask_width``) and the native
+        pixel (``vel_span_per_pixel``), i.e. a trapezoid -- whose autocorrelation
+        integral length (integral^2 / integral-of-square) is ``M**2 / (M - m/3)``
         with M, m the larger/smaller width (reduces to 1.5*w for equal widths).
         """
         big, small = (
@@ -159,11 +159,11 @@ class RadialVelocity:
     ):
         """
         Two-pass Gaussian fit to a CCF dip, returning an RV [km/s] and a photon-
-        limited error. Pass 1 fits `window` about the CCF minimum; pass 2 refits
-        +/-`fit_nsigma` sigma about the pass-1 mean (symmetric), and those points
+        limited error. Pass 1 fits ``window`` about the CCF minimum; pass 2 refits
+        +/-``fit_nsigma`` sigma about the pass-1 mean (symmetric), and those points
         set the Bouchy (2001) photon error, scaled by the Boisse (2010) N_scale
-        oversampling factor (`vel_span_per_pixel`/`mask_width` via
-        _ccf_noise_corr_length). Both windows use at least `min_npts` points.
+        oversampling factor (``vel_span_per_pixel``/``mask_width`` via
+        _ccf_noise_corr_length). Both windows use at least ``min_npts`` points.
         Returns (NaN, NaN) if the fit fails; raises ValueError on a non-physical
         (zero/negative-count) CCF in the fit window, where no photon error exists.
         """
@@ -232,13 +232,13 @@ class RadialVelocity:
     def _combine_ccfs(self, chip, fibers):
         """
         Combine one chip's cached per-order CCFs into a weighted-average CCF (the
-        RV value) and an unweighted-sum CCF (the photon error). `fibers` is a
+        RV value) and an unweighted-sum CCF (the photon error). ``fibers`` is a
         single fiber or exactly the three science fibers (summed before collapsing,
         sharing a mask/grid so the first is representative). Returns
         (velocity_grid, weighted_ccf, summed_ccf, summed_ccf_var, rep_scale), the
         last being the strongest order's pixel scale. Cross-CCD combination happens
         at the RV level in compute_weighted_rvs, not here. Raises ValueError on a
-        bad `fibers`, RuntimeError if the CCFs are unloaded.
+        bad ``fibers``, RuntimeError if the CCFs are unloaded.
         """
         chip = chip.upper()
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
@@ -387,7 +387,7 @@ class RadialVelocity:
         compute_order_by_order_rvs). Two flags control the rest:
 
           combine_fibers : sum the three science fibers' CCFs before collapsing.
-                           True requires `fibers` == the three SCI fibers; False
+                           True requires ``fibers`` == the three SCI fibers; False
                            requires a single fiber.
           combine_ccds   : combine the per-chip RVs across CCDs at the RV level --
                            value = order-weight-weighted mean of the per-chip RVs,
@@ -418,14 +418,14 @@ class RadialVelocity:
         Returns
         -------
         dict or tuple
-            combine_ccds=False -> dict {chip: (rv, rv_err)} over `chips`.
+            combine_ccds=False -> dict {chip: (rv, rv_err)} over ``chips``.
             combine_ccds=True  -> a single (rv, rv_err) tuple [km/s].
             A non-finite fit (no order carrying weight) yields (NaN, NaN).
 
         Raises
         ------
         ValueError
-            If the combine_fibers flag and `fibers` are inconsistent.
+            If the combine_fibers flag and ``fibers`` are inconsistent.
         RuntimeError
             If the CCFs have not been loaded for any requested chip/fiber.
         """
@@ -557,8 +557,7 @@ class RadialVelocity:
 
     def _set_headers(self, l4_obj):
         """
-        Write all RV keywords -- the only place this module writes headers --
-        from the perform()-filled stashes, just before the receipt entry. Per
+        Write all RV keywords from the perform()-filled stashes. Per
         orderlet: RVn RVMETHOD/SKYRMVD/TELLRMVD and per-fiber per-CCD
         CCD{n}RV{sfx}/CCD{n}ERV{sfx}. On PRIMARY: RVMETHOD, and (when a science
         combine ran) the SCI-combined CCD{n}RV/CCD{n}ERV and EPRV

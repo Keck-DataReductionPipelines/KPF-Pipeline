@@ -107,6 +107,11 @@ def build_log_path(log_dir, recipe_name, target, start_time=None):
     -------
     str
         The absolute log-file path.
+
+    Raises
+    ------
+    ValueError
+        If ``log_dir`` is empty or not a string.
     """
     if not log_dir or not isinstance(log_dir, str):
         raise ValueError(f"log_dir must be a non-empty string; got {log_dir!r}")
@@ -168,6 +173,13 @@ def setup_logging(
     -------
     str
         The absolute path of the created log file.
+
+    Raises
+    ------
+    ValueError
+        If ``log_dir`` is empty/not a string, or ``level`` is an unknown level name.
+    FileExistsError
+        If a unique log file cannot be created after the collision retries.
     """
     global _prior_root_level
     teardown_logging()
