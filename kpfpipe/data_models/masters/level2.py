@@ -64,23 +64,17 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             )
         self.kind = kind
         KPF2.__init__(self)
-        # KPF2.__init__ runs RV2.__init__ (via super()), which seeds the EPRV L2
-        # science PRIMARY skeleton. Masters are out of EPRV scope and carry their
-        # own minimal PRIMARY, so drop that skeleton and stamp DATALVL ("ML2")
-        # ourselves -- rvdata's to_fits never re-stamps DATALVL, so without this it
-        # would ship the RV2 placeholder "UNKNOWN".
+        # KPF2.__init__ seeds the EPRV L2 science PRIMARY skeleton. Masters are out
+        # of EPRV scope and carry their own minimal PRIMARY, so drop it and stamp
+        # DATALVL ("ML2") ourselves (rvdata's to_fits never re-stamps DATALVL).
         self.headers["PRIMARY"].clear()
         self.level = 2
 
         # ML2-{kind}-extensions.csv is the authoritative manifest for this master
         # type. KPF2.__init__ builds the full science L2 schema (needed for the
-        # alias system); anything it created that the manifest omits is dropped --
-        # the observation-specific extensions (INSTRUMENT_HEADER, BARYCORR_*,
-        # BJD_TDB, EXPMETER, TELEMETRY, ANCILLARY_SPECTRUM) void for a stacked
-        # master, plus the other type's trace extensions (a wls master drops
-        # FLUX/VAR/BLAZE; a flat master drops WAVE). Then create any Required row not
-        # present (e.g. INPUT_FILES); *_WLS_COEFFS are Required=False, created
-        # per-chip on demand in make_master_l2.
+        # alias system); drop anything the manifest omits, then create any Required
+        # row not present. *_WLS_COEFFS are Required=False, created per-chip on
+        # demand in make_master_l2.
         manifest_df = _ML2_MANIFESTS[kind]
         manifest = set(manifest_df["Name"])
         for ext in list(self.extensions):

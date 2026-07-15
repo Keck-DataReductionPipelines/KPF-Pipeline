@@ -205,15 +205,13 @@ class KeywordRegistry:
         self._load_header_map()
 
     def _build_registry(self):
-        """Build ``self.table`` and every lookup derived from it.
+        """Build ``self.table`` and every read-only lookup derived from it.
 
-        Assembles the unified table (EPRV rows first, then KPF rows; KPF wins a
-        collision), corrects the Defaults header_map.csv gets wrong (NUMORDER
-        65 -> 67) or that are runtime (DRPTAG -> version), drops structural cards
-        rvdata redundantly registers, then derives the read-only lookups. All are
-        shared process-wide via the singleton, so they are frozen (frozenset /
-        MappingProxyType) against a stray consumer mutation; ``self.table`` is
-        only ever read.
+        Unions the EPRV and KPF rows (KPF wins a collision), applies the
+        ``_DEFAULT_OVERRIDES`` corrections, drops structural cards rvdata
+        redundantly registers, then derives the lookups. All are frozen (frozenset
+        / MappingProxyType) against stray mutation, since the singleton shares them
+        process-wide.
         """
         eprv_rows, kpf_rows = self._build_rows()
         table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
@@ -221,9 +219,8 @@ class KeywordRegistry:
             if value is not None:
                 table.loc[table["Keyword"] == keyword, "Default"] = value
         # Structural cards are written by astropy, never registered: drop any that
-        # rvdata redundantly declares as keywords (e.g. XTENSION/EXTNAME), so
-        # registered & structural stay disjoint. (structural is derived first so
-        # is_structural is available here.)
+        # rvdata redundantly declares as keywords, so registered & structural stay
+        # disjoint. (structural is derived first so is_structural is available here.)
         self.structural = frozenset(self._STRUCTURAL)
         table = table[~table["Keyword"].map(self.is_structural)].reset_index(drop=True)
         self.table = table
@@ -258,16 +255,12 @@ class KeywordRegistry:
     def _load_header_map(self):
         """Read and sanitize rvdata's WMKO-native -> EPRV-standard ``header_map``.
 
-        First realigns the fiber-indexed STANDARD keys from rvdata's CAL-first to
-        KPF's SKY-first numbering (see ``_FIBER_INDEXED_BASES``), then keeps only
-        genuine static native->EPRV mapping rows so KPF0._map_header applies the map
-        with no in-loop filter or per-keyword correction. Two row classes are dropped:
-          - STANDARD keys absent from the registry (PARANG/PARANG2) -- warned, so
-            the rvdata header_map / registry inconsistency stays visible;
-          - ``_DEFAULT_OVERRIDES`` keys, whose value comes from the corrected table
-            default, the model level, or the _map_header epoch transform, not a
-            static map row.
-        Runs after ``_build_registry`` -- it filters against ``self.registered``.
+        Realigns the fiber-indexed STANDARD keys from rvdata's CAL-first to KPF's
+        SKY-first numbering (see ``_FIBER_INDEXED_BASES``), then keeps only genuine
+        static native->EPRV rows so ``KPF0._map_header`` needs no in-loop filter.
+        Drops STANDARD keys absent from the registry (PARANG/PARANG2, warned) and
+        ``_DEFAULT_OVERRIDES`` keys (valued elsewhere). Runs after
+        ``_build_registry`` -- it filters against ``self.registered``.
         """
         raw = pd.read_csv(_rvdata_inst_cfg / "header_map.csv")
         # Swap trace index 1<->5 for the fiber-indexed families (SKY<->CAL). A dict
@@ -374,12 +367,10 @@ class KeywordRegistry:
         """Expand a KPF header CSV into unified-registry rows.
 
         Shared by ``_kpf_rows`` and ``_masters_rows``. ``Required`` is always
-        False; ``PopulatedBy`` is whatever the CSV says, but it must NEVER be the
-        EPRV sentinel: the derived routing/validation lookups treat a
-        ``PopulatedBy == _EPRV_TAG`` row as EPRV-sourced, so a KPF row reusing that
-        string would be silently misclassified (dropped from routing, given the
-        wrong Required/Level). Guard against it loudly here. ``source`` names the
-        CSV for that error; ``level_of(row)`` yields each row's Level.
+        False; ``PopulatedBy`` must never be the EPRV sentinel (the derived lookups
+        treat such a row as EPRV-sourced and would misclassify it), so guard against
+        it loudly. ``source`` names the CSV for that error; ``level_of(row)`` yields
+        each row's Level.
         """
         rows = []
         for _, r in df.iterrows():
@@ -425,13 +416,10 @@ class KeywordRegistry:
         """KPF masters keyword rows from the per-master-type registries
         config/{ML1,ML2-flat,ML2-wls}-headers.csv.
 
-        Masters (bias/dark/flat/WLS calibration products) are out of EPRV scope
-        but route their PRIMARY keywords (MASTYPE + the WLS metadata) through
-        ``set_keyword`` like the science models, so they are registered here. One
-        file per master type (mirroring the per-type ``ML*-extensions.csv`` manifests);
-        Level is derived from the filename like ``_kpf_rows`` (ML1 -> 1, ML2 -> 2).
-        MASTYPE appears in every file (harmless: it dedups in ``registered`` and has a
-        single PRIMARY home). All three union into the one global table.
+        Masters are out of EPRV scope but route their PRIMARY keywords (MASTYPE +
+        WLS metadata) through ``set_keyword`` like the science models, so they are
+        registered here. Level is derived from the filename (ML1 -> 1, ML2 -> 2);
+        MASTYPE recurs harmlessly across files (it dedups in ``registered``).
         """
         rows = []
         for fname, level in (
@@ -509,15 +497,11 @@ class KeywordRegistry:
         Returns ``(seed, datatypes)``:
 
         - ``seed`` — ``{keyword: (typed_default, comment)}`` for the EPRV Required
-          PRIMARY keywords at Level <= 1 (the skeleton ``KPF1.__init__`` stamps;
-          these are tagged Level 1 in the table -- see ``_build_rows``).
-          Built exactly like ``RV2.__init__``: format the unit/description comment,
-          then type the default via ``parse_value_to_datatype`` so consumers assign
-          it straight into a header. Insertion order follows the EPRV standard's.
-        - ``datatypes`` — ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords
-          (required + optional), so ``_map_header`` can type the native/default
-          values it overlays. Scoped to EPRV PRIMARY (rvdata-vocab datatypes), so
-          it never feeds KPF's ``int``/``str`` to ``parse_value_to_datatype``.
+          PRIMARY keywords at Level <= 1 (the skeleton ``KPF1.__init__`` stamps),
+          typed via ``parse_value_to_datatype`` like ``RV2.__init__``.
+        - ``datatypes`` — ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords,
+          so ``_map_header`` can type the values it overlays. Scoped to EPRV PRIMARY
+          so it never feeds KPF's ``int``/``str`` to ``parse_value_to_datatype``.
         """
         seed = {}
         datatypes = {}

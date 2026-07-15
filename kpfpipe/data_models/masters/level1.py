@@ -47,8 +47,7 @@ class KPFMasterL1(KPFMasterModel, KPF1):
                 self.create_extension(row["Name"], row["DataType"])
 
         # Masters carry their own minimal PRIMARY (no EPRV science skeleton); stamp
-        # DATALVL so it is present in-memory, not only at to_fits (DRP-RUN data
-        # level). Routed via set_keyword like the science models.
+        # DATALVL so it is present in-memory, not only at to_fits.
         self.set_keyword("DATALVL", self._DATALVL)
 
     def _create_hdul(self):

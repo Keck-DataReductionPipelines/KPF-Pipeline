@@ -117,7 +117,6 @@ class _KPF2DataDict(AliasedOrderedDict):
 
     def __contains__(self, key):
         if self._chip_split(key) is not None:
-            # Valid chip-prefix key — check that the underlying trace exists
             fiber_alias, _ = self._chip_split(key)
             return super().__contains__(self._resolve(fiber_alias))
         return super().__contains__(self._resolve(key))
@@ -167,15 +166,13 @@ class KPF2(KPFDataModel, RV2):
                 if ext not in self.extensions:
                     self.create_extension(ext, "ImageHDU")
 
-        # Pass-through extensions not in RV2 base. NB: the EPRV standard defines
+        # Pass-through extensions not in the RV2 base. NB: the EPRV standard defines
         # ANCILLARY_SPECTRUM (Ca H&K) as an ImageHDU, but we keep it a BinTableHDU
-        # placeholder for now -- Ca H&K extraction is still WIP and existing master/
-        # L2 products (incl. the truth dataset) encode it as BinTableHDU, so flipping
-        # the type breaks reading them back. Switch to ImageHDU when Ca H&K is built
-        # and products are regenerated. See EPRV_DATA_STANDARD.md §8 (deviations).
-        # QUALITY_CONTROL holds the KPF QC booleans + DiagL2 metrics (the L0/L1
-        # extensions CSVs create it on those models; L2 has no CSV so create it
-        # here). RECEIPT and the barycentric/RV# extensions already exist via RV2.
+        # placeholder for now -- Ca H&K extraction is WIP and existing L2/master
+        # products encode it as BinTableHDU, so flipping the type breaks reading
+        # them back. See EPRV_DATA_STANDARD.md §8 (deviations). QUALITY_CONTROL is
+        # created here (L2 has no extensions CSV); RECEIPT and barycentric/RV#
+        # already exist via RV2.
         for ext, ext_type in [
             ("ANCILLARY_SPECTRUM", "BinTableHDU"),
             ("EXPMETER", "BinTableHDU"),
@@ -248,18 +245,13 @@ class KPF2(KPFDataModel, RV2):
         kpf4 = KPF4()
 
         # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, and RECEIPT
-        # card-by-card (value + comment), mirroring to_kpf2. PRIMARY overlays
-        # onto kpf4's EPRV seed (native wins); INSTRUMENT_HEADER (TARGTEFF,
-        # TARGRADV, GAIAID, CCD*BJD, ...) stays a verbatim copy; QUALITY_CONTROL
-        # carries the accumulated L0/L1/L2 diagnostics + QC flags (append-only
-        # history, like RECEIPT) and the RECEIPT cards (applied-step flags,
-        # calibration paths) ride along. The receipt *table* propagates
-        # separately via the copy below.
+        # card-by-card, mirroring to_kpf2: PRIMARY overlays onto kpf4's EPRV seed
+        # (native wins), the rest are verbatim copies. The receipt *table*
+        # propagates separately via the copy below.
         self._forward_headers(
             kpf4, ("PRIMARY", "INSTRUMENT_HEADER", "QUALITY_CONTROL", "RECEIPT")
         )
 
-        # Carry forward receipt and obs_id
         if self.receipt is not None and not self.receipt.empty:
             kpf4.receipt = self.receipt.copy()
         kpf4.obs_id = self.obs_id
