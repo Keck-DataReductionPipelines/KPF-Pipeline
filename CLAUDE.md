@@ -102,6 +102,26 @@ assembly/overscan, master stacking on real frames, and WLS spectrum orientation;
 those live only in `slow` tests, which is why the triggers above run the full
 suite. Pre-commit itself runs only ruff (no tests) — running tests is on you.
 
+### Masters test layout
+
+The masters tests are split by *what they exercise*, not just by module.
+`BaseMasterModule` is abstract, so `tests/regression/test_master_base.py` unit-tests the
+**shared engine** — stacking (rate estimator, per-pixel rejection, datacube clipping),
+calibration resolve/apply/load, frame-load guards, array cleaning, and the shared L1 output
+contract (dtype provenance, `save_master`) — driving it through the simplest concrete vehicle
+for each path: `Bias` (no calibrations) for the pure L1 output/dtype/save path, `Dark`
+(bias-subtracted) for the calibration-orchestration path. `test_master_bias.py` and
+`test_master_dark.py` are then **symmetric mirrors** that cover only each concrete module's own
+behavior (Unit / Info / RoundTrip / Signature / Regression: BUNIT `electrons` vs
+`electrons/sec`, receipt name, `info()` text, the calibration signature, and a real-data
+regression). `test_master_wls.py` stands apart — WLS builds an ML2 and does not use the L1
+stacking engine, so it is tested per-WLS-method on its own. `test_masters_recipe.py` covers only
+the `kpf_drp_masters` recipe (its FileHandler/path-builder unit tests live in `test_io.py`).
+Shared synthetic fixtures live in `tests/regression/_masters.py`. `flat` has no test file
+(stubbed, no `make_master_l1` yet). **A test belongs in `test_master_base.py` iff it exercises a
+`base.py` method vehicle-incidentally; module-specific behavior stays in
+`test_master_<type>.py`.**
+
 ## Profiling
 
 The profiling suite finds and reports performance bottlenecks. It follows a
@@ -155,9 +175,9 @@ collects it):
   dedicated *profiling* harness: attribution charges its work to the right
   `base.py` methods inside `profile_master_bias.py` / `profile_master_dark.py`, so
   a separate engine profile would be redundant. (The *test* suite does isolate it —
-  see `regression/test_master_base.py` under *Masters test layout* in
-  [`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md) — because profiling
-  partitions by wall-clock while tests partition by responsibility.)
+  see `regression/test_master_base.py` under *Masters test layout* in the *Running
+  tests* section above — because profiling partitions by wall-clock while tests
+  partition by responsibility.)
 - **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
   harness skips cleanly (exit 0) when the frames are absent, mirroring the
   `requires_testdata` test pattern.

@@ -1,11 +1,38 @@
 # KPF-DRP vNext — Architecture
 
-This document is the source of truth for the pipeline's **architecture**: the data-model
-hierarchy, extension alias system, data flow, header standardization, configuration, the
-CLI/module layering, logging, filename conventions, the masters pipeline, and the
-diagnostics/QC/checkpoint/quicklook layers. It describes *how the pipeline is structured*
-— not project intent (the charter) or code conventions (the style guide). Consult it before
-making structural or cross-cutting changes.
+This document describes the repo structure and KPF vNext pipeline **architecture**;
+it describes *how the pipeline is structured* — not project intent (the charter) or
+code conventions (the style guide). Consult this document before making structural
+or cross-cutting changes.
+
+Contents:
+
+* Repo Structure
+* Data Flow
+  * Science Pipeline
+  * Masters Pipeline
+* Data Models
+  * EPRV Data Standard
+  * Extension alias system
+  * Header standardization
+  * Keyword registry
+  * Masters data models
+* Processing layers
+  * Modules
+  * Recipes & configs
+  * Scripts
+  * Command line interface (CLI)
+* Logging
+* Quality control
+  * Diagnostics
+  * QC flags
+  * Checkpoints
+  * Quicklook plots
+* File handling
+  * Data directory structure
+  * FileHandler class
+  * io.py path builders
+
 
 **Authority precedence.** This architecture reference sits below the charter and above the
 style guide:
@@ -17,9 +44,60 @@ conflict, the higher one wins.
 
 ---
 
-## Data Model Hierarchy
+## Repo Structure
 
-Data products follow the EPRV RV Data Standard (rvdata) with KPF-specific extensions:
+The repository is organized into a small number of top-level packages, layered so each
+imports only from those below it (see *Processing layers*):
+
+```
+kpfpipe/            scientist-facing building blocks (importable, no orchestration)
+  data_models/      KPF0/1/2/4 + masters models, keyword registry, alias dicts, config CSVs
+  modules/          processing algorithms (science + masters)
+  quality_control/  quality control layers (diagnostics, qc_flags, checkpoints, quicklook)
+  utils/            shared helpers (io, logger, config, stats, astro, kpf_utils)
+recipes/            compose modules into an end-to-end reduction (kpf_drp_{science,masters}.py)
+configs/            default recipe parameters (kpf_drp_{science,masters}.toml)
+scripts/            run recipes many times (processing/, plots/, quality_control/)
+tools/              the `kpfpipe` CLI dispatcher (cli.py) and operator tools
+reference/          static reference data (detector.toml, line lists, order traces, etc.)
+tests/              regression/ (test suite) + profiling/ (performance harnesses)
+docs/               Sphinx site (source/) and the governing docs (dev/)
+```
+
+A few top-level default quantities/constants are exposed and loaded by `kpfpipe/__init__.py`:
+static detector parameters (e.g. pixel dimensions, amplifiers; `reference/detector.toml`),
+CCD/trace identifiers (`kpfpipe.DEFAULTS`), and the repo root (`kpfpipe.REPO_ROOT`).
+
+## Data Flow
+
+The pipeline has two data flows: the **science** flow reduces a single observation from raw
+CCD frames to RVs, and the **masters** flow stacks many calibration frames into nightly
+master calibrations that the science flow consumes.
+
+### Science Pipeline
+
+```
+L0 (raw CCD) → ImageAssembly → L1 → ImageProcessing
+L1 (assembled FFI) → SpectralExtraction → L2 → WavelengthCalibration → BarycentricCorrection
+L2 (extracted spectra) → CrossCorrelation → L4 → RadialVelocity
+L4 (CCFs/RVs)
+```
+
+The `kpf_drp_science` recipe drives this flow for one observation; the `science` CLI
+orchestrator fans it out across many. Each `kpfpipe/modules/` algorithm processes a single
+self-contained step of the data flow (see *Modules*).
+
+### Masters Pipeline
+
+`kpfpipe/modules/masters/` stacks multiple calibration observations into bias, dark, flat, and wavelength-solution (WLS) products. Stacking is sigma-clipped and uses single-pass streaming accumulation (per-pixel counts + exposure time) so a large stack never holds every frame in memory at once; the master is the exposure-weighted rate (total counts ÷ total exposure). The stage is I/O-bound, so the shared engine (`base.py`) caches the first-read assembled frames for later passes to reuse instead of re-reading them. Fan-out concurrency is tuned separately from science (see *Scripts*); the resulting ML1/ML2 products are described under *Masters data models*.
+
+## Data Models
+
+Data products follow the EPRV RV Data Standard (rvdata) with KPF-specific extensions. Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`).
+
+### EPRV Data Standard
+
+The class hierarchy:
 
 ```
 RVDataModel (rvdata)
@@ -32,7 +110,9 @@ RVDataModel (rvdata)
 
 **All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while `RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`. `KPFDataModel` is the single home for shared behavior: `obs_id`, `as_fits_header`, `create_extension`, alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1), `receipt_add_entry`/`_update_drpstatus`, and `_create_hdul`/`_restore_primary_comments`. **`check_filename_convention` is the exception** — every concrete model declares it *explicitly* (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV `SL#` check delegated to rvdata via `RV2`/`RV4` (KPF2/KPF4), and the DRP-RUN-05 master name `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO, so it wins). L2/L4 add KPF-friendly extension aliases via `AliasedOrderedDict`.
 
-## Extension Alias System
+The rvdata `RVDataModel` base provides the `extensions`/`headers`/`data` OrderedDicts plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. `KPFDataModel` overrides `set_data`/`set_header` (in `base.py`, not the level classes) with a `hasattr` guard, so alias resolution runs during init — the base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. It likewise overrides `create_extension` so every extension header is a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
+
+### Extension alias system
 
 `AliasedOrderedDict` (aliased_dict.py) transparently maps KPF names to EPRV-standard names. Designed to be generic enough to upstream into rvdata.
 
@@ -43,229 +123,269 @@ KPF2 aliases (driven by CSV configs in `data_models/config/`):
 
 Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are computed views, not separate storage.
 
-## Data Flow
-
-```
-L0 (raw CCD) → ImageAssembly → ImageProcessing → L1 (assembled FFI)
-L1 → SpectralExtraction → WavelengthCalibration → BarycentricCorrection → L1 (science-ready)
-L1.to_kpf2() → KPF2 (extracted spectra, EPRV-compliant)
-```
-
-## Header standardization (EPRV PRIMARY)
+### Header standardization
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** — `KPF0.to_kpf1()`
 via **`KPF0._map_header()`** — which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
+The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
+The architecture invariants:
+
+- **PRIMARY holds EPRV-registered keywords only** from L1 onward (EPRV keyword names + FITS structural
+  cards — no KPF-registered keywords, no raw natives). `KPF1.__init__` seeds the EPRV Required PRIMARY
+  skeleton; `to_kpf1` overlays native values on top (native wins), and a QC flag (`KWRDPRL{1,2,4}`)
+  checks the required keywords are present. (One keyword-homing exception is noted under
+  *Keyword registry*.)
+- **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
+  written once in `to_kpf1` and never again.
+- **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`.** `_map_header` carries only some natives to
+  PRIMARY, mostly under renamed EPRV keys — so read a native from PRIMARY when it survives there under
+  its own name (e.g. `DATE-OBS`, `OBJECT`), and from `INSTRUMENT_HEADER` when it never reaches PRIMARY or
+  when a coherent block of related natives (e.g. the WMKO astrometry/catalog block used in
+  `barycentric_correction`) reads more clearly together.
+- **DRP provenance is stamped at read** onto RECEIPT (`KPF0.from_fits` → `_stamp_wmko_tracking`, not
+  `to_kpf1`): `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`. It rides RECEIPT forward, with `DRPSTATU`
+  advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
+  read, so every model carries `obs_id` on every construction path.
+- **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
+  as an **append-only history**; only `ISGOOD` — the running AND over every accumulated QC flag —
+  changes per level.
+- **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
+  not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
+  structural card, else it raises.
+- **Every extension header is an `astropy.io.fits.Header`** (not an `OrderedDict`;
+  `KPFDataModel.create_extension` override), so keyword comments survive `to_fits`; the `_create_hdul`
+  override only syncs the receipt table into RECEIPT.
+
+### Keyword registry
+
 The keyword registry (`kpfpipe/data_models/keyword_registry.py`) is a single `KeywordRegistry` class
 with one module singleton `keyword_registry`, imported **only** by `data_models/base.py` and surfaced as
 the `KPFDataModel.keyword_registry` class attribute. It derives its mapping/validation/routing lookups
-from a **single source-of-truth table** unioning our `L{0,1,2,4}-headers.csv` registries with the EPRV
-keyword defs. *(For the coding rules — reading/writing headers, `set_keyword`, registering keywords —
-see the style guide §11.)* The architecture invariants:
+from a **single source-of-truth table** unioning the `L{0,1,2,4}-headers.csv` registries with the EPRV
+keyword defs. *(Coding rules — reading/writing headers, `set_keyword`, registering keywords — are in the
+style guide §11.)*
 
-- **PRIMARY holds EPRV-registered keywords only** from L1 onward (EPRV keyword names + FITS structural
-  cards; no KPF-registered keywords, no raw WMKO natives). `KPF1.__init__` seeds the EPRV Required
-  PRIMARY skeleton (`keyword_registry.eprv_primary_seed`); `to_kpf1` then overlays native values on top
-  (native wins). The required-keyword *presence* check is a QC flag (`KWRDPRL{1,2,4}`).
-  **One deliberate exception:** the L4 SCI-combined per-CCD RV keywords
-  `CCD1RV`/`CCD2RV`/`CCD1ERV`/`CCD2ERV` are KPF-registered (`config/L4-headers.csv`) yet homed on
-  PRIMARY, because they are the pipeline's final RV measurements and belong with the EPRV
-  `RV`/`RVERR`. (`RV`/`RVERR` themselves are EPRV PRIMARY keywords, not KPF-registered, so they are not
-  the exception.)
-- **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values **and** comments),
-  written once in `to_kpf1` and never again.
-- **Read from PRIMARY whenever the keyword lands there after `to_kpf1`** (same value); read from
-  `INSTRUMENT_HEADER` only when PRIMARY can't serve the read cleanly. `_map_header` carries just some
-  natives to PRIMARY, and mostly under **renamed** EPRV keys (`ELAPSED`→`EXPTIME`, `IMTYPE`→`OBSTYPE`,
-  `GAIAID`→`CID4`, `TARGRA`→`CRA4`, `SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`→`TRACE4`/`TRACE1`/`CLSRC5`, …); a few
-  (`DATE-BEG`/`MID`/`END`, `MJD-OBS`, `TARGFRAM`, `TARGTEFF`, `GAIAMAG`, native `EXPTIME`, `OFNAME`) are
-  **not on PRIMARY at all**. So: a native that survives to PRIMARY under its **own name** and is read in
-  isolation is read from **PRIMARY** (e.g. `DATE-OBS`, `OBJECT`). Read from **INSTRUMENT_HEADER** when
-  the native (a) never reaches PRIMARY, or (b) is one of a **coherent block of natives** where mixing
-  PRIMARY + INSTRUMENT reads (or the cryptic renamed keys) would obscure intent — the WMKO astrometry/
-  catalog block (`TARGRA`/`DEC`/`PM*`/`PLAX`/`TARGFRAM`/`TARGEPOC`/`TARGRADV`/`GAIAID`) in
-  `barycentric_correction` and the per-fiber illumination source (`SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`) in
-  `radial_velocity`. (Masters no longer read INSTRUMENT_HEADER at all: the former masters
-  `EXPTIME`-vs-`ELAPSED` load check is now `QCL0.exptime_sane`/`EXPTIMOK`, which reads the raw L0
-  PRIMARY — where both natives coexist before `to_kpf1` renames `ELAPSED`→`EXPTIME`.)
-- **Each registered keyword has one home extension** (the registry `Extension` column), which
-  `set_keyword` routes to: **PRIMARY** (EPRV keywords, plus the L4 final-RV exception
-  `CCD{1,2}RV`/`CCD{1,2}ERV` above), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
-  calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths), the
-  **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). Masters route their
-  PRIMARY keywords the same way (registered in the per-master-type `config/ML{1,2}-*-headers.csv`
-  registries); `BUNIT` is structural, not registered.
-- **DRP provenance is stamped at read** (`KPF0.from_fits` → `_stamp_wmko_tracking`) onto RECEIPT, not at
-  `to_kpf1`: `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID` (the original L0 obs_id). It rides the
-  RECEIPT header forward downstream; `DRPSTATU` is advanced per module by `_update_drpstatus`. `ORIGID`
-  is also the **read-path recovery source for `obs_id`**: `KPFDataModel.from_fits` reads it back into
-  `self.obs_id` for L1/L2/L4 (whose own filenames are timestamp-based and embed no obs_id, unlike L0's),
-  so **every model carries `obs_id` on every construction path** — the `to_kpfN` converters set it
-  directly, from_fits recovers it from `ORIGID`. (Masters carry no `ORIGID` and set no `obs_id`; their
-  filename comes from KOAID/MASTYPE instead — see *Filename conventions*.)
-- **QUALITY_CONTROL + RECEIPT headers propagate L0→L1→L2→L4** card-by-card via the shared helper
-  `KPFDataModel._forward_headers`, making each an **append-only history** (every QC flag / processing
-  step). The only QC keyword that changes per level is **`ISGOOD`**, the running AND over every QC flag
-  accumulated so far.
-- **Header validation lives in the `quality_control/checkpoints` layer**
-  (`Checkpoint.unregistered_keywords`), not in QC or `to_kpfN`: every card on a registry-governed
-  extension must be a registered keyword for that extension or a structural card, else it raises.
-- **Masters carry their own minimal PRIMARY, not the EPRV science skeleton** (`KPFMasterL1`/`L2` stamp
-  `DATALVL` `"ML1"`/`"ML2"`; see *Masters Pipeline*).
-- **Every extension header is an `astropy.io.fits.Header`** (`KPFDataModel.create_extension` override;
-  `from_fits` already returns one). rvdata's base `_create_hdul` (>=0.4.0) copies a `fits.Header`
-  directly when serializing PRIMARY, preserving its keyword comments through `to_fits`; the
-  `KPFDataModel._create_hdul` override only syncs the receipt table into the RECEIPT extension.
+**Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
+routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
+calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths), the
+**barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
+*PRIMARY holds EPRV keywords only* is the L4 SCI-combined RV keywords `CCD{1,2}RV`/`CCD{1,2}ERV` —
+KPF-registered yet homed on PRIMARY, since they are the pipeline's final RV measurements and belong
+beside the EPRV `RV`/`RVERR`. Masters register their PRIMARY keywords in per-master-type registries and
+route them the same way (see *Masters data models*).
 
-## Configuration
+### Masters data models
 
-Extension definitions, trace mappings, and aliases are CSV-driven (`data_models/config/`). Detector parameters (CCD dimensions, order counts) live in `reference/detector.toml` and are exposed at the package top level as `kpfpipe.DETECTOR` (alongside `kpfpipe.DEFAULTS`/`REPO_ROOT`), loaded by `kpfpipe/__init__.py`.
+The masters data models live in `kpfpipe/data_models/masters/` — a `KPFMasterModel` base plus
+the per-level `KPFMasterL1`/`KPFMasterL2` (and a `KPFMasterL4` RV/CCF stub, not yet implemented),
+which subclass the science models (`KPFMasterModel` precedes them in the MRO, so its overrides win)
+and so inherit the alias system and keyword machinery. Masters are *not* EPRV-governed but follow
+the science keyword conventions where possible:
 
-## CLI architecture (dispatcher → scripts → recipes → kpfpipe)
+- **Minimal PRIMARY.** `KPFMasterL1`/`L2` stamp `DATALVL` `"ML1"`/`"ML2"` and do **not** seed the
+  EPRV science skeleton (see *Header standardization*).
+- **Extension schemas are CSV-driven, per master type.** `ML1-extensions.csv` builds ML1
+  directly, while `KPFMasterL2(kind=…)` reads `ML2-{kind}-extensions.csv` for its required `kind`
+  (`"wls"` carries `TRACE*_WAVE` + `*_WLS_COEFFS`; `"flat"` carries `TRACE*_FLUX`/`VAR`/`BLAZE`).
+  Edit the CSV(s) to change a master's schema.
+- **PRIMARY keywords are registered like the science models.** `MASTYPE` (every master file) and
+  the WLS metadata (`ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYORD{X,M,F}`, WLS only) are registered in
+  the **per-master-type** `config/{ML1,ML2-flat,ML2-wls}-headers.csv` registries and unioned into
+  the global registry table (`keyword_registry._masters_rows`); `set_keyword` routes them as usual
+  (see *Keyword registry*). `BUNIT` (on each `{chip}_IMG`) is structural, not registered.
+- **QC/RECEIPT present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT`
+  extensions for later wiring, but no masters QC checks or DRP-provenance stamping exist yet.
 
-`kpfpipe` (the `[project.scripts]` console entry, `tools/cli.py:main`) is a **thin,
-git-style dispatcher**: it routes a subcommand to its implementation under
-`scripts/processing/` and forwards the remaining argv verbatim (each subcommand owns
-its own argparse). The commands:
+The master filename (`{KOAID}_master_{type}_L{N}.fits`, WMKO DRP-RUN-05) is set by
+`KPFMasterModel` — see *io.py path builders*.
 
-- **`kpfpipe run`** → `scripts/processing/reduce.py` — the **leaf**: run one recipe on
-  one unit (`--masters -d <datecode>` / `--science -o <obs_id>`, or an explicit
-  `-r/-c` pair), in-process. Owns config-override assembly, `setup_logging`, the
-  DRP-RUN-08 banner, and the recipe `exec`.
-- **`kpfpipe masters`** → `scripts/processing/masters.py`; **`kpfpipe science`** →
-  `science.py` — **orchestrators**: fan a set of units out as one
-  `python -m scripts.processing.reduce` subprocess each (own log, clean process
-  state, independent exit), via the shared engine in `_dispatch.py`. The orchestrators
-  take `--dates`/`--date_range` (masters) and `--obs_ids` (science);
-  `kpfpipe masters --dates 20240405` is a batch-of-one, while
-  `kpfpipe run --masters -d 20240405` is the in-process single shot.
-- **`kpfpipe timeseries`** → `scripts/processing/timeseries.py` — a **thin
-  wrapper above the orchestrators**: given `--target` + `--date_range`, it discovers
-  that star's science frames from the L0 tree (steps 1–2), then runs **one**
-  `python -m scripts.processing.masters --dates …` subprocess, **one**
-  `python -m scripts.processing.science --obs_ids …` subprocess, and **one**
-  `python -m scripts.plots.plot_timeseries --obs_ids …` subprocess (steps 3–5) — it
-  does *not* use `_dispatch.run_stage` itself (that would fan out leaves; here the
-  two orchestrators each fan out and stream their own batch log). It still calls
-  `setup_batch_logging` at the top of `main()`, writing its **own**
-  `kpf_timeseries_batch_*.log` (discovery + the per-stage dispatch trail) alongside
-  each sub-orchestrator's batch log. All three stages
-  are independently skippable — `--no-masters` / `--no-science` / `--no-plots`
-  (default on) — and fail-soft: every discovered frame is handed to science
-  regardless of the masters result (a frame whose masters failed to build simply
-  fails in the science stage and is reported there — no gating in the wrapper), and
-  the run exits nonzero if any stage that ran failed. The plot stage is handed the
-  **already-discovered `obs_ids`** (so no second file scan) and runs *independently*
-  of science (with `--no-science` it plots whatever L4 is on disk), writing to
-  `{KPF_SCIENCE_OUTPUT}/QLP/timeseries` unless `--plot_dir` overrides it.
-- **`kpfpipe plot-timeseries`** → `scripts/plots/plot_timeseries.py` — a **standalone
-  post-reduction plotter** (the sole `scripts/plots/` command; the only dispatcher
-  route outside `scripts/processing/`). Frames come from **either** `--date_range`
-  (scan the L4 tree) **or** `--obs_ids` (build L4 paths directly from `--data_dir`
-  via `kpf_filepath`, no scan — the handoff `timeseries` uses). It reads each L4
-  PRIMARY (`RV`/`RVERR`/`BJDTDB`), **skips observer-junk frames** (`QUALITY_CONTROL`
-  `NOTJUNK == 0`; a missing extension/card counts as not-junk), then classifies each
-  night's cadence (`_classify_observing_mode` → standard/burst/high cadence) and
-  dispatches: the standard/burst nights go to one grouped `{target}_rv_timeseries.png`
-  (bursts RVERR-weighted) plus `{target}_rv_nightly.png` (nights with >1 observation),
-  while each **high-cadence** night — tens of near-uniform frames spanning the night —
-  is held out of both and gets its own `{target}_{datecode}_rv_timeseries.png` instead
-  of collapsing to a single misleading burst point. In `--obs_ids` mode a supplied
-  frame whose L4 `OBJECT` ≠ `--target` is warned but still plotted, and a missing L4 is
-  skipped. (The parked scratchpad `notes/tmp_rv_plot.py` predates this port and is now
-  superseded.)
+## Processing layers
 
-**The layering is strictly one-directional — each layer may import *down* but never
-up:** `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
+The pipeline is built in strictly one-directional layers — each layer may import *down* but
+never up: `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
 `scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
-imports `scripts.processing.*`, but **the scripts must never import `tools`** — shared
-orchestration helpers live in `scripts/processing/_dispatch.py` (the process-pool
-engine), `_argparse.py` (the shared argparse parent-parser factories `recipe_and_config_parser`
-[`-r`/`-c`], `data_dirs_parser`, `logging_parser`, `pool_parser`, `cache_parser` [`--cache`],
-composed via `parents=[…]` so each shared flag is declared once), and `_scan.py` (the
-up-front, parallel-by-datecode L0 mini-db cache **pre-scan** the orchestrators run before
-fan-out — `warm_mini_db_caches`/`scan_datecodes`/`scan_night_to_cache`, gated by `--cache`).
-`_scan.py` is deliberately where the lone `kpfpipe.utils.io` (`FileHandler`) import lives, so
-`_dispatch.py` stays io-free; all three are `tools`-free. `data_dirs_parser`
-also carries two convenience shortcuts each of the four processing scripts (reduce/masters/
-science/timeseries) accepts: **`--input_dir`** is a plain argparse alias of `--kpf_data_input`,
-and **`--output_dir`** is a fan-out — `_argparse.resolve_dir_shortcuts(args)` (called post-parse
-by every `parse_args`) fills `kpf_masters_output`/`kpf_science_output`/`log_dir`/`plot_dir` from it
-as a *fallback* (an explicit per-dir flag wins), skipping the slots a given command lacks (masters
-has no science output or plot dir). The masters/science outputs take the root **verbatim** (their
-path builders add the `masters/{datecode}` and `L{N}/{datecode}` substructure), but the log dir and
-plot dir each get a conventional subdirectory — `{output_dir}/logs` and `{output_dir}/QLP/timeseries`
-(the `_OUTPUT_DIR_SLOTS` table) — so `--output_dir` reproduces the layout explicit `--log_dir`/`--plot_dir`
-flags would give (the plot subdir matches timeseries' `{science_output}/QLP/timeseries` default) rather
-than dumping logs and plots in the root. (The masters orchestrator's `--date_range` expansion reuses
-`kpfpipe.utils.io.datecode_dirs_in_range` — a downward import into the shared `kpfpipe` layer, not a
-scripts-local helper.) The package `__init__.py`
-holds the default `masters`/`science` recipe/config path constants
-(`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source `reduce`'s
-`--masters`/`--science` shortcuts and the orchestrators' fan-out (which passes them
-to the leaf explicitly via `-r`/`-c`) both resolve against. When adding a script,
-keep it runnable on its own (`python -m scripts.processing.<name>`) with no knowledge
-of the dispatcher above it.
+imports `scripts.processing.*`, but **the scripts must never import `tools`**.
 
-## Logging (issue #1408; WMKO DRP-RUN-07/08/09)
+### Modules
 
-Handler/level configuration lives in exactly one *module*, `kpfpipe.utils.logger`, via **two sibling entry points** (never at import time, never in recipes/modules/tests): `setup_logging` — called only by the single-recipe leaf runner (`scripts/processing/reduce.py` — the `kpfpipe run` entry) before the recipe runs, writing that reduction's per-unit log with a stderr console echo; and `setup_batch_logging` — a thin wrapper called once at the top of each fan-out driver's `main()` (the `scripts/processing/masters.py`/`science.py` orchestrators **and** the `timeseries.py` wrapper — three callers, `label` ∈ `masters`/`science`/`timeseries`), writing a `kpf_{label}_batch_{stamp}.log` summary of the *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels; for `timeseries`, its discovery + per-stage dispatch trail) with the console echo pinned to **stdout** so an operator can watch fan-out progress live. That stdout echo is **source-filtered** (`_BatchConsoleFilter`, on the console handler only): below WARNING only the driver's own narration (`scripts.*` loggers, or `__main__` when a driver runs as `python -m scripts.processing.<name>`) reaches the terminal, so library INFO chatter stays out of the live view; WARNING and above always echo, and the batch log *file* keeps every record unfiltered (as does the leaf `setup_logging` console). The orchestrators (and the shared `_dispatch.py` engine) emit their narration through named loggers, not `print()`. Because the orchestrators still fan `reduce` out as one subprocess per unit, **each reduction also gets exactly one `setup_logging` call and its own per-unit log file** — the batch log sits alongside, not in place of, the per-unit logs. Both siblings write one UT-timestamped file per invocation under the `[LOGGER] log_dir` config key (`log_level`, `console` also supported; CLI overrides `--log_dir`/`--log_level`); a missing `log_dir` is fatal in the leaf *and* the orchestrators (DRP-RUN-07). Library code just declares `logger = logging.getLogger(__name__)` and must work with no handlers installed — tests call `recipe.main(config, args)` directly with no logging configured, so setup must never move into recipes. `warnings.warn` remains the recoverable-condition API, bridged into the log via `logging.captureWarnings`. Tests that call `setup_logging`/`setup_batch_logging` must tear down via `kpfpipe.utils.logger.teardown_logging` inside the same test (see the autouse fixture in `tests/regression/test_logger.py` — pytest's per-test `catch_warnings` context otherwise strands `logging._warnings_showwarning`). *(Coding rules — levels, lazy `%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+`kpfpipe/modules/` holds the scientist-facing processing primitives — each an importable
+building block a recipe composes, with no orchestration or logging setup of its own. The
+science modules run the *Science Pipeline* flow: `image_assembly` (L0 → assembled FFI),
+`image_processing`, `spectral_extraction`, `wavelength_calibration`, `barycentric_correction`,
+and the radial-velocity pair `radial_velocity`/`cross_correlation`; `calibration_association`
+resolves which master calibrations a frame uses. The `masters/` submodule
+(`bias`/`dark`/`flat`/`wls` over a shared `base.py` stacking engine) builds the calibration
+products (see *Masters Pipeline*).
 
-## Filename conventions
+**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
 
-Science: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
+### Recipes & configs
 
-Two authorities encode this rule and **must agree per level**: `kpf_filepath(obs_id, level, …)` (`utils/io.py`) is the pipeline's path builder (directory + filename, from an obs_id string) and is what recipes use to write; `<model>.generate_standard_filename()` builds only the basename and is the `to_fits(fn=None)` fallback. `kpf_filepath` itself decomposes into two lower-level helpers it composes: `kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None)` — the single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`; the datecode is taken from `obs_id` or a bare `datecode`, exactly one of the two; QLP is `{data_root}/QLP/{datecode}/{obs_id}/{level}` and requires `obs_id`) — and `kpf_filename(obs_id, level, *, master)` — the basename; `kpf_filepath = os.path.join(kpf_directory(…), kpf_filename(…))`. **`kpf_filename` is the single source for the naming rule**: the four science models' `generate_standard_filename` all delegate to `kpf_filename(self.obs_id, level)` (so the object- and string-keyed builders can't drift), which is why every model must carry `obs_id` on every construction path (see the `ORIGID` recovery note under *Header standardization*). Like `check_filename_convention`, **every concrete model declares it explicitly** (L0/L1/L2/L4 delegate to `kpf_filename`; `KPFMasterModel` overrides with the KOAID/MASTYPE master name, since masters carry no `obs_id`), and `KPFDataModel`'s abstract version **raises `NotImplementedError`**. `TestFilenameConsistency` (in `tests/regression/test_io.py`) enforces that `generate_standard_filename` and `kpf_filepath` never drift. (Filename *validation* — `check_filename_convention` — is separate and still delegates to rvdata's EPRV check for L2/L4.)
+`recipes/` compose modules into an end-to-end reduction: `kpf_drp_science.py` runs the
+science flow, `kpf_drp_masters.py` builds the nightly masters. Each recipe exposes a
+`main(config, args)` entry that tests call directly with no logging configured — logging
+setup lives in the scripts layer, never in recipes. Default parameters live in
+`configs/kpf_drp_{science,masters}.toml`.
 
-## Masters Pipeline
+### Scripts
 
-`kpfpipe/modules/masters/` — stacks multiple observations to create bias, dark, flat, and wavelength solution (WLS) calibration products. Uses sigma-clipped statistics with a single-pass streaming accumulation (per-pixel counts and exposure time) for large stacks; the master image is the exposure-weighted rate `counts_sum / exptime_sum`. The streaming accumulator's approximation pass caches the first `ndirect` assembled L1 frames (`base.py::_load_frame(cache=True)`) so the exact pass reuses them instead of re-reading/re-assembling — the masters stage is I/O-bound, so this trade favors I/O over the ~1.3 GiB/job the cache holds.
+`scripts/` run recipes many times, over batches of units: `processing/` holds the reduction
+drivers (the CLI leaf, the orchestrators, and the timeseries wrapper — see *Command line
+interface*), `plots/` the post-reduction plotter (`plot_timeseries.py`), and `quality_control/`
+the reporting entry points (`qc.py`/`qlp.py`). Every driver is runnable on its own (`python -m scripts.processing.<name>`),
+with no knowledge of the dispatcher above it; its flags are documented by `kpfpipe <command> --help`.
 
-**Masters concurrency is capped independently of `--jobs`, and NOT by cores or RAM.** The `masters` orchestrator (`_dispatch.py`) fans nightly masters builds out across a process pool; a **fixed** `_MASTERS_JOBS` (16) bounds that fan-out (science keeps the cores-based `--jobs`). This is deliberate and non-obvious: the stacking stage does not bottleneck on cores or RAM. Measured on shrek (256 cores, 2 TiB), a wide masters fan-out left the CPUs ~75% idle with 1.4 TiB free and **never swapped**, yet every job crawled to `--job_timeout` (1 job alone is fast; ~56 at once wedge). The limit is the **operating system's own memory bookkeeping** (page-fault / mapping churn from streaming large arrays) coordinated across all cores — a cost that grows with the *number of concurrent jobs*, not the work each does. So the cap is a fixed, empirically tuned constant (16 ≈ 2× margin below the ~32 where such degradation appears on similar pipelines), floored by cores/RAM only for small machines. Do **not** "restore" a cores- or RAM-derived masters cap: the earlier RAM cap was built on a mistaken swap diagnosis and is inert on a big host. (Historical dead end: a masters stall once *looked* like swapping; forensics later proved zero swap traffic — the signature is idle CPU + free RAM + high system time, i.e. OS contention, not memory pressure.)
+The processing drivers share a set of **`tools`-free** orchestration helpers:
 
-**Masters fan-out launches are staggered, not lockstep** (`_LAUNCH_INTERVAL` in `masters.py`, passed to `run_stage(launch_interval=…)`; the same throttle science uses to pace SIMBAD/Gaia). A masters build opens with an I/O-heavy stack phase — read + assemble the night's bias/dark/ThAr L0 frames (~100 s alone) before any WLS fitting. Launched **in lockstep**, a full pool marches through that read phase together, so the disk sees `jobs`-deep read bursts and the shared phase balloons ~4–5× (2026-07-09 shrek logs: ~100 s solo → ~465 s at 16-wide lockstep), tipping the slowest nights past `--job_timeout`. **Spacing the launches apart desynchronizes the read bursts at the *same* concurrency**: in those same logs, 16-wide jobs that entered staggered (as pool slots freed) held that phase near the ~100 s solo cost (~105–140 s) instead of ~465 s. The interval (5.0 s) spreads the first wave over most of the read window while staying under the throughput ceiling (~`job_duration/jobs`) so the pool still fills. This is **complementary to, not a replacement for, the `_MASTERS_JOBS` cap above**: the cap bounds the higher-concurrency regime where the OS-memory-bookkeeping cost dominates (the "~56 at once wedge"); the stagger removes the lockstep disk-read spike that hits even at 16-wide. (The 5.0 s value is tuned from one night's logs — re-confirm against a real shrek run before trusting it.)
+- `_argparse.py` — shared argparse parent-parsers composed via `parents=[…]`, so each common flag
+  (recipe/config, data dirs, logging, pool, cache) is declared once; `resolve_dir_shortcuts`
+  post-parse expands the `--input_dir`/`--output_dir` convenience shortcuts into their
+  per-directory slots.
+- `_dispatch.py` — the process-pool engine that fans units out as subprocesses.
+- `_scan.py` — the up-front, parallel-by-datecode L0 mini-db cache **pre-scan** the orchestrators
+  run before fan-out (gated by `--cache`). It is deliberately the sole `kpfpipe.utils.io`
+  (`FileHandler`) importer, so `_dispatch.py` stays io-free.
 
-**Junk-frame exclusion.** "Junk" is a manual flag observers set at exposure time (e.g. wrong telescope settings): such a frame can pass every automated QC yet be scientifically useless. The authoritative list is WMKO's `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` — a data-tree artifact, *not* a repo file (title line, `observation_id` header, one obs_id/row). `utils/io.py::load_junk_obs_ids(data_input)` is the single reader (absent file ⇒ empty set ⇒ no-op). It feeds two paths: (1) `FileHandler.build_mini_database` tags each frame with a derived **`ISJUNK`** column (frames are flagged, never dropped), which `FileHandler.build_calibration_stacks(exclude_junk=True)` filters out before master stacking and `timeseries.py` uses to skip junk during discovery; (2) `QCL0.not_junk` populates the `NOTJUNK` QC flag on science frames, recovering `KPF_DATA_INPUT` from the L0's `self.dirname` (`{KPF_DATA_INPUT}/L0/{datecode}`, set by rvdata's `from_fits`); this flag propagates L0→L4, and `plot_timeseries` reads it back off the L4 `QUALITY_CONTROL` to skip junk frames in `--date_range` mode (the `timeseries` `--obs_ids` handoff has already excluded them upstream). A mini database lacking the `ISJUNK` column makes `build_calibration_stacks(exclude_junk=True)` **fail loudly** (`KeyError: 'ISJUNK'`).
+The default recipe/config path constants live in `kpfpipe/__init__.py`
+(`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source the `--masters`/`--science`
+shortcuts resolve against.
 
-**Masters header alignment (out of EPRV scope, but stylistically aligned).** Masters are *not* EPRV-governed, but follow the same keyword conventions as the science models as closely as possible:
+**Fan-out concurrency differs by orchestrator.** Science sizes its pool from cores (`--jobs`); the
+`masters` orchestrator instead caps at a **fixed** `_MASTERS_JOBS` (16, in `_dispatch.py`),
+independent of `--jobs`, cores, or RAM, because masters stacking degrades with the *number* of
+concurrent jobs (OS memory-mapping contention) rather than with compute or memory pressure — so do
+**not** swap in a cores- or RAM-derived cap. Both orchestrators also **stagger** their subprocess
+launches (`_LAUNCH_INTERVAL`): masters by 5.0 s to desync the I/O-heavy read phase each build opens,
+science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries the per-frame L0 pointing QC fires at
+startup (rationale in each module's comment). These caps and intervals were tuned empirically on
+Caltech's shrek server — heuristics, not definitive values; re-confirm against a real run before
+changing them.
 
-- **Keywords route through `set_keyword`.** Masters PRIMARY keywords — `MASTYPE` and the WLS metadata `ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYORDX`/`POLYORDM`/`POLYORDF` — are registered in the **per-master-type** registries `config/{ML1,ML2-flat,ML2-wls}-headers.csv` (mirroring the per-type `ML*-extensions.csv` manifests), all homed on PRIMARY (one registry home each). `MASTYPE` is in every file; the WLS metadata only in `ML2-wls-headers.csv`. Level is derived from the filename (ML1→1, ML2→2), and all three union into the single global registry table (`keyword_registry._masters_rows`) — so routing/validation are unchanged today; the split sets up eventual per-type keyword enforcement when the checkpoint layer is wired onto masters. `BUNIT` (on each `{chip}_IMG`) is structural, not registered.
-- **Masters PRIMARY is minimal — no EPRV science skeleton.** `KPFMasterL1` never runs `KPF1.__init__`; `KPFMasterL2` runs `KPF2.__init__`→`RV2.__init__` and so **clears** the inherited EPRV L2 skeleton. Both stamp `DATALVL` (`"ML1"`/`"ML2"`) in `__init__`.
-- **Extension manifests are authoritative CSVs, per master type.** `ML1-extensions.csv` builds ML1 directly. ML2 inherits the full KPF2 schema (for the alias system); `KPFMasterL2(kind=…)` takes a **required** `kind` (`"wls"`/`"flat"`) and reads `ML2-{kind}-extensions.csv` — `__init__` deletes any inherited extension the manifest omits, then creates its `Required` rows. **wls** carries `TRACE*_WAVE` + `*_WLS_COEFFS`; **flat** carries `TRACE*_FLUX`/`VAR`/`BLAZE`; both omit the per-observation extensions (`INSTRUMENT_HEADER`, `BARYCORR_*`/`BJD_TDB`, `EXPMETER`/`TELEMETRY`/`ANCILLARY_SPECTRUM`). `from_fits` infers `kind` from PRIMARY `MASTYPE`. **To add or drop an ML2 extension, edit the CSV(s).**
-- **QC infrastructure is present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT` for later wiring; no masters QC checks or DRP-provenance stamping exist yet.
+### Command line interface (CLI)
 
-**Masters test layout.** The masters tests are split by *what they exercise*, not just
-by module. `BaseMasterModule` is abstract, so `tests/regression/test_master_base.py`
-unit-tests the **shared engine** — stacking (rate estimator, per-pixel rejection,
-datacube clipping), calibration resolve/apply/load, frame-load guards, array cleaning,
-and the shared L1 output contract (dtype provenance, `save_master`) — driving it through
-the simplest concrete vehicle for each path: `Bias` (no calibrations) for the pure L1
-output/dtype/save path, `Dark` (bias-subtracted) for the calibration-orchestration path.
-`test_master_bias.py` and `test_master_dark.py` are then **symmetric mirrors** that cover
-only each concrete module's own behavior (Unit / Info / RoundTrip / Signature /
-Regression: BUNIT `electrons` vs `electrons/sec`, receipt name, `info()` text, the
-calibration signature, and a real-data regression). `test_master_wls.py` stands apart —
-WLS builds an ML2 and does not use the L1 stacking engine, so it is tested per-WLS-method
-on its own. `test_masters_recipe.py` covers only the `kpf_drp_masters` recipe (its
-FileHandler/path-builder unit tests live in `test_io.py`). Shared synthetic fixtures live
-in `tests/regression/_masters.py`. `flat` has no test file (stubbed, no `make_master_l1`
-yet). **A test belongs in `test_master_base.py` iff it exercises a `base.py` method
-vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.**
+`kpfpipe` (the `[project.scripts]` console entry, `tools/cli.py:main`) is a **thin, git-style
+dispatcher**: it routes a subcommand to its implementation under `scripts/` and forwards
+the remaining argv verbatim (each subcommand owns its own argparse). Full flag usage is in
+`kpfpipe --help` and `kpfpipe <command> --help`; the subcommands differ by *role*:
 
-## RVDataModel Base Class
+- **`kpfpipe run`** (→ `reduce.py`) — the **leaf**: runs one recipe on one unit, in-process. Owns
+  config-override assembly, `setup_logging`, the DRP-RUN-08 banner, and the recipe `exec`.
+- **`kpfpipe science` / `kpfpipe masters`** (→ `science.py`/`masters.py`) — **orchestrators**: fan a
+  batch of units out as one `python -m scripts.processing.reduce` subprocess each (own log, clean
+  process state, independent exit) via `_dispatch.py`.
+- **`kpfpipe timeseries`** (→ `timeseries.py`) — a **thin wrapper** above the orchestrators: discovers
+  a target's frames from the L0 tree, then runs the masters, science, and `plot_timeseries` stages as
+  subprocesses. Each stage is independently skippable and fail-soft — a frame is handed to science
+  regardless of its masters result.
+- **`kpfpipe plot-timeseries`** (→ `scripts/plots/plot_timeseries.py`) — the standalone **plotter**:
+  renders a target's RV timeseries from its L4 products (the same stage the `timeseries` wrapper runs
+  last).
 
-The rvdata `RVDataModel` provides `extensions`, `headers`, `data` (top-level OrderedDicts), plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. The base `set_data()`/`set_header()` use `.keys()` checks that bypass `__contains__` overrides, so KPF2/KPF4 override these methods with a `hasattr` guard to resolve aliases during init before the dicts are upgraded. The base `create_extension()` initializes each extension *header* as an `OrderedDict`; the KPF models override it so every header is a `fits.Header` instead (see *Header standardization*).
 
-## Diagnostics, QC, Checkpoints, and Quicklook
+## Logging
 
-Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Header standardization*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/quality_control/qc.py`). A level with no paired class skips that stage. The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED timing-consistency flag, is an L0 check whose result rides forward this way).
+Logging follows WMKO DRP-RUN-07/08/09 (issue #1408). Handler/level configuration lives in
+exactly one *module*, `kpfpipe.utils.logger`, and never runs at import time or in
+recipes/modules/tests. Two sibling entry points configure it:
 
-- **Diagnostics** (`kpfpipe/quality_control/diagnostics/`) — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
-- **QC** (`kpfpipe/quality_control/qc_flags/`) — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. `ISGOOD` is the **running** aggregate — the AND over every QC flag accumulated on QUALITY_CONTROL so far (this level's checks *plus* those propagated from lower levels), not just this level's checks. No validation or raising — that is the Checkpoints layer's job.
-- **Checkpoints** (`kpfpipe/quality_control/checkpoints/`) — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
-- **Quicklook** (`kpfpipe/quality_control/quicklook/`) — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
+- **`setup_logging`** — called only by the single-recipe leaf runner (`scripts/processing/reduce.py`,
+  the `kpfpipe run` entry) before the recipe runs, writing that reduction's per-unit log with a
+  stderr console echo.
+- **`setup_batch_logging`** — a thin wrapper called once at the top of each fan-out driver's `main()`
+  (the `science.py`/`masters.py` orchestrators **and** the `timeseries.py` wrapper — three callers,
+  `label` ∈ `science`/`masters`/`timeseries`). It writes a `kpf_{label}_batch_{stamp}.log` of the
+  *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels; for
+  `timeseries`, its discovery + per-stage dispatch trail), with the console echo pinned to **stdout**
+  so an operator can watch fan-out live.
+
+The batch stdout echo is **source-filtered** (`_BatchConsoleFilter`, console handler only): below
+WARNING only the driver's own narration (`scripts.*` / `__main__`) reaches the terminal, keeping
+library INFO chatter out of the live view; WARNING and above always echo, and the log *file* keeps
+every record. Orchestrators (and the shared `_dispatch.py` engine) narrate through named loggers,
+never `print()`. Because they still fan `reduce` out as one subprocess per unit, **each reduction
+also gets its own `setup_logging` per-unit log** — the batch log sits alongside, not in place of, it.
+
+Both siblings write one UT-timestamped file per invocation under the `[LOGGER] log_dir` config key
+(`log_level`/`console` also honored; CLI `--log_dir`/`--log_level` override); a missing `log_dir` is
+fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__name__)` and must work
+with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
+setup must never move into recipes. `warnings.warn` stays the recoverable-condition API, bridged in
+via `logging.captureWarnings`; tests that configure logging must tear down with `teardown_logging`
+(see the autouse fixture in `tests/regression/test_logger.py`). *(Coding rules — levels, lazy
+`%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §6.)*
+
+## Quality control
+
+Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Keyword registry*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/quality_control/qc.py`). A level with no paired class skips that stage. The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED timing-consistency flag, is an L0 check whose result rides forward this way).
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 
+### Diagnostics
+
+`kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+
 **Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the PRIMARY `DATE-OBS` (an EPRV keyword carried to PRIMARY under its own name); the association module writes only the paths.
 
-**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
+### QC flags
+
+`kpfpipe/quality_control/qc_flags/` — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. `ISGOOD` is the **running** aggregate — the AND over every QC flag accumulated on QUALITY_CONTROL so far (this level's checks *plus* those propagated from lower levels), not just this level's checks. No validation or raising — that is the Checkpoints layer's job.
+
+### Checkpoints
+
+`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
+
+### Quicklook plots
+
+`kpfpipe/quality_control/quicklook/` — reads products and renders matplotlib plots. Pulls any annotation values from existing headers.
+
+## File handling
+
+### Data directory structure
+
+The pipeline reads and writes a small number of on-disk trees, rooted at the `[DATA_DIRS]`
+config keys — `KPF_DATA_INPUT` (the raw L0 input tree), `KPF_MASTERS_OUTPUT` (the masters
+output tree), and the science/QLP output roots. `kpf_directory` (see *io.py path builders*) is
+the single authority for the output layout:
+
+- **L0 input**: `{KPF_DATA_INPUT}/L0/{datecode}` — the raw `KP.*` frames, alongside the
+  data-tree artifacts `{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv` (the junk list) and
+  `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv` (the cached per-night mini database).
+- **Science products**: `{data_root}/{level}/{datecode}` for `L0`/`L1`/`L2`/`L4`.
+- **Masters**: `{KPF_MASTERS_OUTPUT}/masters/{datecode}`.
+- **Quicklook**: `{data_root}/QLP/{datecode}/{obs_id}/{level}`.
+
+### FileHandler class
+
+`kpfpipe/utils/io.py::FileHandler` discovers KPF files across the L0-input and masters-output
+trees, keyed by `datecode`/`cal_type`, so recipes and scripts never assemble data paths by
+hand. It is constructed from the already-extracted `[DATA_DIRS]` mapping (it does not import
+`ConfigHandler`, keeping construction light). Its key methods:
+
+- `build_mini_database(datecode)` — scans a night into a per-frame table, tagging each frame
+  with the derived **`ISJUNK`** column (from `junk_obs.csv`; used by masters stacking to exclude
+  junk) and caching the result to disk.
+- `build_calibration_stacks(...)` — groups frames into per-`cal_type` stacks for master
+  building; `exclude_junk=True` filters junk out first.
+- `find_masters(cal_type, level, datecode)` — locates already-built master calibrations.
+
+It is **not thread-safe** (`build_mini_database` stores the scanned night on the instance), so
+use one instance per thread; the on-disk mini-db cache is shared safely, keyed by datecode.
+
+### io.py path builders
+
+Science filenames: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
+
+Two authorities encode these names and **must agree per level**: `kpf_filepath()` (`utils/io.py`) —
+the pipeline's path builder (output directory + basename, from an obs_id string), what recipes use to
+write — and `<model>.generate_standard_filename()` — basename only, the `to_fits(fn=None)` fallback.
+`kpf_filepath` composes two single-authority helpers: `kpf_directory` (the sole authority for an
+**output** directory — the `science`/`masters`/`QLP` layouts above) and `kpf_filename` (**the sole
+authority for the naming rule**). All four science models' `generate_standard_filename` delegate to
+`kpf_filename(self.obs_id, level)`, so the object- and string-keyed builders cannot drift — which is
+why every model must carry `obs_id` on every construction path (see the `ORIGID` note under *Header
+standardization*). As with `check_filename_convention`, **every concrete model declares
+`generate_standard_filename` explicitly** (masters override it with the KOAID/MASTYPE name, carrying
+no `obs_id`) while `KPFDataModel`'s base version **raises `NotImplementedError`**;
+`TestFilenameConsistency` (`tests/regression/test_io.py`) guards the two builders against drift.
+Filename *validation* (`check_filename_convention`) is separate, delegating to rvdata's EPRV check
+for L2/L4.
