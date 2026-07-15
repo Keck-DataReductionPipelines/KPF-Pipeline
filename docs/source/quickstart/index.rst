@@ -33,9 +33,12 @@ and a datecode (masters) or obs_id (science) to act on.
 
 Input/output directories specify the root directory for the data files:
 
-* Input L0 data files should be placed in {kpf_data_input}/L0/
-* Reduced L1/L2/L4 science files will output to {kpf_science_output}/L{n}/
-* Masters files will output to {kpf_masters_output}/masters/
+* Input L0 data files should be placed in {input_dir}/L0/
+* Reduced L1/L2/L4 science files will output to {output_dir}/L{n}/
+* Masters files will output to {output_dir}/masters/
+* Logs will output to {output_dir}/logs/
+* Quicklook plots will output to {output_dir}/QLP
+
 
 Masters
 -------
@@ -46,8 +49,8 @@ datecode) directly in the CLI:
 .. code-block:: bash
 
    kpfpipe masters \
-       --kpf_data_input /path/to/data \
-       --kpf_masters_output /path/to/masters/output \
+       --input_dir /path/to/input/ \
+       --ouput_dir /path/to/output/ \
        --dates 20240405 20250912 20250111
 
 Or by passing a plain text file which lists a single datecode per line:
@@ -55,8 +58,8 @@ Or by passing a plain text file which lists a single datecode per line:
 .. code-block:: bash
 
    kpfpipe masters \
-       --kpf_data_input /path/to/data \
-       --kpf_masters_output /path/to/masters/output \
+       --input_dir /path/to/input/ \
+       --ouput_dir /path/to/output \
        --dates /path/to/datecodes.txt
 
 You can also generate masters over a range of nights:
@@ -64,8 +67,8 @@ You can also generate masters over a range of nights:
 .. code-block:: bash
 
    kpfpipe masters \
-       --kpf_data_input /path/to/data \
-       --kpf_masters_output /path/to/masters/output \
+       --input_dir /path/to/input/ \
+       --ouput_dir /path/to/output/ \
        --date_range 20240405 20240418
 
 
@@ -77,9 +80,8 @@ Reduce one or more science frames (identified by their obs_ids):
 .. code-block:: bash
 
    kpfpipe science \
-       --kpf_data_input /path/to/data \
-       --kpf_science_output /path/to/science/output \
-       --kpf_masters_output /path/to/masters/output \
+       --input_dir /path/to/input/ \
+       --ouput_dir /path/to/output/ \
        --obs_ids KP.20240405.40113.57 KP.20240912.84491.73
 
 Or by passing a plain text file which lists a single obs_id per line:
@@ -87,12 +89,11 @@ Or by passing a plain text file which lists a single obs_id per line:
 .. code-block:: bash
 
    kpfpipe science \
-       --kpf_data_input /path/to/data \
-       --kpf_science_output /path/to/science/output \
-       --kpf_masters_output /path/to/masters/output \
+       --input_dir /path/to/input/ \
+       --ouput_dir /path/to/output/ \
        --obs_ids /path/to/obs_ids.txt
 
-Make sure that ``--kpf_masters_output`` specifies the same directory you used
+Make sure that ``--output_dir`` specifies the same directory you used
 to run the masters pipeline so the science pipeline knows where to look for
 masters calibrations.
 
@@ -107,7 +108,6 @@ given date range, use the timeseries command:
 
    kpfpipe timeseries \
        --target 10700 \
-       --kpf_data_input /path/to/data \
-       --kpf_science_output /path/to/science/output \
-       --kpf_masters_output /path/to/masters/output \
+       --input_dir /path/to/input/ \
+       --ouput_dir /path/to/output/ \
        --date_range 20240405 20240418
