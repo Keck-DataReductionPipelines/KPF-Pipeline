@@ -13,13 +13,12 @@
 
 ## 1. Why We Are Rebuilding
 
-The current DRP has reached a point where:
+The legacy v2.12 DRP has reached a point where:
 
--   Development velocity is limited by framework complexity.
+-   Development speed is limited by framework complexity.
 -   Debugging is slowed by hidden state and infrastructure coupling.
 -   Reprocessing is brittle.
--   Calibration strategy (especially WLS + drift) needs structural
-    rethinking.
+-   Calibration strategy (especially WLS + drift) needs structural rethinking.
 -   Silent failures and nondeterministic behavior undermine confidence.
 -   Long-term RV stability remains the dominant scientific challenge.
 
@@ -30,7 +29,7 @@ deterministic behavior, - and development agility.
 
 ------------------------------------------------------------------------
 
-## 2. Immediate Objective (Path 3)
+## 2. Immediate Objective (Phase I)
 
 We are beginning with a simple, astronomy-style pipeline.
 
@@ -54,7 +53,7 @@ and rapid iteration.
 
 ------------------------------------------------------------------------
 
-## 3. Definition of Success (Initial 2--3 Month Target)
+## 3. Definition of Success
 
 The pipeline is considered successful when:
 
@@ -80,8 +79,8 @@ Everything in this rebuild should serve one of:
 
 -   Improving wavelength calibration robustness.
 -   Improving drift modeling clarity.
--   Eliminating outliers.
 -   Making calibration failure modes explicit.
+-   Eliminating RV outliers.
 -   Enabling systematic regression testing.
 
 If a feature does not support RV stability or reproducibility, it is
@@ -96,7 +95,7 @@ The previous pipeline implicitly centered LFC as the foundational WLS.
 In this rebuild:
 
 -   Calibration paths must be explicit.
--   LFC, HCL, and etalon-based strategies are separate modules.
+-   LFC, HCL, and etalon-based strategies are separate.
 -   Each path must be independently testable.
 -   No calibration source is trusted blindly.
 -   QC metrics must accompany every calibration product.
@@ -120,19 +119,19 @@ truth dataset, - and document impact on RV metrics.
 
 ------------------------------------------------------------------------
 
-## 7. Why Path 3 First
+## 7. Why an Astronomy-Style Pipline First
 
-We intentionally begin with Path 3 because:
+We intentionally begin with Phase I because:
 
 -   Framework friction currently slows iteration.
 -   Architecture debates are distracting.
 -   Scientific stability must precede software polish.
 
-Path 3 gives us: - agility, - clarity, - and control.
+Phase I gives us: - agility, - clarity, - and control.
 
 ------------------------------------------------------------------------
 
-## 8. Eventual Migration to Path 2
+## 8. Eventual Migration to Phase II
 
 This codebase should evolve toward a cleaner, modern architecture once:
 
@@ -141,8 +140,8 @@ This codebase should evolve toward a cleaner, modern architecture once:
 -   Silent failures are eliminated.
 -   Reprocessing is robust.
 
-Path 2 (modern orchestration, containerization, workflow engines,
-unified DB) is a second step, not the first.
+Phase II (modern orchestration, containerization, workflow engines,
+unified database) is a second step, not the first.
 
 We do not prematurely optimize infrastructure.
 
