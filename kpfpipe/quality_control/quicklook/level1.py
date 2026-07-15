@@ -11,11 +11,10 @@ from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
 
 
 class PlotL1:
-    """
-    Quicklook plots for KPF L1 (assembled FFI) data.
+    """Quicklook plots for KPF L1 (assembled FFI) data.
 
     Takes a KPF1 object and generates plots of the assembled detector image.
-    Pure visualization — no science computation. Read-noise header mapping
+    Pure visualization -- no science computation. Read-noise header mapping
     is imported from ImageAssembly so there is one source of truth for which
     FITS keywords hold which amplifier's read noise.
 
@@ -59,8 +58,7 @@ class PlotL1:
         return rn_values, rnng_values
 
     def image(self, chip, *, full_res=None):
-        """
-        Plot the assembled FFI for one CCD.
+        """Plot the assembled FFI for one CCD.
 
         Replicates v2.12 plot_2D_image for the basic science-frame case.
 
@@ -70,7 +68,7 @@ class PlotL1:
             'green' or 'red'.
         full_res : bool or None
             Save a native-size, one-output-pixel-per-CCD-pixel PNG when true.
-            None uses the constructor's `full_res` setting.
+            None uses the constructor's ``full_res`` setting.
 
         Returns
         -------
@@ -135,7 +133,6 @@ class PlotL1:
                 textcoords="offset points",
             )
 
-        # Timestamp
         current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         plt.annotate(
             f"KPF QLP: {current_time} UT",
@@ -210,33 +207,31 @@ class PlotL1:
         return np.size(self.l1_obj.data[ext]) > 0
 
     def run(self, which, *, full_res=None):
-        """
-        Generate the requested plot(s) for every chip that has data.
+        """Generate the requested plot(s) for every chip that has data.
 
-        Saves each to `output_dir` and, in that save-to-disk mode, closes the
-        matplotlib figure so callers don't accumulate them. When `output_dir`
-        is None the figures are returned open, so they display when the caller
-        renders them (e.g. interactively in a notebook).
+        Follows the shared Quicklook ``run()`` contract:
+        saved-and-closed when ``output_dir`` is set, returned open when it
+        is ``None``.
 
         Parameters
         ----------
         which : str
             'all' to run every implemented plot, or the name of a single
-            plot method (one of `self._PLOT_METHODS`).
+            plot method (one of ``self._PLOT_METHODS``).
         full_res : bool or None
             Save native-size PNGs when true. None uses the constructor's
-            `full_res` setting.
+            ``full_res`` setting.
 
         Returns
         -------
         dict
-            Maps `{method_name}_{chip}` to its matplotlib.Figure (closed only
-            when saved to `output_dir`); useful for tests and introspection.
+            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
+            for tests and introspection.
 
         Raises
         ------
         ValueError
-            If `which` is neither 'all' nor a known plot method name.
+            If ``which`` is neither 'all' nor a known plot method name.
         """
         if which == "all":
             names = self._PLOT_METHODS
@@ -259,8 +254,7 @@ class PlotL1:
             for name in names:
                 fig = getattr(self, name)(chip, full_res=full_res)
                 figures[f"{name}_{chip}"] = fig
-                # Closing frees memory in save-to-disk mode; when returning
-                # figures for interactive display, leave them open.
+                # Close only saved figures (Quicklook run() contract).
                 if self.output_dir is not None:
                     plt.close(fig)
         return figures

@@ -1,3 +1,5 @@
+"""Diagnostics: per-level metric computation written to product headers."""
+
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
 from kpfpipe.quality_control.diagnostics.level0 import DiagL0
 from kpfpipe.quality_control.diagnostics.level1 import DiagL1

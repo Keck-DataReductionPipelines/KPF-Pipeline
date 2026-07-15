@@ -279,8 +279,8 @@ def main(argv=None):
         if value:
             common_forward += [flag, value]
     common_forward += ["--job_timeout", str(args.job_timeout)]
-    # Discovery above is the sole mini-db writer; force both launched stages
-    # read-only so they don't redundantly re-warm the caches it just wrote.
+    # Discovery is the sole mini-db writer; force both launched stages read-only
+    # so they don't redundantly re-warm the caches it will have just written.
     common_forward += ["--cache", "r"]
 
     # --jobs sizes only the science fan-out: forwarding a large --jobs to masters

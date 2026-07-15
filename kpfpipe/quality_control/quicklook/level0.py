@@ -12,11 +12,10 @@ from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
 
 
 class PlotL0:
-    """
-    Quicklook plots for KPF L0 (raw CCD) data.
+    """Quicklook plots for KPF L0 (raw CCD) data.
 
     Takes a KPF0 object and generates plots of the raw detector images.
-    Pure visualization — no science computation. Amplifier counting and
+    Pure visualization -- no science computation. Amplifier counting and
     orientation delegate to ImageAssembly so detector-geometry knowledge
     has a single home.
 
@@ -54,11 +53,9 @@ class PlotL0:
     def _stitch(self, chip):
         """Concatenate raw amplifier arrays into a single display image.
 
-        Uses ImageAssembly to count amps and (for 4-amp mode) apply per-amp
-        orientation, then applies the same blue -> red FFI orientation as
-        ImageAssembly so the L0 display matches the assembled output. Per-amp
-        orientation is performed on a deepcopy of the L0 so the caller's object
-        is not mutated.
+        Delegates amp counting/orientation to ImageAssembly (on a deepcopy, since
+        orient_channels mutates l0.data), then applies the same blue -> red FFI
+        orientation so the L0 display matches the assembled output.
         """
         chip = chip.upper()
 
@@ -96,8 +93,7 @@ class PlotL0:
         return ImageAssembly.orient_ffi(image, chip)
 
     def stitched_image(self, chip, *, full_res=None):
-        """
-        Plot the stitched raw detector image for one CCD.
+        """Plot the stitched raw detector image for one CCD.
 
         Replicates v2.12 plot_L0_stitched_image.
 
@@ -107,7 +103,7 @@ class PlotL0:
             'green' or 'red'.
         full_res : bool or None
             Save a native-size, one-output-pixel-per-CCD-pixel PNG when true.
-            None uses the constructor's `full_res` setting.
+            None uses the constructor's ``full_res`` setting.
 
         Returns
         -------
@@ -122,7 +118,7 @@ class PlotL0:
         image = self._stitch(chip_upper)
         # Stats run on the unmasked pixels (mask -> NaN), mirroring the L1 path;
         # nan* over the masked array would otherwise ignore the mask and warn.
-        # imshow keeps the masked `image` so masked pixels still render as blank.
+        # imshow keeps the masked ``image`` so masked pixels still render as blank.
         finite = np.ma.filled(image, np.nan)
 
         # Legacy data format: values stored with extra 2^16 factor
@@ -159,7 +155,6 @@ class PlotL0:
         cbar.ax.tick_params(labelsize=12)
         plt.grid(False)
 
-        # Timestamp annotation
         current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(
@@ -199,33 +194,31 @@ class PlotL0:
         return fig
 
     def run(self, which, *, full_res=None):
-        """
-        Generate the requested plot(s) for every chip that has data.
+        """Generate the requested plot(s) for every chip that has data.
 
-        Saves each to `output_dir` and, in that save-to-disk mode, closes the
-        matplotlib figure so callers don't accumulate them. When `output_dir`
-        is None the figures are returned open, so they display when the caller
-        renders them (e.g. interactively in a notebook).
+        Follows the shared Quicklook ``run()`` contract:
+        saved-and-closed when ``output_dir`` is set, returned open when it
+        is ``None``.
 
         Parameters
         ----------
         which : str
             'all' to run every implemented plot, or the name of a single
-            plot method (one of `self._PLOT_METHODS`).
+            plot method (one of ``self._PLOT_METHODS``).
         full_res : bool or None
             Save native-size PNGs when true. None uses the constructor's
-            `full_res` setting.
+            ``full_res`` setting.
 
         Returns
         -------
         dict
-            Maps `{method_name}_{chip}` to its matplotlib.Figure (closed only
-            when saved to `output_dir`); useful for tests and introspection.
+            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
+            for tests and introspection.
 
         Raises
         ------
         ValueError
-            If `which` is neither 'all' nor a known plot method name.
+            If ``which`` is neither 'all' nor a known plot method name.
         """
         if which == "all":
             names = self._PLOT_METHODS

@@ -8,15 +8,18 @@ class Flat(BaseMasterModule):
     """
     Construct a master flat frame from a stack of L0 flat exposures.
 
-    Standard reduction: a flat is bias- and dark-subtracted
-    (`_STANDARD_CALIBRATIONS = ("bias", "dark")`). Not yet implemented.
+    Standard reduction: a flat is bias- and dark-subtracted. Not yet
+    implemented.
 
     Parameters
     ----------
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: stack_sigma, chips.
+        Module configuration. Recognized keys: stack_sigma, min_stack_size,
+        chips, bias and dark (master-calibration overrides), and the
+        calibration-association keys masters_search_window_days and
+        KPF_MASTERS_OUTPUT.
     """
 
     _STANDARD_CALIBRATIONS = ("bias", "dark")

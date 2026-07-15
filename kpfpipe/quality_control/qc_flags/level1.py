@@ -47,27 +47,12 @@ class QCL1(QC):
     required_keywords_present._qc_key = "KWRDPRL1"
 
     def _present_rn_in_range(self, idx, lo, hi):
-        """Validate a read-noise keyword across every amplifier present.
+        """True iff every present amp's ``idx``-th RN keyword is in ``[lo, hi]``.
 
-        Checks the ``idx``-th RN keyword for every amplifier whose keyword is
-        present, so 2-amp and 4-amp readouts both pass. Absent amps are
-        skipped.
-
-        Parameters
-        ----------
-        idx : int
-            Index into each amp's RN keyword pair (0 = RN, 1 = non-Gaussian RN).
-        lo : float
-            Lower bound of the accepted range, inclusive.
-        hi : float
-            Upper bound of the accepted range, inclusive.
-
-        Returns
-        -------
-        bool
-            True if all present values fall in ``[lo, hi]``. False if any is
-            out of range, or if no RN keyword is present at all (read noise
-            should always be recorded).
+        ``idx`` selects the RN keyword pair (0 = RN, 1 = non-Gaussian RN); absent
+        amps are skipped so 2-amp and 4-amp readouts both pass. False if any is
+        out of range, or if no RN keyword is present at all (read noise should
+        always be recorded).
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         found = False

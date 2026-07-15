@@ -1,27 +1,11 @@
 """
 KPF Level 4 (RVs and CCFs) data model.
 
-Inherits from RV4 (EPRV standard) and adds KPF-friendly extension aliases
-for CCF and RV data, following the same AliasedOrderedDict pattern as KPF2.
-
-The EPRV standard defines CCF1...N (ImageHDU) and RV1...N (BinTableHDU), one
-per orderlet. KPF numbers both to match the L2 traces (CCF{n}/RV{n} hold the
-CCF/RV for the orderlet on TRACE{n}): n=1 SKY, 2 SCI1, 3 SCI2, 4 SCI3, 5 CAL.
-The KPF name → extension mapping is therefore derived from the shared trace map
-(trace-map.csv), exactly like the L2 TRACE*_FLUX aliases — not from aliases.csv.
-
-KPF adds a parallel CCF_VAR1...N ImageHDU (a KPF extension, not EPRV) holding
-the per-velocity-bin CCF photon variance for each CCF{n}, numbered and aliased
-the same way (CCF_VAR{n} ↔ TRACE{n}). It persists what the RV photon-error step
-needs, which the value-only EPRV CCF{n} does not carry.
-
-Each CCF (and CCF_VAR) stores green+red orders concatenated (green first), like
-TRACE*_FLUX, so per-chip access mirrors KPF2. RV tables hold one row per order
-(no chip prefix — slice by ORDER_INDEX instead). As examples, `data["SCI2_CCF"]`
-is `data["CCF3"]` (alias), `data["SCI2_CCF_VAR"]` is `data["CCF_VAR3"]`, and
-`data["SCI2_RV"]` is `data["RV3"]` (alias), while `data["GREEN_SCI2_CCF"]`
-returns `CCF3[:NORDER_GREEN]` (the green orders, a view) and
-`data["RED_SCI2_CCF"]` returns `CCF3[NORDER_GREEN:]` (the red orders, a view).
+Radial velocities and cross-correlation functions. Extends the EPRV RV4
+model with KPF-friendly extension aliases for the CCF and RV data, following
+the same pattern as KPF2 -- data can be accessed by either EPRV name
+(``CCF3``, ``RV3``) or KPF name (``SCI2_CCF``, ``SCI2_RV``), with per-chip
+views for the CCF cubes (``GREEN_SCI2_CCF``, ``RED_SCI2_CCF``).
 """
 
 import importlib.resources
@@ -66,7 +50,7 @@ _ALIASES = pd.read_csv(_config_path / "aliases.csv")
 # Each maps a chip-prefixed key -> (fiber_alias, chip). CCF and CCF_VAR cubes are
 # sliced on their order axis (axis 0) and support chip-prefix read and write; RV
 # tables are row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support
-# read only — each is written whole (one BinTable per orderlet), so a chip-prefix
+# read only -- each is written whole (one BinTable per orderlet), so a chip-prefix
 # write raises.
 _CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (fiber_alias, chip)
 for _, _row in _TRACE_MAP.iterrows():
@@ -82,9 +66,9 @@ class _KPF4DataDict(AliasedOrderedDict):
     Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and
     RV tables.
 
-    Accessing `d["GREEN_SCI2_CCF"]` returns `d["SCI2_CCF"][:NORDER_GREEN]`, a
+    Accessing ``d["GREEN_SCI2_CCF"]`` returns ``d["SCI2_CCF"][:NORDER_GREEN]``, a
     numpy view into the first 35 orders of CCF3 (order axis is axis 0, like the
-    trace flux arrays). `d["GREEN_SCI2_RV"]` returns the green rows of the
+    trace flux arrays). ``d["GREEN_SCI2_RV"]`` returns the green rows of the
     SCI2_RV table (rows 0:NORDER_GREEN); RV chip-prefix access is read-only,
     since each RV table is written whole.
     """
@@ -164,21 +148,13 @@ class KPF4(KPFDataModel, RV4):
     """
     KPF Level 4 RV and CCF data model.
 
-    Extends RV4 with KPF-friendly extension aliases and per-chip access for the
-    CCF cubes. EPRV-standard extension names (CCF1...N, RV1...N) remain
-    canonical; aliases are transparent synonyms. KPF also adds a parallel
-    CCF_VAR1...N ImageHDU (per-bin CCF variance) that behaves exactly like
-    CCF1...N (same shape, concatenation, and per-chip access).
-
-    Each CCF (and CCF_VAR) holds green+red orders concatenated (35 green + 32 red
-    = 67 orders total). Per-chip access via the GREEN_/RED_ prefix returns numpy
-    views into the concatenated array. RV tables hold one row per order. As
-    examples of the aliasing, `data["SCI2_CCF"]` is `data["CCF3"]`,
-    `data["SCI2_CCF_VAR"]` is `data["CCF_VAR3"]`, and `data["SCI2_RV"]` is
-    `data["RV3"]`; per-chip, `data["GREEN_SCI2_CCF"]` returns `CCF3[:35]` (green
-    orders, a numpy view), `data["RED_SCI2_CCF"]` returns `CCF3[35:]` (red
-    orders, a numpy view), and `data["GREEN_SCI2_RV"]` / `data["RED_SCI2_RV"]`
-    return the green / red rows of RV3 (read-only).
+    Extends RV4 with KPF-friendly extension aliases and per-chip access for
+    the CCF cubes; EPRV-standard names (``CCF1...N``, ``RV1...N``) remain
+    canonical and aliases are transparent synonyms. Each CCF holds the green
+    and red orders concatenated (green first); a GREEN_/RED_ prefix returns a
+    numpy view of that chip's orders, while RV tables hold one row per order.
+    For example, ``data["SCI2_CCF"]`` is ``data["CCF3"]`` and
+    ``data["SCI2_RV"]`` is ``data["RV3"]``.
     """
 
     def __init__(self):
@@ -243,17 +219,16 @@ class KPF4(KPFDataModel, RV4):
     def generate_standard_filename(self):
         """KPF L4 standard filename (EPRV-standard SL4 name).
 
-        Delegates to `kpf_filename` (the single source for KPF product naming, so
-        generation lives in one place across all levels), deriving the name from
-        `obs_id`. `check_filename_convention` still defers to rvdata's EPRV
-        validator. Raises a `ValueError` if `obs_id` is unset or invalid.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
         return kpf_filename(self.obs_id, "L4")
 
     def to_fits(self, fn=None):
-        """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
-        parameter to ``out_filename``. Delegate so all our call sites can keep
-        passing one path (``to_fits(fn)``)."""
+        """Single-filepath ``to_fits`` shim; see ``KPF2.to_fits`` for the
+        rationale (rvdata >=0.4.0 renamed the parameter to ``out_filename``)."""
         out_path = super().to_fits(out_filename=fn)
         logger.info("wrote %s to %s", type(self).__name__, out_path)
         return out_path

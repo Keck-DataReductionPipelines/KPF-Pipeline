@@ -56,7 +56,7 @@ def _seed_read_noise(l1):
     """Seed RN*/RNNG* via set_keyword, exactly as ImageAssembly does.
 
     set_keyword routes these to QUALITY_CONTROL (their registry home), so this
-    exercises the real read path the quicklook annotation depends on — writing
+    exercises the real read path the quicklook annotation depends on -- writing
     them onto PRIMARY here would let the annotation test pass while production
     (which reads QUALITY_CONTROL) silently rendered nothing.
     """

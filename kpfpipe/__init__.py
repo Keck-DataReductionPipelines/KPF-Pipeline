@@ -1,12 +1,15 @@
+"""KPF pipeline package root: version, detector config, and shared defaults."""
+
 import importlib.metadata
 import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Installed package version (WMKO DRP-RUN-11); stamped onto PRIMARY as DRPTAG/
-# DRPVERNO. Falls back to "unknown" if the package metadata is unavailable
-# (e.g. running from a source tree that was never installed).
+# Installed package version (WMKO DRP-RUN-11); stamped onto RECEIPT as DRPVERNO
+# (the EPRV equivalent DRPTAG is the value carried on PRIMARY). Falls back to
+# "unknown" if the package metadata is unavailable (e.g. running from a source
+# tree that was never installed).
 try:
     __version__ = importlib.metadata.version("kpfpipe")
 except importlib.metadata.PackageNotFoundError:

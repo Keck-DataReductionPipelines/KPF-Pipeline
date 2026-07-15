@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# fetch_l0.sh — retrieve KPF L0 files for a list of obs_ids from a remote server.
+# fetch_l0.sh -- retrieve KPF L0 files for a list of obs_ids from a remote server.
 #
 # Reads a text file of obs_ids (one per line, optionally preceded by an index
 # column, e.g. "1<TAB>KP.20240727.56085.97") and rsyncs the matching L0 FITS
@@ -9,7 +9,7 @@
 # middle field of the obs_id (KP.<datecode>.<seconds>...).
 #
 # The remote and local L0 roots are supplied as arguments (or via the
-# KPF_REMOTE_L0 / KPF_LOCAL_L0 environment variables) — nothing is tied to a
+# KPF_REMOTE_L0 / KPF_LOCAL_L0 environment variables) -- nothing is tied to a
 # particular machine or account.
 #
 # Usage:

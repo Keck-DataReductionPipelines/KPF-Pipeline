@@ -54,7 +54,7 @@ def minimal_l1(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Box extraction (unit tests — no data or fixtures required)
+# Box extraction (unit tests -- no data or fixtures required)
 # ---------------------------------------------------------------------------
 
 
@@ -111,7 +111,7 @@ class TestBoxExtraction:
 
 
 # ---------------------------------------------------------------------------
-# Unimplemented extraction stubs
+# Dtype provenance
 # ---------------------------------------------------------------------------
 
 
@@ -145,6 +145,11 @@ class TestDtypeProvenance:
         assert_dtype(l2.data["SCI2_VAR"], FLUX, "L2 SCI2_VAR")
 
 
+# ---------------------------------------------------------------------------
+# Unimplemented extraction stubs
+# ---------------------------------------------------------------------------
+
+
 class TestUnimplementedExtraction:
     def test_optimal_raises(self):
         D = V = np.ones((5, 10))
@@ -158,7 +163,7 @@ class TestUnimplementedExtraction:
 
 
 # ---------------------------------------------------------------------------
-# perform() shape tests (monkeypatched — no real data or trace files needed)
+# perform() shape tests (monkeypatched -- no real data or trace files needed)
 # ---------------------------------------------------------------------------
 
 
@@ -357,7 +362,7 @@ class TestOrderTraceErrors:
             se.extract_orderlet("GREEN", "SCI1", 2)
 
     def test_duplicate_trace_raises_value_error(self):
-        # Two rows for the same (Fiber, Order) — a corrupt reference file.
+        # Two rows for the same (Fiber, Order) -- a corrupt reference file.
         rows = [
             {
                 "Fiber": "SCI1",

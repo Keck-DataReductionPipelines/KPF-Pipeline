@@ -3,11 +3,11 @@
 Checkpoints are the third QC stage: they READ the 0/1 QC flags and the product
 headers, then warn or raise (never write). This pins:
 
-  - ``unregistered_keywords`` — raises on a card not registered for a governed
+  - ``unregistered_keywords`` -- raises on a card not registered for a governed
     extension (including a raw WMKO native leaked onto an EPRV PRIMARY); skips the
     raw WMKO L0 PRIMARY; passes a clean product. (Migrated from the old
     ``QC._validate_headers`` tests.)
-  - ``qc_flags`` — a failed (0) flag named in the level's ``RAISE_FLAGS`` raises;
+  - ``qc_flags`` -- a failed (0) flag named in the level's ``RAISE_FLAGS`` raises;
     any other failed flag warns; all-pass is silent.
 
 ``run()`` additionally folds in the paired Diagnostics + QC stages before the
@@ -187,7 +187,7 @@ class TestRunFoldsDiagnosticsAndQC:
 
 
 # ---------------------------------------------------------------------------
-# CheckpointL4 — folds DiagL4 + QCL4, then validates the RV/CCF product
+# CheckpointL4 -- folds DiagL4 + QCL4, then validates the RV/CCF product
 # ---------------------------------------------------------------------------
 
 

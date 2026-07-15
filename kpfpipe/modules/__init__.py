@@ -1,1 +1,1 @@
-"""Transform modules operating on KPF data-model objects (L0, L1, L2)."""
+"""Core algorithms for the science and masters pipelines."""

@@ -1,35 +1,38 @@
 # KPF-DRP vNext: Project Context and Intent
 
-> **Authority precedence.** This charter is the single source of truth for project intent
-> and design, but it is not the top of the hierarchy. Two documents outrank it:
-> **1. the WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md)) →
-> 2. the EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md)) → 3. this
-> charter → 4. the style guide ([`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md)).**
-> When they conflict, the higher one wins. The WMKO requirements are Keck's binding technical
-> requirements for the DRP; most are not yet met because the pipeline is in active development
-> — flag only *active* violations (existing code that contradicts a requirement), not *passive*
-> ones (a requirement unmet because the feature does not exist yet).
+This charter describes the project intent and design.
+
+**Authority precedence.**
+When requirements or design principles conflict, the order of governing document precedence is:
+
+1. WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md))
+2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
+3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
+4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
+5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+
+When any two conflict, the higher one wins.
+
 
 ## 1. Why We Are Rebuilding
 
-The current DRP has reached a point where:
+The legacy v2.12 DRP has reached a point where:
 
--   Development velocity is limited by framework complexity.
+-   Development speed is limited by framework complexity.
 -   Debugging is slowed by hidden state and infrastructure coupling.
 -   Reprocessing is brittle.
--   Calibration strategy (especially WLS + drift) needs structural
-    rethinking.
+-   Calibration strategy (especially WLS + drift) needs structural rethinking.
 -   Silent failures and nondeterministic behavior undermine confidence.
 -   Long-term RV stability remains the dominant scientific challenge.
 
 This effort is not a cosmetic refactor.
 
-It is a controlled reset aimed at restoring: - scientific confidence, -
-deterministic behavior, - and development agility.
+It is a controlled reset aimed at restoring scientific confidence,
+deterministic behavior, and development agility.
 
 ------------------------------------------------------------------------
 
-## 2. Immediate Objective (Path 3)
+## 2. Immediate Objective (Phase I)
 
 We are beginning with a simple, astronomy-style pipeline.
 
@@ -46,14 +49,14 @@ This means:
 
 The goal is not elegance.
 
-The goal is: - clarity, - reproducibility, - and stability.
+The goal is clarity, reproducibility, and stability.
 
-We optimize for: - ease of debugging, - transparent calibration logic, -
+We optimize for ease of debugging, transparent calibration logic,
 and rapid iteration.
 
 ------------------------------------------------------------------------
 
-## 3. Definition of Success (Initial 2--3 Month Target)
+## 3. Definition of Success
 
 The pipeline is considered successful when:
 
@@ -64,7 +67,7 @@ The pipeline is considered successful when:
 5.  RV performance on standard stars is stable and measurable.
 6.  Silent failures are eliminated.
 
-We are not targeting: - perfect architecture, - distributed scaling, -
+We are not targeting perfect architecture, distributed scaling,
 or production-grade orchestration.
 
 ------------------------------------------------------------------------
@@ -79,8 +82,8 @@ Everything in this rebuild should serve one of:
 
 -   Improving wavelength calibration robustness.
 -   Improving drift modeling clarity.
--   Eliminating outliers.
 -   Making calibration failure modes explicit.
+-   Eliminating RV outliers.
 -   Enabling systematic regression testing.
 
 If a feature does not support RV stability or reproducibility, it is
@@ -95,7 +98,7 @@ The previous pipeline implicitly centered LFC as the foundational WLS.
 In this rebuild:
 
 -   Calibration paths must be explicit.
--   LFC, HCL, and etalon-based strategies are separate modules.
+-   LFC, HCL, and etalon-based strategies are separate.
 -   Each path must be independently testable.
 -   No calibration source is trusted blindly.
 -   QC metrics must accompany every calibration product.
@@ -111,27 +114,27 @@ This is a small-team effort:
 -   BJ: project lead / scientific oversight / integration.
 -   Greg: primary implementation.
 
-Weekly cadence: - measurable progress, - regression metrics, - explicit
+Weekly cadence: measurable progress, regression metrics, explicit
 sprint goals.
 
-Every major change must: - preserve deterministic behavior, - run on the
-truth dataset, - and document impact on RV metrics.
+Every major change must preserve deterministic behavior, run on the
+truth dataset, and document impact on RV metrics.
 
 ------------------------------------------------------------------------
 
-## 7. Why Path 3 First
+## 7. Why an Astronomy-Style Pipeline First
 
-We intentionally begin with Path 3 because:
+We intentionally begin with Phase I because:
 
 -   Framework friction currently slows iteration.
 -   Architecture debates are distracting.
 -   Scientific stability must precede software polish.
 
-Path 3 gives us: - agility, - clarity, - and control.
+Phase I gives us agility, clarity, and control.
 
 ------------------------------------------------------------------------
 
-## 8. Eventual Migration to Path 2
+## 8. Eventual Migration to Phase II
 
 This codebase should evolve toward a cleaner, modern architecture once:
 
@@ -140,8 +143,8 @@ This codebase should evolve toward a cleaner, modern architecture once:
 -   Silent failures are eliminated.
 -   Reprocessing is robust.
 
-Path 2 (modern orchestration, containerization, workflow engines,
-unified DB) is a second step, not the first.
+Phase II (modern orchestration, containerization, workflow engines,
+unified database) is a second step, not the first.
 
 We do not prematurely optimize infrastructure.
 
@@ -157,7 +160,7 @@ We must avoid:
 -   Introducing silent retries.
 -   Overengineering abstractions.
 
-All steps must remain: - explicit, - readable, - debuggable.
+All steps must remain explicit, readable, and debuggable.
 
 ------------------------------------------------------------------------
 

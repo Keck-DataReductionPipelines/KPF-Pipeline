@@ -1,16 +1,10 @@
 """
 KPF Level 2 (extracted spectra) data model.
 
-Inherits from RV2 (EPRV standard) and adds KPF-friendly extension aliases
-so pipeline code can use either EPRV names (TRACE3_FLUX) or KPF names
-(SCI2_FLUX). Per-chip access (GREEN_SCI2_FLUX, RED_SCI2_FLUX) is handled
-transparently — these return numpy views into the concatenated trace arrays.
-
-Each trace stores green+red orders concatenated (green first), matching the
-EPRV standard. The chip prefix dynamically slices using NORDER_GREEN.
-
-The alias mechanism (AliasedOrderedDict) is generic and could be
-upstreamed into the EPRV standard (which rvdata implements).
+Extracted, wavelength-calibrated spectra. Extends the EPRV RV2 model with
+KPF-friendly extension aliases, so data can be accessed by either EPRV name
+(``TRACE3_FLUX``) or KPF name (``SCI2_FLUX``), including per-chip views
+(``GREEN_SCI2_FLUX``, ``RED_SCI2_FLUX``).
 """
 
 import importlib.resources
@@ -72,7 +66,7 @@ class _KPF2DataDict(AliasedOrderedDict):
     """
     Data dict that supports GREEN_/RED_ chip-prefix access.
 
-    Accessing `d["GREEN_SCI2_FLUX"]` returns `d["SCI2_FLUX"][:NORDER_GREEN]`,
+    Accessing ``d["GREEN_SCI2_FLUX"]`` returns ``d["SCI2_FLUX"][:NORDER_GREEN]``,
     a numpy view into the first 35 orders of TRACE3_FLUX.
     """
 
@@ -123,7 +117,6 @@ class _KPF2DataDict(AliasedOrderedDict):
 
     def __contains__(self, key):
         if self._chip_split(key) is not None:
-            # Valid chip-prefix key — check that the underlying trace exists
             fiber_alias, _ = self._chip_split(key)
             return super().__contains__(self._resolve(fiber_alias))
         return super().__contains__(self._resolve(key))
@@ -155,18 +148,12 @@ class KPF2(KPFDataModel, RV2):
     """
     KPF Level 2 extracted spectra data model.
 
-    Extends RV2 with KPF-friendly extension aliases and per-chip
-    access. EPRV-standard extension names remain canonical;
-    aliases are transparent synonyms.
-
-    Each trace contains green+red orders concatenated (35 green + 32 red
-    = 67 orders total). Per-chip access via GREEN_/RED_ prefix returns
-    numpy views into the concatenated array. As examples of the aliasing,
-    `data["SCI2_FLUX"]` is `data["TRACE3_FLUX"]`, `data["CAL_WAVE"]` is
-    `data["TRACE1_WAVE"]`, and `data["CA_HK"]` is
-    `data["ANCILLARY_SPECTRUM"]`; per-chip, `data["GREEN_SCI2_FLUX"]`
-    returns `TRACE3_FLUX[:35]` (the green orders) and
-    `data["RED_SCI2_FLUX"]` returns `TRACE3_FLUX[35:]` (the red orders).
+    Extends RV2 with KPF-friendly extension aliases and per-chip access;
+    EPRV-standard names remain canonical and aliases are transparent
+    synonyms. Each trace holds the green and red orders concatenated (green
+    first); a GREEN_/RED_ prefix returns a numpy view of that chip's orders.
+    For example, ``data["SCI2_FLUX"]`` is ``data["TRACE3_FLUX"]`` and
+    ``data["GREEN_SCI2_FLUX"]`` returns its green orders.
     """
 
     def __init__(self):
@@ -179,15 +166,13 @@ class KPF2(KPFDataModel, RV2):
                 if ext not in self.extensions:
                     self.create_extension(ext, "ImageHDU")
 
-        # Pass-through extensions not in RV2 base. NB: the EPRV standard defines
+        # Pass-through extensions not in the RV2 base. NB: the EPRV standard defines
         # ANCILLARY_SPECTRUM (Ca H&K) as an ImageHDU, but we keep it a BinTableHDU
-        # placeholder for now -- Ca H&K extraction is still WIP and existing master/
-        # L2 products (incl. the truth dataset) encode it as BinTableHDU, so flipping
-        # the type breaks reading them back. Switch to ImageHDU when Ca H&K is built
-        # and products are regenerated. See EPRV_DATA_STANDARD.md §8 (deviations).
-        # QUALITY_CONTROL holds the KPF QC booleans + DiagL2 metrics (the L0/L1
-        # extensions CSVs create it on those models; L2 has no CSV so create it
-        # here). RECEIPT and the barycentric/RV# extensions already exist via RV2.
+        # placeholder for now -- Ca H&K extraction is WIP and existing L2/master
+        # products encode it as BinTableHDU, so flipping the type breaks reading
+        # them back (a deliberate EPRV deviation). QUALITY_CONTROL is
+        # created here (L2 has no extensions CSV); RECEIPT and barycentric/RV#
+        # already exist via RV2.
         for ext, ext_type in [
             ("ANCILLARY_SPECTRUM", "BinTableHDU"),
             ("EXPMETER", "BinTableHDU"),
@@ -234,10 +219,10 @@ class KPF2(KPFDataModel, RV2):
     def generate_standard_filename(self):
         """KPF L2 standard filename (EPRV-standard SL2 name).
 
-        Delegates to `kpf_filename` (the single source for KPF product naming, so
-        generation lives in one place across all levels), deriving the name from
-        `obs_id`. `check_filename_convention` still defers to rvdata's EPRV
-        validator. Raises a `ValueError` if `obs_id` is unset or invalid.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
         return kpf_filename(self.obs_id, "L2")
 
@@ -255,23 +240,18 @@ class KPF2(KPFDataModel, RV2):
 
         Returns a KPF4 with PRIMARY header keywords forwarded from L2,
         and the receipt chain preserved. RV and CCF data extensions are
-        created but empty — the caller (RV computation) fills those in.
+        created but empty -- the caller (RV computation) fills those in.
         """
         kpf4 = KPF4()
 
         # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, and RECEIPT
-        # card-by-card (value + comment), mirroring to_kpf2. PRIMARY overlays
-        # onto kpf4's EPRV seed (native wins); INSTRUMENT_HEADER (TARGTEFF,
-        # TARGRADV, GAIAID, CCD*BJD, ...) stays a verbatim copy; QUALITY_CONTROL
-        # carries the accumulated L0/L1/L2 diagnostics + QC flags (append-only
-        # history, like RECEIPT) and the RECEIPT cards (applied-step flags,
-        # calibration paths) ride along. The receipt *table* propagates
-        # separately via the copy below.
+        # card-by-card, mirroring to_kpf2: PRIMARY overlays onto kpf4's EPRV seed
+        # (native wins), the rest are verbatim copies. The receipt *table*
+        # propagates separately via the copy below.
         self._forward_headers(
             kpf4, ("PRIMARY", "INSTRUMENT_HEADER", "QUALITY_CONTROL", "RECEIPT")
         )
 
-        # Carry forward receipt and obs_id
         if self.receipt is not None and not self.receipt.empty:
             kpf4.receipt = self.receipt.copy()
         kpf4.obs_id = self.obs_id

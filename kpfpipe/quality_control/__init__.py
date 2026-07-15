@@ -1,1 +1,1 @@
-"""Read-only quality layers: diagnostics, QC booleans, and quicklook."""
+"""Quality control: diagnostics, QC flags, checkpoints, and quicklook plots."""

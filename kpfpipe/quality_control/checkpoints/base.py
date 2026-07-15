@@ -1,25 +1,13 @@
 """Checkpoint framework base class.
 
-The third quality-control stage (after Diagnostics and QC). A Checkpoint's
-checkpoint methods READ the 0/1 QC flags written to QUALITY_CONTROL and the
-product headers, then emit warnings or raise errors -- they never write
-keywords. A method opts in by setting ``_checkpoint_name`` on the function
-object; ``run()`` walks all such methods (MRO order) and calls each.
-
-``run()`` also folds in the two upstream read-only stages: it first runs the
-subclass's paired Diagnostics and QC classes (``DIAGNOSTICS``/``QC``) -- which
-write the metrics and 0/1 flags -- then the checkpoint methods. So the recipe
-drives the whole pipeline order science modules -> Diagnostics -> QC ->
-Checkpoints through one ``CheckpointL{n}(obj).run()`` call.
-
-Two responsibilities, both inherited base checkpoints:
-  - ``unregistered_keywords`` -- structural header validation: any non-structural
-    card not registered for its extension raises ``ValueError`` (this logic used
-    to live in ``QC._validate_headers``).
-  - ``qc_flags`` -- read each 0/1 QC flag; a failed (0) flag named in the
-    subclass's ``RAISE_FLAGS`` raises, every other failed flag warns.
-
-Severity policy lives in the per-level subclasses (their ``RAISE_FLAGS``).
+The third and final read-only quality-control stage (after Diagnostics and QC).
+A Checkpoint reads the 0/1 QC flags and the product headers and emits warnings
+or raises errors -- it never writes keywords. ``run()`` also folds in the paired
+Diagnostics and QC classes first, so the recipe drives the whole
+Diagnostics -> QC -> Checkpoints sequence through one ``CheckpointL{n}(obj).run()``
+call. Two base checkpoints are inherited by every level: ``unregistered_keywords``
+(structural header validation) and ``qc_flags`` (raise on a failed flag named in
+the subclass's ``RAISE_FLAGS``, warn on the rest).
 """
 
 import warnings
@@ -34,7 +22,7 @@ class Checkpoint:
         Finished data product whose flags/headers are read (never written).
     """
 
-    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
+    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
     RAISE_FLAGS = ()  # QC keywords whose failure (0) raises; every other 0 warns.
     DIAGNOSTICS = None  # Paired Diagnostics class, run first by run() (None = skip).
     QC = None  # Paired QC class, run second; its results land in self.qc_results.
@@ -121,15 +109,10 @@ class Checkpoint:
     qc_flags._checkpoint_name = "qc_flags"
 
     def _iter_checkpoints(self):
-        """Yield each checkpoint method tagged with `_checkpoint_name`.
+        """Yield each ``(name, method)`` tagged ``_checkpoint_name``.
 
-        Walks the MRO so subclass methods come before the base class and ordering
-        is stable across runs.
-
-        Yields
-        ------
-        tuple
-            ``(name, bound_method)`` for each tagged checkpoint method.
+        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
+        subclass first.
         """
         seen = set()
         for cls in type(self).__mro__:

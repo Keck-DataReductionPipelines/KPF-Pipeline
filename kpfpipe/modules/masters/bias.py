@@ -18,15 +18,17 @@ class Bias(BaseMasterModule):
     and performs a final outlier pass on the combined image. Outputs a
     KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions.
 
-    Standard reduction: a bias receives no calibration
-    (`_STANDARD_CALIBRATIONS` is empty), so raw frames are stacked as-is.
+    Standard reduction: a bias receives no calibration, so raw frames are
+    stacked as-is.
 
     Parameters
     ----------
     l0_file_list : list of str
         Sorted list of L0 FITS file paths to stack.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: stack_sigma, chips.
+        Module configuration. Recognized keys: stack_sigma, min_stack_size,
+        chips. A bias takes no calibration, so the bias/dark/flat overrides are
+        ignored.
     """
 
     def __init__(self, l0_file_list, config=None):
@@ -60,8 +62,8 @@ class Bias(BaseMasterModule):
         Build master bias from stack.
 
         The constructed KPFMasterL1 is returned and cached on
-        `self.ml1_obj`; pass `master_path` to also persist it to disk
-        via `save_master('L1', ...)`.
+        ``self.ml1_obj``; pass ``master_path`` to also persist it to disk
+        via ``save_master('L1', ...)``.
 
         A bias receives no calibrations, so there are no bias/dark/
         flat overrides (unlike Dark/WLS).
@@ -75,8 +77,7 @@ class Bias(BaseMasterModule):
         sigma : float, optional
             Outlier rejection threshold passed to stack_frames.
         master_path : str, optional
-            If provided, calls `self.save_master('L1', master_path)` at
-            the end to persist the master L1 to a FITS file at this path.
+            If provided, persist the master L1 to a FITS file at this path.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list

@@ -2,32 +2,12 @@
 KPF Barycentric Correction module.
 
 Computes per-order barycentric corrections from the EXPMETER_SCI flux-weighted
-midpoint times and stores them on the L2. WAVE arrays are not modified.
+midpoint times and stores them on the L2 as BJD_TDB, BARYCORR_KMS, and
+BARYCORR_Z (per spectral order), plus per-CCD scalar summaries in the
+barycentric extension headers. Wavelength arrays are not modified.
 
-Outputs (EPRV-standard ImageHDUs, shape (NORDER,)):
-  - BJD_TDB       photon-weighted midpoint in BJD_TDB per spectral order
-  - BARYCORR_KMS  barycentric velocity per spectral order [km/s]
-  - BARYCORR_Z    barycentric redshift per spectral order
-
-Per-CCD scalar summaries (at each chip's flux-weighted photon-midpoint time)
-written to the per-CCD barycentric extension headers (BJD_TDB / BARYCORR_KMS /
-BARYCORR_Z) as registered KPF-pipeline keywords (config/L2-headers.csv):
-  - CCD1BJD       GREEN photon-weighted mid-time (BJD_TDB)
-  - CCD1BKMS      GREEN barycentric velocity [km/s]
-  - CCD1BZ        GREEN barycentric redshift
-  - CCD2BJD       RED   photon-weighted mid-time (BJD_TDB)
-  - CCD2BKMS      RED   barycentric velocity [km/s]
-  - CCD2BZ        RED   barycentric redshift
-
-CCD1BJD/CCD2BJD match the legacy keyword names and semantics; the *BKMS/*BZ
-companions follow the same CCD{n} naming pattern. INSTRUMENT_HEADER is an
-immutable pure pass-through of the raw instrument header and is never written.
-
-Notes
------
-Follows the barycentric correction approach described in:
-- Wright & Eastman (2014) — velocity calculation (barycorrpy)
-- Butler et al. (1996)    — flux-weighted midpoint time
+Follows the barycentric-correction approach of Wright & Eastman (2014,
+barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
 """
 
 import logging
@@ -115,26 +95,15 @@ class BarycentricCorrection:
         )
 
     # ------------------------------------------------------------------
-    # Private helpers — exposure-meter handling
+    # Private helpers -- exposure-meter handling
     # ------------------------------------------------------------------
 
     def _get_timestamps(self):
         """
-        Read start and end timestamps from EXPMETER_SCI.
+        Read EXPMETER_SCI start/mid/end timestamps (t_beg, t_mid, t_end).
 
-        Returns
-        -------
-        t_beg : Time
-            Array of exposure start times.
-        t_mid : Time
-            Array of exposure midpoint times (unweighted).
-        t_end : Time
-            Array of exposure end times.
-
-        Notes
-        -----
-        Prefers corrected timestamps (Date-Beg-Corr / Date-End-Corr) when
-        available, falling back to uncorrected values.
+        Prefers the corrected columns (Date-Beg-Corr / Date-End-Corr), falling
+        back to uncorrected; t_mid is the unweighted (t_beg + t_end) / 2.
         """
         expmeter = self.l2_obj.data["EXPMETER_SCI"]
 
@@ -171,20 +140,11 @@ class BarycentricCorrection:
 
     def _get_normalized_flux(self):
         """
-        Read EXPMETER_SCI flux and normalize by gain and wavelength dispersion.
+        Read EXPMETER_SCI flux, gain- and dispersion-normalized -> (w [Å], f [e-/Å]).
 
-        Columns with numeric names are wavelength channels; non-numeric
-        columns (e.g. timestamps) are skipped.
-
-        EXPMETER_SCI column labels are in Å on L1+ data (converted from the
-        native L0 nm by ImageAssembly), so `w` is returned in Å.
-
-        Returns
-        -------
-        w : ndarray, shape (nwave,)
-            Wavelength of each expmeter channel [Å].
-        f : ndarray, shape (ntime, nwave)
-            Dispersion-normalized flux [e- / Å].
+        Numeric-named columns are wavelength channels; non-numeric columns (e.g.
+        timestamps) are skipped. Column labels are in Å on L1+ (converted from
+        native L0 nm by ImageAssembly), so ``w`` is returned in Å.
         """
         expmeter = self.l2_obj.data["EXPMETER_SCI"]
 
@@ -207,14 +167,11 @@ class BarycentricCorrection:
     @staticmethod
     def _fix_expmeter_outliers(f, kernel_size=5, k=3.0):
         """
-        Detect and interpolate outlier pixels in an expmeter flux array.
+        Return a copy of ``f`` with outlier pixels interpolated (shape unchanged).
 
-        Outlier threshold is adaptive (Chauvenet-like criterion based on array
-        size), scaled by the coefficient `k` (larger rejects fewer points).
-        Replacement uses scipy.griddata linear interpolation, falling back to
-        nearest for any remaining NaNs.
-
-        Returns a copy of f with outliers replaced; shape unchanged.
+        Threshold is adaptive (Chauvenet-like criterion on array size), scaled
+        by ``k`` (larger rejects fewer). Replacement is griddata linear, falling
+        back to nearest for residual NaNs.
         """
         f_smooth = gaussian_filter(
             median_filter(f, size=kernel_size), sigma=kernel_size
@@ -272,7 +229,7 @@ class BarycentricCorrection:
         """
         Estimate flux for a gap before the first or after the last reading.
 
-        Same rate-based model as `_interpolate`. Returns (t_ext, f_ext)
+        Same rate-based model as ``_interpolate``. Returns (t_ext, f_ext)
         for the single gap defined by t0 vs t_beg/t_end.
         """
         dt_exp = (t_end - t_beg).jd
@@ -294,20 +251,12 @@ class BarycentricCorrection:
         self, interpolate=True, extrapolate=True, fix_expmeter_outliers=True
     ):
         """
-        Compute the flux-weighted midpoint time for each expmeter channel.
+        Flux-weighted midpoint time per expmeter channel -> (w_em [Å], t_em [JD-UTC]).
 
-        Reads EXPMETER_SCI, optionally fills gaps between readings
-        (`interpolate`), gaps before/after the shutter window (`extrapolate`,
-        using DATE-BEG/DATE-END), and replaces outlier readings
-        (`fix_expmeter_outliers`), then collapses the time axis to a single
-        flux-weighted mean time per channel.
-
-        Returns
-        -------
-        w_em : ndarray, shape (nwave,)
-            Wavelength of each expmeter channel [Å].
-        t_em : Time, shape (nwave,)
-            Flux-weighted midpoint time (JD-UTC) per channel.
+        Optionally fills gaps between readings (``interpolate``), before/after the
+        shutter window (``extrapolate``, using DATE-BEG/DATE-END), and replaces
+        outlier readings (``fix_expmeter_outliers``) before collapsing the time
+        axis to a flux-weighted mean per channel.
         """
         t_beg, t_mid, t_end = self._get_timestamps()
         w_em, f = self._get_normalized_flux()
@@ -359,17 +308,16 @@ class BarycentricCorrection:
         return w_em, t_em
 
     # ------------------------------------------------------------------
-    # Private helpers — barycorr handoffs
+    # Private helpers -- barycorr handoffs
     # ------------------------------------------------------------------
 
     def _gaia_astrometry(self):
         """
-        Query Gaia DR3 for the target's ICRS astrometry (cached).
+        Query Gaia DR3 for the target's ICRS astrometry (cached SkyCoord).
 
-        The source_id is read from GAIAID in INSTRUMENT_HEADER (preserved from
-        L1 PRIMARY by KPF1.to_kpf2()). Returns a SkyCoord with proper motion
-        and distance (from parallax) attached, at the Gaia ref_epoch. The
-        network query runs once and is reused across calls (one target/frame).
+        source_id comes from GAIAID in INSTRUMENT_HEADER. Returns a SkyCoord
+        with proper motion and distance (from parallax) at the Gaia ref_epoch;
+        the network query runs once and is reused (one target per frame).
         """
         if self._skycoord is None:
             gaia_id_raw = self.l2_obj.headers["INSTRUMENT_HEADER"]["GAIAID"]
@@ -397,12 +345,10 @@ class BarycentricCorrection:
 
     def _wmko_astrometry(self):
         """
-        Build a SkyCoord from WMKO/DCS astrometry in INSTRUMENT_HEADER.
+        Build a SkyCoord from WMKO/DCS astrometry in INSTRUMENT_HEADER (fallback).
 
-        Uses TARGRA/TARGDEC (TARGFRAM, FK5-default equinox J2000 = TARGEPOC)
-        with proper motion and parallax. TARGPMRA is in time-seconds/yr
-        (-> mas/yr via x15 cos(dec)); TARGPLAX is in mas (-> distance via
-        1e3/plax), matching the Gaia path.
+        Unit gotchas: TARGPMRA is time-seconds/yr (-> mas/yr via x15 cos(dec));
+        TARGPLAX is mas (-> distance via 1e3/plax), matching the Gaia path.
         """
         inst = self.l2_obj.headers["INSTRUMENT_HEADER"]
         pos = SkyCoord(inst["TARGRA"], inst["TARGDEC"], unit=(u.hourangle, u.deg))
@@ -422,8 +368,8 @@ class BarycentricCorrection:
         Resolve target astrometry: Gaia DR3 first, then WMKO header fallback.
 
         Each source is tried only if its config toggle is set. If neither
-        yields a SkyCoord, raises, surfacing the captured Gaia error so the
-        failure (our-side vs Gaia-server-side) is distinguishable.
+        yields a SkyCoord, raises and surfaces the captured Gaia error so an
+        our-side vs Gaia-server-side failure stays distinguishable.
         """
         gaia_error = None
         if self.use_gaia_astrometry:
@@ -455,12 +401,10 @@ class BarycentricCorrection:
     @staticmethod
     def _compute_barycorr(skycoord, obs_times, location, rv_mps=0.0):
         """
-        Compute barycentric velocity (m/s) and BJD_TDB for an array of obs_times.
+        barycorrpy handoff -> (bc_vel_mps, bjd_tdb), each shape (n,).
 
-        `rv_mps` is the target's systemic RV (m/s), passed to barycorrpy so
-        the light-travel correction in BJD_TDB accounts for stellar motion.
-
-        Returns (bc_vel_mps, bjd_tdb), each shape (n,).
+        ``rv_mps`` is the target's systemic RV so the BJD_TDB light-travel
+        correction accounts for stellar motion.
         """
         icrs = skycoord.icrs
         ra = icrs.ra.to(u.deg).value
@@ -527,18 +471,18 @@ class BarycentricCorrection:
         """
         Compute the flux-weighted midpoint observation time.
 
-        The per-channel midpoint is always derived internally; `output`
+        The per-channel midpoint is always derived internally; ``output``
         controls how it is projected.
 
         Parameters
         ----------
         output : {'expmeter', 'orders', 'ccds'}
-            'expmeter' — per-channel times, shape (nwave,).
-            'orders'   — per spectral order: mean of the per-channel times for
+            'expmeter' -- per-channel times, shape (nwave,).
+            'orders'   -- per spectral order: mean of the per-channel times for
                          the expmeter channels within the order's wavelength
                          range, shape (NORDER,). Orders outside expmeter
                          coverage fall back to the nearest channel.
-            'ccds'     — per chip: the SCI2-flux-weighted mean of the per-order
+            'ccds'     -- per chip: the SCI2-flux-weighted mean of the per-order
                          values, shape (2,); [GREEN, RED].
         interpolate : bool, optional
             If True, estimate flux during gaps between expmeter readings.
@@ -558,6 +502,16 @@ class BarycentricCorrection:
             Wavelengths corresponding to each output bin [Å].
         t_fwm : Time
             Flux-weighted midpoint time (JD-UTC) per output bin.
+
+        Raises
+        ------
+        ValueError
+            If ``output`` is not one of the allowed values; if the EXPMETER_SCI
+            timestamps are not strictly increasing; if an exposure meter channel
+            has non-positive total flux; or (for ``output='ccds'``) if all SCI2
+            order weights are zero for a CCD.
+        KeyError
+            If SCI2_WAVE is missing or empty (run WavelengthCalibration first).
         """
         if output not in ("expmeter", "orders", "ccds"):
             raise ValueError(
@@ -602,7 +556,7 @@ class BarycentricCorrection:
         if output == "orders":
             return w_orders, t_orders
 
-        # Weight each order by its SCI2 brightness (`weight_percentile`, robust
+        # Weight each order by its SCI2 brightness (``weight_percentile``, robust
         # to cosmics); NaN/failed orders get zero weight, uniform if SCI2_FLUX
         # absent.
         norder_green = self.norder["GREEN"]
@@ -650,7 +604,7 @@ class BarycentricCorrection:
         Compute the barycentric correction at the flux-weighted photon-midpoint
         time for each output bin.
 
-        Mirrors compute_flux_weighted_midpoint_times: `output` selects the
+        Mirrors compute_flux_weighted_midpoint_times: ``output`` selects the
         binning. The per-channel integration and the Gaia astrometry are both
         cached, so calling this for 'orders' then 'ccds' does the heavy work
         once.
@@ -723,14 +677,11 @@ class BarycentricCorrection:
         self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
-        """Write all summary header keywords for barycentric correction.
+        """Write the per-CCD summary keywords.
 
         Reads self._ccd_bjd/_ccd_kms/_ccd_z and self._astrometry_source
-        (populated by perform()); the single place this module writes summary
-        keywords, called just before the receipt entry. Per-CCD keywords are
-        registered KPF-pipeline keywords (config/L2-headers.csv); set_keyword
-        routes them to their registry homes (BJD_TDB / BARYCORR_KMS / BARYCORR_Z,
-        and RECEIPT for ASTRSRC). CCD1=GREEN, CCD2=RED.
+        (populated by perform()); set_keyword routes each to its registry home.
+        CCD1=GREEN, CCD2=RED.
         """
         l2_obj.set_keyword("CCD1BJD", float(self._ccd_bjd[0]))
         l2_obj.set_keyword("CCD1BKMS", float(self._ccd_kms[0]))

@@ -1,15 +1,10 @@
 """Diagnostics for KPF Level 4 (RVs and CCFs) data products.
 
-Ports the per-order BJD and barycentric-RV dispersion statistics from the
-v2.12 ``AnalyzeL2.compute_statistics``: photon-weighted means (``BJDMEAN`` /
-``BERVMEAN``) and the spread of the per-order values about them (``BJDSTD`` /
-``BJDRNG`` in seconds, ``BERVSTD`` / ``BERVRNG`` in m/s) plus the per-order BERV
-percent deviation (``BERVMAXP`` / ``BERVMINP``). They are weighted by the
-per-order CCF-combination ``WEIGHT`` column and computed on the primary science
-orderlet (SCI2), matching the old single-table behavior.
-
-The v2.12 ``AGES*``/``AGEU*`` wave-cal-age metrics needed the time-series
-database (calibration history) and are out of scope for the DB-free vNext L4.
+Per-order BJD and barycentric-RV dispersion statistics: photon-weighted means
+(``BJDMEAN``/``BERVMEAN``) and the spread of the per-order values about them
+(``BJDSTD``/``BJDRNG`` in seconds, ``BERVSTD``/``BERVRNG`` in m/s, and the BERV
+percent deviation ``BERVMAXP``/``BERVMINP``), weighted by the per-order
+CCF-combination ``WEIGHT`` and computed on the primary science orderlet (SCI2).
 """
 
 import numpy as np

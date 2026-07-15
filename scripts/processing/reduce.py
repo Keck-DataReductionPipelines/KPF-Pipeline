@@ -160,7 +160,7 @@ def main(argv=None):
     try:
         recipe.main(config, args)
     except Exception:
-        # The one sanctioned catch-log-reraise point (style guide section 6):
+        # The one sanctioned catch-log-reraise point:
         # ensure the traceback reaches the log before the nonzero exit. The
         # SystemExit usage errors above bypass this on purpose.
         logger.critical("uncaught exception; pipeline aborted", exc_info=True)

@@ -1,17 +1,9 @@
 """QC framework base class.
 
-Each QC subclass defines check methods. A check is a method whose function
-object has a `_qc_key` (8-char FITS keyword) attribute. The runner walks all
-such methods, calls each one, writes a 0/1 result via ``set_keyword`` (which
-routes it to its registry home, QUALITY_CONTROL, with the registry ``Description``
-as the FITS comment), and aggregates ISGOOD = AND of all checks. The per-check
-comment lives once — in the registry ``Description`` — not on the method. If any
-check raises, run() raises (loud failure, no silent suppression).
-
-QC writes only 0/1 keywords. Header validation (unregistered cards, missing
-required keywords) is NOT done here -- it lives in the separate ``checkpoints``
-layer, which reads these flags plus the product headers and emits warnings or
-raises. The pipeline order is: science modules -> Diagnostics -> QC -> Checkpoints.
+The second of three quality-control stages (Diagnostics -> QC -> Checkpoints).
+Each QC subclass runs pass/fail check methods, writing a 0/1 flag per check to
+QUALITY_CONTROL via ``set_keyword`` and aggregating ISGOOD as the AND of all
+checks. Header validation and raising live in the separate Checkpoints layer.
 """
 
 
@@ -24,7 +16,7 @@ class QC:
         Finished data product whose QUALITY_CONTROL header receives the 0/1 flags.
     """
 
-    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
+    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
 
     def __init__(self, kpf_obj):
         self.kpf_obj = kpf_obj
@@ -51,14 +43,14 @@ class QC:
                 raise RuntimeError(f"QC check {name!r} raised: {e}") from e
 
             kw = fn._qc_key
-            # The comment is the registry Description (the single source) — the same
-            # string set_keyword writes as the FITS comment; mirror it into results.
+            # Mirror the registry Description into results (the FITS comment
+            # source; see ``_tag``).
             comment = self.kpf_obj.keyword_registry.routing.get(kw, (None, ""))[1]
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
 
         # ISGOOD is the running aggregate: AND over every QC flag now on
-        # QUALITY_CONTROL — the flags this level just wrote PLUS those propagated
+        # QUALITY_CONTROL -- the flags this level just wrote PLUS those propagated
         # from lower levels (QUALITY_CONTROL accumulates L0->L1->L2->L4). Reading
         # the accumulated header makes it level-agnostic; exclude ISGOOD itself.
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
@@ -69,19 +61,13 @@ class QC:
         return self.results
 
     def _required_primary_keywords(self):
-        """Keywords a level-N product must carry on PRIMARY (a presence set).
+        """Registry EPRV ``Required`` PRIMARY keywords at or below this level.
 
-        The registry's EPRV ``Required`` PRIMARY keywords at or below this
-        product's own level -- the EPRV L2 PRIMARY set is tagged Level 1 in the
-        registry (KPF holds the L1 PRIMARY to the EPRV L2 spec; see
-        ``keyword_registry._build_rows``), so the check needs no L1->L2 cap: the
-        level cap *is* the level. PRIMARY now holds EPRV-registered keywords only
-        (the DRP provenance cards moved to RECEIPT), so there is no
-        KPF-routed-PRIMARY set to union in. Read off the validated model's
-        registry singleton (``self.kpf_obj.keyword_registry``), so qc_flags
-        imports nothing from data_models. L0 -> Level 0 yields the empty set (no
-        PRIMARY keyword is Required there -- raw WMKO L0 PRIMARY is not
-        registry-governed); an untagged subclass (``LEVEL`` None) also gets it.
+        The level cap is the level's own number, so this runs unchanged for L1,
+        L2, and L4 -- each returns the required PRIMARY keywords tagged at or
+        below its own level. Read off the model's registry singleton so qc_flags
+        imports nothing from data_models. L0 (and an untagged ``LEVEL`` None)
+        yields the empty set -- raw WMKO L0 PRIMARY is not registry-governed.
         """
         level = str(self.LEVEL or "")
         if not (level[:1].upper() == "L" and level[1:].isdigit()):
@@ -91,15 +77,10 @@ class QC:
         return {k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap}
 
     def _iter_checks(self):
-        """Yield each check method tagged with `_qc_key`.
+        """Yield each ``(name, method)`` tagged ``_qc_key``.
 
-        Iterates in source order via ``__dict__`` plus an MRO walk so check
-        ordering is stable.
-
-        Yields
-        ------
-        tuple
-            ``(name, bound_method)`` for each tagged check method.
+        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
+        subclass first.
         """
         seen = set()
         for cls in type(self).__mro__:

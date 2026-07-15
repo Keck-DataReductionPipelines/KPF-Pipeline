@@ -214,7 +214,7 @@ class TestPerform:
 
     def test_subset_chips_and_fibers(self, master_wls_path):
         # Only the requested (chip, fiber) blocks are copied; everything
-        # else stays zero — both un-requested fibers within the requested
+        # else stays zero -- both un-requested fibers within the requested
         # chip, and un-requested chips entirely.
         l2 = _make_science_l2(wls_path=master_wls_path)
         WavelengthCalibration(l2).perform(chips=["GREEN"], fibers=["SCI2"])
@@ -312,9 +312,8 @@ def _trough_depth(wave_order, flux_order, lambda_air, halfwin=3.0):
 @pytest.mark.slow
 @pytest.mark.requires_testdata
 class TestSpectrumOrientation:
-    """
-    Discriminator: the WLS-calibrated L2 must have its flux co-oriented with the
-    assigned wavelength axis.
+    """Discriminator: the WLS-calibrated L2 must have its flux co-oriented with
+    the assigned wavelength axis.
 
     For every in-coverage Fraunhofer anchor on every science fiber, the native
     ``(wave, flux)`` pairing must show a DEEPER absorption trough at the catalog

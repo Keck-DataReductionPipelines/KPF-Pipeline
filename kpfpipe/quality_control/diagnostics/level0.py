@@ -1,14 +1,4 @@
-"""Diagnostics for KPF Level 0 (raw CCD) data products.
-
-Pointing/identity checks that cross-match the telescope pointing (RA/DEC) against
-three reference positions: the loaded DCS target (TARGRA/DEC), the Gaia DR3
-catalog position of GAIAID, and the SIMBAD position of the OBJECT name. All three
-metrics are fail-soft: a frame with no pointing/target (e.g. a calibration frame)
-skips them, and a Gaia/SIMBAD lookup failure warns and skips rather than failing
-the L0 checkpoint. Diagnostics that read the overscan region (read noise,
-non-Gaussian RN) are owned by ImageAssembly because they need to run before gain
-conversion modifies the amp data.
-"""
+"""Diagnostics for KPF Level 0 (raw CCD) data products."""
 
 import re
 import warnings
@@ -24,6 +14,8 @@ from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 
 class DiagL0(Diagnostics):
+    """Diagnostics for KPF Level 0 raw data products."""
+
     LEVEL = "L0"
 
     # Keys each metric needs; absent -> metric is N/A for that frame (skip).
@@ -40,13 +32,12 @@ class DiagL0(Diagnostics):
 
     @staticmethod
     def _present(hdr, keys):
-        """True if every key in `keys` is present and non-None in `hdr`."""
+        """True if every key in ``keys`` is present and non-None in ``hdr``."""
         return all(hdr.get(k) is not None for k in keys)
 
     # Astrometry helpers reproduced from BarycentricCorrection._gaia_astrometry /
     # ._wmko_astrometry (there they read INSTRUMENT_HEADER; at L0 the natives are
-    # on PRIMARY). The shared copies move to utils/astro.py in a follow-up -- keep
-    # the two in sync until then.
+    # on PRIMARY). The two copies are kept in sync by hand.
 
     def _gaia_source_id(self):
         """Digit-only Gaia DR3 id from L0 GAIAID, or None if absent/malformed."""
@@ -98,9 +89,8 @@ class DiagL0(Diagnostics):
     def _object_name(self):
         """SIMBAD-resolvable name from L0 PRIMARY OBJECT, or None if absent.
 
-        KPF OBJECT for standard stars is the bare HD number (e.g. '10700'),
-        which SIMBAD only resolves with an 'HD ' prefix; named targets pass
-        through unchanged.
+        KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
+        SIMBAD resolves only with an 'HD ' prefix; named targets pass through.
         """
         obj = self.kpf_obj.headers["PRIMARY"].get("OBJECT")
         if obj is None:

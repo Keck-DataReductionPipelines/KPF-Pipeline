@@ -1,17 +1,9 @@
 """Diagnostics framework base class.
 
-Each Diagnostics subclass defines methods that compute metrics from a
-finished data product and return a dict of {keyword: (value, comment)}.
-The runner writes each via ``set_keyword`` (which routes the keyword to its
-registry-home extension — DiagL2 metrics land on QUALITY_CONTROL) and stores
-them on self.results.
-
-A method opts in by setting `_diag_name` on the function object.
-If a method raises, run() raises (loud failure, no silent suppression).
-
-Diagnostics is read-only with respect to the data extensions — it only
-adds header keywords via ``set_keyword``. Pair with QC, which reads the
-metrics Diagnostics writes and applies pass/fail thresholds.
+The first of the three quality-control stages (Diagnostics -> QC -> Checkpoints).
+Each Diagnostics subclass computes metrics from a finished data product and writes
+them to the product headers via ``set_keyword``; it never modifies the science
+extensions. QC then reads those metrics and applies pass/fail thresholds.
 """
 
 
@@ -25,7 +17,7 @@ class Diagnostics:
         ``set_keyword``, routed to each keyword's registry-home extension).
     """
 
-    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2").
+    LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
 
     def __init__(self, kpf_obj):
         self.kpf_obj = kpf_obj
@@ -34,11 +26,8 @@ class Diagnostics:
     def _tag(self, **values):
         """Pair each ``keyword=value`` with its registry-sourced FITS comment.
 
-        Diagnostic methods build their result dict with this rather than
-        hardcoding comment strings, so the FITS comment has a single source of
-        truth (the keyword registry / ``config/L{n}-headers.csv`` Description)
-        and never drifts from it. ``set_keyword`` already uses the registry
-        Description for the header write; this keeps ``self.results`` in sync.
+        Sources the comment from the keyword registry (single source of truth)
+        so ``self.results`` stays in sync with the ``set_keyword`` header write.
         """
         routing = self.kpf_obj.keyword_registry.routing
         out = {}
@@ -78,15 +67,10 @@ class Diagnostics:
         return self.results
 
     def _iter_methods(self):
-        """Yield each method tagged with `_diag_name`.
+        """Yield each ``(name, method)`` tagged ``_diag_name``.
 
-        Walks the MRO so subclasses' methods come before the base class
-        and ordering is stable across runs.
-
-        Yields
-        ------
-        tuple
-            ``(name, bound_method)`` for each tagged diagnostic method.
+        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
+        subclass first.
         """
         seen = set()
         for cls in type(self).__mro__:

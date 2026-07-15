@@ -1,5 +1,8 @@
 """
 KPF Spectral Extraction module.
+
+Extracts per-order 1D spectra from an assembled L1 frame into a KPF2 (L2),
+populating the per-fiber FLUX and VAR arrays.
 """
 
 import logging
@@ -19,20 +22,15 @@ _DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
 
 class SpectralExtraction:
     """
-    This class performs spectral extraction of the 1D spectrum.
-    Processes data from KPF1 to KPF2.
+    Extract per-order 1D spectra from a KPF1, producing a KPF2.
 
-    Notes
-    -----
-    Single-letter variable names for 2D images in this class follow
-    Horne 1986 optimal extraction, with small modifcations:
-      - D = data
-      - V = variance
-      - S = sky / scattered light
-      - F = flat
-      - P = profile
-      - M = mask
-      - W = weight
+    Parameters
+    ----------
+    l1_obj : KPF1
+        Assembled L1 frame carrying the per-chip ``{CHIP}_CCD`` / ``{CHIP}_VAR``
+        full-frame images to extract from.
+    config : None | dict | ConfigHandler
+        Module configuration. Recognized keys: extraction_method.
     """
 
     def __init__(self, l1_obj, config=None):
@@ -59,19 +57,8 @@ class SpectralExtraction:
     # ------------------------------------------------------------------
 
     def _read_order_trace_reference(self, chip):
-        """
-        Load and cache the order trace reference table for a given chip.
-
-        Parameters
-        ----------
-        chip : str
-            Chip identifier (e.g., 'GREEN', 'RED').
-
-        Notes
-        -----
-        The trace reference file is read from the repository reference
-        directory and cached in `self.order_trace` to avoid repeated I/O.
-        """
+        """Load the ``chip`` order trace table, caching in ``self.order_trace``
+        to avoid repeated I/O."""
         if not hasattr(self, "order_trace"):
             self.order_trace = {}
         if not hasattr(self, "order_trace_path"):
@@ -86,43 +73,12 @@ class SpectralExtraction:
         self.order_trace_path[chip.upper()] = filepath
 
     def _get_orderlet_pixels(self, chip, fiber, order, return_coords=False):
-        """
-        Extract the 2D pixel region corresponding to a single orderlet.
+        """Slice the 2D bounding box (data ``D``, variance ``V``, weights ``W``)
+        for a single orderlet, optionally with its detector row bounds.
 
-        Parameters
-        ----------
-        chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'
-        fiber : str
-            Fiber identifier, e.g. 'SCI2'
-        order : int
-            Spectral order number.
-        return_coords : bool, optional
-            If True, also return the detector row bounds of the extracted box.
-
-        Returns
-        -------
-        D : ndarray
-            2D array of data values within the bounding box.
-        V : ndarray
-            2D array of variance values within the bounding box.
-        W : ndarray
-            2D weight array accounting for fractional pixel coverage at
-            order boundaries.
-        row_min : int, optional
-            Lower detector row index of the bounding box (if return_coords=True).
-        row_max : int, optional
-            Upper detector row index of the bounding box (if return_coords=True).
-
-        Notes
-        -----
-        The bounding region fully encloses the traced orderlet. Due to order
-        tilt and curvature, the box may include pixels from adjacent orders.
-        Weights are assigned as:
-        - 1 for fully enclosed pixels,
-        - 0 for pixels outside the orderlet,
-        - fractional values at the top and bottom trace edges.
-        """
+        The box encloses the traced orderlet; order tilt/curvature can pull in
+        adjacent-order pixels. ``W`` is 1 inside, 0 outside, and fractional at
+        the top/bottom trace edges."""
         chip = chip.upper()
         fiber = fiber.upper()
 
@@ -207,29 +163,10 @@ class SpectralExtraction:
 
     @staticmethod
     def _box_extraction(D, V, *, S=None, M=None, W=None):
-        """
-        Perform simple box (summation) extraction of a 2D spectral trace.
+        """Box (summation) extraction of a 2D trace, returning 1D flux/variance.
 
-        Parameters
-        ----------
-        D : ndarray
-            2D data array.
-        V : ndarray
-            2D variance array.
-        S : ndarray, optional
-            2D sky/scattered light model.
-        M : ndarray, optional
-            Binary bad-pixel mask (1 = good, 0 = bad).
-        W : ndarray, optional
-            Pixel weights accounting for trace geometry.
-
-        Returns
-        -------
-        flux_1d : ndarray
-            Extracted 1D flux spectrum.
-        var_1d : ndarray
-            Corresponding 1D variance spectrum.
-        """
+        Single-letter array names (D, V, S, M, W) follow the Horne (1986)
+        optimal-extraction convention."""
         if S is None:
             S = np.zeros_like(D)
         if M is None:
@@ -249,68 +186,20 @@ class SpectralExtraction:
 
     @staticmethod
     def _optimal_extraction(D, V, *, S=None, M=None, W=None, P=None):
-        """
-        Perform optimal extraction of a 2D spectral trace.
+        """Optimal extraction of a 2D trace (not yet implemented).
 
-        Parameters
-        ----------
-        D : ndarray
-            2D data array.
-        V : ndarray
-            2D variance array.
-        S : ndarray, optional
-            2D sky/scattered light model.
-        M : ndarray, optional
-            Binary bad-pixel mask (1 = good, 0 = bad).
-        W : ndarray, optional
-            Pixel weights accounting for trace geometry.
-        P : ndarray, optional
-            Spatial profile model of the spectral trace.
-
-        Returns
-        -------
-        flux_1d : ndarray
-            Extracted 1D flux spectrum.
-        var_1d : ndarray
-            Corresponding 1D variance spectrum.
-
-        Notes
-        -----
-        Follows Horne (1986) optimal extraction algorithm.
-        """
+        Follows the Horne (1986) optimal-extraction algorithm; single-letter array
+        names follow the ``_box_extraction`` convention (``P`` adds the spatial
+        profile)."""
         raise NotImplementedError("optimal extraction not yet implemented")
 
     @staticmethod
     def _flat_relative_extraction(D, V, *, S=None, M=None, W=None, F=None):
-        """
-        Perform flat-relative spectral extraction.
+        """Flat-relative extraction of a 2D trace (not yet implemented).
 
-        Parameters
-        ----------
-        D : ndarray
-            2D data array.
-        V : ndarray
-            2D variance array.
-        S : ndarray, optional
-            2D sky/scattered light model.
-        M : ndarray, optional
-            Binary bad-pixel mask (1 = good, 0 = bad).
-        W : ndarray, optional
-            Pixel weights accounting for trace geometry.
-        F : ndarray, optional
-            Flat-field reference image.
-
-        Returns
-        -------
-        flux_1d : ndarray
-            Extracted 1D flux spectrum.
-        var_1d : ndarray
-            Corresponding 1D variance spectrum.
-
-        Notes
-        -----
-        Follows Zechmeister et al. (2014) flat-relative extraction algorithm.
-        """
+        Follows the Zechmeister et al. (2014) flat-relative extraction algorithm;
+        single-letter array names follow the ``_box_extraction`` convention
+        (``F`` adds the flat)."""
         raise NotImplementedError("flat relative extraction not yet implemented")
 
     # ------------------------------------------------------------------
@@ -468,12 +357,7 @@ class SpectralExtraction:
         self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
-        """Write all PRIMARY-header keywords for spectral extraction.
-
-        Reserved: this module writes no PRIMARY metadata yet. Present so every
-        module consolidates header writes in one place, called just before the
-        receipt entry.
-        """
+        """Reserved header-consolidation hook; writes no PRIMARY metadata yet."""
 
     # ------------------------------------------------------------------
     # Public entry point

@@ -31,7 +31,7 @@ TESTDATA_BIAS_FILES = sorted(
 
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
-# make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
+# make_l1_arrays() -- shared synthetic stack_frames builder -- lives in _masters.py
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
@@ -42,7 +42,7 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 class TestMasterBiasUnit:
-    """Unit tests using a mocked stack_frames — no real data needed."""
+    """Unit tests using a mocked stack_frames -- no real data needed."""
 
     @pytest.fixture(scope="class")
     def master_bias(self):
