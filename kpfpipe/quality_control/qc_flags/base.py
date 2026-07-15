@@ -61,19 +61,13 @@ class QC:
         return self.results
 
     def _required_primary_keywords(self):
-        """Keywords a level-N product must carry on PRIMARY (a presence set).
+        """Registry EPRV ``Required`` PRIMARY keywords at or below this level.
 
-        The registry's EPRV ``Required`` PRIMARY keywords at or below this
-        product's own level -- the EPRV L2 PRIMARY set is tagged Level 1 in the
-        registry (KPF holds the L1 PRIMARY to the EPRV L2 spec; see
-        ``keyword_registry._build_rows``), so the check needs no L1->L2 cap: the
-        level cap *is* the level. PRIMARY now holds EPRV-registered keywords only
-        (the DRP provenance cards moved to RECEIPT), so there is no
-        KPF-routed-PRIMARY set to union in. Read off the validated model's
-        registry singleton (``self.kpf_obj.keyword_registry``), so qc_flags
-        imports nothing from data_models. L0 -> Level 0 yields the empty set (no
-        PRIMARY keyword is Required there -- raw WMKO L0 PRIMARY is not
-        registry-governed); an untagged subclass (``LEVEL`` None) also gets it.
+        The level cap *is* the level (the EPRV L2 PRIMARY set is tagged Level 1),
+        so no L1->L2 adjustment is needed. Read off the model's registry singleton
+        so qc_flags imports nothing from data_models. L0 (and an untagged
+        ``LEVEL`` None) yields the empty set -- raw WMKO L0 PRIMARY is not
+        registry-governed.
         """
         level = str(self.LEVEL or "")
         if not (level[:1].upper() == "L" and level[1:].isdigit()):
@@ -83,15 +77,9 @@ class QC:
         return {k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap}
 
     def _iter_checks(self):
-        """Yield each check method tagged with `_qc_key`.
+        """Yield ``(name, bound_method)`` for each ``_qc_key``-tagged check.
 
-        Iterates in source order via ``__dict__`` plus an MRO walk so check
-        ordering is stable.
-
-        Yields
-        ------
-        tuple
-            ``(name, bound_method)`` for each tagged check method.
+        Walks ``__dict__`` across the MRO so check ordering is stable.
         """
         seen = set()
         for cls in type(self).__mro__:

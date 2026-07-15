@@ -54,11 +54,9 @@ class PlotL0:
     def _stitch(self, chip):
         """Concatenate raw amplifier arrays into a single display image.
 
-        Uses ImageAssembly to count amps and (for 4-amp mode) apply per-amp
-        orientation, then applies the same blue -> red FFI orientation as
-        ImageAssembly so the L0 display matches the assembled output. Per-amp
-        orientation is performed on a deepcopy of the L0 so the caller's object
-        is not mutated.
+        Delegates amp counting/orientation to ImageAssembly (on a deepcopy, since
+        orient_channels mutates l0.data), then applies the same blue -> red FFI
+        orientation so the L0 display matches the assembled output.
         """
         chip = chip.upper()
 
@@ -159,7 +157,6 @@ class PlotL0:
         cbar.ax.tick_params(labelsize=12)
         plt.grid(False)
 
-        # Timestamp annotation
         current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         timestamp_label = f"KPF QLP: {current_time} UT"
         plt.annotate(

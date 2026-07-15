@@ -109,15 +109,9 @@ class Checkpoint:
     qc_flags._checkpoint_name = "qc_flags"
 
     def _iter_checkpoints(self):
-        """Yield each checkpoint method tagged with `_checkpoint_name`.
+        """Yield ``(name, bound_method)`` for each `_checkpoint_name`-tagged method.
 
-        Walks the MRO so subclass methods come before the base class and ordering
-        is stable across runs.
-
-        Yields
-        ------
-        tuple
-            ``(name, bound_method)`` for each tagged checkpoint method.
+        Walks the MRO so subclass methods precede the base and ordering is stable.
         """
         seen = set()
         for cls in type(self).__mro__:

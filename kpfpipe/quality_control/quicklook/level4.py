@@ -172,15 +172,11 @@ class PlotL4:
         return tab
 
     def _order_weights(self, rvtab):
-        """Per-order CCF-combination weights for the SCI annotations, read from
-        the RV table's WEIGHT column (written by CrossCorrelation).
-
-        These are the weights the pipeline actually uses to combine the per-order
-        CCFs (see RadialVelocity._combine_ccfs); orders with weight 0 are excluded
-        from the combined RV. Returns None when the fiber has no RV table, but
-        *raises* when a table is present yet lacks WEIGHT: there is no meaningful
-        substitute, and silently inventing one (e.g. from RV_ERR) would annotate
-        weights the pipeline never used and mask the missing column.
+        """Per-order CCF-combination weights (RV table WEIGHT column) for the SCI
+        annotations. Returns None if the fiber has no RV table, but *raises* if a
+        table is present yet lacks WEIGHT — the column the pipeline actually used
+        to combine CCFs (see RadialVelocity._combine_ccfs), with no meaningful
+        substitute.
         """
         if rvtab is None:
             return None
@@ -195,10 +191,9 @@ class PlotL4:
     def _draw_ccf_panel(self, ax, chip, fiber, norder, vref):
         """Draw one orderlet panel of stacked per-order CCFs (v2.12 layout).
 
-        Every panel shares the same `norder`-based y-range so the five orderlet
-        panels line up. An unilluminated orderlet (e.g. etalon/LFC CAL, no CCF)
-        gets a framed panel over the shared `vref` velocity range with a
-        'not illuminated' note instead of a blank default axis.
+        Panels share a `norder`-based y-range so the five line up; an
+        unilluminated orderlet (no CCF) gets a framed 'not illuminated' note
+        over the shared `vref` range instead of a blank default axis.
         """
         is_sci = fiber in _SCI_FIBERS
         top = norder * _ORDER_OFFSET

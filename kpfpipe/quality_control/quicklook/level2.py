@@ -81,11 +81,10 @@ class PlotL2:
         return self._flux(chip, "SCI2") is not None
 
     def _require_wave(self, chip, fiber="SCI2"):
-        """Return the (norder, ncol) wavelength array for a fiber, or raise.
+        """Return a fiber's (norder, ncol) wavelength array, or raise if absent.
 
-        PlotL2 requires an attached wavelength solution; failing loudly here
-        prevents a wavelength-less plot from being mistaken for a calibrated
-        one. Run WavelengthCalibration before PlotL2.
+        Fails loudly so a wavelength-less plot can't pass for a calibrated one;
+        run WavelengthCalibration before PlotL2.
         """
         wave = self._wave(chip, fiber)
         if wave is None:
@@ -151,7 +150,6 @@ class PlotL2:
             per_order = np.nanpercentile(snr, _SNR_PERCENTILE, axis=1)
             ax.plot(x, per_order, marker=".", linewidth=1, label=fiber, alpha=0.8)
 
-        # summed science orderlet
         sci_flux = [self._flux(chip, f) for f in _SCI_FIBERS]
         sci_var = [self._var(chip, f) for f in _SCI_FIBERS]
         if all(a is not None for a in sci_flux + sci_var):
@@ -234,7 +232,7 @@ class PlotL2:
             return None
         norder = self._flux(chip, "SCI2").shape[0]
         if order is None:
-            order = norder // 2  # representative middle order
+            order = norder // 2
         if not (1 <= order <= norder):
             raise ValueError(f"order {order} out of range 1..{norder} for {chip}")
         o = order - 1

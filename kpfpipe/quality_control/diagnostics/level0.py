@@ -90,9 +90,8 @@ class DiagL0(Diagnostics):
     def _object_name(self):
         """SIMBAD-resolvable name from L0 PRIMARY OBJECT, or None if absent.
 
-        KPF OBJECT for standard stars is the bare HD number (e.g. '10700'),
-        which SIMBAD only resolves with an 'HD ' prefix; named targets pass
-        through unchanged.
+        KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
+        SIMBAD resolves only with an 'HD ' prefix; named targets pass through.
         """
         obj = self.kpf_obj.headers["PRIMARY"].get("OBJECT")
         if obj is None:

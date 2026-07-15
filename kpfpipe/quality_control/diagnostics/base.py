@@ -26,11 +26,8 @@ class Diagnostics:
     def _tag(self, **values):
         """Pair each ``keyword=value`` with its registry-sourced FITS comment.
 
-        Diagnostic methods build their result dict with this rather than
-        hardcoding comment strings, so the FITS comment has a single source of
-        truth (the keyword registry / ``config/L{n}-headers.csv`` Description)
-        and never drifts from it. ``set_keyword`` already uses the registry
-        Description for the header write; this keeps ``self.results`` in sync.
+        Sources the comment from the keyword registry (single source of truth)
+        so ``self.results`` stays in sync with the ``set_keyword`` header write.
         """
         routing = self.kpf_obj.keyword_registry.routing
         out = {}
@@ -70,15 +67,10 @@ class Diagnostics:
         return self.results
 
     def _iter_methods(self):
-        """Yield each method tagged with `_diag_name`.
+        """Yield each ``(name, bound_method)`` tagged with `_diag_name`.
 
-        Walks the MRO so subclasses' methods come before the base class
-        and ordering is stable across runs.
-
-        Yields
-        ------
-        tuple
-            ``(name, bound_method)`` for each tagged diagnostic method.
+        Walks the MRO so subclass methods precede the base class and ordering
+        is stable across runs.
         """
         seen = set()
         for cls in type(self).__mro__:

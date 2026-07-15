@@ -135,7 +135,6 @@ class PlotL1:
                 textcoords="offset points",
             )
 
-        # Timestamp
         current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         plt.annotate(
             f"KPF QLP: {current_time} UT",
