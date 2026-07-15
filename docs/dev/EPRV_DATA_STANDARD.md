@@ -1,4 +1,4 @@
-# EPRV Data Standard — KPF-relevant reference
+# EPRV Data Standard
 
 This file mirrors the portions of the **EPRV FITS Data Standard** that govern KPF data
 products, condensed from the official docs:
@@ -7,13 +7,16 @@ changes slowly enough that we track it rather than pin a commit; re-scrape if it
 Only KPF-relevant content is reproduced; consult the source for the full standard (all
 instruments, L3, complete keyword tables, the translator API).
 
-**Authority precedence.** When requirements or design principles conflict, the order is:
-**1. the WMKO technical requirements (`WMKO_REQUIREMENTS.md`) → 2. this EPRV standard →
-3. the project charter (`KPF_VNEXT_CHARTER.md`) → 4. the architecture reference
-(`KPF_VNEXT_ARCHITECTURE.md`) → 5. the style guide (`KPF_VNEXT_STYLE_GUIDE.md`).** The WMKO
-requirements outrank this standard; below them,
-KPF L2 and L4 products are EPRV-compliant by contract, so this standard wins on data
-structure, extension/keyword names, units, and reference frames.
+**Authority precedence.**
+When requirements or design principles conflict, the order of governing document precedence is:
+
+1. WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md))
+2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
+3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
+4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
+5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+
+When any two conflict, the higher one wins.
 
 ---
 
