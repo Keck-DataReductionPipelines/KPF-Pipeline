@@ -473,7 +473,7 @@ class StageName:
 - **Dtype precision is a contract — guard both directions.** Never upscale
   `float32→float64` (memory/throughput regression) nor downscale `float64→float32`
   (precision loss → wrong RVs). The policy — single source of truth, also encoded for
-  tests in [`tests/regression/_dtype_policy.py`](tests/regression/_dtype_policy.py):
+  tests in `tests/regression/_dtype_policy.py`:
   - **float32** — L1 `*_CCD`/`*_VAR`, master `*_IMG`/`*_SNR`, L2 `*_FLUX`/`*_VAR`/`*_BLAZE`.
   - **float64** — every `*_WAVE`, `BJD_TDB`, `BARYCORR_KMS`/`_Z`, CCF cubes, and the L4
     RV-table floats (`RV`/`RV_ERR`/`BERV`/`WAVE_START`/`WAVE_END`). `*_WAVE`, `BJD_TDB`,
@@ -830,7 +830,7 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
 - **Dtype provenance**: each module test file has a `TestDtypeProvenance` class asserting
   the §7 float32/float64/uint8/bool policy at the extension boundaries, the internal
   math-bearing functions (typed-input → output dtype), and across a FITS round-trip, using
-  the shared rubric [`tests/regression/_dtype_policy.py`](tests/regression/_dtype_policy.py). Assert *precision*
+  the shared rubric `tests/regression/_dtype_policy.py`. Assert *precision*
   (kind + itemsize via `assert_dtype`), **not** the exact dtype object — FITS round-trips
   to big-endian, so `>f4` is still float32.
 

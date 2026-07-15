@@ -254,5 +254,5 @@ translator; vNext may differ by design per the charter — confirm each is inten
    when Ca H&K is built and products are regenerated.
 
 **Instrument eras (`INSTERA`)**: the KPF era table is vendored at
-[`reference/kpf_instrument_eras.csv`](reference/kpf_instrument_eras.csv) (era tag, UT
+`reference/kpf_instrument_eras.csv` (era tag, UT
 start/end, comment) — use it to stamp/validate `INSTERA` by observation date.
