@@ -1,4 +1,4 @@
-"""Masters modules: stack L0 frames into bias, dark, flat, and WLS products."""
+"""Masters modules: bias, dark, flat, and wls."""
 
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.modules.masters.bias import Bias

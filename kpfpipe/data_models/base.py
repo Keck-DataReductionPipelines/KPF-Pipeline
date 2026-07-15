@@ -1,9 +1,21 @@
 """
 KPF base data model.
 
-Shared base for every KPF data model (L0, L1, L2, L4). Extends the EPRV
-``RVDataModel`` with the behaviour common to all KPF products: FITS-header
+Shared base for every KPF data model (L0, L1, L2, L4). Extends the EPRV Data
+Standard ``RVDataModel`` with the behavior common to all KPF products: FITS-header
 storage, provenance receipts, and alias-aware data and header access.
+
+Bi-directional extension aliasing allows use of either EPRV Data Standard
+or KPF naming conventions for order traces:
+
+* TRACE1 = SKY
+* TRACE2 = SCI1
+* TRACE3 = SCI2
+* TRACE4 = SCI3
+* TRACE5 = CAL
+
+For example, "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", so reading
+``d["SCI2_FLUX"]`` returns the same object stored under "TRACE3_FLUX".
 """
 
 import logging

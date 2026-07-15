@@ -2,7 +2,7 @@
 KPF Calibration Association module.
 
 Given a KPF observation frame, finds the most appropriate master calibration
-file for each calibration type (bias, dark, flat, thar) by searching
+file for each calibration type (bias, dark, flat, wls) by searching
 the masters directory and selecting the nearest-in-time match.
 """
 

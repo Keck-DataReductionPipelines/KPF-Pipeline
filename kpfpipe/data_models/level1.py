@@ -1,9 +1,9 @@
 """
 KPF Level 1 (assembled FFI) data model.
 
-Assembled CCD frames (GREEN and RED, with variance) built by combining the
-L0 amplifier readouts. Also used for 2D master calibrations (bias, dark,
-flat), which share the same structure.
+Assembled full frame images (FFIs) built by combining the L0 amplifier
+readouts. GREEN and RED CCDs are stored in separate extensions. Also
+used for FFI masters calibrations (bias, dark, flat).
 """
 
 import importlib.resources
