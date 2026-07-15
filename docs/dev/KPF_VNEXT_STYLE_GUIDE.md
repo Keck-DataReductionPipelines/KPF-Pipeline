@@ -20,7 +20,8 @@ scope, scientific focus, calibration philosophy, guardrails), or the architectur
 
 This file covers *how code should look and be organized* — not operational or technical
 guidance (environment, commands) or the pipeline's structure (the architecture reference),
-which are documented separately.
+which are documented separately. It does not restate what the architecture guide already
+covers; where a rule needs that context, it points there rather than duplicating it.
 
 Contents:
 
@@ -83,57 +84,40 @@ diverge, the charter wins. Each principle names where it is enforced concretely.
 
 ## B. Pipeline design
 
-Conventions organized by pipeline subsystem — the data models, the transform modules, the
-recipes/configs that drive them, the FITS products they read and write, the quality-control
-layers, and error handling. Where a subsystem has distinct **science** and **masters** flavors,
-they are called out under their own subheadings.
+Conventions organized by pipeline subsystem. Where a subsystem has distinct **science** and
+**masters** flavors, they are called out under their own subheadings.
 
 ### B.1 KPF data models
 
-The data models (`data_models/`) are the objects every module operates *on*: `KPF0`/`KPF1`/
-`KPF2`/`KPF4` subclass the corresponding RVData model, and the masters models subclass
-`KPFMasterModel`.
+The models (`data_models/`) are what modules operate *on*; their hierarchy, shared
+`KPFDataModel` behavior, and I/O overrides are described in the architecture guide. Conventions
+specific to writing model code:
 
 #### Science
 
-- **Data-product instances vs. level/manifest constants** (`kpfN` vs `L<N>`). A variable that
-  *holds a model instance* names it with the **`kpfN`** form in `data_models/`
-  (`kpf1 = KPF1()`, `kpf2 = self.to_kpf2()`) and the **`lN_obj`/`mlN_obj`** form in `modules/`
-  (`l1_obj`, `ml2_obj`) — each matches its area's established style. A *constant or identifier
-  that names a data **level**, an extension **manifest**, or a **filename pattern*** instead uses
-  the level token **`L<N>`/`ML<N>`** everywhere (`_L0_EXTENSIONS`, `_L0_TO_L1_PASSTHROUGH`,
-  `_L1_TO_L2_PASSTHROUGH`, `_ML1_EXTENSIONS`, `_L1_FILENAME_PATTERN`), so it mirrors the
-  EPRV/`DATALVL` level terminology and the `L0-extensions.csv` / `ML1-extensions.csv` config-file
-  names. A receipt/provenance **step-name string** matches its *method* (`to_kpf1`, `to_kpf2`,
-  `to_kpf4`), not the level.
-- **Headers are normalized to `astropy.io.fits.Header`.** The KPF models override
-  `create_extension` (`data_models/base.py`) so every extension header is a `fits.Header` — no
-  value-vs-`(value, comment)` ambiguity and no separate header parser (see the reading/writing
-  rules in §B.4 *Headers*).
-- **`KPF0.to_kpf1` owns the WMKO-native → EPRV conversion** (`data_models/level0.py`); the mapping
-  is not re-implemented elsewhere (call `KPF0._map_header`).
-- **`read`/`to_fits` overrides.** The models override `read` because `RVDataModel.read` carries no
-  per-level (`lvl == N`) dispatch, and override `to_fits` to keep KPF's single positional filepath
-  (rvdata `>=0.4.0` renamed the parameter to `out_filename`, which the override forwards).
-  `generate_standard_filename()` (the `to_fits(fn=None)` fallback) delegates to `kpf_filename`
-  (§B.3) so object- and string-keyed names can't drift.
-- **Materialize memmapped FITS HDUs before the source file closes**: copy with
-  `np.array(hdu.data)` (not `np.asarray`), so the array does not alias a freed memmap.
+- **Instance vs. level/manifest naming** (`kpfN` vs `L<N>`). A variable *holding a model
+  instance* uses `kpfN` in `data_models/` (`kpf2 = self.to_kpf2()`) and `lN_obj`/`mlN_obj` in
+  `modules/` (`l1_obj`, `ml2_obj`). A constant/identifier naming a data **level**, extension
+  **manifest**, or **filename pattern** uses the `L<N>`/`ML<N>` token everywhere
+  (`_L0_EXTENSIONS`, `_L1_TO_L2_PASSTHROUGH`, `_ML1_EXTENSIONS`), mirroring the EPRV `DATALVL`
+  terminology and the CSV names. A receipt **step-name string** matches its *method*
+  (`to_kpf1`/`to_kpf2`/`to_kpf4`), not the level.
+- **I/O overrides forward KPF's conventions**: `to_fits` keeps a single positional filepath
+  (forwarding it as rvdata's renamed `out_filename`); materialize memmapped HDU arrays with
+  `np.array(hdu.data)` (not `np.asarray`) before the source file closes, so nothing aliases a
+  freed memmap.
 
 #### Masters
 
-- The master data models (`data_models/masters/`) subclass `KPFMasterModel`
-  (`KPFMasterL1`/`KPFMasterL2`, with `KPFMasterL4` a stub) and follow the same override idioms as
-  the science models; `KPFMasterModel` supplies the KOAID/`MASTYPE` master filename in place of the
-  science `kpf_filename`. Their extension manifests use the `ML<N>` token (`ML1-extensions.csv`,
-  `_ML1_EXTENSIONS`).
+- Master models (`data_models/masters/`) subclass `KPFMasterModel` and use the `ML<N>` token in
+  their manifests (`ML1-extensions.csv`, `_ML1_EXTENSIONS`).
 
 ### B.2 KPF modules
 
 #### Science
 
-Every standard pipeline module follows the same top-to-bottom template. New modules
-should match it:
+Every standard pipeline module follows the same top-to-bottom template. New modules should
+match it:
 
 ```python
 """KPF <Stage> module.
@@ -143,16 +127,11 @@ Notes section citing papers — see radial_velocity.py / barycentric_correction.
 """
 
 import os                                   # 1. stdlib
-import warnings
-
-import numpy as np                          # 2. third-party (alphabetical)
-import pandas as pd
-
+import numpy as np                          # 2. third-party
 from kpfpipe import DEFAULTS                 # 3. first-party (absolute only)
 from kpfpipe.utils.config import ConfigHandler
 
 _DEFAULTS = {**DEFAULTS, "module_param": ...}   # module constants are private (leading _)
-_LOOKUP_TABLE = {...}                           # internal maps/paths only — no public constants
 
 
 class StageName:
@@ -198,424 +177,228 @@ class StageName:
     def perform(self, chips=None):
         ...                                    # populate header-source attributes
         self._set_headers(self.l2_obj)         # consolidates ALL header writes
-        self._track_info(chips)                # builds & caches _info text, before the receipt
+        self._track_info(chips)                # caches _info text, before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "", "PASS")
-        logger.info("summary:\n%s", self._info)  # perform() logs the cached summary
+        logger.info("summary:\n%s", self._info)
         return self.l2_obj
 
     def info(self):       # prints self._info (the cached text), always last
         print(self._info)
 ```
 
-- **Method order is fixed and marked with 66-dash banner comments**:
-  `__init__` → *Private helpers* → *Algorithm steps* → *Private helpers - module execution*
-  (`_track_info`, then `_set_headers`) → *Public entry point* (`perform`) → `info()`.
+- **Method order is fixed, marked with 66-dash banner comments** (`# ----`, never `====`/`####`;
+  sub-labels allowed): `__init__` → *Private helpers* → *Algorithm steps* → *Private helpers -
+  module execution* (`_track_info`, then `_set_headers`) → *Public entry point* (`perform`) →
+  `info()`.
 - **Header consolidation & `_info`.** A module writes headers in exactly one place — a private
-  `_set_headers(obj)` that sources its values from instance attributes (never recomputes,
-  never reads another product) and writes each registered keyword via `obj.set_keyword(key, value)`
-  (routing + comment come from the registry), called immediately before `receipt_add_entry`. Modules
-  that write no header keywords keep an empty helper for uniformity. `_info` (formerly `_results`) is the
-  pruned, human-readable summary **text** (a `str`) consumed **only** by reporting — never the
-  science/header chain, and never tests (tests assert on the underlying attributes). A private
-  `_track_info(self[, chips, fibers])` (no other args — it sources from instance attributes) **builds
-  and caches** that text on `self._info`, called immediately after `_set_headers` and before the receipt;
-  `perform()` then logs it (`logger.info("summary:\n%s", self._info)`) and `info()` prints it, so both
-  share one rendering (no separate `_info_text()` builder). `info()` prints a short "not been called"
-  notice while `self._info` is `None`.
-- The banner is exactly:
-  ```python
-      # ------------------------------------------------------------------
-      # Section name
-      # ------------------------------------------------------------------
-  ```
-  No `=====` or `#####` styles. Sub-labels are allowed
-  (`# Private helpers — exposure-meter handling`).
-- **Per-level subpackages** (`data_models/`, `quality_control/*/`) use `levelN.py` file
-  naming (`level0.py`, `level1.py`, `level2.py`) with shared logic in `base.py`, and
-  re-export through `__init__.py` with an explicit `__all__`.
-- **Porting from the legacy DRP**: the v2.12 pipeline is kept at `legacy/KPF-Pipeline/`
-  as an algorithm reference. When porting a stage, read the original
-  `modules/<stage>/src/alg.py` for the core logic, then rewrite it to the skeleton above —
-  do **not** carry over hidden state, database dependencies, or implicit calibration-source
-  hierarchy (charter §9 Guardrails, §10 Core Design Principles).
+  `_set_headers(obj)` sourcing values from instance attributes (never recomputing, never reading
+  another product), each via `obj.set_keyword`, called just before `receipt_add_entry`; a module
+  that writes none keeps an empty helper. `_info` is the cached human-readable summary **text** (a
+  `str`) for reporting only — never the science/header chain, never asserted by tests.
+  `_track_info(self[, chips, fibers])` builds and caches it on `self._info`; `perform()` logs it
+  and `info()` prints it (one shared rendering), and `info()` prints a "not been called" notice
+  while `_info` is `None`.
+- **Porting from the legacy DRP** (`legacy/KPF-Pipeline/`, an algorithm reference): read the
+  original `modules/<stage>/src/alg.py` for the core logic, then rewrite it to the skeleton above
+  — do **not** carry over hidden state, DB dependencies, or implicit calibration hierarchy.
 
 #### Masters
 
-The masters layer (`modules/masters/`) is a **batch/stack builder** and diverges from transform
-modules in documented, intentional ways — follow *its* conventions when adding masters code:
+The masters layer (`modules/masters/`) is a batch/stack builder that diverges from transform
+modules — follow *its* conventions:
 
-- **Constructed from a file list, not a data object**: `Bias(l0_file_list, config)`.
-- **Entry points are `make_master_l1(...)` / `make_master_l2(...)`**, not `perform()`. They
-  follow the same positional-then-keyword-only shape as `perform()` (§C.3), with the input
-  file list standing in for `chips`/`fibers`:
-  ```python
-  def make_master_l1(self, l0_file_list=None, *, <None-kwargs>, <default-value-kwargs>):
-  ```
-  `l0_file_list` is the sole positional (defaulting to `None`, falling back to the list the
-  module was constructed with); every tunable is keyword-only after the `*`, ordered
-  configurable `None`-kwargs first, then semi-hidden default-value-kwargs (e.g. `verbose=True`).
-- **Shared base class `BaseMasterModule`** holds all heavy lifting (frame loading,
-  stacking, streaming accumulation, save). Subclasses (`Bias`, `Dark`, `Flat`, `WLS`) are thin:
-  an `__init__` that selects the config section, the `make_master_*` entry point, and an
-  `info()`. `_DEFAULTS` extends the base: `{**BaseMasterModule._DEFAULTS, ...}`.
-- **Two stacking backends switched by frame count**: an in-memory datacube below
-  `nframe_stream`, and a single-pass streaming accumulation above it (to bound memory).
-  Both sum counts and exposure time per pixel over the surviving (sigma-clipped) frames;
-  the master IMG is the exposure-weighted rate `counts_sum / exptime_sum`, stored float32.
-- **Sigma-clipping** via `kpfpipe.utils.stats.flag_outliers(arr, sigma, axis=0)`; robust
-  WLS-coefficient combination via `mad_std` + median.
-- **`info()` pretty-printer** (ASCII-table summary) is expected on every subclass. Bias/Dark/WLS
-  each have a `_track_info()` that caches the text on `self._info`, with the per-chip stack
-  statistics cached separately on `self._stack_info` (Bias/Dark via the base
-  `_populate_stack_info()`; WLS inline in `make_master_l2`). Flat is an unimplemented stub — no
-  `_track_info`; its `info()` prints a terse not-implemented notice directly.
-- **Public API surface is `make_master*`, `save*`, `stack_frames`, and `info`.**
-  `stack_frames` is public so callers can build a stacked frame without the full
-  `make_master_*` wrapper. Every other method on `BaseMasterModule` and its
-  subclasses — frame loading, calibration, line fitting, coefficient solving, and
-  the other algorithm/helper steps — takes a leading underscore. Tests that
-  exercise those internals call (and patch) the underscored names directly.
+- **Constructed from a file list**, not a data object: `Bias(l0_file_list, config)`.
+- **Entry points are `make_master_l1/l2(...)`**, not `perform()`, with the same positional-then-
+  keyword-only shape as `perform()` (§C.3) and `l0_file_list` as the sole positional.
+- **Thin subclasses over `BaseMasterModule`.** `Bias`/`Dark`/`Flat`/`WLS` add only an `__init__`
+  (selecting the config section), the `make_master_*` entry point, and an `info()` ASCII-table
+  summary; `_DEFAULTS` extends the base (`{**BaseMasterModule._DEFAULTS, ...}`).
+- **Public API is `make_master*`, `save*`, `stack_frames`, `info`**; every other method is
+  underscored (tests patch the underscored names directly).
 
 ### B.3 Recipes & configuration
 
 #### Science
 
-- **Recipes are plain Python modules** (not a DSL/`.recipe` file), one `def main(config, args)`
-  entry point, no top-level execution. The leaf runner (`scripts/processing/reduce.py`,
-  invoked via `kpfpipe run`) imports and calls `main`.
-- **Module invocation idiom = instantiate then call**, with the variable named
-  `snake_case` after the class:
-  ```python
-  image_assembly = ImageAssembly(l0, config)
-  l1 = image_assembly.perform()
-  ```
-  - Transform modules → `.perform()`; QC/Diag/Quicklook → `.run()` (or `.run("all")`);
-    masters → `.make_master_l1/l2()`. The constructor takes the **whole `ConfigHandler`**,
-    not pre-extracted params — each module pulls its own section internally.
-- **Output paths go through the `utils/io.py` trio** — never re-derived by string
-  concatenation in modules/recipes. `kpf_directory(obs_id, *, level, data_root, kind)` is the
-  single authority for an **output** directory (`kind` ∈ `science`/`masters`/`QLP`),
-  `kpf_filename(obs_id, level, *, master)` builds the basename, and
-  `kpf_filepath = os.path.join(kpf_directory(...), kpf_filename(...))` is their composition
-  (returning the bare `kpf_filename` when `data_root is None`). `kpf_filename` is also the single
-  naming authority for the **data models** (§B.1). Recipes call these rather than
-  assembling paths inline (e.g. a QLP dir is `kpf_directory(..., kind="QLP")`, not a hand-built
-  `os.path.join(data_root, "QLP", …)`). `kpf_directory` is obs-keyed (datecode from `obs_id`);
-  plain `os.path.join` remains fine for **input**/night-keyed directories that have a bare
-  datecode and no obs_id — the L0 scan dir (`FileHandler.build_mini_database`), the
-  masters-search dir (`find_masters`, which scans a `obs_date ± N` window), and the masters
-  recipe's `l0_dir` — which are out of `kpf_directory`'s scope by design. Where the masters
-  layout is thus encoded twice — the *writer* (`kpf_filepath`/`kpf_directory`) and the inline
-  *reader* (`find_masters`) — keep them in lock-step with a **drift test**
-  (`TestFindMasters.test_finds_kpf_filepath_output`). Level passed as a literal
-  `"L0"/"L1"/"L2"/"L4"`; `os.makedirs(os.path.dirname(path), exist_ok=True)` before every
-  `.to_fits()`.
-- **Arg validation**: guard at the top, `raise SystemExit("Error: --obs_id is required …")`
-  with an example.
-- **Recipe comments** are terse, lowercase, imperative, and explain the *why* (science
-  rationale), placed above the stage; transforms annotated with `-->`. Future/disabled
-  stages are kept as commented-out blocks mirroring the live pattern, labelled
+- **Recipes are plain Python** with one `main(config, args)` entry (tests call it directly); no
+  top-level execution. Their composition and the scripts/CLI layering are in the architecture
+  guide.
+- **Invoke a module by instantiate-then-call**, the variable named `snake_case` after the class:
+  `image_assembly = ImageAssembly(l0, config); l1 = image_assembly.perform()`. Transforms →
+  `.perform()`, QC/Diag/Quicklook → `.run()`, masters → `.make_master_l1/l2()`. The constructor
+  takes the whole `ConfigHandler`; each module pulls its own section.
+- **Build output paths only through the `utils/io.py` builders** (`kpf_directory`/`kpf_filename`/
+  `kpf_filepath`) — never string-concatenate paths in modules/recipes; `os.makedirs(
+  os.path.dirname(path), exist_ok=True)` before every `.to_fits()`. (Plain `os.path.join` is fine
+  for night-keyed *input* directories that have no obs_id.)
+- **Validate args at the top**: `raise SystemExit("Error: --obs_id is required …")` with an example.
+- **Recipe comments** are terse, lowercase, imperative, and explain the *why*, above the stage
+  (transforms annotated `-->`); disabled stages stay as commented-out blocks labelled
   `(not yet implemented)`.
 
-Science config files:
+Config files:
 
-- **TOML, loaded with stdlib `tomllib`.** One config per recipe, sharing the basename
-  (`recipes/kpf_drp_science.py` ↔ `configs/kpf_drp_science.toml`).
-- **Sections are `UPPER_SNAKE` in brackets.** Two fixed globals `[DATA_DIRS]`,
-  `[TRACES]`; per-module sections in the **science** config are **`[MODULE_<NAME>]`**
-  matching the class (`[MODULE_RADIAL_VELOCITY]` ↔ `RadialVelocity`), and those modules
-  call `config.get_params(["DATA_DIRS", "TRACES", "MODULE_<NAME>"])`.
-- **Key casing**: `lower_snake_case` everywhere except `[DATA_DIRS]` (which uses
-  env-var-like `UPPER_SNAKE`). Booleans `true`/`false`; paths double-quoted; lists are
-  TOML arrays with explicit `.0` on floats.
+- **TOML via stdlib `tomllib`**, one per recipe sharing the recipe basename. Sections are
+  `UPPER_SNAKE`: the fixed `[DATA_DIRS]`/`[TRACES]` globals plus per-module `[MODULE_<NAME>]`
+  matching the class, pulled via `config.get_params([...])`. Keys are `lower_snake_case` (except
+  `[DATA_DIRS]`, which is `UPPER_SNAKE`); floats carry an explicit `.0` in TOML arrays.
 
 #### Masters
 
-- **Masters config sections use the bare product name** — `[BIAS]`, `[DARK]`, `[FLAT]`,
-  `[WLS]` (no `MODULE_` prefix), matched by `get_params([..., "BIAS"])`. This is a
-  deliberate, accepted exception: masters are batch builders keyed by product, not the
-  `MODULE_`-prefixed transform stages. Keep it; do not "align" it to the science pattern.
-- **Masters that calibrate frames also merge the shared transform-stage sections**
-  the per-frame calibration reuses — Dark/Flat/WLS pass
-  `get_params([..., "<PRODUCT>", "MODULE_CALIBRATION_ASSOCIATION", "MODULE_IMAGE_PROCESSING"])`
-  so the same `bias`/`dark`/`flat` flags and `masters_search_window_days` drive both the
-  science path and `_process_frame`. Order matters: `MODULE_IMAGE_PROCESSING` comes **last**
-  so its flags win on any key collision. Bias (no per-frame calibration) omits both.
+- **Masters config sections use the bare product name** — `[BIAS]`/`[DARK]`/`[FLAT]`/`[WLS]` (no
+  `MODULE_` prefix). A deliberate, accepted exception — don't "align" it to the science pattern.
+- **Frame-calibrating masters merge the shared transform sections** they reuse — Dark/Flat/WLS
+  pass `[..., "<PRODUCT>", "MODULE_CALIBRATION_ASSOCIATION", "MODULE_IMAGE_PROCESSING"]` with
+  `MODULE_IMAGE_PROCESSING` **last** so its flags win on any collision; Bias omits both.
 
 ### B.4 FITS structures
 
-*(Terminology: **`rvdata`/`RVData`** is the Python *package* we import and inherit from — its
-imports, classes (`RV2`/`RV4`/`RVDataModel`), and API (e.g. `register_rvdata_extension`).
-**"EPRV" / "EPRV (data) standard"** is the data *format/spec* — FITS structure, keyword names,
-units, reference frames — and names identifiers that hold or describe format artifacts
-(`eprv_primary_seed`, `_EPRV_TAG`, the `aliases.csv` `EPRV` column, an `eprv_key` local). Keep
-them distinct in identifiers and prose. The package name `rv-data-standard` *contains* "data
-standard", so never write "rvdata standard"/"rvdata-standard" for the format: say **"EPRV
-standard (which rvdata implements)"**. One external exception: rvdata's vendored `header_map.csv`
-names its target column `STANDARD`; read it by that name (`row["STANDARD"]`) but treat the
-*values* as EPRV targets. Reserve a bare "standard" for genuinely different senses — a "standard
-CCD sequence", the "standard set" of calibrations, a "standard filename" — where no EPRV/rvdata
-meaning applies.)*
-
-The KPF-pipeline keyword registry (our `L*-headers.csv` ∪ the EPRV keyword defs) and its derived
-routing/validation lookups are owned by the `KeywordRegistry` class in
-`data_models/keyword_registry.py` — one module singleton `keyword_registry`, imported only by
-`base.py`, which surfaces it as the `KPFDataModel.keyword_registry` class attribute (and uses
-`.routing` in `set_keyword`); the checkpoints validator reads `.allowed`/`.required` off
-`kpf_obj.keyword_registry`.
+*(Terminology: **`rvdata`/`RVData`** = the Python package we import and inherit from; **"EPRV"** =
+the data format/spec it implements. Keep them distinct — never write "rvdata standard" for the
+format; say "EPRV standard (which rvdata implements)". Identifiers holding format artifacts take an
+`eprv_` prefix. One quirk: rvdata's vendored `header_map.csv` names its target column `STANDARD`,
+but its values are EPRV targets.)*
 
 #### Extensions
 
-- **CSV config tables** (`data_models/config/`) are comma-separated, single header row, no
-  quoting, read with `pandas.read_csv`; every CSV ends with a `Description` column.
-- **Extension manifests** (`L0-extensions.csv`, …): columns
-  `HDU,Name,DataType,Required,Description` — integer 0-based HDU index, `UPPER_SNAKE`
-  ext name, FITS HDU class, Python-cased `True`/`False`, free-text description.
-- **Mapping tables**: `aliases.csv` → `KPF,EPRV,Description` (1:1 non-trace aliases only);
-  `trace-map.csv` → `Trace,Fiber,Description` (trace/fiber aliases derived at runtime).
-- These CSVs are the source of truth for HDU layout and alias registration — keep fiber
-  names in sync across `trace-map.csv`, `[TRACES].fibers`, and `detector.toml`.
+- **CSV config tables** (`data_models/config/`) drive HDU layout and alias registration: comma-
+  separated, single header row, read with `pandas.read_csv`, always ending in a `Description`
+  column. Extension manifests (`L0-extensions.csv`, …) are `HDU,Name,DataType,Required,Description`;
+  mapping tables are `aliases.csv` (`KPF,EPRV,…`) and `trace-map.csv` (`Trace,Fiber,…`).
+- **Keep fiber names in sync** across `trace-map.csv`, `[TRACES].fibers`, and `detector.toml`.
 
 #### Headers
 
-The WMKO-native → EPRV-standard conversion happens **only** in `KPF0.to_kpf1`
-(`data_models/level0.py`; see §B.1). Every extension header is an `astropy.io.fits.Header`, so
-there is no value-vs-`(value, comment)` ambiguity and no separate header parser. What this means
-when writing code:
+Every extension header is an `astropy.io.fits.Header` (the WMKO→EPRV conversion and the
+`INSTRUMENT_HEADER` snapshot are described in the architecture guide's *Header standardization*).
+When writing code:
 
-- **Reading a header value**: use `header.get(key, default)` (or `header[key]`) on the keyword's
-  home extension (per the registry `Extension` column — e.g. read `RNGREEN1` from
-  `headers["QUALITY_CONTROL"]`, `BIASFILE` from `headers["RECEIPT"]`). A `fits.Header`
-  returns the scalar value; the comment lives in `header.comments[key]`. **Never hand-roll
-  `value[0] if isinstance(value, tuple)`** — headers are never tuple-valued dicts.
-- **Writing a registered KPF-pipeline keyword**: call `obj.set_keyword(key, value)`. It routes the
-  keyword to its registry-home extension with the registry `Description` as the comment — never
-  hardcode an extension or comment, and never write `headers["PRIMARY"][key] = …` directly for a
-  registered keyword. The keyword **must** be in `config/L{0,1,2,4}-headers.csv` first (with its
-  `Extension`), or `set_keyword` raises `KeyError` and the checkpoints validator would reject the
-  product. Never write to `INSTRUMENT_HEADER` (immutable snapshot of the L0 PRIMARY as ingested).
-- **Writing an unregistered/EPRV-conversion card** (the WMKO→EPRV mapping, provenance stamping):
-  the conversion sites in `KPF0` assign `header[key] = (value, comment)` directly; outside those,
-  prefer `set_keyword`.
-- **Conversion**: call `KPF0._map_header`; don't re-implement the WMKO→EPRV mapping.
-- **Reading a header keyword: prefer PRIMARY when the keyword lands there** after `to_kpf1` with the
-  same value (e.g. `DATE-OBS`, `OBJECT` — carried to PRIMARY under their own names). Read from
-  `headers["INSTRUMENT_HEADER"]` only when PRIMARY can't serve the read cleanly: the native never
-  reaches PRIMARY (`DATE-BEG`/`MID`/`END`, `MJD-OBS`, `TARGFRAM`, `TARGTEFF`, `GAIAMAG`, native
-  `EXPTIME`, `OFNAME`), or it belongs to a **coherent native block** where mixing PRIMARY + INSTRUMENT
-  reads or the cryptic renamed keys (`GAIAID`→`CID4`, `TARGRA`→`CRA4`, `SCI-OBJ`→`TRACE4`, …) would
-  obscure intent — the astrometry/catalog block, the per-fiber illumination source
-  (`SCI-OBJ`/`SKY-OBJ`/`CAL-OBJ`), and the `EXPTIME`-vs-`ELAPSED` pair (distinct quantities that only
-  coexist on INSTRUMENT_HEADER). Read via `.get`; no silent fallback — let a missing key raise.
-- Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
-  Exception: the L4 final-RV measurements `CCD{1,2}RV`/`CCD{1,2}ERV` are KPF-registered keywords
-  deliberately homed on PRIMARY (alongside the EPRV `RV`/`RVERR`).
+- **Read a value** with `header.get(key)`/`header[key]` on the keyword's home extension (per the
+  registry `Extension` column); the comment is in `header.comments[key]`. Never hand-roll
+  `value[0] if isinstance(value, tuple)` — headers are never tuple-valued.
+- **Write a registered keyword** with `obj.set_keyword(key, value)` — it routes to the registry
+  home with the registry `Description` as comment. Never hardcode an extension/comment or write
+  `headers["PRIMARY"][key] = …` for a registered keyword; the keyword must be in
+  `config/L{0,1,2,4}-headers.csv` first, or `set_keyword` raises. Never write to
+  `INSTRUMENT_HEADER`.
+- **Unregistered conversion/provenance cards** are assigned `header[key] = (value, comment)`
+  directly, only at the `KPF0` conversion sites; call `KPF0._map_header`, don't re-implement it.
+- **Prefer PRIMARY, fall back to `INSTRUMENT_HEADER`** for reads: a native that survives on PRIMARY
+  under its own name is read there; one that never reaches PRIMARY, or that reads more clearly as a
+  coherent native block, is read from `INSTRUMENT_HEADER`. No silent fallback — let a missing key
+  raise.
+- **Use EPRV keyword names on PRIMARY** (`EXPTIME`, not `ELAPSED`); the L4 `CCD{1,2}RV`/`ERV` are
+  the one KPF-registered exception deliberately homed on PRIMARY.
 
 #### Keywords
 
-- **FITS keyword names**: ≤ 8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`,
-  `RNOK`, `ISGOOD`). Encode the level into the keyword when needed for uniqueness
-  (`DATAPRL0`, `L2NANOK`). **Before inventing a new PRIMARY/extension keyword, grep
-  `reference/legacy_data_format.rst` and reuse the legacy spelling/casing wherever the
-  science meaning matches** (e.g. `WLSFILE`, `BIASFILE`) — so downstream tools, notebooks,
-  and archival workflows keep reading v3 products unchanged. Only coin a new keyword when
-  the concept genuinely doesn't exist in the legacy schema.
-- **`L{0,1,2,4}-headers.csv`** register every KPF-pipeline keyword and its home extension,
-  split by the level that first writes the keyword (the combined set drives the `set_keyword`
-  routing map and the checkpoints validator). Columns are
-  `Keyword,Description,Extension,DataType,PopulatedBy`. The **`Extension`** column is the keyword's
-  home header (`PRIMARY`, `QUALITY_CONTROL`, `RECEIPT`, `BJD_TDB`, `BARYCORR_KMS`, `BARYCORR_Z`,
-  `RV1`–`RV5`) — `set_keyword` writes there, and `Description` becomes the FITS comment, so a
-  keyword's home and comment are defined **once, in the registry**. `DataType` is one of
-  `str`/`int`/`float`. Logical flags are stored as `int` 0/1, never Python booleans: QC keys carry a
-  `QC: …` description, and every other (T/F) flag appends `(T/F)` to its description. Each `Keyword`
-  is an explicit FITS keyword of **≤8 characters** with no wildcards — enumerate every member of
-  a family on its own row (e.g. `RNGREEN1`-`RNGREEN4`, `CCD1RV`/`CCD2RV`), never a `?`/`*` stand-in.
+- **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`); encode the level
+  where needed for uniqueness (`DATAPRL0`). **Before coining a new keyword, grep
+  `reference/legacy_data_format.rst` and reuse the legacy spelling where the science meaning
+  matches** (`WLSFILE`, `BIASFILE`), so downstream/archival tools keep reading v3 products.
+- **Register every KPF keyword in `L{0,1,2,4}-headers.csv`** (`Keyword,Description,Extension,
+  DataType,PopulatedBy`) — `Extension` is its home and `Description` becomes the FITS comment (both
+  defined once, here). Flags are stored as `int` 0/1 (never Python bool): QC keys get a `QC: …`
+  description, other flags append `(T/F)`. Enumerate every family member on its own row — no
+  `?`/`*` wildcards.
 
 ### B.5 Quality control (Diagnostics / QC / Checkpoints / Quicklook)
 
-These four read-only layers under `kpfpipe/quality_control/` share conventions that new
-QC code must follow. Diagnostics, QC, and Checkpoints run in that strict order — each
-consumes what the prior wrote (metrics → 0/1 flags → warn/raise):
+The four read-only layers (`kpfpipe/quality_control/`) and their strict run order are described in
+the architecture guide. Conventions for writing QC code:
 
-- **Read-only discipline.** Diagnostics and QC write header keywords **only via `set_keyword`**
-  (which routes them to QUALITY_CONTROL — see §B.4 *Headers*), never to
-  `data`. Quicklook writes only PNGs. When a helper would mutate `l0.data`, operate on a `deepcopy`
-  to protect the caller's object.
-- **Method-attribute registration + MRO-walk discovery.** Tag a method by assigning an
-  attribute immediately after its `def` — there are no decorators:
+- **Read-only.** Diagnostics/QC write header keywords **only via `set_keyword`** (→
+  QUALITY_CONTROL), never `data`; Quicklook writes only PNGs. To mutate `l0.data` in a helper, work
+  on a `deepcopy`.
+- **Register methods by attribute, no decorators** — assign the tag right after the `def`; the base
+  `_iter_*` generator walks the MRO (subclass beats base):
   ```python
   def nan_counts(self): ...
-  nan_counts._diag_name = "nan_counts"          # Diagnostics
-
-  def data_l0_red_green(self): ...
-  data_l0_red_green._qc_key = "DATAPRL0"        # QC
-
-  def unregistered_keywords(self): ...
-  unregistered_keywords._checkpoint_name = "unregistered_keywords"  # Checkpoints
+  nan_counts._diag_name = "nan_counts"   # Diagnostics (_qc_key / _checkpoint_name for QC / Checkpoints)
   ```
-  The base class's `_iter_*` generator walks `type(self).__mro__`, collects callables
-  carrying the tag (`_diag_name` / `_qc_key` / `_checkpoint_name`), and dedupes overrides
-  via a `seen` set (subclass beats base).
-- **Runners reset `self.results = {}` at entry** (Diagnostics/QC; determinism) and wrap each
-  method call in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
-- **Writes go through `set_keyword`** (comment sourced from the registry, not the call site).
-  QC writes integer `0/1` plus an `ISGOOD` aggregate and **does no validation**. Round floats
-  before writing (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`. The
-  per-check/metric comment lives **once, in the registry `Description`** — QC methods carry only
-  `_qc_key` (no `_qc_comment`); `run()` mirrors the registry `Description` into `self.results` for
-  reporting. (Diagnostics methods still return their own `(value, comment)` dicts, but the FITS
-  comment is always the registry `Description`.)
-- **Checkpoints validate; they do not write.** A `Checkpoint` subclass reads the 0/1 flags +
-  headers and **warns or raises** (header validation lives in `Checkpoint.unregistered_keywords`).
-  Per-flag severity is a per-level `RAISE_FLAGS` tuple on the subclass (a failed flag named there
-  raises, every other failed flag warns).
-- **QC comments are namespaced `"QC: ..."`**; Diagnostics comments are bare descriptive
-  phrases. (Both live in the registry `Description` column, the single source for the FITS comment.)
-- **Quicklook plotting**: pyplot state-machine API (`plt.figure(figsize=..., tight_layout=True)`);
-  `cmap="viridis"`, `origin="lower"`, vmin/vmax from percentiles; templated titles
-  `f"L{N} - {Chip} CCD: {obs_id} - {name}"`; a UTC `KPF QLP: … UT` timestamp annotation;
-  save as `f"{obs_id}_L{N}_{plotname}_{chip}_zoomable.png"` with `plt.close(fig)` after
-  each. Unimplemented plots are stubbed with a docstring citing the v2.12 source and
-  `raise NotImplementedError(...)`.
-- **Quicklook `run()` contract** (shared by every `PlotL{N}.run`): when `output_dir` is set,
-  each figure is saved there and closed to free memory; when `output_dir` is `None`, the
-  figures are returned **open** so a caller (e.g. an interactive notebook) can render them.
-  State this once here -- a per-level `run()` docstring should reference the contract, not
-  restate it.
+- **Runners reset `self.results = {}` at entry** and wrap each method in `try/except`, re-raising as
+  `RuntimeError` (loud failure, no silent suppression).
+- **QC writes `int` 0/1 plus an `ISGOOD` aggregate and does no validation**; round floats
+  (`round(float(x), 6)`) and cast numpy scalars to Python types. The per-check comment lives once in
+  the registry `Description` (QC methods carry only `_qc_key`). QC comments are namespaced `"QC: …"`;
+  Diagnostics comments are bare phrases.
+- **Quicklook** follows the existing plot conventions (pyplot state-machine, `viridis`, percentile
+  vmin/vmax, templated titles + `_zoomable.png` filenames), stubbing unimplemented plots with
+  `NotImplementedError` citing the v2.12 source. Its `run()` contract — save-and-close when
+  `output_dir` is set, else return the figures **open** — is stated once here; per-level `run()`
+  docstrings reference it rather than restating it.
 
 ### B.6 Error handling, validation & logging
 
-- **Logging is standard** (the project decision of issue #1408, implementing WMKO
-  DRP-RUN-07/08/09). The rules:
-  - **Named loggers only**: `logger = logging.getLogger(__name__)` at module top, below
-    the imports. Recipes are exec'd (their `__name__` is `"recipe"`), so they name their
-    loggers explicitly — `logging.getLogger("kpfpipe.recipe.science")` / `".masters"`;
-    the CLI uses `"kpfpipe.cli"`. Never call the root-logger conveniences
-    (`logging.info(...)` — Ruff `LOG015`).
-  - **Handler/level configuration lives in exactly one module** (`kpfpipe.utils.logger`),
-    via two sibling entry points — never at import time, never in recipes/modules/tests:
-    `setup_logging` (the single-recipe leaf runner `scripts/processing/reduce.py`, the
-    `kpfpipe run` entry; per-recipe log, stderr console echo) and `setup_batch_logging`
-    (the fan-out orchestrators `scripts/processing/masters.py`/`science.py`, once per
-    invocation; a `_batch_` summary log with the console echo pinned to **stdout** for
-    live progress). Library code must work with no handlers installed (records drop
-    silently).
-  - **Level policy**: `INFO` is the production level — reduction steps, decision
-    points, file reads/writes, and end-of-`perform()` module summaries. `DEBUG` —
-    inner-loop progress and counters. `WARNING` arrives via the warnings bridge (below).
-    Log calls are **never** gated behind `verbose` flags — the level is the gate.
-  - **Lazy `%`-formatting in log calls** (Ruff `G`): `logger.info("wrote %s", fn)`,
-    not f-strings.
-  - Human-facing status → `print()`, confined to interactive `info()` reporters (data
-    models and modules); never in `perform()`/pipeline paths. A module's `_track_info()`
-    builds and caches the summary text on `self._info`; `info()` prints it and `perform()`
-    logs it (`logger.info("summary:\n%s", self._info)`), so both share one rendering (see §B.2).
-    The batch-processing orchestrators (`masters`/`science`/`_dispatch`) are **not** an
-    exception to this: they log their fan-out narration (dispatch banner, per-unit
-    ok/FAILED, failure sentinels) through a named logger configured by
-    `setup_batch_logging`, not `print()` — the stdout console echo gives the operator the
-    same live view while also persisting a batch-summary log.
-- **Raise exceptions; do not catch-and-log.** The one sanctioned catch-log-reraise
-  point is the single-recipe leaf runner (`scripts/processing/reduce.py`), which wraps
-  the recipe call in
-  `logger.critical(..., exc_info=True); raise` so uncaught tracebacks land in the log
-  (DRP-RUN-08) before the process exits nonzero. Everywhere else, choose the
-  semantically correct type:
-  - `TypeError` — wrong `config` type (every `__init__`).
-  - `ValueError` — bad domain value / failed validation (the workhorse).
-  - `LookupError`/`KeyError` — missing trace/header.
-  - `FileNotFoundError` — missing master/input.
-  - `NotImplementedError` — stubs.
-  - `RuntimeError` — wrapping a failure from a sub-step (QC/Diag runners re-raise as
-    `RuntimeError(f"... {name!r} raised: {e}") from e`).
-- **No `assert` statements** for validation — use explicit `if ...: raise`.
-- **Validate early, fail fast**: check args at the top of the function before doing work.
-- **Error messages are f-strings that state the expectation and show the offending
-  value with `!r`**: `raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")`.
-- **Narrow your `except`**, never bare `except:`. Broad `except Exception` is acceptable
-  only around external I/O that converts to a warning-and-skip. **Always parenthesize a
-  multi-type clause** — `except (ValueError, TypeError):`, binding or not. PEP 758 makes the
-  bare `except A, B:` valid at runtime on 3.14, but Pylance/Pyright doesn't yet parse it and
-  flags every such clause; the parenthesized form is accepted by every tool. The formatter
-  leaves these parens in place because `target-version` is pinned to `py313` (see §C.7).
-- **Always chain re-raises** (Ruff `B904`): `raise ... from e` to preserve the original
-  context, or `raise ... from None` when translating a low-level error (a `KeyError`/
-  `AttributeError` from a dict lookup or `getattr` dispatch) into a clearer domain error
-  whose message already says what the original would — suppressing the redundant chain.
-- **Predicate/extractor split**: `is_*` predicates validate inline and return `bool`
-  (never raise); the raising extractors/converters (`get_*`, `utc_to_hst`, …) validate
-  through the matching predicate and raise `ValueError` at their own boundary. See
-  `utils/kpf_utils.py`, where `is_timestamp` is the single validity source and
-  `get_timestamp` et al. turn its `False` into a raise.
-- **In-pipeline recoverable/degraded conditions** → `warnings.warn(..., stacklevel=2)`,
-  gated behind a `verbose` flag: `if verbose: warnings.warn(..., stacklevel=2)`. The
-  explicit `stacklevel` is required (Ruff `B028`) so the warning points at the caller.
-  `setup_logging` bridges these into the log at `WARNING` via
-  `logging.captureWarnings(True)` — with the default warning filter, each unique
-  warning is recorded once per location per process.
+Logging follows WMKO DRP-RUN-07/08/09; the `setup_logging`/`setup_batch_logging` entry points are
+described in the architecture guide. The coding rules:
+
+- **Named loggers only**: `logger = logging.getLogger(__name__)` at module top; recipes (exec'd, so
+  `__name__ == "recipe"`) name theirs explicitly (`"kpfpipe.recipe.science"`). Never the root-logger
+  conveniences (`logging.info(...)` — Ruff `LOG015`).
+- **Handler/level configuration lives only in `kpfpipe.utils.logger`**, never at import time or in
+  recipes/modules/tests; library code must work with no handlers installed.
+- **Level policy**: `INFO` = production (steps, decisions, I/O, end-of-`perform()` summaries),
+  `DEBUG` = inner-loop detail, `WARNING` via the warnings bridge. Never gate log calls behind
+  `verbose` — the level is the gate. Use lazy `%`-formatting (`logger.info("wrote %s", fn)`, Ruff
+  `G`), not f-strings.
+- **`print()` only in interactive `info()` reporters**, never in `perform()`/pipeline paths (the
+  `_info` rendering is in §B.2).
+- **Raise; don't catch-and-log.** The sole sanctioned catch-log-reraise point is the leaf runner
+  (`reduce.py`: `logger.critical(..., exc_info=True); raise`). Elsewhere pick the semantic type:
+  `TypeError` (wrong `config` type), `ValueError` (bad domain value — the workhorse),
+  `LookupError`/`KeyError` (missing trace/header), `FileNotFoundError` (missing master/input),
+  `NotImplementedError` (stubs), `RuntimeError` (wrapping a sub-step failure).
+- **No `assert` for validation** — explicit `if …: raise`. Validate early, at the top of the
+  function. Error messages are f-strings that state the expectation and show the value with `!r`.
+- **Narrow the `except`**, never bare. Parenthesize multi-type clauses (`except (ValueError,
+  TypeError):`) — required because `target-version` is pinned `py313` (§C.7). Always chain re-raises
+  (`raise … from e`, or `from None` when translating a low-level error into a clearer domain one).
+- **Predicate/extractor split**: `is_*` predicates validate inline and return `bool` (never raise);
+  the matching raising extractor/converter (`get_*`, `utc_to_hst`, …) validates through the predicate
+  and raises `ValueError` at its own boundary.
+- **Recoverable/degraded conditions** → `if verbose: warnings.warn(..., stacklevel=2)` (the explicit
+  `stacklevel` is required, Ruff `B028`); `setup_logging` bridges these to `WARNING`.
 
 ---
 
 ## C. Coding conventions
 
-Cross-cutting conventions that apply regardless of subsystem — naming, class and function
-design, numerical idioms, shared utilities, imports, formatting, and tests.
+Cross-cutting conventions that apply regardless of subsystem.
 
 ### C.1 Naming
 
-- **Code is self-documenting.** Names — variables, functions, methods — should make intent
-  legible on their own, so a reader rarely needs a comment to understand *what* a line does.
-  This is the primary lever for the §D.2 rule that comments explain *why*, not *what*: if you
-  reach for an inline comment to say what a variable holds, prefer a clearer name instead.
-  Balance clarity against brevity — favor intelligible names, but keep sanctioned terse
-  notation (documented algorithm symbols; domain-standard short names like `chip`, `order`,
-  `oscan`) where it aids rather than hurts readability.
+- **Names carry intent**, so a reader rarely needs a comment for *what* a line does (the lever
+  behind the §D.2 why-not-what rule). Keep sanctioned terse notation — documented algorithm symbols,
+  domain short names (`chip`, `order`, `oscan`) — where it aids readability. Below are the
+  KPF-specific conventions (beyond the PEP 8 defaults ruff already enforces):
 
 | Thing | Convention | Examples |
 |---|---|---|
-| Modules (files) | `snake_case`, noun phrase = the algorithm stage | `image_assembly.py`, `spectral_extraction.py`, `calibration_association.py` |
-| Masters modules | short, single-word, = the product | `bias.py`, `dark.py`, `flat.py`, `wls.py`, `base.py` |
-| Classes | `PascalCase`, name = CamelCase of the filename | `ImageAssembly`, `SpectralExtraction`, `RadialVelocity` |
+| Masters modules | short, single-word = the product | `bias.py`, `dark.py`, `wls.py` |
 | Acronym classes | keep the acronym capitalized | `WLS` (not `Wls`), `QC` |
-| Per-level classes | compact level suffix `L0/L1/L2`, **not** `Level0` | `DiagL0`, `QCL1`, `PlotL0`, `KPF2` |
-| Public methods/functions | `snake_case`, verb-led | `count_amplifiers`, `subtract_overscan`, `compute_redshift` |
+| Per-level classes | compact level suffix `L0/L1/L2`, **not** `Level0` | `DiagL0`, `QCL1`, `KPF2` |
 | Predicates | `is_*`, return `bool` | `is_obs_id`, `is_timestamp` |
-| Converters | `<x>_to_<y>` | `air_to_vac`, `utc_to_hst`, `kpf_timestamp_to_eprv_timestamp` |
-| Private helpers | leading underscore | `_get_overscan_pixels`, `_resolve_illumination_source` |
-| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `REPO_ROOT`, `DEFAULTS`, `DETECTOR`, `NORDER_GREEN` |
-| Module constants | `UPPER_SNAKE` with a leading underscore — modules export **no** importable constants (one documented exception: `ImageAssembly.RN_KEYS`) | `_DEFAULTS`, `_LEVEL_BY_CAL_TYPE`, `_OBS_ID_PATTERN` |
-| Variables | `snake_case` | `datecode`, `file_list`, `oscan_srl` |
+| Converters | `<x>_to_<y>` | `air_to_vac`, `utc_to_hst` |
+| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `DEFAULTS`, `DETECTOR`, `NORDER_GREEN` |
+| Module constants | `_UPPER_SNAKE`; modules export **no** importable constants (lone exception: `ImageAssembly.RN_KEYS`) | `_DEFAULTS`, `_OBS_ID_PATTERN` |
 
-- **One public class per module** is universal for the pipeline modules. The class name
-  is the CamelCase of the file name.
-- **Math-heavy locals may be terse single-capital letters** when they mirror a published
-  algorithm's notation (e.g. Horne 1986 `D, V, S, F, P, M, W`).
-  This is sanctioned *only* in numerical code and *only* when the symbols are documented
-  in the surrounding docstring/comments. Use descriptive names everywhere else
-  (I/O, path handling, orchestration).
-- **Modules define no public (importable) constants.** Every module-level constant in
-  `kpfpipe/modules/` is an implementation detail and takes a leading underscore
-  (`_DEFAULTS`, lookup/dispatch tables, internal file paths). Values other code needs are
-  *not* re-declared as module constants: pull detector geometry from `DETECTOR`/`detector.toml`
-  (already exposed on every instance as `self.norder`, `self.ccd`, …), take physical
-  constants from `astropy`, and attach fixed objects (e.g. a site `EarthLocation`) to the
-  class as a class attribute. Public `UPPER_SNAKE` constants are fine in `data_models/` and
-  the package root, where importing them is intended.
-- **One sanctioned exception:** `ImageAssembly.RN_KEYS` (the per-amplifier read-noise
-  header-keyword table) is public. `ImageAssembly` is the first module to touch raw L0 and
-  owns detector read-noise metadata that QC/Quicklook import rather than re-derive; the
-  exception is documented at its definition. Don't add new public module constants on this
-  precedent without the same justification.
+- **One public class per module**, its name = CamelCase of the filename.
+- **Math-heavy locals may be terse single capitals** mirroring a published algorithm (Horne 1986
+  `D, V, S, F, P, M, W`) — only in numerical code, only when documented in the surrounding
+  docstring. Use descriptive names everywhere else.
+- **Modules define no public constants.** Every `kpfpipe/modules/` module-level constant is
+  `_`-private; pull detector geometry from `DETECTOR` (exposed on every instance as `self.norder`
+  etc.) and physical constants from `astropy` rather than re-declaring them.
 
 ### C.2 Class design
 
-- **Transform modules are plain standalone classes** — no base class, no mixins, no
-  ABCs, no `dataclasses`. They operate *on* the data-model objects, they don't subclass
-  them. (The masters and QC/Diag layers *do* share a base class — see §B.2/§B.5.)
-- **Canonical constructor signature**: `__init__(self, l<N>_obj, config=None)`. The data
-  object is the first positional arg, named for its level (`l0_obj`, `l1_obj`, `l2_obj`).
-- **The config-resolution block is the same everywhere** — copy it verbatim:
+- **Transform modules are plain standalone classes** — no base class, mixins, ABCs, or
+  `dataclasses`; they operate *on* data-model objects, not subclass them. (The masters and QC/Diag
+  layers *do* share a base class — §B.2/§B.5.)
+- **Canonical constructor**: `__init__(self, l<N>_obj, config=None)` — the data object first, named
+  for its level.
+- **Copy the config-resolution block verbatim**, then let `_DEFAULTS` become instance attributes:
   ```python
   if config is None:
       params = {}
@@ -628,335 +411,157 @@ design, numerical idioms, shared utilities, imports, formatting, and tests.
   for k, v in _DEFAULTS.items():
       setattr(self, k, params.get(k, v))
   ```
-  Tunable params become instance attributes via the `_DEFAULTS` setattr loop.
-- **`_DEFAULTS` merges the global defaults**: `_DEFAULTS = {**DEFAULTS, "key": ...}`
-  (use the `{**DEFAULTS, ...}` spread form, not `dict(DEFAULTS)`).
-- **Defaults live in the module, not the config file.** Resolution is a three-tier
-  override chain, lowest precedence first: `_DEFAULTS` (the in-module default) → config
-  (TOML values applied on top via `params.get(k, v)` in the loop above) → a direct keyword
-  argument on a method call (overrides both). Config is the production override path;
-  direct kwargs are the developer/interactive path (e.g. notebooks), not used in production.
-- **Declare every lazily-populated attribute in `__init__`, set to `None`/`{}`.** Add a
-  trailing comment naming the filling method (and its shape) **only where that isn't obvious**;
-  keep comments minimal otherwise. Conventional attributes (`_info`) stay bare:
+  `_DEFAULTS` merges the globals (`{**DEFAULTS, ...}`). Resolution is a three-tier chain, lowest
+  first: `_DEFAULTS` (in-module default) → config (TOML) → a direct method kwarg (the developer/
+  interactive override, not used in production).
+- **Declare every lazily-populated attribute in `__init__`** (to `None`/`{}`), with a trailing
+  `# populated by …` comment only where the filler isn't obvious (no hidden state):
   ```python
-  self._info = None
   self._ccd_bjd = None   # per-CCD [GREEN, RED] arrays for _set_headers
   self._line_mask = {}   # set by _build_line_mask()
   ```
-- **Detector geometry comes from `DETECTOR` (sourced from `detector.toml`), consumed on
-  the instance** — every module gets `self.norder` (`{GREEN, RED}` dict), `self.ccd`,
-  `self.chips`, `self.fibers` via the `_DEFAULTS` config loop. Do **not** re-declare them as
-  module-level constants; use `self.norder["GREEN"]` etc., with a method-local handle for a
-  verbose derived value (`norder = self.norder["GREEN"] + self.norder["RED"]`). Never
-  hardcode order/column counts.
-- Use `@staticmethod` for pure functions that touch no instance state.
-- **Dispatch-by-name idiom** for pluggable methods:
-  `fxn = getattr(self, f"_{method}_extraction")` wrapped in
-  `try/except AttributeError → raise AttributeError("Unsupported ...")`.
+- **Dispatch-by-name** for pluggable methods: `getattr(self, f"_{method}_extraction")` wrapped in
+  `try/except AttributeError → raise AttributeError("Unsupported …")`.
 
 ### C.3 Function & method design
 
-- **Argument convention — "`None` means use config".** Domain identifiers (`chip`,
-  `fiber`, `order`) are positional; every tunable is a keyword arg defaulting to `None`
-  and resolved at the top of the method body:
-  ```python
-  def perform(self, chips=None):
-      if chips is None:
-          chips = self.chips
-  ```
-  This is the single most important and most universal convention in the codebase.
-- **Canonical `perform()` signature**:
-  ```python
-  def perform(self, chips=None, fibers=None, *, <None-kwargs>, <default-value-kwargs>):
-  ```
-  - **`chips`, `fibers` are the only positional arguments** (each defaulting to `None`),
-    in that order. A module that doesn't operate on one of them simply omits it
-    (`perform(self, chips=None, *, ...)`); a module that operates on neither has no leading
-    positionals. A module whose primary selector is something else keeps that one required
-    positional in the same slot (e.g. `CalibrationAssociation.perform(self, cal_types, *, ...)`).
-  - **Everything else is keyword-only** — place a bare `*` after the positionals so all
-    tunables must be passed by name.
-  - **Order the keyword-only args in two groups**: first the *configurable* parameters —
-    backed by a `_DEFAULTS` key and a config entry, defaulting to `None` and resolving to
-    the configured `self.<attr>` (the "`None` means use config" tunables); then the
-    *semi-hidden* parameters — rarely-tuned knobs left exposed for developer experimentation,
-    carrying a real literal default (e.g. `min_npts=9`, `verbose=True`) and intentionally
-    **absent** from both `_DEFAULTS` and config. The invariant is that a tunable's tier is
-    legible from the signature alone: **`=None` ⇒ configurable** (resolves to `self.<attr>`),
-    **literal default ⇒ semi-hidden**. So a semi-hidden param needing a sequence default uses
-    an *immutable literal* (a tuple, safe as a default argument), e.g.
-    `clip_edge_pixels=(500, 500)`, never the `None`-sentinel + in-body list fallback. Within
-    each group, keep a sensible domain order.
-- **The `make_master_*` entry points follow the same shape** (§B.2), with `l0_file_list`
-  as the sole positional in place of `chips`/`fibers`.
-- **Parameter ordering applies to *every* method**, not just the public entry points:
-  required positionals first, then defaulted parameters in two groups — `None`-defaults
-  (configurable) before real-value defaults (semi-hidden). This holds for algorithm step
-  methods, private helpers, and standalone utils alike.
-- **The `*` (forcing keyword-only) is reserved for public entry points** — `perform()` and
-  `make_master_*()`. Private/algorithm methods keep the same parameter *ordering* but do
-  **not** need a `*` added; their domain identifiers stay positional. A helper may still use
-  `*` where it already aids clarity (existing practice), but don't add one mechanically:
-  ```python
-  def kpf_filepath(obs_id, level, *, data_root=None, master=None): ...
-  def _box_extraction(D, V, *, S=None, M=None, W=None): ...
-  ```
-  Required positionals first; everything tunable after the `*`.
-- **String-enum mode parameters** (e.g. `method`, `response`, `cal_type`) are validated
-  against an explicit allowed set, raising `ValueError` that names the valid options.
-- **Return patterns**:
-  - A transform's `perform()` returns the next-level data object after mutating
-    headers and calling `receipt_add_entry("<module>", "", "PASS")` (the middle
-    arg is the rvdata `ARGS` provenance string — `""` when not applicable).
-  - Step methods that mutate `*_obj.data` in place return `None` and document
-    *"Modifies … in-place"*.
-  - Helpers return a single value or a fixed tuple; validators return `None`.
-- **Pure-function discipline in utils/numerical code**: never mutate inputs — `.copy()`
-  (or `np.asarray(x).copy()`) before modifying.
-- **Length**: helpers ~20–60 lines, `perform()` ~30–70; heavy numerical methods may run
-  longer. `perform()` reads as a linear pipeline of step-method calls, typically inside
-  `for chip in chips:`.
+- **"`None` means use config"** — the most universal convention in the codebase. Domain identifiers
+  (`chip`, `fiber`, `order`) are positional; every tunable is a keyword defaulting to `None` and
+  resolved at the top of the body (`if chips is None: chips = self.chips`).
+- **Canonical `perform()` signature**: `perform(self, chips=None, fibers=None, *, <kwargs>)`.
+  `chips`, `fibers` are the only positionals (omit either if unused; a module whose primary selector
+  is something else keeps it in the same slot). Everything else is keyword-only after a bare `*`, in
+  two groups: **configurable** params (`=None`, resolving to `self.<attr>`) first, then **semi-hidden**
+  knobs with a real literal default (e.g. `min_npts=9`) that are absent from `_DEFAULTS`/config. The
+  tier must be legible from the signature — `=None` ⇒ configurable, literal ⇒ semi-hidden — so a
+  semi-hidden sequence default is an immutable tuple (`clip_edge_pixels=(500, 500)`), never a
+  `None`-sentinel + in-body list. `make_master_*` follows the same shape with `l0_file_list` as the
+  positional (§B.2).
+- **This ordering applies to every method**, not just entry points; the `*` itself is reserved for
+  the public entry points (`perform`/`make_master_*`) — private methods keep the ordering without a `*`.
+- **String-enum mode params** (`method`, `cal_type`, …) validate against an explicit allowed set,
+  raising `ValueError` that names the options.
+- **Return patterns**: a transform's `perform()` returns the next-level object after
+  `receipt_add_entry("<module>", "", "PASS")` (the middle arg is the rvdata `ARGS` string, `""` when
+  N/A); in-place step methods return `None` and document *"Modifies … in-place"*; helpers return a
+  single value or a fixed tuple.
+- **Never mutate inputs** in utils/numerical code — `.copy()` (or `np.asarray(x).copy()`) first.
 
 #### Type hints
 
-- **Adopted stance: docstring types only — no PEP 484 annotations.** Document parameter
-  and return types in NumPy-style docstrings (`name : str or pathlib.Path`), not in
-  signatures. Do not add inline type hints to new code; the codebase carries none.
-- **`mypy` is not used.** It still appears as a dev dependency (`pyproject.toml`,
-  `environment.yml`), but it is not run or enforced and there are no annotations for it
-  to check. Treat those entries as vestigial, not a signal to start annotating.
+- **Docstring types only — no PEP 484 annotations**; the codebase carries none, so don't start.
+  `mypy` is a vestigial dev dependency, not run or enforced.
 
 ### C.4 NumPy & numerical idioms
 
-- **Vectorize**; use explicit broadcasting (`[:, None]`, `[None, :]`) with named
-  temporaries. Loops only for inherently sequential work.
-- **Be NaN-aware by default**: `np.nanmedian`, `np.nanstd`, `np.nanmean`; fill missing
-  data with `np.full(..., np.nan, dtype=np.float32)`.
-- **Dtype precision is a contract — guard both directions.** Never upscale
-  `float32→float64` (memory/throughput regression) nor downscale `float64→float32`
-  (precision loss → wrong RVs). The policy — single source of truth, also encoded for
-  tests in `tests/regression/_dtype_policy.py`:
+- **Vectorize**; use explicit broadcasting (`[:, None]`, `[None, :]`) with named temporaries. Loops
+  only for inherently sequential work.
+- **Be NaN-aware by default**: `np.nanmedian`, `np.nanstd`, `np.nanmean`; fill missing data with
+  `np.full(..., np.nan, dtype=np.float32)`.
+- **Dtype precision is a contract — guard both directions.** Never upscale `float32→float64`
+  (memory/throughput regression) nor downscale `float64→float32` (precision loss → wrong RVs). The
+  policy — single source of truth, also encoded for tests in `tests/regression/_dtype_policy.py`:
   - **float32** — L1 `*_CCD`/`*_VAR`, master `*_IMG`/`*_SNR`, L2 `*_FLUX`/`*_VAR`/`*_BLAZE`.
-  - **float64** — every `*_WAVE`, `BJD_TDB`, `BARYCORR_KMS`/`_Z`, CCF cubes, and the L4
-    RV-table floats (`RV`/`RV_ERR`/`BERV`/`WAVE_START`/`WAVE_END`). `*_WAVE`, `BJD_TDB`,
-    `WAVE_START`/`WAVE_END` are **EPRV-mandated 64-bit** (EPRV §2/§3, *born-64 at every
-    state* — never rely on RVData's upcast); the rest is KPF precision policy.
-  - **bool** in memory / **uint8** (8-bit) on disk — quality masks (`*_MASK`).
+  - **float64** — every `*_WAVE`, `BJD_TDB`, `BARYCORR_KMS`/`_Z`, CCF cubes, and the L4 RV-table
+    floats. `*_WAVE`, `BJD_TDB`, `WAVE_START`/`WAVE_END` are **EPRV-mandated 64-bit** (born-64 at
+    every state — never rely on RVData's upcast); the rest is KPF precision policy.
+  - **bool** in memory / **uint8** on disk — quality masks (`*_MASK`).
   - L0 amps stay native-int or float32 — **never float64**.
-  Be explicit at allocation (`np.zeros(..., dtype=...)`, `np.asarray(..., dtype=...)`),
-  and cast kernels/weights to the input `dtype` so scipy doesn't promote float32→float64.
-  A **deliberate** precision change that produces a higher-precision *result* (a float64
-  CCF accumulated from float32 flux) is fine — the result's dtype governs.
-- **Prefer robust statistics**: median + MAD (`astropy.stats.mad_std(..., ignore_nan=True)`)
-  over mean/std for outlier work; guard divisions with a small `eps` (`1e-12`) or
-  `np.maximum(N, 1)`.
-- **Pre-zero then fill valid pixels** rather than divide-then-clean; use the `where=`
-  kwarg of `np.sum` et al. for masked reductions.
-- **Views vs copies are deliberate**: slicing yields views on purpose (consistent with
-  the data-model "view not copy" philosophy); `.copy()` when you must mutate.
-- **Row/col nomenclature is numpy, not KPF.** All image/spectrum arrays use the numpy axis
-  convention throughout: **axis 0** (`row`/`nrow`) = **cross-dispersion** (across orders, flux
-  varies rapidly); **axis 1** (`col`/`ncol`) = **dispersion** (along an order, flux varies
-  slowly). This is the *transpose* of the KPF/observatory physical convention (where a "row"
-  runs along dispersion), so a reader expecting KPF physical directions will misread the code's
-  `row`/`col` — but the code is uniform and self-consistent.
-  `# Axis convention: axis 0 = cross-dispersion (KPF col); axis 1 = dispersion (KPF row).`
+  Be explicit at allocation (`np.zeros(..., dtype=...)`) and cast kernels/weights to the input dtype
+  so scipy doesn't promote. A deliberate change that yields a higher-precision *result* (a float64
+  CCF from float32 flux) is fine — the result's dtype governs.
+- **Prefer robust statistics**: median + MAD (`astropy.stats.mad_std(..., ignore_nan=True)`) over
+  mean/std for outlier work; guard divisions with a small `eps` (`1e-12`) or `np.maximum(N, 1)`.
+- **Pre-zero then fill valid pixels** rather than divide-then-clean; use the `where=` kwarg of
+  `np.sum` et al. for masked reductions.
+- **Views vs copies are deliberate**: slicing yields views on purpose; `.copy()` when you must mutate.
+- **Row/col nomenclature is numpy, not KPF.** All image/spectrum arrays use **axis 0** (`row`/`nrow`)
+  = **cross-dispersion** and **axis 1** (`col`/`ncol`) = **dispersion** — the *transpose* of the
+  KPF/observatory physical convention, so a reader expecting KPF physical directions will misread
+  `row`/`col`. The code is uniform and self-consistent; annotate the axis convention where it matters.
 
 ### C.5 Shared utilities & helpers
 
-- **Import shared helpers, don't duplicate them.** Detector-geometry helpers
-  (`count_amplifiers`, `orient_channels`) and the public `RN_KEYS` read-noise table are
-  owned by `ImageAssembly`; other layers import them. Reusable stats/validation live in
-  `kpfpipe/utils/` and are imported, never re-implemented (the project's **utils-first** rule).
-- **Delegate shared numerics to `kpfpipe/utils/`** (`flag_outliers`, `optimize_lsq`,
-  `interpolate_bad_pixels`, `compute_redshift`, `strictly_increasing`). `scipy` is the
-  numerical backend (`least_squares` with an analytic Jacobian, `ndimage`,
-  `interpolate`); log-space parameterization for positive-definite fit params.
-- **A util should earn its place with a consumer — with two documented exceptions.** Default
-  to YAGNI: don't add a `utils/` helper before something calls it. Two categories may be kept
-  without a production call site, and **each such function must say so in its docstring** (a
-  short sentence naming why it's retained) so it reads as deliberate, not dead code:
-  - **Symmetric-completeness helpers** — the unused half of an inverse pair or the missing
-    member of a validator set, kept so the API surface is whole. Example: `hst_to_utc`
-    (inverse of the used `utc_to_hst`).
-  - **Staged-ahead helpers** — a self-contained routine written for imminent work and already
-    covered by tests, ahead of its first pipeline call site. Example: `air_to_vac` (retained
-    for the forthcoming vacuum-wavelength wiring, already a wavelength-cal test oracle).
-
-  Both are exempt from "delete if unused"; anything else unused is dead code and should go.
-  The docstring note is the machine-invisible signal a linter can't infer — without it, a
-  future reader (or a dead-code sweep) can't tell an intentional keep from an oversight.
-- **Utility handlers in `utils/` are a lighter class variant.** A discovery/IO handler
-  (e.g. `io.FileHandler`) has no data-model object and often no per-call tunables: it
-  takes the already-extracted **`[DATA_DIRS]` dict** (required; the caller does the
-  `config.get_params(["DATA_DIRS"])` — the handler deliberately does not import or
-  accept `ConfigHandler`), stores the roots it needs as private attributes, and
-  **omits the `_DEFAULTS` setattr loop** when there is nothing tunable to surface
-  (every clustering knob stays a per-call method argument). Such a handler may also
-  carry loaded working state so callers never thread an intermediate product:
-  `FileHandler.build_mini_database` caches the night's DataFrame on `self._mini_db`,
-  which `build_calibration_stacks` reads by default (an explicit `mini_db=` arg overrides
-  it, per the "`None` means use `self`" rule), so the recipe passes a datecode once
-  and the mini database is never surfaced. Its `cache` flag adds an on-disk tier
-  keyed by the same `datecode`, whose read and write sides are selected independently by a
-  mode string (`False` default / `"r"` / `"w"` / `"rw"`/`"wr"`, order-insensitive): read loads
-  `{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv` when present (skipping the header
-  scan), write writes it (atomically, temp file + `os.replace`) after a scan, and `"rw"` is
-  the read/write-through cache. Cache **writing is owned by the scripts/orchestrator layer**:
-  the batch orchestrators warm each night once up front (the `_scan.py` pre-scan,
-  `cache="rw"`) and `timeseries.py` discovery writes with `"rw"`, while the readers — the
-  reduce leaf (masters recipe) and `select_master_cals.py` — pass `"r"`. Recipes/modules
-  read the cache but never write it.
+- **Utils-first: import shared helpers, don't duplicate.** Reusable stats/validation/geometry live in
+  `kpfpipe/utils/` (detector geometry — `count_amplifiers`, `orient_channels`, `RN_KEYS` — on
+  `ImageAssembly`) and are imported, never re-implemented. `scipy` is the numerical backend; shared
+  numerics (`flag_outliers`, `optimize_lsq`, `interpolate_bad_pixels`, `compute_redshift`) live in
+  utils.
+- **A util earns its place with a caller (YAGNI).** Two kinds may be kept without a call site, **each
+  saying so in its docstring**: the symmetric-completeness half of an inverse/validator pair
+  (`hst_to_utc`), and a staged-ahead helper already covered by tests (`air_to_vac`). Anything else
+  unused is dead code.
+- **A `utils/` IO/discovery handler is a lighter class variant** (e.g. `io.FileHandler`): it takes the
+  already-extracted `[DATA_DIRS]` dict (not a `ConfigHandler`) and omits the `_DEFAULTS` loop when
+  nothing is tunable, keeping per-call knobs as method arguments.
 
 ### C.6 Imports
 
-- **Three groups, blank-line separated, in PEP 8 order**: (1) stdlib,
-  (2) third-party, (3) first-party `kpfpipe.*`. Alphabetical within each group. Enforced and
-  auto-sorted by Ruff's import rules (`I`; `known-first-party = ["kpfpipe"]`).
-- **Absolute imports only.** Never relative (`from .base import ...` is not used —
-  write `from kpfpipe.modules.masters.base import BaseMasterModule`).
-- **Standard aliases**: `import numpy as np`, `import pandas as pd`,
-  `import astropy.units as u`, `import matplotlib.pyplot as plt`.
-- **Deferred (in-function) imports are acceptable and used deliberately** in tests and
-  occasionally to break import-cost/cycles — when you do it, add a one-line comment
-  saying why.
+- **Absolute imports only** — never relative (`from kpfpipe.modules.masters.base import …`, not
+  `from .base import …`). Grouping and sorting are ruff-enforced (`I`); standard aliases are `np`,
+  `pd`, `u` (astropy.units), `plt`.
+- **Deferred (in-function) imports** are acceptable to break import cost/cycles — add a one-line
+  comment saying why.
 
 ### C.7 Formatting
 
-- **Prefer Ruff's normalization for stylistic nits.** When the formatter has an opinion on a
-  purely stylistic point (paren placement, line wrapping, quote style, blank lines), follow
-  what `ruff format` produces rather than hand-styling against it — fighting the formatter
-  just churns. Deviate only with a strong, documented reason. (Example of such a reason:
-  Ruff's `target-version` is pinned to `py313`, one below the 3.14.3 runtime, *so that* the
-  formatter keeps the parens on a multi-type `except` instead of emitting PEP 758's bare form
-  — which Pylance/Pyright can't parse. The pin makes the formatter agree with the type
-  checker; see §B.6.)
-- **`ruff` is the unified formatter + linter** (it replaced black/isort/flake8). The
-  formatter is black-compatible: **88-char target line length**, double-quote normalization.
-  Config lives in `pyproject.toml` under `[tool.ruff]`; `ruff==0.15.17` and
-  `pre-commit==4.6.0` are pinned dev deps. Enforced locally via a pre-commit hook — run
-  `pre-commit install` once after setting up the env.
-- **Lint ruleset** (`[tool.ruff.lint] select`): `E`/`W` (pycodestyle), `F` (pyflakes),
-  `I` (import sorting), `B` (flake8-bugbear), `UP` (pyupgrade), `G`
-  (flake8-logging-format — lazy `%`-formatting in log calls), `LOG` (flake8-logging —
-  named loggers only). Line length (`E501`) is
-  enforced at 88. `__init__.py` is exempt from `F401` (re-exports). Ruff's scope is
-  `kpfpipe/`, `tests/`, `recipes/`, `scripts/`, and `tools/`; only `legacy/` and
-  `gjgilbert_notebooks/` are excluded.
-- **Quote style → double quotes** (ruff/black default). The codebase follows the formatter's
-  rule (prefer `"`, but keep `'` where switching would add escapes — e.g. `'say "hi"'` stays
-  single). Triple-quoted strings use `"""`; f-strings, raw, and byte strings follow the same
-  rule. Write new code with double quotes.
-- **f-strings are the only interpolation style.** No `%` or `.format()` (except inside
-  `datetime.strftime` codes, and deliberate numeric formatting like `format(x, "g")`).
-  Use `{x!r}` for repr, `{x:05d}`/`{hh:02d}` for zero-padding.
-- **Let the formatter own alignment** — don't hand-align assignments or dict values with
-  extra spaces; `ruff format` will collapse them.
-- 4-space indent; two blank lines between top-level defs, one between methods.
+- **`ruff format` and `ruff check` own formatting and linting** (black-compatible: 88 cols, double
+  quotes), configured in `pyproject.toml` and enforced by the pre-commit hook. Follow the formatter
+  rather than hand-styling against it.
+- **`target-version` is pinned `py313`** (one below the 3.14 runtime) on purpose: at `py314`,
+  `ruff format` strips the parens off a multi-type `except`, emitting PEP 758's bare form, which
+  Pylance/Pyright can't parse. The pin keeps `except (A, B):` (§B.6).
+- **f-strings are the only interpolation style** — no `%` or `.format()`, except `strftime` codes,
+  deliberate numeric formatting (`format(x, "g")`), and the lazy `%` in log calls (§B.6).
 
 ### C.8 Tests
 
 #### Regression
 
-- **pytest, class-based.** Group tests in `Test<Subject>` classes; **no bare module-level
-  `def test_` functions**. Methods are `test_<behavior>` in `snake_case`; error-path tests
-  suffix `_raises`/`_raises_<error>`. Test files are `test_<module>.py` mirroring the
-  source; per-level naming follows `data_models/` (`test_quicklook_l0.py`).
-- **Masters tests split by responsibility, not by module.** `test_master_base.py` unit-tests the
-  shared stacking engine (`BaseMasterModule`, which is abstract) through the simplest concrete
-  vehicle per path — `Bias` for the pure L1 output/dtype/save path, `Dark` for the
-  calibration-orchestration path — while `test_master_bias.py`/`test_master_dark.py` are symmetric
-  mirrors covering only each concrete module's own behavior (BUNIT, receipt name, `info()` text,
-  calibration signature, a real-data regression). `test_master_wls.py` stands alone (WLS builds an
-  ML2, not via the L1 engine); `test_masters_recipe.py` covers the `kpf_drp_masters` recipe;
-  `flat` has no test file while stubbed. **A test belongs in `test_master_base.py` iff it exercises
-  a `base.py` method vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.**
-- **Section the file with the same 66-dash banner comments** used in source modules.
-  Open with a module docstring stating scope and data requirements.
-- **Fixtures** (`@pytest.fixture`): named for the object produced (`synthetic_l0_file`,
-  `l2_from_flat`). Fixtures used by **more than one file live in `tests/conftest.py`**
-  (e.g. `synthetic_l0_file`/`synthetic_l1_file` and the seeded `image_hdu` builder); keep
-  single-consumer fixtures local. Use `scope="class"` for expensive real-data pipelines
-  (with `tmp_path_factory`, since `tmp_path` is function-scoped). Returning
-  `(result, helper_obj)` tuples is common.
-- **Shared non-fixture helpers** go in an underscore-prefixed module that pytest does not
-  collect (`tests/regression/_masters.py`), imported relatively (`from ._masters import ...`) — do not
-  duplicate a builder across files or hang it off `conftest.py` (which is for fixtures/hooks).
-- **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
-  referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
-  module constants. Two explicit tiers, documented in the module docstring: **synthetic
-  in-memory FITS** (astropy) for unit tests, **real `testdata/` FITS** for
-  regression/integration tests in their own `Test...RealData`/`Test...Regression` classes.
-  `tests/testdata/` is **intentionally gitignored** (large FITS); the few developers copy
-  the needed files locally and coordinate out-of-band. **Never commit anything under it,
-  and don't hunt for or build a fixture-generation script — there isn't one, by design.**
-  If an integration test needs a missing/stale testdata file, regenerate it **locally** and
-  note in the response that the shared copy needs the same update.
-- **Markers** (registered in `conftest.py`): mark integration / heavy-compute classes
-  `@pytest.mark.slow`, and truth-frame-gated classes `@pytest.mark.requires_testdata`
-  (auto-skipped when `tests/testdata/` is absent). The fast pre-commit subset is
-  `-m "not slow"`; *when* to run the subset vs the full suite is run-policy, out of scope
-  for this style guide.
-- **Float tolerances** (use the prevailing pattern for the situation):
-  - Analytic recovery → `np.testing.assert_allclose(rtol=1e-5, atol=1e-5)`.
-  - FITS round-trips → `assert_array_almost_equal(decimal=4)`.
-  - Scalars → `pytest.approx` (bare, or `rel=1e-4`/`abs=...`).
-  - Real-data sanity → bare range comparisons (`1.0 < rn < 20.0`).
-- **Assertions**: bare `assert` for scalars/shapes/membership/exceptions; `np.testing.*`
-  for arrays. Exceptions via `pytest.raises(Error, match="<regex>")` (the `match=` is used
-  consistently); warnings via `pytest.warns(...)`; "no warning" via
-  `warnings.catch_warnings()` + `simplefilter("error", UserWarning)`. Add an f-string
-  assertion message where a failure needs context (loops, subprocess checks).
-- **Isolation**: `monkeypatch` is the dominant tool (stub expensive/data-dependent steps);
-  `unittest.mock` (`MagicMock`/`patch`) where call objects are needed; hand-rolled stub
-  classes for lightweight fakes; `tmp_path`/`tmp_path_factory` for filesystem isolation.
-- **Parallel-safe**: the suite runs under `pytest-xdist` (`-n auto --dist loadscope`), so
-  every test must be parallel-safe — write outputs only under `tmp_path`, keep no shared
-  mutable module/global state, and never depend on a fixed on-disk path or test order.
-- **Git-receipt / cwd constraint**: in-process tests don't `cd` — **never `chdir` outside
-  the repo**, which breaks the receipt's git-SHA provenance stamping. CLI tests run a
-  subprocess with `cwd=_REPO_ROOT` and `PYTHONPATH=_REPO_ROOT`, where
-  `_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`. This is the
-  canonical accommodation.
-- **Determinism**: seed randomness with `np.random.default_rng(<int>)` (commonly `42`) —
-  the modern Generator API. Never `np.random.seed()`.
-- **Constants come from `DETECTOR`** (`NORDER_GREEN = DETECTOR["norder"]["GREEN"]`) — never
-  hardcode order/column counts.
-- **Dtype provenance**: each module test file has a `TestDtypeProvenance` class asserting
-  the §C.4 float32/float64/uint8/bool policy at the extension boundaries, the internal
-  math-bearing functions (typed-input → output dtype), and across a FITS round-trip, using
-  the shared rubric `tests/regression/_dtype_policy.py`. Assert *precision*
-  (kind + itemsize via `assert_dtype`), **not** the exact dtype object — FITS round-trips
-  to big-endian, so `>f4` is still float32.
+- **pytest, class-based** — `Test<Subject>` classes, no bare module-level `test_` functions; methods
+  `test_<behavior>`, error paths suffixed `_raises`. Files `test_<module>.py` mirror the source,
+  sectioned with the same 66-dash banners and opened with a scope-stating module docstring.
+- **Masters test placement**: a test belongs in `test_master_base.py` iff it exercises a `base.py`
+  method vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py` (the file
+  layout is in the architecture guide).
+- **Fixtures** are named for what they produce; multi-file fixtures live in `tests/conftest.py` and
+  multi-file plain helpers in a non-collected `_underscore.py` module — don't duplicate builders. Use
+  `scope="class"` + `tmp_path_factory` for expensive real-data pipelines.
+- **Test data**: real FITS under the **gitignored** `tests/testdata/<LEVEL>/<date>/`, via
+  `Path(__file__).parent / "testdata" / …`. Two tiers (synthetic in-memory vs. real `testdata/`)
+  documented in the module docstring. Never commit testdata and don't build a fixture-generation
+  script (there is none, by design); regenerate a missing frame locally and flag it in the response.
+- **Markers**: `@pytest.mark.slow` (integration/heavy) and `@pytest.mark.requires_testdata`
+  (auto-skipped when absent).
+- **Tolerances**: analytic recovery `assert_allclose(rtol=1e-5, atol=1e-5)`; FITS round-trips
+  `assert_array_almost_equal(decimal=4)`; scalars `pytest.approx`; real-data sanity bare ranges.
+- **Assertions**: bare `assert` for scalars/shapes; `np.testing.*` for arrays; exceptions via
+  `pytest.raises(Error, match=…)`, warnings via `pytest.warns`.
+- **Parallel-safe** (`pytest-xdist`): write outputs only under `tmp_path`, keep no shared mutable
+  state, and never depend on a fixed on-disk path or test order.
+- **Git-receipt constraint**: never `chdir` outside the repo (it breaks the receipt's git-SHA
+  stamping); CLI subprocess tests run with `cwd`/`PYTHONPATH = _REPO_ROOT`.
+- **Determinism**: `np.random.default_rng(<int>)`, never `np.random.seed()`. Constants come from
+  `DETECTOR`, never hardcoded.
+- **Dtype provenance**: a `TestDtypeProvenance` class per module asserts the §C.4 policy at the
+  extension boundaries, internal math, and across a FITS round-trip (via `_dtype_policy.py`); assert
+  *precision* (kind + itemsize), **not** the exact dtype object.
 
 #### Profiling
 
-The profiling suite follows a **"tallest tentpole"** philosophy: only the most critical
-bottlenecks matter, and optimization must never compromise scientific accuracy or slow forward
-development (charter §6/§9/§10) — a "no action needed" result is a perfectly good outcome.
+The suite is **"tallest tentpole"** — only the biggest bottlenecks matter, optimization must never
+cost scientific accuracy, and "no action needed" is a fine result.
 
-- **Harnesses are not pytest tests.** `tests/profiling/profile_<module>.py`, `profile_*_recipe.py`,
-  and the shared `_profiling.py`: the `profile_` prefix keeps them out of collection so `make test`
-  stays fast. They **mirror the test files 1-to-1** (`test_<x>.py` ↔ `profile_<x>.py`), are
-  standalone scripts run via `make profile*`, must run with **no interactive input**, and must
-  contain **no references to Claude**. New profiling logic belongs in `_profiling.py`, not per
-  file; each `profile_<module>.py` is a thin `setup`/`call` wrapper over `run_profile`.
-- **Attribute to KPF methods.** Pass 1 runs the target under `cProfile`, then charges each
-  library/builtin leaf's own time *up the caller graph to the nearest enclosing KPF method*
-  (`_kpf_attributed`), so a bottleneck like `numpy.partition` shows up against the KPF method that
-  drives it (e.g. `utils/stats.py:flag_outliers`), not as an un-actionable library leaf. The
-  per-module report ranks KPF methods by this **attributed time** (those over
-  `TOP_FUNCTION_MIN_FRACTION`, 2%); pass 2 drills into each hotspot with `line_profiler`.
-- **Unified hotspot rule.** A KPF method is a **hotspot** when its attributed time is both
-  `HOTSPOT_FRACTION` (20%) of the budget **and** `HOTSPOT_MIN_SECONDS` (1 s) — a dominant share
-  *and* a non-trivial absolute cost. The same set drives the drill-down and the **Recommended
-  actions**; no hotspot ⇒ no drill-down and "no action needed". Tune these constants in
-  `_profiling.py`. (The two recipe reports partition by stage-level wall-clock instead;
-  attribution applies to the per-module reports.)
-- **Reports.** Each run prints a summary to stdout *and* writes a self-contained Markdown report
-  to the gitignored `tests/profiling/reports/`. **Regenerate the reports when the suite or the
-  pipeline's performance profile changes.**
+- **Harnesses are not pytest tests** (the `profile_` prefix keeps them uncollected). They mirror the
+  test files 1-to-1, run standalone via `make profile*`, take no interactive input, and reference no
+  Claude; shared logic lives in `_profiling.py`.
+- **Attribute library time to the enclosing KPF method** (`_kpf_attributed`) so a `numpy.partition`
+  cost shows against the method that drives it; rank by attributed time and drill into hotspots with
+  `line_profiler`.
+- **A hotspot** is attributed time both ≥ `HOTSPOT_FRACTION` (20%) **and** ≥ `HOTSPOT_MIN_SECONDS`
+  (1 s); no hotspot ⇒ no drill-down. Tune the constants in `_profiling.py`.
+- **Reports** print to stdout and write to the gitignored `tests/profiling/reports/`; regenerate them
+  when the pipeline's performance profile changes.
 
 ---
 
@@ -964,103 +569,50 @@ development (charter §6/§9/§10) — a "no action needed" result is a perfectl
 
 ### D.1 Docstrings
 
-- **NumPy/numpydoc is the docstring standard.** The summary **begins on the same line as
-  the opening `"""`** (never on its own line); the `Parameters`/`Returns`/`Raises`/`Notes`
-  sections follow after a blank line, in the `name : type` form. A short docstring is a
-  single line, `"""Summary."""`. The codebase is uniformly numpydoc — no Google `Args:`
-  style remains.
-  ```python
-  def compute_doppler_factor(v):
-      """Relativistic Doppler factor ``f = lambda_obs / lambda_rest`` …
-
-      Parameters
-      ----------
-      v : astropy.units.Quantity
-          Radial velocity (any velocity unit); positive = receding.
-
-      Returns
-      -------
-      float or ndarray
-          Dimensionless Doppler factor.
-      """
-  ```
-- **Wrap code identifiers in double backticks** (``` ``set_keyword`` ```, ``` ``obs_id`` ```):
-  in RST/Sphinx double backticks render as inline-code literals, whereas single backticks are
-  the default interpreted-text role and render as *italic*, not code.
-- **Module docstrings on every module.** One-liner for thin files
-  (`"""KPF <Stage> module."""`); a rich multi-paragraph block for science modules,
-  listing output HDUs with shapes/units and ending with a `Notes` section citing papers
-  (`Author (Year) -- reason`). No author tags, dates, or `__author__`.
-- **Class docstrings document the `__init__` args at the class level** (in a `Parameters`
-  section) — *not* on `__init__` itself. The `Attributes` section is **not** used; instead
-  document instance attributes with the trailing `# populated by …` comment on the
-  assignment in `__init__` (see §C.2).
-- **Document public methods and most private helpers.** Trivial math primitives may skip
-  docstrings; short helpers may use a one-line summary, but anything with more than one
-  non-obvious argument should get full `Parameters`/`Returns` sections. On public methods,
-  document `Returns` as a section (not woven into the summary prose), and give **every
-  exception a caller can trigger** its own `Raises` entry -- do not omit one, understate its
-  cause, or bury it in `Notes`.
-- **`Examples` sections are not used.** Worked examples, where helpful, go in the prose of
-  the summary (and double as test oracles for pure utils).
-- **Types are documented in the docstring, not the signature** (see §C.3). Array
-  shapes/dtypes/units are stated in prose
-  (`"(EPRV-standard ImageHDUs, shape (NORDER,))"`, `"WAVE [Å, vacuum]"`).
-- **State shared docstring content once, the same way everywhere.** A few descriptions recur
-  across many methods; use the canonical wording rather than re-deriving it per site:
-  - `chip : str` -- CCD identifier, e.g. `'GREEN'` or `'RED'`; `fiber : str` -- fiber
-    identifier, e.g. `'SCI1'`/…/`'CAL'`/`'SKY'`.
-  - **Calibration-source override forms** (`perform`/`make_master_*` args such as `bias`,
-    `master_wls`): `True` → resolve the path from the header; a `str` → load that path; a
-    `KPFMasterL{N}` → use in-memory. Define the meaning once (`ImageProcessing.perform`) and
-    reference it ("same forms as ``ImageProcessing.perform``") instead of re-enumerating.
-  - **Gaussian `optimize_lsq` parameters** are `theta = [b, a, mu, sigma]` (baseline,
-    amplitude, center, positive width).
-  - **Materializing memmapped FITS HDUs**: copy with `np.array(hdu.data)` (not `np.asarray`)
-    before the source file closes (the idiom is stated in §B.1). Comment the reason **once**
-    at a canonical site; other sites just follow the idiom.
-  - **`to_fits` single-filepath shim**: KPF keeps one positional filepath; rvdata `>=0.4.0`
-    renamed the parameter to `out_filename`, so the KPF override forwards it (§B.1). Explain
-    once, not per level.
+- **numpydoc**, with the summary on the same line as the opening `"""` (never its own line); the
+  `Parameters`/`Returns`/`Raises`/`Notes` sections follow a blank line, in `name : type` form; a short
+  docstring is one line. Wrap code identifiers in **double** backticks (single backticks render as
+  italic in RST).
+- **Module docstring on every module** — a one-liner for thin files, a multi-paragraph block for
+  science modules listing output HDUs (shapes/units) and ending with a `Notes` paper citation
+  (`Author (Year) -- reason`). No author tags or dates.
+- **Class docstrings document the `__init__` args at the class level** (`Parameters`), not on
+  `__init__`; the `Attributes` section is not used — document instance attributes with the
+  `# populated by …` comment in `__init__` (§C.2).
+- **Document public methods and most private helpers**; give **every exception a caller can trigger**
+  its own `Raises` entry (don't omit, understate, or bury it in `Notes`), and document `Returns` as a
+  section, not woven into prose. Trivial math primitives may skip docstrings; `Examples` sections are
+  not used.
+- **Types go in the docstring, not the signature** (§C.3); array shapes/dtypes/units in prose
+  (`"WAVE [Å, vacuum]"`).
+- **State recurring docstring content once, identically** — the `chip`/`fiber` glossaries; the
+  calibration-source override forms (defined once at `ImageProcessing.perform`, referenced elsewhere);
+  the `optimize_lsq` `theta = [b, a, mu, sigma]` convention; and the memmap / `to_fits`-shim idioms
+  (§B.1).
 
 ### D.2 Comments
 
-- **Inline comments explain *why*, not *what*** — full sentences, capitalized. Annotate
-  magic numbers with units/meaning inline (`* 1.48424  # e-/ADU: exposure meter gain`). If a
-  comment is needed to explain *what* a variable holds, rename the variable instead (§C.1, code
-  is self-documenting).
-- **Units use bracket notation** (`[km/s]`, `[Å]`, `[Å, vacuum]`, `[e-/ADU]`) in
-  docstrings/comments — not encoded in variable names (except unit-suffixed names like
-  `..._KMS`). State the **air/vacuum convention** wherever wavelengths appear;
-  use astropy `Quantity` for in-code units.
-- **Use ASCII `--`, not the em-dash `—`, inside docstrings and inline comments** (the Python
-  source is kept ASCII-only; `--` renders as an en-dash in Sphinx). This Markdown guide may
-  use `—` freely -- the rule is about `.py` docstrings/comments.
-- **Code does not cite governing docs.** Docstrings and comments must not reference this style
-  guide or any other governing document by name or section number (no "see style guide §…",
-  "charter §…", "EPRV_DATA_STANDARD.md §…"). State the *reason* a rule exists inline where it
-  aids the reader, but keep the citation out of the source — the governing docs are the home for
-  cross-references, not the code. Descriptive terms that happen to name a standard (e.g.
-  "EPRV-standard ImageHDUs", "vacuum wavelengths per the EPRV frame") are fine; an explicit
-  doc/section *citation* is not.
-- **`TODO` is the only task marker** (`# TODO: <imperative or open question>`); no
-  `FIXME`/`XXX`/`HACK`/`NOTE:`. No issue/ticket linkage is the current norm.
-- **Provenance**: legacy v2.12 compatibility choices are generally **not** annotated in
-  code — the `quicklook` module is the one exception (it documents the v2.12 plots it
-  ports). Generating scripts may be cross-referenced where it aids reproducibility
-  (`"see scripts/build_rough_wls_from_legacy_wls.py"`).
+- **Comments explain *why*, not *what*** — full sentences, capitalized; annotate magic numbers with
+  units/meaning (`* 1.48424  # e-/ADU: exposure-meter gain`). If a comment explains *what* a variable
+  holds, rename the variable (§C.1).
+- **Units in bracket notation** (`[km/s]`, `[Å, vacuum]`, `[e-/ADU]`); state the air/vacuum convention
+  wherever wavelengths appear; use astropy `Quantity` for in-code units.
+- **Use ASCII `--`, not the em-dash `—`**, in `.py` docstrings/comments (the source is kept ASCII).
+- **Code does not cite governing docs** — no "see style guide §…", "charter §…", "EPRV_DATA_STANDARD.md
+  §…" in docstrings/comments. State the *reason* a rule exists inline where it helps, but keep the
+  citation out of the source; a descriptive term that names a standard ("EPRV-standard ImageHDUs") is
+  fine.
+- **`TODO` is the only task marker** (`# TODO: …`); no `FIXME`/`XXX`/`HACK`. Legacy-compat choices are
+  not annotated in code except in `quicklook`, which documents the v2.12 plots it ports.
 
 ---
 
 ## E. Open Inconsistencies
 
-Genuine inconsistencies in the codebase with no clear winner yet. Until decided, **match
-the dominant variant of the file/area you're editing**, and don't churn unrelated files to
-"fix" style.
+Genuine inconsistencies in the codebase with no clear winner yet. Until decided, **match the dominant
+variant of the file/area you're editing**, and don't churn unrelated files to "fix" style.
 
-1. **Quicklook** — no shared base class + tuple-based registration, unlike Diag/QC; DPI
-   (150 vs 600) and axis-fontsize (14 vs 18) drift between L0 and L1.
-2. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the
-   `0.2` load-failure threshold is an unnamed magic number.
-3. **Configs** — the `[DATA_DIRS]` + `[TRACES]` blocks are duplicated verbatim across the
-   science and masters configs (no shared-include mechanism).
+1. **Masters** — the config-resolution block is duplicated 5× (could be a base helper); the `0.2`
+   load-failure threshold is an unnamed magic number.
+2. **Configs** — the `[DATA_DIRS]` + `[TRACES]` blocks are duplicated verbatim across the science and
+   masters configs (no shared-include mechanism).
