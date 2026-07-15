@@ -1,4 +1,4 @@
-# KPF-DRP vNext — Architecture
+# KPF-DRP vNext: Pipeline Architecture
 
 This document describes the repo structure and KPF vNext pipeline **architecture**;
 it describes *how the pipeline is structured* — not project intent (the charter) or
@@ -37,13 +37,16 @@ Contents:
   * Profiling
 
 
-**Authority precedence.** This architecture reference sits below the charter and above the
-style guide:
-**1. the WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md)) →
-2. the EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md)) → 3. the project
-charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md)) → 4. this architecture reference →
-5. the style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md)).** When they
-conflict, the higher one wins.
+**Authority precedence.**
+When requirements or design principles conflict, the order of governing document precedence is:
+
+1. WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md))
+2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
+3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
+4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
+5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+
+When any two conflict, the higher one wins.
 
 ---
 
