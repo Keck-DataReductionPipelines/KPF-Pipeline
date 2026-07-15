@@ -32,6 +32,9 @@ Contents:
   * Data directory structure
   * FileHandler class
   * io.py path builders
+* Tests
+  * Regression
+  * Profiling
 
 
 **Authority precedence.** This architecture reference sits below the charter and above the
@@ -389,3 +392,37 @@ no `obs_id`) while `KPFDataModel`'s base version **raises `NotImplementedError`*
 `TestFilenameConsistency` (`tests/regression/test_io.py`) guards the two builders against drift.
 Filename *validation* (`check_filename_convention`) is separate, delegating to rvdata's EPRV check
 for L2/L4.
+
+## Tests
+
+`tests/` splits into `regression/` (the pytest suite) and `profiling/` (performance harnesses),
+with `tests/conftest.py` at the root serving both (its fixtures and the `requires_testdata`
+marker) and the real frames under the gitignored `tests/testdata/`. This section covers how the
+suites are **laid out**; how to *write* a regression test or profiling harness is in the style
+guide §12 (same two subsections), and *when* to run which tier is in CLAUDE.md.
+
+### Regression
+
+`tests/regression/` holds `test_<module>.py` files mirroring the source (per-level names follow
+`data_models/`, e.g. `test_quicklook_l0.py`), plus the non-collected helpers `_masters.py`
+(synthetic fixtures) and `_dtype_policy.py` (the dtype rubric). The `slow` marker carves the
+real-`testdata` integration and heavy-compute tests (full L0→L2, real-frame assembly/overscan,
+master stacking, WLS orientation) off from the fast `-m "not slow"` subset.
+
+The masters tests mirror the masters subpackage by *responsibility*: `test_master_base.py` covers
+the shared stacking engine (`BaseMasterModule`), `test_master_bias.py`/`test_master_dark.py` the
+concrete bias/dark modules, `test_master_wls.py` the WLS path (a separate ML2), and
+`test_masters_recipe.py` the `kpf_drp_masters` recipe; `flat` has no test file while stubbed.
+(Which file a new masters test belongs in is a style-guide §12 rule.)
+
+### Profiling
+
+`tests/profiling/` harnesses mirror the test files 1-to-1 (`profile_<x>.py` ↔ `test_<x>.py`),
+share logic in `_profiling.py`, and write reports to the gitignored `tests/profiling/reports/`.
+Two recipe harnesses (`profile_science_recipe.py`, `profile_masters_recipe.py`) rank functions
+*across* modules to show which stage dominates; per-module `profile_<module>.py` files drill into
+one module. `flat` is skipped while stubbed, and the shared stacking engine (`masters/base.py`)
+has no dedicated harness — its work is attributed to `base.py` methods inside the bias/dark
+harnesses (whereas the *test* suite isolates the engine in `test_master_base.py`, because
+profiling partitions by wall-clock and tests by responsibility). How a harness attributes time
+and flags hotspots is specified in the style guide §12.

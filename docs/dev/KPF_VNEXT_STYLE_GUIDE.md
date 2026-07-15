@@ -767,10 +767,21 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
 
 ## 12. Tests
 
+### Regression
+
 - **pytest, class-based.** Group tests in `Test<Subject>` classes; **no bare module-level
   `def test_` functions**. Methods are `test_<behavior>` in `snake_case`; error-path tests
   suffix `_raises`/`_raises_<error>`. Test files are `test_<module>.py` mirroring the
   source; per-level naming follows `data_models/` (`test_quicklook_l0.py`).
+- **Masters tests split by responsibility, not by module.** `test_master_base.py` unit-tests the
+  shared stacking engine (`BaseMasterModule`, which is abstract) through the simplest concrete
+  vehicle per path — `Bias` for the pure L1 output/dtype/save path, `Dark` for the
+  calibration-orchestration path — while `test_master_bias.py`/`test_master_dark.py` are symmetric
+  mirrors covering only each concrete module's own behavior (BUNIT, receipt name, `info()` text,
+  calibration signature, a real-data regression). `test_master_wls.py` stands alone (WLS builds an
+  ML2, not via the L1 engine); `test_masters_recipe.py` covers the `kpf_drp_masters` recipe;
+  `flat` has no test file while stubbed. **A test belongs in `test_master_base.py` iff it exercises
+  a `base.py` method vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.**
 - **Section the file with the same 66-dash banner comments** used in source modules.
   Open with a module docstring stating scope and data requirements.
 - **Fixtures** (`@pytest.fixture`): named for the object produced (`synthetic_l0_file`,
@@ -782,13 +793,6 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
 - **Shared non-fixture helpers** go in an underscore-prefixed module that pytest does not
   collect (`tests/regression/_masters.py`), imported relatively (`from ._masters import ...`) — do not
   duplicate a builder across files or hang it off `conftest.py` (which is for fixtures/hooks).
-- **Profiling harnesses** (`tests/profiling/profile_<module>.py`, `tests/profiling/profile_*_recipe.py`, and
-  the shared `tests/profiling/_profiling.py`) are *not* pytest tests — the `profile_` prefix keeps them out
-  of collection so `make test` stays fast. They **mirror the test files 1-to-1**
-  (`test_<x>.py` ↔ `profile_<x>.py`). They are standalone scripts run via `make profile*`,
-  must run with **no interactive input**, and must contain **no references to Claude**.
-  New profiling logic belongs in `tests/profiling/_profiling.py`, not duplicated per file; each
-  `profile_<module>.py` is a thin `setup`/`call` wrapper over `run_profile`.
 - **Test data**: real KPF FITS lives under `tests/testdata/<LEVEL>/<date>/`,
   referenced via `Path(__file__).parent / "testdata" / ...` assigned to `UPPER_CASE`
   module constants. Two explicit tiers, documented in the module docstring: **synthetic
@@ -835,6 +839,34 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
   the shared rubric `tests/regression/_dtype_policy.py`. Assert *precision*
   (kind + itemsize via `assert_dtype`), **not** the exact dtype object — FITS round-trips
   to big-endian, so `>f4` is still float32.
+
+### Profiling
+
+The profiling suite follows a **"tallest tentpole"** philosophy: only the most critical
+bottlenecks matter, and optimization must never compromise scientific accuracy or slow forward
+development (charter §6/§9/§10) — a "no action needed" result is a perfectly good outcome.
+
+- **Harnesses are not pytest tests.** `tests/profiling/profile_<module>.py`, `profile_*_recipe.py`,
+  and the shared `_profiling.py`: the `profile_` prefix keeps them out of collection so `make test`
+  stays fast. They **mirror the test files 1-to-1** (`test_<x>.py` ↔ `profile_<x>.py`), are
+  standalone scripts run via `make profile*`, must run with **no interactive input**, and must
+  contain **no references to Claude**. New profiling logic belongs in `_profiling.py`, not per
+  file; each `profile_<module>.py` is a thin `setup`/`call` wrapper over `run_profile`.
+- **Attribute to KPF methods.** Pass 1 runs the target under `cProfile`, then charges each
+  library/builtin leaf's own time *up the caller graph to the nearest enclosing KPF method*
+  (`_kpf_attributed`), so a bottleneck like `numpy.partition` shows up against the KPF method that
+  drives it (e.g. `utils/stats.py:flag_outliers`), not as an un-actionable library leaf. The
+  per-module report ranks KPF methods by this **attributed time** (those over
+  `TOP_FUNCTION_MIN_FRACTION`, 2%); pass 2 drills into each hotspot with `line_profiler`.
+- **Unified hotspot rule.** A KPF method is a **hotspot** when its attributed time is both
+  `HOTSPOT_FRACTION` (20%) of the budget **and** `HOTSPOT_MIN_SECONDS` (1 s) — a dominant share
+  *and* a non-trivial absolute cost. The same set drives the drill-down and the **Recommended
+  actions**; no hotspot ⇒ no drill-down and "no action needed". Tune these constants in
+  `_profiling.py`. (The two recipe reports partition by stage-level wall-clock instead;
+  attribution applies to the per-module reports.)
+- **Reports.** Each run prints a summary to stdout *and* writes a self-contained Markdown report
+  to the gitignored `tests/profiling/reports/`. **Regenerate the reports when the suite or the
+  pipeline's performance profile changes.**
 
 ---
 

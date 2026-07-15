@@ -43,9 +43,7 @@ default surfaced by the environment/tooling — when they disagree, this wins.
 # All test/pipeline commands run in the `kpfpipe` conda env — activate it, or
 # prefix with `conda run -n kpfpipe`. Base-system Python lacks rvdata and fails
 # with ModuleNotFoundError. The `make` targets below already wrap conda run.
-# Run from KPF-Pipeline/ (git receipt system requirement). Tests run in parallel
-# via pytest-xdist; --dist loadscope keeps each class on one worker so
-# class-scoped integration fixtures run once, not once per worker.
+# Run from KPF-Pipeline/ (git receipt system requirement).
 
 # Fast pre-commit subset (everything except @pytest.mark.slow) — the default
 make test-fast   # conda run -n kpfpipe python -m pytest tests/ -m "not slow" -n auto --dist loadscope
@@ -65,134 +63,37 @@ ruff check --fix kpfpipe/ tests/ recipes/ # lint + auto-fix
 # Pre-commit hook (enforces ruff format + lint on commit)
 pre-commit install          # one-time, after creating the env
 pre-commit run --all-files  # run all hooks across the repo
+
+# Profiling harnesses (design: architecture guide → Tests → Profiling)
+make profile   # all harnesses; also profile-science / profile-masters / profile-<module>
 ```
 
 ## Running tests — subset vs full
 
-This is about **which tier of tests to run, not how often to run them**. No git
-hook runs tests — `pre-commit` is ruff-only — so testing is a judgment call, made
-*continuously while working*, not deferred to commit/PR time. Run tests as you
-change code; just match the scope to the change instead of defaulting to the full
-suite "just to be safe".
+Which *tier* to run, not how often: testing is a judgment call made continuously
+while working, not deferred to commit/PR time (no git hook runs tests — `pre-commit`
+is ruff-only). Match the scope to the change instead of defaulting to the full suite:
 
-The suite is split by the `slow` marker: `slow` covers the real-`testdata`
-integration tests and a few heavy-compute synthetic tests; everything else is the
-fast subset. The three tiers, smallest first:
+- **While iterating (most runs):** only the file(s) for the code you touched
+  (`python -m pytest tests/regression/test_<area>.py`).
+- **Before wrapping up / committing:** `make test-fast` (the `-m "not slow"` subset, ~16s).
+- **The full suite (`make test`)** — when the blast radius is wide: opening/updating a
+  PR; a change to a **core/shared** module other tests depend on (the data models,
+  `kpfpipe/__init__.py` constants, base classes, anything the integration tests exercise);
+  or a cross-cutting refactor.
 
-- **Continuously, while iterating (most runs):** run only the file(s)/tests for
-  the code you just touched (`python -m pytest tests/regression/test_<area>.py`). This is the
-  default and should happen many times per task, not once at the end.
-- **Before wrapping up a change / before committing:** `make test-fast` (the
-  `-m "not slow"` subset, ~16s). Confirms the change didn't break unrelated unit
-  coverage. "Before committing" names *when this tier is appropriate*, not the
-  only time tests run.
-- **The FULL suite (`make test`)** — reserved for when the blast radius is wide:
-  - opening or updating a PR;
-  - changing a **core/shared module** other tests depend on — the data models
-    (`kpfpipe/data_models/`), the package-level constants in `kpfpipe/__init__.py`
-    (`DETECTOR`/`DEFAULTS`/`REPO_ROOT`), base classes, or anything the
-    integration tests exercise;
-  - a **major or cross-cutting refactor**.
-
-Reaching for the full suite on a small, localized change is the habit to avoid —
-a targeted run plus the fast subset catches those regressions far cheaper.
-
-The fast subset deliberately skips full L0→L2 recipe integration, real-frame
-assembly/overscan, master stacking on real frames, and WLS spectrum orientation;
-those live only in `slow` tests, which is why the triggers above run the full
-suite. Pre-commit itself runs only ruff (no tests) — running tests is on you.
-
-### Masters test layout
-
-The masters tests are split by *what they exercise*, not just by module.
-`BaseMasterModule` is abstract, so `tests/regression/test_master_base.py` unit-tests the
-**shared engine** — stacking (rate estimator, per-pixel rejection, datacube clipping),
-calibration resolve/apply/load, frame-load guards, array cleaning, and the shared L1 output
-contract (dtype provenance, `save_master`) — driving it through the simplest concrete vehicle
-for each path: `Bias` (no calibrations) for the pure L1 output/dtype/save path, `Dark`
-(bias-subtracted) for the calibration-orchestration path. `test_master_bias.py` and
-`test_master_dark.py` are then **symmetric mirrors** that cover only each concrete module's own
-behavior (Unit / Info / RoundTrip / Signature / Regression: BUNIT `electrons` vs
-`electrons/sec`, receipt name, `info()` text, the calibration signature, and a real-data
-regression). `test_master_wls.py` stands apart — WLS builds an ML2 and does not use the L1
-stacking engine, so it is tested per-WLS-method on its own. `test_masters_recipe.py` covers only
-the `kpf_drp_masters` recipe (its FileHandler/path-builder unit tests live in `test_io.py`).
-Shared synthetic fixtures live in `tests/regression/_masters.py`. `flat` has no test file
-(stubbed, no `make_master_l1` yet). **A test belongs in `test_master_base.py` iff it exercises a
-`base.py` method vehicle-incidentally; module-specific behavior stays in
-`test_master_<type>.py`.**
-
-## Profiling
-
-The profiling suite finds and reports performance bottlenecks. It follows a
-**"tallest tentpole"** philosophy: we only care about the most critical
-bottlenecks, and **optimization must never compromise scientific accuracy or
-slow forward development** (charter §6/§9/§10). A profiling result of "no action
-needed" is a perfectly good outcome.
-
-```bash
-make profile                       # run every harness, regenerate all reports
-make profile-science               # end-to-end science pipeline (L0 -> L4)
-make profile-masters               # end-to-end masters pipeline (bias/dark/WLS)
-make profile-radial_velocity       # a single module (any of PROFILE_MODULES)
-conda run -n kpfpipe python -m tests.profiling.profile_radial_velocity   # equivalent
-```
-
-Layout: the regression tests live in `tests/regression/` (`test_*.py` plus the
-test-only helpers `_masters.py` / `_dtype_policy.py`); the profiling harnesses
-live in `tests/profiling/` (`profile_*.py` plus the shared `_profiling.py` and
-the `reports/` output dir). `tests/conftest.py` stays at the `tests/` root so its
-fixtures and the `requires_testdata` marker apply to both, and the real frames
-stay at `tests/testdata`.
-
-**Design** (parallels the test suite; shared logic in `tests/profiling/_profiling.py`,
-which like `tests/regression/_masters.py` is *not* a `test_*.py` file so pytest never
-collects it):
-
-- **Attribute to KPF methods.** Pass 1 runs the target under `cProfile`, then
-  charges each library/builtin leaf's own time *up the caller graph to the nearest
-  enclosing KPF method* (`_kpf_attributed`). This is the key move: a bottleneck
-  like `numpy.partition` shows up against the KPF method that drives it (e.g.
-  `utils/stats.py:flag_outliers`), not as an un-actionable library leaf. The
-  per-module report ranks KPF methods by this **attributed time** (listing those
-  over `TOP_FUNCTION_MIN_FRACTION`, 2%); pass 2 drills into each hotspot method
-  with `line_profiler` to show *where inside it* the time goes (docstring lines
-  stripped).
-- **Unified hotspot rule.** A KPF method is a **hotspot** when its attributed time
-  is `HOTSPOT_FRACTION` (20%) of the budget **and** `HOTSPOT_MIN_SECONDS` (1 s) — a
-  dominant share *and* a non-trivial absolute cost. The same set drives both the
-  drill-down and the **Recommended actions**. No hotspot ⇒ no drill-down and "no
-  action needed", which is a fine outcome. Tune these constants in
-  `tests/profiling/_profiling.py`. (The two recipe reports use a different, stage-level
-  wall-clock partition — attribution applies to the per-module reports.)
-- **Structure.** The profiling files mirror the test files **1-to-1**
-  (`regression/test_<x>.py` ↔ `profiling/profile_<x>.py`). Two end-to-end recipe harnesses —
-  `profile_science_recipe.py` and `profile_masters_recipe.py` (optimized
-  independently) — rank functions *across* modules to show which stage dominates.
-  Per-module `tests/profiling/profile_<module>.py` files drill into a single module (useful
-  when re-running one module repeatedly during algorithm development). `flat` is
-  skipped while stubbed. The shared stacking engine (`masters/base.py`) has no
-  dedicated *profiling* harness: attribution charges its work to the right
-  `base.py` methods inside `profile_master_bias.py` / `profile_master_dark.py`, so
-  a separate engine profile would be redundant. (The *test* suite does isolate it —
-  see `regression/test_master_base.py` under *Masters test layout* in the *Running
-  tests* section above — because profiling partitions by wall-clock while tests
-  partition by responsibility.)
-- **Data.** Real (gitignored) `tests/testdata` frames at realistic sizes; each
-  harness skips cleanly (exit 0) when the frames are absent, mirroring the
-  `requires_testdata` test pattern.
-- **Reports.** Each run prints a human-readable summary to stdout *and* writes a
-  Markdown report to `tests/profiling/reports/` (gitignored, regenerable). The
-  reports are fully auto-generated and self-contained — the suite runs with no
-  manual input. **When the suite or the pipeline's performance profile changes,
-  regenerate the reports.**
+The fast subset skips the `slow` integration tests (real-frame assembly/overscan, master
+stacking, full L0→L2, WLS orientation), which is why the full-suite triggers above are what
+catch those. How the suite is laid out and split — and the masters test layout — is in the
+architecture guide (*Tests → Regression*); test-writing conventions are in the style guide §12.
 
 ## Architecture
 
 The pipeline architecture — the data-model hierarchy, extension alias system, data flow,
 header standardization, configuration, the CLI/module layering, logging, filename
-conventions, the masters pipeline, and the diagnostics/QC/checkpoint/quicklook layers —
-lives in [`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md) (governing doc #4).
+conventions, the masters pipeline, the diagnostics/QC/checkpoint/quicklook layers, and the
+test/profiling suite structure — lives in
+[`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md) (governing doc #4).
 It is not duplicated here; consult it before making structural or cross-cutting changes.
 
 ## Design Principles & Success Criteria
