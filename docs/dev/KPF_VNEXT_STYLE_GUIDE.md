@@ -22,6 +22,29 @@ This file covers *how code should look and be organized* — not operational or 
 guidance (environment, commands) or the pipeline's structure (the architecture reference),
 which are documented separately.
 
+Contents:
+
+* 1. Naming
+* 2. Module structure
+* 3. Imports
+* 4. Class design
+* 5. Function & method design
+  * Type hints
+* 6. Error handling, validation & logging
+* 7. NumPy & numerical idioms
+* 8. Formatting
+* 9. Masters subpackage (`modules/masters/`)
+* 10. Recipes & configuration
+  * Config files
+  * CSV config tables (`data_models/config/`)
+  * FITS PRIMARY header conventions
+* 11. Quality-control layers (Diagnostics / QC / Checkpoints / Quicklook)
+* 12. Tests
+  * Regression
+  * Profiling
+* 13. Docstrings & comments
+  * Open Inconsistencies
+
 ---
 
 ## 1. Naming
@@ -101,7 +124,7 @@ which are documented separately.
 
 ---
 
-## 2. Module structure (the "golden skeleton")
+## 2. Module structure
 
 Every standard pipeline module follows the same top-to-bottom template. New modules
 should match it:
@@ -196,7 +219,7 @@ class StageName:
   each have a `_track_info()` that caches the text on `self._info`, with the per-chip stack statistics cached
   separately on `self._stack_info` (Bias/Dark via the base `_populate_stack_info()`; WLS inline in
   `make_master_l2`). Flat is an unimplemented stub — no `_track_info`; its `info()` prints a terse
-  not-implemented notice directly. See §10.)*
+  not-implemented notice directly. See §9.)*
 - The banner is exactly:
   ```python
       # ------------------------------------------------------------------
@@ -253,7 +276,7 @@ class StageName:
 
 - **Transform modules are plain standalone classes** — no base class, no mixins, no
   ABCs, no `dataclasses`. They operate *on* the data-model objects, they don't subclass
-  them. (The masters and QC/Diag layers *do* share a base class — see §10/§11.)
+  them. (The masters and QC/Diag layers *do* share a base class — see §9/§11.)
 - **Canonical constructor signature**: `__init__(self, l<N>_obj, config=None)`. The data
   object is the first positional arg, named for its level (`l0_obj`, `l1_obj`, `l2_obj`).
 - **The config-resolution block is the same everywhere** — copy it verbatim:
@@ -352,7 +375,7 @@ class StageName:
     an *immutable literal* (a tuple, safe as a default argument), e.g.
     `clip_edge_pixels=(500, 500)`, never the `None`-sentinel + in-body list fallback. Within
     each group, keep a sensible domain order.
-- **The `make_master_*` entry points follow the same shape** (§10), with `l0_file_list`
+- **The `make_master_*` entry points follow the same shape** (§9), with `l0_file_list`
   as the sole positional in place of `chips`/`fibers`.
 - **Parameter ordering applies to *every* method**, not just the public entry points:
   required positionals first, then defaulted parameters in two groups — `None`-defaults
@@ -543,61 +566,7 @@ class StageName:
 
 ---
 
-## 9. Quality-control layers (Diagnostics / QC / Checkpoints / Quicklook)
-
-These four read-only layers under `kpfpipe/quality_control/` share conventions that new
-QC code must follow. Diagnostics, QC, and Checkpoints run in that strict order — each
-consumes what the prior wrote (metrics → 0/1 flags → warn/raise):
-
-- **Read-only discipline.** Diagnostics and QC write header keywords **only via `set_keyword`**
-  (which routes them to QUALITY_CONTROL — see §11 *FITS PRIMARY header conventions*), never to
-  `data`. Quicklook writes only PNGs. When a helper would mutate `l0.data`, operate on a `deepcopy`
-  to protect the caller's object.
-- **Method-attribute registration + MRO-walk discovery.** Tag a method by assigning an
-  attribute immediately after its `def` — there are no decorators:
-  ```python
-  def nan_counts(self): ...
-  nan_counts._diag_name = "nan_counts"          # Diagnostics
-
-  def data_l0_red_green(self): ...
-  data_l0_red_green._qc_key = "DATAPRL0"        # QC
-
-  def unregistered_keywords(self): ...
-  unregistered_keywords._checkpoint_name = "unregistered_keywords"  # Checkpoints
-  ```
-  The base class's `_iter_*` generator walks `type(self).__mro__`, collects callables
-  carrying the tag (`_diag_name` / `_qc_key` / `_checkpoint_name`), and dedupes overrides
-  via a `seen` set (subclass beats base).
-- **Runners reset `self.results = {}` at entry** (Diagnostics/QC; determinism) and wrap each
-  method call in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
-- **Writes go through `set_keyword`** (comment sourced from the registry, not the call site).
-  QC writes integer `0/1` plus an `ISGOOD` aggregate and **does no validation**. Round floats
-  before writing (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`. The
-  per-check/metric comment lives **once, in the registry `Description`** — QC methods carry only
-  `_qc_key` (no `_qc_comment`); `run()` mirrors the registry `Description` into `self.results` for
-  reporting. (Diagnostics methods still return their own `(value, comment)` dicts, but the FITS
-  comment is always the registry `Description`.)
-- **Checkpoints validate; they do not write.** A `Checkpoint` subclass reads the 0/1 flags +
-  headers and **warns or raises** (header validation lives in `Checkpoint.unregistered_keywords`).
-  Per-flag severity is a per-level `RAISE_FLAGS` tuple on the subclass (a failed flag named there
-  raises, every other failed flag warns).
-- **QC comments are namespaced `"QC: ..."`**; Diagnostics comments are bare descriptive
-  phrases. (Both live in the registry `Description` column, the single source for the FITS comment.)
-- **Quicklook plotting**: pyplot state-machine API (`plt.figure(figsize=..., tight_layout=True)`);
-  `cmap="viridis"`, `origin="lower"`, vmin/vmax from percentiles; templated titles
-  `f"L{N} - {Chip} CCD: {obs_id} - {name}"`; a UTC `KPF QLP: … UT` timestamp annotation;
-  save as `f"{obs_id}_L{N}_{plotname}_{chip}_zoomable.png"` with `plt.close(fig)` after
-  each. Unimplemented plots are stubbed with a docstring citing the v2.12 source and
-  `raise NotImplementedError(...)`.
-- **Quicklook `run()` contract** (shared by every `PlotL{N}.run`): when `output_dir` is set,
-  each figure is saved there and closed to free memory; when `output_dir` is `None`, the
-  figures are returned **open** so a caller (e.g. an interactive notebook) can render them.
-  State this once here -- a per-level `run()` docstring should reference the contract, not
-  restate it.
-
----
-
-## 10. Masters subpackage (`modules/masters/`)
+## 9. Masters subpackage (`modules/masters/`)
 
 The masters layer is a **batch/stack builder** and diverges from transform modules in
 documented, intentional ways — follow *its* conventions when adding masters code:
@@ -632,7 +601,7 @@ documented, intentional ways — follow *its* conventions when adding masters co
 
 ---
 
-## 11. Recipes & configuration
+## 10. Recipes & configuration
 
 - **Recipes are plain Python modules** (not a DSL/`.recipe` file), one `def main(config, args)`
   entry point, no top-level execution. The leaf runner (`scripts/processing/reduce.py`,
@@ -762,6 +731,60 @@ class attribute (and uses `.routing` in `set_keyword`); the checkpoints validato
 - Use EPRV keyword *names* on PRIMARY (e.g. `EXPTIME`, not `ELAPSED`; `OBSTYPE`, not `IMTYPE`).
   Exception: the L4 final-RV measurements `CCD{1,2}RV`/`CCD{1,2}ERV` are KPF-registered keywords
   deliberately homed on PRIMARY (alongside the EPRV `RV`/`RVERR`).
+
+---
+
+## 11. Quality-control layers (Diagnostics / QC / Checkpoints / Quicklook)
+
+These four read-only layers under `kpfpipe/quality_control/` share conventions that new
+QC code must follow. Diagnostics, QC, and Checkpoints run in that strict order — each
+consumes what the prior wrote (metrics → 0/1 flags → warn/raise):
+
+- **Read-only discipline.** Diagnostics and QC write header keywords **only via `set_keyword`**
+  (which routes them to QUALITY_CONTROL — see §10 *FITS PRIMARY header conventions*), never to
+  `data`. Quicklook writes only PNGs. When a helper would mutate `l0.data`, operate on a `deepcopy`
+  to protect the caller's object.
+- **Method-attribute registration + MRO-walk discovery.** Tag a method by assigning an
+  attribute immediately after its `def` — there are no decorators:
+  ```python
+  def nan_counts(self): ...
+  nan_counts._diag_name = "nan_counts"          # Diagnostics
+
+  def data_l0_red_green(self): ...
+  data_l0_red_green._qc_key = "DATAPRL0"        # QC
+
+  def unregistered_keywords(self): ...
+  unregistered_keywords._checkpoint_name = "unregistered_keywords"  # Checkpoints
+  ```
+  The base class's `_iter_*` generator walks `type(self).__mro__`, collects callables
+  carrying the tag (`_diag_name` / `_qc_key` / `_checkpoint_name`), and dedupes overrides
+  via a `seen` set (subclass beats base).
+- **Runners reset `self.results = {}` at entry** (Diagnostics/QC; determinism) and wrap each
+  method call in `try/except` re-raising as `RuntimeError` — loud failure, no silent suppression.
+- **Writes go through `set_keyword`** (comment sourced from the registry, not the call site).
+  QC writes integer `0/1` plus an `ISGOOD` aggregate and **does no validation**. Round floats
+  before writing (`round(float(x), 6)`), and cast numpy scalars to Python `int`/`float`. The
+  per-check/metric comment lives **once, in the registry `Description`** — QC methods carry only
+  `_qc_key` (no `_qc_comment`); `run()` mirrors the registry `Description` into `self.results` for
+  reporting. (Diagnostics methods still return their own `(value, comment)` dicts, but the FITS
+  comment is always the registry `Description`.)
+- **Checkpoints validate; they do not write.** A `Checkpoint` subclass reads the 0/1 flags +
+  headers and **warns or raises** (header validation lives in `Checkpoint.unregistered_keywords`).
+  Per-flag severity is a per-level `RAISE_FLAGS` tuple on the subclass (a failed flag named there
+  raises, every other failed flag warns).
+- **QC comments are namespaced `"QC: ..."`**; Diagnostics comments are bare descriptive
+  phrases. (Both live in the registry `Description` column, the single source for the FITS comment.)
+- **Quicklook plotting**: pyplot state-machine API (`plt.figure(figsize=..., tight_layout=True)`);
+  `cmap="viridis"`, `origin="lower"`, vmin/vmax from percentiles; templated titles
+  `f"L{N} - {Chip} CCD: {obs_id} - {name}"`; a UTC `KPF QLP: … UT` timestamp annotation;
+  save as `f"{obs_id}_L{N}_{plotname}_{chip}_zoomable.png"` with `plt.close(fig)` after
+  each. Unimplemented plots are stubbed with a docstring citing the v2.12 source and
+  `raise NotImplementedError(...)`.
+- **Quicklook `run()` contract** (shared by every `PlotL{N}.run`): when `output_dir` is set,
+  each figure is saved there and closed to free memory; when `output_dir` is `None`, the
+  figures are returned **open** so a caller (e.g. an interactive notebook) can render them.
+  State this once here -- a per-level `run()` docstring should reference the contract, not
+  restate it.
 
 ---
 
