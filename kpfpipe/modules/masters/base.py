@@ -123,26 +123,14 @@ class BaseMasterModule:
 
     def _resolve_calibrations(self, *, bias=None, dark=None, flat=None):
         """
-        Resolve which calibrations to apply to each frame.
+        Resolve which calibrations apply per frame: {name: False|True|str|KPFMasterL1}.
 
-        For each calibration, the value is the per-call override (the make_master
-        kwarg if not None, else the config-resolved `self.<name>`, i.e.
-        DEFAULTS < [MODULE_IMAGE_PROCESSING]) — but only if the calibration is in
-        the per-master standard (`_STANDARD_CALIBRATIONS`); otherwise it is forced
-        off. A flag/path can only turn a standard calibration off (or aim it at a
-        specific master); it can never enable one outside the master's standard.
-
-        Parameters
-        ----------
-        bias, dark, flat : bool | str | KPFMasterL1, optional
-            Per-call overrides (same accepted forms as `ImageProcessing.perform`:
-            True → header-associated master, str → filepath, KPFMasterL1 → that
-            object). None means "use the resolved config value".
-
-        Returns
-        -------
-        dict
-            {name: False | True | str | KPFMasterL1} for name in bias/dark/flat.
+        For bias/dark/flat, take the per-call override (make_master kwarg if not
+        None, else config-resolved ``self.<name>``) only if the calibration is in
+        this master's ``_STANDARD_CALIBRATIONS``, else force it off. A flag/path can
+        only disable a standard calibration (or aim it at a specific master), never
+        enable one outside the standard. Override forms match
+        ``ImageProcessing.perform``.
         """
         overrides = {"bias": bias, "dark": dark, "flat": flat}
         resolved = {}
@@ -160,27 +148,11 @@ class BaseMasterModule:
         """
         Resolve one active calibration to a master, caching one per type.
 
-        The source comes from `self._active_calibrations[cal_type]`: True → the
-        master associated into the frame header, str → a filepath, KPFMasterL1 →
-        an in-memory master. A disk-backed master is read only when its path
-        differs from the one already cached for `cal_type`; frames in a stack
-        almost always share the same master, so each is read from disk once.
-        Falsy (inactive) values and in-memory KPFMasterL1 objects are returned
-        unchanged.
-
-        Parameters
-        ----------
-        l1_obj : KPF1
-            The frame being calibrated; its PRIMARY header supplies the
-            associated master path for a True calibration.
-        cal_type : str
-            Calibration name: 'bias', 'dark', or 'flat'.
-
-        Returns
-        -------
-        bool | str | KPFMasterL1
-            A cached KPFMasterL1 for a disk-backed calibration; otherwise the
-            source value unchanged (so ImageProcessing handles falsy/invalid).
+        Source is ``self._active_calibrations[cal_type]``: True → master associated
+        into the frame header, str → filepath, KPFMasterL1 → in-memory master. A
+        disk-backed master is read only when its path differs from the cached one
+        (frames in a stack almost always share a master, so each is read once).
+        Falsy and in-memory values are returned unchanged.
         """
         value = self._active_calibrations[cal_type]
         if not value or isinstance(value, KPFMasterL1):
@@ -202,32 +174,14 @@ class BaseMasterModule:
 
     def _load_frame(self, fn, cache=False):
         """
-        Load an L0 file and perform image assembly to produce an L1 object.
+        Load an L0 file and assemble it to an L1 object; None on failure.
 
-        Parameters
-        ----------
-        fn : str
-            Path to L0 FITS file.
-        cache : bool
-            If True, retain the assembled L1 in the internal cache for reuse.
-            The caller decides which frames are worth caching (see the streaming
-            stats path). A frame already cached is returned from the cache
-            regardless of this flag.
-
-        Returns
-        -------
-        l1_obj : KPF1 or None
-            The assembled L1 object, or None on failure. Failure means the
-            frame could not be read/assembled or failed a required QCL0 flag
-            (`_REQUIRED_L0_QC_FLAGS`, which includes the EXPTIME/ELAPSED
-            consistency check); a warning names the cause. Callers detect
-            failure via `l1_obj is None`.
-
-        Notes
-        -----
-        When `cache=True`, the successfully processed frame is retained to
-        reduce redundant I/O and recomputation. The streaming stats path caches
-        its approximation-pass frames so the exact pass reuses them.
+        Failure means the frame could not be read/assembled or failed a required
+        QCL0 flag (``_REQUIRED_L0_QC_FLAGS``, incl. the EXPTIME/ELAPSED consistency
+        check); a warning names the cause and callers detect it via ``is None``.
+        With ``cache=True`` the assembled L1 is retained for reuse (the streaming
+        stats path caches its approximation-pass frames so the exact pass reuses
+        them); an already-cached frame is returned regardless of the flag.
         """
         if fn in self._l1_obj_cache:
             return self._l1_obj_cache[fn]
@@ -254,25 +208,12 @@ class BaseMasterModule:
 
     def _process_frame(self, l1_obj):
         """
-        Apply this module's active calibrations to an assembled frame.
+        Apply this module's active calibrations to an assembled frame (in place).
 
-        Subtracts the active masters via ImageProcessing, reusing the standard
-        science-path modules rather than reimplementing the math. Calibrations
-        requested as `True` are associated first (CalibrationAssociation writes
-        their nearest-in-time master into the PRIMARY header); calibrations given
-        as an explicit filepath or KPFMasterL1 object skip association and are
-        passed straight through. Modules with no active calibrations receive the
-        frame unchanged.
-
-        Parameters
-        ----------
-        l1_obj : KPF1
-            Assembled L1 frame to calibrate, mutated in place.
-
-        Returns
-        -------
-        KPF1
-            The same frame with the active calibrations applied.
+        Subtracts active masters via ImageProcessing (reusing the science-path
+        modules). ``True`` calibrations are associated first (nearest-in-time
+        master written to PRIMARY); explicit filepath/KPFMasterL1 overrides pass
+        straight through. No active calibrations → frame returned unchanged.
         """
         calibrations = self._active_calibrations
         active = [name for name, value in calibrations.items() if value]
@@ -311,19 +252,8 @@ class BaseMasterModule:
         """
         Extract an assembled frame to L2 (for spectral masters, e.g. WLS).
 
-        Performs spectral extraction only. Calibration is not implicit here:
-        callers that need bias/dark applied must run `_process_frame` on the
-        frame first.
-
-        Parameters
-        ----------
-        l1_obj : KPF1
-            Assembled (and, where needed, already calibrated) L1 frame.
-
-        Returns
-        -------
-        KPF2
-            The extracted L2 spectra.
+        Spectral extraction only — calibration is not implicit; callers needing
+        bias/dark applied must run ``_process_frame`` first.
         """
         spectral_extraction = SpectralExtraction(l1_obj)
         return spectral_extraction.perform()
@@ -335,23 +265,8 @@ class BaseMasterModule:
     @staticmethod
     def _check_load_failures(failure, n_total, max_fail_fraction, max_fail_number):
         """
-        Raise if cumulative frame-load failures exceed either limit.
-
-        Parameters
-        ----------
-        failure : int
-            Number of frames that have failed to load so far.
-        n_total : int
-            Total number of frames in the stack.
-        max_fail_fraction : float
-            Maximum allowed fraction of failed frames.
-        max_fail_number : int
-            Maximum allowed absolute number of failed frames.
-
-        Raises
-        ------
-        ValueError
-            If either limit is exceeded.
+        Raise ValueError if cumulative frame-load failures exceed either the
+        fraction (``max_fail_fraction``) or absolute (``max_fail_number``) limit.
         """
         if failure / n_total > max_fail_fraction or failure > max_fail_number:
             raise ValueError(
@@ -373,55 +288,26 @@ class BaseMasterModule:
         """
         Compute stacked statistics using an in-memory data cube.
 
-        Parameters
-        ----------
-        l0_file_list : list of str, optional
-            List of L0 FITS filenames to process. The full list is stacked;
-            the caller is responsible for passing the desired subset (e.g. the
-            streaming path passes only its approximation-pass frames).
-        sigma : float, optional
-            Sigma threshold for outlier rejection across frames.
-        cache : bool, optional
-            If True, cache each loaded frame so a later pass (the streaming
-            exact pass) can reuse it without re-reading from disk. Defaults to
-            False, since the standalone datacube path reads each frame once.
-        max_fail_fraction : float, optional
-            Maximum fraction of frames allowed to fail loading before raising.
-            Defaults to 0.2.
-        max_fail_number : int, optional
-            Maximum absolute number of frames allowed to fail loading before
-            raising. Defaults to 2. Stacking raises when either limit is
-            exceeded.
+        Stacks the full ``l0_file_list`` (caller passes the desired subset). With
+        ``cache=True`` each loaded frame is retained so a later pass (the streaming
+        exact pass) reuses it. Raises when frame-load failures exceed
+        ``max_fail_fraction`` or ``max_fail_number``.
 
-        Returns
-        -------
-        stats : dict
-            Per-extension statistics including:
-            - 'nframe'      : number of valid frames per pixel
-            - 'counts_sum'  : summed counts across valid frames
-            - 'rate_mean'   : equal-weight mean of per-frame rates (the center
-                              used for streaming clip bounds, not the master IMG)
-            - 'rate_rms'    : frame-to-frame sample RMS of the per-frame rates
-            On the '{chip}_CCD' entry only:
-            - 'exptime_sum' : per-pixel total exposure time over valid frames
-                              (the denominator of the exposure-weighted rate in
-                              stack_frames; equals the valid-frame count for a
-                              bias stack, where T = 1)
-        zero_exptime : bool
-            True if this is a bias stack (all frames have exposure at or below
-            `_ZERO_EXPTIME_TOL_SECONDS`), used by the streaming path to validate
-            per-frame exposure consistency.
+        Returns ``(stats, zero_exptime)``. ``stats`` is per-extension with 'nframe',
+        'counts_sum', 'rate_mean' (equal-weight mean of per-frame rates — the clip
+        center, not the master IMG), 'rate_rms' (frame-to-frame sample RMS), and on
+        '{chip}_CCD' only 'exptime_sum' (per-pixel total exposure over valid frames;
+        the exposure-weighted-rate denominator in stack_frames, = valid-frame count
+        for a bias stack where T=1). ``zero_exptime`` is True for a bias stack (all
+        exposures ≤ ``_ZERO_EXPTIME_TOL_SECONDS``).
 
         Notes
         -----
-        Exposure time is read from the EPRV-standard PRIMARY EXPTIME (the actual
-        elapsed time, mapped from the native WMKO ELAPSED), not the nominal
-        requested EXPTIME. Outlier rejection is performed on the CCD rate (VAR =
-        |CCD| + RN adds no independent information); rates are used so frames of
-        differing exposure are comparable, and VAR is still summed for the SNR.
-        Exposure times must be either all zero (≤ `_ZERO_EXPTIME_TOL_SECONDS`) or
-        all above it. Raises an error if more than `max_fail_fraction` of frames
-        fail to load.
+        Exposure time is the EPRV PRIMARY EXPTIME (elapsed, mapped from native
+        ELAPSED), not the nominal requested EXPTIME. Rejection is on the CCD rate
+        (VAR = |CCD| + RN adds no independent info); rates make differing-exposure
+        frames comparable, and VAR is still summed for the SNR. Exposures must be
+        all zero (≤ ``_ZERO_EXPTIME_TOL_SECONDS``) or all above it.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -540,49 +426,18 @@ class BaseMasterModule:
         max_fail_number=2,
     ):
         """
-        Compute stacked statistics with a single streaming pass over the frames.
+        Compute stacked statistics with a single streaming pass over the frames
+        (memory-light, at the cost of compute speed).
 
-        Parameters
-        ----------
-        l0_file_list : list of str, optional
-            List of L0 FITS filenames to process.
-        nstream : int
-            Streaming threshold; the first `nstream - 1` frames form the
-            approximation pass that estimates the per-pixel clipping bounds.
-        sigma : float, optional
-            Sigma threshold for outlier rejection.
-        max_fail_fraction : float, optional
-            Maximum fraction of frames allowed to fail loading before raising.
-            Defaults to 0.2.
-        max_fail_number : int, optional
-            Maximum absolute number of frames allowed to fail loading before
-            raising. Defaults to 2. Stacking raises when either limit is
-            exceeded.
+        The first ``nstream - 1`` frames are stacked via the datacube method to
+        estimate per-pixel rate mean/RMS, which set the clipping bounds for the
+        streaming pass. Raises when load failures exceed
+        ``max_fail_fraction``/``max_fail_number`` or exposures are inconsistent.
 
-        Returns
-        -------
-        exact_stats : dict
-            Per-extension statistics needed by `stack_frames`:
-            - 'nframe'     : number of valid frames per pixel
-            - 'counts_sum' : summed counts across valid frames
-            On the '{chip}_CCD' entry only:
-            - 'exptime_sum' : per-pixel total exposure time over valid frames
-            (Unlike `_compute_stats_from_datacube`, the streaming pass does not
-            produce 'rate_mean'/'rate_rms': clip bounds come from the datacube
-            approximation below, and the master IMG is counts_sum / exptime_sum.)
-        zero_exptime : bool
-            True if this is a bias stack (all frames have exposure at or below
-            `_ZERO_EXPTIME_TOL_SECONDS`).
-
-        Notes
-        -----
-        An initial subset of frames is processed using the direct data cube
-        method to estimate approximate rate mean and RMS. These estimates define
-        the per-pixel clipping bounds for the streaming pass.
-
-        Optimized to reduce memory usage at the expense of compute speed.
-        Raises an error if frame load failures exceed `max_fail_fraction` or
-        `max_fail_number`, or if exposure times are inconsistent.
+        Returns ``(exact_stats, zero_exptime)``. ``exact_stats`` carries only
+        'nframe', 'counts_sum', and (on '{chip}_CCD') 'exptime_sum' — no
+        'rate_mean'/'rate_rms', since clip bounds come from the approximation and
+        the master IMG is counts_sum / exptime_sum.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -681,34 +536,18 @@ class BaseMasterModule:
 
     def _clean_l1_arrays(self, l1_arrays, sigma, cal_type=None):
         """
-        Interpolate bad pixels and recompute the bad-pixel mask per chip.
+        Interpolate bad pixels and recompute the per-chip bad-pixel mask
+        (True = good) on the stacked '{chip}_IMG/_SNR/_MASK' arrays.
 
-        Parameters
-        ----------
-        l1_arrays : dict
-            Per-chip '{chip}_IMG/_SNR/_MASK' arrays from `stack_frames`.
-        sigma : float
-            Sigma threshold for the final outlier pass on the combined image.
-        cal_type : {'bias', 'dark', 'flat', None}, optional
-            Selects the final outlier-flagging mode. The detector is illuminated
-            only for flats, so each cal type compares a pixel to a different
-            notion of "normal" (in the assembled image dispersion runs along
-            axis=1, cross-dispersion along axis=0):
+        ``cal_type`` selects the final outlier-flagging mode, since the detector is
+        illuminated only for flats (in the assembled image dispersion runs along
+        axis=1, cross-dispersion along axis=0):
 
-            - 'bias' : per-column median (axis=0) -- each pixel is judged against
-              its own cross-dispersion column, removing the CCD's column-wise
-              bias structure.
-            - 'dark' : global median (no illumination or column structure to
-              preserve). `None` falls back to this conservative mode.
-            - 'flat' : residual deviation from the smooth illumination trend
-              along dispersion (axis=1), tolerating the blaze while catching
-              pixels that depart from it.
-
-        Returns
-        -------
-        dict
-            The same dict with IMG/SNR interpolated over bad pixels and MASK
-            recomputed (True = good).
+        - 'bias' : per-column median (axis=0) — judges each pixel against its own
+          cross-dispersion column, removing column-wise bias structure.
+        - 'dark'/None : global median (no illumination/column structure to preserve).
+        - 'flat' : residual deviation from the smooth illumination trend along
+          dispersion (axis=1), tolerating the blaze while catching departures.
         """
         for chip in self.chips:
             img = l1_arrays[f"{chip}_IMG"]
@@ -745,24 +584,10 @@ class BaseMasterModule:
 
     def _build_ml1_obj(self, l1_arrays, l0_file_list, *, master_type):
         """
-        Assemble a KPFMasterL1 from finalized per-chip arrays.
-
-        Parameters
-        ----------
-        l1_arrays : dict
-            Finalized '{chip}_IMG/_SNR/_MASK' arrays.
-        l0_file_list : list of str
-            L0 files that went into the stack; recorded via set_input_files.
-        master_type : str
-            WMKO filename token for the product ('bias', 'dark', 'flat').
-            Recorded via set_input_files for the compliant output filename, and
-            the single source for both the receipt key (`master_{master_type}`)
-            and the BUNIT units (`_BUNIT_BY_TYPE`).
-
-        Returns
-        -------
-        KPFMasterL1
-            The populated master L1 object.
+        Assemble a KPFMasterL1 from finalized per-chip '{chip}_IMG/_SNR/_MASK'
+        arrays. ``master_type`` ('bias'/'dark'/'flat') drives the WMKO filename
+        token, the receipt key (``master_{master_type}``), and the BUNIT units
+        (``_BUNIT_BY_TYPE``).
         """
         receipt_key = f"master_{master_type}"
         bunit = self._BUNIT_BY_TYPE.get(master_type)
@@ -784,10 +609,8 @@ class BaseMasterModule:
 
     def _populate_stack_info(self, l1_arrays):
         """
-        Cache per-chip master statistics on `self._stack_info` for `_track_info()`.
-
-        Sets `self._stack_info` to a per-chip dict of
-        {'num_bad', 'pct_bad', 'median', 'rms'}.
+        Cache per-chip master statistics ({'num_bad','pct_bad','median','rms'}) on
+        ``self._stack_info`` for the subclass ``_track_info()``.
         """
         self._stack_info = {
             chip: {
@@ -921,7 +744,6 @@ class BaseMasterModule:
             l1_arrays[f"{chip}_SNR"] = snr.astype(np.float32)
             l1_arrays[f"{chip}_MASK"] = good
 
-        # Interpolate bad pixels and recompute the bad-pixel mask before return.
         return self._clean_l1_arrays(l1_arrays, sigma, cal_type=cal_type)
 
     def save_master(self, level, path, *, overwrite=False):

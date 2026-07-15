@@ -123,11 +123,10 @@ class WavelengthCalibration:
         self._info = "\n".join(lines)
 
     def _set_headers(self, l2_obj):
-        """Write all PRIMARY-header keywords for wavelength calibration.
+        """Write PRIMARY-header keywords for wavelength calibration.
 
-        Reserved: this module writes no PRIMARY metadata yet. Present so every
-        module consolidates header writes in one place, called just before the
-        receipt entry.
+        Reserved: no PRIMARY metadata written yet. Present so every module
+        consolidates header writes in one place.
         """
 
     # ------------------------------------------------------------------

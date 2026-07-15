@@ -83,12 +83,10 @@ class RadialVelocity:
 
     def _load_ccfs(self, chips, fibers):
         """
-        Load the CCF cubes, per-bin variances, velocity grids, and mask width from
-        the (CrossCorrelation-produced) L4 into the caches the RV methods read.
-
-        Only illuminated fibers (non-empty CCF) are loaded; the velocity grid is
-        reconstructed from the CCF header (VELSTART/VELSTEP/VELNSTEP) and the mask
-        width from VELMASK.
+        Load the CCF cubes/variances, velocity grids, and mask width from the
+        (CrossCorrelation-produced) L4 into the caches the RV methods read. Only
+        illuminated fibers (non-empty CCF) are loaded; the grid is reconstructed
+        from the CCF header (VELSTART/VELSTEP/VELNSTEP) and the width from VELMASK.
         """
         for fiber in fibers:
             if self.l4_obj.data[f"{fiber}_CCF"].size == 0:
@@ -108,10 +106,10 @@ class RadialVelocity:
 
     def _get_order_weights(self, chip, fiber):
         """
-        Per-order CCF-combination weights for one orderlet, read from the WEIGHT
-        column of the L4 RVn table (written by CrossCorrelation). Returns a 1D
-        ndarray of length norder_chip, ordered by ORDER (green-then-red rows; the
-        chip-prefixed read returns this chip's rows).
+        Per-order CCF-combination weights for one orderlet, from the WEIGHT column
+        of the L4 RVn table (written by CrossCorrelation). Returns a length-
+        norder_chip ndarray ordered by ORDER (the chip-prefixed read slices to
+        this chip's rows).
         """
         table = self.l4_obj.data[f"{chip.upper()}_{fiber.upper()}_RV"]
         return np.asarray(table["WEIGHT"], dtype=np.float64)
@@ -121,9 +119,8 @@ class RadialVelocity:
         """
         Native per-pixel velocity scale [km/s] of an order, from its wavelength
         endpoints and column count: c * (dispersion per pixel) / mean wavelength.
-
         The RVn WAVE_START/WAVE_END and detector ncol stand in for the full WAVE
-        array; this feeds the CCF-noise correlation length in _compute_rv_1d.
+        array; feeds the CCF-noise correlation length in _compute_rv_1d.
         """
         speed_of_light_kms = c.to("km/s").value
         return (
@@ -136,18 +133,12 @@ class RadialVelocity:
     @staticmethod
     def _ccf_noise_corr_length(vel_span_per_pixel, mask_width):
         """
-        Decorrelation length [km/s] of the CCF photon noise.
-
-        The Boisse (2010) N_scale factor divides the CCF velocity step by the
-        length over which CCF-noise bins are independent, correcting the
-        diagonal information sum for the fact that a finely-stepped CCF is
-        oversampled. That length is *not* the native pixel: the CCF is the
-        spectrum seen through a mask hole, so its noise kernel is the
-        cross-correlation of two top-hats -- the mask hole (full width
-        `mask_width`) and the native pixel (`vel_span_per_pixel`) -- i.e. a
-        trapezoid. The integral length of a trapezoid's autocorrelation,
-        (integral)^2 / integral-of-square, is `M**2 / (M - m/3)` with M, m the
-        larger/smaller of the two widths (reduces to 1.5*w for equal widths).
+        Decorrelation length [km/s] of the CCF photon noise, for the Boisse (2010)
+        N_scale oversampling correction. The CCF noise kernel is the cross-
+        correlation of two top-hats -- the mask hole (`mask_width`) and the native
+        pixel (`vel_span_per_pixel`), i.e. a trapezoid -- whose autocorrelation
+        integral length (integral^2 / integral-of-square) is `M**2 / (M - m/3)`
+        with M, m the larger/smaller width (reduces to 1.5*w for equal widths).
         """
         big, small = (
             max(vel_span_per_pixel, mask_width),
@@ -167,50 +158,14 @@ class RadialVelocity:
         min_npts=9,
     ):
         """
-        Two-pass Gaussian fit to a CCF dip, with a photon-limited error.
-
-        The first pass fits the `window` ([min, max] km/s) about the CCF
-        minimum, yielding a mean and sigma. The second pass refits a window of
-        +/-`fit_nsigma` sigma about that mean (symmetric about it); those points
-        also set the error estimate (Bouchy et al. 2001). Both windows use at
-        least min_npts grid points.
-
-        Parameters
-        ----------
-        vel : ndarray
-            CCF velocity steps [km/s].
-        ccf : ndarray
-            CCF value at each velocity step.
-        ccf_var : ndarray
-            Per-velocity-bin CCF variance sum(w**2 * var) aligned with `ccf`; sets
-            the photon noise in the error estimate (Bouchy 2001).
-        vel_span_per_pixel : float
-            Native per-pixel velocity scale [km/s] of the order (from
-            _pixel_velocity_scale); with `mask_width` it sets the CCF-noise
-            correlation length (see `_ccf_noise_corr_length`).
-        mask_width : float
-            CCF mask hole full width [km/s] used to build the CCF (each top-hat
-            hole is `mask_width` wide, centered on its line).
-        window : list of float
-            [min, max] km/s velocity window about the dip for the first pass.
-        fit_nsigma : float
-            Half-width of the second-pass fit window, in units of the
-            first-pass fitted sigma.
-        min_npts : int
-            Minimum number of grid points to use in each fit window.
-
-        Returns
-        -------
-        rv : float
-            Fitted radial velocity [km/s], or NaN if the fit fails.
-        rv_err : float
-            Photon-limited RV uncertainty [km/s], or NaN if unavailable.
-
-        Raises
-        ------
-        ValueError
-            If the CCF or its variance is non-physical (zero/negative flux
-            counts) across the fit window, so a photon error cannot be computed.
+        Two-pass Gaussian fit to a CCF dip, returning an RV [km/s] and a photon-
+        limited error. Pass 1 fits `window` about the CCF minimum; pass 2 refits
+        +/-`fit_nsigma` sigma about the pass-1 mean (symmetric), and those points
+        set the Bouchy (2001) photon error, scaled by the Boisse (2010) N_scale
+        oversampling factor (`vel_span_per_pixel`/`mask_width` via
+        _ccf_noise_corr_length). Both windows use at least `min_npts` points.
+        Returns (NaN, NaN) if the fit fails; raises ValueError on a non-physical
+        (zero/negative-count) CCF in the fit window, where no photon error exists.
         """
         # Fail loudly on non-finite CCF values rather than masking them out.
         if ccf.size < min_npts or not np.all(np.isfinite(ccf)) or np.ptp(ccf) == 0:
@@ -276,47 +231,14 @@ class RadialVelocity:
 
     def _combine_ccfs(self, chip, fibers):
         """
-        Combine the cached per-order CCFs of one chip into a weighted-average CCF
-        (for the RV value) and an unweighted-sum CCF (for the photon error).
-
-        Summing happens within a single chip: the cached order CCFs are summed
-        across `fibers`, then collapsed across orders two ways -- normalized to
-        unit sum and scaled by each order's CCF weight (the value CCF), and a raw
-        nansum (the count-scale error CCF). Cross-CCD combination is done at the
-        RV level by compute_weighted_rvs, not here.
-
-        Parameters
-        ----------
-        chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'.
-        fibers : str or list of str
-            A single fiber (e.g. 'SCI1') OR exactly the three science fibers
-            (SCI1, SCI2, SCI3), which are summed before collapsing. All summed
-            fibers share a mask, so the first is used for the grid, pixel scale,
-            and order weights.
-
-        Returns
-        -------
-        velocity_grid : ndarray
-            Shared CCF velocity grid [km/s].
-        weighted_ccf : ndarray
-            Order-weighted collapsed CCF (the RV value); identically zero if no
-            order carries weight.
-        summed_ccf : ndarray
-            Unweighted order-summed collapsed CCF (the photon-error signal).
-        summed_ccf_var : ndarray
-            Per-bin photon variance of summed_ccf.
-        rep_scale : float
-            Native per-pixel velocity scale of the strongest order (the
-            photon-error velocity scale).
-
-        Raises
-        ------
-        ValueError
-            If `fibers` is neither a single fiber nor exactly the three science
-            fibers.
-        RuntimeError
-            If the CCFs have not been loaded for any requested fiber.
+        Combine one chip's cached per-order CCFs into a weighted-average CCF (the
+        RV value) and an unweighted-sum CCF (the photon error). `fibers` is a
+        single fiber or exactly the three science fibers (summed before collapsing,
+        sharing a mask/grid so the first is representative). Returns
+        (velocity_grid, weighted_ccf, summed_ccf, summed_ccf_var, rep_scale), the
+        last being the strongest order's pixel scale. Cross-CCD combination happens
+        at the RV level in compute_weighted_rvs, not here. Raises ValueError on a
+        bad `fibers`, RuntimeError if the CCFs are unloaded.
         """
         chip = chip.upper()
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
@@ -635,16 +557,13 @@ class RadialVelocity:
 
     def _set_headers(self, l4_obj):
         """
-        Write all RV keywords, the single place this module writes headers, called
-        just before the receipt entry. Reads only the stashes filled by perform().
-
-        Per illuminated orderlet: the RVn RV-processing descriptors
-        (RVMETHOD/SKYRMVD/TELLRMVD) and the legacy per-fiber per-CCD RV
-        CCD{n}RV{sfx}/CCD{n}ERV{sfx} (routed to the RV# table). On PRIMARY:
-        RVMETHOD, and -- when a science combine ran -- the SCI-combined per-CCD
-        CCD{n}RV/CCD{n}ERV and the EPRV RV/RVERR/BERV/BJDTDB. A non-finite value is
-        written as None (a FITS UNDEFINED card). The RVn CTYPE cards belong to
-        CrossCorrelation and are not rewritten here.
+        Write all RV keywords -- the only place this module writes headers --
+        from the perform()-filled stashes, just before the receipt entry. Per
+        orderlet: RVn RVMETHOD/SKYRMVD/TELLRMVD and per-fiber per-CCD
+        CCD{n}RV{sfx}/CCD{n}ERV{sfx}. On PRIMARY: RVMETHOD, and (when a science
+        combine ran) the SCI-combined CCD{n}RV/CCD{n}ERV and EPRV
+        RV/RVERR/BERV/BJDTDB. Non-finite values are written as None (FITS
+        UNDEFINED). The RVn CTYPE cards belong to CrossCorrelation.
         """
         sfx = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
         for fiber in self._processed:

@@ -104,12 +104,11 @@ class WLS(BaseMasterModule):
 
     def _load_linelist(self, linelist=None):
         """
-        Return the cached line list DataFrame, loading or reloading if needed.
+        Return the cached line list DataFrame, loading/reloading if `linelist`
+        differs from the cached path.
 
         Columns: CHIP, INDEX (0-based row), ECHELLE (physical order), WAVE
-        [Å, vacuum]. Loads from disk when nothing is cached, or when `linelist`
-        (a file path) differs from the cached `self.linelist`; otherwise returns
-        the cache unchanged.
+        [Å, vacuum].
         """
         needs_load = not hasattr(self, "_linelist_df")
         if linelist is not None and linelist != self.linelist:
@@ -122,13 +121,8 @@ class WLS(BaseMasterModule):
 
     def _load_rough_wls(self, rough_wls_file=None):
         """
-        Return the cached rough WLS dict, loading or reloading if needed.
-
-        Loads from disk when no rough WLS is cached yet, or when
-        `rough_wls_file` (a file path) differs from the cached
-        `self.rough_wls_file`. Otherwise returns the cache unchanged. The
-        cache is transparently kept in sync with the most recently
-        passed-in file path.
+        Return the cached rough WLS dict, loading/reloading if `rough_wls_file`
+        differs from the cached path. The cache tracks the most recent path.
         """
         needs_load = not hasattr(self, "rough_wls")
         if rough_wls_file is not None and rough_wls_file != self.rough_wls_file:
@@ -163,13 +157,12 @@ class WLS(BaseMasterModule):
 
     def _line_fit_qc(self, lines, lineprofile, window, loc, amp_max=1.5e6, std_min=0.5):
         """
-        Quality-control the per-line fits and return a boolean flag array
-        (True = line passed QC), aligned with the per-line arrays in `lines`.
+        QC the per-line fits; return a boolean flag array aligned with `lines`
+        (True = passed).
 
-        `loc` is the per-line window-center pixel; a centroid more than
-        `window` pixels from it is flagged as a runaway fit. Fitted amplitudes
-        outside [0, `amp_max`] (default 1.5e6, ~10x single-pixel saturation)
-        and Gaussian sigmas outside [`std_min`, `window`] px are also flagged.
+        Flags runaway centroids (>`window` px from the window-center `loc`),
+        amplitudes outside [0, `amp_max`] (~10x single-pixel saturation), and
+        Gaussian sigmas outside [`std_min`, `window`] px.
         """
         if lineprofile != "gaussian":
             raise ValueError(f"Unsupported lineprofile: {lineprofile}")
@@ -191,28 +184,10 @@ class WLS(BaseMasterModule):
         max_fail_number=2,
     ):
         """
-        Run each L0 frame in the stack through the L0→L2 pipeline.
-
-        Parameters
-        ----------
-        l0_file_list : list of str, optional
-            L0 files to process. Defaults to self.l0_file_list.
-        max_fail_fraction : float, optional
-            Maximum fraction of frames allowed to fail loading before raising.
-            Defaults to 0.2.
-        max_fail_number : int, optional
-            Maximum absolute number of frames allowed to fail loading before
-            raising. Defaults to 2. Raises when either limit is exceeded.
-
-        Returns
-        -------
-        list of KPF2
-            Extracted L2 objects for all successfully processed frames.
-
-        Notes
-        -----
-        Resets self._l2_obj_cache at entry. Raises ValueError if frame load
-        failures exceed `max_fail_fraction` or `max_fail_number`.
+        Run each L0 frame in the stack through the L0->L2 pipeline, returning the
+        extracted KPF2 objects (also cached on `self._l2_obj_cache`, reset at
+        entry). Raises if load failures exceed `max_fail_fraction` or
+        `max_fail_number`.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -248,43 +223,18 @@ class WLS(BaseMasterModule):
         window=5,
     ):
         """
-        Fit line positions (in pixel space) along a 1D extracted order.
+        Fit line positions (pixel space) along one 1D extracted order.
 
-        Fits a 1D line model over a ±`window` pixel neighborhood around each
-        reference line in `line_waves` (the lines pre-selected for this order),
-        then quality-controls the fits via `_line_fit_qc`. The rough WLS span
-        of `wave1d` is a guardrail: a reference line outside it raises.
+        Fits a 1D line model over a +/-`window` px neighborhood around each
+        reference line in `line_waves`, then QCs the fits via `_line_fit_qc`.
+        A reference line outside the rough WLS span of `wave1d` raises (a
+        CHIP/ORDER labeling-inconsistency guardrail).
 
-        Parameters
-        ----------
-        flux1d : ndarray
-            1D extracted flux for a single order.
-        wave1d : ndarray
-            1D rough wavelength grid for the same order.
-        line_waves : ndarray
-            Reference line wavelengths to fit in this order [Å], already
-            selected for the order by the caller.
-        lineprofile : str, optional
-            Line profile model name. See kpfpipe.utils.stats._FUNCTIONS
-            for supported values.
-        window : int, optional
-            Half-width of the fit window, in pixels.
-
-        Returns
-        -------
-        lines : dict of ndarray
-            Per-line arrays of equal length. All entries are retained
-            regardless of QC status; the caller is responsible for
-            filtering on 'isgood' before downstream use. Lines whose fit
-            window contains any non-finite flux are dropped silently
-            before fitting. If the input order is entirely non-finite
-            (e.g. an extraction-failed orderlet filled with NaN), all
-            arrays are returned empty. Keys:
-              'wav' - reference line wavelength
-              'pix' - fitted pixel position
-              'std' - fitted line sigma (Gaussian width)
-              'amp' - fitted line amplitude
-              'isgood' - boolean QC flag (True = line passed QC)
+        Returns a dict of equal-length per-line arrays; all lines are retained
+        regardless of QC (caller filters on 'isgood'). Lines whose fit window
+        contains any non-finite flux are dropped before fitting; an all-NaN
+        order returns empty arrays. Keys: 'wav' (reference wavelength), 'pix'
+        (fitted pixel), 'std' (Gaussian sigma), 'amp' (amplitude), 'isgood'.
         """
         # Fit in float64 (wavelength solutions are float64).
         flux1d = np.asarray(flux1d, dtype=np.float64)
@@ -365,46 +315,11 @@ class WLS(BaseMasterModule):
         """
         Fit line positions across all orders and fibers of one chip.
 
-        Loops over the requested fibers, calling `_fit_line_positions_1d`
-        on each (order, fiber) extracted spectrum, and concatenates the
-        surviving lines into flat arrays tagged with their chip, fiber,
-        order index, and echelle order.
-
-        Parameters
-        ----------
-        l2_obj : KPF2
-            Extracted L2 object containing per-fiber FLUX arrays of shape
-            (norder, ncol).
-        chip : str
-            Chip identifier ('GREEN' or 'RED').
-        fibers : list of str
-            Fiber identifiers (e.g. ['SCI1', 'SCI2', 'SCI3']).
-        linelist : str, optional
-            Path to a CSV line list. If different from the currently
-            cached `self.linelist`, the file is reloaded and the cache
-            is updated. Defaults to `self.linelist` (no reload).
-        lineprofile : str, optional
-            Line profile model name. See kpfpipe.utils.stats._FUNCTIONS.
-        window : int, optional
-            Half-width of the per-line fit window, in pixels.
-
-        Returns
-        -------
-        lines : dict of ndarray
-            Flat 1D arrays, all of equal length. All lines are retained
-            regardless of QC status; the caller is responsible for
-            filtering on 'isgood' before downstream use. All per-line keys
-            produced by `_fit_line_positions_1d` are carried through, plus
-            provenance tags identifying each line's source. Keys:
-              'chip' - chip identifier ('GREEN' or 'RED')
-              'fiber' - fiber name
-              'index' - KPF order index (0-based row)
-              'echelle' - physical echelle order
-              'wav' - reference line wavelength
-              'pix' - fitted pixel position
-              'std' - fitted line sigma (Gaussian width)
-              'amp' - fitted line amplitude
-              'isgood' - boolean QC flag (True = line passed QC)
+        Loops the requested fibers, calling `_fit_line_positions_1d` per
+        (order, fiber) and concatenating survivors into flat arrays. Returns the
+        per-line dict from `_fit_line_positions_1d` plus provenance tags 'chip',
+        'fiber', 'index' (0-based row), and 'echelle' (physical order); all lines
+        retained regardless of QC.
         """
         linelist_df = self._load_linelist(linelist)
 
@@ -490,40 +405,16 @@ class WLS(BaseMasterModule):
         polyorder_f=None,
     ):
         """
-        Fit a multivariate Legendre polynomial wavelength solution to
-        fitted line positions.
+        Fit a multivariate Legendre wavelength solution to fitted line positions.
 
         Treats the grating invariant m*lambda (echelle order x wavelength) as a
-        smooth function of pixel position (x), order (m), and (optionally) fiber
-        index (f). All variables are rescaled to [-1, 1] before fitting.
-
-        Parameters
-        ----------
-        lines : dict of ndarray
-            Flat 1D arrays as produced by `_fit_line_positions_ffi`. Lines
-            without `lines['isgood']` set are excluded from the fit. Required
-            keys: 'wav', 'pix', 'echelle', 'fiber', 'isgood'.
-        orders : ndarray of int
-            Physical echelle order per row (bluest first), used to rescale
-            the order axis to [-1, 1].
-        polyorder_x : int, optional
-            Polynomial degree along the pixel axis.
-        polyorder_m : int, optional
-            Polynomial degree along the order axis.
-        polyorder_f : int, optional
-            Polynomial degree along the fiber axis (only used for 3-fiber fits).
-
-        Returns
-        -------
-        coeffs : ndarray
-            Legendre coefficient array. Shape is
-            (polyorder_x+1, polyorder_m+1) for a single-fiber fit, or
-            (polyorder_x+1, polyorder_m+1, polyorder_f+1) for a 3-fiber fit.
-
-        Notes
-        -----
-        Raises ValueError if `lines['fiber']` contains anything other than
-        one fiber, all five fibers, or three SCI fibers (SCI1, SCI2, SCI3).
+        smooth function of pixel (x), order (m), and optionally fiber (f); all
+        variables are rescaled to [-1, 1] before fitting. Only lines with
+        `lines['isgood']` set are used. Returns the Legendre coefficient array,
+        shape (polyorder_x+1, polyorder_m+1) for a single-fiber fit or with a
+        trailing (polyorder_f+1) axis for a multi-fiber fit. Raises for a fiber
+        set other than 1, the 3 SCI fibers, or all 5 fibers, or when the fit is
+        underconstrained.
         """
         if polyorder_x is None:
             polyorder_x = self.polyorder_x
@@ -605,23 +496,10 @@ class WLS(BaseMasterModule):
 
         The coefficients describe the grating-invariant m*lambda surface, so the
         evaluated surface is divided by the physical order to recover wavelength.
-
-        Parameters
-        ----------
-        coeffs : ndarray
-            Legendre coefficient array from `_calculate_wls_coeffs`. Either
-            2D (single-fiber) or 3D (three-fiber).
-        orders : ndarray of int
-            Physical echelle order per row (bluest first); sets the number of
-            orders and the [-1, 1] rescaling (must match `_calculate_wls_coeffs`).
-        nfiber : int
-            Number of fibers at which to evaluate. Ignored for 2D `coeffs`.
-
-        Returns
-        -------
-        W : ndarray
-            Wavelength array of shape (norder, ncol) for 2D `coeffs`, or
-            (norder, ncol, nfiber) for 3D `coeffs`.
+        `orders` sets the [-1, 1] order rescaling (must match
+        `_calculate_wls_coeffs`). Returns W of shape (norder, ncol) for 2D
+        `coeffs` or (norder, ncol, nfiber) for 3D `coeffs` (`nfiber` ignored for
+        2D).
         """
         blue, red = orders[0], orders[-1]
         x = np.linspace(-1, 1, self.ccd["ncol"])
@@ -658,47 +536,17 @@ class WLS(BaseMasterModule):
     ):
         """
         Fit line positions and a per-frame Legendre WLS for every frame in
-        `self._l2_obj_cache`. Every frame is reported; a frame is flagged
-        `rejected` (warned, never raised) and kept out of the combined solution
-        when its line-fit QC failure fraction exceeds `max_bad_frac`, or when its
-        per-frame fit fails (too few good lines, a dropped fiber, or non-finite
-        coefficients). Survivors are gated against `min_stack_size` in
-        `make_master_l2`.
+        `self._l2_obj_cache`.
 
-        Parameters
-        ----------
-        chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'.
-        fibers : list of str
-            Fiber identifiers, e.g. ['SCI1', 'SCI2', 'SCI3'] or a single fiber.
-        linelist : str, optional
-            Path to a CSV line list. If different from the currently
-            cached `self.linelist`, the file is reloaded and the cache
-            is updated. Defaults to `self.linelist` (no reload).
-        lineprofile : str, optional
-            Line profile model name. Defaults to self.lineprofile.
-        polyorder_x, polyorder_m, polyorder_f : int, optional
-            Polynomial degrees along the pixel / order / fiber axes.
-        window : int, optional
-            Half-width of the per-line fit window, in pixels.
-        max_bad_frac : float, optional
-            Maximum fraction of per-line fits allowed to fail QC before a
-            frame is rejected from the stack.
+        Every frame is reported; a frame is flagged `rejected` (warned, never
+        raised) and kept out of the combined solution when its line-fit QC
+        failure fraction exceeds `max_bad_frac`, or when its per-frame fit fails
+        (too few good lines, a dropped fiber, or non-finite coefficients).
+        Survivors are gated against `min_stack_size` in `make_master_l2`.
 
-        Returns
-        -------
-        frames : list of dict
-            Per-frame diagnostics, one entry per input frame in original
-            order. Keys: 'obs_id', 'lines' (the `_fit_line_positions_ffi`
-            dict), 'coeffs' (per-frame Legendre coefficients, or None if
-            rejected), and 'rejected' (bool). Only non-rejected frames feed
-            the combined solution.
-
-        Notes
-        -----
-        Raises ValueError only if `self._l2_obj_cache` is empty (i.e.,
-        `_process_stack_l0_to_l2` has not been run). Per-frame QC/fit problems
-        warn and reject the frame; they never raise.
+        Returns a list of per-frame dicts (original order) with keys 'obs_id',
+        'lines' (the `_fit_line_positions_ffi` dict), 'coeffs' (None if
+        rejected), and 'rejected'. Raises only if `self._l2_obj_cache` is empty.
         """
         self._load_linelist(linelist)
         if lineprofile is None:
@@ -785,38 +633,13 @@ class WLS(BaseMasterModule):
         """
         Combine surviving per-frame coefficients into a master WLS.
 
-        Stacks the Legendre coefficients of the non-rejected `frames`, combines
-        them via per-coefficient outlier-rejected averaging (median +/- `qc_sigma`
-        MAD), and evaluates the mean coefficients to a master wavelength array.
-        Assumes at least one surviving frame -- callers gate the surviving-frame
-        count against `min_stack_size` first.
-
-        Parameters
-        ----------
-        frames : list of dict
-            Per-frame diagnostics from `_fit_and_qc_lines_stack`; only entries with
-            `rejected` False (and a non-None `coeffs`) contribute.
-        chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'.
-        nfibers : int
-            Number of fibers in the fit (sets the W fiber axis).
-        qc_sigma : float, optional
-            Outlier rejection threshold applied to the per-frame Legendre
-            coefficients when combining them.
-
-        Returns
-        -------
-        W : ndarray
-            Master wavelength array, shape (norder, ncol) or
-            (norder, ncol, nfiber).
-        coeffs_mean : ndarray
-            Outlier-rejected mean Legendre coefficient array.
-
-        Notes
-        -----
-        Raises ValueError if every surviving frame is rejected as an outlier for
-        at least one Legendre coefficient (a cross-frame degeneracy that leaves
-        the stack uncombinable).
+        Stacks the non-rejected frames' Legendre coefficients, combines them by
+        per-coefficient outlier-rejected averaging (median +/- `qc_sigma` MAD),
+        and evaluates the mean to a master wavelength array. Assumes at least one
+        survivor (callers gate against `min_stack_size` first). Returns
+        (W, coeffs_mean). Raises if every survivor is rejected as an outlier for
+        some coefficient (a cross-frame degeneracy that leaves the stack
+        uncombinable).
         """
         coeffs_stack = np.array([fr["coeffs"] for fr in frames if not fr["rejected"]])
 

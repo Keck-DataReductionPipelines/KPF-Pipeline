@@ -86,8 +86,7 @@ class Dark(BaseMasterModule):
             `bias="/path/master_bias.fits"` uses a specific master. Dark/flat are
             never applied to a dark, so they are not accepted.
         master_path : str, optional
-            If provided, calls `self.save_master('L1', master_path)` at
-            the end to persist the master L1 to a FITS file at this path.
+            If provided, persist the master L1 to a FITS file at this path.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list

@@ -69,8 +69,8 @@ class ImageProcessing:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        # Resolved masters and their paths, cached per instance by
-        # _resolve_master() during perform() so a master is read at most once.
+        # Resolved masters + paths, cached by _resolve_master() so each master
+        # is read at most once.
         self._bias_ml1 = None
         self._dark_ml1 = None
         self._bias_path = None
@@ -86,25 +86,10 @@ class ImageProcessing:
     @classmethod
     def _load_master(cls, master_path):
         """
-        Load a master frame from an explicit path.
+        Load a master L1 frame from an explicit path.
 
-        The single FITS-read chokepoint for masters; `BaseMasterModule` also
-        delegates here.
-
-        Parameters
-        ----------
-        master_path : str
-            Path to the master L1 FITS file.
-
-        Returns
-        -------
-        KPFMasterL1
-            The loaded master.
-
-        Raises
-        ------
-        FileNotFoundError
-            If `master_path` does not exist on disk.
+        The single FITS-read chokepoint for masters (`BaseMasterModule` also
+        delegates here); raises FileNotFoundError if the path is absent.
         """
         if not os.path.isfile(master_path):
             raise FileNotFoundError(f"Master file not found: {master_path}")
@@ -168,25 +153,10 @@ class ImageProcessing:
         Recover the per-pixel variance of a master IMG from its stored SNR.
 
         A master stores IMG = counts / exptime and SNR = |counts| / sqrt(var),
-        so the variance of the IMG value is (IMG / SNR)**2 (= var / exptime**2).
-        This is the bias/dark uncertainty propagated into the science VAR. A
-        master is built from many frames, so this term is small relative to the
-        per-frame image variance. SNR is non-negative by construction and is
-        exactly zero only at bad / zero-flux pixels; those contribute zero
-        variance rather than inf/NaN.
-
-        Parameters
-        ----------
-        img : numpy.ndarray
-            Master IMG array ('{chip}_IMG'); electrons for bias, electrons/sec
-            for dark.
-        snr : numpy.ndarray
-            Matching master SNR array ('{chip}_SNR').
-
-        Returns
-        -------
-        numpy.ndarray
-            Per-pixel variance of the master IMG, in IMG units squared.
+        so var(IMG) = (IMG / SNR)**2 (= var / exptime**2) — the master's
+        contribution to the science VAR, small because a master averages many
+        frames. SNR is exactly zero only at bad / zero-flux pixels, which
+        contribute zero variance rather than inf/NaN.
         """
         ratio = np.zeros_like(img, dtype=np.float32)
         np.divide(img, snr, out=ratio, where=snr > 0)
@@ -278,11 +248,10 @@ class ImageProcessing:
         self._info = "\n".join(lines)
 
     def _set_headers(self, l1_obj):
-        """Write all PRIMARY-header keywords for image processing.
+        """Write the applied-flag keywords (BIASSUB/DARKSUB) for image processing.
 
-        Reads the applied-flag attributes populated by perform(); the single
-        place this module writes header keywords, called just before the receipt
-        entry. set_keyword routes BIASSUB/DARKSUB to their registry home (RECEIPT).
+        Reads the flags populated by perform(); set_keyword routes them to their
+        registry home (RECEIPT).
         """
         l1_obj.set_keyword("BIASSUB", int(self._biassub))
         l1_obj.set_keyword("DARKSUB", int(self._darksub))

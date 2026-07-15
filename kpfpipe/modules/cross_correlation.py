@@ -104,13 +104,10 @@ class CrossCorrelation:
 
     def _resolve_illumination_source(self, chip, fiber):
         """
-        Resolve (and cache) the illumination source and its CCF settings for one
-        orderlet, from its SCI-OBJ/SKY-OBJ/CAL-OBJ keyword in INSTRUMENT_HEADER.
-
-        Returns a dict with keys 'object' (the normalized source), 'mask_name',
-        'apply_barycorr', and 'vel_grid_center'. An unilluminated fiber ('none')
-        has None mask/barycorr/center. Sources whose CCF path is not yet built
-        (etalon, lfc) are skipped the same way, with a warning.
+        Resolve (and cache) the orderlet's illumination source and CCF settings
+        (dict: 'object', 'mask_name', 'apply_barycorr', 'vel_grid_center') from
+        its SCI-OBJ/SKY-OBJ/CAL-OBJ keyword in INSTRUMENT_HEADER. 'none' and the
+        not-yet-built sources (etalon, lfc) get None mask/barycorr/center.
         """
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
@@ -128,7 +125,7 @@ class CrossCorrelation:
                 f"cannot dispatch a mask for fiber {fiber}"
             )
 
-        # Map the raw keyword to the source object and its CCF settings (mask,
+        # Dispatch the raw keyword to source object + CCF settings (mask,
         # barycorr flag, grid center: systemic RV for a star, 0 for sky/cal).
         raw = inst.get(keyword)
         v = str(raw).strip().lower()
@@ -224,19 +221,11 @@ class CrossCorrelation:
 
     def _build_line_mask(self, chip, fiber, mask_width=None):
         """
-        Build (and cache) the orderlet's CCF line mask: vacuum line centers,
-        weights, and per-line top-hat holes of full width `mask_width` about
-        each center (relativistic Doppler). The mask is selected from the orderlet's
-        illumination source.
-
-        Stellar masks load from reference/line_masks/stellar_masks/; the 'thar'
-        mask is built from the ThAr line list with uniform weights.
-
-        Returns
-        -------
-        dict
-            Mask with keys 'center', 'weight', 'start', 'end', each a 1D ndarray
-            of length n_line; wavelengths are vacuum [Å].
+        Build (and cache) the orderlet's CCF line mask (dict of vacuum 'center',
+        'weight', and per-line top-hat 'start'/'end' at full width `mask_width`
+        about each center via relativistic Doppler). Stellar masks load from
+        reference/line_masks/stellar_masks/; 'thar' is built from the ThAr line
+        list with uniform weights.
         """
         if mask_width is None:
             mask_width = self.ccf_mask_width
@@ -272,12 +261,9 @@ class CrossCorrelation:
 
     def _build_velocity_grid(self, chip, fiber, step_size=None, window=None):
         """
-        Build (and cache) the orderlet's CCF velocity grid: evenly spaced over
-        `window` about the orderlet's grid center in `step_size` increments.
-
-        The [min, max] `window` is converted to an integer number of `step_size`
-        steps (so the step is exact), then shifted by the center — the systemic
-        RV (TARGRADV) for stellar fibers, 0 for sky/cal fibers.
+        Build (and cache) the orderlet's CCF velocity grid: `window` [min, max]
+        rounded to an integer number of exact `step_size` steps, then shifted by
+        the grid center (systemic RV for stellar fibers, 0 for sky/cal).
         """
         if step_size is None:
             step_size = self.ccf_step_size
@@ -319,40 +305,14 @@ class CrossCorrelation:
     @staticmethod
     def _compute_ccf_1d(wave, flux, var, line_mask, velocity_grid, barycorr_z):
         """
-        Cross-correlate one order's spectrum against the mask over the velocity
-        grid, folding in the order's barycentric redshift z.
+        Cross-correlate one order's spectrum (wave/flux/var) against the mask over
+        the velocity grid, folding in the order's barycentric redshift z. Returns
+        (ccf, ccf_var = sum(w**2 * var)), both all-zero when the order is unusable
+        or no mask lines fall fully within it.
 
-        Parameters
-        ----------
-        wave : ndarray
-            1D wavelength solution for the order [Å].
-        flux : ndarray
-            1D extracted flux for the order.
-        var : ndarray
-            1D per-pixel variance for the order (TRACE_VAR); sets the CCF photon
-            variance.
-        line_mask : dict
-            Line mask (keys 'start', 'end', 'weight') from _build_line_mask.
-        velocity_grid : ndarray
-            CCF velocity steps [km/s].
-        barycorr_z : float
-            Barycentric redshift for the order.
-
-        Returns
-        -------
-        ccf : ndarray
-            CCF value at each velocity step (all zeros if the order is unusable
-            or no mask lines fall fully within it).
-        ccf_var : ndarray
-            Per-velocity-bin photon variance sum(w**2 * var), where w is the
-            per-pixel mask weight (all zeros in the same unusable cases).
-
-        Raises
-        ------
-        ValueError
-            If the WAVE array is descending; an ascending (blue->red) solution
-            is expected, so a reversed order signals an upstream orientation
-            error rather than something to silently correct.
+        Raises ValueError if WAVE is descending: an ascending (blue->red) solution
+        is expected, so a reversed order signals an upstream orientation error
+        rather than something to silently correct.
         """
         wave = np.asarray(wave, dtype=np.float64)
         flux = np.asarray(flux, dtype=np.float64)
@@ -630,12 +590,10 @@ class CrossCorrelation:
 
     def _set_headers(self, l4_obj):
         """
-        Write all CCF/RV extension headers, the single place this module writes
-        headers, called just before the receipt entry. Reads the per-orderlet
-        caches populated by perform()/compute_ccfs (velocity grid, illumination
-        source, step, mask width). Each keyword is an EPRV per-extension card, so
-        it is routed with an explicit ext= to this orderlet's CCF{n}/RV{n}. CCF
-        axes are (velocity, order); RV axes are (columns, order).
+        Write all CCF/RV extension headers (the module's single header-writing
+        site) from the per-orderlet caches, routing each EPRV per-extension card
+        with an explicit ext= to this orderlet's CCF{n}/RV{n}. CCF axes are
+        (velocity, order); RV axes are (columns, order).
         """
         for fiber in self._fibers_done:
             key = f"{self._chips_done[-1]}_{fiber}"

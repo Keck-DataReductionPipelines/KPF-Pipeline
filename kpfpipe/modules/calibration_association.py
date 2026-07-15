@@ -89,29 +89,9 @@ class CalibrationAssociation:
 
     def _find_master_files(self, cal_type, date_obs, masters_search_window_days=None):
         """
-        Return a list of (filepath, timestamp) tuples for all available
-        masters of the given calibration type within the search window.
-
-        Parameters
-        ----------
-        cal_type : str
-            One of 'bias', 'dark', 'flat', 'thar'.
-        date_obs : str
-            ISO-format observation datetime from the frame's PRIMARY header
-            (e.g. '2024-04-05T11:08:33').
-        masters_search_window_days : [int, int], optional
-            Search window as [days_before, days_after]. Defaults to
-            self.masters_search_window_days.
-
-        Returns
-        -------
-        list of (str, str)
-            Sorted list of (filepath, kpf_timestamp) tuples.
-
-        Raises
-        ------
-        ValueError
-            If `cal_type` is not a key of `_LEVEL_BY_CAL_TYPE`.
+        Return sorted (filepath, kpf_timestamp) tuples for all masters of
+        `cal_type` within the [days_before, days_after] window around
+        `date_obs`. Raises ValueError for an unsupported `cal_type`.
         """
         if cal_type not in _LEVEL_BY_CAL_TYPE:
             raise ValueError(
@@ -145,21 +125,8 @@ class CalibrationAssociation:
 
     def _select_nearest(self, date_obs, master_files):
         """
-        Select the candidate whose timestamp is nearest to date_obs.
-
-        Parameters
-        ----------
-        date_obs : str
-            ISO-format observation datetime from the frame's PRIMARY header
-            (e.g. '2024-04-05T11:08:33').
-        master_files : list of (str, str)
-            (filepath, kpf_timestamp) pairs from _find_master_files.
-
-        Returns
-        -------
-        str or None
-            Filepath of the selected master, or None if master_files is empty.
-            Callers should treat None as a failure.
+        Return the filepath of the candidate nearest in time to `date_obs`,
+        or None if `master_files` is empty (callers treat None as a failure).
         """
         if not master_files:
             return None
@@ -194,12 +161,10 @@ class CalibrationAssociation:
     def _set_headers(self, l1_obj):
         """Write the master-path keyword for each associated calibration.
 
-        Reads self._calibrations (populated by perform()); the single place this
-        module writes header keywords, called just before the receipt entry. Each
-        cal type contributes {PREFIX}FILE (full master path), which set_keyword
-        routes to RECEIPT. The signed (master - obs) age ({PREFIX}AGE) is
-        recomputed downstream by DiagL1 from this path plus PRIMARY DATE-OBS,
-        so this module no longer computes or writes it.
+        Reads self._calibrations (from perform()); each cal type contributes
+        {PREFIX}FILE (full master path), which set_keyword routes to RECEIPT.
+        The signed age {PREFIX}AGE is recomputed downstream by DiagL1 from this
+        path plus PRIMARY DATE-OBS, not written here.
         """
         for cal_type, cal in self._calibrations.items():
             prefix = _HEADER_PREFIX[cal_type]
