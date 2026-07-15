@@ -94,6 +94,14 @@ autodoc_default_options = {
     "show-inheritance": True,
 }
 
+# Order documented members by source order rather than alphabetically. For a
+# package documented via automodule, "bysource" follows the __all__ order, so a
+# base class listed first in __all__ leads the page above its subclasses
+# (e.g. Diagnostics above DiagL0..DiagL4, matching the base-first __all__
+# convention in the quality_control subpackages). For classes it orders methods
+# by definition order instead of alphabetically.
+autodoc_member_order = "bysource"
+
 # -- Options for HTML output --------------------------------------------------
 
 html_theme = "sphinx_rtd_theme"
