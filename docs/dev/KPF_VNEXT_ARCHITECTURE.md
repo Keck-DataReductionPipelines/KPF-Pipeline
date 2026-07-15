@@ -92,7 +92,16 @@ self-contained step of the data flow (see *Modules*).
 
 ### Masters Pipeline
 
-`kpfpipe/modules/masters/` stacks multiple calibration observations into bias, dark, flat, and wavelength-solution (WLS) products. Stacking is sigma-clipped and uses single-pass streaming accumulation (per-pixel counts + exposure time) so a large stack never holds every frame in memory at once; the master is the exposure-weighted rate (total counts ÷ total exposure). The stage is I/O-bound, so the shared engine (`base.py`) caches the first-read assembled frames for later passes to reuse instead of re-reading them. Fan-out concurrency is tuned separately from science (see *Scripts*); the resulting ML1/ML2 products are described under *Masters data models*.
+`kpfpipe/modules/masters/` stacks multiple calibration observations into bias, dark, flat, and
+wavelength-solution (WLS) products.
+
+- **Stacking** is sigma-clipped and uses single-pass streaming accumulation (per-pixel counts +
+  exposure time), so a large stack never holds every frame in memory at once; the master is the
+  exposure-weighted rate (total counts ÷ total exposure).
+- **The stage is I/O-bound**, so the shared engine (`base.py`) caches the first-read assembled
+  frames for later passes to reuse instead of re-reading them.
+- **Fan-out concurrency** is tuned separately from science (see *Scripts*); the resulting ML1/ML2
+  products are described under *Masters data models*.
 
 ## Data Models
 
@@ -111,7 +120,20 @@ RVDataModel (rvdata)
     └── KPF4 (KPFDataModel, RV4) (level4.py)   — RVs and CCFs (L4) with aliases
 ```
 
-**All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while `RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`. `KPFDataModel` is the single home for shared behavior: `obs_id`, `as_fits_header`, `create_extension`, alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1), `receipt_add_entry`/`_update_drpstatus`, and `_create_hdul`/`_restore_primary_comments`. **`check_filename_convention` is the exception** — every concrete model declares it *explicitly* (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV `SL#` check delegated to rvdata via `RV2`/`RV4` (KPF2/KPF4), and the DRP-RUN-05 master name `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO, so it wins). L2/L4 add KPF-friendly extension aliases via `AliasedOrderedDict`.
+**All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance
+alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while
+`RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`.
+
+- **Shared behavior lives in `KPFDataModel`**: `obs_id`, `as_fits_header`, `create_extension`,
+  alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1),
+  `receipt_add_entry`/`_update_drpstatus`, and `_create_hdul`/`_restore_primary_comments`.
+- **`check_filename_convention` is the exception** — every concrete model declares it *explicitly*
+  (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base
+  is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV
+  `SL#` check delegated to rvdata via `RV2`/`RV4` (KPF2/KPF4), and the DRP-RUN-05 master name
+  `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO,
+  so it wins).
+- **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`.
 
 The rvdata `RVDataModel` base provides the `extensions`/`headers`/`data` OrderedDicts plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. `KPFDataModel` overrides `set_data`/`set_header` (in `base.py`, not the level classes) with a `hasattr` guard, so alias resolution runs during init — the base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. It likewise overrides `create_extension` so every extension header is a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
 
@@ -286,7 +308,24 @@ the remaining argv verbatim (each subcommand owns its own argparse). Full flag u
 
 ## Quality control
 
-Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of them mutate the scientific arrays — they only read data and write header keywords via `set_keyword` (routed to QUALITY_CONTROL — see *Keyword registry*) (and, in Quicklook's case, to PNG files). Per-level files follow the `levelN.py` naming used by `data_models/`. The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the prior wrote. The recipe drives all three through a **single `CheckpointL{n}(obj).run()` call**: `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly. The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g. `scripts/quality_control/qc.py`). A level with no paired class skips that stage. The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED timing-consistency flag, is an L0 check whose result rides forward this way).
+Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of
+them mutate the scientific arrays — they only read data and write header keywords via `set_keyword`
+(routed to QUALITY_CONTROL — see *Keyword registry*) (and, in Quicklook's case, to PNG files).
+Per-level files follow the `levelN.py` naming used by `data_models/`.
+
+The first three run in a strict order — **Diagnostics → QC → Checkpoints** — each consuming what the
+prior wrote, driven by the recipe through a **single `CheckpointL{n}(obj).run()` call**:
+
+- `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as
+  the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the
+  checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly.
+- The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g.
+  `scripts/quality_control/qc.py`). A level with no paired class skips that stage.
+
+The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags
++ `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4
+products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED
+timing-consistency flag, is an L0 check whose result rides forward this way).
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 

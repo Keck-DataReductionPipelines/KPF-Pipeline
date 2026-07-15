@@ -12,11 +12,8 @@ of the project's authority hierarchy:
 3. the project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md)) →
 4. the architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md)) →
 5. this style guide.** They describe the dominant, prevailing pattern; where the codebase
-contradicts itself, the recommended variant is called out explicitly. When following a rule
-here would conflict with any of the four documents above — the WMKO requirements (Keck's
-binding technical requirements), the EPRV standard (data-product format), the charter (intent,
-scope, scientific focus, calibration philosophy, guardrails), or the architecture reference
-(pipeline structure) — **the higher document wins.** Style yields to science.
+contradicts itself, the recommended variant is called out explicitly. When a rule here
+conflicts with any of those four documents, **the higher one wins** — style yields to science.
 
 This file covers *how code should look and be organized* — not operational or technical
 guidance (environment, commands) or the pipeline's structure (the architecture reference),

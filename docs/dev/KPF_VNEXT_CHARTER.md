@@ -24,8 +24,8 @@ The legacy v2.12 DRP has reached a point where:
 
 This effort is not a cosmetic refactor.
 
-It is a controlled reset aimed at restoring: - scientific confidence, -
-deterministic behavior, - and development agility.
+It is a controlled reset aimed at restoring scientific confidence,
+deterministic behavior, and development agility.
 
 ------------------------------------------------------------------------
 
@@ -46,9 +46,9 @@ This means:
 
 The goal is not elegance.
 
-The goal is: - clarity, - reproducibility, - and stability.
+The goal is clarity, reproducibility, and stability.
 
-We optimize for: - ease of debugging, - transparent calibration logic, -
+We optimize for ease of debugging, transparent calibration logic,
 and rapid iteration.
 
 ------------------------------------------------------------------------
@@ -64,7 +64,7 @@ The pipeline is considered successful when:
 5.  RV performance on standard stars is stable and measurable.
 6.  Silent failures are eliminated.
 
-We are not targeting: - perfect architecture, - distributed scaling, -
+We are not targeting perfect architecture, distributed scaling,
 or production-grade orchestration.
 
 ------------------------------------------------------------------------
@@ -111,15 +111,15 @@ This is a small-team effort:
 -   BJ: project lead / scientific oversight / integration.
 -   Greg: primary implementation.
 
-Weekly cadence: - measurable progress, - regression metrics, - explicit
+Weekly cadence: measurable progress, regression metrics, explicit
 sprint goals.
 
-Every major change must: - preserve deterministic behavior, - run on the
-truth dataset, - and document impact on RV metrics.
+Every major change must preserve deterministic behavior, run on the
+truth dataset, and document impact on RV metrics.
 
 ------------------------------------------------------------------------
 
-## 7. Why an Astronomy-Style Pipline First
+## 7. Why an Astronomy-Style Pipeline First
 
 We intentionally begin with Phase I because:
 
@@ -127,7 +127,7 @@ We intentionally begin with Phase I because:
 -   Architecture debates are distracting.
 -   Scientific stability must precede software polish.
 
-Phase I gives us: - agility, - clarity, - and control.
+Phase I gives us agility, clarity, and control.
 
 ------------------------------------------------------------------------
 
@@ -157,7 +157,7 @@ We must avoid:
 -   Introducing silent retries.
 -   Overengineering abstractions.
 
-All steps must remain: - explicit, - readable, - debuggable.
+All steps must remain explicit, readable, and debuggable.
 
 ------------------------------------------------------------------------
 
