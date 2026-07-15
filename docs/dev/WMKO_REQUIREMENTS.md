@@ -10,8 +10,9 @@ the project's reference hierarchy — they outrank every other governing documen
 
 **1. these WMKO requirements → 2. the EPRV data standard
 ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md)) → 3. the project charter
-([`KPF_DRP_VNEXT_CHARTER.md`](KPF_DRP_VNEXT_CHARTER.md)) → 4. the style guide
-([`KPF_DRP_VNEXT_STYLE_GUIDE.md`](KPF_DRP_VNEXT_STYLE_GUIDE.md)).**
+([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md)) → 4. the architecture reference
+([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md)) → 5. the style guide
+([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md)).**
 
 When any two conflict, the higher one wins.
 
