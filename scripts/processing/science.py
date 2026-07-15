@@ -6,7 +6,7 @@ A lightweight, fail-loud orchestrator: it dispatches each frame as a separate
 ``kpfpipe run`` leaf), so every frame gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which frames to reduce (discovering a target's frames from the L0 tree lives in
-the orchestrator, not here), via the input form:
+the timeseries wrapper, not here), via the input form:
 
     kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36
     kpfpipe science --obs_ids frames.txt        # a file of obs_ids
@@ -15,9 +15,9 @@ Reductions run in a bounded process pool. The L0 mini-database caches for the
 nights the frames span are warmed up front by a parallel per-datecode pre-scan
 (``--cache``, ``rw`` by default; ``r`` skips the pre-scan and leaves each reduce to
 read-only); the first frame then runs alone as a canary to warm the *other* shared
-caches,
-then the rest fan out (paced apart, since the per-frame L0 pointing QC queries
-SIMBAD/Gaia). The run is fail-soft (a frame that fails to reduce is reported and
+caches, then the rest fan out (paced apart, since the per-frame L0 pointing QC
+queries SIMBAD/Gaia). The run is fail-soft (a frame that fails to reduce is
+reported and
 the others continue) but exits nonzero if any frame failed.
 """
 

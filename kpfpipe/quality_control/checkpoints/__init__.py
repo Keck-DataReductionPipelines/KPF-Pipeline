@@ -1,3 +1,5 @@
+"""Checkpoints: per-level validation that warns or raises on QC results."""
+
 from kpfpipe.quality_control.checkpoints.base import Checkpoint
 from kpfpipe.quality_control.checkpoints.level0 import CheckpointL0
 from kpfpipe.quality_control.checkpoints.level1 import CheckpointL1

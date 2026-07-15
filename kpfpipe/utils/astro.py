@@ -1,4 +1,4 @@
-"""Air/vacuum wavelength conversion and relativistic Doppler/redshift helpers."""
+"""Astronomy-related helper functions, in the style of ``astropy``."""
 
 import astropy.units as u
 import numpy as np
@@ -6,9 +6,8 @@ from astropy.constants import c
 
 
 def compute_doppler_factor(v):
-    """
-    Relativistic Doppler factor ``f = lambda_obs / lambda_rest`` for a source
-    with radial velocity `v`.
+    """Relativistic Doppler factor ``f = lambda_obs / lambda_rest`` for a source
+    with radial velocity ``v``.
 
     Standard astronomical convention: a receding source (``v > 0``) is
     redshifted, so ``f > 1``. The factor relates to the redshift by
@@ -31,9 +30,8 @@ def compute_doppler_factor(v):
 
 
 def compute_redshift(v):
-    """
-    Relativistic redshift ``z = lambda_obs / lambda_rest - 1`` for a source
-    with radial velocity `v`. A receding source (``v > 0``) gives ``z > 0``;
+    """Relativistic redshift ``z = lambda_obs / lambda_rest - 1`` for a source
+    with radial velocity ``v``. A receding source (``v > 0``) gives ``z > 0``;
     computed as ``compute_doppler_factor(v) - 1``.
 
     Parameters
@@ -52,8 +50,7 @@ def compute_redshift(v):
 
 
 def air_to_vac(wave_air):
-    """
-    Convert air wavelengths to vacuum via the Edlén 1953 formula (two
+    """Convert air wavelengths to vacuum via the Edlén 1953 formula (two
     iterations; only wavelengths > 2000 Å are modified).
 
     Not yet wired into a pipeline module: retained for the forthcoming

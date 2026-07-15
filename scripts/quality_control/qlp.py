@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""
-Standalone QLP (quicklook plot) generator.
+"""Standalone QLP (quicklook plot) generator.
 
 Usage:
     python scripts/quality_control/qlp.py \

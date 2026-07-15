@@ -1,5 +1,4 @@
-"""
-Tests for the KPF QC framework (Tasks 2-7).
+"""Tests for the KPF QC framework (quality_control/qc_flags).
 
 Covers:
   - QC base class runner (TestQCBase)
@@ -7,9 +6,10 @@ Covers:
   - QCL1 checks (TestQCL1)
   - QCL1 full run on an all-good synthetic L1 (TestQCL1Run)
   - QCL2 checks (TestQCL2)
+  - QCL4 checks (TestQCL4)
   - CLI smoke tests (TestQCScript)
 
-All tests use synthetic in-memory data — no real KPF files required.
+All tests use synthetic in-memory data -- no real KPF files required.
 """
 
 import os
@@ -348,15 +348,15 @@ class TestQCL0:
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in range(1, 5):
-                # data=None → KPF0 stores array(None, dtype=object) — treated as absent.
+                # data=None: KPF0 stores array(None, dtype=object), treated as absent.
                 hdus.append(fits.ImageHDU(data=None, name=f"{chip}_AMP{amp}"))
         fits.HDUList(hdus).writeto(fn, overwrite=True)
         l0 = KPF0.from_fits(fn)
         assert QCL0(l0).data_l0_red_green() is False
 
     def test_data_l0_red_green_pass_two_amp(self, tmp_path):
-        """2-amp readout (only AMP1/AMP2 per chip; AMP3/4 absent) — the truth-frame
-        layout — has data present and must pass."""
+        """2-amp readout (only AMP1/AMP2 per chip; AMP3/4 absent) -- the truth-frame
+        layout -- has data present and must pass."""
         fn = str(tmp_path / "KP.20240405.00003.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
@@ -796,7 +796,7 @@ class TestQCL2:
 
     def test_required_keywords_present_pass(self):
         # Fresh KPF2 is rvdata-seeded with the EPRV-required PRIMARY keywords; seed
-        # the KPF provenance cards too so all 44 are present.
+        # the KPF provenance cards too so all required keywords are present.
         kpf2 = _make_kpf2_with_flux()
         _seed_required_primary(kpf2, QCL2)
         assert QCL2(kpf2).required_keywords_present() is True
@@ -1031,7 +1031,7 @@ class TestQCScript:
 
 
 # ---------------------------------------------------------------------------
-# QCL4 — CCF/RV presence and BERV percent-change (ported from v2.12)
+# QCL4 -- CCF/RV presence and BERV percent-change (ported from v2.12)
 # (timing consistency moved to QCL0 / DATTIMOK)
 # ---------------------------------------------------------------------------
 

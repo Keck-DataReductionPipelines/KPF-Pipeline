@@ -123,12 +123,12 @@ def _master_dark(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# TestInit
+# TestDtypeProvenance
 # ---------------------------------------------------------------------------
 
 
 class TestDtypeProvenance:
-    """L1 CCD/VAR must stay float32 through bias AND dark subtraction — the
+    """L1 CCD/VAR must stay float32 through bias AND dark subtraction -- the
     dark*exptime(float64) scaling is the prime upcast trap."""
 
     def _module_bias_dark(self, tmp_path):
@@ -146,6 +146,11 @@ class TestDtypeProvenance:
         mod.perform()
         for ext in ("GREEN_CCD", "RED_CCD", "GREEN_VAR", "RED_VAR"):
             assert_dtype(mod.l1_obj.data[ext], L1_IMAGE, f"{ext} after bias+dark")
+
+
+# ---------------------------------------------------------------------------
+# TestInit
+# ---------------------------------------------------------------------------
 
 
 class TestInit:
@@ -174,7 +179,7 @@ class TestInit:
 
 
 # ---------------------------------------------------------------------------
-# TestBiasResolution — perform() resolves the bias source (bool | str |
+# TestBiasResolution -- perform() resolves the bias source (bool | str |
 # KPFMasterL1) and records its path. Dark is disabled to isolate bias.
 # ---------------------------------------------------------------------------
 
@@ -203,7 +208,7 @@ class TestBiasResolution:
     def test_explicit_path_overrides_headers(self, tmp_path):
         bias_path = str(tmp_path / "master_bias.fits")
         _write_master_bias(bias_path)
-        # Headers point nowhere valid — explicit path should win.
+        # Headers point nowhere valid -- explicit path should win.
         mod = _make_module(bias_file="wrong.fits", bias_dir="/wrong/dir")
         mod.perform(bias=bias_path, dark=False)
         assert mod._bias_path == bias_path
@@ -220,7 +225,7 @@ class TestBiasResolution:
         bias_path = str(tmp_path / "master_bias.fits")
         _write_master_bias(bias_path)
         master = KPFMasterL1.from_fits(bias_path)
-        # No BIAS headers — the object is used directly, no disk lookup.
+        # No BIAS headers -- the object is used directly, no disk lookup.
         mod = _make_module()
         mod.perform(bias=master, dark=False)
         assert mod._bias_path is not None
@@ -298,7 +303,7 @@ class TestSubtractBias:
 
 
 # ---------------------------------------------------------------------------
-# TestDarkResolution — perform() resolves the dark source (bool | str |
+# TestDarkResolution -- perform() resolves the dark source (bool | str |
 # KPFMasterL1) and records its path. Bias is disabled to isolate dark.
 # ---------------------------------------------------------------------------
 
@@ -595,7 +600,7 @@ class TestPerformDark:
 
 
 # ---------------------------------------------------------------------------
-# TestVarianceBudget — bias/dark add only a small fraction to the error budget
+# TestVarianceBudget -- bias/dark add only a small fraction to the error budget
 # ---------------------------------------------------------------------------
 
 
@@ -701,7 +706,7 @@ class TestMasterCache:
         assert mod._bias_ml1 is first
 
     def test_separate_instances_do_not_share(self, tmp_path):
-        # The cache is per instance — there is no class-level sharing.
+        # The cache is per instance -- there is no class-level sharing.
         path = str(tmp_path / "master_bias.fits")
         _write_master_bias(path)
         a = _make_module()

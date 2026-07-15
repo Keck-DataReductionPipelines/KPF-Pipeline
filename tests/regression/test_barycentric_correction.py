@@ -1,5 +1,4 @@
-"""
-Tests for the BarycentricCorrection module (KPF2 → KPF2).
+"""Tests for the BarycentricCorrection module (KPF2 -> KPF2).
 
 Static-method unit tests require no fixtures. Integration tests use a
 synthetic KPF2 with a small EXPMETER_SCI table and populated SCI2_WAVE.
@@ -54,7 +53,7 @@ def _make_expmeter_table():
 def synthetic_kpf2():
     """KPF2 with synthetic EXPMETER_SCI and wavelength arrays.
 
-    SCI2_WAVE is filled with 5000.0 — order_center = 5000 for every order,
+    SCI2_WAVE is filled with 5000.0 -- order_center = 5000 for every order,
     so np.interp returns the per-channel value at 5000Å (i.e. the first
     PHOTON_JD) for every order. Tests that need per-order variation
     populate SCI2_WAVE themselves.
@@ -92,7 +91,7 @@ def _fake_skycoord():
 
 
 # ---------------------------------------------------------------------------
-# Static helpers — unchanged behavior across the split
+# Static helpers -- unchanged behavior across the split
 # ---------------------------------------------------------------------------
 
 
@@ -664,7 +663,7 @@ class TestQueryGaiaValidation:
 
 
 # ---------------------------------------------------------------------------
-# _get_skycoord — Gaia first, WMKO header fallback, else raise
+# _get_skycoord -- Gaia first, WMKO header fallback, else raise
 # ---------------------------------------------------------------------------
 
 
@@ -742,7 +741,7 @@ class TestAstrometryResolution:
 
 
 # ---------------------------------------------------------------------------
-# perform() — Gaia and barycorrpy stubbed
+# perform() -- Gaia and barycorrpy stubbed
 # ---------------------------------------------------------------------------
 
 
@@ -991,7 +990,7 @@ class TestPerform:
             BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
         )
 
-        # No monkeypatch on _fix_expmeter_outliers — real filter runs.
+        # No monkeypatch on _fix_expmeter_outliers -- real filter runs.
         kpf2 = BarycentricCorrection(synthetic_kpf2).perform(fix_expmeter_outliers=True)
         assert np.all(np.isfinite(np.asarray(kpf2.data["BJD_TDB"])))
 

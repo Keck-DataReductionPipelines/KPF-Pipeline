@@ -154,7 +154,7 @@ class TestEmptyLevels:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 — pointing / identity offsets (GAIAOFF, TARGOFF)
+# DiagL0 -- pointing / identity offsets (GAIAOFF, TARGOFF)
 # ---------------------------------------------------------------------------
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
@@ -265,7 +265,7 @@ class TestDiagL0Pointing:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 — OBJECT-name offset via SIMBAD (OBJOFF)
+# DiagL0 -- OBJECT-name offset via SIMBAD (OBJOFF)
 # ---------------------------------------------------------------------------
 
 
@@ -330,7 +330,7 @@ class TestDiagL0Object:
 
 
 # ---------------------------------------------------------------------------
-# DiagL1 — master calibration ages
+# DiagL1 -- master calibration ages
 # ---------------------------------------------------------------------------
 
 
@@ -404,7 +404,7 @@ class TestDiagL1CalibrationAges:
 
 
 # ---------------------------------------------------------------------------
-# DiagL2 — NaN counts + zero-flux fraction
+# DiagL2 -- NaN counts + zero-flux fraction
 # ---------------------------------------------------------------------------
 
 
@@ -584,7 +584,7 @@ def _set_fiber_arrays(kpf2, suffix, value, chips=("GREEN", "RED"), fibers=_FIBER
 
 
 # ---------------------------------------------------------------------------
-# DiagL2 — per-fiber SNR
+# DiagL2 -- per-fiber SNR
 # ---------------------------------------------------------------------------
 
 
@@ -641,7 +641,7 @@ class TestDiagL2Snr:
 
 
 # ---------------------------------------------------------------------------
-# DiagL2 — orderlet flux ratios
+# DiagL2 -- orderlet flux ratios
 # ---------------------------------------------------------------------------
 
 
@@ -674,7 +674,7 @@ class TestDiagL2OrderletFluxRatios:
 
 
 # ---------------------------------------------------------------------------
-# DiagL4 — per-order BJD / barycentric-RV dispersion (ported from v2.12)
+# DiagL4 -- per-order BJD / barycentric-RV dispersion (ported from v2.12)
 # ---------------------------------------------------------------------------
 
 

@@ -3,8 +3,7 @@ API
 ===
 
 Auto-generated reference for the ``kpfpipe`` package, built from the source
-docstrings. The entries below are the top-level subpackages; each recurses
-automatically through its own modules.
+docstrings.
 
 .. autosummary::
    :toctree: _generated

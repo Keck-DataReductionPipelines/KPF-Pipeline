@@ -43,7 +43,7 @@ RN_KEYS = {
 
 class ImageAssembly:
     """
-    This class performs CCD-level processing to convert L0 data to L1.
+    Assemble a raw L0 readout into an L1 full-frame image.
 
     Operations include:
       - orienting amplifier channels
@@ -52,6 +52,14 @@ class ImageAssembly:
       - subtracting overscan bias
       - assembling full-frame images (FFI)
       - converting EXPMETER_SCI/SKY wavelengths from nm to Angstroms
+
+    Parameters
+    ----------
+    l0_obj : KPF0
+        Raw L0 readout to assemble. Its per-amplifier extensions
+        (``{CHIP}_AMP{n}``) are read and modified in place during assembly.
+    config : None | dict | ConfigHandler
+        Module configuration. Recognized keys: overscan_method, readnoise_sigma.
     """
 
     def __init__(self, l0_obj, config=None):
@@ -78,7 +86,8 @@ class ImageAssembly:
         self.namp = {}  # chip -> n amps; set by count_amplifiers()
         self.dims = {}  # chip -> amp shape; set by count_amplifiers()
         self.readnoise = {}  # channel ext -> RN std; set by measure_read_noise()
-        self.rn_nongauss = {}  # channel ext -> std/mad; set by measure_read_noise()
+        # channel ext -> sqrt(2/pi)*std/mad; set by measure_read_noise()
+        self.rn_nongauss = {}
         self._parse_amplifier_reference()
 
     # ------------------------------------------------------------------
@@ -87,11 +96,10 @@ class ImageAssembly:
 
     def _parse_amplifier_reference(self):
         """
-        Load orientation mapping and gain for amplifier channels.
-
-        Orientation keys indicate how to flip/rotate each amplifier channel to
-        standard orientation (serial overscan on right, parallel overscan on bottom).
-        Cached in `self.orientation` for repeated use.
+        Cache per-channel orientation flips and gains from the amplifier
+        reference into ``self.orientation`` / ``self.gain``. Orientation maps
+        each channel to standard orientation (serial overscan right, parallel
+        overscan bottom).
         """
         for chip in self.chips:
             chip = chip.upper()
@@ -101,27 +109,8 @@ class ImageAssembly:
 
     def _get_overscan_pixels(self, chip, amp_no, buffer=(0, 0)):
         """
-        Extract overscan pixels for a given amplifier.
-
-        Parameters
-        ----------
-        chip : str
-            CCD identifier, e.g., 'GREEN' or 'RED'.
-        amp_no : int
-            Amplifier number (1-4).
-        buffer : tuple of int, optional
-            Number of pixels to ignore at edges (start, end). Defaults to (0, 0).
-
-        Returns
-        -------
-        oscan_pix_srl : ndarray
-            Serial overscan pixels (columns beyond imaging area).
-        oscan_pix_prl : ndarray
-            Parallel overscan pixels (rows beyond imaging area).
-
-        Notes
-        -----
-        Assumes image orientation has been standardized.
+        Return the (serial, parallel) overscan pixel arrays for one amplifier,
+        with optional edge-buffer trimming. Assumes standard orientation.
         """
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
@@ -142,23 +131,8 @@ class ImageAssembly:
 
     def _get_imaging_pixels(self, chip, amp_no):
         """
-        Extract imaging pixels (active CCD area) for a given amplifier.
-
-        Parameters
-        ----------
-        chip : str
-            CCD identifier, e.g., 'GREEN' or 'RED'.
-        amp_no : int
-            Amplifier number (1-4).
-
-        Returns
-        -------
-        ndarray
-            2D array of imaging pixels.
-
-        Notes
-        -----
-        Assumes image orientation has been standardized.
+        Return the active-imaging-area pixels for one amplifier (prescan and
+        overscan stripped). Assumes standard orientation.
         """
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
@@ -175,8 +149,8 @@ class ImageAssembly:
     def _oscan_zero(self, chip, amp_no, **kwargs):
         """
         Returns overscan bias level of zero. chip/amp_no/kwargs are unused here
-        but kept for the uniform `_oscan_*` dispatch signature (see
-        subtract_overscan()); `del` marks them intentionally discarded.
+        but kept for the uniform ``_oscan_*`` dispatch signature (see
+        subtract_overscan()); ``del`` marks them intentionally discarded.
         """
         del chip, amp_no, kwargs
         return 0.0
@@ -200,16 +174,10 @@ class ImageAssembly:
     @staticmethod
     def _convert_expmeter_wavelengths_to_angstroms(l1_obj):
         """
-        Rename EXPMETER_SCI/SKY wavelength column labels from nm to Å.
-
-        Raw L0 expmeter tables label per-channel flux columns with the
-        channel central wavelength in nanometers (e.g. '498.12'). The
-        RVData L2 standard and KPF WAVE arrays use Angstroms, so this
-        renames those columns at the L0 → L1 boundary so the entire
-        L1+ pipeline operates in a single wavelength unit.
-
-        Non-numeric columns (e.g. 'Date-Beg', 'Date-End') are skipped.
-        Underlying flux values are unchanged.
+        Rename EXPMETER_SCI/SKY wavelength column labels from nm to Å at the
+        L0 → L1 boundary, so the whole L1+ pipeline uses one wavelength unit
+        (RVData L2 and KPF WAVE arrays are in Angstroms). Non-numeric columns
+        (e.g. 'Date-Beg') are skipped; flux values are unchanged.
         """
         for ext_name in ("EXPMETER_SCI", "EXPMETER_SKY"):
             if ext_name not in l1_obj.data:
@@ -247,8 +215,8 @@ class ImageAssembly:
         Notes
         -----
         Sets instance attributes:
-        - `self.namp[chip]` : number of amplifier regions detected.
-        - `self.dims[chip]` : shape of each amplifier channel.
+        - ``self.namp[chip]`` : number of amplifier regions detected.
+        - ``self.dims[chip]`` : shape of each amplifier channel.
         Only 2-amp and 4-amp configurations are supported.
         """
         chip = chip.upper()
@@ -285,7 +253,7 @@ class ImageAssembly:
 
         Notes
         -----
-        The transformations are flips, so each is its own inverse — calling
+        The transformations are flips, so each is its own inverse -- calling
         twice restores the input. measure_read_noise and subtract_overscan use
         this to orient to standard, do their work, then restore the original
         orientation, so a non-standard orientation never propagates between
@@ -361,8 +329,10 @@ class ImageAssembly:
         Notes
         -----
         Stores results in:
-        - `self.readnoise[channel_ext]` : standard deviation of cleaned overscan.
-        - `self.rn_nongauss[channel_ext]` : non-Gaussian factor computed as std/mad.
+        - ``self.readnoise[channel_ext]`` : standard deviation of cleaned overscan.
+        - ``self.rn_nongauss[channel_ext]`` : non-Gaussian factor, computed as
+          ``sqrt(2/pi) * std / mad`` (the ``sqrt(2/pi)`` normalization makes the
+          indicator ~1 for a Gaussian).
         """
         if sigma is None:
             sigma = self.readnoise_sigma
@@ -527,25 +497,8 @@ class ImageAssembly:
 
     def _set_headers(self, l1_obj):
         """
-        Populate KPF1 header keywords related to read noise measurement
-        and overscan subtraction.
-
-        Parameters
-        ----------
-        l1_obj : KPF1
-            L1 data object whose PRIMARY header will be updated with
-            read noise and overscan metadata.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        Header updates:
-        1. Read noise per amplifier channel (e.g. RNGRN1)
-        2. Non-Gaussian read noise per amplifier channel (e.g. RNNGGR1)
-        3. Overscan subtraction applied (OSCANSUB)
+        Write read-noise metadata to ``l1_obj``: per-amplifier read noise
+        (RN_KEYS), the non-Gaussian factor, and the OSCANSUB flag.
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]

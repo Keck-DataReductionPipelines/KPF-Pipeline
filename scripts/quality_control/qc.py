@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""
-Standalone QC runner.
+"""Standalone QC runner.
 
 Usage:
     python scripts/quality_control/qc.py \
@@ -9,9 +8,9 @@ Usage:
         --obs_id <obs_id> --level L1 --config <toml> [--write]
 
 Exit codes:
-    0 — ISGOOD=1 (all checks passed)
-    1 — ISGOOD=0 (one or more checks failed)
-    2 — Input / IO error
+    0 -- ISGOOD=1 (all checks passed)
+    1 -- ISGOOD=0 (one or more checks failed)
+    2 -- Input / IO error
 """
 
 import argparse

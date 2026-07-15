@@ -1,12 +1,9 @@
 """
-KPF-specific base data model.
+KPF base data model.
 
-Thin layer on top of RVDataModel that adds KPF-specific attributes and the
-behaviour shared by every KPF data model: fits.Header storage, the DRPSTATU
-receipt stamp, alias-aware set_data/set_header, and lossless PRIMARY
-serialization. All four KPF models inherit it — L0/L1 directly, and L2/L4 via
-multiple inheritance alongside rvdata's RV2/RV4 (KPFDataModel listed first so
-its overrides win while RV2/RV4 remain reachable through ``super()``).
+Shared base for every KPF data model (L0, L1, L2, L4). Extends the EPRV
+``RVDataModel`` with the behaviour common to all KPF products: FITS-header
+storage, provenance receipts, and alias-aware data and header access.
 """
 
 import logging
@@ -17,17 +14,14 @@ from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
 
-# The header/extension keyword registry lives in its own module as a single
-# KeywordRegistry instance; base.py is its only importer. The instance is
-# surfaced as a KPFDataModel class attribute (below) so consumers handed a
-# kpf_obj (the checkpoints validator, level0's WMKO->EPRV mapping, tests) reach
-# it through kpf.keyword_registry, and re-exported so sibling data_models files
-# (level2/4) import the same singleton from base.
+# The keyword registry lives in its own module as a single KeywordRegistry
+# instance; base.py is its only importer, and re-exports it (below) so sibling
+# data_models files (level2/4) import the same singleton from base.
 from kpfpipe.data_models.keyword_registry import keyword_registry
 from kpfpipe.utils.kpf_utils import is_obs_id
 
 # Receipt names that are data-model conversions / serialization rather than
-# pipeline modules — excluded from DRPSTATU so it names the last real stage.
+# pipeline modules -- excluded from DRPSTATU so it names the last real stage.
 # ``read``/``from_fits`` are here too: reading a product back must not clobber
 # the status the writer stamped (rvdata >=0.4.0 logs a ``read`` receipt via its
 # ``@receipt_logged`` decorator on ``RVDataModel.read``).
@@ -47,15 +41,11 @@ logger = logging.getLogger(__name__)
 
 
 class KPFDataModel(RVDataModel):
-    """Shared base for every KPF data model (L0, L1, and — multiply-inherited
-    with RV2/RV4 — L2, L4)."""
+    """Shared base for every KPF data model (L0, L1, L2, L4)."""
 
     # The keyword registry singleton, surfaced as a class attribute so anything
-    # handed a KPF data model (the checkpoints header validator, level0's
-    # WMKO->EPRV mapping, tests) reaches it via kpf.keyword_registry — keeping
-    # data_models/keyword_registry imported only by base.py. set_keyword uses
-    # .routing; the validator uses .allowed / .required / .structural; .table is
-    # the source table and .registered the allowlist.
+    # handed a KPF data model (the checkpoints validator, level0's WMKO->EPRV
+    # mapping, tests) reaches it via kpf.keyword_registry.
     keyword_registry = keyword_registry
 
     def __init__(self):
@@ -85,14 +75,9 @@ class KPFDataModel(RVDataModel):
         return obj
 
     def _obs_id_from_receipt(self):
-        """Recover the obs_id from the ORIGID provenance card on RECEIPT.
-
-        ORIGID is the original L0 obs_id, stamped by ``KPF0`` and forwarded on the
-        RECEIPT header through every level, so it is the obs_id source for a
-        from_fits'd L1/L2/L4 product (whose own filename does not embed it).
-        Returns ``None`` when RECEIPT/ORIGID is absent or not a valid obs_id
-        (e.g. masters, which carry no ORIGID).
-        """
+        """Recover the obs_id from the ORIGID card on RECEIPT (``None`` if absent
+        or invalid, e.g. masters). ORIGID is stamped at L0 and forwarded on the
+        RECEIPT header, so it is the obs_id source for a from_fits'd L1/L2/L4."""
         receipt = self.headers.get("RECEIPT")
         origid = receipt.get("ORIGID") if receipt is not None else None
         return origid if is_obs_id(origid) else None
@@ -103,13 +88,10 @@ class KPFDataModel(RVDataModel):
 
         KPF stores every extension header as a ``fits.Header`` so reads and writes
         go through astropy natively, with no value-vs-``(value, comment)``
-        ambiguity. This is the single bridge from the two legacy in-memory forms:
-
-        - a ``fits.Header`` (e.g. from ``from_fits``) is returned as a copy, so a
-          caller can rebuild an HDU without aliasing the stored header;
-        - a plain mapping (RVData seeds PRIMARY defaults as an ``OrderedDict`` whose
-          entries are ``(value, comment)`` tuples) is rebuilt card by card —
-          ``head[kw] = (value, comment)`` sets the value and comment together.
+        ambiguity. A ``fits.Header`` is returned as a copy (so callers can rebuild
+        an HDU without aliasing the stored header); a plain mapping -- RVData seeds
+        PRIMARY defaults as an ``OrderedDict`` of ``(value, comment)`` tuples -- is
+        rebuilt card by card, setting each value and comment together.
         """
         if isinstance(src, fits.Header):
             return src.copy()
@@ -135,7 +117,7 @@ class KPFDataModel(RVDataModel):
         writes ``value`` to the extension named there, with the registry
         Description as the FITS comment. This is the single write path for
         registered keywords, so a keyword always lands on the same extension with
-        the same comment — callers never name a comment.
+        the same comment -- callers never name a comment.
 
         ``ext`` targets a specific extension for EPRV per-extension cards that
         have no single routed home because they recur on every orderlet's
@@ -152,7 +134,7 @@ class KPFDataModel(RVDataModel):
             ``config/L{level}-headers.csv`` before writing it.
         ValueError
             If the target extension does not exist on this object (a config
-            error — the extension must be created before the write).
+            error -- the extension must be created before the write).
         """
         name = str(key).strip()
         if ext is None:
@@ -216,12 +198,9 @@ class KPFDataModel(RVDataModel):
 
     def _coerce_to_min_bit_depth(self, canonical_ext, data, label):
         """Upcast ``data`` to satisfy ``canonical_ext``'s MinBitDepth, mirroring
-        rvdata's base ``set_data`` enforcement (incl. its warning) for the
-        chip-prefix write path that bypasses it. ``canonical_ext`` is the resolved
-        extension whose requirement applies (e.g. ``TRACE3_WAVE``); ``label`` is
-        the name shown in the warning (the chip-prefix key the caller passed).
-        A no-op when there is no requirement, the array is empty, or it already
-        meets the depth (and for KPF4, whose ``_get_min_bit_depth`` returns None).
+        rvdata's ``set_data`` enforcement (and its warning) for the chip-prefix
+        write path that bypasses it. A no-op with no requirement, an empty array,
+        or data already at depth (and for KPF4, whose MinBitDepth is None).
         """
         min_depth = self._get_min_bit_depth(canonical_ext)
         if (
@@ -256,15 +235,11 @@ class KPFDataModel(RVDataModel):
     def _forward_headers(self, target, ext_names):
         """Forward governed extension headers onto ``target``, card by card.
 
-        The single home for the header carry-over shared by the
-        ``to_kpf{1,2,4}`` level-up conversions. For each name present on both
-        sides, every card is copied with its FITS comment (iterating
-        ``.items()`` would drop comments). Copying *overlays* onto the target's
-        existing header rather than replacing it, so a PRIMARY pre-seeded with
-        the EPRV skeleton keeps cards the source lacks (native values win), and
-        INSTRUMENT_HEADER / QUALITY_CONTROL / RECEIPT — created empty on the
-        target — receive a verbatim, comment-preserving copy. An extension
-        absent on either side is skipped.
+        Shared by the ``to_kpf{1,2,4}`` conversions: for each name present on both
+        sides, copy every card with its FITS comment (``.items()`` would drop
+        comments). Copying overlays onto the target's header rather than replacing
+        it, so a PRIMARY pre-seeded with the EPRV skeleton keeps cards the source
+        lacks (native values win). An extension absent on either side is skipped.
         """
         for ext in ext_names:
             if ext in self.headers and ext in target.headers:
@@ -297,12 +272,10 @@ class KPFDataModel(RVDataModel):
         self.set_keyword("DRPSTATU", f"{label} module complete")
 
     def _create_hdul(self):
-        """Sync ``self.receipt`` into the RECEIPT extension before writing; rvdata
-        serializes ``self.data["RECEIPT"]``, not ``self.receipt``. L0/L1 omit
-        RECEIPT from their default extensions, so create it if absent. PRIMARY
-        keyword comments are preserved by rvdata's own ``_create_hdul`` (it copies
-        a ``fits.Header`` directly) as of rvdata >=0.4.0, so no PRIMARY rebuild is
-        needed here."""
+        """Sync ``self.receipt`` into the RECEIPT extension before writing (rvdata
+        serializes ``self.data["RECEIPT"]``, not ``self.receipt``), creating the
+        extension if L0/L1 omitted it. PRIMARY comments are preserved by rvdata's
+        own ``_create_hdul``, so no PRIMARY rebuild is needed."""
         if self.receipt is not None and not self.receipt.empty:
             if "RECEIPT" not in self.extensions:
                 self.create_extension("RECEIPT", "BinTableHDU")
@@ -312,7 +285,7 @@ class KPFDataModel(RVDataModel):
     def generate_standard_filename(self):
         """Abstract: every concrete KPF model builds its own standard filename.
 
-        KPFDataModel is never instantiated directly — only inherited — so reaching
+        KPFDataModel is never instantiated directly -- only inherited -- so reaching
         this means a subclass failed to define the method.
         """
         raise NotImplementedError(
@@ -322,7 +295,7 @@ class KPFDataModel(RVDataModel):
     def check_filename_convention(self, filename):
         """Abstract: every concrete KPF model declares its own filename convention.
 
-        KPFDataModel is never instantiated directly — only inherited — so reaching
+        KPFDataModel is never instantiated directly -- only inherited -- so reaching
         this means a subclass failed to define the method.
         """
         raise NotImplementedError(

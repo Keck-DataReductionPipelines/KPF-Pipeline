@@ -1,14 +1,4 @@
-"""L2 quicklook plots for extracted KPF 1D spectra.
-
-Ports the extracted-spectrum quicklook plots from the v2.12 ``AnalyzeL1``
-class (the old pipeline's "L1" level is vNext's L2). These plots REQUIRE an
-attached wavelength solution: the per-fiber ``{chip}_{fiber}_WAVE`` arrays
-must be populated (i.e. WavelengthCalibration has run). If they are not, the
-plot methods raise rather than silently producing a pixel-axis plot that
-could be mistaken for a wavelength-calibrated one (charter: fail loudly).
-
-Pure visualization — no science computation is written back to the product.
-"""
+"""L2 quicklook plots for extracted KPF 1D spectra."""
 
 import os
 from datetime import UTC, datetime
@@ -26,15 +16,18 @@ _FLUX_PERCENTILE = 95
 
 
 class PlotL2:
-    """
-    Quicklook plots for KPF L2 (extracted 1D spectra) data.
+    """Quicklook plots for KPF L2 (extracted 1D spectra) data.
 
-    Args:
-        l2_obj: KPF2 data object (post-SpectralExtraction; requires
-            WavelengthCalibration to have populated the per-fiber WAVE arrays).
-        output_dir: directory to save PNG files. None = return Figure only.
-        obs_id: observation ID for titles/filenames. If None, falls back to
-            the l2_obj.obs_id attribute (populated on every construction path).
+    Parameters
+    ----------
+    l2_obj : KPF2
+        Extracted L2 frame (post-SpectralExtraction; requires
+        WavelengthCalibration to have populated the per-fiber WAVE arrays).
+    output_dir : str or None
+        Directory to save PNG files. None returns the Figure only.
+    obs_id : str or None
+        Observation ID for titles/filenames. If None, falls back to
+        ``l2_obj.obs_id`` (populated on every construction path).
     """
 
     _PLOT_METHODS = (
@@ -87,11 +80,10 @@ class PlotL2:
         return self._flux(chip, "SCI2") is not None
 
     def _require_wave(self, chip, fiber="SCI2"):
-        """Return the (norder, ncol) wavelength array for a fiber, or raise.
+        """Return a fiber's (norder, ncol) wavelength array, or raise if absent.
 
-        PlotL2 requires an attached wavelength solution; failing loudly here
-        prevents a wavelength-less plot from being mistaken for a calibrated
-        one. Run WavelengthCalibration before PlotL2.
+        Fails loudly so a wavelength-less plot can't pass for a calibrated one;
+        run WavelengthCalibration before PlotL2.
         """
         wave = self._wave(chip, fiber)
         if wave is None:
@@ -157,7 +149,6 @@ class PlotL2:
             per_order = np.nanpercentile(snr, _SNR_PERCENTILE, axis=1)
             ax.plot(x, per_order, marker=".", linewidth=1, label=fiber, alpha=0.8)
 
-        # summed science orderlet
         sci_flux = [self._flux(chip, f) for f in _SCI_FIBERS]
         sci_var = [self._var(chip, f) for f in _SCI_FIBERS]
         if all(a is not None for a in sci_flux + sci_var):
@@ -230,17 +221,20 @@ class PlotL2:
         """Overplot the science orderlets (and SKY/CAL) for a single spectral
         order vs wavelength.
 
-        Args:
-            chip: 'GREEN' or 'RED'.
-            order: 1-indexed spectral order. Defaults to a representative
-                order near the middle of the chip.
+        Parameters
+        ----------
+        chip : str
+            'GREEN' or 'RED'.
+        order : int or None
+            1-indexed spectral order. Defaults to a representative order
+            near the middle of the chip.
         """
         chip = chip.upper()
         if not self._has_chip(chip):
             return None
         norder = self._flux(chip, "SCI2").shape[0]
         if order is None:
-            order = norder // 2  # representative middle order
+            order = norder // 2
         if not (1 <= order <= norder):
             raise ValueError(f"order {order} out of range 1..{norder} for {chip}")
         o = order - 1
@@ -377,19 +371,23 @@ class PlotL2:
     # ------------------------------------------------------------------
 
     def run(self, which):
-        """Generate the requested plot(s) for every chip that has data,
-        saving each to ``output_dir``. In that save-to-disk mode the figure is
-        closed so callers don't accumulate them; when ``output_dir`` is None the
-        figures are returned open, so they display when the caller renders them
-        (e.g. interactively in a notebook).
+        """Generate the requested plot(s) for every chip that has data.
 
-        Args:
-            which: 'all' to run every implemented plot, or the name of a
-                single plot method (one of ``self._PLOT_METHODS``).
+        Follows the shared Quicklook ``run()`` contract (style guide §9):
+        saved-and-closed when ``output_dir`` is set, returned open when it
+        is ``None``.
 
-        Returns:
-            dict mapping ``{method_name}_{chip}`` to matplotlib.Figure (closed
-            only when saved to ``output_dir``; useful for tests/introspection).
+        Parameters
+        ----------
+        which : str
+            'all' to run every implemented plot, or the name of a single
+            plot method (one of ``self._PLOT_METHODS``).
+
+        Returns
+        -------
+        dict
+            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
+            for tests and introspection.
         """
         if which == "all":
             names = self._PLOT_METHODS
@@ -412,8 +410,7 @@ class PlotL2:
                 if fig is None:
                     continue
                 figures[f"{name}_{chip}"] = fig
-                # Closing frees memory in save-to-disk mode; when returning
-                # figures for interactive display, leave them open.
+                # Close only saved figures (Quicklook run() contract).
                 if self.output_dir is not None:
                     plt.close(fig)
         return figures

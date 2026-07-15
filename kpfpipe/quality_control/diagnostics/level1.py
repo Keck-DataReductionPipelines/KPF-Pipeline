@@ -1,11 +1,8 @@
 """Diagnostics for KPF Level 1 (assembled FFI) data products.
 
-The L1 metrics consumed by QCL1 that depend on intermediate processing
-state (read noise from raw overscan, the BIASSUB flag) are still written by
-the modules that produce them — ImageAssembly, ImageProcessing. Metrics that
-can be recomputed from the finished L1 product alone live here: the master
-calibration ages, derived from the master paths CalibrationAssociation wrote
-to RECEIPT plus the observation timestamp (DATE-OBS) on PRIMARY.
+Metrics recomputable from the finished L1 product -- chiefly the master
+calibration ages (bias/dark/flat/WLS), each the signed age of the associated
+master relative to the observation time.
 """
 
 from datetime import datetime
@@ -15,8 +12,7 @@ from kpfpipe.utils.kpf_utils import get_timestamp, kpf_timestamp_to_datetime
 
 # Master-calibration age metrics: the RECEIPT path keyword (written by
 # CalibrationAssociation) -> the age keyword whose signed (master - obs) value
-# this diagnostic computes. The FITS comment comes from the registry (via the
-# _tag helper / set_keyword), so it is not duplicated here.
+# this diagnostic computes. (FITS comment from the registry -- see ``_tag``.)
 _CAL_AGE_KEYS = {
     "BIASFILE": "BIASAGE",
     "DARKFILE": "DARKAGE",
@@ -26,6 +22,8 @@ _CAL_AGE_KEYS = {
 
 
 class DiagL1(Diagnostics):
+    """Diagnostics for KPF Level 1 assembled FFI products."""
+
     LEVEL = "L1"
 
     def calibration_ages(self):

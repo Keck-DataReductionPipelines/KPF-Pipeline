@@ -12,12 +12,12 @@ class AliasedOrderedDict(OrderedDict):
     """
     OrderedDict with transparent name aliases.
 
-    Register an alias with `register_alias(alias, canonical)`. After that,
-    `__getitem__`, `__setitem__`, `__contains__`, and `get()` all resolve the
-    alias to the canonical key before performing the lookup. For example, once
+    Register an alias with ``register_alias(alias, canonical)``. After that,
+    ``__getitem__``, ``__setitem__``, ``__contains__``, and ``get()`` all resolve
+    the alias to the canonical key before performing the lookup. For example, once
     "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", reading
-    `d["SCI2_FLUX"]` returns the same object stored under "TRACE3_FLUX" and
-    `"SCI2_FLUX" in d` is True.
+    ``d["SCI2_FLUX"]`` returns the same object stored under "TRACE3_FLUX" and
+    ``"SCI2_FLUX" in d`` is True.
     """
 
     def __init__(self, *args, **kwargs):

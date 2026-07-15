@@ -1,5 +1,4 @@
-"""
-Tests for the CrossCorrelation module (KPF2 -> KPF4: per-orderlet CCFs).
+"""Tests for the CrossCorrelation module (KPF2 -> KPF4: per-orderlet CCFs).
 
 Mirrors the CCF-side coverage of test_radial_velocity.py against the standalone
 CrossCorrelation module. Static-method unit tests (_compute_ccf_1d) build

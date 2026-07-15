@@ -10,8 +10,7 @@ _SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 _SNR_PERCENTILE = 95
 _CHIP_PREFIX = {"GREEN": "G", "RED": "R"}
 
-# Fiber -> NaN-count keyword. The FITS comment comes from the registry (via
-# the _tag helper / set_keyword), so it is not duplicated here.
+# Fiber -> NaN-count keyword. (FITS comment from the registry -- see ``_tag``.)
 _NAN_KEYS = {
     "SCI1": "NANSCI1",
     "SCI2": "NANSCI2",
@@ -27,7 +26,7 @@ class DiagL2(Diagnostics):
     LEVEL = "L2"
 
     def nan_counts(self):
-        """Count NaN pixels per fiber in `{CHIP}_{FIBER}_FLUX`, summed across chips.
+        """Count NaN pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, summed across chips.
 
         Always emits all five keys; fibers with no extracted data report 0.
 
@@ -51,8 +50,8 @@ class DiagL2(Diagnostics):
     def zero_flux_fraction(self):
         """Compute the fraction of L2 flux pixels exactly equal to zero.
 
-        Counts across all `{CHIP}_{FIBER}_FLUX` extensions. Skipped (no key
-        written) when no L2 data is present — `QCL2.DATAPRL2` will have
+        Counts across all ``{CHIP}_{FIBER}_FLUX`` extensions. Skipped (no key
+        written) when no L2 data is present -- ``QCL2.DATAPRL2`` will have
         already failed in that case.
 
         Returns

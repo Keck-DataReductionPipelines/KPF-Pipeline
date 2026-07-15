@@ -1,25 +1,12 @@
 """
-KPF masters base data model.
+KPF Masters base data model.
 
-Base class for all masters calibration data models. Inherits from
-KPFDataModel and initializes the data model infrastructure without
-creating any science-level extensions.
-
-Level-specific masters classes use double inheritance (e.g. KPFMasterL1
-subclasses both KPFMasterModel and KPF1). This gives the level-specific
-class access to science model methods (from_fits, to_fits, _read, info,
-etc.) while the extension setup is controlled entirely by KPFMasterModel
-and its subclasses.
+Shared base for the masters calibration products. Extends KPFDataModel
+without creating any science-level extensions, leaving each level-specific
+subclass (KPFMasterL1/L2/L4) to install its own masters extensions.
 
 Masters products differ from science products in extension naming to
-avoid confusion: units and normalization conventions differ by
-calibration type (bias, dark, flat) and are not the same as raw
-science counts (e.g., GREEN_CCD).
-
-Filename convention (WMKO DRP-RUN-05): masters are written as
-``{KOAID-of-first-input}_master_{type}_L{level}.fits`` (e.g.
-``KP.20240405.49597.71_master_bias_L1.fits``), built by
-``generate_standard_filename()``.
+avoid confusion (see KPFMasterL1/L2/L4)
 """
 
 import os
@@ -46,7 +33,6 @@ class KPFMasterModel(KPFDataModel):
     Inherits from KPFDataModel and initializes only the base data model
     infrastructure. Science-level extension setup is intentionally skipped
     so that level-specific subclasses can install masters extensions instead.
-    Normalization conventions differ by calibration type (bias, dark, flat).
     """
 
     def __init__(self):
@@ -72,16 +58,14 @@ class KPFMasterModel(KPFDataModel):
         """
         Record the stacked input L0 files and the master calibration type.
 
-        `master_type` is the WMKO filename token ('bias', 'dark', 'flat', or
+        ``master_type`` is the WMKO filename token ('bias', 'dark', 'flat', or
         'thar'); it is stored in the PRIMARY ``MASTYPE`` header so that
-        `generate_standard_filename()` can always build a DRP-RUN-05-compliant
-        name, including after a `from_fits()` round-trip.
+        ``generate_standard_filename()`` can always build a DRP-RUN-05-compliant
+        name, including after a ``from_fits()`` round-trip.
         """
         self.set_data("INPUT_FILES", pd.DataFrame({"FILENAME": file_list}))
-        # MASTYPE is out of EPRV scope but registered in every ML*-headers.csv so it
-        # routes through set_keyword (-> PRIMARY, registry comment) like every other
-        # KPF keyword. It reads back as a scalar via .get() in
-        # generate_standard_filename().
+        # MASTYPE is out of EPRV scope but registered so it routes through
+        # set_keyword (-> PRIMARY) like every other KPF keyword.
         self.set_keyword("MASTYPE", master_type)
 
     def generate_standard_filename(self):
@@ -90,9 +74,9 @@ class KPFMasterModel(KPFDataModel):
         ``{KOAID-of-first-input}_master_{type}_L{level}.fits``.
 
         The KOAID is read from the first recorded input file and the type from
-        the PRIMARY ``MASTYPE`` header (both set by `set_input_files()`). Raises
+        the PRIMARY ``MASTYPE`` header (both set by ``set_input_files()``). Raises
         if either is missing, so a non-compliant master name can never be
-        produced; `kpf_filename` validates the type token and level.
+        produced; ``kpf_filename`` validates the type token and level.
         """
         master_type = self.headers["PRIMARY"].get("MASTYPE")
         if not master_type:

@@ -1,9 +1,10 @@
 """
 Regression tests for image assembly (L0 → L1).
 
-Uses real L0 FITS files for regression tests (skipped if data unavailable).
-Set KPF_TESTDATA env var to your L0 data directory, or defaults to
-/data/kpf/L0 (Keck server) then ~/analysis/kpf/L0 (local).
+The 2-amp regression and round-trip tests are marked ``slow`` and read real L0
+FITS frames from the gitignored ``tests/testdata/L0/20240405`` tree (paths
+hard-coded below). The 4-amp, dtype-provenance, orientation, and expmeter tests
+run on synthetic data generated into ``tmp_path`` and need no external frames.
 """
 
 import os
@@ -258,7 +259,7 @@ class TestImageAssembly4Amp:
 
 
 # ---------------------------------------------------------------------------
-# orient_ffi: standard FFI orientation (load-bearing flux/wave co-orientation)
+# Dtype provenance (L1 CCD/VAR float32; L0 amps never upscale to float64)
 # ---------------------------------------------------------------------------
 
 

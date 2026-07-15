@@ -1,4 +1,4 @@
-"""ConfigHandler: load TOML config files with optional section overrides."""
+"""ConfigHandler: load TOML config files with optional overrides."""
 
 import tomllib
 from pathlib import Path
@@ -31,7 +31,15 @@ class ConfigHandler:
                     self.config[section] = values
 
     def load_config(self, path=None):
-        """Load/reload the TOML into `self.config` (optional `path` override)."""
+        """Load/reload the TOML into ``self.config`` (optional ``path`` override).
+
+        Raises
+        ------
+        FileNotFoundError
+            If the config path does not exist.
+        tomllib.TOMLDecodeError
+            If the file is not valid TOML.
+        """
         if path is not None:
             self.path = Path(path)
 
@@ -41,7 +49,7 @@ class ConfigHandler:
         return self.config
 
     def get_params(self, sections=None):
-        """Flatten `sections` into one dict; nested dicts join as `key_subkey`."""
+        """Flatten ``sections`` into one dict; nested dicts join as ``key_subkey``."""
         if not self.config:
             self.load_config()
 

@@ -40,14 +40,11 @@ class QCL0(QC):
     def data_l0_red_green(self):
         """Raw CCD data present: each of GREEN/RED is a supported amp readout.
 
-        KPF reads out either 2 or 4 amplifiers per chip, so the expected amp
-        count is inferred from the data rather than fixed: a chip passes when the
-        number of present, non-empty amplifier extensions is a supported readout
-        mode (``_SUPPORTED_NAMP``), mirroring ``ImageAssembly.count_amplifiers``.
-        This accepts both 2-amp and 4-amp frames and rejects a chip with no data
-        or a partial/invalid amp set (1 or 3). Absent amps are stored as
-        ``array(None, dtype=object)`` and skipped -- the same present-amp scan
-        QCL1 uses for read noise.
+        KPF reads out either 2 or 4 amplifiers per chip, so the amp count is
+        inferred from the data: a chip passes when its number of present,
+        non-empty amplifier extensions is a supported readout mode
+        (``_SUPPORTED_NAMP``), mirroring ``ImageAssembly.count_amplifiers``. A
+        chip with no data or a partial/invalid amp set (1 or 3) fails.
         """
         for chip in _CHIPS:
             namp = 0

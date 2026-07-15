@@ -102,9 +102,9 @@ class QCL2(QC):
     def science_snr(self):
         """Science SNR is finite and above a minimum floor.
 
-        Reads the GSNRSCI/RSNRSCI metrics written by DiagL2.snr (run DiagL2
-        before QCL2, mirroring the flux_finite_fraction -> nan_counts
-        dependency). Guards against a silently failed extraction.
+        Reads the GSNRSCI/RSNRSCI metrics written by ``DiagL2.snr`` (run DiagL2
+        before QCL2, the same Diagnostics -> QC ordering every metric-backed
+        check relies on). Guards against a silently failed extraction.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         values = [_hdr_float(hdr, k) for k in ("GSNRSCI", "RSNRSCI")]

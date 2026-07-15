@@ -1,1 +1,1 @@
-# Makes this directory a package for importlib.resources.
+"""Makes this directory a package for importlib.resources."""

@@ -430,7 +430,7 @@ class TestRateEstimator:
 class TestPerPixelRejection:
     """Counts and exposure time are summed over the SAME per-pixel survivor set,
     so a pixel with fewer good frames yields the same rate as a fully-sampled
-    pixel — only its SNR drops (photon statistics)."""
+    pixel -- only its SNR drops (photon statistics)."""
 
     def test_datacube_partial_rejection_preserves_rate(self, monkeypatch):
         # 5 identical frames (100 e- over 10 s -> 10 e-/sec). flag_outliers is
@@ -788,7 +788,7 @@ class TestDtypeProvenance:
 
 
 # ---------------------------------------------------------------------------
-# save_master / make_master_l1(master_path=...) — the shared write path
+# save_master / make_master_l1(master_path=...) -- the shared write path
 # ---------------------------------------------------------------------------
 
 

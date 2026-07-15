@@ -1,12 +1,9 @@
 """
-KPF Level 1 (assembled 2D frame) data model.
+KPF Level 1 (assembled FFI) data model.
 
-Represents an assembled CCD frame after combining amplifier readouts.
-Also used for master calibration products (bias, dark, flat) which
-share the same structure (mean + variance frames for GREEN and RED).
-
-Subclasses RVDataModel (via KPFDataModel) to reuse its extension/header/data
-infrastructure and receipt system.
+Assembled CCD frames (GREEN and RED, with variance) built by combining the
+L0 amplifier readouts. Also used for 2D master calibrations (bias, dark,
+flat), which share the same structure.
 """
 
 import importlib.resources
@@ -38,16 +35,13 @@ _L1_FILENAME_PATTERN = re.compile(r"kpf_L1_\d{8}T\d{6}\.fits")
 
 class KPF1(KPFDataModel):
     """
-    KPF Level 1 assembled 2D frame data model.
+    KPF Level 1 assembled FFI data model.
 
-    After image assembly, the L1 product contains assembled GREEN_CCD
-    and RED_CCD frames with corresponding variance frames, plus
-    pass-through extensions from L0 (CA_HK, exposure meter, telemetry).
-
-    Also used for master calibration products (bias, dark, flat).
-    Construct from a FITS file with `KPF1.from_fits(path)`, then read the
-    assembled 4080x4080 frames from `data` (e.g. `data["GREEN_CCD"]`,
-    `data["RED_CCD"]`).
+    Contains the assembled GREEN_CCD and RED_CCD frames with their variance
+    frames, plus pass-through extensions from L0 (CA_HK, exposure meter,
+    telemetry). Construct from a FITS file with ``KPF1.from_fits(path)``, then
+    read the assembled frames from ``data`` (e.g. ``data["GREEN_CCD"]``,
+    ``data["RED_CCD"]``).
     """
 
     _DATALVL = "L1"
@@ -62,10 +56,9 @@ class KPF1(KPFDataModel):
                 self.create_extension(row["Name"], row["DataType"])
 
         # Seed PRIMARY with the EPRV Required keyword skeleton (typed defaults +
-        # comments), mirroring how rvdata's RV2.__init__ seeds KPF2. L1 is not an
-        # EPRV level, so KPF1 has no RV1 to inherit this from; we stamp it from the
-        # registry's eprv_primary_seed (the single source of truth) so KWRDPRL1 is
-        # meaningful and native values (overlaid in KPF0.to_kpf1) win over defaults.
+        # comments). L1 is not an EPRV level, so KPF1 has no RV1 to inherit this
+        # from; stamp it from the registry so KWRDPRL1 is meaningful and native
+        # values (overlaid in KPF0.to_kpf1) win over defaults.
         for kw, value in self.keyword_registry.eprv_primary_seed.items():
             self.headers["PRIMARY"][kw] = value
         # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN"; correct it
@@ -73,17 +66,16 @@ class KPF1(KPFDataModel):
         self.set_keyword("DATALVL", self._DATALVL)
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """
-        Route L1 FITS reads to `KPF1._read`.
+        """Route L1 FITS reads to ``KPF1._read``.
 
-        `RVDataModel.read` has no lvl==1 dispatch branch, so the inherited
-        `from_fits` would never call into `_read` without this override.
+        Needed for the same reason as the L0 override; see ``KPF0.read`` for the
+        canonical rationale (``RVDataModel.read`` has no lvl==1 dispatch branch,
+        so the inherited ``from_fits`` would never call into ``_read``).
         """
         self._read(hdul)
 
     def _read(self, hdul):
-        """
-        Read all extensions from an L1 FITS HDUList.
+        """Read all extensions from an L1 FITS HDUList.
 
         Handles known extensions from the CSV definition and also
         accepts unknown extensions (with a warning).
@@ -123,8 +115,8 @@ class KPF1(KPFDataModel):
                     df = df.reindex(columns=all_cols).fillna("")
                 self.receipt = df
             elif fits_type == "ImageHDU":
-                # np.array (not asarray) materializes the memmapped HDU into RAM
-                # before from_fits closes the file; a view would dangle afterward.
+                # Materialize the memmap before from_fits closes the file
+                # (np.array, not asarray); see KPF0._read for the full rationale.
                 self.set_data(ext_name, np.array(hdu.data))
             elif fits_type == "BinTableHDU":
                 self.set_data(ext_name, Table.read(hdu))
@@ -147,13 +139,12 @@ class KPF1(KPFDataModel):
         return True
 
     def generate_standard_filename(self):
-        """
-        KPF L1 filenames follow the kpf_L1_YYYYMMDDThhmmss.fits convention.
+        """KPF L1 filenames follow the kpf_L1_YYYYMMDDThhmmss.fits convention.
 
-        Delegates to `kpf_filename` (the single source for the KPF-native naming
-        rule), deriving the timestamp from `obs_id` so the fallback name matches
-        where the recipe writes (`kpf_filepath(obs_id, "L1")`). Raises a
-        `ValueError` if `obs_id` is unset or invalid.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
         return kpf_filename(self.obs_id, "L1")
 
@@ -189,31 +180,22 @@ class KPF1(KPFDataModel):
     }
 
     def to_kpf2(self):
-        """
-        Create a KPF2 scaffold from this L1, carrying over headers and
+        """Create a KPF2 scaffold from this L1, carrying over headers and
         pass-through extensions.
 
-        The L1 PRIMARY is already EPRV-standard (converted upstream in
-        KPF0.to_kpf1), so headers are a pure pass-through: the EPRV PRIMARY and
-        the immutable INSTRUMENT_HEADER are forwarded unchanged (value + comment).
-        Header validation no longer runs here — it moved to the checkpoints
-        layer (quality_control/checkpoints, Checkpoint.unregistered_keywords).
-        Pass-through extensions (TELEMETRY,
-        EXPMETER_SCI→EXPMETER, CA_HK→ANCILLARY_SPECTRUM) and KPF-friendly
-        aliases (e.g., SCI2_FLUX → TRACE3_FLUX) are handled below. Trace data
-        arrays are created but empty — the caller (spectral extraction) fills
-        those in.
+        The L1 PRIMARY is already EPRV-standard (converted in KPF0.to_kpf1), so
+        the PRIMARY and INSTRUMENT_HEADER headers are a pure pass-through. Pass-
+        through extensions (TELEMETRY, EXPMETER_SCI->EXPMETER) and KPF-friendly
+        aliases (e.g. SCI2_FLUX -> TRACE3_FLUX) are handled below. Trace arrays
+        are created empty -- the caller (spectral extraction) fills those in.
         """
         kpf2 = KPF2()
 
-        # Headers are a pure pass-through; the native→EPRV conversion and the
-        # INSTRUMENT_HEADER snapshot were done once in KPF0.to_kpf1. Forward
-        # PRIMARY + INSTRUMENT_HEADER (and QC/RECEIPT below) card-by-card,
-        # preserving comments; PRIMARY overlays onto kpf2's EPRV seed (native
-        # wins), INSTRUMENT_HEADER stays a verbatim copy.
+        # Forward PRIMARY + INSTRUMENT_HEADER card-by-card (the native->EPRV
+        # conversion happened once in KPF0.to_kpf1); PRIMARY overlays onto kpf2's
+        # EPRV seed (native wins), INSTRUMENT_HEADER stays a verbatim copy.
         self._forward_headers(kpf2, ("PRIMARY", "INSTRUMENT_HEADER"))
 
-        # Pass-through extensions with renaming
         for kpf1_ext, kpf2_ext in self._L1_TO_L2_PASSTHROUGH.items():
             if kpf1_ext in self.extensions:
                 kpf1_type = self.extensions[kpf1_ext]
@@ -227,21 +209,16 @@ class KPF1(KPFDataModel):
                 if kpf1_ext in self.headers:
                     kpf2.set_header(kpf2_ext, self.headers[kpf1_ext])
 
-        # Forward the L1 QUALITY_CONTROL and RECEIPT *headers* onto L2, with
-        # comments. The receipt *table* propagates via the receipt copy below, but
-        # the RECEIPT header cards (OSCANSUB / *FILE applied by ImageAssembly /
-        # CalibrationAssociation) and the QUALITY_CONTROL cards (RN*, *AGE, QC
-        # booleans) are separate and must be carried explicitly; downstream L2
-        # stages (BarycentricCorrection, DiagL2, QCL2) append to them.
+        # Forward the L1 QUALITY_CONTROL and RECEIPT headers onto L2. The receipt
+        # *table* propagates via the copy below, but the header cards are separate
+        # and must be carried explicitly; downstream L2 stages append to them.
         self._forward_headers(kpf2, ("QUALITY_CONTROL", "RECEIPT"))
 
-        # Carry forward receipt
         if self.receipt is not None and not self.receipt.empty:
             kpf2.receipt = self.receipt.copy()
 
-        # Carry the obs_id model attribute through. The ORIGID provenance card is
-        # stamped once at L0 (KPF0.from_fits) and rides forward on the RECEIPT
-        # header forwarded above, so it is not (re)written here.
+        # Carry the obs_id through; ORIGID (stamped at L0) rides forward on the
+        # RECEIPT header above, so it is not rewritten here.
         kpf2.obs_id = self.obs_id
 
         kpf2.set_keyword("DATALVL", "L2")

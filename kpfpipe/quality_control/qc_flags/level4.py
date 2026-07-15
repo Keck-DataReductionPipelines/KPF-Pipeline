@@ -1,11 +1,8 @@
 """QC checks for KPF Level 4 (RVs and CCFs) data products.
 
-Ports the v2.12 RV/CCF QC checks (``data_L2`` presence,
-``L2_barycentric_rv_percent_change``) to vNext L4, plus the framework
-required-PRIMARY-keyword presence check. Every result is a 0/1 flag written to
-QUALITY_CONTROL via ``set_keyword``. (The timing-consistency check ported from
-v2.12 ``L2_datetime`` now lives in QCL0 as ``DATTIMOK`` -- it is a raw-frame
-property and propagates downstream via the QUALITY_CONTROL history.)
+Checks the presence of the RV/CCF data and the per-order barycentric-RV percent
+change, plus the framework required-PRIMARY-keyword presence check. Each result
+is a 0/1 flag written to QUALITY_CONTROL.
 """
 
 import numpy as np
