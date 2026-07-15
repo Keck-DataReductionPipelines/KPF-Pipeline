@@ -1,4 +1,4 @@
-"""KPF data-file discovery: the FileHandler class plus product-path builders."""
+"""KPF data-file discovery: FileHandler class plus path builders."""
 
 import glob
 import logging

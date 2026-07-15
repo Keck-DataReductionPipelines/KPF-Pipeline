@@ -1,4 +1,4 @@
-"""Air/vacuum wavelength conversion and relativistic Doppler/redshift helpers."""
+"""Astronomy-related helper functions, in the style of ``astropy``."""
 
 import astropy.units as u
 import numpy as np

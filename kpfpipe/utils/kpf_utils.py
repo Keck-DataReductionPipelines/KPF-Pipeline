@@ -1,4 +1,4 @@
-"""Obs-id, datecode, and timestamp parsing plus UTC/HST and EPRV conversions."""
+"""obs_id, datecode, and timestamp parsing, plus UTC/HST and KPF/EPRV conversions."""
 
 import os
 import re

@@ -1,4 +1,4 @@
-"""Statistical helpers: monotonicity, outliers, line fits, bad-pixel interpolation."""
+"""Statistical helpers, in the style of ``scipy`` & ``numpy``."""
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
