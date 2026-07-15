@@ -209,7 +209,7 @@ class PlotL1:
     def run(self, which, *, full_res=None):
         """Generate the requested plot(s) for every chip that has data.
 
-        Follows the shared Quicklook ``run()`` contract (style guide §9):
+        Follows the shared Quicklook ``run()`` contract:
         saved-and-closed when ``output_dir`` is set, returned open when it
         is ``None``.
 

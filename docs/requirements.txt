@@ -14,6 +14,7 @@
 # --- docs tooling ---
 sphinx
 sphinx-rtd-theme
+myst-parser  # render the Markdown governing docs under source/guidelines/
 
 # --- kpfpipe runtime deps (mirror of pyproject.toml [project].dependencies) ---
 astropy==7.2.0

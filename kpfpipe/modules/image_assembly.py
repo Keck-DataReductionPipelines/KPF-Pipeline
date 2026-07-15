@@ -32,7 +32,7 @@ _DEFAULTS = {
 # Public by design (special case): per-amplifier read-noise header keywords.
 # ImageAssembly is the first module to touch raw L0 and owns detector read-noise
 # metadata, so QC/Quicklook import this table rather than re-deriving it. This is
-# the one sanctioned public constant in kpfpipe/modules/ (see style guide §1).
+# the one sanctioned public constant in kpfpipe/modules/.
 RN_KEYS = {
     "GREEN_AMP1": ["RNGREEN1", "RNNGGR1"],
     "GREEN_AMP2": ["RNGREEN2", "RNNGGR2"],

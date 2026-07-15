@@ -52,6 +52,7 @@ release = "vNext"
 # -- General configuration ----------------------------------------------------
 
 extensions = [
+    "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
@@ -59,7 +60,12 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-source_suffix = ".rst"
+# The governing docs under guidelines/ are Markdown (myst_parser); the rest of
+# the site (and the generated API stubs) are reStructuredText.
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
 master_doc = "index"
 language = "en"
 exclude_patterns = []
@@ -101,6 +107,40 @@ autodoc_default_options = {
 # convention in the quality_control subpackages). For classes it orders methods
 # by definition order instead of alphabetically.
 autodoc_member_order = "bysource"
+
+# -- Guidelines bridge --------------------------------------------------------
+
+# The governing docs are stored ONCE, as Markdown, in docs/dev/ (outside the
+# Sphinx source tree, so developers and AI assistants find them in a single
+# obvious place). Sphinx only builds files under source/, so copy them into
+# source/dev/guidelines/ at build time and let myst_parser render them. The
+# copies are gitignored (like api/_generated) -- docs/dev/ stays the sole tracked
+# copy, so there is no duplication in the repo. source/dev/guidelines/index.rst
+# (the toctree) is the only tracked file under source/dev/guidelines/.
+
+
+def _sync_guidelines(*_):
+    """Copy docs/dev/*.md into source/dev/guidelines/ before Sphinx reads.
+
+    Connected to Sphinx's ``config-inited`` event, which passes ``(app, config)``
+    positionally; neither is needed here (paths come from ``_repo_root``).
+    """
+    import shutil
+
+    src_dir = os.path.join(_repo_root, "docs", "dev")
+    dst_dir = os.path.join(os.path.dirname(__file__), "dev", "guidelines")
+    os.makedirs(dst_dir, exist_ok=True)
+    for name in sorted(os.listdir(src_dir)):
+        if name.endswith(".md"):
+            shutil.copyfile(
+                os.path.join(src_dir, name), os.path.join(dst_dir, name)
+            )
+
+
+def setup(app):
+    # config-inited fires before source discovery, so the copies exist in time.
+    app.connect("config-inited", _sync_guidelines)
+
 
 # -- Options for HTML output --------------------------------------------------
 

@@ -16,7 +16,7 @@ from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf_utils import get_obs_id
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
-# would not identify this module in the log (style guide section 6).
+# would not identify this module in the log.
 logger = logging.getLogger("kpfpipe.recipe.masters")
 
 
