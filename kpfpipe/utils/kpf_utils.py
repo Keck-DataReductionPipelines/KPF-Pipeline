@@ -16,8 +16,7 @@ _HST_UTC_OFFSET_SECONDS = 36000
 
 
 def is_timestamp(s):
-    """
-    Return True if `s` is a valid KPF timestamp, e.g. '20240113.23249.10'.
+    """Return True if ``s`` is a valid KPF timestamp, e.g. '20240113.23249.10'.
 
     Checks all three: the 'YYYYMMDD.SSSSS.FF' format, that YYYYMMDD is a real
     calendar date, and that SSSSS (seconds past midnight) is in [0, 86399]; the
@@ -36,8 +35,7 @@ def is_timestamp(s):
 
 
 def is_obs_id(s):
-    """
-    Return True if `s` is a valid KPF observation ID, e.g.
+    """Return True if ``s`` is a valid KPF observation ID, e.g.
     'KP.20240113.23249.10'. Both the format and the embedded date/seconds
     are checked.
     """
@@ -47,8 +45,7 @@ def is_obs_id(s):
 
 
 def is_datecode(s):
-    """
-    Return True if `s` is a valid 8-digit datecode that parses as a real
+    """Return True if ``s`` is a valid 8-digit datecode that parses as a real
     calendar date, e.g. '20240405'.
     """
     if not isinstance(s, str) or not _DATECODE_PATTERN.fullmatch(s):

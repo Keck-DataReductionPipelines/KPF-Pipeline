@@ -135,28 +135,10 @@ class FileHandler:
         return os.path.join(self._data_input, "vNext", "mini_db", f"{datecode}_L0.csv")
 
     def _read_mini_db_cache(self, datecode):
-        """The cached mini database for `datecode` as a DataFrame if the on-disk
-        cache is trustworthy for the current L0 directory, else None (the caller
-        then rescans). Reads the cache CSV at most once: the loaded frame is both
-        validated and returned. The cache path, L0 directory, and its FITS file
-        list are all derived from `datecode` plus the instance's ``KPF_DATA_INPUT``
-        root.
-
-        Two guardrails protect against a stale cache:
-
-        * **Count** -- the cache's row count must equal the number of FITS files
-          on disk, so a frame added or removed since the cache was written
-          invalidates it. The cache records *every* file, including unreadable ones
-          (as header-null rows), so a persistently-corrupt frame no longer skews the
-          count and defeats the cache.
-        * **Freshness** -- the cache must be at least as new as every input's
-          timestamp: for each file the later of its modification time
-          (``st_mtime``, when its contents were written) and its change time
-          (``st_ctime``, when it was last moved/linked into the directory -- so a
-          frame copied in with an old mtime is still caught); plus the directory's
-          own ``st_mtime`` (its entry list changes when a file is added or
-          removed). A same-count swap thus still invalidates the cache.
-        """
+        """The cached mini database for ``datecode`` if trustworthy, else None
+        (caller rescans). Rejects a stale cache when the row count differs from the
+        FITS files on disk, or the cache is older than any input or the directory
+        (by ``st_mtime``/``st_ctime``, so a same-count swap is still caught)."""
         cache_path = self._mini_db_cache_path(datecode)
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
@@ -190,19 +172,10 @@ class FileHandler:
         return cached
 
     def _write_mini_db_cache(self, datecode):
-        """Atomically write the full scan (``self._full_scan_mini_db`` -- one row
-        per file, including unreadable frames) to the on-disk cache CSV for
-        `datecode`, creating the cache directory as needed. Writing the full scan
-        (not the cleaned ``self._mini_db``) keeps the cache a faithful mirror of the
-        L0 directory, so the row-count guardrail in ``_read_mini_db_cache`` stays
-        honest.
-
-        pandas' ``to_csv`` truncates the target in place, so a concurrent reader
-        could observe an empty, partial, or half-written CSV. Fill a same-dir temp
-        file and ``os.replace`` it into position instead (atomic on POSIX), so
-        readers always see the old or new CSV whole; clean up the temp file if the
-        write fails.
-        """
+        """Atomically write the full scan (``self._full_scan_mini_db``, one row per
+        file) to ``datecode``'s cache CSV via a same-dir temp + ``os.replace``, so a
+        concurrent reader never sees a half-written file. Writes the full scan, not
+        the cleaned ``self._mini_db``, to keep the row-count guardrail honest."""
         cache_path = self._mini_db_cache_path(datecode)
         cache_dir = os.path.dirname(cache_path)
         os.makedirs(cache_dir, exist_ok=True)
@@ -219,17 +192,16 @@ class FileHandler:
 
     @staticmethod
     def _clean_mini_db(full_scan_mini_db):
-        """The readable-frame subset of a full scan: drop rows whose header could not
-        be read (every header column null). Such frames belong in the on-disk cache
-        -- which mirrors the L0 directory -- but are useless for stacking/discovery,
-        so the in-memory ``self._mini_db`` excludes them. Re-indexes the survivors."""
+        """The readable-frame subset of a full scan: drop rows whose header could
+        not be read (every header column null) and re-index. Such frames stay in
+        the on-disk cache (which mirrors the L0 directory) but are useless for
+        stacking/discovery, so the in-memory ``self._mini_db`` excludes them."""
         return full_scan_mini_db.dropna(
             subset=_MINI_DB_KEYS[1:], how="all"
         ).reset_index(drop=True)
 
     def build_mini_database(self, datecode, cache=False):
-        """
-        Scan the PRIMARY header of every L0 FITS file for one observing night,
+        """Scan the PRIMARY header of every L0 FITS file for one observing night,
         cache the resulting DataFrame on the instance, and return it.
 
         Reads ``{KPF_DATA_INPUT}/L0/{datecode}/*.fits`` and stores the result as
@@ -335,28 +307,18 @@ class FileHandler:
         return self._mini_db
 
     def _seconds_since_j2000(self, s):
-        """Seconds since J2000.0 (2000-01-01 12:00 UTC) for the KPF timestamp in
-        `s` (a timestamp, obs_id, filename, or path) -- the monotonic scalar this
-        handler sorts and gap-detects on when clustering frames; raises
-        ``ValueError`` if `s` holds no valid KPF timestamp.
-
-        Naive UTC arithmetic (leap seconds ignored): fine for frame ordering and
-        cluster-gap detection, not for astronomical (TT/TAI) timing.
-        """
+        """Seconds since J2000.0 for the KPF timestamp in ``s`` -- the monotonic
+        scalar this handler sorts and gap-detects on. Naive UTC (leap seconds
+        ignored): fine for ordering, not for astronomical timing. Raises
+        ``ValueError`` if ``s`` holds no valid KPF timestamp."""
         dt = kpf_timestamp_to_datetime(get_timestamp(s))
         return int((dt - _J2000_EPOCH).total_seconds())
 
     def _select_frames(self, cal_type, *, exclude_junk=True):
-        """
-        The junk-excluded, OBJECT-filtered frames of `cal_type` from the carried
-        mini database (``self._mini_db``).
-
-        The single frame-selection entry point the grouping paths share. Raises
-        ``ValueError`` if no mini database is loaded (call ``build_mini_database``
-        first) or if the type has no frames; a mini database lacking the ISJUNK
-        column raises ``KeyError`` under ``exclude_junk=True`` (a fail-loud guard
-        against a database built before junk tracking existed).
-        """
+        """The junk-excluded, OBJECT-filtered frames of ``cal_type`` from the
+        carried mini database -- the shared frame-selection entry point. Raises
+        ``ValueError`` if no database is loaded or the type has no frames;
+        ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
         mini_db = self._mini_db
         if mini_db is None:
             raise ValueError(
@@ -370,32 +332,10 @@ class FileHandler:
         return cal_df
 
     def _identify_clusters(self, cal_type, *, cluster_gap_seconds, exclude_junk=True):
-        """
-        Group `cal_type` frames into observing-session clusters by time gaps.
-
-        Reads the carried mini database (``self._mini_db``) via `_select_frames`
-        and infers the morn/midday/eve/night/midnight sessions purely from the
-        frame timestamps: the OBJECT morn/eve/night suffix is only a label and
-        does not partition the result, so a mislabeled frame clusters with its
-        true session instead of splitting off. Consecutive time-sorted frames
-        start a new cluster wherever they are more than `cluster_gap_seconds`
-        apart; for the allowlisted cal types the morn and eve sessions sit hours
-        apart, so the gap alone separates them.
-
-        Parameters
-        ----------
-        cal_type : str
-            Calibration frame type (a key of `_OBJECT_MAP`).
-        cluster_gap_seconds : int
-            Gap [s] between consecutive frames that starts a new cluster.
-        exclude_junk : bool, default True
-            Drop observer-flagged junk frames before clustering.
-
-        Returns
-        -------
-        clusters : list of list of str
-            Chronologically-sorted filename lists, one per detected session.
-        """
+        """Group ``cal_type`` frames into observing-session clusters by time gaps:
+        a new cluster starts where consecutive time-sorted frames are more than
+        ``cluster_gap_seconds`` apart. The OBJECT suffix is only a label and does
+        not partition, so a mislabeled frame clusters with its true session."""
         cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
         timed = sorted((self._seconds_since_j2000(fn), fn) for fn in cal_df["FILENAME"])
         clusters = []
@@ -421,8 +361,7 @@ class FileHandler:
         groupby="time_of_day",
         exclude_junk=True,
     ):
-        """
-        Return sorted file lists for all calibration stacks of the requested
+        """Return sorted file lists for all calibration stacks of the requested
         type, grouped from the mini database carried on the instance
         (``self._mini_db``, set by `build_mini_database`).
 
@@ -441,9 +380,7 @@ class FileHandler:
           routinely straddle HST midnight and belong in a single nightly stack.
 
         Every returned stack has at least `min_stack_size` files; undersized
-        stacks are dropped, and it raises when none meets the threshold. Reads the
-        mini database off the instance, so the recipe never handles the DataFrame
-        itself.
+        stacks are dropped, and it raises when none meets the threshold.
 
         Parameters
         ----------
@@ -520,8 +457,7 @@ class FileHandler:
         return clusters
 
     def find_masters(self, cal_type, level, datecode):
-        """
-        Sorted list of the master files matching ``cal_type``/``level`` written
+        """Sorted list of the master files matching ``cal_type``/``level`` written
         under ``KPF_MASTERS_OUTPUT`` for ``datecode`` -- everything matching
         ``{root}/masters/{datecode}/*_master_{cal_type}_{level}.fits`` (the KOAID
         prefix wildcarded).
@@ -545,8 +481,7 @@ class FileHandler:
 
 
 def kpf_filename(obs_id, level, *, master=None):
-    """
-    Base filename for a KPF data product (no directory). The single source of
+    """Base filename for a KPF data product (no directory). The single source of
     the naming rule; ``<model>.generate_standard_filename()`` and `kpf_filepath`
     both delegate here.
 
@@ -621,8 +556,7 @@ def masters_stack_subdir(masters, kind, level):
 
 
 def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
-    """
-    Output directory for a KPF product tree.
+    """Output directory for a KPF product tree.
 
     The single authority for the on-disk output layout; `kpf_filepath` and the
     recipes go through it rather than re-deriving ``os.path.join(data_root, ...)``
@@ -706,8 +640,7 @@ def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
 
 
 def kpf_filepath(obs_id, level, *, data_root=None, master=None):
-    """
-    Build a filepath for a KPF data product: the product's directory
+    """Build a filepath for a KPF data product: the product's directory
     (`kpf_directory`) joined with its basename (`kpf_filename`).
 
     The pipeline's authoritative path builder: constructs the output path from

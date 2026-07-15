@@ -57,10 +57,8 @@ def _gaussian_theta0_generator(x, y):
 def _gaussian_untransform(theta):
     """Report fitted [b, a, mu, sigma], forcing sigma >= 0.
 
-    The model depends only on ``sigma**2``, so the fit may converge to a
-    negative sigma; ``abs`` picks the physical (positive) width. Fitting sigma
-    directly (rather than log-sigma) avoids the per-evaluation ``exp``/``log``
-    round-trip that constrained it positive.
+    The model depends only on ``sigma**2``, so the fit may converge to a negative
+    sigma; ``abs`` picks the physical (positive) width.
     """
     b, a, mu, sigma = theta
     return np.array([b, a, mu, np.abs(sigma)])
@@ -79,8 +77,7 @@ _FUNCTIONS = {
 
 
 def optimize_lsq(x, y, linemodel):
-    """
-    Fit a 1D line model to (x, y) by non-linear least squares.
+    """Fit a 1D line model to (x, y) by non-linear least squares.
 
     Looks up the model function, analytic Jacobian, and initial-guess
     generator registered under `linemodel`, then fits via MINPACK's lmder
@@ -146,15 +143,12 @@ def optimize_lsq(x, y, linemodel):
 
 
 def _mad_std(x, med=None, axis=None, keepdims=False):
-    """Lightweight NaN-aware drop-in for ``astropy.stats.mad_std``.
+    """NaN-aware drop-in for ``astropy.stats.mad_std``: MAD scaled to a Gaussian
+    sigma, ``1.482602218505602 * median(|x - median(x)|)``, reduced over ``axis``.
 
-    Returns the MAD scaled to a Gaussian sigma, ``MAD / norm.ppf(0.75)`` =
-    ``1.482602218505602 * median(|x - median(x)|)``, reduced over ``axis``
-    (ignoring NaNs). Adds two things astropy's ``mad_std`` lacks: a reusable
-    pre-computed median ``med`` (must be reduced over the same ``axis`` with
-    ``keepdims=True`` so it broadcasts against ``x``) to skip a redundant
-    median, and ``axis``/``keepdims`` control over the final MAD reduction
-    (matching ``np.median`` semantics).
+    Adds a reusable pre-computed median ``med`` (must be reduced over the same
+    ``axis`` with ``keepdims=True`` so it broadcasts against ``x``) plus
+    ``axis``/``keepdims`` control over the final MAD reduction.
     """
     if med is None:
         med = np.nanmedian(x, axis=axis, keepdims=True)
@@ -164,12 +158,12 @@ def _mad_std(x, med=None, axis=None, keepdims=False):
 
 
 def _smooth_filter(x, size=None, *, axes=None):
-    """Median- then Gaussian-smooth `x`; a drop-in for chaining scipy's
-    ``median_filter`` and ``gaussian_filter``.
+    """Median- then Gaussian-smooth ``x`` (chains scipy's ``median_filter`` and
+    ``gaussian_filter``).
 
-    `size` sets both the median window and the Gaussian sigma; `axes` restricts
-    the smoothing to those axes (all axes when None), so the trend follows
-    structure along them without blurring across the others.
+    ``size`` sets both the median window and the Gaussian sigma; ``axes`` restricts
+    smoothing to those axes (all when None), so the trend follows structure along
+    them without blurring across the others.
     """
     return gaussian_filter(
         median_filter(x, size=size, axes=axes), sigma=size, axes=axes
@@ -177,8 +171,7 @@ def _smooth_filter(x, size=None, *, axes=None):
 
 
 def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
-    """
-    Flag elements of `x` more than `sigma` robust deviations from their peers.
+    """Flag elements of ``x`` more than ``sigma`` robust deviations from their peers.
 
     `axis` selects the axis along which each element is compared to its peers:
 
@@ -215,8 +208,7 @@ def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
 
 
 def interpolate_bad_pixels(data, mask, method="local", fill_outside=True):
-    """
-    Interpolate over bad pixels of a 2D image, replacing each with a value
+    """Interpolate over bad pixels of a 2D image, replacing each with a value
     inferred from its good neighbors.
 
     Parameters

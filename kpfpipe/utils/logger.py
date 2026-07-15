@@ -217,8 +217,8 @@ def setup_batch_logging(log_dir, label, level="INFO", console=True):
     own decision points -- units dispatched, canary result, per-unit ok/failed,
     and the failure sentinels -- alongside (not replacing) each unit's
     per-reduction log. The console echo is pinned to ``sys.stdout`` so an operator
-    can watch batch progress live (parity with the ``print()``s this replaces),
-    while each record is also persisted to the batch log file. The stdout echo is
+    can watch batch progress live, while each record is also persisted to the
+    batch log file. The stdout echo is
     filtered (``_BatchConsoleFilter``) so that below WARNING only the driver's own
     ``scripts.*``/``__main__`` narration reaches the terminal -- library INFO
     chatter is kept out of the live view but still written to the batch log file.
