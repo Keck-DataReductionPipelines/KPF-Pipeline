@@ -1,7 +1,6 @@
-"""
-Tests for the kpf_drp_science recipe.
+"""Tests for the kpf_drp_science recipe.
 
-Integration tests run the full recipe (L0 → L1 → L2) against a real star
+Integration tests run the full recipe (L0 -> L1 -> L2) against a real star
 observation from tests/testdata/L0/20240405/.
 """
 

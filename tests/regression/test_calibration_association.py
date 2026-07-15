@@ -1,6 +1,4 @@
-"""
-Unit tests for CalibrationAssociation.
-"""
+"""Unit tests for CalibrationAssociation."""
 
 import pytest
 from astropy.io import fits
@@ -178,8 +176,8 @@ class TestSelectNearest:
     def test_selects_nearest_of_two(self, tmp_path):
         mod = _make_module(tmp_path)
         # Science frame at 40113s (~11:08 UTC).
-        # Candidate A at 03637s (~01:00 UTC) — delta ~7.1 hours.
-        # Candidate B at 36000s (~10:00 UTC) — delta ~1.1 hours.
+        # Candidate A at 03637s (~01:00 UTC) -- delta ~7.1 hours.
+        # Candidate B at 36000s (~10:00 UTC) -- delta ~1.1 hours.
         result = mod._select_nearest(
             "2024-04-05T11:08:33",
             [

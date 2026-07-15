@@ -17,9 +17,9 @@ within [START, END].
 Builds run in a bounded process pool. The L0 mini-database caches are warmed up
 front by a parallel per-datecode pre-scan (``--cache``, ``rw`` by default; ``r``
 skips the pre-scan and leaves each reduce to read-only); the first night then runs
-alone as a
-canary to warm the *other* shared caches (barycorrpy leap-seconds, astropy IERS,
-matplotlib fonts, bytecode) before the rest fan out. The run is fail-soft (a night
+alone as a canary to warm the *other* shared caches (barycorrpy leap-seconds,
+astropy IERS, matplotlib fonts, bytecode) before the rest fan out. The run is
+fail-soft (a night
 that fails to build is reported and the others continue) but exits nonzero if any
 night failed.
 """

@@ -2,11 +2,12 @@
 
 timeseries is a thin discovery + dispatch wrapper: it combs the L0 tree for a
 target's science frames over a datecode range (steps 1-2), then runs one masters
-and one science orchestrator subprocess (steps 3-4). The robust fan-out engine
-lives in _dispatch (tested in test_dispatch.py) and the orchestrators own their
-own arg parsing (test_masters_script.py / test_science_script.py). These cover
-only what timeseries owns: arg parsing, the threaded L0 discovery, the
-orchestrator argv it builds, and the main() dispatch order.
+orchestrator, one science orchestrator, and one plotter subprocess (steps 3-5).
+The robust fan-out engine lives in _dispatch (tested in test_dispatch.py) and the
+orchestrators own their own arg parsing (test_masters_script.py /
+test_science_script.py). These cover only what timeseries owns: arg parsing, the
+threaded L0 discovery, the orchestrator argv it builds, and the main() dispatch
+order.
 
 Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 """

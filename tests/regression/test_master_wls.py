@@ -1,5 +1,4 @@
-"""
-Unit tests for the WLS module.
+"""Unit tests for the WLS module.
 
 All sub-module I/O is mocked; no real data or FITS files are required.
 """
@@ -55,8 +54,7 @@ def _linelist_df(chip, norder, waves):
 
 @pytest.fixture
 def mock_pipeline(monkeypatch):
-    """
-    Patch CalibrationAssociation, ImageProcessing, and SpectralExtraction so
+    """Patch CalibrationAssociation, ImageProcessing, and SpectralExtraction so
     that _process_frame and _extract_frame run without touching disk or real
     data.
 
@@ -196,8 +194,7 @@ class TestProcessIndividualFrames:
 
 @pytest.fixture
 def mock_make_master_l2(monkeypatch):
-    """
-    Patch frame loading, _fit_and_qc_lines_stack, and _combine_coeffs_stack so
+    """Patch frame loading, _fit_and_qc_lines_stack, and _combine_coeffs_stack so
     make_master_l2 runs without touching disk or real spectra. The fitting
     stub reports one non-rejected frame per input (FILE_LIST has 8 frames, so
     the default min_stack_size=5 gate passes), and the combine stub returns
@@ -446,7 +443,7 @@ class TestMakeMasterL2:
 
     def test_save_diagnostics_with_empty_stash_raises(self, tmp_path):
         # make_master_l2 initialises _frame_diagnostics to {} before populating
-        # it. If the chip loop raises before any chip is added, it stays empty —
+        # it. If the chip loop raises before any chip is added, it stays empty --
         # save_diagnostics must refuse rather than write an empty HDF5.
         wls = WLS(FILE_LIST)
         wls._frame_diagnostics = {}

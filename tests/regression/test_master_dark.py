@@ -2,9 +2,9 @@
 
 Unit tests mock stack_frames (no real data). TestMasterDarkRegression builds a
 real master dark from the bundled L0 darks: the five frames span two default-gap
-clusters and HST midnight, so it widens cluster_gap_seconds and lifts the
-midnight boundary to group them into one stack, bias-subtracting each frame. The
-shared stacking engine these exercise (`BaseMasterModule`) is unit-tested in
+clusters and HST midnight, so it groups them with groupby='obs_night' (the whole
+loaded night in one stack) before bias-subtracting each frame. The shared
+stacking engine these exercise (`BaseMasterModule`) is unit-tested in
 test_master_base.py.
 """
 
@@ -24,7 +24,7 @@ from ._masters import make_l1_arrays
 
 CHIPS = ["GREEN", "RED"]
 NROW, NCOL = 10, 10  # small arrays for unit tests
-# make_l1_arrays() — shared synthetic stack_frames builder — lives in _masters.py
+# make_l1_arrays() -- shared synthetic stack_frames builder -- lives in _masters.py
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
@@ -37,7 +37,7 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 class TestMasterDarkUnit:
-    """Unit tests using a mocked stack_frames — no real data needed."""
+    """Unit tests using a mocked stack_frames -- no real data needed."""
 
     @pytest.fixture(scope="class")
     def master_dark(self):

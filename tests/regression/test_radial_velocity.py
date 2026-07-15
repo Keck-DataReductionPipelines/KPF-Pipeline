@@ -1,5 +1,4 @@
-"""
-Tests for the RadialVelocity module (KPF4 -> KPF4: fit per-order CCFs to RVs).
+"""Tests for the RadialVelocity module (KPF4 -> KPF4: fit per-order CCFs to RVs).
 
 RadialVelocity consumes the CCF-bearing L4 that CrossCorrelation produces and
 fills the RV/RV_ERR columns and RV headers. Static-method unit tests
@@ -82,8 +81,7 @@ def _make_l4(
     bjd=0.0,
     perform_fibers=None,
 ):
-    """
-    Build a synthetic KPF2 (absorption injected at _MASK_CENTERS, shifted by
+    """Build a synthetic KPF2 (absorption injected at _MASK_CENTERS, shifted by
     _V_INJECT) and run CrossCorrelation (mask stubbed, narrow grid) to a KPF4.
     """
     kpf2 = KPF2()

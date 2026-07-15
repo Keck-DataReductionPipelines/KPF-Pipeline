@@ -1,8 +1,8 @@
-"""Profile ``RadialVelocity.perform`` (CCF computation and RV fitting, L2 -> L4).
+"""Profile ``RadialVelocity.perform`` (fit the per-order CCFs to RVs).
 
-This is the expected tallest tentpole of the science pipeline (per-velocity,
-per-line inner loops in ``_compute_ccf_1d``), so the line-level drill-down pass
-is kept enabled and this harness is the slowest to run.
+The per-order CCFs are built upstream by ``CrossCorrelation``; this module only
+fits them, so its cost is the order-by-order two-pass Gaussian CCF-dip fits in
+``_compute_rv_1d``. The line-level drill-down pass is kept enabled.
 
 Run with ``make profile-radial_velocity`` or
 ``python tests/profiling/profile_radial_velocity.py``. Requires real frames in

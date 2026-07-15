@@ -10,14 +10,17 @@ The header scan and clustering are done by the pipeline's own
 ``kpfpipe.utils.io.FileHandler`` (``build_mini_database`` +
 ``build_calibration_stacks``), so this tool always matches the masters recipe
 exactly: same OBJECT typing, gap splitting, HST-midnight handling, observer-junk
-exclusion, and per-type thresholds. Of the eligible clusters for each type the
+exclusion, and per-type grouping. Of the eligible clusters for each type the
 largest (earliest on a tie) is chosen, and up to --count of its frames are
 emitted.
 
-Per-type settings match recipes/kpf_drp_masters.py (see _TYPE_KWARGS):
-bias/flat/thar require 5 frames; darks require 3, merge undersized clusters, and
-ignore the HST-midnight split (their sparse sequences legitimately span a
-night's HST midnight).
+Per-type grouping mirrors recipes/kpf_drp_masters.py (see _TYPE_KWARGS): darks
+set min_stack_size=3 and group the whole night into one stack
+(groupby='obs_night'), so their sparse sequences that straddle HST midnight stay
+together; bias/flat/thar keep the build_calibration_stacks defaults
+(min_stack_size=1, per-session time_of_day grouping). Selection is deliberately
+permissive here -- the tool only needs the largest cluster of each type, not the
+recipe's configured per-type minima.
 
 Output is an obs_id list in the exact format of the input (index<TAB>obs_id,
 one per line), ready to feed straight back into fetch_l0.sh. A human-readable
@@ -36,10 +39,11 @@ import sys
 from kpfpipe.utils.io import FileHandler
 from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, get_timestamp, is_obs_id
 
-# Per-type kwargs for build_calibration_stacks, matching recipes/kpf_drp_masters.py.
-# Darks are sparse long exposures whose sequences straddle HST midnight, so they
-# drop the threshold to 3 and group the whole night into one stack (obs_night);
-# bias/thar use the default time_of_day (one stack per morn/eve session).
+# Per-type kwargs for build_calibration_stacks; the grouping mirrors
+# recipes/kpf_drp_masters.py. Darks are sparse long exposures whose sequences
+# straddle HST midnight, so they set min_stack_size=3 and group the whole night
+# into one stack (groupby='obs_night'); bias/flat/thar keep the defaults
+# (min_stack_size=1, time_of_day -- one stack per morning/evening session).
 _TYPE_KWARGS = {
     "bias": {},
     "dark": {"min_stack_size": 3, "groupby": "obs_night"},
