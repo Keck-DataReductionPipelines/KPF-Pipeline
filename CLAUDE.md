@@ -74,7 +74,7 @@ KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reductio
 pipeline for the Keck Observatory. The scientific priority is intermediate and
 long-term radial velocity (RV) stability.
 
-## Governing documents (precedence order)
+## Governing Documents (precedence order)
 
 Five references govern this project. **When they conflict, the higher one wins.**
 Each is the source of truth for its domain — consult before making related
@@ -113,7 +113,7 @@ the governing docs must never cite CLAUDE.md.** Operational/policy material belo
   (a tagged PyPI release, not a moving branch). Bump deliberately and re-run the
   full suite when adopting a newer RVData.
 
-## Git workflow
+## Git Workflow
 
 v3 work branches from and PRs into **`kpf-next`** (the v3 develop branch). Never
 target `master` (production/stable) or `develop` (frozen at v2.12, legacy).
@@ -155,7 +155,7 @@ constants, anything integration tests exercise; or a cross-cutting refactor). `t
 the `slow` integration tests (real-frame assembly/overscan, master stacking, full L0→L2, WLS
 orientation). Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
 
-## Design decisions
+## Design Decisions
 
 Before a non-trivial design or structural change, verify against the governing docs
 (precedence table above) — consult, don't guess:
