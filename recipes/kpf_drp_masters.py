@@ -15,6 +15,7 @@ import time
 from kpfpipe.modules.masters import WLS, Bias, Dark
 from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf_utils import get_obs_id
+from recipes._logging import masters_run_summary
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log.
@@ -103,27 +104,8 @@ def main(config, args):
         wls.make_master_l2(master_path=wls_path)
         built.append(("thar", wls_path, len(files)))
 
-    logger.info(_summary(datecode, built, time.monotonic() - t0))
+    logger.info(masters_run_summary(datecode, built, time.monotonic() - t0))
     logger.info("exiting kpf_drp_masters pipeline")
-
-
-def _summary(datecode, built, elapsed_s):
-    """Format this run's masters end-of-run verdict.
-
-    ``built`` is the list of ``(cal_type, path, n_frames)`` stacked this run
-    (empty if none) -- masters have no single product to read back, so main()
-    passes what it stacked. The surrounding blank lines make the block stand out
-    by eye in the log.
-    """
-    lines = [f"===== masters run summary: {datecode} ====="]
-    if built:
-        for cal_type, path, n_frames in built:
-            name = os.path.basename(path) if path else "n/a"
-            lines.append(f"  {cal_type:<6s} {name}  ({n_frames} frames)")
-    else:
-        lines.append("  (no masters built)")
-    lines.append(f"  elapsed:  {elapsed_s:.1f} s")
-    return "\n\n" + "\n".join(lines) + "\n\n"
 
 
 if __name__ == "__main__":

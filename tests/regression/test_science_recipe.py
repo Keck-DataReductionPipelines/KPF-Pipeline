@@ -18,6 +18,7 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_filepath
+from recipes._logging import science_run_summary
 
 # ---------------------------------------------------------------------------
 # Test data paths and constants
@@ -272,7 +273,7 @@ class _FakeL4:
 
 
 class TestScienceSummary:
-    """Unit tests for the recipe's private _summary() run-verdict formatter."""
+    """Unit tests for the science_run_summary() run-verdict formatter."""
 
     def _l4(self):
         headers = {
@@ -302,7 +303,7 @@ class TestScienceSummary:
         return _FakeL4("KP.20240405.40113.57", headers, receipt)
 
     def test_all_fields_from_l4(self):
-        text = _load_recipe()._summary(self._l4(), 92.4)
+        text = science_run_summary(self._l4(), 92.4)
         assert "run summary: KP.20240405.40113.57" in text
         # Input/output paths come from the RECEIPT table, shown as basenames.
         assert "inputs:   KP.20240405.40113.57.fits" in text
@@ -328,7 +329,7 @@ class TestScienceSummary:
             {"RECEIPT": {}, "PRIMARY": {"RV": None}, "QUALITY_CONTROL": {}},
             None,
         )
-        text = _load_recipe()._summary(l4, 1.0)
+        text = science_run_summary(l4, 1.0)
         assert "RV:       n/a (no science combine)" in text
         assert "inputs:   n/a" in text
         assert "outputs:  n/a" in text

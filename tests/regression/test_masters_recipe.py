@@ -14,6 +14,7 @@ import pytest
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler, kpf_filepath
+from recipes._logging import masters_run_summary
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 MASTERS_CONFIG_PATH = (
@@ -135,10 +136,10 @@ class TestMastersRecipeErrors:
 
 
 class TestMastersSummary:
-    """Unit tests for the recipe's private _summary() run-verdict formatter."""
+    """Unit tests for the masters_run_summary() run-verdict formatter."""
 
     def test_built_masters_listed(self):
-        text = _load_masters_recipe()._summary(
+        text = masters_run_summary(
             "20240405",
             [
                 ("bias", "/m/kpf_20240405_bias_L1.fits", 32),
@@ -153,5 +154,5 @@ class TestMastersSummary:
         assert text.startswith("\n\n") and text.endswith("\n\n")
 
     def test_no_masters_built(self):
-        text = _load_masters_recipe()._summary("20240405", [], 1.0)
+        text = masters_run_summary("20240405", [], 1.0)
         assert "(no masters built)" in text

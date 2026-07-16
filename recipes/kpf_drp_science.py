@@ -11,7 +11,6 @@ data products are written to the output data root.
 """
 
 import logging
-import os
 import time
 
 from kpfpipe.data_models import KPF0
@@ -31,6 +30,7 @@ from kpfpipe.quality_control.checkpoints import (
 )
 from kpfpipe.quality_control.quicklook import PlotL0, PlotL1, PlotL2, PlotL4
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
+from recipes._logging import science_run_summary
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log.
@@ -164,76 +164,9 @@ def main(config, args):
 
     # End-of-run verdict: a compact roll-up read straight off the finished L4
     # product (masters, inputs/outputs, ISGOOD, combined RV), plus the elapsed.
-    logger.info(_summary(l4, time.monotonic() - t0))
+    logger.info(science_run_summary(l4, time.monotonic() - t0))
 
     logger.info("exiting kpf_drp_science pipeline")
-
-
-def _summary(l4, elapsed_s):
-    """Format this run's end-of-run verdict from the finished L4 product.
-
-    A compact, greppable roll-up read off the L4 the recipe just built: obs_id
-    and the master-file cards from RECEIPT, the input/product paths from the
-    RECEIPT provenance table, ISGOOD from QUALITY_CONTROL, and the combined RV
-    from PRIMARY, plus the wall-clock elapsed. ``RV``/``RVERR``/``BJDTDB`` that
-    are not real numbers (absent or FITS UNDEFINED, e.g. no science combine ran)
-    render as ``n/a``; ``RV`` is km/s (error in m/s), ``BJDTDB`` is BJD_TDB. The
-    surrounding blank lines make the block stand out by eye in the log.
-    """
-    receipt = l4.headers.get("RECEIPT", {})
-    primary = l4.headers.get("PRIMARY", {})
-    qc = l4.headers.get("QUALITY_CONTROL", {})
-
-    def base(path):
-        return os.path.basename(path) if path else "n/a"
-
-    def receipt_paths(function, arg_key):
-        # The input/product paths are not first-class keywords (unlike the master
-        # cards); they survive only as key=value fragments in the RECEIPT ARGS.
-        table = getattr(l4, "receipt", None)
-        if table is None or getattr(table, "empty", True):
-            return []
-        out = []
-        for _, row in table.iterrows():
-            if row.get("FUNCTION") != function:
-                continue
-            for token in str(row.get("ARGS", "")).split(", "):
-                key, _, value = token.partition("=")
-                if key.strip() == arg_key and value.strip():
-                    out.append(value.strip())
-        return out
-
-    obs_id = getattr(l4, "obs_id", None) or receipt.get("ORIGID") or "unknown"
-    masters = {
-        "bias": receipt.get("BIASFILE"),
-        "dark": receipt.get("DARKFILE"),
-        "thar": receipt.get("WLSFILE"),
-    }
-    masters_str = "  ".join(f"{k}={base(v)}" for k, v in masters.items())
-    # First from_fits is the original L0 read; a reload would append its own.
-    inputs = receipt_paths("from_fits", "fn")[:1]
-    outputs = receipt_paths("to_fits", "out_filepath")
-    inputs_str = "  ".join(base(p) for p in inputs) or "n/a"
-    outputs_str = "  ".join(base(p) for p in outputs) or "n/a"
-
-    rv, rverr, bjd = primary.get("RV"), primary.get("RVERR"), primary.get("BJDTDB")
-    if isinstance(rv, (int, float)):
-        err = f"{rverr * 1e3:.3f}" if isinstance(rverr, (int, float)) else "n/a"
-        bjd_str = f"{bjd:.6f}" if isinstance(bjd, (int, float)) else "n/a"
-        rv_line = f"{rv:+.5f} km/s  err {err} m/s  @ BJD_TDB {bjd_str}"
-    else:
-        rv_line = "n/a (no science combine)"
-
-    lines = [
-        f"===== run summary: {obs_id} =====",
-        f"  inputs:   {inputs_str}",
-        f"  masters:  {masters_str}",
-        f"  outputs:  {outputs_str}",
-        f"  ISGOOD:   {qc.get('ISGOOD')}",
-        f"  RV:       {rv_line}",
-        f"  elapsed:  {elapsed_s:.1f} s",
-    ]
-    return "\n\n" + "\n".join(lines) + "\n\n"
 
 
 if __name__ == "__main__":
