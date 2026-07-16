@@ -44,7 +44,7 @@ When requirements or design principles conflict, the order of governing document
 2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
 3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
 4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
-5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+5. KPF vNext style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
 
 When any two conflict, the higher one wins.
 
@@ -138,7 +138,7 @@ alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its ove
   so it wins).
 - **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`.
 
-The rvdata `RVDataModel` base provides the `extensions`/`headers`/`data` OrderedDicts plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. `KPFDataModel` overrides `set_data`/`set_header` (in `base.py`, not the level classes) with a `hasattr` guard, so alias resolution runs during init — the base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. It likewise overrides `create_extension` so every extension header is a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
+`KPFDataModel` overrides `set_data`/`set_header` in `base.py` (not the level classes) with a `hasattr` guard so alias resolution runs during init — the rvdata base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. Its `create_extension` override makes every extension header a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
 
 ### Extension alias system
 
@@ -175,7 +175,7 @@ The architecture invariants:
   advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
   read, so every model carries `obs_id` on every construction path.
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
-  as an **append-only history**; only `ISGOOD` — the running AND over every accumulated QC flag —
+  as an **append-only history**; only `ISGOOD` (the running QC aggregate — see *QC flags*)
   changes per level.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
@@ -454,8 +454,9 @@ master stacking, WLS orientation) off from the fast `-m "not slow"` subset.
 
 The masters tests mirror the masters subpackage by *responsibility*: `test_master_base.py` covers
 the shared stacking engine (`BaseMasterModule`), `test_master_bias.py`/`test_master_dark.py` the
-concrete bias/dark modules, `test_master_wls.py` the WLS path (a separate ML2), and
-`test_masters_recipe.py` the `kpf_drp_masters` recipe; `flat` has no test file while stubbed.
+concrete bias/dark modules, `test_master_wls.py` the WLS path (a separate ML2),
+`test_masters_recipe.py` the `kpf_drp_masters` recipe, and `test_masters_script.py` the masters
+CLI script; `flat` has no test file while stubbed.
 (Which file a new masters test belongs in is a style-guide §C.8 rule.)
 
 ### Profiling

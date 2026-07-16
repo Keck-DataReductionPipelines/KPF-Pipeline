@@ -1,7 +1,5 @@
 # KPF-DRP vNext: Project Context and Intent
 
-This charter describes the project intent and design.
-
 **Authority precedence.**
 When requirements or design principles conflict, the order of governing document precedence is:
 
@@ -9,7 +7,7 @@ When requirements or design principles conflict, the order of governing document
 2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
 3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
 4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
-5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+5. KPF vNext style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
 
 When any two conflict, the higher one wins.
 
@@ -25,10 +23,10 @@ The legacy v2.12 DRP has reached a point where:
 -   Silent failures and nondeterministic behavior undermine confidence.
 -   Long-term RV stability remains the dominant scientific challenge.
 
-This effort is not a cosmetic refactor.
+This is not a cosmetic refactor.
 
-It is a controlled reset aimed at restoring scientific confidence,
-deterministic behavior, and development agility.
+It is a controlled reset aimed at restoring scientific
+confidence, deterministic behavior, and development agility.
 
 ------------------------------------------------------------------------
 

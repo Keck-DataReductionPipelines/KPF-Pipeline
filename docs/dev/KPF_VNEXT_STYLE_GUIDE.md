@@ -12,22 +12,19 @@ When requirements or design principles conflict, the order of governing document
 2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
 3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
 4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
-5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+5. KPF vNext style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
 
 When any two conflict, the higher one wins.
 
 
-**Status of these rules.** These are *soft* requirements, and this guide sits at the **bottom**
-of the project's authority hierarchy:
+**Status of these rules.** These are *soft* requirements — this guide sits at the **bottom** of
+the authority hierarchy above, so where a rule here conflicts with any of those four documents,
+**the higher one wins** (style yields to science). It describes the dominant, prevailing pattern;
+where the codebase contradicts itself, the recommended variant is called out explicitly.
 
-This style guide describes the dominant, prevailing pattern; where the codebase
-contradicts itself, the recommended variant is called out explicitly. When a rule here
-conflicts with any of those four documents, **the higher one wins** — style yields to science.
-
-This file covers *how code should look and be organized* — not operational or technical
-guidance (environment, commands) or the pipeline's structure (the architecture reference),
-which are documented separately. It does not restate what the architecture guide already
-covers; where a rule needs that context, it points there rather than duplicating it.
+This file covers *how code should look and be organized* — not operational/technical guidance
+(environment, commands) or the pipeline's structure (the architecture reference). Where a rule
+needs that context, it points there rather than restating it.
 
 Contents:
 

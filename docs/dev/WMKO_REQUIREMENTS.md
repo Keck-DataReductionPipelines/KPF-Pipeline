@@ -5,15 +5,17 @@
 > This Markdown mirror exists so the requirements are greppable and linkable alongside the
 > code. Re-transcribe if the requirements are revised.
 
+> **The two blocks below (Authority precedence, Active vs. passive compliance) are repo-added
+> governance for the vNext project — they are not part of the transcribed WMKO PDF.**
+
 **Authority precedence.**
-The WMKO technical requirements are the **top** of the project's reference hierarchy —
-they outrank every other governing document:
+When requirements or design principles conflict, the order of governing document precedence is:
 
 1. WMKO technical requirements ([`WMKO_REQUIREMENTS.md`](WMKO_REQUIREMENTS.md))
 2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
 3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
 4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
-5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+5. KPF vNext style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
 
 When any two conflict, the higher one wins.
 
