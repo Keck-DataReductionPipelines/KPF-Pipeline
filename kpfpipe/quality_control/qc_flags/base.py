@@ -6,6 +6,10 @@ QUALITY_CONTROL via ``set_keyword`` and aggregating ISGOOD as the AND of all
 checks. Header validation and raising live in the separate Checkpoints layer.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class QC:
     """Base runner for per-level pass/fail QC check methods.
@@ -36,8 +40,10 @@ class QC:
     def run(self):
         """Run all checks, write each 0/1 result, and aggregate ISGOOD.
 
-        Resets ``self.results`` at the start so calling ``run()`` repeatedly
-        on the same instance is deterministic.
+        Each result is logged as it is written -- ``DEBUG`` on a pass, ``WARNING``
+        on a fail -- both carrying the keyword's comment so the 8-char keyword
+        reads clearly. Resets ``self.results`` at the start so calling ``run()``
+        repeatedly on the same instance is deterministic.
 
         Returns
         -------
@@ -59,6 +65,14 @@ class QC:
             comment = self.kpf_obj.keyword_registry.routing.get(kw, (None, ""))[1]
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
+            logger.log(
+                logging.DEBUG if passed else logging.WARNING,
+                "%s %s = %s — %s",
+                self.LEVEL,
+                kw,
+                1 if passed else 0,
+                comment,
+            )
 
         # ISGOOD is the running aggregate: AND over every QC flag now on
         # QUALITY_CONTROL -- the flags this level just wrote PLUS those propagated

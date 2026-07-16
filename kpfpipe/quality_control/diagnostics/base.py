@@ -6,6 +6,10 @@ them to the product headers via ``set_keyword``; it never modifies the science
 extensions. QC then reads those metrics and applies pass/fail thresholds.
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class Diagnostics:
     """Base runner for per-level diagnostic metric methods.
@@ -64,6 +68,8 @@ class Diagnostics:
                 # retained in self.results only).
                 self.kpf_obj.set_keyword(kw, value)
 
+        for kw, (value, comment) in self.results.items():
+            logger.debug("%s %s = %s — %s", self.LEVEL, kw, value, comment)
         return self.results
 
     def _iter_methods(self):

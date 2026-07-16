@@ -85,13 +85,15 @@ class TestQCFlags:
             CheckpointL2(l2).qc_flags()
 
     def test_nonraise_flag_zero_warns(self, caplog):
-        # KWRDPRL2 is not a RAISE_FLAG, so a 0 warns (data present so DATAPRL2 ok).
+        # KWRDPRL2 is not a RAISE_FLAG, so a 0 lands in the ISGOOD summary rather
+        # than raising (DATAPRL2 = 1, so no fatal flag).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (0, "required present")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
-        assert "KWRDPRL2 = 0" in caplog.text
+        assert "ISGOOD=0" in caplog.text
+        assert "KWRDPRL2" in caplog.text
 
     def test_all_pass_silent(self, caplog):
         l2 = KPF2()
@@ -108,18 +110,19 @@ class TestQCFlags:
             CheckpointL2(l2).qc_flags()
         assert not caplog.records
 
-    def test_only_current_level_flags_are_checked(self, caplog):
-        # QUALITY_CONTROL accumulates the L0->L1->L2 history, but qc_flags warns
-        # only on THIS level's own checks. A failed L1 flag (RNOK) propagated onto
-        # an L2 product must NOT re-warn at the L2 checkpoint; the L2 flag does.
+    def test_summary_lists_all_failing_flags_cross_level(self, caplog):
+        # The ISGOOD summary is the cross-level roll-up: it names every failing
+        # flag on QUALITY_CONTROL by bare keyword, including one propagated from a
+        # lower level (RNOK from L1). Per-flag detail with comments is the QC
+        # stage's job (see test_qc_flags), so the checkpoint need not repeat it.
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
         l2.headers["QUALITY_CONTROL"]["RNOK"] = (0, "L1 read noise (propagated)")
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (0, "L2 required present")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
-        assert "KWRDPRL2 = 0" in caplog.text  # current-level flag warns
-        assert "RNOK" not in caplog.text  # propagated L1 flag ignored
+        assert "KWRDPRL2" in caplog.text
+        assert "RNOK" in caplog.text
 
     def test_registry_qc_flag_sets_scoping(self):
         from kpfpipe.data_models.keyword_registry import keyword_registry as reg

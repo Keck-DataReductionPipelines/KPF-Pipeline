@@ -335,7 +335,10 @@ Logging follows WMKO DRP-RUN-07/08/09. The coding rules:
 - **Level policy**: `INFO` = production (steps, decisions, I/O, end-of-`perform()` summaries),
   `DEBUG` = inner-loop (per-order/-chip/-frame) detail, `WARNING` = recoverable/degraded runtime
   conditions. Per-item logging inside a loop stays `DEBUG` (or aggregate to one line) so it never
-  floods `INFO`/`WARNING`. Never gate log calls behind `verbose` — the level is the gate. Use lazy
+  floods `INFO`/`WARNING`. Emit QC/diagnostics keyword logs one keyword per line as
+  `keyword = value — comment` (the FITS comment, read off the header) — verbosely at `DEBUG`, but
+  only for failing/fatal flags at the rare `WARNING`/`ERROR` levels. Never gate log calls behind
+  `verbose` — the level is the gate. Use lazy
   `%`-formatting (`logger.info("wrote %s", fn)`, Ruff `G`), not f-strings.
 - **No `print()` in pipeline code.** Anything that runs as part of a reduction — `perform()` and its
   helpers, recipes, the CLI, utils, data-model read/write paths — logs, never prints. The **only**
