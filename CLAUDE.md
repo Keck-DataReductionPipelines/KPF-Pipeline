@@ -131,9 +131,8 @@ make test-fast   # fast pre-commit subset: everything except @pytest.mark.slow (
 make test        # full suite, parallel
 make test-serial # serial fallback for debugging parallel/receipt issues
 
-# Single test class or test (while iterating on one area)
+# Single test/class — append ::Class or ::Class::test_name to the file path
 conda run -n kpfpipe python -m pytest tests/regression/test_data_models_l2.py::TestKPF2Aliases -v
-conda run -n kpfpipe python -m pytest tests/regression/test_data_models_l2.py::TestKPF2Aliases::test_chip_prefix_access -v
 
 # Formatting and linting (Ruff; config in pyproject.toml [tool.ruff])
 ruff format kpfpipe/ tests/ recipes/      # format (black-compatible)
@@ -147,31 +146,31 @@ pre-commit run --all-files  # run all hooks across the repo
 make profile   # all; also profile-science / profile-masters / profile-<module>
 ```
 
-## Running tests — which tier
+## Testing
 
-No git hook runs tests (`pre-commit` is ruff-only), so match scope to the change:
+No git hook runs tests (`pre-commit` is ruff-only), so match scope to the change: touched
+file(s) while iterating; `make test-fast` before committing; `make test` (full) only for wide
+blast radius (a PR; a core/shared-module change — data models, base classes, `kpfpipe/__init__.py`
+constants, anything integration tests exercise; or a cross-cutting refactor). `test-fast` skips
+the `slow` integration tests (real-frame assembly/overscan, master stacking, full L0→L2, WLS
+orientation). Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
 
-| Scope | When |
-|-------|------|
-| The file(s) you touched | While iterating (most runs) |
-| `make test-fast` | Before wrapping up / committing |
-| `make test` (full) | Wide blast radius: opening/updating a PR; a change to a core/shared module (data models, `kpfpipe/__init__.py` constants, base classes, anything integration tests exercise); a cross-cutting refactor. |
+## Design decisions
 
-The fast subset skips `slow` integration tests (real-frame assembly/overscan,
-master stacking, full L0→L2, WLS orientation) — the triggers above are what catch
-those. Suite layout is in the architecture guide (*Tests → Regression*);
-test-writing conventions are in the style guide §C.8.
+Before a non-trivial design or structural change, verify against the governing docs
+(precedence table above) — consult, don't guess:
 
-## Architecture, principles, and success criteria
+1. **Requirements / data format** — does it touch a WMKO requirement or the L2/L4 data
+   products? Check `WMKO_REQUIREMENTS.md` / `EPRV_DATA_STANDARD.md` first.
+2. **Principles** — determinism, no hidden state, fail-loud, explicit calibration,
+   simplicity (charter §9 Guardrails, §10 Core Design Principles; calibration §5).
+3. **Structure** — matches the data-model / alias / layering / QC contracts
+   (architecture reference).
+4. **Change gate** — preserves deterministic behavior, runs on the truth dataset, and
+   documents RV-metric impact (charter §6); measure against §3 Definition of Success.
 
-Do not restate these here (past copies drifted — keep one source):
+The governing docs are the single source of truth — read them, don't restate them here
+(past inline copies drifted). Intent & principles: [`KPF_VNEXT_CHARTER.md`](docs/dev/KPF_VNEXT_CHARTER.md). Structure (data model, aliases, layering, masters,
+QC/checkpoint/quicklook, tests): [`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md). Code style: [`KPF_VNEXT_STYLE_GUIDE.md`](docs/dev/KPF_VNEXT_STYLE_GUIDE.md).
 
-- **Structure** (data model, aliases, layering, masters, QC/checkpoint/quicklook,
-  test/profiling suite): [`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md).
-- **Intent & principles**: [`KPF_VNEXT_CHARTER.md`](docs/dev/KPF_VNEXT_CHARTER.md)
-  — §10 Core Design Principles, §9 Guardrails, §5 Calibration Philosophy,
-  §3 Definition of Success, §6 (preserve deterministic behavior, run on the truth
-  dataset, document impact on RV metrics). Consult before design decisions.
-
-Keep CLAUDE.md as long-term memory for operational/technical/workflow guidance
-learned while coding; use the charter for project intent and principles.
+Do not modify CLAUDE.md without explicit instruction to do so from a human developer.
