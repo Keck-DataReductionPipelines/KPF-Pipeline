@@ -237,7 +237,7 @@ numbering; that was stale and does not bind vNext.)
 | 6 | SCI | **Virtual fiber** (EPRV translator only, not produced by vNext) — `SCI1/2/3` resampled onto SCI2's grid, outlier-rejected and weighted |
 
 **Known deviations from the EPRV KPF translator doc** (the doc describes the official
-translator; vNext may differ by design per the charter — confirm each is intended):
+translator; vNext may differ by design — confirm each is intended):
 
 1. **No Trace 6 (virtual combined science fiber).** Our `trace-map.csv` and `fibers`
    (`SKY,SCI1,SCI2,SCI3,CAL`) stop at trace 5; the standard defines a 6th combined-science

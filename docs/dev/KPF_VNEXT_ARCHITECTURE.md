@@ -190,8 +190,7 @@ The keyword registry (`kpfpipe/data_models/keyword_registry.py`) is a single `Ke
 with one module singleton `keyword_registry`, imported **only** by `data_models/base.py` and surfaced as
 the `KPFDataModel.keyword_registry` class attribute. It derives its mapping/validation/routing lookups
 from a **single source-of-truth table** unioning the `L{0,1,2,4}-headers.csv` registries with the EPRV
-keyword defs. *(Coding rules — reading/writing headers, `set_keyword`, registering keywords — are in the
-style guide §B.4.)*
+keyword defs.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
@@ -380,8 +379,7 @@ fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__nam
 with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
 setup must never move into recipes. `warnings.warn` stays the recoverable-condition API, bridged in
 via `logging.captureWarnings`; tests that configure logging must tear down with `teardown_logging`
-(see the autouse fixture in `tests/regression/test_logger.py`). *(Coding rules — levels, lazy
-`%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §B.6.)*
+(see the autouse fixture in `tests/regression/test_logger.py`).
 
 
 ## File handling
@@ -441,8 +439,7 @@ for L2/L4.
 `tests/` splits into `regression/` (the pytest suite) and `profiling/` (performance harnesses),
 with `tests/conftest.py` at the root serving both (its fixtures and the `requires_testdata`
 marker) and the real frames under the gitignored `tests/testdata/`. This section covers how the
-suites are **laid out**; how to *write* a regression test or profiling harness is in the style
-guide §C.8 (same two subsections), and *when* to run which tier is in CLAUDE.md.
+suites are **laid out**.
 
 ### Regression
 
@@ -457,7 +454,6 @@ the shared stacking engine (`BaseMasterModule`), `test_master_bias.py`/`test_mas
 concrete bias/dark modules, `test_master_wls.py` the WLS path (a separate ML2),
 `test_masters_recipe.py` the `kpf_drp_masters` recipe, and `test_masters_script.py` the masters
 CLI script; `flat` has no test file while stubbed.
-(Which file a new masters test belongs in is a style-guide §C.8 rule.)
 
 ### Profiling
 
@@ -468,5 +464,4 @@ Two recipe harnesses (`profile_science_recipe.py`, `profile_masters_recipe.py`) 
 one module. `flat` is skipped while stubbed, and the shared stacking engine (`masters/base.py`)
 has no dedicated harness — its work is attributed to `base.py` methods inside the bias/dark
 harnesses (whereas the *test* suite isolates the engine in `test_master_base.py`, because
-profiling partitions by wall-clock and tests by responsibility). How a harness attributes time
-and flags hotspots is specified in the style guide §C.8.
+profiling partitions by wall-clock and tests by responsibility).
