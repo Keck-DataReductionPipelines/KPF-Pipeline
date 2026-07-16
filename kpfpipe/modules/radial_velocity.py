@@ -553,6 +553,15 @@ class RadialVelocity:
                     f"{nvalid:>8d}{ccd_rv:>+16.5f}{ccd_erv * 1e3:>16.3f}"
                     f"{rv_rms:>16.3f}"
                 )
+
+        # Headline science product: the cross-CCD/-fiber combined RV written to
+        # PRIMARY (RV/RVERR/BJDTDB), formed only when a science combine ran.
+        if self._sci_combined_ran and np.isfinite(self._combined_rv):
+            lines.append(
+                f"\n  combined science RV: {self._combined_rv:+.5f} km/s"
+                f"   err {self._combined_rverr * 1e3:.3f} m/s"
+                f"   @ BJD_TDB {self._primary_bjdtdb:.6f}"
+            )
         self._info = "\n".join(lines)
 
     def _set_headers(self, l4_obj):
