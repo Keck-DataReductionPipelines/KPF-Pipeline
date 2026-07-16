@@ -44,7 +44,7 @@ per-frame value, not a static default).
 
 import importlib.metadata
 import importlib.resources
-import warnings
+import logging
 from types import MappingProxyType
 
 import pandas as pd
@@ -55,6 +55,8 @@ from rvdata.core.models.definitions import (
 from rvdata.core.tools.headers import parse_value_to_datatype
 
 from kpfpipe import DETECTOR, __version__
+
+logger = logging.getLogger(__name__)
 
 _rvdata_inst_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
 _rvdata_core_cfg = importlib.resources.files("rvdata.core.models.config")
@@ -274,11 +276,10 @@ class KeywordRegistry:
             set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
         )
         if unregistered:
-            warnings.warn(
+            logger.warning(
                 "header_map.csv maps to STANDARD keys absent from the keyword "
-                f"registry; they are dropped (not emitted): {unregistered}",
-                UserWarning,
-                stacklevel=2,
+                "registry; they are dropped (not emitted): %s",
+                unregistered,
             )
         keep = eprv_keys.isin(self.registered) & ~eprv_keys.isin(
             self._DEFAULT_OVERRIDES.keys()

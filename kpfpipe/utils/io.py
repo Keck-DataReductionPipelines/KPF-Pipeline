@@ -4,7 +4,6 @@ import glob
 import logging
 import os
 import tempfile
-import warnings
 from datetime import datetime
 
 import pandas as pd
@@ -284,7 +283,7 @@ class FileHandler:
             try:
                 header = fits.getheader(fn, ext=0)
             except Exception as e:
-                warnings.warn(f"Could not read header from {fn}: {e}", stacklevel=2)
+                logger.warning("Could not read header from %s: %s", fn, e)
                 header = None
 
             mini_db["FILENAME"].append(fn)

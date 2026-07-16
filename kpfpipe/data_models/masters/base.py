@@ -9,15 +9,17 @@ Masters products differ from science products in extension naming to
 avoid confusion (see KPFMasterL1/L2/L4)
 """
 
+import logging
 import os
 import re
-import warnings
 
 import pandas as pd
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf_utils import get_obs_id
+
+logger = logging.getLogger(__name__)
 
 # WMKO DRP-RUN-05 master name: {KOAID}_master_{type}_L{N}.fits, where KOAID is a
 # KP.YYYYMMDD.NNNNN.NN obs_id, type is bias/dark/flat/thar, and N is 1/2/4.
@@ -46,10 +48,10 @@ class KPFMasterModel(KPFDataModel):
         """
         basename = os.path.basename(filename)
         if not _MASTER_FILENAME_PATTERN.fullmatch(basename):
-            warnings.warn(
-                f"Filename '{basename}' does not follow the KPF masters naming "
+            logger.warning(
+                "Filename '%s' does not follow the KPF masters naming "
                 "convention ({KOAID}_master_{bias,dark,flat,thar}_L{1,2,4}.fits)",
-                stacklevel=2,
+                basename,
             )
             return False
         return True

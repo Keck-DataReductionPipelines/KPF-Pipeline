@@ -7,7 +7,6 @@ the masters directory and selecting the nearest-in-time match.
 """
 
 import logging
-import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
@@ -113,10 +112,10 @@ class CalibrationAssociation:
                 try:
                     ts = get_timestamp(filepath)
                 except ValueError as e:
-                    warnings.warn(
-                        f"dropping master with unparseable timestamp: "
-                        f"{filepath!r} ({e})",
-                        stacklevel=2,
+                    logger.warning(
+                        "dropping master with unparseable timestamp: %r (%s)",
+                        filepath,
+                        e,
                     )
                     continue
                 master_files.append((filepath, ts))

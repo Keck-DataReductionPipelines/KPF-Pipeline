@@ -377,8 +377,9 @@ Both siblings write one UT-timestamped file per invocation under the `[LOGGER] l
 (`log_level`/`console` also honored; CLI `--log_dir`/`--log_level` override); a missing `log_dir` is
 fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__name__)` and must work
 with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
-setup must never move into recipes. `warnings.warn` stays the recoverable-condition API, bridged in
-via `logging.captureWarnings`; tests that configure logging must tear down with `teardown_logging`
+setup must never move into recipes. Recoverable/degraded conditions use `logger.warning` (not
+`warnings.warn`); `logging.captureWarnings` still funnels any third-party/stdlib `warnings.warn` into
+the log at `WARNING`. Tests that configure logging must tear down with `teardown_logging`
 (see the autouse fixture in `tests/regression/test_logger.py`).
 
 

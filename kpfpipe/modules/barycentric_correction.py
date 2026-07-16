@@ -12,7 +12,6 @@ barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
 
 import logging
 import re
-import warnings
 
 import astropy.units as u
 import numpy as np
@@ -381,10 +380,11 @@ class BarycentricCorrection:
                 gaia_error = e
         if self.use_wmko_fallback:
             if gaia_error is not None:
-                warnings.warn(
-                    f"Gaia astrometry unavailable ({type(gaia_error).__name__}: "
-                    f"{gaia_error}); using WMKO header astrometry",
-                    stacklevel=2,
+                logger.warning(
+                    "Gaia astrometry unavailable (%s: %s); "
+                    "using WMKO header astrometry",
+                    type(gaia_error).__name__,
+                    gaia_error,
                 )
             self._astrometry_source = "WMKO header"
             return self._wmko_astrometry()

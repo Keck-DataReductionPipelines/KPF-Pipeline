@@ -1,7 +1,7 @@
 """Diagnostics for KPF Level 0 (raw CCD) data products."""
 
+import logging
 import re
-import warnings
 
 import numpy as np
 from astropy import units as u
@@ -11,6 +11,8 @@ from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
+
+logger = logging.getLogger(__name__)
 
 
 class DiagL0(Diagnostics):
@@ -151,9 +153,8 @@ class DiagL0(Diagnostics):
                 new_obstime=self._obs_time()
             )
         except Exception as e:
-            warnings.warn(
-                f"GAIAOFF skipped: Gaia lookup failed ({type(e).__name__}: {e})",
-                stacklevel=2,
+            logger.warning(
+                "GAIAOFF skipped: Gaia lookup failed (%s: %s)", type(e).__name__, e
             )
             return {}
         sep = float(self._pointing().separation(gaia).arcsec)
@@ -192,9 +193,8 @@ class DiagL0(Diagnostics):
                 new_obstime=self._obs_time()
             )
         except Exception as e:
-            warnings.warn(
-                f"OBJOFF skipped: SIMBAD lookup failed ({type(e).__name__}: {e})",
-                stacklevel=2,
+            logger.warning(
+                "OBJOFF skipped: SIMBAD lookup failed (%s: %s)", type(e).__name__, e
             )
             return {}
         sep = float(self._pointing().separation(obj).arcsec)

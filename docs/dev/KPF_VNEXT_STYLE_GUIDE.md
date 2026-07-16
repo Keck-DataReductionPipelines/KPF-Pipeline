@@ -333,9 +333,9 @@ Logging follows WMKO DRP-RUN-07/08/09. The coding rules:
 - **Handler/level configuration lives only in `kpfpipe.utils.logger`**, never at import time or in
   recipes/modules/tests; library code must work with no handlers installed.
 - **Level policy**: `INFO` = production (steps, decisions, I/O, end-of-`perform()` summaries),
-  `DEBUG` = inner-loop detail, `WARNING` via the warnings bridge. Never gate log calls behind
-  `verbose` — the level is the gate. Use lazy `%`-formatting (`logger.info("wrote %s", fn)`, Ruff
-  `G`), not f-strings.
+  `DEBUG` = inner-loop detail, `WARNING` = recoverable/degraded runtime conditions. Never gate log
+  calls behind `verbose` — the level is the gate. Use lazy `%`-formatting (`logger.info("wrote %s",
+  fn)`, Ruff `G`), not f-strings.
 - **No `print()` in pipeline code.** Anything that runs as part of a reduction — `perform()` and its
   helpers, recipes, the CLI, utils, data-model read/write paths — logs, never prints. The **only**
   sanctioned `print()` is the interactive `info()` reporter (data models and modules), which exists
@@ -353,8 +353,13 @@ Logging follows WMKO DRP-RUN-07/08/09. The coding rules:
 - **Predicate/extractor split**: `is_*` predicates validate inline and return `bool` (never raise);
   the matching raising extractor/converter (`get_*`, `utc_to_hst`, …) validates through the predicate
   and raises `ValueError` at its own boundary.
-- **Recoverable/degraded conditions** → `if verbose: warnings.warn(..., stacklevel=2)` (the explicit
-  `stacklevel` is required, Ruff `B028`); `setup_logging` bridges these to `WARNING`.
+- **Recoverable/degraded conditions** → `logger.warning(...)`, not `warnings.warn`. A degraded
+  runtime condition (missing header, dropped frame, failed lookup) is an operational event the log
+  must record (DRP-RUN-08), and `logger.warning` — unlike `warnings.warn` — does not dedup per
+  call-site, so a per-frame condition is logged every time. Reserve `warnings.warn` for
+  developer-facing deprecations / API misuse. `setup_logging` still calls
+  `logging.captureWarnings(True)`, so any third-party/stdlib `warnings.warn` is funneled into the log
+  at `WARNING`.
 
 ---
 

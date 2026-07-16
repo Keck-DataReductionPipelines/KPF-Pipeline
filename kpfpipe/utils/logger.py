@@ -143,9 +143,10 @@ def setup_logging(
       (DRP-RUN-12).
     - Formats records with UT timestamps (``time.gmtime``).
     - Sets the root logger level, pins chatty third-party loggers to
-      WARNING, and calls ``logging.captureWarnings(True)`` so every
-      ``warnings.warn`` lands in the log at WARNING with its ``file:lineno``
-      source identification (DRP-RUN-08).
+      WARNING, and calls ``logging.captureWarnings(True)`` so any
+      third-party/stdlib ``warnings.warn`` still lands in the log at WARNING
+      (pipeline code logs recoverable conditions via ``logger.warning``
+      directly; DRP-RUN-08).
 
     Parameters
     ----------

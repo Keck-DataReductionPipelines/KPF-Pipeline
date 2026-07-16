@@ -10,7 +10,9 @@ call. Two base checkpoints are inherited by every level: ``unregistered_keywords
 the subclass's ``RAISE_FLAGS``, warn on the rest).
 """
 
-import warnings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Checkpoint:
@@ -100,11 +102,7 @@ class Checkpoint:
                 continue
             if key in self.RAISE_FLAGS:
                 raise ValueError(f"QC checkpoint failed: {key} = 0 ({self.LEVEL})")
-            warnings.warn(
-                f"QC checkpoint flagged: {key} = 0 ({self.LEVEL})",
-                UserWarning,
-                stacklevel=2,
-            )
+            logger.warning("QC checkpoint flagged: %s = 0 (%s)", key, self.LEVEL)
 
     qc_flags._checkpoint_name = "qc_flags"
 

@@ -4,7 +4,6 @@ KPF Master Wavelength Solution construction module.
 
 import logging
 import os
-import warnings
 
 import h5py
 import numpy as np
@@ -365,10 +364,12 @@ class WLS(BaseMasterModule):
 
                 nlines = len(line_dict["wav"])
                 if nlines == 0:
-                    warnings.warn(
-                        f"{chip} {fiber} order {o}: orderlet skipped "
-                        f"(no fittable lines; flux likely NaN-filled)",
-                        stacklevel=2,
+                    logger.warning(
+                        "%s %s order %s: orderlet skipped "
+                        "(no fittable lines; flux likely NaN-filled)",
+                        chip,
+                        fiber,
+                        o,
                     )
                 line_dict["chip"] = np.full(nlines, chip)
                 line_dict["fiber"] = np.full(nlines, fiber)
@@ -385,10 +386,12 @@ class WLS(BaseMasterModule):
             n_good = int(np.sum(lines["isgood"][i]))
             logger.info("%s %s: %d/%d good lines", chip, fiber, n_good, n_total)
             if n_good == 0:
-                warnings.warn(
-                    f"{chip} {fiber}: no good lines retained "
-                    f"({n_total} attempted; all rejected or NaN-filled)",
-                    stacklevel=2,
+                logger.warning(
+                    "%s %s: no good lines retained "
+                    "(%d attempted; all rejected or NaN-filled)",
+                    chip,
+                    fiber,
+                    n_total,
                 )
 
         for k in lines:
@@ -590,10 +593,13 @@ class WLS(BaseMasterModule):
 
             if bad_frac > max_bad_frac:
                 frame["rejected"] = True
-                warnings.warn(
-                    f"{chip} frame {l2_obj.obs_id}: {bad_frac:.1%} of line fits "
-                    f"failed QC (> {max_bad_frac:.0%}); frame rejected from stack",
-                    stacklevel=2,
+                logger.warning(
+                    "%s frame %s: %.1f%% of line fits failed QC (> %.0f%%); "
+                    "frame rejected from stack",
+                    chip,
+                    l2_obj.obs_id,
+                    bad_frac * 100,
+                    max_bad_frac * 100,
                 )
                 continue
 
@@ -609,19 +615,21 @@ class WLS(BaseMasterModule):
                 )
             except ValueError as exc:
                 frame["rejected"] = True
-                warnings.warn(
-                    f"{chip} frame {l2_obj.obs_id}: WLS fit failed ({exc}); "
-                    f"frame rejected from stack",
-                    stacklevel=2,
+                logger.warning(
+                    "%s frame %s: WLS fit failed (%s); frame rejected from stack",
+                    chip,
+                    l2_obj.obs_id,
+                    exc,
                 )
                 continue
 
             if not np.isfinite(coeffs).all():
                 frame["rejected"] = True
-                warnings.warn(
-                    f"{chip} frame {l2_obj.obs_id}: non-finite Legendre "
-                    f"coefficients; frame rejected from stack",
-                    stacklevel=2,
+                logger.warning(
+                    "%s frame %s: non-finite Legendre coefficients; "
+                    "frame rejected from stack",
+                    chip,
+                    l2_obj.obs_id,
                 )
                 continue
 
@@ -930,17 +938,15 @@ class WLS(BaseMasterModule):
 
         directory = masters_stack_subdir(os.path.dirname(master_path), "thar", "L2")
         os.makedirs(directory, exist_ok=True)
-        # These are deliberately non-EPRV diagnostic products; suppress KPF2.to_fits'
-        # EPRV filename-convention warning for the {obs_id}_thar_L2 name.
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message=".*EPRV naming convention.*")
-            for l2_obj in self._l2_obj_cache:
-                path = os.path.join(directory, f"{l2_obj.obs_id}_thar_L2.fits")
-                if not overwrite and os.path.exists(path):
-                    raise FileExistsError(
-                        f"{path} already exists; pass overwrite=True to replace it"
-                    )
-                l2_obj.to_fits(path)
+        # These are deliberately non-EPRV diagnostic products; KPF2.to_fits' EPRV
+        # filename-convention warning for the {obs_id}_thar_L2 name is expected.
+        for l2_obj in self._l2_obj_cache:
+            path = os.path.join(directory, f"{l2_obj.obs_id}_thar_L2.fits")
+            if not overwrite and os.path.exists(path):
+                raise FileExistsError(
+                    f"{path} already exists; pass overwrite=True to replace it"
+                )
+            l2_obj.to_fits(path)
         logger.info(
             "wrote %d individual ThAr L2 frames to %s",
             len(self._l2_obj_cache),
