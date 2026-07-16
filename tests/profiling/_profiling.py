@@ -152,7 +152,7 @@ def masters_config(output_dir=None):
 
 
 # ---------------------------------------------------------------------------
-# Intermediate-product builders (the science L0 -> L2 chain)
+# Intermediate-product builders (the science L0 -> L4 chain)
 #
 # Each rebuilds from scratch so a harness can call it twice (the cProfile pass
 # and the line_profiler pass each get a fresh, unmutated input). Construction is
@@ -200,6 +200,12 @@ def bary_l2(config):
     from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 
     return BarycentricCorrection(wls_l2(config), config).perform()
+
+
+def ccf_l4(config):
+    from kpfpipe.modules.cross_correlation import CrossCorrelation
+
+    return CrossCorrelation(bary_l2(config), config).perform()
 
 
 # --- masters inputs --------------------------------------------------------

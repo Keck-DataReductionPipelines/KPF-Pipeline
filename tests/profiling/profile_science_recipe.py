@@ -23,6 +23,7 @@ except ModuleNotFoundError:
 # Pipeline modules eligible for the (here disabled) line-level drill-down.
 import kpfpipe.modules.barycentric_correction as m_bary
 import kpfpipe.modules.calibration_association as m_calib
+import kpfpipe.modules.cross_correlation as m_ccf
 import kpfpipe.modules.image_assembly as m_assembly
 import kpfpipe.modules.image_processing as m_proc
 import kpfpipe.modules.radial_velocity as m_rv
@@ -36,6 +37,7 @@ PIPELINE_MODULES = [
     m_extract,
     m_wls,
     m_bary,
+    m_ccf,
     m_rv,
 ]
 
