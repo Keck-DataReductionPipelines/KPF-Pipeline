@@ -310,7 +310,7 @@ the remaining argv verbatim (each subcommand owns its own argparse). Full flag u
 
 ## Quality control
 
-Four read-only layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of
+Four layers, consolidated under `kpfpipe/quality_control/`, consume data products. None of
 them mutate the scientific arrays — they only read data and write header keywords via `set_keyword`
 (routed to QUALITY_CONTROL — see *Keyword registry*) (and, in Quicklook's case, to PNG files).
 Per-level files follow the `levelN.py` naming used by `data_models/`.

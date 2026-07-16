@@ -14,12 +14,6 @@ _SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 _BERV_PCT_TOL = 1.0
 
 
-def _hdr_float(hdr, key):
-    """Return float value for a header key, or None if absent."""
-    val = hdr.get(key)
-    return None if val is None else float(val)
-
-
 class QCL4(QC):
     """QC checks for KPF Level 4 RV/CCF products."""
 
@@ -63,8 +57,8 @@ class QCL4(QC):
         is nothing to flag.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        mx = _hdr_float(hdr, "BERVMAXP")
-        mn = _hdr_float(hdr, "BERVMINP")
+        mx = self._hdr_float(hdr, "BERVMAXP")
+        mn = self._hdr_float(hdr, "BERVMINP")
         if mx is None or mn is None:
             return True
         return mx <= _BERV_PCT_TOL and mn >= -_BERV_PCT_TOL

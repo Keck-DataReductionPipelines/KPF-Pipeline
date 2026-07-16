@@ -13,12 +13,6 @@ _NAN_KEYS = ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]
 _MIN_SCI_SNR = 1.0
 
 
-def _hdr_float(hdr, key):
-    """Return float value for a header key, or None if absent."""
-    val = hdr.get(key)
-    return None if val is None else float(val)
-
-
 class QCL2(QC):
     """QC checks for KPF Level 2 extracted spectra products."""
 
@@ -58,7 +52,7 @@ class QCL2(QC):
 
         nan_total = 0
         for k in _NAN_KEYS:
-            v = _hdr_float(hdr, k)
+            v = self._hdr_float(hdr, k)
             if v is None:
                 return False
             nan_total += v
@@ -69,7 +63,7 @@ class QCL2(QC):
 
     def nonzero_flux(self):
         """ZEROFRAC < 0.5."""
-        v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "ZEROFRAC")
+        v = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "ZEROFRAC")
         return v is not None and v < 0.5
 
     nonzero_flux._qc_key = "L2FLXOK"
@@ -107,7 +101,7 @@ class QCL2(QC):
         check relies on). Guards against a silently failed extraction.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        values = [_hdr_float(hdr, k) for k in ("GSNRSCI", "RSNRSCI")]
+        values = [self._hdr_float(hdr, k) for k in ("GSNRSCI", "RSNRSCI")]
         values = [v for v in values if v is not None]
         if not values:
             return False

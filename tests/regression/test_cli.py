@@ -14,9 +14,7 @@ from tools import cli
 
 
 class TestDispatch:
-    @pytest.mark.parametrize(
-        "command", ["run", "masters", "science", "timeseries", "plot-timeseries"]
-    )
+    @pytest.mark.parametrize("command", ["run", "masters", "science", "timeseries"])
     def test_routes_to_command_with_forwarded_argv(self, command, monkeypatch):
         seen = []
         monkeypatch.setitem(cli._COMMANDS, command, lambda rest: seen.append(rest))
@@ -35,7 +33,7 @@ class TestUsage:
         out = capsys.readouterr().out
         assert "usage: kpfpipe <command>" in out
         assert "run" in out and "masters" in out and "science" in out
-        assert "timeseries" in out and "plot-timeseries" in out
+        assert "timeseries" in out
 
     @pytest.mark.parametrize("flag", ["-h", "--help"])
     def test_help_flag_prints_usage(self, flag, capsys):
@@ -50,3 +48,11 @@ class TestUnknownCommand:
         assert exc.value.code == 2
         err = capsys.readouterr().err
         assert "unknown command" in err and "frobnicate" in err
+
+    def test_plot_timeseries_is_not_a_command(self, capsys):
+        # The plotter is invoked only via `scripts.plots.plot_timeseries` (as a
+        # script and from the timeseries stage); it is deliberately not a CLI command.
+        assert "plot-timeseries" not in cli._COMMANDS
+        with pytest.raises(SystemExit) as exc:
+            cli.main(["plot-timeseries", "--target", "10700"])
+        assert exc.value.code == 2

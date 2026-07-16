@@ -34,7 +34,7 @@ class Checkpoint:
     def run(self):
         """Run the paired Diagnostics and QC, then every checkpoint method.
 
-        Folds in the two upstream read-only stages: Diagnostics writes its
+        Folds in the two upstream stages: Diagnostics writes its
         metrics, QC writes the 0/1 flags + ISGOOD (captured in ``self.qc_results``
         for callers that report them), then each checkpoint method warns or
         raises. A level with no paired ``DIAGNOSTICS``/``QC`` skips that stage.

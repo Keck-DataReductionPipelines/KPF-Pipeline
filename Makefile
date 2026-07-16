@@ -32,8 +32,8 @@ test-serial:
 # Per-module: `make profile-radial_velocity`, `make profile-master_wls`, etc.
 # These names mirror the test files 1-to-1 (test_<x>.py <-> profile_<x>.py).
 PROFILE_MODULES = image_assembly image_processing spectral_extraction \
-	wavelength_calibration barycentric_correction radial_velocity \
-	calibration_association master_bias master_dark master_wls
+	wavelength_calibration barycentric_correction cross_correlation \
+	radial_velocity calibration_association master_bias master_dark master_wls
 
 # Run every harness (both recipes + all per-module files) and regenerate reports.
 profile: profile-masters profile-science $(addprefix profile-,$(PROFILE_MODULES))

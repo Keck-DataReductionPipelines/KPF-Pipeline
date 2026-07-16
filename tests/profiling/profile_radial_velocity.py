@@ -20,7 +20,7 @@ import kpfpipe.modules.radial_velocity as m_rv
 def run():
     def setup():
         config = P.science_config()
-        return m_rv.RadialVelocity(P.bary_l2(config), config)
+        return m_rv.RadialVelocity(P.ccf_l4(config), config)
 
     P.run_profile(
         title="RadialVelocity.perform (L2 -> L4)",

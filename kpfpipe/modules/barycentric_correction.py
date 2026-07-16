@@ -247,7 +247,7 @@ class BarycentricCorrection:
         f_ext = rate * dt_gap
         return t_ext, f_ext
 
-    def _compute_per_chanel_flux_weighted_midpoint_time(
+    def _compute_per_channel_flux_weighted_midpoint_time(
         self, interpolate=True, extrapolate=True, fix_expmeter_outliers=True
     ):
         """
@@ -522,7 +522,7 @@ class BarycentricCorrection:
         # for 'orders' then 'ccds').
         key = (interpolate, extrapolate, fix_expmeter_outliers)
         if self._exposure_meter is None or self._exposure_meter[0] != key:
-            w_em, t_em = self._compute_per_chanel_flux_weighted_midpoint_time(
+            w_em, t_em = self._compute_per_channel_flux_weighted_midpoint_time(
                 interpolate=interpolate,
                 extrapolate=extrapolate,
                 fix_expmeter_outliers=fix_expmeter_outliers,
