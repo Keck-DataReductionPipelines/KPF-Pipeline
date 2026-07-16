@@ -300,9 +300,9 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
 
 ### B.5 Quality control (Diagnostics / QC / Checkpoints / Quicklook)
 
-The four read-only layers live in `kpfpipe/quality_control/`. Conventions for writing QC code:
+The four layers live in `kpfpipe/quality_control/`. Conventions for writing QC code:
 
-- **Read-only.** Diagnostics/QC write header keywords **only via `set_keyword`** (→
+- **Never mutate `data`.** Diagnostics/QC write header keywords **only via `set_keyword`** (→
   QUALITY_CONTROL), never `data`; Quicklook writes only PNGs. To mutate `l0.data` in a helper, work
   on a `deepcopy`.
 - **Register methods by attribute, no decorators** — assign the tag right after the `def`; the base
