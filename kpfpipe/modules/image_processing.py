@@ -245,7 +245,7 @@ class ImageProcessing:
             lines.append(f"  {'bias':<10s} {self._bias_path}")
         if self.dark:
             lines.append(f"  {'dark':<10s} {self._dark_path}")
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l1_obj):
         """Write the applied-flag keywords (BIASSUB/DARKSUB) for image processing.
@@ -366,7 +366,7 @@ class ImageProcessing:
         self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "", "PASS")
 
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return self.l1_obj
 
     def info(self):

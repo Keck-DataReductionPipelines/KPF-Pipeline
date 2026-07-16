@@ -163,7 +163,7 @@ class StageName:
     # ------------------------------------------------------------------
     def _track_info(self, chips=None, fibers=None):
         """Build & cache the info() summary text (takes only chips/fibers)."""
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"   # blank-line padding lives here
 
     def _set_headers(self, l2_obj):
         """Sole place this module writes headers; reads instance attributes."""
@@ -177,7 +177,7 @@ class StageName:
         self._set_headers(self.l2_obj)         # consolidates ALL header writes
         self._track_info(chips)                # caches _info text, before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "", "PASS")
-        logger.info("summary:\n%s", self._info)
+        logger.info("%s", self._info)         # padding is baked into _info; keep this clean
         return self.l2_obj
 
     def info(self):       # prints self._info (the cached text), always last

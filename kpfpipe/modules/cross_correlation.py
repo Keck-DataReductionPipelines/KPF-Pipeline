@@ -594,7 +594,7 @@ class CrossCorrelation:
                 lines.append(
                     f"  {chip:<8s}{fiber:<8s}{res.get('source', ''):<10s}{nccf:>8d}"
                 )
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l4_obj):
         """
@@ -782,7 +782,7 @@ class CrossCorrelation:
         self._set_headers(l4_obj)
         self._track_info(chips, fibers)
         l4_obj.receipt_add_entry("cross_correlation", "", "PASS")
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return l4_obj
 
     def info(self):

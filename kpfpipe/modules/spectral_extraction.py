@@ -355,7 +355,7 @@ class SpectralExtraction:
         fibers_str = " ".join(fibers)
         for chip in chips:
             lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
         """Reserved header-consolidation hook; writes no PRIMARY metadata yet."""
@@ -409,7 +409,7 @@ class SpectralExtraction:
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return l2_obj
 
     def info(self):

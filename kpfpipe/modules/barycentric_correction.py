@@ -675,7 +675,7 @@ class BarycentricCorrection:
             f"\n  per-order spread:   BJD {np.ptp(bjd) * 86400:.3f} sec,"
             f" BARY {np.ptp(kms) * 1000:.3f} m/s"
         )
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
         """Write the per-CCD summary keywords.
@@ -757,7 +757,7 @@ class BarycentricCorrection:
         self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "", "PASS")
 
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return self.l2_obj
 
     def info(self):

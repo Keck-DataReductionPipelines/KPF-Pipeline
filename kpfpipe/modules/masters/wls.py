@@ -793,7 +793,7 @@ class WLS(BaseMasterModule):
             self.save_diagnostics(master_path, overwrite=True)
 
         self._track_info()
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
 
         for chip in self.chips:
             n_survivors = self._stack_info[chip]["n_survivors"]
@@ -978,7 +978,7 @@ class WLS(BaseMasterModule):
             lines.append(
                 f"  {chip:<8s} {survived:<18s} {n_fit} / {n_total} ({pct:.1f}%)"
             )
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def info(self):
         """Print a summary of the module configuration and WLS results."""

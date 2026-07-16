@@ -562,7 +562,7 @@ class RadialVelocity:
                 f"   err {self._combined_rverr * 1e3:.3f} m/s"
                 f"   @ BJD_TDB {self._primary_bjdtdb:.6f}"
             )
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l4_obj):
         """
@@ -815,7 +815,7 @@ class RadialVelocity:
         self._set_headers(l4_obj)
         self._track_info(fibers)
         l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return l4_obj
 
     def info(self):

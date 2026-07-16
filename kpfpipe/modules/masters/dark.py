@@ -114,7 +114,7 @@ class Dark(BaseMasterModule):
         if master_path is not None:
             self.save_master("L1", master_path, overwrite=True)
 
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
 
         return self.ml1_obj
 
@@ -134,7 +134,7 @@ class Dark(BaseMasterModule):
                 f"  {chip:<8s} {stats['median']:<15.4f} {stats['rms']:<10.4f} "
                 f"{stats['num_bad']} ({stats['pct_bad']:.3f}%)"
             )
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def info(self):
         """Print a summary of the module configuration and stacking results."""

@@ -155,7 +155,7 @@ class CalibrationAssociation:
         for cal_type, cal in self._calibrations.items():
             lines.append(f"  {cal_type:<12s} {cal['filepath']}")
             lines.append("")
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l1_obj):
         """Write the master-path keyword for each associated calibration.
@@ -234,7 +234,7 @@ class CalibrationAssociation:
         self._track_info()
         self.l1_obj.receipt_add_entry("calibration_association", "", "PASS")
 
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return self.l1_obj
 
     def info(self):

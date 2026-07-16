@@ -499,7 +499,7 @@ class ImageAssembly:
                 rnng = round(float(self.rn_nongauss[ch]), 4)
                 lines.append(f"  {ch:<14s} {rn:<18} {rnng}")
             lines.append("")
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l1_obj):
         """
@@ -580,7 +580,7 @@ class ImageAssembly:
         self._track_info(chips)
         l1_obj.receipt_add_entry("image_assembly", "", "PASS")
 
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return l1_obj
 
     def info(self):

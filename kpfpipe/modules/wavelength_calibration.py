@@ -120,7 +120,7 @@ class WavelengthCalibration:
         lines.append(f"  wls_path: {self._wls_path}")
         if agewls is not None:
             lines.append(f"  WLSAGE:   {agewls:+.4f} d  (master - obs)")
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
         """Reserved header-consolidation hook; writes no PRIMARY metadata yet."""
@@ -187,7 +187,7 @@ class WavelengthCalibration:
         self._track_info()
         self.l2_obj.receipt_add_entry("wavelength_calibration", "", "PASS")
 
-        logger.info("\n\nsummary:\n%s\n\n", self._info)
+        logger.info("%s", self._info)
         return self.l2_obj
 
     def info(self):
