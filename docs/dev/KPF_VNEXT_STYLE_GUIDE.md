@@ -336,8 +336,10 @@ Logging follows WMKO DRP-RUN-07/08/09. The coding rules:
   `DEBUG` = inner-loop detail, `WARNING` via the warnings bridge. Never gate log calls behind
   `verbose` — the level is the gate. Use lazy `%`-formatting (`logger.info("wrote %s", fn)`, Ruff
   `G`), not f-strings.
-- **`print()` only in interactive `info()` reporters**, never in `perform()`/pipeline paths (the
-  `_info` rendering is in §B.2).
+- **No `print()` in pipeline code.** Anything that runs as part of a reduction — `perform()` and its
+  helpers, recipes, the CLI, utils, data-model read/write paths — logs, never prints. The **only**
+  sanctioned `print()` is the interactive `info()` reporter (data models and modules), which exists
+  for notebook/REPL use and is never called from pipeline paths (the `_info` rendering is in §B.2).
 - **Raise; don't catch-and-log.** The sole sanctioned catch-log-reraise point is the leaf runner
   (`reduce.py`: `logger.critical(..., exc_info=True); raise`). Elsewhere pick the semantic type:
   `TypeError` (wrong `config` type), `ValueError` (bad domain value — the workhorse),
