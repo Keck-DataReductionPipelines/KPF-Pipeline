@@ -700,6 +700,12 @@ class BaseMasterModule:
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
+        logger.debug(
+            "stacking %d frames via %s method",
+            nframe,
+            "datacube" if nframe < nstream else "streaming",
+        )
+
         if nframe < nstream:
             stats, _ = self._compute_stats_from_datacube(
                 l0_file_list,

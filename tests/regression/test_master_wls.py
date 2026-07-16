@@ -651,8 +651,8 @@ class TestMakeMasterL2:
 
     def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
         """
-        A NaN-filled orderlet (extraction failure) should be skipped with a
-        warning rather than crashing scipy's least_squares.
+        A NaN-filled orderlet (extraction failure) should be skipped (logged at
+        DEBUG) rather than crashing scipy's least_squares.
         """
         wls = WLS(FILE_LIST)
         ncol = wls.ccd["ncol"]
@@ -669,7 +669,7 @@ class TestMakeMasterL2:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.DEBUG):
             result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
@@ -1134,9 +1134,8 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
 
-        # The fabricated all-NaN fiber makes the code warn once per synthetic order
-        # plus once at the fiber level; capture them all so the per-order ones don't
-        # leak to the run summary, and assert the fiber-level one.
+        # The all-NaN fiber logs a per-order skip at DEBUG plus a fiber-level
+        # WARNING; capture at WARNING and assert the fiber-level one.
         with caplog.at_level(logging.WARNING):
             result = wls._fit_line_positions_ffi(
                 StubL2(),
@@ -1147,7 +1146,7 @@ class TestFitLinePositions:
         assert len(result["wav"]) == 0
 
     def test_nan_orderlet_emits_skip_warning(self, caplog):
-        """A single NaN-filled orderlet emits the per-orderlet skip warning."""
+        """A single NaN-filled orderlet logs the per-orderlet skip at DEBUG."""
         wls = WLS(FILE_LIST)
         ncol = wls.ccd["ncol"]
         norder = wls.norder["RED"]
@@ -1163,7 +1162,7 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.DEBUG):
             wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"])
 
         assert "orderlet skipped" in caplog.text

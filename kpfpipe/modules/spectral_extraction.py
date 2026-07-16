@@ -252,7 +252,7 @@ class SpectralExtraction:
             n_bad = int(np.sum(~np.isfinite(arr)))
             n_neg = int(np.sum(arr < 0))
             if n_bad or n_neg:
-                logger.warning(
+                logger.debug(
                     "%s array: %s %s %s has %d non-finite, %d negative values",
                     name,
                     chip,

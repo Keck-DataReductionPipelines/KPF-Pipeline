@@ -241,6 +241,8 @@ class ImageAssembly:
                 f"detected {self.namp[chip]} on {chip} CCD"
             )
 
+        logger.debug("%s CCD: %d-amplifier mode", chip, self.namp[chip])
+
     def orient_channels(self, chip):
         """
         Reorient amplifier channels to a standard orientation in-place.

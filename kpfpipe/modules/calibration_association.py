@@ -223,6 +223,12 @@ class CalibrationAssociation:
                 )
 
             self._calibrations[cal_type] = {"filepath": filepath}
+            logger.debug(
+                "%s: selected %s from %d candidate(s)",
+                cal_type,
+                filepath,
+                len(master_files),
+            )
 
         self._set_headers(self.l1_obj)
         self._track_info()

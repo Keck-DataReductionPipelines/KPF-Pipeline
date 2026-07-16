@@ -328,6 +328,7 @@ class BarycentricCorrection:
             FROM gaiadr3.gaia_source
             WHERE source_id = {gaia_id}
             """
+            logger.info("querying Gaia DR3 for source_id %s", gaia_id)
             job = Gaia.launch_job(query)
             result = job.get_results()[0]
 

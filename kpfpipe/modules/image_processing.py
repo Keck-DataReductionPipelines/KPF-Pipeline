@@ -349,10 +349,12 @@ class ImageProcessing:
 
         if self.bias:
             for chip in self.chips:
+                logger.debug("subtracting bias from %s CCD", chip)
                 self.subtract_bias(chip)
 
         if self.dark:
             for chip in self.chips:
+                logger.debug("subtracting dark from %s CCD", chip)
                 self.subtract_dark(chip)
 
         # OR with the prior flag so applying one calibration never clears

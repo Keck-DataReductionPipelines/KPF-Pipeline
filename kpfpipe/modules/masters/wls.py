@@ -364,7 +364,7 @@ class WLS(BaseMasterModule):
 
                 nlines = len(line_dict["wav"])
                 if nlines == 0:
-                    logger.warning(
+                    logger.debug(
                         "%s %s order %s: orderlet skipped "
                         "(no fittable lines; flux likely NaN-filled)",
                         chip,

@@ -360,7 +360,7 @@ class RadialVelocity:
                     min_npts,
                 )
             except ValueError as e:
-                logger.warning(
+                logger.debug(
                     "%s order %d: non-physical CCF window (%s); RV/RV_ERR set NaN",
                     ext,
                     o,
