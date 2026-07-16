@@ -231,7 +231,10 @@ The master filename (`{KOAID}_master_{type}_L{N}.fits`, WMKO DRP-RUN-05) is set 
 The pipeline is built in strictly one-directional layers — each layer may import *down* but
 never up: `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
 `scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
-imports `scripts.processing.*`, but **the scripts must never import `tools`**.
+imports `scripts.processing.*`, but **the scripts must never import `tools`**. All four are
+installed, importable packages; code shared across a layer's siblings goes **down** into
+`kpfpipe/`, or — when it is layer-specific — lives beside them as a `_`-prefixed private helper
+(e.g. `scripts/processing/_argparse.py`, `recipes/_logging.py`) that only its own layer imports.
 
 ### Modules
 
