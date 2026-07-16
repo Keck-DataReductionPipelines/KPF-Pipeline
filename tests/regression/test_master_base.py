@@ -9,7 +9,9 @@ orchestration path. Behavior specific to a concrete module lives in
 test_master_<type>.py.
 """
 
+import logging
 import os
+import re
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -50,15 +52,16 @@ class TestMasterBaseErrors:
         ):
             Dark(FILE_LIST, config="not-a-config")
 
-    def test_load_frame_missing_file_warns_and_skips(self):
+    def test_load_frame_missing_file_warns_and_skips(self, caplog):
         # A missing/unreadable L0 frame warns and returns None, not a crash.
         fn = "/nonexistent/KP.20240101.00001.00.fits"
         m = Dark([fn])
-        with pytest.warns(UserWarning, match="Failed to load"):
+        with caplog.at_level(logging.WARNING):
             l1_obj = m._load_frame(fn, cache=False)
+        assert "Failed to load" in caplog.text
         assert l1_obj is None
 
-    def test_load_frame_qc_failure_warns_and_skips(self, monkeypatch):
+    def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
         # A frame failing a required QCL0 flag (here the EXPTIME/ELAPSED
         # consistency flag EXPTIMOK) is warned and dropped before assembly.
         m = Dark(FILE_LIST)
@@ -71,8 +74,9 @@ class TestMasterBaseErrors:
             "kpfpipe.modules.masters.base.QCL0",
             lambda l0: MagicMock(run=lambda: qc_result),
         )
-        with pytest.warns(UserWarning, match="QC failed.*EXPTIMOK"):
+        with caplog.at_level(logging.WARNING):
             l1_obj = m._load_frame(fn, cache=False)
+        assert re.search(r"QC failed.*EXPTIMOK", caplog.text)
         assert l1_obj is None
 
     def test_load_frame_qc_pass_returns_assembled(self, monkeypatch):

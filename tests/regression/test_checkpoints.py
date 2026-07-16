@@ -14,7 +14,7 @@ headers, then warn or raise (never write). This pins:
 checkpoint methods; that orchestration is pinned in ``TestRunFoldsDiagnosticsAndQC``.
 """
 
-import warnings
+import logging
 
 import numpy as np
 import pytest
@@ -35,18 +35,18 @@ _NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
 
 
 class TestUnregisteredKeywords:
-    def test_clean_product_passes(self):
+    def test_clean_product_passes(self, caplog):
         # Fresh KPF2: EPRV-seeded PRIMARY (all registered) + empty governed
         # extensions -> no unregistered card, and no QC flags present -> qc_flags
         # is a no-op, so the checkpoint methods are silent. (run() is not used
         # here: it folds in QC, which a bare product can't satisfy -- the fold is
         # covered by TestRunFoldsDiagnosticsAndQC.)
         l2 = KPF2()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")  # any warning would fail this
+        with caplog.at_level(logging.WARNING):
             chk = CheckpointL2(l2)
             chk.unregistered_keywords()
             chk.qc_flags()
+        assert not caplog.records
 
     def test_unexpected_keyword_on_governed_extension_raises(self):
         l2 = KPF2()
@@ -84,30 +84,31 @@ class TestQCFlags:
         with pytest.raises(ValueError, match="DATAPRL2 = 0"):
             CheckpointL2(l2).qc_flags()
 
-    def test_nonraise_flag_zero_warns(self):
+    def test_nonraise_flag_zero_warns(self, caplog):
         # KWRDPRL2 is not a RAISE_FLAG, so a 0 warns (data present so DATAPRL2 ok).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (0, "required present")
-        with pytest.warns(UserWarning, match="KWRDPRL2 = 0"):
+        with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
+        assert "KWRDPRL2 = 0" in caplog.text
 
-    def test_all_pass_silent(self):
+    def test_all_pass_silent(self, caplog):
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (1, "required present")
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+        with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
+        assert not caplog.records
 
-    def test_absent_flag_is_ignored(self):
+    def test_absent_flag_is_ignored(self, caplog):
         # A flag the QC stage never wrote is absent -> neither warns nor raises.
         l2 = KPF2()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+        with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
+        assert not caplog.records
 
-    def test_only_current_level_flags_are_checked(self):
+    def test_only_current_level_flags_are_checked(self, caplog):
         # QUALITY_CONTROL accumulates the L0->L1->L2 history, but qc_flags warns
         # only on THIS level's own checks. A failed L1 flag (RNOK) propagated onto
         # an L2 product must NOT re-warn at the L2 checkpoint; the L2 flag does.
@@ -115,12 +116,10 @@ class TestQCFlags:
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
         l2.headers["QUALITY_CONTROL"]["RNOK"] = (0, "L1 read noise (propagated)")
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (0, "L2 required present")
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
+        with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
-        msgs = [str(w.message) for w in caught]
-        assert any("KWRDPRL2 = 0" in m for m in msgs)  # current-level flag warns
-        assert not any("RNOK" in m for m in msgs)  # propagated L1 flag ignored
+        assert "KWRDPRL2 = 0" in caplog.text  # current-level flag warns
+        assert "RNOK" not in caplog.text  # propagated L1 flag ignored
 
     def test_registry_qc_flag_sets_scoping(self):
         from kpfpipe.data_models.keyword_registry import keyword_registry as reg
@@ -176,14 +175,14 @@ class TestRunFoldsDiagnosticsAndQC:
         # QC's result dict is captured for callers (e.g. scripts/quality_control/qc.py).
         assert chk.qc_results == {"ISGOOD": (True, "")}
 
-    def test_missing_paired_classes_skip_those_stages(self):
+    def test_missing_paired_classes_skip_those_stages(self, caplog):
         # Base Checkpoint has DIAGNOSTICS = QC = None (LEVEL None skips PRIMARY):
         # run() does the checkpoint methods only and leaves qc_results empty.
         chk = Checkpoint(KPF2())  # clean, empty -> checkpoint methods are silent
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
+        with caplog.at_level(logging.WARNING):
             chk.run()
         assert chk.qc_results == {}
+        assert not caplog.records
 
 
 # ---------------------------------------------------------------------------
@@ -218,11 +217,11 @@ def _make_l4(*, sci=True):
 
 
 class TestCheckpointL4:
-    def test_run_good_product_passes_and_writes_flags(self):
+    def test_run_good_product_passes_and_writes_flags(self, caplog):
         l4 = _make_l4()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")  # a good product must not warn
+        with caplog.at_level(logging.WARNING):
             CheckpointL4(l4).run()
+        assert not caplog.records
         qc = l4.headers["QUALITY_CONTROL"]
         # Folded DiagL4 metrics + QCL4 flags both landed on QUALITY_CONTROL.
         assert qc["BERVMEAN"] is not None and qc["BJDMEAN"] is not None
@@ -235,11 +234,12 @@ class TestCheckpointL4:
         with pytest.raises(ValueError, match="DATAPRL4 = 0"):
             CheckpointL4(l4).run()
 
-    def test_nonraise_flag_warns(self):
+    def test_nonraise_flag_warns(self, caplog):
         # KWRDPRL4 = 0 (a required PRIMARY keyword missing); not a RAISE_FLAG, so
         # it warns rather than raises.
         l4 = _make_l4()
         req = sorted(CheckpointL4.QC(l4)._required_primary_keywords())
         del l4.headers["PRIMARY"][req[0]]
-        with pytest.warns(UserWarning, match="KWRDPRL4 = 0"):
+        with caplog.at_level(logging.WARNING):
             CheckpointL4(l4).run()
+        assert "KWRDPRL4 = 0" in caplog.text

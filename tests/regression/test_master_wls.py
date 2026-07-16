@@ -3,7 +3,7 @@
 All sub-module I/O is mocked; no real data or FITS files are required.
 """
 
-import warnings
+import logging
 from unittest.mock import MagicMock
 
 import h5py
@@ -532,25 +532,6 @@ class TestMakeMasterL2:
         with pytest.raises(FileExistsError, match="overwrite=True"):
             wls.save_reduced_frames(master_path)
 
-    def test_save_reduced_frames_suppresses_eprv_filename_warning(
-        self, mock_make_master_l2, tmp_path
-    ):
-        # These are deliberately non-EPRV products; KPF2.to_fits warns on the
-        # {obs_id}_thar_L2 name, which save_reduced_frames must silence.
-        class WarningL2:
-            obs_id = "KP.20240101.00000.00"
-
-            def to_fits(self, path):
-                warnings.warn(
-                    "Filename does not follow the EPRV naming convention.", stacklevel=2
-                )
-
-        wls = WLS(FILE_LIST)
-        wls._l2_obj_cache = [WarningL2()]
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")  # any leaked warning fails the test
-            wls.save_reduced_frames(str(tmp_path / "master.fits"), overwrite=True)
-
     def test_save_master_refuses_overwrite_by_default(
         self, mock_make_master_l2, tmp_path
     ):
@@ -668,7 +649,7 @@ class TestMakeMasterL2:
             assert "coeffs" not in rej
             assert "lines" in rej  # rejected frame's line diagnostics still written
 
-    def test_nan_orderlet_emits_warning_and_does_not_crash(self):
+    def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
         """
         A NaN-filled orderlet (extraction failure) should be skipped with a
         warning rather than crashing scipy's least_squares.
@@ -688,12 +669,13 @@ class TestMakeMasterL2:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
-        with pytest.warns(UserWarning, match=r"RED SCI1 order 102: orderlet skipped"):
+        with caplog.at_level(logging.WARNING):
             result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
                 ["SCI1"],
             )
+        assert "RED SCI1 order 102: orderlet skipped" in caplog.text
 
         # The NaN order (bluest RED, echelle 102) contributed no lines; rest did.
         assert 102 not in result["echelle"]
@@ -881,22 +863,24 @@ class TestFitAndQcStack:
         assert [fr["rejected"] for fr in frames] == [False] * 5
         assert all(fr["coeffs"] is not None for fr in frames)
 
-    def test_single_bad_frame_dropped(self, monkeypatch):
+    def test_single_bad_frame_dropped(self, caplog, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.22, 0.0, 0.03, 0.01])
-        with pytest.warns(UserWarning, match=r"line fits failed QC"):
+        with caplog.at_level(logging.WARNING):
             frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
+        assert "line fits failed QC" in caplog.text
         # the 22%-bad frame (index 1) is flagged rejected with no coeffs, but
         # still reported alongside the four kept frames
         assert len(frames) == 5
         assert [fr["rejected"] for fr in frames] == [False, True, False, False, False]
         assert frames[1]["coeffs"] is None
 
-    def test_many_bad_frames_all_dropped_no_raise(self, monkeypatch):
+    def test_many_bad_frames_all_dropped_no_raise(self, caplog, monkeypatch):
         # more than one over-threshold frame no longer aborts: each is warned
         # and rejected, and every frame is still reported
         wls = self._setup(monkeypatch, [0.22, 0.01, 0.34, 0.01, 0.01])
-        with pytest.warns(UserWarning, match=r"line fits failed QC"):
+        with caplog.at_level(logging.WARNING):
             frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
+        assert "line fits failed QC" in caplog.text
         assert [fr["rejected"] for fr in frames] == [True, False, True, False, False]
         assert sum(not fr["rejected"] for fr in frames) == 3
 
@@ -906,7 +890,7 @@ class TestFitAndQcStack:
         frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
         assert [fr["rejected"] for fr in frames] == [False, False]
 
-    def test_nonfinite_coeffs_frame_rejected_not_raised(self, monkeypatch):
+    def test_nonfinite_coeffs_frame_rejected_not_raised(self, caplog, monkeypatch):
         # a per-frame fit yielding a NaN coefficient rejects (warns) that frame
         # rather than aborting the whole build
         wls = WLS(FILE_LIST)
@@ -919,12 +903,13 @@ class TestFitAndQcStack:
         monkeypatch.setattr(
             WLS, "_calculate_wls_coeffs", lambda self, *a, **k: next(coeffs)
         )
-        with pytest.warns(UserWarning, match=r"non-finite Legendre"):
+        with caplog.at_level(logging.WARNING):
             frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
+        assert "non-finite Legendre" in caplog.text
         assert [fr["rejected"] for fr in frames] == [False, True, False]
         assert frames[1]["coeffs"] is None
 
-    def test_underconstrained_frame_rejected_not_raised(self, monkeypatch):
+    def test_underconstrained_frame_rejected_not_raised(self, caplog, monkeypatch):
         # a per-frame fit that raises (e.g. underconstrained) rejects (warns)
         # that frame instead of aborting
         wls = WLS(FILE_LIST)
@@ -940,8 +925,9 @@ class TestFitAndQcStack:
 
         monkeypatch.setattr(WLS, "_fit_line_positions_ffi", lambda self, *a, **k: lines)
         monkeypatch.setattr(WLS, "_calculate_wls_coeffs", calc)
-        with pytest.warns(UserWarning, match=r"WLS fit failed"):
+        with caplog.at_level(logging.WARNING):
             frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
+        assert "WLS fit failed" in caplog.text
         assert [fr["rejected"] for fr in frames] == [False, True, False]
         assert frames[1]["coeffs"] is None
 
@@ -1132,7 +1118,7 @@ class TestFitLinePositions:
         for key in ["wav", "pix", "std", "amp"]:
             assert result[key].dtype == np.float64
 
-    def test_all_nan_fiber_emits_fiber_level_warning(self):
+    def test_all_nan_fiber_emits_fiber_level_warning(self, caplog):
         """A fiber whose every order is NaN should emit a fiber-level warning."""
         wls = WLS(FILE_LIST)
         ncol = wls.ccd["ncol"]
@@ -1151,16 +1137,16 @@ class TestFitLinePositions:
         # The fabricated all-NaN fiber makes the code warn once per synthetic order
         # plus once at the fiber level; capture them all so the per-order ones don't
         # leak to the run summary, and assert the fiber-level one.
-        with pytest.warns(UserWarning) as record:
+        with caplog.at_level(logging.WARNING):
             result = wls._fit_line_positions_ffi(
                 StubL2(),
                 "RED",
                 ["SCI1"],
             )
-        assert any("RED SCI1: no good lines retained" in str(w.message) for w in record)
+        assert "RED SCI1: no good lines retained" in caplog.text
         assert len(result["wav"]) == 0
 
-    def test_nan_orderlet_emits_skip_warning(self):
+    def test_nan_orderlet_emits_skip_warning(self, caplog):
         """A single NaN-filled orderlet emits the per-orderlet skip warning."""
         wls = WLS(FILE_LIST)
         ncol = wls.ccd["ncol"]
@@ -1177,10 +1163,10 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
 
-        with pytest.warns(UserWarning) as record:
+        with caplog.at_level(logging.WARNING):
             wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"])
 
-        assert any("orderlet skipped" in str(w.message) for w in record)
+        assert "orderlet skipped" in caplog.text
 
 
 # ---------------------------------------------------------------------------

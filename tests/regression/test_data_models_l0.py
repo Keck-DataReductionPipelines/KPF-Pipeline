@@ -5,6 +5,7 @@ Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
 import importlib.metadata
+import logging
 import os
 
 import numpy as np
@@ -106,11 +107,12 @@ class TestKPF0ErrorPaths:
         hdul.close()
         return fn
 
-    def test_warns_on_unknown_extension(self, tmp_path):
+    def test_warns_on_unknown_extension(self, caplog, tmp_path):
         weird = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="MYSTERY")
         fn = self._minimal_l0(tmp_path, extra_hdus=[weird])
-        with pytest.warns(UserWarning, match="Non-standard extension"):
+        with caplog.at_level(logging.WARNING):
             KPF0.from_fits(fn)
+        assert "Non-standard extension" in caplog.text
 
     def test_parses_receipt_with_entries(self, tmp_path):
         receipt = Table({"FUNCTION": ["init"], "STATUS": ["PASS"]})
@@ -172,11 +174,12 @@ class TestKPF0Provenance:
         assert "ORIGID" not in l0.headers["PRIMARY"]
 
     def test_from_fits_defaults_program_ids_to_unknown_and_warns(
-        self, synthetic_l0_minimal
+        self, caplog, synthetic_l0_minimal
     ):
         """A file lacking PROGID/KOAID defaults both to UNKNOWN and warns."""
-        with pytest.warns(UserWarning, match="PROGID absent"):
+        with caplog.at_level(logging.WARNING):
             l0 = KPF0.from_fits(synthetic_l0_minimal)
+        assert "PROGID absent" in caplog.text
         receipt = l0.headers["RECEIPT"]
         assert receipt.get("PROGID") == "UNKNOWN"
         assert receipt.get("KOAID") == "UNKNOWN"

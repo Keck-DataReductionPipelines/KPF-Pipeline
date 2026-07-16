@@ -6,6 +6,7 @@ Unit tests use synthetic DataFrames and temp directories — no real data needed
 Integration tests (slow) use real L0 data from tests/testdata/L0/20240405/.
 """
 
+import logging
 import os
 from pathlib import Path
 
@@ -747,7 +748,7 @@ class TestMiniDatabaseCache:
         assert len(cached) == len(db)
         assert cached["FILENAME"].tolist() == db["FILENAME"].tolist()
 
-    def test_unreadable_frame_recorded_in_cache_not_in_memory(self, tmp_path):
+    def test_unreadable_frame_recorded_in_cache_not_in_memory(self, caplog, tmp_path):
         # An unreadable frame is omitted from the in-memory db (useless for
         # stacking) but still recorded in the on-disk cache, so the cache mirrors
         # the directory and its row-count guardrail treats it as current, not stale.
@@ -756,8 +757,9 @@ class TestMiniDatabaseCache:
         corrupt = tmp_path / "L0" / "20240405" / "KP.20240405.03000.00.fits"
         corrupt.write_bytes(b"not a valid FITS file")
 
-        with pytest.warns(UserWarning, match="Could not read header"):
+        with caplog.at_level(logging.WARNING):
             db = fh.build_mini_database("20240405", cache="rw")
+        assert "Could not read header" in caplog.text
 
         assert len(db) == 2  # in-memory: only the two readable frames
         cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
