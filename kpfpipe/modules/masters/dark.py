@@ -114,7 +114,7 @@ class Dark(BaseMasterModule):
         if master_path is not None:
             self.save_master("L1", master_path, overwrite=True)
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
 
         return self.ml1_obj
 

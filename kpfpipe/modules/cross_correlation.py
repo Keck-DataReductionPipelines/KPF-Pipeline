@@ -782,7 +782,7 @@ class CrossCorrelation:
         self._set_headers(l4_obj)
         self._track_info(chips, fibers)
         l4_obj.receipt_add_entry("cross_correlation", "", "PASS")
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
         return l4_obj
 
     def info(self):

@@ -409,7 +409,7 @@ class SpectralExtraction:
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
         return l2_obj
 
     def info(self):

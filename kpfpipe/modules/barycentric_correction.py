@@ -757,7 +757,7 @@ class BarycentricCorrection:
         self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "", "PASS")
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
         return self.l2_obj
 
     def info(self):

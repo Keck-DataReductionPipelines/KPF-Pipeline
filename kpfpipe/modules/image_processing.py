@@ -366,7 +366,7 @@ class ImageProcessing:
         self._track_info()
         self.l1_obj.receipt_add_entry("image_processing", "", "PASS")
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
         return self.l1_obj
 
     def info(self):

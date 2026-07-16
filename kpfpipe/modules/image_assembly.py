@@ -580,7 +580,7 @@ class ImageAssembly:
         self._track_info(chips)
         l1_obj.receipt_add_entry("image_assembly", "", "PASS")
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
         return l1_obj
 
     def info(self):

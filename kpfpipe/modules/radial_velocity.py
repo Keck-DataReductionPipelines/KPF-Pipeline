@@ -815,7 +815,7 @@ class RadialVelocity:
         self._set_headers(l4_obj)
         self._track_info(fibers)
         l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
         return l4_obj
 
     def info(self):

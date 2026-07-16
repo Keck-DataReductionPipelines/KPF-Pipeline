@@ -793,7 +793,7 @@ class WLS(BaseMasterModule):
             self.save_diagnostics(master_path, overwrite=True)
 
         self._track_info()
-        logger.info("summary:\n%s", self._info)
+        logger.info("\n\nsummary:\n%s\n\n", self._info)
 
         for chip in self.chips:
             n_survivors = self._stack_info[chip]["n_survivors"]
