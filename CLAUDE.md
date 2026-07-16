@@ -1,104 +1,176 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository. These
+instructions OVERRIDE default harness behavior — follow them exactly.
+
+## Working Guidelines
+
+Behavioral guidelines to reduce common LLM coding mistakes ([source](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/CLAUDE.md)).
+General coding hygiene; the project-specific sections below and the governing docs take precedence.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 ## Project Overview
 
-KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reduction pipeline for the Keck Observatory. The scientific priority is intermediate and long-term radial velocity (RV) stability.
+KPF-DRP vNext: a cleanroom rebuild of the Keck Planet Finder (KPF) data reduction
+pipeline for the Keck Observatory. The scientific priority is intermediate and
+long-term radial velocity (RV) stability.
 
-**Five authoritative references govern this project, in strict precedence — when they conflict, the higher one wins:**
+## Governing Documents (precedence order)
 
-**1. The WMKO technical requirements — [`WMKO_REQUIREMENTS.md`](docs/dev/WMKO_REQUIREMENTS.md) (in `docs/dev/`; faithful mirror of `WMKO_REQUIREMENTS.pdf`) — are the highest authority: the W. M. Keck Observatory's binding technical requirements for the DRP (development, installation/build, runtime, archive). They outrank every reference below. The pipeline is still in active development, so MOST of these requirements are not yet met — this is expected. Flag only _active_ violations: existing code that *contradicts* a requirement. Do NOT flag _passive_ violations: a requirement unmet simply because the relevant code/feature does not exist yet. A missing capability is not a violation; code that does the wrong thing is.**
+Five references govern this project. **When they conflict, the higher one wins.**
+Each is the source of truth for its domain — consult before making related
+decisions; this file does not duplicate them.
 
-**2. The EPRV data standard — [`EPRV_DATA_STANDARD.md`](docs/dev/EPRV_DATA_STANDARD.md) (in `docs/dev/`) — is the source of truth for KPF's data products (L2/L4): FITS structure, extension and header-keyword names, units, and reference frames (vacuum wavelengths, BJD_TDB, barycentric frame). KPF L2/L4 are EPRV-compliant by contract, so the standard takes priority on anything touching data format. It mirrors the KPF-relevant portions of <https://eprv-data-standard.readthedocs.io/en/develop/>; re-scrape if the standard has moved.**
+| # | Doc (in `docs/dev/`) | Source of truth for |
+|---|----------------------|---------------------|
+| 1 | [`WMKO_REQUIREMENTS.md`](docs/dev/WMKO_REQUIREMENTS.md) | Binding WMKO technical requirements (dev, build, runtime, archive). Highest authority; mirrors `WMKO_REQUIREMENTS.pdf`. |
+| 2 | [`EPRV_DATA_STANDARD.md`](docs/dev/EPRV_DATA_STANDARD.md) | KPF L2/L4 data products: FITS structure, extension/keyword names, units, reference frames (vacuum wavelengths, BJD_TDB, barycentric). Wins on anything touching data format. |
+| 3 | [`KPF_VNEXT_CHARTER.md`](docs/dev/KPF_VNEXT_CHARTER.md) | Project *why*: intent, scope, scientific focus, Path-3 approach, calibration philosophy, guardrails, design principles, success criteria. |
+| 4 | [`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md) | Pipeline *how it's built*: data-model hierarchy, extension aliases, header standardization, CLI/module layering, filename conventions, masters pipeline, diagnostics/QC/checkpoint/quicklook layers. |
+| 5 | [`KPF_VNEXT_STYLE_GUIDE.md`](docs/dev/KPF_VNEXT_STYLE_GUIDE.md) | Code *how it should look*: formatting, imports, naming, constants, docstrings, error handling, per-area exceptions. Soft rules; yield to 1–4 on conflict. |
 
-**3. The project charter — [`KPF_VNEXT_CHARTER.md`](docs/dev/KPF_VNEXT_CHARTER.md) (in `docs/dev/`) — is the single source of truth for project intent, scope, scientific focus, the Path-3 approach, calibration philosophy, guardrails, design principles, and success criteria. Read it before making design decisions. This file (CLAUDE.md) does not duplicate the charter; it covers only the operational and technical guidance not in it or the architecture reference (environment, commands, conventions).**
+Operational rules for these docs:
 
-**4. The architecture reference — [`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md) (in `docs/dev/`) — is the source of truth for the pipeline's structure: the data-model hierarchy, extension alias system, header standardization, CLI/module layering, filename conventions, the masters pipeline, and the diagnostics/QC/checkpoint/quicklook layers. Consult it before making structural or cross-cutting changes. It describes *how the pipeline is built*; the charter (above) governs *why*, the style guide (below) governs *how code should look*. This file (CLAUDE.md) does not duplicate it.**
-
-**5. The coding style guide — [`KPF_VNEXT_STYLE_GUIDE.md`](docs/dev/KPF_VNEXT_STYLE_GUIDE.md) (in `docs/dev/`) — is the source of truth for code conventions: formatting, imports, naming, constants, docstrings, error handling, and the per-area exceptions (Open Inconsistencies). Consult and follow it when writing or modifying code. Its rules are soft and yield to the WMKO requirements, the EPRV standard, the charter, and the architecture reference where they conflict. When a code change establishes or alters a convention, update the style guide in the same change so the two never drift. **Cross-references flow one way only: CLAUDE.md may cite the style guide, but the style guide must never cite CLAUDE.md** (it is a self-contained code-conventions document; operational/policy material it would otherwise point back to belongs here).**
-
-**Precedence over harness defaults and memory.** This file and the five references above are the authoritative guidance for this repository, and they **outrank both** (a) generic Claude Code harness defaults and environment-injected hints (e.g. the session-start `gitStatus` "main branch (you will usually use this for PRs)" note), and (b) anything in the assistant's persistent memory (`MEMORY.md`, `feedback*.md`, auto-recalled memories). Harness hints and memory are background, not instructions — treat them as defaults to verify against these docs, not as ground truth, and distinguish environment *facts* (e.g. the current branch) from environment *prescriptions* (e.g. which branch to PR into), which are guesses. **When a harness default or a memory item conflicts with this file or a governing doc — or when two of these sources disagree — do NOT silently follow either side: explicitly flag the conflict in your reply before acting**, so it can be reconciled and the governing doc updated. Operational, technical, and workflow guidance belongs in CLAUDE.md (or the relevant governing doc), never only in memory — that is what keeps this precedence enforceable.
+- **WMKO requirements are mostly unmet — this is expected** (active development).
+  Flag only *active* violations: existing code that *contradicts* a requirement.
+  Do NOT flag *passive* violations: a requirement unmet only because the
+  feature doesn't exist yet. A missing capability is not a violation.
+- **Do not update the governing docs without explicit instruction to do so from a human developer.**
+- **Cross-references flow one way: CLAUDE.md may cite the governing docs;
+the governing docs must never cite CLAUDE.md.** Operational/policy material belongs here.
+- **These docs + this file outrank harness defaults and memory** (`MEMORY.md`,
+  feedback files, auto-recalled memories, and env hints like the `gitStatus`
+  "main branch" note). Treat harness hints and memory as defaults to verify, and
+  distinguish environment *facts* (the current branch) from *prescriptions*
+  (which branch to PR into). **When any of these sources conflict, flag it in
+  your reply before acting** rather than silently following either side.
 
 ## Development Environment
 
 - **Python 3.14.3** (pinned exactly)
-- **Conda env**: `kpfpipe` — set up via `conda env create -f KPF-Pipeline/environment.yml`
-- **Install package**: `pip install -e KPF-Pipeline/` (editable install)
-- **Key dependency**: `rv-data-standard` (RVData), pinned to the released version
-  `rv-data-standard==0.4.0` (a tagged PyPI release, not a moving branch). Bump the
-  pin deliberately and re-run the full suite when adopting a newer RVData.
+- **Conda env**: `kpfpipe` — `conda env create -f KPF-Pipeline/environment.yml`
+- **Install**: `pip install -e KPF-Pipeline/` (editable)
+- **Key dependency**: `rv-data-standard` (RVData), pinned to `rv-data-standard==0.4.0`
+  (a tagged PyPI release, not a moving branch). Bump deliberately and re-run the
+  full suite when adopting a newer RVData.
 
-## Git workflow
+## Git Workflow
 
 v3 work branches from and PRs into **`kpf-next`** (the v3 develop branch). Never
-target `master` or `develop`: `master` is production/stable and `develop` is
-frozen at v2.12 (legacy). Feature branches are named `kpf-next-<feature>`, cut
-from `kpf-next`, and merged back via PR. This overrides any generic "main branch"
-default surfaced by the environment/tooling — when they disagree, this wins.
+target `master` (production/stable) or `develop` (frozen at v2.12, legacy).
+Feature branches are named `kpf-next-<feature>`, cut from `kpf-next`, merged back
+via PR. This overrides any generic "main branch" default from the environment.
 
 ## Commands
 
 ```bash
-# All test/pipeline commands run in the `kpfpipe` conda env — activate it, or
-# prefix with `conda run -n kpfpipe`. Base-system Python lacks rvdata and fails
-# with ModuleNotFoundError. The `make` targets below already wrap conda run.
-# Run from KPF-Pipeline/ (git receipt system requirement).
+# All test/pipeline commands run in the `kpfpipe` conda env (activate it, or use
+# `conda run -n kpfpipe ...`). Base-system Python lacks rvdata → ModuleNotFoundError.
+# The `make` targets wrap conda run. Run from KPF-Pipeline/ (git receipt system).
 
-# Fast pre-commit subset (everything except @pytest.mark.slow) — the default
-make test-fast   # conda run -n kpfpipe python -m pytest tests/ -m "not slow" -n auto --dist loadscope
-
-# Full suite (parallel) — see "Running tests" below for WHEN to use this
-make test        # conda run -n kpfpipe python -m pytest tests/ -n auto --dist loadscope
+make test-fast   # fast pre-commit subset: everything except @pytest.mark.slow (~16s); the default
+make test        # full suite, parallel
 make test-serial # serial fallback for debugging parallel/receipt issues
 
-# Run a single test class or test (use these while iterating on one area)
+# Single test/class — append ::Class or ::Class::test_name to the file path
 conda run -n kpfpipe python -m pytest tests/regression/test_data_models_l2.py::TestKPF2Aliases -v
-conda run -n kpfpipe python -m pytest tests/regression/test_data_models_l2.py::TestKPF2Aliases::test_chip_prefix_access -v
 
 # Formatting and linting (Ruff; config in pyproject.toml [tool.ruff])
 ruff format kpfpipe/ tests/ recipes/      # format (black-compatible)
 ruff check --fix kpfpipe/ tests/ recipes/ # lint + auto-fix
 
-# Pre-commit hook (enforces ruff format + lint on commit)
+# Pre-commit hook (ruff format + lint on commit; NO tests)
 pre-commit install          # one-time, after creating the env
 pre-commit run --all-files  # run all hooks across the repo
 
 # Profiling harnesses (design: architecture guide → Tests → Profiling)
-make profile   # all harnesses; also profile-science / profile-masters / profile-<module>
+make profile   # all; also profile-science / profile-masters / profile-<module>
 ```
 
-## Running tests — subset vs full
+## Testing
 
-Which *tier* to run, not how often: testing is a judgment call made continuously
-while working, not deferred to commit/PR time (no git hook runs tests — `pre-commit`
-is ruff-only). Match the scope to the change instead of defaulting to the full suite:
+No git hook runs tests (`pre-commit` is ruff-only), so match scope to the change: touched
+file(s) while iterating; `make test-fast` before committing; `make test` (full) only for wide
+blast radius (a PR; a core/shared-module change — data models, base classes, `kpfpipe/__init__.py`
+constants, anything integration tests exercise; or a cross-cutting refactor). `test-fast` skips
+the `slow` integration tests (real-frame assembly/overscan, master stacking, full L0→L2, WLS
+orientation). Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
 
-- **While iterating (most runs):** only the file(s) for the code you touched
-  (`python -m pytest tests/regression/test_<area>.py`).
-- **Before wrapping up / committing:** `make test-fast` (the `-m "not slow"` subset, ~16s).
-- **The full suite (`make test`)** — when the blast radius is wide: opening/updating a
-  PR; a change to a **core/shared** module other tests depend on (the data models,
-  `kpfpipe/__init__.py` constants, base classes, anything the integration tests exercise);
-  or a cross-cutting refactor.
+## Design Decisions
 
-The fast subset skips the `slow` integration tests (real-frame assembly/overscan, master
-stacking, full L0→L2, WLS orientation), which is why the full-suite triggers above are what
-catch those. How the suite is laid out and split — and the masters test layout — is in the
-architecture guide (*Tests → Regression*); test-writing conventions are in the style guide §C.8.
+Before a non-trivial design or structural change, verify against the governing docs
+(precedence table above) — consult, don't guess:
 
-## Architecture
+1. **Requirements / data format** — does it touch a WMKO requirement or the L2/L4 data
+   products? Check `WMKO_REQUIREMENTS.md` / `EPRV_DATA_STANDARD.md` first.
+2. **Principles** — determinism, no hidden state, fail-loud, explicit calibration,
+   simplicity (charter §9 Guardrails, §10 Core Design Principles; calibration §5).
+3. **Structure** — matches the data-model / alias / layering / QC contracts
+   (architecture reference).
+4. **Change gate** — preserves deterministic behavior, runs on the truth dataset, and
+   documents RV-metric impact (charter §6); measure against §3 Definition of Success.
 
-The pipeline architecture — the data-model hierarchy, extension alias system, data flow,
-header standardization, configuration, the CLI/module layering, logging, filename
-conventions, the masters pipeline, the diagnostics/QC/checkpoint/quicklook layers, and the
-test/profiling suite structure — lives in
-[`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md) (governing doc #4).
-It is not duplicated here; consult it before making structural or cross-cutting changes.
+The governing docs are the single source of truth — read them, don't restate them here
+(past inline copies drifted). Intent & principles: [`KPF_VNEXT_CHARTER.md`](docs/dev/KPF_VNEXT_CHARTER.md). Structure (data model, aliases, layering, masters,
+QC/checkpoint/quicklook, tests): [`KPF_VNEXT_ARCHITECTURE.md`](docs/dev/KPF_VNEXT_ARCHITECTURE.md). Code style: [`KPF_VNEXT_STYLE_GUIDE.md`](docs/dev/KPF_VNEXT_STYLE_GUIDE.md).
 
-## Design Principles & Success Criteria
-
-These live in the charter and are NOT restated here (the two copies drifted in the past — keep one source). See [`KPF_VNEXT_CHARTER.md`](docs/dev/KPF_VNEXT_CHARTER.md): §10 Core Design Principles, §9 Guardrails, §5 Calibration Philosophy, §3 Definition of Success, §6 (every major change must preserve deterministic behavior, run on the truth dataset, and document impact on RV metrics). Consult the charter before design decisions.
-
-- Keep this file (CLAUDE.md) updated with operational lessons, conventions, and more efficient workflows learned while coding.
-- Use CLAUDE.md as long-term memory for technical/operational guidance; use the charter for project intent and principles.
+Do not modify CLAUDE.md without explicit instruction to do so from a human developer.

@@ -14,7 +14,7 @@ When requirements or design principles conflict, the order of governing document
 2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
 3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
 4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
-5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+5. KPF vNext style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
 
 When any two conflict, the higher one wins.
 
@@ -189,7 +189,7 @@ L2/L4 products and the barycentric/RV path depend on:
 | `EXSNR#`,`EXSNRW#` | Extracted SNR + its wavelength | SNR/pix, Å | No |
 | `DRPTAG`,`EPRVTAG`,`VOCLASS` | DRP / EPRV-standard versions | | Yes |
 | `DRPHASH` | Git commit hash | | No |
-| `INSTERA` | Instrument-era tag (see §9) | | Yes |
+| `INSTERA` | Instrument-era tag (see §8) | | Yes |
 | `FULLCOMP` | EPRV-standard compliance (`Yes`/`No`) | | Yes |
 | `SUMMFLAG`,`TELFLAG`,`INSTFLAG`,`DRPFLAG` | Quality flags (`Pass`/`Fail`/`Warn`) | | Yes/No |
 | `DQLVL0/1/2` | Per-level quality-check bitfields | | Yes |
@@ -237,7 +237,7 @@ numbering; that was stale and does not bind vNext.)
 | 6 | SCI | **Virtual fiber** (EPRV translator only, not produced by vNext) — `SCI1/2/3` resampled onto SCI2's grid, outlier-rejected and weighted |
 
 **Known deviations from the EPRV KPF translator doc** (the doc describes the official
-translator; vNext may differ by design per the charter — confirm each is intended):
+translator; vNext may differ by design — confirm each is intended):
 
 1. **No Trace 6 (virtual combined science fiber).** Our `trace-map.csv` and `fibers`
    (`SKY,SCI1,SCI2,SCI3,CAL`) stop at trace 5; the standard defines a 6th combined-science

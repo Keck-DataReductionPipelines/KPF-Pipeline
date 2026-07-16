@@ -12,22 +12,18 @@ When requirements or design principles conflict, the order of governing document
 2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
 3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
 4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
-5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+5. KPF vNext style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
 
 When any two conflict, the higher one wins.
 
 
-**Status of these rules.** These are *soft* requirements, and this guide sits at the **bottom**
-of the project's authority hierarchy:
+**Status of these rules.** These are *soft* requirements — this guide sits at the **bottom** of
+the authority hierarchy above, so where a rule here conflicts with any of those four documents,
+**the higher one wins** (style yields to science). It describes the dominant, prevailing pattern;
+where the codebase contradicts itself, the recommended variant is called out explicitly.
 
-This style guide describes the dominant, prevailing pattern; where the codebase
-contradicts itself, the recommended variant is called out explicitly. When a rule here
-conflicts with any of those four documents, **the higher one wins** — style yields to science.
-
-This file covers *how code should look and be organized* — not operational or technical
-guidance (environment, commands) or the pipeline's structure (the architecture reference),
-which are documented separately. It does not restate what the architecture guide already
-covers; where a rule needs that context, it points there rather than duplicating it.
+This file covers *how code should look and be organized* — not operational/technical guidance
+(environment, commands) or the pipeline's structure (the architecture reference).
 
 Contents:
 
@@ -57,34 +53,31 @@ Contents:
 
 ## A. Core Design Principles
 
-These are the values the rest of this guide operationalizes. They deliberately mirror the
-charter (§9 Guardrails, §10 Core Design Principles) — where this section and the charter ever
-diverge, the charter wins. Each principle names where it is enforced concretely.
+These are the values the rest of this guide operationalizes. Each principle names where it is
+enforced concretely.
 
 - **Code is self-documenting.** Names carry intent, so a reader rarely needs a comment to learn
   *what* a line does; comments are reserved for *why*. This is the lever behind the naming rules
   (§C.1) and the comment discipline (§D.2).
 - **Prefer clarity over cleverness.** Write the obvious version. A longer, plainly-readable
   implementation beats a terse or clever one that a future reader — human or AI assistant — has
-  to decode (charter §10.7).
+  to decode.
 - **Do not over-engineer.** Implement the simplest thing that meets the requirement; don't build
-  for hypothetical futures (YAGNI). A new utility earns its place with a real caller (§C.5)
-  (charter §10.8).
+  for hypothetical futures (YAGNI). A new utility earns its place with a real caller (§C.5).
 - **Avoid excessive abstraction.** Keep layers minimal. Transform modules are plain standalone
   classes — no base classes, mixins, ABCs, or `dataclasses` unless a concrete, shared need
-  already exists (§C.2) (charter §9).
+  already exists (§C.2).
 - **No hidden state.** No implicit global state, no database coupling in science code, no
   calibration hierarchy resolved behind the caller's back. Every lazily-filled attribute is
   declared up front in `__init__`, and configuration flows through one explicit three-tier
-  override chain (§C.2) (charter §10.1).
+  override chain (§C.2).
 - **Fail loudly.** Validate early and raise a specific, typed exception that shows the offending
   value; never swallow an error or press on with degraded data. Raise rather than catch-and-log
-  (§B.6) (charter §10.4).
+  (§B.6).
 - **Do not introduce quiet fallbacks.** No silent retries, no "default on missing key" that masks
-  a real problem — a missing keyword or master should raise, not be papered over (§B.6)
-  (charter §9).
+  a real problem — a missing keyword or master should raise, not be papered over (§B.6).
 - **Be explicit.** Explicit calibration paths, explicit units and reference frames, explicit
-  arguments. Every step should be readable and debuggable in isolation (charter §9).
+  arguments. Every step should be readable and debuggable in isolation.
 
 ---
 
@@ -95,9 +88,8 @@ Conventions organized by pipeline subsystem. Where a subsystem has distinct **sc
 
 ### B.1 KPF data models
 
-The models (`data_models/`) are what modules operate *on*; their hierarchy, shared
-`KPFDataModel` behavior, and I/O overrides are described in the architecture guide. Conventions
-specific to writing model code:
+The models (`data_models/`) are what modules operate *on*. Conventions specific to writing model
+code:
 
 #### Science
 
@@ -275,9 +267,7 @@ but its values are EPRV targets.)*
 
 #### Headers
 
-Every extension header is an `astropy.io.fits.Header` (the WMKO→EPRV conversion and the
-`INSTRUMENT_HEADER` snapshot are described in the architecture guide's *Header standardization*).
-When writing code:
+Every extension header is an `astropy.io.fits.Header`. When writing code:
 
 - **Read a value** with `header.get(key)`/`header[key]` on the keyword's home extension (per the
   registry `Extension` column); the comment is in `header.comments[key]`. Never hand-roll
@@ -310,8 +300,7 @@ When writing code:
 
 ### B.5 Quality control (Diagnostics / QC / Checkpoints / Quicklook)
 
-The four read-only layers (`kpfpipe/quality_control/`) and their strict run order are described in
-the architecture guide. Conventions for writing QC code:
+The four read-only layers live in `kpfpipe/quality_control/`. Conventions for writing QC code:
 
 - **Read-only.** Diagnostics/QC write header keywords **only via `set_keyword`** (→
   QUALITY_CONTROL), never `data`; Quicklook writes only PNGs. To mutate `l0.data` in a helper, work
@@ -336,8 +325,7 @@ the architecture guide. Conventions for writing QC code:
 
 ### B.6 Error handling, validation & logging
 
-Logging follows WMKO DRP-RUN-07/08/09; the `setup_logging`/`setup_batch_logging` entry points are
-described in the architecture guide. The coding rules:
+Logging follows WMKO DRP-RUN-07/08/09. The coding rules:
 
 - **Named loggers only**: `logger = logging.getLogger(__name__)` at module top; recipes (exec'd, so
   `__name__ == "recipe"`) name theirs explicitly (`"kpfpipe.recipe.science"`). Never the root-logger
@@ -528,8 +516,7 @@ Cross-cutting conventions that apply regardless of subsystem.
   `test_<behavior>`, error paths suffixed `_raises`. Files `test_<module>.py` mirror the source,
   sectioned with the same 66-dash banners and opened with a scope-stating module docstring.
 - **Masters test placement**: a test belongs in `test_master_base.py` iff it exercises a `base.py`
-  method vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py` (the file
-  layout is in the architecture guide).
+  method vehicle-incidentally; module-specific behavior stays in `test_master_<type>.py`.
 - **Fixtures** are named for what they produce; multi-file fixtures live in `tests/conftest.py` and
   multi-file plain helpers in a non-collected `_underscore.py` module — don't duplicate builders. Use
   `scope="class"` + `tmp_path_factory` for expensive real-data pipelines.

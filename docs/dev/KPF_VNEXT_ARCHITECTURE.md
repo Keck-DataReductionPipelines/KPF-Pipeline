@@ -44,7 +44,7 @@ When requirements or design principles conflict, the order of governing document
 2. EPRV data standard ([`EPRV_DATA_STANDARD.md`](EPRV_DATA_STANDARD.md))
 3. KPF vNext project charter ([`KPF_VNEXT_CHARTER.md`](KPF_VNEXT_CHARTER.md))
 4. KPF vNext architecture reference ([`KPF_VNEXT_ARCHITECTURE.md`](KPF_VNEXT_ARCHITECTURE.md))
-5. KPF vNext the style guide. ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
+5. KPF vNext style guide ([`KPF_VNEXT_STYLE_GUIDE.md`](KPF_VNEXT_STYLE_GUIDE.md))
 
 When any two conflict, the higher one wins.
 
@@ -138,7 +138,7 @@ alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its ove
   so it wins).
 - **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`.
 
-The rvdata `RVDataModel` base provides the `extensions`/`headers`/`data` OrderedDicts plus `create_extension()`, `set_data()`, `set_header()`, `from_fits()`, `to_fits()`, and a receipt system. `KPFDataModel` overrides `set_data`/`set_header` (in `base.py`, not the level classes) with a `hasattr` guard, so alias resolution runs during init — the base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. It likewise overrides `create_extension` so every extension header is a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
+`KPFDataModel` overrides `set_data`/`set_header` in `base.py` (not the level classes) with a `hasattr` guard so alias resolution runs during init — the rvdata base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. Its `create_extension` override makes every extension header a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
 
 ### Extension alias system
 
@@ -175,7 +175,7 @@ The architecture invariants:
   advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
   read, so every model carries `obs_id` on every construction path.
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
-  as an **append-only history**; only `ISGOOD` — the running AND over every accumulated QC flag —
+  as an **append-only history**; only `ISGOOD` (the running QC aggregate — see *QC flags*)
   changes per level.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
@@ -190,8 +190,7 @@ The keyword registry (`kpfpipe/data_models/keyword_registry.py`) is a single `Ke
 with one module singleton `keyword_registry`, imported **only** by `data_models/base.py` and surfaced as
 the `KPFDataModel.keyword_registry` class attribute. It derives its mapping/validation/routing lookups
 from a **single source-of-truth table** unioning the `L{0,1,2,4}-headers.csv` registries with the EPRV
-keyword defs. *(Coding rules — reading/writing headers, `set_keyword`, registering keywords — are in the
-style guide §B.4.)*
+keyword defs.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
@@ -380,8 +379,7 @@ fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__nam
 with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
 setup must never move into recipes. `warnings.warn` stays the recoverable-condition API, bridged in
 via `logging.captureWarnings`; tests that configure logging must tear down with `teardown_logging`
-(see the autouse fixture in `tests/regression/test_logger.py`). *(Coding rules — levels, lazy
-`%`-formatting, named loggers, the `print()`/`info()` carve-out — live in the style guide §B.6.)*
+(see the autouse fixture in `tests/regression/test_logger.py`).
 
 
 ## File handling
@@ -441,8 +439,7 @@ for L2/L4.
 `tests/` splits into `regression/` (the pytest suite) and `profiling/` (performance harnesses),
 with `tests/conftest.py` at the root serving both (its fixtures and the `requires_testdata`
 marker) and the real frames under the gitignored `tests/testdata/`. This section covers how the
-suites are **laid out**; how to *write* a regression test or profiling harness is in the style
-guide §C.8 (same two subsections), and *when* to run which tier is in CLAUDE.md.
+suites are **laid out**.
 
 ### Regression
 
@@ -454,9 +451,9 @@ master stacking, WLS orientation) off from the fast `-m "not slow"` subset.
 
 The masters tests mirror the masters subpackage by *responsibility*: `test_master_base.py` covers
 the shared stacking engine (`BaseMasterModule`), `test_master_bias.py`/`test_master_dark.py` the
-concrete bias/dark modules, `test_master_wls.py` the WLS path (a separate ML2), and
-`test_masters_recipe.py` the `kpf_drp_masters` recipe; `flat` has no test file while stubbed.
-(Which file a new masters test belongs in is a style-guide §C.8 rule.)
+concrete bias/dark modules, `test_master_wls.py` the WLS path (a separate ML2),
+`test_masters_recipe.py` the `kpf_drp_masters` recipe, and `test_masters_script.py` the masters
+CLI script; `flat` has no test file while stubbed.
 
 ### Profiling
 
@@ -467,5 +464,4 @@ Two recipe harnesses (`profile_science_recipe.py`, `profile_masters_recipe.py`) 
 one module. `flat` is skipped while stubbed, and the shared stacking engine (`masters/base.py`)
 has no dedicated harness — its work is attributed to `base.py` methods inside the bias/dark
 harnesses (whereas the *test* suite isolates the engine in `test_master_base.py`, because
-profiling partitions by wall-clock and tests by responsibility). How a harness attributes time
-and flags hotspots is specified in the style guide §C.8.
+profiling partitions by wall-clock and tests by responsibility).
