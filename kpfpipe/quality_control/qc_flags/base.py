@@ -22,6 +22,17 @@ class QC:
         self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (passed, comment).
 
+    @staticmethod
+    def _hdr_float(hdr, key):
+        """Return float value for a header key, or None if absent."""
+        val = hdr.get(key)
+        return None if val is None else float(val)
+
+    @staticmethod
+    def _hdr_bool(hdr, key):
+        """Return bool value for a header key, or False if absent."""
+        return bool(hdr.get(key, False))
+
     def run(self):
         """Run all checks, write each 0/1 result, and aggregate ISGOOD.
 

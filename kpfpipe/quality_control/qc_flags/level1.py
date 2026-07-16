@@ -9,17 +9,6 @@ _RN_LO, _RN_HI = 2.0, 6.0
 _RNNG_LO, _RNNG_HI = 0.8, 1.5
 
 
-def _hdr_float(hdr, key):
-    """Return float value for a header key, or None if absent."""
-    val = hdr.get(key)
-    return None if val is None else float(val)
-
-
-def _hdr_flag(hdr, key):
-    """Return bool value for a header key, or False if absent."""
-    return bool(hdr.get(key, False))
-
-
 class QCL1(QC):
     """QC checks for KPF Level 1 assembled FFI products."""
 
@@ -57,7 +46,7 @@ class QCL1(QC):
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         found = False
         for keys in RN_KEYS.values():
-            v = _hdr_float(hdr, keys[idx])
+            v = self._hdr_float(hdr, keys[idx])
             if v is None:
                 continue
             found = True
@@ -79,27 +68,27 @@ class QCL1(QC):
 
     def bias_ok(self):
         """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 7 days."""
-        if not _hdr_flag(self.kpf_obj.headers["RECEIPT"], "BIASSUB"):
+        if not self._hdr_bool(self.kpf_obj.headers["RECEIPT"], "BIASSUB"):
             return False
-        v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BIASAGE")
+        v = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BIASAGE")
         return v is not None and abs(v) <= 7
 
     bias_ok._qc_key = "BIASOK"
 
     def dark_ok(self):
         """Dark subtracted (RECEIPT DARKSUB) and master dark age <= 14 days."""
-        if not _hdr_flag(self.kpf_obj.headers["RECEIPT"], "DARKSUB"):
+        if not self._hdr_bool(self.kpf_obj.headers["RECEIPT"], "DARKSUB"):
             return False
-        v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "DARKAGE")
+        v = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "DARKAGE")
         return v is not None and abs(v) <= 14
 
     dark_ok._qc_key = "DARKOK"
 
     def flat_ok(self):
         """Flat divided (RECEIPT FLATDIV) and master flat age <= 30 days."""
-        if not _hdr_flag(self.kpf_obj.headers["RECEIPT"], "FLATDIV"):
+        if not self._hdr_bool(self.kpf_obj.headers["RECEIPT"], "FLATDIV"):
             return False
-        v = _hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "FLATAGE")
+        v = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "FLATAGE")
         return v is not None and abs(v) <= 30
 
     flat_ok._qc_key = "FLATOK"

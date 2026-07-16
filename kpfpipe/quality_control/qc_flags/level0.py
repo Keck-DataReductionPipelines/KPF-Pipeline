@@ -16,12 +16,6 @@ _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amp
 _TIME_TOL_S = 0.1  # DATE-END - DATE-BEG vs ELAPSED tolerance (v2.12 quality_control.py)
 
 
-def _hdr_float(hdr, key):
-    """Return float value for a header key, or None if absent."""
-    val = hdr.get(key)
-    return None if val is None else float(val)
-
-
 def _parse_iso(value):
     """Parse an ISO-8601 datetime string, or None if missing/unparseable."""
     if value is None:
@@ -88,7 +82,7 @@ class QCL0(QC):
             return False
         if not (beg <= mid <= end):
             return False
-        elapsed = _hdr_float(hdr, "ELAPSED")
+        elapsed = self._hdr_float(hdr, "ELAPSED")
         if (
             elapsed is not None
             and abs((end - beg).total_seconds() - elapsed) > _TIME_TOL_S
@@ -117,7 +111,7 @@ class QCL0(QC):
         if not (np.isfinite(exptime) and exptime >= 0):
             return False
 
-        elapsed = _hdr_float(hdr, "ELAPSED")
+        elapsed = self._hdr_float(hdr, "ELAPSED")
         if elapsed is not None and not (0 <= elapsed - exptime <= _TIME_TOL_S):
             return False
         return True
@@ -155,7 +149,7 @@ class QCL0(QC):
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         for key, limit in (("TARGOFF", 1.0), ("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
-            val = _hdr_float(hdr, key)
+            val = self._hdr_float(hdr, key)
             if val is not None and val >= limit:
                 return False
         return True
