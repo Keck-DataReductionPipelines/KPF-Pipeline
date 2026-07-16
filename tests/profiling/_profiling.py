@@ -75,6 +75,13 @@ NETWORK_MARKERS = (
     "certifi",
 )
 
+# DiagL0 resolves each frame's pointing against Gaia DR3 and SIMBAD (astroquery)
+# -- network catalog round-trips as nondeterministic as the barycentric IERS
+# fetch, so they are likewise quarantined from the QC slice of the recipe summary
+# (reported separately, never in the denominator). Matched on the astroquery
+# package path; see _astrometry_cumtime.
+ASTROQUERY_MARKER = "/astroquery/"
+
 # The masters I/O-vs-compute split measures disk I/O at the data-model
 # serialization boundary rather than by low-level primitives: every read is a
 # `from_fits` call (in base._load_frame and base._load_calibration) and every
@@ -393,14 +400,40 @@ def _flags(rows):
 def _network_own(rows):
     """Total own time of network calls (SSL/socket), for the separate report line.
 
-    Network is a nondeterministic IERS download during barycentric correction, so
-    it is quarantined from the recipe's High-level summary.
+    Network is a nondeterministic IERS download during barycentric correction plus
+    the DiagL0 Gaia/SIMBAD pointing lookups, so it is quarantined from the recipe's
+    High-level summary.
     """
     return sum(
         r["tottime"]
         for r in rows
         if any(m in f"{r['file']} {r['name']}" for m in NETWORK_MARKERS)
     )
+
+
+def _astrometry_cumtime(stats):
+    """Cumulative time of DiagL0's nondeterministic astrometry catalog queries.
+
+    DiagL0 resolves each frame's pointing against Gaia DR3 and SIMBAD (astroquery)
+    -- network round-trips as nondeterministic as the barycentric IERS fetch. Sum
+    the *outermost* astroquery frames (caller not itself astroquery) whose caller
+    is a ``diagnostics/`` method, so the full per-query time is counted once and
+    the identical Gaia query inside BarycentricCorrection -- already excluded with
+    that whole quarantined stage -- is not double-counted here.
+    """
+    total = 0.0
+    for func, (_cc, _nc, _tt, _ct, callers) in stats.stats.items():
+        if ASTROQUERY_MARKER not in func[0]:
+            continue
+        for caller, cvals in callers.items():
+            cfn = caller[0]
+            if ASTROQUERY_MARKER in cfn:
+                continue  # nested astroquery frame; its time is in the outer one
+            if _is_kpf_module(cfn) and _module_label(cfn).startswith(
+                "quality_control/diagnostics/"
+            ):
+                total += cvals[3]  # per-caller cumtime; outermost DiagL0 query only
+    return total
 
 
 def _io_compute_split(stats):
@@ -481,6 +514,97 @@ def _quicklook_breakdown(stats):
     return {"rows": rows, "total": total}
 
 
+def _qc_sublayer_run_key(stats, subdir):
+    """The ``(file, line, 'run')`` key of the single base ``run`` in a QC sublayer.
+
+    Each of diagnostics / qc_flags / checkpoints defines ``run`` exactly once (on
+    its base class, no subclass overrides), so the first name-``run`` key whose
+    module sits under ``subdir`` uniquely identifies that sublayer's entry point.
+    Returns None when the sublayer never ran.
+    """
+    for k in stats.stats:
+        fn, _ln, name = k
+        if name != "run" or not _is_kpf_module(fn):
+            continue
+        if _module_label(fn).startswith(subdir):
+            return k
+    return None
+
+
+def _qc_level_label(filename):
+    """``diagnostics/level2.py`` -> ``DiagL2``; ``qc_flags/level1.py`` -> ``QCL1``."""
+    label = _module_label(filename)
+    n = label.rsplit("/", 1)[-1].removesuffix(".py").removeprefix("level")  # "2"
+    prefix = "Diag" if label.startswith("quality_control/diagnostics/") else "QC"
+    return f"{prefix}L{n}"
+
+
+def _quality_control_breakdown(stats):
+    """Per-level wall-clock within the quality-control stage (science recipe).
+
+    The recipe runs all QC through ``CheckpointL{n}.run()``, which folds in
+    ``DiagL{n}.run()`` then ``QCL{n}.run()`` before its own header/flag validation.
+    Diagnostics and QC each dispatch their tagged, level-specific check methods
+    (in ``diagnostics/level{n}.py`` / ``qc_flags/level{n}.py``) as direct children
+    of a single shared base ``run`` -- so each level's cost is the cumtime its
+    check methods contribute there, keyed ``DiagL{n}`` / ``QCL{n}``. ``checkpoints``
+    is the remainder (the thin base-``run`` dispatch/keyword-routing plus the
+    checkpoint validation methods). DiagL0's nondeterministic Gaia/SIMBAD pointing
+    lookups are carved out of its row (and the total), matching the recipe
+    summary, which reports them as a separate quarantined slice. Returns ``rows``
+    (``(label, seconds, fraction)``) and the QC ``total``; empty when no
+    checkpoints ran (masters).
+    """
+    ck_key = _qc_sublayer_run_key(stats, "quality_control/checkpoints/")
+    if ck_key is None:
+        return {"rows": [], "total": 0.0}
+    total = stats.stats[ck_key][3]  # cumtime of Checkpoint.run across all levels
+
+    # The base run of each folded-in sublayer; its level check methods are its
+    # direct children (charged via their per-caller cumtime, like _quicklook).
+    run_keys = {}
+    for subdir in ("quality_control/diagnostics/", "quality_control/qc_flags/"):
+        key = _qc_sublayer_run_key(stats, subdir)
+        if key is not None:
+            run_keys[key] = subdir
+
+    agg = {}
+    for func, (_cc, _nc, _tt, _ct, callers) in stats.stats.items():
+        filename = func[0]
+        if not _is_kpf_module(filename):
+            continue
+        label = _module_label(filename)
+        # Only the level-specific check-method files (level{n}.py) get a level
+        # row; the shared base-run dispatch helpers fold into the checkpoints
+        # remainder below.
+        stem = label.rsplit("/", 1)[-1].removesuffix(".py")
+        if not (stem.startswith("level") and stem.removeprefix("level").isdigit()):
+            continue
+        for run_key, subdir in run_keys.items():
+            if label.startswith(subdir) and run_key in callers:
+                lvl = _qc_level_label(filename)
+                agg[lvl] = agg.get(lvl, 0.0) + callers[run_key][3]
+
+    # Quarantine DiagL0's Gaia/SIMBAD lookups from its row and the total, matching
+    # the recipe summary (which reports them separately as a nondeterministic slice).
+    astrometry = _astrometry_cumtime(stats)
+    if "DiagL0" in agg:
+        agg["DiagL0"] = max(agg["DiagL0"] - astrometry, 0.0)
+    total = max(total - astrometry, 0.0)
+
+    # Everything not charged to a level's checks is the checkpoint wrapper (the
+    # base-run dispatch + keyword routing + validation); max() guards float noise.
+    agg["checkpoints"] = max(total - sum(agg.values()), 0.0)
+
+    base = total or 1e-12
+    rows = sorted(
+        ((lbl, s, s / base) for lbl, s in agg.items()),
+        key=lambda e: e[1],
+        reverse=True,
+    )
+    return {"rows": rows, "total": total}
+
+
 def _stage_name(module_label):
     """``modules/radial_velocity.py`` -> ``radial_velocity``; ``modules/masters/
     bias.py`` -> ``bias`` (the product, per the masters "by product" rule)."""
@@ -491,10 +615,17 @@ def _summary_bucket(filename, name):
     """Map a recipe-``main`` direct child to a (label, kind) High-level bucket.
 
     ``from_fits``/``to_fits`` are the data-product reads/writes (I/O); the KPF
-    pipeline stages, quicklook, and QC/diagnostics map to their respective rows;
-    barycentric correction is quarantined; everything else (path helpers, config,
-    glue) is orchestration overhead. ``utils``/``data_models`` are deliberately
-    *not* their own rows — their time is absorbed into the calling stage.
+    pipeline stages, quicklook, and QC map to their respective rows; barycentric
+    correction is quarantined; everything else (path helpers, config, glue) is
+    orchestration overhead. ``utils``/``data_models`` are deliberately *not* their
+    own rows — their time is absorbed into the calling stage.
+
+    The recipe drives all quality control through ``CheckpointL{n}.run()`` (which
+    folds in the paired Diagnostics and QC before its own validation), so the QC
+    row is keyed on ``checkpoints/``; the ``qc_flags/`` / ``diagnostics/`` prefixes
+    are matched too for robustness, though in the recipe they are never a direct
+    child of ``main`` (their time nests inside the checkpoint subtree). Without the
+    ``checkpoints/`` match the whole QC subtree falls through to overhead.
     """
     if name in ("from_fits", "to_fits"):
         return IO_SUMMARY_LABEL, "io"
@@ -505,7 +636,11 @@ def _summary_bucket(filename, name):
         if label.startswith("quality_control/quicklook/"):
             return QUICKLOOK_LABEL, "quicklook"
         if label.startswith(
-            ("quality_control/qc_flags/", "quality_control/diagnostics/")
+            (
+                "quality_control/checkpoints/",
+                "quality_control/qc_flags/",
+                "quality_control/diagnostics/",
+            )
         ):
             return QC_LABEL, "qc"
         if label.startswith("modules/"):
@@ -535,9 +670,12 @@ def _recipe_summary(stats, call, network_own):
     ``calibration_association`` (it lands in that stage, never double-counted).
 
     Barycentric correction is quarantined (nondeterministic IERS fetch): its
-    slice is reported separately and excluded from the denominator. Returns the
-    sorted ``rows`` (``(label, seconds, fraction, kind)``), the ``denominator``
-    (wall-clock minus barycentric), ``bary_seconds``, and ``network_seconds``.
+    slice is reported separately and excluded from the denominator. The DiagL0
+    Gaia/SIMBAD pointing lookups are quarantined the same way -- carved out of the
+    QC slice, since they nest inside it rather than being a top-level stage.
+    Returns the sorted ``rows`` (``(label, seconds, fraction, kind)``), the
+    ``denominator`` (wall-clock minus those quarantined slices), ``bary_seconds``,
+    ``astrometry_seconds``, and ``network_seconds``.
     """
     main_key = _find_main_key(stats, call)
     buckets = {}
@@ -559,6 +697,15 @@ def _recipe_summary(stats, call, network_own):
         buckets[OVERHEAD_LABEL] = buckets.get(OVERHEAD_LABEL, 0.0) + main_own
         kinds[OVERHEAD_LABEL] = "overhead"
 
+    # Carve DiagL0's nondeterministic astrometry lookups out of the QC slice, the
+    # same quarantine the barycentric stage gets (reported separately below).
+    astrometry_seconds = _astrometry_cumtime(stats)
+    if astrometry_seconds and QC_LABEL in buckets:
+        astrometry_seconds = min(astrometry_seconds, buckets[QC_LABEL])
+        buckets[QC_LABEL] -= astrometry_seconds
+    else:
+        astrometry_seconds = 0.0
+
     denominator = sum(buckets.values()) or 1e-12
     rows = sorted(
         ((lbl, s, s / denominator, kinds[lbl]) for lbl, s in buckets.items()),
@@ -569,6 +716,7 @@ def _recipe_summary(stats, call, network_own):
         "rows": rows,
         "denominator": denominator,
         "bary_seconds": bary_seconds,
+        "astrometry_seconds": astrometry_seconds,
         "network_seconds": network_own,
     }
 
@@ -765,7 +913,7 @@ def _render(title, total, rows, flags, line_text):
     return "\n".join(out)
 
 
-def _render_recipe(title, summary, split=None, quicklook=None):
+def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
     """Render an end-to-end recipe report.
 
     Just the cumulative **High-level summary** (wall-clock per pipeline stage, a
@@ -780,10 +928,14 @@ def _render_recipe(title, summary, split=None, quicklook=None):
     modules and so is not otherwise visible in the per-stage summary.
     ``quicklook`` (optional, from :func:`_quicklook_breakdown`) adds a per-plot
     breakdown of the quicklook stage; rendered only when non-empty (science).
+    ``quality`` (optional, from :func:`_quality_control_breakdown`) adds a per-
+    sublayer breakdown of the quality-control stage (checkpoints / diagnostics /
+    qc_flags); rendered only when non-empty (science).
     """
     ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     denom = summary["denominator"]
     has_bary = summary["bary_seconds"] > 0
+    has_astro = summary.get("astrometry_seconds", 0) > 0
     out = []
     w = out.append
 
@@ -792,12 +944,22 @@ def _render_recipe(title, summary, split=None, quicklook=None):
     excl = " (excl. barycentric)" if has_bary else ""
     w(f"_Generated {ts} • recipe wall-clock{excl}: {denom:.3f} s._")
     w("")
-    quarantined = (
-        "The barycentric-correction stage and network time are reported "
-        "separately (excluded from the rows) because they are nondeterministic. "
-        if has_bary
-        else "Network time is reported separately because it is nondeterministic. "
-    )
+    items = []
+    if has_bary:
+        items.append("the barycentric-correction stage")
+    if has_astro:
+        items.append("the DiagL0 astrometry lookups")
+    items.append("network time")
+    if len(items) > 1:
+        joined = ", ".join(items[:-1]) + ", and " + items[-1]
+        quarantined = (
+            f"{joined[0].upper()}{joined[1:]} are reported separately (excluded "
+            "from the rows) because they are nondeterministic. "
+        )
+    else:
+        quarantined = (
+            "Network time is reported separately because it is nondeterministic. "
+        )
     w(
         "> Auto-generated by `tests/profiling/_profiling.py`. The High-level "
         "summary is cumulative wall-clock per pipeline stage (each stage includes "
@@ -822,8 +984,19 @@ def _render_recipe(title, summary, split=None, quicklook=None):
             f"- **Barycentric correction stage** — {summary['bary_seconds']:.3f} s "
             "wall-clock (excluded; triggers a nondeterministic IERS network fetch)."
         )
+    if has_astro:
+        excluded.append(
+            f"- **Astrometry lookups** (Gaia DR3 + SIMBAD, in DiagL0) — "
+            f"{summary['astrometry_seconds']:.3f} s cumulative (excluded; "
+            "nondeterministic catalog network queries)."
+        )
     if summary["network_seconds"] > 0:
-        whence = "mostly inside barycentric" if has_bary else "not disk I/O"
+        if not has_bary:
+            whence = "not disk I/O"
+        elif has_astro:
+            whence = "inside barycentric + the DiagL0 lookups"
+        else:
+            whence = "mostly inside barycentric"
         excluded.append(
             f"- **Network** (SSL/socket) — {summary['network_seconds']:.3f} s own "
             f"time (excluded; nondeterministic, {whence})."
@@ -871,6 +1044,26 @@ def _render_recipe(title, summary, split=None, quicklook=None):
         w("| plot | % | s |")
         w("|---|---:|---:|")
         for lbl, secs, frac in quicklook["rows"]:
+            w(f"| `{lbl}` | {frac:.1%} | {secs:.3f} |")
+        w("")
+
+    # Quality-control per-level breakdown (science recipe) ----------------
+    if quality and quality["rows"]:
+        w("## Quality control breakdown")
+        w("")
+        w(
+            f"Wall-clock per level within the quality-control stage "
+            f"({quality['total']:.3f} s total; % of that). The recipe runs all QC "
+            "through `CheckpointL{n}.run()`, which folds in each level's "
+            "diagnostics (`DiagL{n}`) then QC flags (`QCL{n}`); `checkpoints` is "
+            "the thin dispatch/keyword-routing plus header/flag validation. "
+            "DiagL0's nondeterministic Gaia/SIMBAD pointing lookups are excluded "
+            "here (reported with the quarantined slices above)."
+        )
+        w("")
+        w("| level | % | s |")
+        w("|---|---:|---:|")
+        for lbl, secs, frac in quality["rows"]:
             w(f"| `{lbl}` | {frac:.1%} | {secs:.3f} |")
         w("")
 
@@ -948,7 +1141,8 @@ def run_profile(
         summary = _recipe_summary(stats, call, _network_own(rows))
         split = _io_compute_split(stats) if io_compute else None
         quicklook = _quicklook_breakdown(stats)
-        report = _render_recipe(title, summary, split, quicklook)
+        quality = _quality_control_breakdown(stats)
+        report = _render_recipe(title, summary, split, quicklook, quality)
         print(report)
         return _write_report(report, report_name)
 
