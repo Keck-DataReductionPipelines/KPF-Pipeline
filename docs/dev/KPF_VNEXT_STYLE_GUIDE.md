@@ -163,7 +163,7 @@ class StageName:
     # ------------------------------------------------------------------
     def _track_info(self, chips=None, fibers=None):
         """Build & cache the info() summary text (takes only chips/fibers)."""
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"   # blank-line padding lives here
 
     def _set_headers(self, l2_obj):
         """Sole place this module writes headers; reads instance attributes."""
@@ -177,7 +177,7 @@ class StageName:
         self._set_headers(self.l2_obj)         # consolidates ALL header writes
         self._track_info(chips)                # caches _info text, before the receipt
         self.l2_obj.receipt_add_entry("stage_name", "", "PASS")
-        logger.info("summary:\n%s", self._info)
+        logger.info("%s", self._info)         # padding is baked into _info; keep this clean
         return self.l2_obj
 
     def info(self):       # prints self._info (the cached text), always last
@@ -333,11 +333,17 @@ Logging follows WMKO DRP-RUN-07/08/09. The coding rules:
 - **Handler/level configuration lives only in `kpfpipe.utils.logger`**, never at import time or in
   recipes/modules/tests; library code must work with no handlers installed.
 - **Level policy**: `INFO` = production (steps, decisions, I/O, end-of-`perform()` summaries),
-  `DEBUG` = inner-loop detail, `WARNING` via the warnings bridge. Never gate log calls behind
-  `verbose` — the level is the gate. Use lazy `%`-formatting (`logger.info("wrote %s", fn)`, Ruff
-  `G`), not f-strings.
-- **`print()` only in interactive `info()` reporters**, never in `perform()`/pipeline paths (the
-  `_info` rendering is in §B.2).
+  `DEBUG` = inner-loop (per-order/-chip/-frame) detail, `WARNING` = recoverable/degraded runtime
+  conditions. Per-item logging inside a loop stays `DEBUG` (or aggregate to one line) so it never
+  floods `INFO`/`WARNING`. Emit QC/diagnostics keyword logs one keyword per line as
+  `keyword = value — comment` (the FITS comment, read off the header) — verbosely at `DEBUG`, but
+  only for failing/fatal flags at the rare `WARNING`/`ERROR` levels. Never gate log calls behind
+  `verbose` — the level is the gate. Use lazy
+  `%`-formatting (`logger.info("wrote %s", fn)`, Ruff `G`), not f-strings.
+- **No `print()` in pipeline code.** Anything that runs as part of a reduction — `perform()` and its
+  helpers, recipes, the CLI, utils, data-model read/write paths — logs, never prints. The **only**
+  sanctioned `print()` is the interactive `info()` reporter (data models and modules), which exists
+  for notebook/REPL use and is never called from pipeline paths (the `_info` rendering is in §B.2).
 - **Raise; don't catch-and-log.** The sole sanctioned catch-log-reraise point is the leaf runner
   (`reduce.py`: `logger.critical(..., exc_info=True); raise`). Elsewhere pick the semantic type:
   `TypeError` (wrong `config` type), `ValueError` (bad domain value — the workhorse),
@@ -351,8 +357,13 @@ Logging follows WMKO DRP-RUN-07/08/09. The coding rules:
 - **Predicate/extractor split**: `is_*` predicates validate inline and return `bool` (never raise);
   the matching raising extractor/converter (`get_*`, `utc_to_hst`, …) validates through the predicate
   and raises `ValueError` at its own boundary.
-- **Recoverable/degraded conditions** → `if verbose: warnings.warn(..., stacklevel=2)` (the explicit
-  `stacklevel` is required, Ruff `B028`); `setup_logging` bridges these to `WARNING`.
+- **Recoverable/degraded conditions** → `logger.warning(...)`, not `warnings.warn`. A degraded
+  runtime condition (missing header, dropped frame, failed lookup) is an operational event the log
+  must record (DRP-RUN-08), and `logger.warning` — unlike `warnings.warn` — does not dedup per
+  call-site, so a per-frame condition is logged every time. Reserve `warnings.warn` for
+  developer-facing deprecations / API misuse. `setup_logging` still calls
+  `logging.captureWarnings(True)`, so any third-party/stdlib `warnings.warn` is funneled into the log
+  at `WARNING`.
 
 ---
 

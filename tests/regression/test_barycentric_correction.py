@@ -5,6 +5,8 @@ synthetic KPF2 with a small EXPMETER_SCI table and populated SCI2_WAVE.
 Gaia and barycorrpy calls are stubbed via monkeypatching.
 """
 
+import logging
+
 import astropy.units as u
 import numpy as np
 import pytest
@@ -687,7 +689,9 @@ class TestAstrometryResolution:
         # defaults: use_gaia_astrometry=True, use_wmko_fallback=False
         assert BarycentricCorrection(synthetic_kpf2)._get_skycoord() is sentinel
 
-    def test_falls_back_to_wmko_on_gaia_error(self, synthetic_kpf2, monkeypatch):
+    def test_falls_back_to_wmko_on_gaia_error(
+        self, caplog, synthetic_kpf2, monkeypatch
+    ):
         self._add_wmko_keys(synthetic_kpf2)
 
         def boom(self):
@@ -696,8 +700,9 @@ class TestAstrometryResolution:
         monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", boom)
 
         bc = BarycentricCorrection(synthetic_kpf2, config={"use_wmko_fallback": True})
-        with pytest.warns(UserWarning, match="ConnectionError"):
+        with caplog.at_level(logging.WARNING):
             sc = bc._get_skycoord()
+        assert "ConnectionError" in caplog.text
         assert sc.icrs.distance.to(u.pc).value == pytest.approx(1e3 / 72.0)
 
     def test_wmko_only_when_gaia_disabled(self, synthetic_kpf2, monkeypatch):
@@ -928,7 +933,7 @@ class TestPerform:
         assert astrsrc == "Gaia DR3"
 
     def test_perform_falls_back_and_records_wmko_provenance(
-        self, synthetic_kpf2, monkeypatch
+        self, caplog, synthetic_kpf2, monkeypatch
     ):
         TestAstrometryResolution._add_wmko_keys(synthetic_kpf2)
 
@@ -950,10 +955,11 @@ class TestPerform:
         )
 
         bc = BarycentricCorrection(synthetic_kpf2)  # defaults: gaia on, wmko off
-        with pytest.warns(UserWarning, match="ConnectionError"):
+        with caplog.at_level(logging.WARNING):
             kpf2 = bc.perform(
                 use_wmko_fallback=True
             )  # override the toggle for this call
+        assert "ConnectionError" in caplog.text
 
         astrsrc = kpf2.headers["RECEIPT"].get("ASTRSRC")
         assert astrsrc == "WMKO header"

@@ -12,6 +12,7 @@ Covers:
 All tests use synthetic in-memory data -- no real KPF files required.
 """
 
+import logging
 import os
 import subprocess
 import sys
@@ -324,6 +325,32 @@ class TestQCBase:
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
         assert list(qc.results) == ["FLAG"]
         assert qc.results["FLAG"][0] is True
+
+    def test_run_logs_pass_debug_fail_warning(self, caplog):
+        """Each flag is logged as written: a pass at DEBUG, a failure at WARNING."""
+        obj = self._make_obj()
+
+        class MyQC(QC):
+            LEVEL = "L2"
+
+            def check_ok(self):
+                return True
+
+            check_ok._qc_key = "CHKOK"
+
+            def check_fail(self):
+                return False
+
+            check_fail._qc_key = "CHKFAIL"
+
+        with caplog.at_level(logging.DEBUG):
+            MyQC(obj).run()
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        debugs = [r for r in caplog.records if r.levelno == logging.DEBUG]
+        assert any("CHKFAIL = 0" in r.getMessage() for r in warnings)
+        assert any("CHKOK = 1" in r.getMessage() for r in debugs)
+        # A passing flag never warns.
+        assert not any("CHKOK" in r.getMessage() for r in warnings)
 
 
 # ---------------------------------------------------------------------------

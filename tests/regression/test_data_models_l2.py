@@ -6,6 +6,7 @@ calibration product.
 Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
+import logging
 import warnings
 from collections import OrderedDict
 
@@ -404,27 +405,28 @@ class TestDtypeProvenance:
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path)
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path)
 
-    def test_chip_prefix_wave_write_enforces_min_bit_depth(self):
+    def test_chip_prefix_wave_write_enforces_min_bit_depth(self, caplog):
         """A float32 WAVE written via a chip-prefix key (which bypasses rvdata's
         base set_data) is still upcast to float64 with the MinBitDepth warning —
         the chip-split path enforces the born-64 WAVE policy like the canonical
         path does."""
         kpf2 = KPF2()
-        with pytest.warns(UserWarning, match="MinBitDepth=64"):
+        with caplog.at_level(logging.WARNING):
             kpf2.set_data(
                 "GREEN_SCI2_WAVE", np.ones((NORDER_GREEN, 8), dtype=np.float32)
             )
+        assert "MinBitDepth=64" in caplog.text
         assert_dtype(kpf2.data["TRACE3_WAVE"], WAVE, "underlying TRACE3_WAVE")
 
-    def test_chip_prefix_flux_write_keeps_float32(self):
+    def test_chip_prefix_flux_write_keeps_float32(self, caplog):
         """FLUX has no MinBitDepth requirement, so a float32 chip-prefix write is
         kept as-is (no upcast, no warning) — the enforcement is WAVE/QUALITY-only."""
         kpf2 = KPF2()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", UserWarning)
+        with caplog.at_level(logging.WARNING):
             kpf2.set_data(
                 "GREEN_SCI2_FLUX", np.ones((NORDER_GREEN, 8), dtype=np.float32)
             )
+        assert "MinBitDepth" not in caplog.text
         assert_dtype(kpf2.data["TRACE3_FLUX"], FLUX, "underlying TRACE3_FLUX")
 
 
@@ -516,10 +518,10 @@ class TestKPFMasterL2:
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML2"
 
-    def test_no_warning_on_known_extensions(self, synthetic_masters_l2_file):
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", UserWarning)
+    def test_no_warning_on_known_extensions(self, caplog, synthetic_masters_l2_file):
+        with caplog.at_level(logging.WARNING):
             KPFMasterL2.from_fits(synthetic_masters_l2_file)
+        assert "Non-standard extension" not in caplog.text
 
     def test_set_input_files(self):
         m = KPFMasterL2(kind="wls")
@@ -541,7 +543,7 @@ class TestKPFMasterL2:
         assert "INPUT_FILES" in m2.extensions
         assert m2.data["INPUT_FILES"]["FILENAME"].tolist() == files
 
-    def test_warns_on_unknown_extension(self, tmp_path):
+    def test_warns_on_unknown_extension(self, caplog, tmp_path):
         fn = str(tmp_path / "unknown_ext_ml2.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
@@ -552,8 +554,9 @@ class TestKPFMasterL2:
         hdul.writeto(fn, overwrite=True)
         hdul.close()
 
-        with pytest.warns(UserWarning, match="Non-standard extension"):
+        with caplog.at_level(logging.WARNING):
             KPFMasterL2.from_fits(fn)
+        assert "Non-standard extension" in caplog.text
 
 
 class TestKPF2HeaderStorage:

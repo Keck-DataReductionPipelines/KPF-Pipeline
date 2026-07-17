@@ -11,12 +11,14 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_filepath
+from recipes._logging import science_run_summary
 
 # ---------------------------------------------------------------------------
 # Test data paths and constants
@@ -259,3 +261,76 @@ class TestScienceRecipeErrors:
         recipe = _load_recipe()
         with pytest.raises(SystemExit, match="--obs_id is required"):
             recipe.main(config, args)
+
+
+class _FakeL4:
+    """Minimal stand-in for a finished KPF4: the attributes _summary reads."""
+
+    def __init__(self, obs_id, headers, receipt):
+        self.obs_id = obs_id
+        self.headers = headers
+        self.receipt = receipt
+
+
+class TestScienceSummary:
+    """Unit tests for the science_run_summary() run-verdict formatter."""
+
+    def _l4(self):
+        headers = {
+            "RECEIPT": {
+                "ORIGID": "KP.20240405.40113.57",
+                "BIASFILE": "/m/20240405/KP.20240405.03637.74_master_bias_L1.fits",
+                "DARKFILE": "/m/20240405/KP.20240405.03637.74_master_dark_L1.fits",
+                "WLSFILE": "/m/20240405/KP.20240405.63499.95_master_thar_L2.fits",
+            },
+            "PRIMARY": {"RV": 11.290158, "RVERR": 0.000156, "BJDTDB": 2460405.968919},
+            "QUALITY_CONTROL": {"ISGOOD": 0},
+        }
+        receipt = pd.DataFrame(
+            [
+                ("from_fits", "fn=/in/L0/20240405/KP.20240405.40113.57.fits, foo=None"),
+                (
+                    "to_fits",
+                    "out_filepath=/out/L2/20240405/kpf_SL2_20240405T110833.fits",
+                ),
+                (
+                    "to_fits",
+                    "out_filepath=/out/L4/20240405/kpf_SL4_20240405T110833.fits",
+                ),
+            ],
+            columns=["FUNCTION", "ARGS"],
+        )
+        return _FakeL4("KP.20240405.40113.57", headers, receipt)
+
+    def test_all_fields_from_l4(self):
+        text = science_run_summary(self._l4(), 92.4)
+        assert "run summary: KP.20240405.40113.57" in text
+        # Input/output paths come from the RECEIPT table, shown as basenames.
+        assert "inputs:   KP.20240405.40113.57.fits" in text
+        assert "/in/" not in text
+        assert (
+            "outputs:  kpf_SL2_20240405T110833.fits  kpf_SL4_20240405T110833.fits"
+            in text
+        )
+        # Masters from the RECEIPT header cards.
+        assert "bias=KP.20240405.03637.74_master_bias_L1.fits" in text
+        assert "thar=KP.20240405.63499.95_master_thar_L2.fits" in text
+        assert "ISGOOD:   0" in text
+        # RV km/s, error m/s (0.000156 km/s -> 0.156 m/s).
+        assert "+11.29016 km/s  err 0.156 m/s  @ BJD_TDB 2460405.968919" in text
+        assert "elapsed:  92.4 s" in text
+        # Internal blank-line padding so the block stands out in the log.
+        assert text.startswith("\n\n") and text.endswith("\n\n")
+
+    def test_no_science_combine_and_no_receipt(self):
+        # RV absent (or FITS UNDEFINED) -> n/a; no receipt table -> paths n/a.
+        l4 = _FakeL4(
+            "obs",
+            {"RECEIPT": {}, "PRIMARY": {"RV": None}, "QUALITY_CONTROL": {}},
+            None,
+        )
+        text = science_run_summary(l4, 1.0)
+        assert "RV:       n/a (no science combine)" in text
+        assert "inputs:   n/a" in text
+        assert "outputs:  n/a" in text
+        assert "bias=n/a" in text

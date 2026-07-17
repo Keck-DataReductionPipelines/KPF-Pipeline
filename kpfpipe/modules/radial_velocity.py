@@ -360,7 +360,7 @@ class RadialVelocity:
                     min_npts,
                 )
             except ValueError as e:
-                logger.warning(
+                logger.debug(
                     "%s order %d: non-physical CCF window (%s); RV/RV_ERR set NaN",
                     ext,
                     o,
@@ -553,7 +553,16 @@ class RadialVelocity:
                     f"{nvalid:>8d}{ccd_rv:>+16.5f}{ccd_erv * 1e3:>16.3f}"
                     f"{rv_rms:>16.3f}"
                 )
-        self._info = "\n".join(lines)
+
+        # Headline science product: the cross-CCD/-fiber combined RV written to
+        # PRIMARY (RV/RVERR/BJDTDB), formed only when a science combine ran.
+        if self._sci_combined_ran and np.isfinite(self._combined_rv):
+            lines.append(
+                f"\n  combined science RV: {self._combined_rv:+.5f} km/s"
+                f"   err {self._combined_rverr * 1e3:.3f} m/s"
+                f"   @ BJD_TDB {self._primary_bjdtdb:.6f}"
+            )
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l4_obj):
         """
@@ -806,7 +815,7 @@ class RadialVelocity:
         self._set_headers(l4_obj)
         self._track_info(fibers)
         l4_obj.receipt_add_entry("radial_velocity", "", "PASS")
-        logger.info("summary:\n%s", self._info)
+        logger.info("%s", self._info)
         return l4_obj
 
     def info(self):

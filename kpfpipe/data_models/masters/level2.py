@@ -9,7 +9,6 @@ solutions, while a flat master (kind="flat") holds extracted spectra.
 import importlib.resources
 import logging
 import os
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -157,10 +156,8 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             if ext_name not in self.extensions:
                 if ext_name != "PRIMARY":
                     if ext_name not in self._known_extensions:
-                        warnings.warn(
-                            f"Non-standard extension '{ext_name}' found in L2 file.",
-                            UserWarning,
-                            stacklevel=2,
+                        logger.warning(
+                            "Non-standard extension '%s' found in L2 file.", ext_name
                         )
                     self.create_extension(ext_name, fits_type)
 

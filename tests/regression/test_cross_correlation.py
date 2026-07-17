@@ -10,6 +10,9 @@ CCF variance cubes, and the metadata-seeded RV tables (RV/RV_ERR left NaN for
 RadialVelocity); it does not fit RVs or write any PRIMARY/combined-RV keywords.
 """
 
+import logging
+import re
+
 import numpy as np
 import pytest
 from astropy.constants import c
@@ -257,12 +260,13 @@ class TestDispatch:
     @pytest.mark.parametrize(
         "raw, obj", [("EtalonFiber", "etalon"), ("LFCFiber", "lfc")]
     )
-    def test_unimplemented_source_warns_and_skips(self, header_kpf2, raw, obj):
+    def test_unimplemented_source_warns_and_skips(self, caplog, header_kpf2, raw, obj):
         header_kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = raw
-        with pytest.warns(UserWarning, match=f"{obj}.*not implemented"):
+        with caplog.at_level(logging.WARNING):
             source = CrossCorrelation(header_kpf2)._resolve_illumination_source(
                 "GREEN", "CAL"
             )
+        assert re.search(rf"{obj}.*not implemented", caplog.text)
         assert source == {
             "object": obj,
             "mask_name": None,
@@ -591,11 +595,12 @@ class TestPerform:
         l4 = cc_module.perform(fibers=["CAL"])
         assert l4.headers["CAL_CCF"]["CCFMASK"] == "thar"
 
-    def test_unimplemented_fiber_skipped(self, cc_module):
+    def test_unimplemented_fiber_skipped(self, caplog, cc_module):
         # An etalon/lfc fiber has no CCF path yet -> skipped, empty extensions.
         cc_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "EtalonFiber"
-        with pytest.warns(UserWarning, match="etalon.*not implemented"):
+        with caplog.at_level(logging.WARNING):
             l4 = cc_module.perform(fibers=["CAL"])
+        assert re.search(r"etalon.*not implemented", caplog.text)
         assert l4.data["CAL_CCF"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
 

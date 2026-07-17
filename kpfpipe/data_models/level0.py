@@ -9,7 +9,6 @@ import importlib.resources
 import logging
 import os
 import re
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -92,10 +91,8 @@ class KPF0(KPFDataModel):
         for key in ("PROGID", "KOAID"):
             value = primary.get(key)
             if not value:
-                warnings.warn(
-                    f"{key} absent from L0 PRIMARY; defaulting to 'UNKNOWN'",
-                    UserWarning,
-                    stacklevel=2,
+                logger.warning(
+                    "%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key
                 )
                 value = "UNKNOWN"
             self.set_keyword(key, value)
@@ -122,10 +119,8 @@ class KPF0(KPFDataModel):
             if ext_name not in self.extensions:
                 if ext_name != "PRIMARY":
                     if ext_name not in _KNOWN_L0_EXTENSIONS:
-                        warnings.warn(
-                            f"Non-standard extension '{ext_name}' found in L0 file.",
-                            UserWarning,
-                            stacklevel=2,
+                        logger.warning(
+                            "Non-standard extension '%s' found in L0 file.", ext_name
                         )
                     self.create_extension(ext_name, fits_type)
 
@@ -154,10 +149,10 @@ class KPF0(KPFDataModel):
         """KPF L0 uses the WMKO-native KP.YYYYMMDD.NNNNN.NN.fits name."""
         basename = os.path.basename(filename)
         if not _L0_FILENAME_PATTERN.fullmatch(basename):
-            warnings.warn(
-                f"Filename '{basename}' does not follow the KPF L0 naming "
+            logger.warning(
+                "Filename '%s' does not follow the KPF L0 naming "
                 "convention (KP.YYYYMMDD.NNNNN.NN.fits)",
-                stacklevel=2,
+                basename,
             )
             return False
         return True

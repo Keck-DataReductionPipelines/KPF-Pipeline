@@ -7,10 +7,12 @@ Diagnostics and QC classes first, so the recipe drives the whole
 Diagnostics -> QC -> Checkpoints sequence through one ``CheckpointL{n}(obj).run()``
 call. Two base checkpoints are inherited by every level: ``unregistered_keywords``
 (structural header validation) and ``qc_flags`` (raise on a failed flag named in
-the subclass's ``RAISE_FLAGS``, warn on the rest).
+the subclass's ``RAISE_FLAGS``, else summarize the flags behind an ISGOOD=0).
 """
 
-import warnings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Checkpoint:
@@ -44,8 +46,20 @@ class Checkpoint:
             self.DIAGNOSTICS(self.kpf_obj).run()
         if self.QC is not None:
             self.qc_results = self.QC(self.kpf_obj).run()
-        for _name, fn in self._iter_checkpoints():
-            fn()
+        for name, fn in self._iter_checkpoints():
+            try:
+                fn()
+            except Exception as e:
+                logger.error("%s checkpoint %r raised: %s", self.LEVEL, name, e)
+                raise
+        qc_hdr = self.kpf_obj.headers.get("QUALITY_CONTROL")
+        isgood = qc_hdr.get("ISGOOD") if qc_hdr is not None else None
+        logger.info(
+            "%s checkpoints passed (%d QC flag(s), ISGOOD=%s)",
+            self.LEVEL,
+            len(self.qc_results),
+            isgood,
+        )
 
     def unregistered_keywords(self):
         """Raise on any non-structural card not registered for its extension.
@@ -79,31 +93,28 @@ class Checkpoint:
     unregistered_keywords._checkpoint_name = "unregistered_keywords"
 
     def qc_flags(self):
-        """Read this level's 0/1 QC flags; raise a RAISE_FLAGS failure, warn the rest.
+        """Raise on a fatal flag failure; summarize the flags behind an ISGOOD=0.
 
-        Scoped to **this level's own** checks (the registry's
-        ``qc_flag_keywords_by_level[LEVEL]`` -- the ``QCL{n}`` flags), NOT the
-        flags propagated from lower levels: QUALITY_CONTROL accumulates the whole
-        L0->L1->L2->L4 history, but a lower-level flag was already surfaced at its
-        own level's checkpoint, so re-warning it here would just be noise. A flag
-        absent from the header is skipped (the check did not run); a flag equal to
-        0 raises if it is in ``RAISE_FLAGS``, else warns.
+        The fatal check is scoped to **this level's own** ``RAISE_FLAGS``: a 0
+        there raises. The summary then names every failing QC flag on
+        QUALITY_CONTROL (the cross-level L0->L4 accumulation, ISGOOD excluded) by
+        bare keyword -- each was already logged with its comment by the QC stage
+        as the flag was written, so the names alone suffice here. A flag absent
+        from the header is skipped (its check did not run).
         """
         header = self.kpf_obj.headers.get("QUALITY_CONTROL")
         if header is None:
             return
         reg = self.kpf_obj.keyword_registry
-        flag_keys = reg.qc_flag_keywords_by_level.get(self.LEVEL, frozenset())
-        for key in sorted(flag_keys):
-            value = header.get(key)
-            if value is None or value != 0:
-                continue
-            if key in self.RAISE_FLAGS:
+        for key in sorted(reg.qc_flag_keywords_by_level.get(self.LEVEL, frozenset())):
+            if key in self.RAISE_FLAGS and header.get(key) == 0:
                 raise ValueError(f"QC checkpoint failed: {key} = 0 ({self.LEVEL})")
-            warnings.warn(
-                f"QC checkpoint flagged: {key} = 0 ({self.LEVEL})",
-                UserWarning,
-                stacklevel=2,
+        failing = sorted(
+            key for key in reg.qc_flag_keywords - {"ISGOOD"} if header.get(key) == 0
+        )
+        if failing:
+            logger.warning(
+                "%s ISGOOD=0; failing QC flags: %s", self.LEVEL, ", ".join(failing)
             )
 
     qc_flags._checkpoint_name = "qc_flags"

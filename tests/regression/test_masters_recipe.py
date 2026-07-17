@@ -14,6 +14,7 @@ import pytest
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler, kpf_filepath
+from recipes._logging import masters_run_summary
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 MASTERS_CONFIG_PATH = (
@@ -132,3 +133,26 @@ class TestMastersRecipeErrors:
         recipe = _load_masters_recipe()
         with pytest.raises(SystemExit, match="--datecode is required"):
             recipe.main(config, args)
+
+
+class TestMastersSummary:
+    """Unit tests for the masters_run_summary() run-verdict formatter."""
+
+    def test_built_masters_listed(self):
+        text = masters_run_summary(
+            "20240405",
+            [
+                ("bias", "/m/kpf_20240405_bias_L1.fits", 32),
+                ("thar", "/m/kpf_20240405_thar_L2.fits", 12),
+            ],
+            240.5,
+        )
+        assert "masters run summary: 20240405" in text
+        assert "bias   kpf_20240405_bias_L1.fits  (32 frames)" in text
+        assert "thar   kpf_20240405_thar_L2.fits  (12 frames)" in text
+        assert "elapsed:  240.5 s" in text
+        assert text.startswith("\n\n") and text.endswith("\n\n")
+
+    def test_no_masters_built(self):
+        text = masters_run_summary("20240405", [], 1.0)
+        assert "(no masters built)" in text

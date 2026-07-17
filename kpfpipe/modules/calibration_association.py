@@ -7,7 +7,6 @@ the masters directory and selecting the nearest-in-time match.
 """
 
 import logging
-import warnings
 from datetime import datetime, timedelta
 
 from kpfpipe import DEFAULTS
@@ -113,10 +112,10 @@ class CalibrationAssociation:
                 try:
                     ts = get_timestamp(filepath)
                 except ValueError as e:
-                    warnings.warn(
-                        f"dropping master with unparseable timestamp: "
-                        f"{filepath!r} ({e})",
-                        stacklevel=2,
+                    logger.warning(
+                        "dropping master with unparseable timestamp: %r (%s)",
+                        filepath,
+                        e,
                     )
                     continue
                 master_files.append((filepath, ts))
@@ -156,7 +155,7 @@ class CalibrationAssociation:
         for cal_type, cal in self._calibrations.items():
             lines.append(f"  {cal_type:<12s} {cal['filepath']}")
             lines.append("")
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l1_obj):
         """Write the master-path keyword for each associated calibration.
@@ -224,12 +223,18 @@ class CalibrationAssociation:
                 )
 
             self._calibrations[cal_type] = {"filepath": filepath}
+            logger.debug(
+                "%s: selected %s from %d candidate(s)",
+                cal_type,
+                filepath,
+                len(master_files),
+            )
 
         self._set_headers(self.l1_obj)
         self._track_info()
         self.l1_obj.receipt_add_entry("calibration_association", "", "PASS")
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("%s", self._info)
         return self.l1_obj
 
     def info(self):

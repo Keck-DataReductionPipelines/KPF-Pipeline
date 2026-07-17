@@ -1,5 +1,7 @@
 """Unit tests for CalibrationAssociation."""
 
+import logging
+
 import pytest
 from astropy.io import fits
 
@@ -127,7 +129,7 @@ class TestFindMasterFiles:
 
         assert result[0][1] < result[1][1]
 
-    def test_warns_and_drops_master_with_unparseable_timestamp(self, tmp_path):
+    def test_warns_and_drops_master_with_unparseable_timestamp(self, caplog, tmp_path):
         d = tmp_path / "masters" / "20240405"
         d.mkdir(parents=True)
         _stub_master(d, "KP.20240405.03637.74", "bias")
@@ -135,8 +137,9 @@ class TestFindMasterFiles:
         (d / "nostamp_master_bias_L1.fits").touch()
 
         mod = _make_module(tmp_path)
-        with pytest.warns(UserWarning, match="unparseable timestamp"):
+        with caplog.at_level(logging.WARNING):
             result = mod._find_master_files("bias", "2024-04-05T11:08:33")
+        assert "unparseable timestamp" in caplog.text
 
         assert len(result) == 1
         assert result[0][0].endswith("KP.20240405.03637.74_master_bias_L1.fits")

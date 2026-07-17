@@ -231,7 +231,10 @@ The master filename (`{KOAID}_master_{type}_L{N}.fits`, WMKO DRP-RUN-05) is set 
 The pipeline is built in strictly one-directional layers — each layer may import *down* but
 never up: `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
 `scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
-imports `scripts.processing.*`, but **the scripts must never import `tools`**.
+imports `scripts.processing.*`, but **the scripts must never import `tools`**. All four are
+installed, importable packages; code shared across a layer's siblings goes **down** into
+`kpfpipe/`, or — when it is layer-specific — lives beside them as a `_`-prefixed private helper
+(e.g. `scripts/processing/_argparse.py`, `recipes/_logging.py`) that only its own layer imports.
 
 ### Modules
 
@@ -377,8 +380,9 @@ Both siblings write one UT-timestamped file per invocation under the `[LOGGER] l
 (`log_level`/`console` also honored; CLI `--log_dir`/`--log_level` override); a missing `log_dir` is
 fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__name__)` and must work
 with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
-setup must never move into recipes. `warnings.warn` stays the recoverable-condition API, bridged in
-via `logging.captureWarnings`; tests that configure logging must tear down with `teardown_logging`
+setup must never move into recipes. Recoverable/degraded conditions use `logger.warning` (not
+`warnings.warn`); `logging.captureWarnings` still funnels any third-party/stdlib `warnings.warn` into
+the log at `WARNING`. Tests that configure logging must tear down with `teardown_logging`
 (see the autouse fixture in `tests/regression/test_logger.py`).
 
 

@@ -11,6 +11,7 @@ data products are written to the output data root.
 """
 
 import logging
+import time
 
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
@@ -29,6 +30,7 @@ from kpfpipe.quality_control.checkpoints import (
 )
 from kpfpipe.quality_control.quicklook import PlotL0, PlotL1, PlotL2, PlotL4
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
+from recipes._logging import science_run_summary
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log.
@@ -36,6 +38,7 @@ logger = logging.getLogger("kpfpipe.recipe.science")
 
 
 def main(config, args):
+    t0 = time.monotonic()
     logger.info("entering kpf_drp_science pipeline")
 
     if not args.obs_id:
@@ -158,6 +161,10 @@ def main(config, args):
     # Write the final L4 data product (RVs and CCFs) to disk
     l4_out_path = kpf_filepath(obs_id, "L4", data_root=data_root_science)
     l4.to_fits(l4_out_path)
+
+    # End-of-run verdict: a compact roll-up read straight off the finished L4
+    # product (masters, inputs/outputs, ISGOOD, combined RV), plus the elapsed.
+    logger.info(science_run_summary(l4, time.monotonic() - t0))
 
     logger.info("exiting kpf_drp_science pipeline")
 

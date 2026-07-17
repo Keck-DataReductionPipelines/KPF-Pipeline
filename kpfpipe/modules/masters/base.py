@@ -2,8 +2,8 @@
 Base class for KPF Masters modules.
 """
 
+import logging
 import os
-import warnings
 
 import numpy as np
 
@@ -17,6 +17,8 @@ from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.quality_control.qc_flags.level0 import QCL0
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
+
+logger = logging.getLogger(__name__)
 
 
 class BaseMasterModule:
@@ -201,7 +203,7 @@ class BaseMasterModule:
             qc = QCL0(l0_obj).run()
             failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
             if failed:
-                warnings.warn(f"QC failed for {fn}: {', '.join(failed)}", stacklevel=2)
+                logger.warning("QC failed for %s: %s", fn, ", ".join(failed))
                 return None
 
             l1_obj = ImageAssembly(l0_obj).perform()
@@ -210,7 +212,7 @@ class BaseMasterModule:
                 self._l1_obj_cache[fn] = l1_obj
 
         except (FileNotFoundError, OSError) as e:
-            warnings.warn(f"Failed to load {fn}: {e}", stacklevel=2)
+            logger.warning("Failed to load %s: %s", fn, e)
             return None
 
         return l1_obj
@@ -697,6 +699,12 @@ class BaseMasterModule:
 
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
+
+        logger.debug(
+            "stacking %d frames via %s method",
+            nframe,
+            "datacube" if nframe < nstream else "streaming",
+        )
 
         if nframe < nstream:
             stats, _ = self._compute_stats_from_datacube(

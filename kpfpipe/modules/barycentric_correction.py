@@ -12,7 +12,6 @@ barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
 
 import logging
 import re
-import warnings
 
 import astropy.units as u
 import numpy as np
@@ -329,6 +328,7 @@ class BarycentricCorrection:
             FROM gaiadr3.gaia_source
             WHERE source_id = {gaia_id}
             """
+            logger.info("querying Gaia DR3 for source_id %s", gaia_id)
             job = Gaia.launch_job(query)
             result = job.get_results()[0]
 
@@ -381,10 +381,11 @@ class BarycentricCorrection:
                 gaia_error = e
         if self.use_wmko_fallback:
             if gaia_error is not None:
-                warnings.warn(
-                    f"Gaia astrometry unavailable ({type(gaia_error).__name__}: "
-                    f"{gaia_error}); using WMKO header astrometry",
-                    stacklevel=2,
+                logger.warning(
+                    "Gaia astrometry unavailable (%s: %s); "
+                    "using WMKO header astrometry",
+                    type(gaia_error).__name__,
+                    gaia_error,
                 )
             self._astrometry_source = "WMKO header"
             return self._wmko_astrometry()
@@ -674,7 +675,7 @@ class BarycentricCorrection:
             f"\n  per-order spread:   BJD {np.ptp(bjd) * 86400:.3f} sec,"
             f" BARY {np.ptp(kms) * 1000:.3f} m/s"
         )
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
         """Write the per-CCD summary keywords.
@@ -756,7 +757,7 @@ class BarycentricCorrection:
         self._track_info()
         self.l2_obj.receipt_add_entry("barycentric_correction", "", "PASS")
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("%s", self._info)
         return self.l2_obj
 
     def info(self):

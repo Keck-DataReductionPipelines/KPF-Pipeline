@@ -10,10 +10,12 @@ and written to the output data root via the pipeline path helpers.
 
 import logging
 import os
+import time
 
 from kpfpipe.modules.masters import WLS, Bias, Dark
 from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf_utils import get_obs_id
+from recipes._logging import masters_run_summary
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
 # would not identify this module in the log.
@@ -21,6 +23,7 @@ logger = logging.getLogger("kpfpipe.recipe.masters")
 
 
 def main(config, args):
+    t0 = time.monotonic()
     logger.info("entering kpf_drp_masters pipeline")
 
     if not args.datecode:
@@ -45,6 +48,8 @@ def main(config, args):
     file_handler = FileHandler(data_dirs)
     file_handler.build_mini_database(datecode, cache="r")
 
+    built = []  # (cal_type, path, n_frames) per master stacked, for the run summary
+
     # Stack the bias frames into a master bias used to remove the detector
     # offset from every science and calibration frame.
     for files in file_handler.build_calibration_stacks(
@@ -58,6 +63,7 @@ def main(config, args):
         logger.info("stacking %d bias frames -> %s", len(files), bias_path)
         bias = Bias(files, config)
         bias.make_master_l1(master_path=bias_path)
+        built.append(("bias", bias_path, len(files)))
 
     # Stack the dark frames into a master dark used to remove dark current.
     # Runs after the master bias so CalibrationAssociation can subtract that
@@ -73,6 +79,7 @@ def main(config, args):
         logger.info("stacking %d dark frames -> %s", len(files), dark_path)
         dark = Dark(files, config)
         dark.make_master_l1(master_path=dark_path)
+        built.append(("dark", dark_path, len(files)))
 
     # master flat (not yet implemented)
     # for files in file_handler.build_calibration_stacks('flat'):
@@ -95,7 +102,9 @@ def main(config, args):
         logger.info("building WLS from %d ThAr frames -> %s", len(files), wls_path)
         wls = WLS(files, config)
         wls.make_master_l2(master_path=wls_path)
+        built.append(("thar", wls_path, len(files)))
 
+    logger.info(masters_run_summary(datecode, built, time.monotonic() - t0))
     logger.info("exiting kpf_drp_masters pipeline")
 
 

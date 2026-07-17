@@ -10,7 +10,6 @@ import importlib.resources
 import logging
 import os
 import re
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -95,10 +94,8 @@ class KPF1(KPFDataModel):
             if ext_name not in self.extensions:
                 if ext_name != "PRIMARY":
                     if ext_name not in self._known_extensions:
-                        warnings.warn(
-                            f"Non-standard extension '{ext_name}' found in L1 file.",
-                            UserWarning,
-                            stacklevel=2,
+                        logger.warning(
+                            "Non-standard extension '%s' found in L1 file.", ext_name
                         )
                     self.create_extension(ext_name, fits_type)
 
@@ -130,10 +127,10 @@ class KPF1(KPFDataModel):
         """
         basename = os.path.basename(filename)
         if not _L1_FILENAME_PATTERN.fullmatch(basename):
-            warnings.warn(
-                f"Filename '{basename}' does not follow the KPF L1 naming "
+            logger.warning(
+                "Filename '%s' does not follow the KPF L1 naming "
                 "convention (kpf_L1_YYYYMMDDThhmmss.fits)",
-                stacklevel=2,
+                basename,
             )
             return False
         return True

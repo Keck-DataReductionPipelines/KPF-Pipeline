@@ -19,7 +19,6 @@ For example, "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", so reading
 """
 
 import logging
-import warnings
 
 import numpy as np
 from astropy.io import fits
@@ -228,12 +227,13 @@ class KPFDataModel(RVDataModel):
             target = np.dtype(f"uint{min_depth}")
         else:
             target = np.dtype(f"int{min_depth}")
-        warnings.warn(
-            f"Extension '{label}' has dtype {data.dtype} "
-            f"({data.dtype.itemsize * 8}-bit) but MinBitDepth={min_depth}. "
-            f"Upcasting to {target.name}.",
-            UserWarning,
-            stacklevel=2,
+        logger.warning(
+            "Extension '%s' has dtype %s (%d-bit) but MinBitDepth=%d. Upcasting to %s.",
+            label,
+            data.dtype,
+            data.dtype.itemsize * 8,
+            min_depth,
+            target.name,
         )
         return data.astype(target)
 

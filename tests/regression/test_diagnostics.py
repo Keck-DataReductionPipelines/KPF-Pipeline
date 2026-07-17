@@ -1,6 +1,6 @@
 """Tests for the Diagnostics framework and per-level subclasses."""
 
-import warnings
+import logging
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -238,17 +238,16 @@ class TestDiagL0Pointing:
         assert "GAIAOFF" not in results
         assert "TARGOFF" not in results
 
-    def test_skip_gaiaoff_when_no_gaiaid(self):
+    def test_skip_gaiaoff_when_no_gaiaid(self, caplog):
         # Pointing + target present, GAIAID absent -> TARGOFF only, no warning.
         l0 = _make_l0_pointing(GAIAID=None)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
+        with caplog.at_level(logging.WARNING):
             results = DiagL0(l0).run()
         assert "GAIAOFF" not in results
         assert "TARGOFF" in results
-        assert not any("GAIAOFF skipped" in str(c.message) for c in caught)
+        assert "GAIAOFF skipped" not in caplog.text
 
-    def test_gaia_failure_warns_and_skips(self):
+    def test_gaia_failure_warns_and_skips(self, caplog):
         # Gaia unreachable -> GAIAOFF warns and skips; the network-free TARGOFF
         # still computes (fail-soft, so the L0 checkpoint does not fail).
         l0 = _make_l0_pointing()
@@ -257,9 +256,10 @@ class TestDiagL0Pointing:
                 "kpfpipe.quality_control.diagnostics.level0.Gaia.launch_job",
                 side_effect=ConnectionError("gaia down"),
             ),
-            pytest.warns(UserWarning, match="GAIAOFF skipped"),
+            caplog.at_level(logging.WARNING),
         ):
             results = DiagL0(l0).run()
+        assert "GAIAOFF skipped" in caplog.text
         assert "GAIAOFF" not in results
         assert "TARGOFF" in results
 
@@ -316,7 +316,7 @@ class TestDiagL0Object:
         l0 = _make_l0_pointing()  # helper sets no OBJECT
         assert DiagL0(l0).object_ra_dec_offset() == {}
 
-    def test_simbad_no_match_warns_and_skips(self):
+    def test_simbad_no_match_warns_and_skips(self, caplog):
         l0 = _make_l0_pointing()
         l0.headers["PRIMARY"]["OBJECT"] = "NotARealStar"
         with (
@@ -324,9 +324,10 @@ class TestDiagL0Object:
                 "kpfpipe.quality_control.diagnostics.level0.Simbad",
                 return_value=_fake_simbad(no_match=True),
             ),
-            pytest.warns(UserWarning, match="OBJOFF skipped"),
+            caplog.at_level(logging.WARNING),
         ):
             assert DiagL0(l0).object_ra_dec_offset() == {}
+        assert "OBJOFF skipped" in caplog.text
 
 
 # ---------------------------------------------------------------------------

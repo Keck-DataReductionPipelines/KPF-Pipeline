@@ -6,7 +6,6 @@ populating the per-fiber FLUX and VAR arrays.
 """
 
 import logging
-import warnings
 
 import numpy as np
 import pandas as pd
@@ -253,10 +252,14 @@ class SpectralExtraction:
             n_bad = int(np.sum(~np.isfinite(arr)))
             n_neg = int(np.sum(arr < 0))
             if n_bad or n_neg:
-                warnings.warn(
-                    f"{name} array: {chip} {fiber} {order} has "
-                    f"{n_bad} non-finite, {n_neg} negative values",
-                    stacklevel=2,
+                logger.debug(
+                    "%s array: %s %s %s has %d non-finite, %d negative values",
+                    name,
+                    chip,
+                    fiber,
+                    order,
+                    n_bad,
+                    n_neg,
                 )
 
         return flux_1d, var_1d
@@ -326,10 +329,8 @@ class SpectralExtraction:
         # the loop to continue through all orders provides useful diagnostic
         # information for cases where the algorithm truly fails.
         if failure == 1:
-            warnings.warn(
-                f"1 orderlet failed to extract from the {chip} CCD; filled with NaN.",
-                UserWarning,
-                stacklevel=2,
+            logger.warning(
+                "1 orderlet failed to extract from the %s CCD; filled with NaN.", chip
             )
         elif failure > 1:
             raise LookupError(
@@ -354,7 +355,7 @@ class SpectralExtraction:
         fibers_str = " ".join(fibers)
         for chip in chips:
             lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
-        self._info = "\n".join(lines)
+        self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
         """Reserved header-consolidation hook; writes no PRIMARY metadata yet."""
@@ -408,7 +409,7 @@ class SpectralExtraction:
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
-        logger.info("summary:\n%s", self._info)
+        logger.info("%s", self._info)
         return l2_obj
 
     def info(self):

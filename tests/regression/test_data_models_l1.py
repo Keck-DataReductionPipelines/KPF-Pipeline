@@ -6,6 +6,7 @@ Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
 import importlib.metadata
+import logging
 import re
 
 import numpy as np
@@ -125,7 +126,7 @@ class TestKPF1:
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "L1"
 
-    def test_warns_on_unknown_extension(self, tmp_path):
+    def test_warns_on_unknown_extension(self, caplog, tmp_path):
         fn = str(tmp_path / "unknown_ext.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
@@ -135,8 +136,9 @@ class TestKPF1:
         hdul.writeto(fn, overwrite=True)
         hdul.close()
 
-        with pytest.warns(UserWarning, match="Non-standard extension"):
+        with caplog.at_level(logging.WARNING):
             KPF1.from_fits(fn)
+        assert "Non-standard extension" in caplog.text
 
 
 class TestL1PrimarySeed:
@@ -293,16 +295,12 @@ class TestToKpf1:
         """_map_header emits only registered keywords; header_map's non-standard
         STANDARD keys (e.g. PARANG <- PARANTEL) are dropped, not leaked onto the
         EPRV PRIMARY. The raw value survives verbatim in INSTRUMENT_HEADER."""
-        import warnings
-
         fn = str(tmp_path / "KP.20240113.00009.00.fits")
         p = fits.PrimaryHDU()
         p.header["INSTRUME"] = "KPF"
         p.header["PARANTEL"] = 108.03  # header_map maps PARANTEL -> non-standard PARANG
         fits.HDUList([p]).writeto(fn)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")  # PROGID/KOAID absent -> UNKNOWN
-            l1 = KPF0.from_fits(fn).to_kpf1()
+        l1 = KPF0.from_fits(fn).to_kpf1()
         assert "PARANG" not in l1.headers["PRIMARY"]
         assert l1.headers["INSTRUMENT_HEADER"]["PARANTEL"] == 108.03
 
@@ -485,12 +483,10 @@ class TestKPFMasterL1:
         with pytest.raises(ValueError):
             KPFMasterL1().generate_standard_filename()
 
-    def test_no_warning_on_known_extensions(self, synthetic_masters_l1_file):
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", UserWarning)
+    def test_no_warning_on_known_extensions(self, caplog, synthetic_masters_l1_file):
+        with caplog.at_level(logging.WARNING):
             KPFMasterL1.from_fits(synthetic_masters_l1_file)
+        assert "Non-standard extension" not in caplog.text
 
     def test_set_input_files(self):
         m = KPFMasterL1()
