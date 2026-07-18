@@ -184,9 +184,16 @@ class TestClearStaleOutputs:
         assert not any(os.path.exists(p) for p in targets)
         assert os.path.exists(stray)  # a different obs_id's product is untouched
 
-    def test_science_noop_when_output_root_unset(self, tmp_path):
-        # No KPF_SCIENCE_OUTPUT -> nothing to resolve, no error.
-        red.clear_stale_outputs(_Config({}), _args(obs_id=self._OID))
+    def test_science_raises_when_output_root_unset(self, tmp_path):
+        # No KPF_SCIENCE_OUTPUT -> can't know what to clear; fail loud, matching
+        # the recipe's required data_dirs["KPF_SCIENCE_OUTPUT"] read.
+        with pytest.raises(KeyError, match="KPF_SCIENCE_OUTPUT"):
+            red.clear_stale_outputs(_Config({}), _args(obs_id=self._OID))
+
+    def test_masters_raises_when_output_root_unset(self, tmp_path):
+        # Same for the masters branch: absent KPF_MASTERS_OUTPUT fails loud.
+        with pytest.raises(KeyError, match="KPF_MASTERS_OUTPUT"):
+            red.clear_stale_outputs(_Config({}), _args(datecode="20240405"))
 
     def test_science_noop_for_invalid_obs_id(self, tmp_path):
         # A malformed obs_id can't build a path; skip rather than raise (the recipe
