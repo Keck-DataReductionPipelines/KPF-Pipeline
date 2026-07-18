@@ -7,15 +7,13 @@ Covers:
   - QCL1 full run on an all-good synthetic L1 (TestQCL1Run)
   - QCL2 checks (TestQCL2)
   - QCL4 checks (TestQCL4)
-  - CLI smoke tests (TestQCScript)
 
 All tests use synthetic in-memory data -- no real KPF files required.
+The qc.py CLI smoke tests live in test_qc_script.py.
 """
 
 import logging
 import os
-import subprocess
-import sys
 import types
 
 import numpy as np
@@ -960,110 +958,6 @@ class TestQCL2:
             assert fn._qc_key == key, (
                 f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
             )
-
-
-# ---------------------------------------------------------------------------
-# Task 6: CLI smoke tests
-# ---------------------------------------------------------------------------
-
-_REPO_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-
-
-def _write_l0_fixture(path, *, passing=True):
-    """Write a minimal L0 FITS fixture at path.
-
-    passing=True  → all QCL0 checks pass (valid header keywords, EXPTIME finite
-                    and consistent with ELAPSED, amps present).
-    passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
-    """
-    primary = fits.PrimaryHDU()
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    # Requested EXPTIME within tolerance of the elapsed time (_GOOD_DATES
-    # ELAPSED = 12.07) so EXPTIMOK's ELAPSED-consistency check passes.
-    primary.header["EXPTIME"] = 12.0 if passing else -1.0
-    primary.header["OBJECT"] = "synthetic"
-    primary.header["OFNAME"] = os.path.basename(path)
-    primary.header["IMTYPE"] = "Object"
-    for k, v in _GOOD_DATES.items():  # self-consistent raw times so DATTIMOK passes
-        primary.header[k] = v
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = np.ones((10, 10), dtype=np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    fits.HDUList(hdus).writeto(path, overwrite=True)
-
-
-def _run_qc_script(fixture_path, level="L0", extra_args=None):
-    """Run scripts/quality_control/qc.py via subprocess, return the CompletedProcess."""
-    cmd = [
-        sys.executable,
-        "scripts/quality_control/qc.py",
-        "--input",
-        str(fixture_path),
-        "--level",
-        level,
-    ]
-    if extra_args:
-        cmd.extend(extra_args)
-    env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
-    return subprocess.run(cmd, cwd=_REPO_ROOT, env=env, capture_output=True, text=True)
-
-
-class TestQCScript:
-    """Smoke tests for scripts/quality_control/qc.py via subprocess."""
-
-    def test_all_passing_exit_0_isgood_pass(self, tmp_path):
-        """All-good L0 → exit code 0, stdout contains 'ISGOOD: PASS'."""
-        fixture = tmp_path / "KP.20240405.00001.00.fits"
-        _write_l0_fixture(str(fixture), passing=True)
-
-        result = _run_qc_script(fixture, level="L0")
-
-        assert result.returncode == 0, (
-            f"Expected exit 0, got {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
-        assert "ISGOOD: PASS" in result.stdout, (
-            f"Expected 'ISGOOD: PASS' in stdout:\n{result.stdout}"
-        )
-
-    def test_failure_injected_exit_1_isgood_fail(self, tmp_path):
-        """L0 with negative EXPTIME → exit code 1, stdout contains 'ISGOOD: FAIL'."""
-        fixture = tmp_path / "KP.20240405.00002.00.fits"
-        _write_l0_fixture(str(fixture), passing=False)
-
-        result = _run_qc_script(fixture, level="L0")
-
-        assert result.returncode == 1, (
-            f"Expected exit 1, got {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
-        assert "ISGOOD: FAIL" in result.stdout, (
-            f"Expected 'ISGOOD: FAIL' in stdout:\n{result.stdout}"
-        )
-
-    def test_missing_file_exit_2(self, tmp_path):
-        """Non-existent file → exit code 2."""
-        missing = tmp_path / "does_not_exist.fits"
-        result = _run_qc_script(missing, level="L0")
-        assert result.returncode == 2
-
-    def test_no_args_exit_nonzero(self):
-        """No args → argparse error → non-zero exit."""
-        env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
-        result = subprocess.run(
-            [sys.executable, "scripts/quality_control/qc.py"],
-            cwd=_REPO_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode != 0
 
 
 # ---------------------------------------------------------------------------

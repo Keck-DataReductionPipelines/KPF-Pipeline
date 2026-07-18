@@ -5,7 +5,7 @@ subcommand implementation under ``scripts/processing/`` and forwards the
 remaining argv verbatim. These tests verify the routing (each command reaches
 its handler with the untouched remainder), the usage banner, and the
 unknown-command error -- the subcommands' own parsing is tested in
-test_reduce.py / test_masters_script.py / test_science_script.py.
+test_reduce_script.py / test_masters_script.py / test_science_script.py.
 """
 
 import pytest
