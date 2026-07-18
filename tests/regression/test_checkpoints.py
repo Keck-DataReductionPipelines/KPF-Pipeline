@@ -184,9 +184,13 @@ class TestRunFoldsDiagnosticsAndQC:
         assert chk.qc_results == {"ISGOOD": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self, caplog):
-        # Base Checkpoint has DIAGNOSTICS = QC = None (LEVEL None skips PRIMARY):
-        # run() does the checkpoint methods only and leaves qc_results empty.
-        chk = Checkpoint(KPF2())  # clean, empty -> checkpoint methods are silent
+        # A concrete-level checkpoint with DIAGNOSTICS = QC = None: run() does the
+        # checkpoint methods only and leaves qc_results empty. (LEVEL must be a
+        # recognized level -- qc_flags() looks it up directly, no silent default.)
+        class NoStageCheckpoint(Checkpoint):
+            LEVEL = "L2"
+
+        chk = NoStageCheckpoint(KPF2())  # clean, empty -> checkpoint methods silent
         with caplog.at_level(logging.WARNING):
             chk.run()
         assert chk.qc_results == {}
