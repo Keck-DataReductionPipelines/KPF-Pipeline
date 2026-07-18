@@ -1,5 +1,9 @@
 """Tests for kpfpipe.utils.config: ConfigHandler TOML loading and section overrides."""
 
+import logging
+
+import pytest
+
 from kpfpipe.utils.config import ConfigHandler
 
 
@@ -51,3 +55,16 @@ class TestConfigHandler:
         handler.config = {}  # force the reload branch in get_params
         params = handler.get_params(["TRACES"])
         assert params["n"] == 7
+
+    def test_get_params_raises_on_absent_section(self, tmp_path):
+        cfg = _write_toml(tmp_path, "[TRACES]\nn = 1\n")
+        with pytest.raises(KeyError, match="'MISSING' absent"):
+            ConfigHandler(cfg).get_params(["TRACES", "MISSING"])
+
+    def test_get_params_empty_section_contributes_nothing(self, tmp_path, caplog):
+        cfg = _write_toml(tmp_path, "[TRACES]\nn = 1\n[EMPTY]\n")
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.utils.config"):
+            params = ConfigHandler(cfg).get_params(["TRACES", "EMPTY"])
+        assert params == {"n": 1}
+        assert "'TRACES' loaded (1 entries)" in caplog.text
+        assert "'EMPTY' present but empty" in caplog.text

@@ -798,13 +798,15 @@ class TestMiniDatabaseCache:
         db = fh.build_mini_database("20240405", cache="rw")
         assert db["FILENAME"].tolist() == ["/sentinel.fits"]
 
-    def test_cache_read_only_does_not_write(self, tmp_path):
+    def test_cache_read_only_does_not_write(self, tmp_path, caplog):
         # "r" reads a current cache but, on a miss, never writes one back.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        db = fh.build_mini_database("20240405", cache="r")
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.utils.io"):
+            db = fh.build_mini_database("20240405", cache="r")
 
         assert len(db) == 1  # scanned fresh (no cache to read)
         assert not (tmp_path / "vNext" / "mini_db").exists()  # and none written
+        assert "cache miss" in caplog.text  # cold-cache read logged at DEBUG
 
     def test_cache_write_only_does_not_read(self, tmp_path):
         # "w" writes the scan result but ignores an existing cache on read: the
@@ -864,8 +866,10 @@ _JUNK_BIAS = [
 
 
 class TestJunkExclusion:
-    def test_load_junk_absent_file(self, tmp_path):
-        assert load_junk_obs_ids(str(tmp_path)) == set()
+    def test_load_junk_absent_file(self, tmp_path, caplog):
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.utils.io"):
+            assert load_junk_obs_ids(str(tmp_path)) == set()
+        assert "junk exclusion is a no-op" in caplog.text
 
     def test_load_junk_parses_wmko_format(self, tmp_path):
         # WMKO layout: a title line, an 'observation_id' header, one obs_id/row.

@@ -64,6 +64,7 @@ def load_junk_obs_ids(data_input):
     """
     junk_csv = os.path.join(data_input, "vNext", "reference", "junk_obs.csv")
     if not os.path.isfile(junk_csv):
+        logger.debug("No junk_obs.csv at %s; junk exclusion is a no-op", junk_csv)
         return set()
     df = pd.read_csv(junk_csv, header=1)
     return set(df.iloc[:, 0].astype(str).str.strip())
@@ -141,7 +142,15 @@ class FileHandler:
         cache_path = self._mini_db_cache_path(datecode)
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
-        if not file_list or not os.path.isfile(cache_path):
+        if not file_list:
+            logger.debug(
+                "No FITS files in %s; no mini database cache to read", data_dir
+            )
+            return None
+        if not os.path.isfile(cache_path):
+            logger.debug(
+                "No mini database cache at %s (cache miss); will scan", cache_path
+            )
             return None
 
         cached = pd.read_csv(cache_path)
@@ -260,7 +269,7 @@ class FileHandler:
         if read_cache:
             cached = self._read_mini_db_cache(datecode)
             if cached is not None:
-                logger.info(
+                logger.debug(
                     "loaded mini database cache from %s",
                     self._mini_db_cache_path(datecode),
                 )
