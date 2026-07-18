@@ -336,7 +336,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 ### Diagnostics
 
-`kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+`kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
 
 **Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the PRIMARY `DATE-OBS` (an EPRV keyword carried to PRIMARY under its own name); the association module writes only the paths.
 
@@ -346,7 +346,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 ### Checkpoints
 
-`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2` set `LEVEL` + `RAISE_FLAGS`.
+`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
 
 ### Quicklook plots
 
