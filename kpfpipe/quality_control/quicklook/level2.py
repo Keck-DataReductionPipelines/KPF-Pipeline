@@ -1,5 +1,6 @@
 """L2 quicklook plots for extracted KPF 1D spectra."""
 
+import logging
 import os
 from datetime import UTC, datetime
 
@@ -7,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.quality_control.quicklook._save_png import save_png
+
+logger = logging.getLogger(__name__)
 
 _DPI = 200
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
@@ -43,11 +46,8 @@ class PlotL2:
         self.output_dir = output_dir
         self.fibers = _FIBERS
 
-        primary = (
-            l2_obj.headers.get("PRIMARY", {}) if hasattr(l2_obj, "headers") else {}
-        )
-        self.obs_id = obs_id or getattr(l2_obj, "obs_id", None) or ""
-        self.name = primary.get("OBJECT", "") if primary else ""
+        self.obs_id = obs_id or l2_obj.obs_id
+        self.name = l2_obj.headers["PRIMARY"]["OBJECT"]
 
     # ------------------------------------------------------------------
     # Data access helpers
@@ -404,6 +404,7 @@ class PlotL2:
         figures = {}
         for chip in ("green", "red"):
             if not self._has_chip(chip):
+                logger.debug("L2 quicklook: no data for %s CCD, skipping", chip)
                 continue
             for name in names:
                 fig = getattr(self, name)(chip)

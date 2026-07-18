@@ -1,5 +1,6 @@
 """L1 quicklook plots for assembled FFI."""
 
+import logging
 import os
 from datetime import UTC, datetime
 
@@ -8,6 +9,8 @@ import numpy as np
 
 from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
+
+logger = logging.getLogger(__name__)
 
 
 class PlotL1:
@@ -35,10 +38,8 @@ class PlotL1:
         self.l1_obj = l1_obj
         self.output_dir = output_dir
         self.full_res = full_res
-        self.obs_id = getattr(l1_obj, "obs_id", None) or ""
-        self.name = ""
-        if "PRIMARY" in l1_obj.headers:
-            self.name = l1_obj.headers["PRIMARY"].get("OBJECT", "")
+        self.obs_id = l1_obj.obs_id
+        self.name = l1_obj.headers["PRIMARY"]["OBJECT"]
 
     def _read_noise_values(self, chip):
         """Return (rn_list, rnng_list) from QUALITY_CONTROL, or ([], []) if absent.
@@ -250,6 +251,7 @@ class PlotL1:
             full_res = self.full_res
         for chip in ["green", "red"]:
             if not self._has_chip(chip):
+                logger.debug("L1 quicklook: no data for %s CCD, skipping", chip)
                 continue
             for name in names:
                 fig = getattr(self, name)(chip, full_res=full_res)

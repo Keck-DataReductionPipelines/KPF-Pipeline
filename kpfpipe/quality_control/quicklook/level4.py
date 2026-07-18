@@ -1,5 +1,6 @@
 """L4 quicklook plots for KPF cross-correlation functions (CCFs) and RVs."""
 
+import logging
 import os
 from datetime import UTC, datetime
 
@@ -7,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.quality_control.quicklook._save_png import save_png
+
+logger = logging.getLogger(__name__)
 
 _DPI = 200
 # Orderlet panels, left-to-right, in the canonical KPF order.
@@ -44,11 +47,8 @@ class PlotL4:
         self.output_dir = output_dir
         self.fibers = _FIBERS
 
-        primary = (
-            l4_obj.headers.get("PRIMARY", {}) if hasattr(l4_obj, "headers") else {}
-        )
-        self.obs_id = obs_id or getattr(l4_obj, "obs_id", None) or ""
-        self.name = primary.get("OBJECT", "") if primary else ""
+        self.obs_id = obs_id or l4_obj.obs_id
+        self.name = l4_obj.headers["PRIMARY"]["OBJECT"]
 
     # ------------------------------------------------------------------
     # Data access helpers
@@ -79,18 +79,18 @@ class PlotL4:
         return self.l4_obj.headers.get(key, {}) or {}
 
     def _velocity_grid(self, fiber, nvel):
-        """Velocity axis [km/s] from the CCF header, or sample index fallback."""
+        """Velocity axis [km/s] from the CCF header.
+
+        CrossCorrelation writes VELSTART/VELSTEP/VELNSTEP on every CCF it
+        produces, so their absence on a populated CCF is a malformed product
+        (fail loud) rather than a state to substitute sample indices for.
+        """
         hdr = self._ext_header(fiber, "CCF")
-        start = hdr.get("VELSTART") if hdr else None
-        step = hdr.get("VELSTEP") if hdr else None
-        nstep = hdr.get("VELNSTEP") if hdr else None
-        if start is None or step is None:
-            return np.arange(nvel)
-        n = int(nstep) if nstep is not None else nvel
-        return np.arange(n) * float(step) + float(start)
+        n = int(hdr["VELNSTEP"]) if "VELNSTEP" in hdr else nvel
+        return np.arange(n) * float(hdr["VELSTEP"]) + float(hdr["VELSTART"])
 
     def _ccf_mask(self, fiber):
-        return self._ext_header(fiber, "CCF").get("CCFMASK", "") or ""
+        return self._ext_header(fiber, "CCF")["CCFMASK"]
 
     def _combined_rv(self, chip, fiber):
         """Per-CCD orderlet-combined RV [km/s], or None.
@@ -100,12 +100,17 @@ class PlotL4:
         read from there, not PRIMARY/INSTRUMENT_HEADER.
         """
         n = "1" if chip.upper() == "GREEN" else "2"
-        val = self._ext_header(fiber, "RV").get(f"CCD{n}RV{_RV_SFX[fiber.upper()]}")
+        key = f"CCD{n}RV{_RV_SFX[fiber.upper()]}"
+        val = self._ext_header(fiber, "RV").get(key)
         if val is None:
+            logger.debug("no combined RV for %s %s (%s absent)", chip, fiber, key)
             return None
         try:
             return float(val)
         except (TypeError, ValueError):
+            logger.debug(
+                "non-numeric combined RV %r for %s %s (%s)", val, chip, fiber, key
+            )
             return None
 
     def _has_chip(self, chip):
@@ -203,6 +208,9 @@ class PlotL4:
 
         ccf = self._ccf(chip, fiber)
         if ccf is None:
+            logger.debug(
+                "L4 CCF panel %s %s: not illuminated (no CCF data)", chip, fiber
+            )
             ax.set_xlim(vref[0], vref[-1])
             ax.text(
                 0.5 * (vref[0] + vref[-1]),
@@ -371,6 +379,7 @@ class PlotL4:
         figures = {}
         for chip in ("green", "red"):
             if not self._has_chip(chip):
+                logger.debug("L4 quicklook: no data for %s CCD, skipping", chip)
                 continue
             for name in names:
                 fig = getattr(self, name)(chip)
