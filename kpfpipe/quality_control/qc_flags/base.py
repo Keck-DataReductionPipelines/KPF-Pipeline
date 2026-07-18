@@ -61,8 +61,8 @@ class QC:
 
             kw = fn._qc_key
             # Mirror the registry Description into results (the FITS comment
-            # source; see ``_tag``).
-            comment = self.kpf_obj.keyword_registry.routing.get(kw, (None, ""))[1]
+            # source; see ``_tag``). The _qc_key must be registered.
+            comment = self.kpf_obj.keyword_registry.routing[kw][1]
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
             logger.log(

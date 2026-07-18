@@ -30,15 +30,13 @@ class Diagnostics:
     def _tag(self, **values):
         """Pair each ``keyword=value`` with its registry-sourced FITS comment.
 
-        Sources the comment from the keyword registry (single source of truth)
-        so ``self.results`` stays in sync with the ``set_keyword`` header write.
+        Sources the comment from the keyword registry (single source of truth) so
+        ``self.results`` stays in sync with the ``set_keyword`` header write. Every
+        emitted keyword must be registered; an unregistered one raises rather than
+        getting a blank comment.
         """
         routing = self.kpf_obj.keyword_registry.routing
-        out = {}
-        for kw, value in values.items():
-            route = routing.get(kw)
-            out[kw] = (value, route[1] if route is not None else "")
-        return out
+        return {kw: (value, routing[kw][1]) for kw, value in values.items()}
 
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.
