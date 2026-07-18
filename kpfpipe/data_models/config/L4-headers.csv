@@ -30,8 +30,7 @@ BJDRNG,Per-order BJD range [s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BERVMEAN,Photon-weighted mean of per-order BERV [km/s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BERVSTD,Photon-weighted std of per-order BERV [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BERVRNG,Per-order BERV range [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
-BERVMAXP,Max per-order BERV deviation from mean [%] (SCI2),QUALITY_CONTROL,float,DiagL4
-BERVMINP,Min per-order BERV deviation from mean [%] (SCI2),QUALITY_CONTROL,float,DiagL4
 DATAPRL4,QC: L4 CCF/RV present,QUALITY_CONTROL,int,QCL4
 KWRDPRL4,QC: required L4 PRIMARY keywords present,QUALITY_CONTROL,int,QCL4
-BERVOK,QC: per-order BERV within +/-1% of mean,QUALITY_CONTROL,int,QCL4
+BERVOK,QC: per-order BERV range within 0.1 m/s,QUALITY_CONTROL,int,QCL4
+BJDOK,QC: per-order BJD range within 1 s,QUALITY_CONTROL,int,QCL4

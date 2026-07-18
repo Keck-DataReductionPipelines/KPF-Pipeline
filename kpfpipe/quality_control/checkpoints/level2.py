@@ -9,6 +9,7 @@ class CheckpointL2(Checkpoint):
     """Checkpoints for KPF Level 2 extracted spectra products."""
 
     LEVEL = "L2"
-    RAISE_FLAGS = ("DATAPRL2",)  # missing extracted flux is fatal; other flags warn.
+    # Missing extracted flux or a required PRIMARY keyword is fatal; others warn.
+    RAISE_FLAGS = ("DATAPRL2", "KWRDPRL2")
     DIAGNOSTICS = DiagL2
     QC = QCL2

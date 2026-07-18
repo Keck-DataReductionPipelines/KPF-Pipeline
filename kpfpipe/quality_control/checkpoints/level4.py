@@ -9,6 +9,7 @@ class CheckpointL4(Checkpoint):
     """Checkpoints for KPF Level 4 RV/CCF products."""
 
     LEVEL = "L4"
-    RAISE_FLAGS = ("DATAPRL4",)  # missing science CCF/RV is fatal; other flags warn.
+    # Missing science CCF/RV or a required PRIMARY keyword is fatal; others warn.
+    RAISE_FLAGS = ("DATAPRL4", "KWRDPRL4")
     DIAGNOSTICS = DiagL4
     QC = QCL4

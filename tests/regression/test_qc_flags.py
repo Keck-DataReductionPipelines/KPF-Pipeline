@@ -215,20 +215,19 @@ class TestQCBase:
 
         QC.run() writes each result via ``set_keyword`` and aggregates ISGOOD; it
         does NOT validate headers (that moved to the checkpoints layer). It reads
-        each check's comment off ``keyword_registry.routing`` (empty here -- these
-        synthetic keys aren't registered, so comment "") and derives ISGOOD as the
-        AND over ``keyword_registry.qc_flag_keywords`` present on QUALITY_CONTROL,
-        so the stub declares the synthetic check keys as the QC-flag set. This fake
-        stores every keyword on QUALITY_CONTROL (value only).
+        each check's comment off ``keyword_registry.routing`` (the synthetic keys
+        are registered here with blank comments) and derives ISGOOD as the AND over
+        ``keyword_registry.qc_flag_keywords`` present on QUALITY_CONTROL, so the
+        stub declares the synthetic check keys as the QC-flag set. This fake stores
+        every keyword on QUALITY_CONTROL (value only).
         """
+        qc_keys = frozenset({"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "ISGOOD"})
 
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             keyword_registry = types.SimpleNamespace(
-                routing={},
-                qc_flag_keywords=frozenset(
-                    {"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "ISGOOD"}
-                ),
+                routing={k: ("QUALITY_CONTROL", "") for k in qc_keys},
+                qc_flag_keywords=qc_keys,
             )
 
             def set_keyword(self, key, value):
@@ -1066,11 +1065,13 @@ class TestQCScript:
 # ---------------------------------------------------------------------------
 
 
-def _make_l4(*, sci=True, rv_filled=True, maxpc=None, minpc=None):
-    """KPF4 with science CCF/RV and optional per-order BERV %-deviation metrics.
+def _make_l4(*, sci=True, rv_filled=True, bervrng=None, bjdrng=None, sci_obj=None):
+    """KPF4 with science CCF/RV and optional per-order BERV/BJD range metrics.
 
     ``rv_filled=False`` seeds the RV table with NaN RVs (a CrossCorrelation-only
-    L4, before RadialVelocity), so DATAPRL4 must fail.
+    L4, before RadialVelocity), so DATAPRL4 must fail. ``sci_obj`` sets the SCI2
+    illumination (INSTRUMENT_HEADER SCI-OBJ); the BERV/BJD tolerance checks only
+    apply when it is 'target'.
     """
     l4 = KPF4()
     if sci:
@@ -1085,13 +1086,18 @@ def _make_l4(*, sci=True, rv_filled=True, maxpc=None, minpc=None):
                     {
                         "ORDER_INDEX": np.arange(_NORDER_TOTAL),
                         "RV": rv_col,
+                        "BJD_TDB": np.full(_NORDER_TOTAL, 2460000.0),
+                        "BERV": np.zeros(_NORDER_TOTAL),
+                        "WEIGHT": np.ones(_NORDER_TOTAL),
                     }
                 ),
             )
-    if maxpc is not None:
-        l4.headers["QUALITY_CONTROL"]["BERVMAXP"] = maxpc
-    if minpc is not None:
-        l4.headers["QUALITY_CONTROL"]["BERVMINP"] = minpc
+    if bervrng is not None:
+        l4.headers["QUALITY_CONTROL"]["BERVRNG"] = bervrng
+    if bjdrng is not None:
+        l4.headers["QUALITY_CONTROL"]["BJDRNG"] = bjdrng
+    if sci_obj is not None:
+        l4.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
     return l4
 
 
@@ -1107,15 +1113,54 @@ class TestQCL4:
         # did not) -> the RVs are the L4 product, so DATAPRL4 must fail.
         assert QCL4(_make_l4(rv_filled=False)).ccf_rv_present() is False
 
-    def test_bcv_percent_change_pass(self):
-        assert QCL4(_make_l4(maxpc=0.3, minpc=-0.4)).berv_within_tolerance() is True
+    def test_ccf_rv_present_fail_when_columns_missing(self):
+        # RV filled but the per-order BJD_TDB/BERV/WEIGHT columns the DiagL4
+        # dispersion metrics consume are absent -> DATAPRL4 must fail.
+        l4 = KPF4()
+        for fiber in ("SCI1", "SCI2", "SCI3"):
+            l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
+            l4.set_data(
+                f"{fiber}_RV",
+                Table(
+                    {
+                        "ORDER_INDEX": np.arange(_NORDER_TOTAL),
+                        "RV": np.zeros(_NORDER_TOTAL),
+                    }
+                ),
+            )
+        assert QCL4(l4).ccf_rv_present() is False
 
-    def test_bcv_percent_change_fail(self):
-        assert QCL4(_make_l4(maxpc=1.5, minpc=-0.2)).berv_within_tolerance() is False
+    def test_berv_within_tolerance_pass(self):
+        l4 = _make_l4(sci_obj="target", bervrng=0.05)
+        assert QCL4(l4).berv_within_tolerance() is True
 
-    def test_bcv_percent_change_absent_passes(self):
-        # No BERVMAXP/BERVMINP (e.g. calibration frame) -> nothing to flag.
-        assert QCL4(_make_l4()).berv_within_tolerance() is True
+    def test_berv_within_tolerance_fail(self):
+        l4 = _make_l4(sci_obj="target", bervrng=0.5)
+        assert QCL4(l4).berv_within_tolerance() is False
+
+    def test_berv_within_tolerance_non_target_passes(self):
+        # SCI2 not star-illuminated (e.g. thar/etalon) -> not applicable, passes
+        # even with an out-of-tolerance BERVRNG present.
+        assert QCL4(_make_l4(bervrng=0.5)).berv_within_tolerance() is True
+
+    def test_berv_within_tolerance_target_absent_fails(self):
+        # Target frame but DiagL4 skipped the metric (degenerate weights / NaN
+        # barycorr) -> malformed, must fail rather than pass vacuously.
+        assert QCL4(_make_l4(sci_obj="target")).berv_within_tolerance() is False
+
+    def test_bjd_within_tolerance_pass(self):
+        l4 = _make_l4(sci_obj="target", bjdrng=0.5)
+        assert QCL4(l4).bjd_within_tolerance() is True
+
+    def test_bjd_within_tolerance_fail(self):
+        l4 = _make_l4(sci_obj="target", bjdrng=2.0)
+        assert QCL4(l4).bjd_within_tolerance() is False
+
+    def test_bjd_within_tolerance_non_target_passes(self):
+        assert QCL4(_make_l4(bjdrng=2.0)).bjd_within_tolerance() is True
+
+    def test_bjd_within_tolerance_target_absent_fails(self):
+        assert QCL4(_make_l4(sci_obj="target")).bjd_within_tolerance() is False
 
     def test_required_keywords_present(self):
         l4 = _make_l4()
@@ -1128,21 +1173,22 @@ class TestQCL4:
             assert QCL4(l4).required_keywords_present() is False
 
     def test_run_all_good_isgood(self):
-        l4 = _make_l4(maxpc=0.1, minpc=-0.1)
+        l4 = _make_l4(sci_obj="target", bervrng=0.05, bjdrng=0.5)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
-        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "BERVOK"}
+        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "BERVOK", "BJDOK"}
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1
+        assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1 and qc["BJDOK"] == 1
         assert qc["ISGOOD"] == 1
 
     def test_run_flags_failure_in_isgood(self):
-        l4 = _make_l4(sci=False, maxpc=2.0, minpc=-2.0)  # no CCF/RV, bad BCV
+        # no CCF/RV, and out-of-tolerance BERV/BJD ranges on a target frame
+        l4 = _make_l4(sci=False, sci_obj="target", bervrng=0.5, bjdrng=2.0)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         l4.headers["QUALITY_CONTROL"]  # ensure present
         QCL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0
+        assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0 and qc["BJDOK"] == 0
         assert qc["ISGOOD"] == 0

@@ -2,9 +2,9 @@
 
 Per-order BJD and barycentric-RV dispersion statistics: photon-weighted means
 (``BJDMEAN``/``BERVMEAN``) and the spread of the per-order values about them
-(``BJDSTD``/``BJDRNG`` in seconds, ``BERVSTD``/``BERVRNG`` in m/s, and the BERV
-percent deviation ``BERVMAXP``/``BERVMINP``), weighted by the per-order
-CCF-combination ``WEIGHT`` and computed on the primary science orderlet (SCI2).
+(``BJDSTD``/``BJDRNG`` in seconds, ``BERVSTD``/``BERVRNG`` in m/s), weighted by the
+per-order CCF-combination ``WEIGHT`` and computed on the primary science orderlet
+(SCI2).
 """
 
 import numpy as np
@@ -82,20 +82,10 @@ class DiagL4(Diagnostics):
         if stats is None:
             return {}
         mean, std, rng = stats
-        values = {
-            "BERVMEAN": round(mean, 6),
-            "BERVSTD": round(std * _KMS_TO_MS, 4),
-            "BERVRNG": round(rng * _KMS_TO_MS, 4),
-        }
-        # Per-order BERV percent deviation from the weighted mean, over
-        # nonzero-weight orders (BERVOK feeds on these).
-        berv = np.asarray(tab["BERV"], dtype=float)
-        w = np.asarray(tab["WEIGHT"], dtype=float)
-        nz = np.isfinite(berv) & np.isfinite(w) & (w != 0)
-        if mean != 0 and np.any(nz):
-            perc = (berv[nz] - mean) / mean * 100.0
-            values["BERVMAXP"] = round(float(perc.max()), 4)
-            values["BERVMINP"] = round(float(perc.min()), 4)
-        return self._tag(**values)
+        return self._tag(
+            BERVMEAN=round(mean, 6),
+            BERVSTD=round(std * _KMS_TO_MS, 4),
+            BERVRNG=round(rng * _KMS_TO_MS, 4),
+        )
 
     berv_dispersion._diag_name = "berv_dispersion"

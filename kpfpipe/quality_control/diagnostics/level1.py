@@ -33,19 +33,17 @@ class DiagL1(Diagnostics):
         RECEIPT (``{PREFIX}FILE``, written by CalibrationAssociation) and the
         observation timestamp from PRIMARY (DATE-OBS). The master
         timestamp is parsed from its filename. A cal type is skipped when its
-        path is absent; the whole metric is skipped when DATE-OBS is missing.
+        path is absent. RECEIPT and PRIMARY are default L1 extensions and DATE-OBS
+        is a required PRIMARY keyword (KWRDPRL1), so all three are read directly;
+        a KeyError would signal a broken upstream invariant.
 
         Returns
         -------
         dict
             Maps each present ``{PREFIX}AGE`` keyword to its ``(age, comment)``.
         """
-        receipt = self.kpf_obj.headers.get("RECEIPT", {})
-        primary = self.kpf_obj.headers.get("PRIMARY", {})
-        date_obs = primary.get("DATE-OBS")
-        if not date_obs:
-            return {}
-        obs_dt = datetime.fromisoformat(date_obs)
+        receipt = self.kpf_obj.headers["RECEIPT"]
+        obs_dt = datetime.fromisoformat(self.kpf_obj.headers["PRIMARY"]["DATE-OBS"])
 
         results = {}
         for file_kw, age_kw in _CAL_AGE_KEYS.items():
