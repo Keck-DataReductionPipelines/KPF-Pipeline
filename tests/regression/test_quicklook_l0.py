@@ -1,5 +1,7 @@
 """Tests for L0 quicklook plots."""
 
+import os
+
 import matplotlib
 import numpy as np
 import pytest
@@ -31,6 +33,7 @@ def synthetic_4amp_l0(tmp_path):
     primary.header["OBJECT"] = "synthetic-4amp"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -58,6 +61,7 @@ def synthetic_2amp_l0(tmp_path):
     primary.header["OBJECT"] = "synthetic-2amp"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:38"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -84,6 +88,7 @@ def small_2amp_l0(tmp_path):
     primary.header["OBJECT"] = "small-2amp"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:39"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -203,6 +208,7 @@ class TestStitchedImage2To16:
 
         primary = fits.PrimaryHDU()
         primary.header["OBJECT"] = "high-value"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in range(1, 5):
@@ -324,6 +330,7 @@ class TestPlotL0Run:
 
         primary = fits.PrimaryHDU()
         primary.header["OBJECT"] = "green-only"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for amp in range(1, 5):
             data = rng.normal(1000, 3, (100, 100)).astype(np.float32)

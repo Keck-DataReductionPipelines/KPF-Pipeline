@@ -126,7 +126,7 @@ class TestKPF1:
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "L1"
 
-    def test_warns_on_unknown_extension(self, caplog, tmp_path):
+    def test_raises_on_unknown_extension(self, tmp_path):
         fn = str(tmp_path / "unknown_ext.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
@@ -136,9 +136,22 @@ class TestKPF1:
         hdul.writeto(fn, overwrite=True)
         hdul.close()
 
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(
+            ValueError, match="Non-standard extension 'WEIRD_EXTENSION'"
+        ):
             KPF1.from_fits(fn)
-        assert "Non-standard extension" in caplog.text
+
+    def test_to_fits_warns_on_nonconforming_name_but_writes(
+        self, caplog, synthetic_l1_file, tmp_path
+    ):
+        """L1 to_fits runs the same warn-only filename advisory as L0: a
+        non-conforming output name warns but the write still proceeds."""
+        l1 = KPF1.from_fits(synthetic_l1_file)
+        out = str(tmp_path / "not_kpf_convention.fits")
+        with caplog.at_level(logging.WARNING):
+            out_path = l1.to_fits(out)
+        assert "does not follow the KPF L1 naming" in caplog.text
+        assert out_path == out
 
 
 class TestL1PrimarySeed:
@@ -298,6 +311,7 @@ class TestToKpf1:
         fn = str(tmp_path / "KP.20240113.00009.00.fits")
         p = fits.PrimaryHDU()
         p.header["INSTRUME"] = "KPF"
+        p.header["OFNAME"] = "KP.20240113.00009.00.fits"
         p.header["PARANTEL"] = 108.03  # header_map maps PARANTEL -> non-standard PARANG
         fits.HDUList([p]).writeto(fn)
         l1 = KPF0.from_fits(fn).to_kpf1()
@@ -334,7 +348,7 @@ class TestToKpf1:
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         receipt = l1.headers["RECEIPT"]
         assert receipt.get("PROGID") == "K123"
-        assert receipt.get("KOAID") == "KP.20240113.23249.10"
+        assert receipt.get("KOAID") == "KP.20240113.23249.10.fits"
         assert "PROGID" not in l1.headers["PRIMARY"]
 
     def test_to_kpf1_forwards_drpstatus(self, synthetic_l0_file):

@@ -52,6 +52,7 @@ def synthetic_4amp_l0(tmp_path):
     primary.header["OBJECT"] = "synthetic-4amp"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -388,6 +389,7 @@ def synthetic_4amp_l0_with_expmeter(tmp_path):
     primary.header["OBJECT"] = "synthetic-expmeter"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:

@@ -76,8 +76,8 @@ class KPF1(KPFDataModel):
     def _read(self, hdul):
         """Read all extensions from an L1 FITS HDUList.
 
-        Handles known extensions from the CSV definition and also
-        accepts unknown extensions (with a warning).
+        Handles known extensions from the CSV definition and rejects any
+        non-standard extension by raising (matching rvdata's read contract).
         """
         for hdu in hdul:
             ext_name = hdu.name
@@ -94,8 +94,8 @@ class KPF1(KPFDataModel):
             if ext_name not in self.extensions:
                 if ext_name != "PRIMARY":
                     if ext_name not in self._known_extensions:
-                        logger.warning(
-                            "Non-standard extension '%s' found in L1 file.", ext_name
+                        raise ValueError(
+                            f"Non-standard extension {ext_name!r} in L1 file"
                         )
                     self.create_extension(ext_name, fits_type)
 
@@ -153,6 +153,8 @@ class KPF1(KPFDataModel):
             raise NameError("Filename must end with .fits")
 
         self.receipt_add_entry("to_fits", f"out_filepath={fn}", "PASS")
+        # Warn-only advisory (match rvdata); the write still proceeds.
+        self.check_filename_convention(fn)
 
         if "PRIMARY" in self.headers:
             self.set_keyword("FILENAME", os.path.basename(fn))

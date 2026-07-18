@@ -6,14 +6,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Installed package version (WMKO DRP-RUN-11); stamped onto RECEIPT as DRPVERNO
-# (the EPRV equivalent DRPTAG is the value carried on PRIMARY). Falls back to
-# "unknown" if the package metadata is unavailable (e.g. running from a source
-# tree that was never installed).
-try:
-    __version__ = importlib.metadata.version("kpfpipe")
-except importlib.metadata.PackageNotFoundError:
-    __version__ = "unknown"
+__version__ = importlib.metadata.version("kpfpipe")
 
 # By default use both CCDs and all five fibers
 DEFAULTS = {

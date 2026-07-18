@@ -372,6 +372,7 @@ class TestQCL0:
         fn = str(tmp_path / "KP.20240405.00002.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in range(1, 5):
@@ -387,6 +388,7 @@ class TestQCL0:
         fn = str(tmp_path / "KP.20240405.00003.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in (1, 2):
@@ -402,6 +404,7 @@ class TestQCL0:
         fn = str(tmp_path / "KP.20240405.00004.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in (1, 2, 3):  # 3 amps -> not a valid 2/4-amp readout
