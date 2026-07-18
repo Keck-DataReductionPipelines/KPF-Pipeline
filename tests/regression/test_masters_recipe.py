@@ -134,6 +134,23 @@ class TestMastersRecipeErrors:
         with pytest.raises(SystemExit, match="--datecode is required"):
             recipe.main(config, args)
 
+    @pytest.mark.slow
+    def test_missing_min_stack_size_key_raises(self, tmp_path):
+        """min_stack_size is a required quality gate: a [BIAS] section present but
+        lacking the key must fail loud, not silently stack with no size gate."""
+        import argparse
+
+        cfg = tmp_path / "no_min_stack.toml"
+        cfg.write_text(
+            f'[DATA_DIRS]\nKPF_DATA_INPUT = "{TESTDATA_DIR}"\n'
+            f'KPF_MASTERS_OUTPUT = "{tmp_path}"\n[BIAS]\nmax_stack_size = 20\n'
+        )
+        config = ConfigHandler(str(cfg))
+        args = argparse.Namespace(datecode="20240405", obs_id=None)
+        recipe = _load_masters_recipe()
+        with pytest.raises(KeyError, match="min_stack_size"):
+            recipe.main(config, args)
+
 
 class TestMastersSummary:
     """Unit tests for the masters_run_summary() run-verdict formatter."""

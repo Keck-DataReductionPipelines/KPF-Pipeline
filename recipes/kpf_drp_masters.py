@@ -54,7 +54,7 @@ def main(config, args):
     # offset from every science and calibration frame.
     for files in file_handler.build_calibration_stacks(
         "bias",
-        min_stack_size=config.get_params(["BIAS"]).get("min_stack_size"),
+        min_stack_size=config.get_params(["BIAS"])["min_stack_size"],
         groupby="time_of_day",
     ):
         bias_path = kpf_filepath(
@@ -70,7 +70,7 @@ def main(config, args):
     # bias from each dark frame (via _process_frame) before stacking.
     for files in file_handler.build_calibration_stacks(
         "dark",
-        min_stack_size=config.get_params(["DARK"]).get("min_stack_size"),
+        min_stack_size=config.get_params(["DARK"])["min_stack_size"],
         groupby="obs_night",
     ):
         dark_path = kpf_filepath(
@@ -92,7 +92,7 @@ def main(config, args):
     # emission-line spectrum anchors the per-order wavelength calibration.
     for files in file_handler.build_calibration_stacks(
         "thar",
-        min_stack_size=config.get_params(["WLS"]).get("min_stack_size"),
+        min_stack_size=config.get_params(["WLS"])["min_stack_size"],
         groupby="time_of_day",
     ):
         obs_id = get_obs_id(files[0])
