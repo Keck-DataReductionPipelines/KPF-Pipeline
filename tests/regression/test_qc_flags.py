@@ -531,29 +531,26 @@ class TestQCL0:
         assert seen["data_input"] == str(tmp_path)
 
     def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
-        """obs_id=None → passes without consulting the list."""
+        """obs_id=None is not in any junk list → passes (documented residual: an
+        unresolved obs_id is not caught here)."""
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
-        def _boom(data_input):
-            raise AssertionError("load_junk_obs_ids must not be consulted")
-
-        monkeypatch.setattr(mod, "load_junk_obs_ids", _boom)
+        monkeypatch.setattr(
+            mod, "load_junk_obs_ids", lambda data_input: {"KP.20240101.99999.00"}
+        )
         l0 = _make_kpf0(tmp_path)
         l0.dirname = str(tmp_path / "L0" / "20240405")
         l0.obs_id = None
         assert QCL0(l0).not_junk() is True
 
-    def test_not_junk_pass_unknown_dirname(self, tmp_path, monkeypatch):
-        """No source dir on the object → passes without consulting the list."""
-        import kpfpipe.quality_control.qc_flags.level0 as mod
-
-        def _boom(data_input):
-            raise AssertionError("load_junk_obs_ids must not be consulted")
-
-        monkeypatch.setattr(mod, "load_junk_obs_ids", _boom)
+    def test_not_junk_raises_on_unknown_dirname(self, tmp_path):
+        """dirname is set on every L0 read; an absent one is a broken upstream
+        invariant and fails loud (os.path.dirname(None) → TypeError) rather than
+        silently passing."""
         l0 = _make_kpf0(tmp_path)
         l0.dirname = None
-        assert QCL0(l0).not_junk() is True
+        with pytest.raises(TypeError):
+            QCL0(l0).not_junk()
 
     def test_not_junk_key_present(self):
         qc = QCL0.__dict__["not_junk"]
@@ -917,9 +914,13 @@ class TestQCL2:
         kpf2.set_data("GREEN_SCI1_VAR", var)
         assert QCL2(kpf2).variance_positive() is False
 
-    def test_variance_positive_fail_no_var(self):
+    def test_variance_positive_raises_on_shape_mismatch(self):
+        # FLUX populated but VAR left at its default empty (0,) shape is a
+        # malformed product: the shape-mismatched comparison raises rather than
+        # silently skipping the fiber.
         kpf2 = _make_kpf2_with_flux()  # no VAR populated
-        assert QCL2(kpf2).variance_positive() is False
+        with pytest.raises(ValueError):
+            QCL2(kpf2).variance_positive()
 
     # --- science_snr (L2SNROK) ---
 

@@ -73,7 +73,9 @@ class QCL2(QC):
 
         A negative extracted variance is unphysical (box/optimal variance is a
         sum of non-negative terms) and would corrupt downstream RV weighting.
-        Zero variance at off-detector / fully-masked columns is tolerated.
+        Zero variance at off-detector / fully-masked columns is tolerated. A VAR
+        whose shape disagrees with its FLUX is a malformed product, not a state to
+        skip: the comparison below then raises (fail loud).
         """
         saw_data = False
         for chip in _CHIPS:
@@ -84,7 +86,7 @@ class QCL2(QC):
                     continue
                 flux = np.asarray(flux)
                 var = np.asarray(var)
-                if flux.size == 0 or var.shape != flux.shape:
+                if flux.size == 0:
                     continue
                 saw_data = True
                 if np.any(np.isfinite(flux) & np.isfinite(var) & (var < 0)):
