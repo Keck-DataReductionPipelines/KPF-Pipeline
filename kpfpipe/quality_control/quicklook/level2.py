@@ -1,24 +1,21 @@
 """L2 quicklook plots for extracted KPF 1D spectra."""
 
 import logging
-import os
-from datetime import UTC, datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kpfpipe.quality_control.quicklook._save_png import save_png
+from kpfpipe.quality_control.quicklook.base import Plot
 
 logger = logging.getLogger(__name__)
 
-_DPI = 200
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 _SNR_PERCENTILE = 95
 _FLUX_PERCENTILE = 95
 
 
-class PlotL2:
+class PlotL2(Plot):
     """Quicklook plots for KPF L2 (extracted 1D spectra) data.
 
     Parameters
@@ -33,6 +30,7 @@ class PlotL2:
         ``l2_obj.obs_id`` (populated on every construction path).
     """
 
+    LEVEL = "L2"
     _PLOT_METHODS = (
         "snr_per_order",
         "peak_flux",
@@ -42,12 +40,8 @@ class PlotL2:
     )
 
     def __init__(self, l2_obj, output_dir=None, obs_id=None):
-        self.l2_obj = l2_obj
-        self.output_dir = output_dir
+        super().__init__(l2_obj, output_dir, obs_id)
         self.fibers = _FIBERS
-
-        self.obs_id = obs_id or l2_obj.obs_id
-        self.name = l2_obj.headers["PRIMARY"]["OBJECT"]
 
     # ------------------------------------------------------------------
     # Data access helpers
@@ -55,14 +49,14 @@ class PlotL2:
 
     def _flux(self, chip, fiber):
         """Return the (norder, ncol) flux array for one fiber, or None."""
-        arr = self.l2_obj.data.get(f"{chip.upper()}_{fiber.upper()}_FLUX")
+        arr = self.kpf_obj.data.get(f"{chip.upper()}_{fiber.upper()}_FLUX")
         arr = np.asarray(arr) if arr is not None else None
         if arr is None or arr.ndim != 2 or arr.size == 0:
             return None
         return arr
 
     def _var(self, chip, fiber):
-        arr = self.l2_obj.data.get(f"{chip.upper()}_{fiber.upper()}_VAR")
+        arr = self.kpf_obj.data.get(f"{chip.upper()}_{fiber.upper()}_VAR")
         arr = np.asarray(arr) if arr is not None else None
         if arr is None or arr.ndim != 2 or arr.size == 0:
             return None
@@ -70,7 +64,7 @@ class PlotL2:
 
     def _wave(self, chip, fiber):
         """Return the (norder, ncol) wavelength array, or None if not populated."""
-        arr = self.l2_obj.data.get(f"{chip.upper()}_{fiber.upper()}_WAVE")
+        arr = self.kpf_obj.data.get(f"{chip.upper()}_{fiber.upper()}_WAVE")
         arr = np.asarray(arr) if arr is not None else None
         if arr is None or arr.ndim != 2 or arr.size == 0:
             return None
@@ -99,30 +93,6 @@ class PlotL2:
         with np.errstate(divide="ignore", invalid="ignore"):
             snr = flux / np.sqrt(np.abs(var))
         return np.where(np.isfinite(snr), snr, 0.0)
-
-    # ------------------------------------------------------------------
-    # Common decoration
-    # ------------------------------------------------------------------
-
-    def _decorate_and_save(self, fig, plot_name, chip):
-        """Add the standard QLP timestamp and save if output_dir is set."""
-        current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-        fig.text(
-            0.99,
-            0.005,
-            f"KPF QLP: {current_time} UT",
-            fontsize=8,
-            color="darkgray",
-            ha="right",
-            va="bottom",
-        )
-        if self.output_dir is not None:
-            prefix = f"{self.obs_id}_" if self.obs_id else ""
-            path = os.path.join(
-                self.output_dir, f"{prefix}L2_{plot_name}_{chip.lower()}_zoomable.png"
-            )
-            save_png(fig, path, dpi=_DPI, compress_level=6)
-        return fig
 
     # ------------------------------------------------------------------
     # Plots
@@ -285,6 +255,9 @@ class PlotL2:
         for ax, fiber in zip(axes, fibers, strict=True):
             flux = self._flux(chip, fiber)
             if flux is None:
+                logger.debug(
+                    "L2 spectrum_one_row %s %s: no flux, hiding panel", chip, fiber
+                )
                 ax.set_visible(False)
                 continue
             wave = self._require_wave(chip, fiber)
@@ -339,6 +312,12 @@ class PlotL2:
         for ax, (a, b) in zip(axes, pairs, strict=True):
             fa, fb = self._flux(chip, a), self._flux(chip, b)
             if fa is None or fb is None:
+                logger.debug(
+                    "L2 orderlet_flux_ratios %s %s/%s: no flux, hiding panel",
+                    chip,
+                    a,
+                    b,
+                )
                 ax.set_visible(False)
                 continue
             with np.errstate(divide="ignore", invalid="ignore"):
@@ -365,53 +344,3 @@ class PlotL2:
         )
         axes[-1].set_xlabel(xlabel, fontsize=14)
         return self._decorate_and_save(fig, "orderlet_flux_ratios", chip)
-
-    # ------------------------------------------------------------------
-    # Driver
-    # ------------------------------------------------------------------
-
-    def run(self, which):
-        """Generate the requested plot(s) for every chip that has data.
-
-        Follows the shared Quicklook ``run()`` contract:
-        saved-and-closed when ``output_dir`` is set, returned open when it
-        is ``None``.
-
-        Parameters
-        ----------
-        which : str
-            'all' to run every implemented plot, or the name of a single
-            plot method (one of ``self._PLOT_METHODS``).
-
-        Returns
-        -------
-        dict
-            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
-            for tests and introspection.
-        """
-        if which == "all":
-            names = self._PLOT_METHODS
-        elif which in self._PLOT_METHODS:
-            names = (which,)
-        else:
-            raise ValueError(
-                f"unknown plot {which!r}; expected 'all' or one of {self._PLOT_METHODS}"
-            )
-
-        if self.output_dir is not None:
-            os.makedirs(self.output_dir, exist_ok=True)
-
-        figures = {}
-        for chip in ("green", "red"):
-            if not self._has_chip(chip):
-                logger.debug("L2 quicklook: no data for %s CCD, skipping", chip)
-                continue
-            for name in names:
-                fig = getattr(self, name)(chip)
-                if fig is None:
-                    continue
-                figures[f"{name}_{chip}"] = fig
-                # Close only saved figures (Quicklook run() contract).
-                if self.output_dir is not None:
-                    plt.close(fig)
-        return figures

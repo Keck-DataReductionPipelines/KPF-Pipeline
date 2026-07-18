@@ -1,20 +1,17 @@
 """L0 quicklook plots for raw KPF detector images."""
 
-import logging
 import os
 from copy import deepcopy
-from datetime import UTC, datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.quality_control.quicklook._save_png import save_image_png, save_png
+from kpfpipe.quality_control.quicklook.base import Plot
 
-logger = logging.getLogger(__name__)
 
-
-class PlotL0:
+class PlotL0(Plot):
     """Quicklook plots for KPF L0 (raw CCD) data.
 
     Takes a KPF0 object and generates plots of the raw detector images.
@@ -33,20 +30,18 @@ class PlotL0:
         figure PNGs. Full-resolution files can be tens of MB per chip.
     """
 
+    LEVEL = "L0"
     _PLOT_METHODS = ("stitched_image",)
 
     def __init__(self, l0_obj, output_dir=None, full_res=False):
-        self.l0_obj = l0_obj
-        self.output_dir = output_dir
+        super().__init__(l0_obj, output_dir)
         self.full_res = full_res
-        self.obs_id = l0_obj.obs_id
-        self.name = l0_obj.headers["PRIMARY"]["OBJECT"]
 
     def _has_chip(self, chip):
         """Return True if any AMP extension for the chip holds data."""
         for i in range(1, 5):
             ext = f"{chip.upper()}_AMP{i}"
-            arr = self.l0_obj.data.get(ext)
+            arr = self.kpf_obj.data.get(ext)
             if arr is not None and np.size(arr) > 0:
                 return True
         return False
@@ -61,18 +56,18 @@ class PlotL0:
         chip = chip.upper()
 
         # Count amplifiers via ImageAssembly (non-destructive).
-        ia = ImageAssembly(self.l0_obj)
+        ia = ImageAssembly(self.kpf_obj)
         ia.count_amplifiers(chip)
         namp = ia.namp[chip]
 
         if namp == 2:
             image = np.concatenate(
-                (self.l0_obj.data[f"{chip}_AMP1"], self.l0_obj.data[f"{chip}_AMP2"]),
+                (self.kpf_obj.data[f"{chip}_AMP1"], self.kpf_obj.data[f"{chip}_AMP2"]),
                 axis=1,
             )
         elif namp == 4:
             # orient_channels mutates l0.data, so operate on a copy.
-            l0_copy = deepcopy(self.l0_obj)
+            l0_copy = deepcopy(self.kpf_obj)
             ia = ImageAssembly(l0_copy)
             ia.count_amplifiers(chip)
             ia.orient_channels(chip)
@@ -156,8 +151,7 @@ class PlotL0:
         cbar.ax.tick_params(labelsize=12)
         plt.grid(False)
 
-        current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-        timestamp_label = f"KPF QLP: {current_time} UT"
+        timestamp_label = f"KPF QLP: {self._timestamp()} UT"
         plt.annotate(
             timestamp_label,
             xy=(1, 0),
@@ -193,58 +187,3 @@ class PlotL0:
                 save_png(fig, fig_path, dpi=150, compress_level=1)
 
         return fig
-
-    def run(self, which, *, full_res=None):
-        """Generate the requested plot(s) for every chip that has data.
-
-        Follows the shared Quicklook ``run()`` contract:
-        saved-and-closed when ``output_dir`` is set, returned open when it
-        is ``None``.
-
-        Parameters
-        ----------
-        which : str
-            'all' to run every implemented plot, or the name of a single
-            plot method (one of ``self._PLOT_METHODS``).
-        full_res : bool or None
-            Save native-size PNGs when true. None uses the constructor's
-            ``full_res`` setting.
-
-        Returns
-        -------
-        dict
-            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
-            for tests and introspection.
-
-        Raises
-        ------
-        ValueError
-            If ``which`` is neither 'all' nor a known plot method name.
-        """
-        if which == "all":
-            names = self._PLOT_METHODS
-        elif which in self._PLOT_METHODS:
-            names = (which,)
-        else:
-            raise ValueError(
-                f"unknown plot {which!r}; expected 'all' or one of {self._PLOT_METHODS}"
-            )
-
-        if self.output_dir is not None:
-            os.makedirs(self.output_dir, exist_ok=True)
-
-        figures = {}
-        if full_res is None:
-            full_res = self.full_res
-        for chip in ["green", "red"]:
-            if not self._has_chip(chip):
-                logger.debug("L0 quicklook: no data for %s CCD, skipping", chip)
-                continue
-            for name in names:
-                fig = getattr(self, name)(chip, full_res=full_res)
-                figures[f"{name}_{chip}"] = fig
-                # Closing frees memory in save-to-disk mode; when returning
-                # figures for interactive display, leave them open.
-                if self.output_dir is not None:
-                    plt.close(fig)
-        return figures
