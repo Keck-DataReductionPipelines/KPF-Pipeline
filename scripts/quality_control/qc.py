@@ -62,7 +62,7 @@ def main():
     elif args.obs_id and args.config:
         config = ConfigHandler(args.config)
         params = config.get_params(["DATA_DIRS"])
-        data_root = params.get("KPF_DATA_INPUT", "/data/kpf/")
+        data_root = params["KPF_DATA_INPUT"]
         input_file = kpf_filepath(args.obs_id, args.level, data_root=data_root)
     else:
         parser.error("Provide either --input or both --obs_id and --config")
@@ -112,9 +112,10 @@ def main():
 
     print()
 
-    # ISGOOD is routed to the QUALITY_CONTROL header (its registry home) by QC.run.
-    isgood_raw = data.headers.get("QUALITY_CONTROL", {}).get("ISGOOD", (0,))
-    isgood_val = isgood_raw[0] if isinstance(isgood_raw, tuple) else isgood_raw
+    # ISGOOD is routed to the QUALITY_CONTROL header (its registry home) by QC.run;
+    # once checkpoint.run() has folded in QC the flag is always present, so read it
+    # directly -- a missing one is a broken invariant, not a default-to-FAIL case.
+    isgood_val = data.headers["QUALITY_CONTROL"]["ISGOOD"]
     isgood_label = "PASS" if isgood_val else "FAIL"
     print(f"ISGOOD: {isgood_label}  ({pass_count} of {total} checks passed)")
 

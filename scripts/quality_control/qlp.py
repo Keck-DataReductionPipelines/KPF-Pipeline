@@ -44,7 +44,7 @@ def main():
     elif args.obs_id and args.config:
         config = ConfigHandler(args.config)
         params = config.get_params(["DATA_DIRS"])
-        data_root = params.get("KPF_DATA_INPUT", "/data/kpf/")
+        data_root = params["KPF_DATA_INPUT"]
         input_file = kpf_filepath(args.obs_id, args.level, data_root=data_root)
     else:
         parser.error("Provide either --input or both --obs_id and --config")
@@ -72,7 +72,7 @@ def main():
             )
         config = ConfigHandler(args.config)
         params = config.get_params(["DATA_DIRS"])
-        data_root = params.get("KPF_DATA_OUTPUT", "/data/kpf-next/")
+        data_root = params["KPF_SCIENCE_OUTPUT"]
         output_dir = kpf_directory(
             kind="QLP", data_root=data_root, level=args.level, obs_id=obs_id
         )
@@ -87,9 +87,7 @@ def main():
         qlp = PlotL0(data, output_dir=output_dir)
     else:
         qlp = PlotL1(data, output_dir=output_dir)
-    figs = qlp.all()
-    for _, fig in figs.items():
-        fig.clear()
+    qlp.run("all")
     print(f"Plots saved to {output_dir}")
 
 
