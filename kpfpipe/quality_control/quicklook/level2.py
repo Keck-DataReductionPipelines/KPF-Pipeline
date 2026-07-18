@@ -1,13 +1,9 @@
 """L2 quicklook plots for extracted KPF 1D spectra."""
 
-import logging
-
 import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.quality_control.quicklook.base import Plot
-
-logger = logging.getLogger(__name__)
 
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
@@ -255,9 +251,6 @@ class PlotL2(Plot):
         for ax, fiber in zip(axes, fibers, strict=True):
             flux = self._flux(chip, fiber)
             if flux is None:
-                logger.debug(
-                    "L2 spectrum_one_row %s %s: no flux, hiding panel", chip, fiber
-                )
                 ax.set_visible(False)
                 continue
             wave = self._require_wave(chip, fiber)
@@ -312,12 +305,6 @@ class PlotL2(Plot):
         for ax, (a, b) in zip(axes, pairs, strict=True):
             fa, fb = self._flux(chip, a), self._flux(chip, b)
             if fa is None or fb is None:
-                logger.debug(
-                    "L2 orderlet_flux_ratios %s %s/%s: no flux, hiding panel",
-                    chip,
-                    a,
-                    b,
-                )
                 ax.set_visible(False)
                 continue
             with np.errstate(divide="ignore", invalid="ignore"):

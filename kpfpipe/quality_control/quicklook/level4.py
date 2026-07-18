@@ -1,13 +1,9 @@
 """L4 quicklook plots for KPF cross-correlation functions (CCFs) and RVs."""
 
-import logging
-
 import matplotlib.pyplot as plt
 import numpy as np
 
 from kpfpipe.quality_control.quicklook.base import Plot
-
-logger = logging.getLogger(__name__)
 
 # Orderlet panels, left-to-right, in the canonical KPF order.
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]
@@ -97,14 +93,10 @@ class PlotL4(Plot):
         key = f"CCD{n}RV{_RV_SFX[fiber.upper()]}"
         val = self._ext_header(fiber, "RV").get(key)
         if val is None:
-            logger.debug("no combined RV for %s %s (%s absent)", chip, fiber, key)
             return None
         try:
             return float(val)
         except (TypeError, ValueError):
-            logger.debug(
-                "non-numeric combined RV %r for %s %s (%s)", val, chip, fiber, key
-            )
             return None
 
     def _has_chip(self, chip):
@@ -178,9 +170,6 @@ class PlotL4(Plot):
 
         ccf = self._ccf(chip, fiber)
         if ccf is None:
-            logger.debug(
-                "L4 CCF panel %s %s: not illuminated (no CCF data)", chip, fiber
-            )
             ax.set_xlim(vref[0], vref[-1])
             ax.text(
                 0.5 * (vref[0] + vref[-1]),
