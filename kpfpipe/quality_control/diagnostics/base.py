@@ -42,7 +42,9 @@ class Diagnostics:
         """Run all diagnostic methods, writing each result via set_keyword.
 
         Resets ``self.results`` at the start so calling ``run()`` repeatedly
-        is deterministic.
+        is deterministic. A method that raises is logged at ERROR (naming it) and
+        its exception propagates unchanged -- fail-fast; halting past here is the
+        checkpoint layer's role, but this stage records rather than swallows.
 
         Returns
         -------
@@ -54,17 +56,17 @@ class Diagnostics:
         for name, fn in self._iter_methods():
             try:
                 output = fn()
+                if not output:
+                    continue
+                for kw, (value, comment) in output.items():
+                    self.results[kw] = (value, comment)
+                    # set_keyword routes each metric to its registry home; the FITS
+                    # comment is the registry Description (the metric-dict comment is
+                    # retained in self.results only).
+                    self.kpf_obj.set_keyword(kw, value)
             except Exception as e:
-                raise RuntimeError(f"Diagnostic {name!r} raised: {e}") from e
-
-            if not output:
-                continue
-            for kw, (value, comment) in output.items():
-                self.results[kw] = (value, comment)
-                # set_keyword routes each metric to its registry home; the FITS
-                # comment is the registry Description (the metric-dict comment is
-                # retained in self.results only).
-                self.kpf_obj.set_keyword(kw, value)
+                logger.error("%s diagnostic %r raised: %s", self.LEVEL, name, e)
+                raise
 
         for kw, (value, comment) in self.results.items():
             logger.debug("%s %s = %s — %s", self.LEVEL, kw, value, comment)

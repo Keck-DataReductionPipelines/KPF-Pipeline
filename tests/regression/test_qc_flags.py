@@ -275,17 +275,23 @@ class TestQCBase:
         assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHKFAIL"] == 0
 
-    def test_raising_check_propagates_runtime_error(self):
+    def test_raising_check_propagates_and_logs(self, caplog):
         obj = self._make_obj()
 
         class MyQC(QC):
+            LEVEL = "L0"
+
             def check_boom(self):
                 raise ValueError("boom!")
 
             check_boom._qc_key = "BOOM"
 
-        with pytest.raises(RuntimeError, match="QC check 'check_boom' raised"):
-            MyQC(obj).run()
+        # Fail-fast: the original exception propagates unchanged (no RuntimeError
+        # wrap), and run() logs the offending check at ERROR.
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(ValueError, match="boom!"):
+                MyQC(obj).run()
+        assert "QC check 'check_boom' raised" in caplog.text
 
     def test_empty_subclass_isgood_1(self):
         obj = self._make_obj()

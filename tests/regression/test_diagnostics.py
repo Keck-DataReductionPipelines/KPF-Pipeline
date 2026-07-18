@@ -88,17 +88,23 @@ class TestDiagnosticsBase:
         assert results == {}
         assert obj.headers["PRIMARY"] == {}
 
-    def test_raising_method_propagates_runtime_error(self):
+    def test_raising_method_propagates_and_logs(self, caplog):
         obj = self._make_obj()
 
         class MyDiag(Diagnostics):
+            LEVEL = "L0"
+
             def boom(self):
                 raise ValueError("boom!")
 
             boom._diag_name = "boom"
 
-        with pytest.raises(RuntimeError, match="Diagnostic 'boom' raised"):
-            MyDiag(obj).run()
+        # Fail-fast: the original exception propagates unchanged (no RuntimeError
+        # wrap), and run() logs the offending method at ERROR.
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(ValueError, match="boom!"):
+                MyDiag(obj).run()
+        assert "diagnostic 'boom' raised" in caplog.text
 
     def test_repeated_run_resets_results(self):
         obj = self._make_obj()
@@ -396,16 +402,19 @@ class TestDiagL1CalibrationAges:
         assert set(results) == {"BIASAGE"}
         assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
 
-    def test_no_date_obs_raises(self):
-        # DATE-OBS is guaranteed by the L1 checkpoint's KWRDPRL1 raise gate;
-        # if it is missing anyway, calibration_ages fails loud (a broken
-        # upstream invariant), surfaced through Diagnostics.run() as RuntimeError.
+    def test_no_date_obs_raises(self, caplog):
+        # DATE-OBS is guaranteed by the L1 checkpoint's KWRDPRL1 raise gate; if it
+        # is missing anyway, calibration_ages fails loud (a broken upstream
+        # invariant). run() logs the offending method and lets the original
+        # KeyError propagate unchanged (fail-fast).
         l1 = _make_kpf1_with_calibrations(
             files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
         )
         del l1.headers["PRIMARY"]["DATE-OBS"]
-        with pytest.raises(RuntimeError, match="DATE-OBS"):
-            DiagL1(l1).run()
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(KeyError, match="DATE-OBS"):
+                DiagL1(l1).run()
+        assert "diagnostic 'calibration_ages' raised" in caplog.text
 
 
 # ---------------------------------------------------------------------------

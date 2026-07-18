@@ -91,7 +91,9 @@ class Plot:
 
         Saved-and-closed when ``output_dir`` is set, returned open when it is
         None. ``plot_kwargs`` forward to each plot method (e.g. ``full_res`` for
-        the L0/L1 image plots).
+        the L0/L1 image plots). A plot method that raises is logged at ERROR
+        (naming the plot and chip) and its exception propagates unchanged --
+        fail-fast; this stage records rather than swallows.
 
         Parameters
         ----------
@@ -120,11 +122,17 @@ class Plot:
                 )
                 continue
             for name in names:
-                fig = getattr(self, name)(chip, **plot_kwargs)
-                if fig is None:
-                    continue
-                figures[f"{name}_{chip}"] = fig
-                # Close only saved figures (open ones are returned for display).
-                if self.output_dir is not None:
-                    plt.close(fig)
+                try:
+                    fig = getattr(self, name)(chip, **plot_kwargs)
+                    if fig is None:
+                        continue
+                    figures[f"{name}_{chip}"] = fig
+                    # Close only saved figures (open ones are returned for display).
+                    if self.output_dir is not None:
+                        plt.close(fig)
+                except Exception as e:
+                    logger.error(
+                        "%s plot %r on %s raised: %s", self.LEVEL, name, chip, e
+                    )
+                    raise
         return figures

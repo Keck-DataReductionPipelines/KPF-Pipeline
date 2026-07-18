@@ -43,7 +43,10 @@ class QC:
         Each result is logged as it is written -- ``DEBUG`` on a pass, ``WARNING``
         on a fail -- both carrying the keyword's comment so the 8-char keyword
         reads clearly. Resets ``self.results`` at the start so calling ``run()``
-        repeatedly on the same instance is deterministic.
+        repeatedly on the same instance is deterministic. A check that raises is
+        logged at ERROR (naming it) and its exception propagates unchanged --
+        fail-fast; halting past here is the checkpoint layer's role, but this
+        stage records rather than swallows.
 
         Returns
         -------
@@ -56,23 +59,23 @@ class QC:
         for name, fn in self._iter_checks():
             try:
                 passed = fn()
+                kw = fn._qc_key
+                # Mirror the registry Description into results (the FITS comment
+                # source; see ``_tag``). The _qc_key must be registered.
+                comment = self.kpf_obj.keyword_registry.routing[kw][1]
+                self.results[kw] = (passed, comment)
+                self.kpf_obj.set_keyword(kw, 1 if passed else 0)
+                logger.log(
+                    logging.DEBUG if passed else logging.WARNING,
+                    "%s %s = %s — %s",
+                    self.LEVEL,
+                    kw,
+                    1 if passed else 0,
+                    comment,
+                )
             except Exception as e:
-                raise RuntimeError(f"QC check {name!r} raised: {e}") from e
-
-            kw = fn._qc_key
-            # Mirror the registry Description into results (the FITS comment
-            # source; see ``_tag``). The _qc_key must be registered.
-            comment = self.kpf_obj.keyword_registry.routing[kw][1]
-            self.results[kw] = (passed, comment)
-            self.kpf_obj.set_keyword(kw, 1 if passed else 0)
-            logger.log(
-                logging.DEBUG if passed else logging.WARNING,
-                "%s %s = %s — %s",
-                self.LEVEL,
-                kw,
-                1 if passed else 0,
-                comment,
-            )
+                logger.error("%s QC check %r raised: %s", self.LEVEL, name, e)
+                raise
 
         # ISGOOD is the running aggregate: AND over every QC flag now on
         # QUALITY_CONTROL -- the flags this level just wrote PLUS those propagated
