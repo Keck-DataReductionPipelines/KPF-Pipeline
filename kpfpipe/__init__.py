@@ -6,7 +6,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-__version__ = importlib.metadata.version("kpfpipe")
+try:
+    __version__ = importlib.metadata.version("kpfpipe")
+except importlib.metadata.PackageNotFoundError as e:
+    raise RuntimeError(
+        "kpfpipe package metadata not found -- this can occur if the repository "
+        "was cloned but not installed. Install it into the kpfpipe conda env "
+        "before importing: `pip install -e KPF-Pipeline/`."
+    ) from e
 
 # By default use both CCDs and all five fibers
 DEFAULTS = {
