@@ -73,21 +73,30 @@ class AstroQuery:
     Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT)
     plus a verbatim snapshot of the DCS/TCS ``TARG*`` astrometry, and deposits all
     three on ``l0_obj.catalog_query`` for downstream use (EPRV ``C*#`` catalog
-    keywords, DiagL0 pointing offsets, BarycentricCorrection). Fail-soft: a frame
-    with no GAIAID/OBJECT (e.g. a calibration) or a failed network lookup yields a
+    keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science frames
+    are supported: the constructor raises on a non-``Object`` IMTYPE (a calibration).
+    Fail-soft otherwise: a missing GAIAID/OBJECT or a failed network lookup yields a
     ``None`` record rather than an error.
 
     Parameters
     ----------
     l0_obj : KPF0
-        Raw L0 frame. Its PRIMARY header (GAIAID, OBJECT, TARG*) is read but never
-        modified; the resolved catalog data is attached as ``l0_obj.catalog_query``.
+        Raw L0 science frame (IMTYPE ``Object``). Its PRIMARY header (IMTYPE, GAIAID,
+        OBJECT, TARG*) is read but never modified; the resolved catalog data is
+        attached as ``l0_obj.catalog_query``.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: use_gaia, use_simbad.
     """
 
     def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
+
+        imtype = l0_obj.headers["PRIMARY"].get("IMTYPE")
+        if str(imtype).strip().lower() != "object":
+            raise ValueError(
+                f"AstroQuery runs only on science frames (IMTYPE 'Object'); got "
+                f"IMTYPE={imtype!r}. It must not be called on a calibration frame."
+            )
 
         if config is None:
             params = {}
