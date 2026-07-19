@@ -206,6 +206,47 @@ class TestDiagL0Offsets:
         assert results["TARGOFF"][0] < 0.1
 
 
+class TestDiagL0Contingency:
+    """Unavailable astrometry -> present-but-empty offset + WARNING, no crash."""
+
+    _KEYS = ("GAIAOFF", "TARGOFF", "OBJOFF")
+
+    def test_no_catalog_query_all_empty(self, caplog):
+        # AstroQuery not run: no catalog_query attribute at all.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["RA"] = _PT_RA
+        l0.headers["PRIMARY"]["DEC"] = _PT_DEC
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
+        with caplog.at_level(logging.WARNING):
+            DiagL0(l0).run()
+        qc = l0.headers["QUALITY_CONTROL"]
+        # All three present (registered) but valueless (read back as None).
+        for key in self._KEYS:
+            assert key in qc and qc[key] is None
+        assert caplog.text.count("no catalog_query on L0") == 3
+
+    def test_source_none_emits_empty_for_that_source(self, caplog):
+        # Gaia lookup disabled/failed -> GAIAOFF empty; wmko/simbad still compute.
+        l0 = _make_l0_with_catalog()
+        l0.catalog_query["gaia"] = None
+        with caplog.at_level(logging.WARNING):
+            results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] is None
+        assert results["TARGOFF"][0] < 0.1
+        assert results["OBJOFF"][0] < 0.1
+        assert "no gaia astrometry in catalog_query" in caplog.text
+
+    def test_incomplete_record_emits_empty(self, caplog):
+        # A record present but missing a field the offset needs (e.g. parallax).
+        l0 = _make_l0_with_catalog()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        l0.catalog_query["wmko"] = _record_at(pt, parallax=None)
+        with caplog.at_level(logging.WARNING):
+            results = DiagL0(l0).run()
+        assert results["TARGOFF"][0] is None
+        assert "incomplete wmko record" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # DiagL1 -- master calibration ages
 # ---------------------------------------------------------------------------

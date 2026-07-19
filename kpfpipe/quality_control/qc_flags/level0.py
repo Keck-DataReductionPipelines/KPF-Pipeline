@@ -138,14 +138,17 @@ class QCL0(QC):
     def radec_consistent(self):
         """Pointing agrees with the target and catalog positions.
 
-        Thresholds the DiagL0 offsets on QUALITY_CONTROL: TARGOFF < 1", and the
-        catalog cross-matches OBJOFF/GAIAOFF < 5" (a loose bound, since the loaded
-        pointing coordinates are not Gaia/SIMBAD-derived). Each offset is checked
-        only when present, so a frame with no pointing (e.g. a calibration frame)
-        or a skipped catalog lookup passes.
+        TARGOFF (pointing vs the DCS target) is internal telescope-pointing
+        consistency and is required: an empty value (astrometry unavailable) or
+        one >= 1" fails. OBJOFF/GAIAOFF are external catalog cross-matches with a
+        looser 5" bound, checked only when present-and-valued, so a disabled or
+        failed Gaia/SIMBAD lookup passes.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        for key, limit in (("TARGOFF", 1.0), ("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
+        targoff = self._hdr_float(hdr, "TARGOFF")
+        if targoff is None or targoff >= 1.0:
+            return False
+        for key, limit in (("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
             val = self._hdr_float(hdr, key)
             if val is not None and val >= limit:
                 return False

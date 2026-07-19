@@ -35,6 +35,7 @@ def _write_l0_fixture(path, *, passing=True):
     """
     primary = fits.PrimaryHDU()
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+    primary.header["MJD-OBS"] = 60405.04
     # Requested EXPTIME within tolerance of the elapsed time (_GOOD_DATES
     # ELAPSED = 12.07) so EXPTIMOK's ELAPSED-consistency check passes.
     primary.header["EXPTIME"] = 12.0 if passing else -1.0
@@ -43,6 +44,20 @@ def _write_l0_fixture(path, *, passing=True):
     primary.header["IMTYPE"] = "Object"
     for k, v in _GOOD_DATES.items():
         primary.header[k] = v
+
+    # Pointing + DCS target (identical -> TARGOFF ~ 0) so AstroQuery resolves the
+    # wmko record and DiagL0's required TARGOFF is available offline; the external
+    # Gaia/SIMBAD lookups are disabled via config (see _write_astro_config).
+    primary.header["RA"] = "12:00:00.00"
+    primary.header["DEC"] = "+40:00:00.0"
+    primary.header["TARGRA"] = "12:00:00.00"
+    primary.header["TARGDEC"] = "+40:00:00.0"
+    primary.header["TARGFRAM"] = "FK5"
+    primary.header["TARGEQUI"] = 2000.0
+    primary.header["TARGPMRA"] = 0.0
+    primary.header["TARGPMDC"] = 0.0
+    primary.header["TARGPLAX"] = 100.0
+    primary.header["TARGEPOC"] = 2000.0
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -58,6 +73,19 @@ def _write_config(path, data_dirs):
     lines = ["[DATA_DIRS]"]
     lines += [f'{key} = "{value}"' for key, value in data_dirs.items()]
     path.write_text("\n".join(lines) + "\n")
+
+
+def _write_astro_config(path):
+    """A minimal config that disables AstroQuery's network lookups.
+
+    qc.py runs AstroQuery for L0; disabling Gaia/SIMBAD keeps these smoke tests
+    offline while the header-native wmko record still yields TARGOFF. get_params
+    requires the three sections to exist (empty is fine)."""
+    path.write_text(
+        "[DATA_DIRS]\n[TRACES]\n"
+        "[MODULE_ASTRO_QUERY]\nuse_gaia = false\nuse_simbad = false\n"
+    )
+    return path
 
 
 def _run_qc_script(fixture_path, level="L0", extra_args=None):
@@ -83,8 +111,9 @@ class TestQCScript:
         """All-good L0 → exit code 0, stdout contains 'ISGOOD: PASS'."""
         fixture = tmp_path / "KP.20240405.00001.00.fits"
         _write_l0_fixture(str(fixture), passing=True)
+        cfg = _write_astro_config(tmp_path / "astro.toml")
 
-        result = _run_qc_script(fixture, level="L0")
+        result = _run_qc_script(fixture, level="L0", extra_args=["--config", str(cfg)])
 
         assert result.returncode == 0, (
             f"Expected exit 0, got {result.returncode}\n"
@@ -98,8 +127,9 @@ class TestQCScript:
         """L0 with negative EXPTIME → exit code 1, stdout contains 'ISGOOD: FAIL'."""
         fixture = tmp_path / "KP.20240405.00002.00.fits"
         _write_l0_fixture(str(fixture), passing=False)
+        cfg = _write_astro_config(tmp_path / "astro.toml")
 
-        result = _run_qc_script(fixture, level="L0")
+        result = _run_qc_script(fixture, level="L0", extra_args=["--config", str(cfg)])
 
         assert result.returncode == 1, (
             f"Expected exit 1, got {result.returncode}\n"

@@ -28,9 +28,16 @@ class QC:
 
     @staticmethod
     def _hdr_float(hdr, key):
-        """Return float value for a header key, or None if absent."""
-        val = hdr.get(key)
-        return None if val is None else float(val)
+        """Return float value for a header key, or None if absent/empty/non-numeric.
+
+        A present-but-empty (valueless) card and an absent key both read back as
+        None (which ``float`` rejects); a stray non-numeric value is caught too, so
+        a check reading the key degrades gracefully rather than raising.
+        """
+        try:
+            return float(hdr.get(key))
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _hdr_bool(hdr, key):

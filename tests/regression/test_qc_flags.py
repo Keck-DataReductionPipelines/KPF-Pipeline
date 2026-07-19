@@ -580,12 +580,23 @@ class TestQCL0:
 
     def test_radec_objoff_fail(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
+        l0.set_keyword("TARGOFF", 0.02)  # internal pointing OK
         l0.set_keyword("OBJOFF", 6.0)  # > 5" pointing-vs-OBJECT
         assert QCL0(l0).radec_consistent() is False
 
-    def test_radec_absent_offsets_pass(self, tmp_path):
-        # A calibration-like frame writes no offsets -> nothing to check -> pass.
+    def test_radec_targoff_required_empty_fails(self, tmp_path):
+        # TARGOFF is internal pointing consistency: absent or present-but-empty fails.
         l0 = _make_kpf0(tmp_path)
+        assert QCL0(l0).radec_consistent() is False
+        l0.set_keyword("TARGOFF", None)  # present-but-empty (astrometry unavailable)
+        assert QCL0(l0).radec_consistent() is False
+
+    def test_radec_external_offsets_optional(self, tmp_path):
+        # TARGOFF within budget; GAIAOFF/OBJOFF unavailable (empty) -> still pass.
+        l0 = _make_kpf0(tmp_path)
+        l0.set_keyword("TARGOFF", 0.02)
+        l0.set_keyword("GAIAOFF", None)
+        l0.set_keyword("OBJOFF", None)
         assert QCL0(l0).radec_consistent() is True
 
     def test_radecok_key_present(self):

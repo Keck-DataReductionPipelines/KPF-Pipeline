@@ -20,6 +20,7 @@ import sys
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
+from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.quality_control.checkpoints import CheckpointL0, CheckpointL1, CheckpointL2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_filepath
@@ -82,6 +83,17 @@ def main():
         sys.exit(2)
 
     obs_id = args.obs_id or getattr(data, "obs_id", None) or "unknown"
+
+    # AstroQuery resolves target astrometry onto data.catalog_query, which the L0
+    # pointing-offset diagnostics consume; run it before the checkpoint. Only L0
+    # needs it, and AstroQuery requires a science (IMTYPE 'Object') frame.
+    if args.level == "L0":
+        try:
+            astro_config = ConfigHandler(args.config) if args.config else None
+            AstroQuery(data, astro_config).perform()
+        except Exception as exc:
+            print(f"Error: AstroQuery failed: {exc}", file=sys.stderr)
+            sys.exit(2)
 
     # ------------------------------------------------------------------ #
     # Run QC (via the Checkpoint stage, which folds in Diagnostics + QC and
