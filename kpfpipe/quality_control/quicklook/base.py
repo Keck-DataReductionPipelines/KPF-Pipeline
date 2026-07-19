@@ -4,8 +4,7 @@ The quicklook layer renders per-level PNG plots of finished data products for
 near-real-time observing feedback (WMKO DRP-RUN-01). Each ``PlotL{n}`` subclass
 implements the plot methods named in its ``_PLOT_METHODS`` tuple plus a
 ``_has_chip`` presence test; the shared ``run()`` dispatches the requested
-plot(s) across the GREEN/RED CCDs, saving-and-closing when ``output_dir`` is set
-and returning the open figures otherwise.
+plot(s) across the GREEN/RED CCDs.
 
 Unlike the Diagnostics -> QC -> Checkpoints stages, quicklook is pure
 visualization: it never writes to product headers or science extensions.

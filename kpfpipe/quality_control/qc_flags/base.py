@@ -44,9 +44,8 @@ class QC:
         on a fail -- both carrying the keyword's comment so the 8-char keyword
         reads clearly. Resets ``self.results`` at the start so calling ``run()``
         repeatedly on the same instance is deterministic. A check that raises is
-        logged at ERROR (naming it) and its exception propagates unchanged --
-        fail-fast; halting past here is the checkpoint layer's role, but this
-        stage records rather than swallows.
+        logged at ERROR (naming it) and re-raised unchanged -- fail-fast; halting
+        is the checkpoint layer's role.
 
         Returns
         -------

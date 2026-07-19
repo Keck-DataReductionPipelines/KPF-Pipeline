@@ -100,10 +100,9 @@ class Checkpoint:
         bare keyword -- each was already logged with its comment by the QC stage
         as the flag was written, so the names alone suffice here. A flag absent
         from the header is skipped (its check did not run). QUALITY_CONTROL is a
-        default extension written by the folded QC stage, so an absent one is a
-        broken invariant and raises (via direct access) rather than passing.
-        ``LEVEL`` is a fixed subclass constant (L0/L1/L2/L4); an unrecognized one
-        likewise raises (via direct lookup) rather than skipping every fatal check.
+        default extension and ``LEVEL`` a fixed subclass constant (L0/L1/L2/L4),
+        so a missing one is a broken invariant that raises (direct access) rather
+        than passing.
         """
         header = self.kpf_obj.headers["QUALITY_CONTROL"]
         reg = self.kpf_obj.keyword_registry

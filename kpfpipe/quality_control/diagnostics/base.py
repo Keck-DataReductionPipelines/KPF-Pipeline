@@ -43,8 +43,7 @@ class Diagnostics:
 
         Resets ``self.results`` at the start so calling ``run()`` repeatedly
         is deterministic. A method that raises is logged at ERROR (naming it) and
-        its exception propagates unchanged -- fail-fast; halting past here is the
-        checkpoint layer's role, but this stage records rather than swallows.
+        re-raised unchanged -- fail-fast; halting is the checkpoint layer's role.
 
         Returns
         -------

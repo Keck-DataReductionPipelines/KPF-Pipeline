@@ -41,7 +41,7 @@ def _write_l0_fixture(path, *, passing=True):
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = os.path.basename(path)
     primary.header["IMTYPE"] = "Object"
-    for k, v in _GOOD_DATES.items():  # self-consistent raw times so DATTIMOK passes
+    for k, v in _GOOD_DATES.items():
         primary.header[k] = v
 
     hdus = [primary]

@@ -28,12 +28,7 @@ class DiagL2(Diagnostics):
     def nan_counts(self):
         """Count NaN pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, summed across chips.
 
-        All five keys are emitted unconditionally: ``QCL2.flux_finite_fraction``
-        (L2NANOK) sums all five and fails if any is missing. A fiber with no
-        extracted data reports 0 -- but the pipeline always extracts all five
-        fibers, and ``QCL2.extraction_present`` (DATAPRL2, a fatal checkpoint
-        flag) already rejects any L2 with an empty fiber, so that 0 is never
-        reached in a passing product.
+        Always emits all five keys; fibers with no extracted data report 0.
 
         Returns
         -------
@@ -109,9 +104,8 @@ class DiagL2(Diagnostics):
 
         A compact RV-stability indicator: per order take the 95th-percentile
         of flux/sqrt(|var|), then the median across orders. Summed SCI uses
-        SCI1+SCI2+SCI3 flux and variance. A (chip, fiber) with absent/empty data
-        is skipped; since all five fibers are always extracted and DATAPRL2 fails
-        any L2 with an empty fiber, this skip never fires in a passing product.
+        SCI1+SCI2+SCI3 flux and variance. Skipped per (chip, fiber) when that
+        data is absent.
         """
         out = {}
         for chip, p in _CHIP_PREFIX.items():
@@ -133,9 +127,7 @@ class DiagL2(Diagnostics):
 
         Ratio is the per-order median flux of fiber A over fiber B, then the
         median across orders. All fibers share the order/pixel grid, so no
-        wavelength resampling is needed. A pair is skipped when either fiber's
-        flux is absent/empty (unreachable in a passing L2 -- DATAPRL2 gates all
-        five fibers); a ratio with no finite orders is also skipped.
+        wavelength resampling is needed.
         """
         pairs = [
             ("SCI1", "SCI2", "FR12"),
