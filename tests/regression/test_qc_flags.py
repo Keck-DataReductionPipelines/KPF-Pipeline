@@ -1042,7 +1042,14 @@ class TestQCL4:
     def test_berv_within_tolerance_non_target_passes(self):
         # SCI2 not star-illuminated (e.g. thar/etalon) -> not applicable, passes
         # even with an out-of-tolerance BERVRNG present.
-        assert QCL4(_make_l4(bervrng=0.5)).berv_within_tolerance() is True
+        l4 = _make_l4(sci_obj="etalon", bervrng=0.5)
+        assert QCL4(l4).berv_within_tolerance() is True
+
+    def test_berv_within_tolerance_raises_when_sci_obj_absent(self):
+        # A frame with no SCI-OBJ is malformed (CrossCorrelation requires it
+        # upstream) -> raise, not silently pass as a non-target source.
+        with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
+            QCL4(_make_l4(bervrng=0.05)).berv_within_tolerance()
 
     def test_berv_within_tolerance_target_absent_fails(self):
         # Target frame but DiagL4 skipped the metric (degenerate weights / NaN
@@ -1058,7 +1065,13 @@ class TestQCL4:
         assert QCL4(l4).bjd_within_tolerance() is False
 
     def test_bjd_within_tolerance_non_target_passes(self):
-        assert QCL4(_make_l4(bjdrng=2.0)).bjd_within_tolerance() is True
+        assert (
+            QCL4(_make_l4(sci_obj="etalon", bjdrng=2.0)).bjd_within_tolerance() is True
+        )
+
+    def test_bjd_within_tolerance_raises_when_sci_obj_absent(self):
+        with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
+            QCL4(_make_l4(bjdrng=0.5)).bjd_within_tolerance()
 
     def test_bjd_within_tolerance_target_absent_fails(self):
         assert QCL4(_make_l4(sci_obj="target")).bjd_within_tolerance() is False

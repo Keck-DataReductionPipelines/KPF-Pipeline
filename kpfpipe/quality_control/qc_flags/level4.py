@@ -53,15 +53,30 @@ class QCL4(QC):
 
     required_keywords_present._qc_key = "KWRDPRL4"
 
+    def _sci2_is_target(self):
+        """Whether SCI2 is star-illuminated, from INSTRUMENT_HEADER's SCI-OBJ.
+
+        Every L4 frame carries SCI-OBJ (CrossCorrelation requires it upstream and
+        fails loud otherwise), so an absent keyword is a malformed frame, not a
+        non-target source; raise rather than silently defaulting to not-target.
+        """
+        inst = self.kpf_obj.headers.get("INSTRUMENT_HEADER", {})
+        if "SCI-OBJ" not in inst:
+            raise ValueError(
+                "SCI-OBJ not in INSTRUMENT_HEADER; cannot determine the SCI2 "
+                "illumination source for the BERV/BJD tolerance gates"
+            )
+        return str(inst["SCI-OBJ"]).strip().lower() == "target"
+
     def berv_within_tolerance(self):
         """BERVRNG (from DiagL4) within tolerance.
 
         Only applies when SCI2 is star-illuminated (SCI-OBJ == 'target'); other
         sources pass (no meaningful barycentric dispersion). On a target frame an
-        absent BERVRNG (non-finite barycorr / non-positive weight) fails.
+        absent BERVRNG (non-finite barycorr / non-positive weight) fails; an
+        absent SCI-OBJ raises (see _sci2_is_target).
         """
-        inst = self.kpf_obj.headers.get("INSTRUMENT_HEADER", {})
-        if str(inst.get("SCI-OBJ", "")).strip().lower() != "target":
+        if not self._sci2_is_target():
             return True
         rng = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BERVRNG")
         return rng is not None and rng <= _BERV_RNG_TOL_MS
@@ -72,10 +87,10 @@ class QCL4(QC):
         """BJDRNG (from DiagL4) within tolerance.
 
         Only applies when SCI2 is star-illuminated (SCI-OBJ == 'target'); other
-        sources pass. On a target frame an absent BJDRNG fails.
+        sources pass. On a target frame an absent BJDRNG fails; an absent SCI-OBJ
+        raises (see _sci2_is_target).
         """
-        inst = self.kpf_obj.headers.get("INSTRUMENT_HEADER", {})
-        if str(inst.get("SCI-OBJ", "")).strip().lower() != "target":
+        if not self._sci2_is_target():
             return True
         rng = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BJDRNG")
         return rng is not None and rng <= _BJD_RNG_TOL_S
