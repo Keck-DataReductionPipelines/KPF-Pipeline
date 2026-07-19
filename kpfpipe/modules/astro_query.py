@@ -14,14 +14,18 @@ than write headers here, AstroQuery tracks the queried quantities on the L0 and
 lets ``to_kpf1()`` overlay them onto the L1 PRIMARY (a follow-up integration).
 
 AstroQuery never modifies the L0 PRIMARY header -- that header is a pure
-pass-through to INSTRUMENT_HEADER. Values are stored raw, in each source's native
-units; unit conversion, per-fiber fan-out, and derived quantities (offsets,
-redshift) are the jobs of the downstream consumers, not this module.
+pass-through to INSTRUMENT_HEADER. The three records share one schema and one set
+of units and reference frame, so a consumer reads any source identically: ICRS,
+RA/Dec in degrees, proper motion in mas/yr (RA including cos(Dec)), parallax in
+mas, RV in km/s, epoch/equinox in Julian years. Per-fiber fan-out and derived
+quantities (offsets, redshift) remain the jobs of downstream consumers.
 """
 
 import logging
 
+import astropy.units as u
 import numpy as np
+from astropy.coordinates import Angle
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
@@ -36,20 +40,30 @@ _DEFAULTS = {
     "use_simbad": True,
 }
 
-# WMKO/DCS target-astrometry cards on the raw L0 PRIMARY, snapshotted verbatim
-# (native units) into the 'wmko' record. Consumers apply the unit conventions
-# (e.g. TARGPMRA is time-seconds/yr) exactly as BarycentricCorrection/DiagL0 do.
-_WMKO_KEYS = {
-    "ra": "TARGRA",
-    "dec": "TARGDEC",
-    "pmra": "TARGPMRA",
-    "pmdec": "TARGPMDC",
-    "parallax": "TARGPLAX",
-    "rv": "TARGRADV",
-    "frame": "TARGFRAM",
-    "epoch": "TARGEPOC",
-    "equinox": "TARGEQUI",
+# Column units AstroQuery assumes for each catalog result, verified before the
+# values are trusted so a silent upstream schema change fails loudly instead of
+# corrupting the record.
+_GAIA_UNITS = {
+    "ra": u.deg,
+    "dec": u.deg,
+    "pmra": u.mas / u.yr,
+    "pmdec": u.mas / u.yr,
+    "parallax": u.mas,
+    "radial_velocity": u.km / u.s,
+    "ref_epoch": u.yr,
 }
+_SIMBAD_UNITS = {
+    "ra": u.deg,
+    "dec": u.deg,
+    "pmra": u.mas / u.yr,
+    "pmdec": u.mas / u.yr,
+    "plx_value": u.mas,
+    "rvz_radvel": u.km / u.s,
+}
+
+# The DCS TARG* astrometry format the wmko conversion assumes (verified before use).
+_WMKO_FRAME = "FK5"
+_WMKO_EQUINOX = 2000.0
 
 
 class AstroQuery:
@@ -108,7 +122,7 @@ class AstroQuery:
         token = str(raw).strip().split()[-1] if str(raw).strip() else ""
         return token if token.isdigit() else None
 
-    def _object_name(self):
+    def _simbad_resolvable_name(self):
         """SIMBAD-resolvable name from L0 PRIMARY OBJECT, or None if absent.
 
         KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
@@ -137,32 +151,102 @@ class AstroQuery:
             return None
         return None if np.isnan(f) else f
 
+    @staticmethod
+    def _verify_units(table, expected, source):
+        """Verify a query result's column units before its values are trusted.
+
+        Guards the canonical-unit assumption: raises ``ValueError`` if any
+        expected column is missing or carries a unit other than the one the
+        record schema assumes, so a silent catalog schema change fails loudly.
+        """
+        mismatched = {}
+        for col, want in expected.items():
+            if col not in table.colnames:
+                mismatched[col] = "MISSING"
+            elif table[col].unit != want:
+                mismatched[col] = table[col].unit
+        if mismatched:
+            raise ValueError(
+                f"{source} returned unexpected column units {mismatched}; expected "
+                f"{expected}. The catalog schema may have changed; AstroQuery's unit "
+                "assumptions must be revalidated before use."
+            )
+
+    def _verify_wmko_format(self, primary):
+        """Verify the DCS TARG* astrometry is in the assumed input format.
+
+        The wmko conversion assumes FK5 J2000 with sexagesimal TARGRA/TARGDEC
+        (hourangle/deg), TARGPMRA in s/yr and TARGPMDC in arcsec/yr. The pm units
+        are not encoded in the header, but the frame, equinox, and sexagesimal
+        coordinate format are -- verify those and raise ``ValueError`` on any
+        surprise so a silent DCS format change cannot corrupt the record.
+        """
+        frame = primary.get("TARGFRAM")
+        equinox = self._scalar(primary.get("TARGEQUI"))
+        ra, dec = primary.get("TARGRA"), primary.get("TARGDEC")
+        problems = []
+        if not (isinstance(frame, str) and frame.strip().upper() == _WMKO_FRAME):
+            problems.append(f"TARGFRAM={frame!r} (expected {_WMKO_FRAME!r})")
+        if equinox != _WMKO_EQUINOX:
+            problems.append(f"TARGEQUI={equinox!r} (expected {_WMKO_EQUINOX})")
+        if not (
+            isinstance(ra, str) and ":" in ra and isinstance(dec, str) and ":" in dec
+        ):
+            problems.append(f"TARGRA/TARGDEC not sexagesimal ({ra!r}, {dec!r})")
+        if problems:
+            raise ValueError(
+                "unexpected WMKO/DCS astrometry format: "
+                + "; ".join(problems)
+                + "; AstroQuery assumes FK5 J2000 sexagesimal input. Verify the DCS "
+                "header format before proceeding."
+            )
+
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
 
     def read_wmko_target(self):
-        """Snapshot the DCS/TCS ``TARG*`` target astrometry from L0 PRIMARY.
+        """Read the DCS/TCS ``TARG*`` target astrometry from L0 PRIMARY.
 
-        Returns the raw header values (native units, no conversion) keyed by the
-        record schema, or None when the frame carries no target pointing (TARGRA
-        absent -- e.g. a calibration frame).
+        Converts the native DCS values to the canonical schema (RA/Dec degrees,
+        proper motion mas/yr, ICRS): TARGRA/TARGDEC are sexagesimal (hourangle /
+        deg); TARGPMRA is time-seconds/yr (-> mas/yr via x15 cos(Dec)) and TARGPMDC
+        is arcsec/yr (-> mas/yr). TARGFRAM is FK5 J2000, relabeled ICRS (the ~23 mas
+        frame tie is negligible for this fallback record). Returns None when the
+        frame carries no target pointing (TARGRA absent -- e.g. a calibration).
         """
         primary = self.l0_obj.headers["PRIMARY"]
         if primary.get("TARGRA") is None:
             logger.warning("no TARGRA on L0 PRIMARY; WMKO/DCS astrometry unavailable")
             return None
-        record = {"source_id": primary.get("OBJECT")}
-        record.update({field: primary.get(card) for field, card in _WMKO_KEYS.items()})
+        self._verify_wmko_format(primary)
+        dec_deg = Angle(primary["TARGDEC"], unit=u.deg).deg
+        pmra = self._scalar(primary.get("TARGPMRA"))
+        pmdec = self._scalar(primary.get("TARGPMDC"))
+        record = {
+            "source_id": primary.get("OBJECT"),
+            "ra": Angle(primary["TARGRA"], unit=u.hourangle).to(u.deg).value,
+            "dec": dec_deg,
+            "pmra": None
+            if pmra is None
+            else pmra * 15.0 * np.cos(np.radians(dec_deg)) * 1e3,
+            "pmdec": None if pmdec is None else pmdec * 1e3,
+            "parallax": self._scalar(primary.get("TARGPLAX")),
+            "rv": self._scalar(primary.get("TARGRADV")),
+            "frame": "icrs",
+            "epoch": self._scalar(primary.get("TARGEPOC")),
+            "equinox": self._scalar(primary.get("TARGEQUI")),
+        }
         logger.info("successfully built record for wmko")
         return record
 
     def query_gaia(self):
         """Query Gaia DR3 for the target's ICRS astrometry, or None (fail-soft).
 
-        Returns None when disabled, when L0 GAIAID yields no usable source_id, or
-        when the lookup fails (warned, not raised). Values are Gaia-native: deg,
-        mas/yr, mas, km/s, and ref_epoch in Julian years.
+        Returns None (warned) when disabled, when GAIAID yields no usable
+        source_id, when the lookup fails, or when the source is not found. Raises
+        ValueError if the result's column units differ from the assumed canonical
+        schema (deg, mas/yr, mas, km/s, epoch in Julian years; ICRS).
         """
         if not self.use_gaia:
             return None
@@ -179,7 +263,7 @@ class AstroQuery:
         """
         logger.info("querying Gaia DR3 for source_id %s", gaia_id)
         try:
-            row = Gaia.launch_job(query).get_results()[0]
+            results = Gaia.launch_job(query).get_results()
         except Exception as e:
             logger.warning(
                 "Gaia query failed (%s: %s); Gaia astrometry unavailable",
@@ -187,6 +271,14 @@ class AstroQuery:
                 e,
             )
             return None
+        if len(results) == 0:
+            logger.warning(
+                "Gaia returned no match for source_id %s; Gaia astrometry unavailable",
+                gaia_id,
+            )
+            return None
+        self._verify_units(results, _GAIA_UNITS, "Gaia DR3")
+        row = results[0]
         record = {
             "source_id": gaia_id,
             "ra": self._scalar(row["ra"]),
@@ -206,13 +298,14 @@ class AstroQuery:
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
         Returns None when disabled, when L0 has no OBJECT name, or when the lookup
-        fails / resolves nothing (warned, not raised). Column schema is the
+        fails / resolves nothing (warned, not raised). Raises ValueError if the
+        result's column units differ from the assumed schema. Column schema is the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value
         mas, rvz_radvel km/s).
         """
         if not self.use_simbad:
             return None
-        name = self._object_name()
+        name = self._simbad_resolvable_name()
         if name is None:
             logger.warning(
                 "no OBJECT name on L0 PRIMARY; SIMBAD astrometry unavailable"
@@ -235,6 +328,7 @@ class AstroQuery:
                 "SIMBAD returned no match for %r; SIMBAD astrometry unavailable", name
             )
             return None
+        self._verify_units(result, _SIMBAD_UNITS, "SIMBAD")
         row = result[0]
         record = {
             "source_id": name,
