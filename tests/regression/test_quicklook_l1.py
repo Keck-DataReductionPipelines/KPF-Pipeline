@@ -11,6 +11,14 @@ import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level1 import KPF1
 
+
+@pytest.fixture(autouse=True)
+def _close_figures():
+    """Close any figures a test left open (the output_dir=None path returns them)."""
+    yield
+    plt.close("all")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
