@@ -14,3 +14,6 @@ OBJOFF,Pointing offset from OBJECT (SIMBAD) position (arcsec),QUALITY_CONTROL,fl
 GAIAOFF,Pointing offset from GAIAID position (arcsec),QUALITY_CONTROL,float,DiagL0
 NOTJUNK,QC: obs_id not in junk list,QUALITY_CONTROL,int,QCL0
 ISGOOD,QC: aggregate pass/fail,QUALITY_CONTROL,int,QC
+WMKOCR,Catalog record present for DCS/TCS target,CATALOG_RECORD,int,AstroQuery
+GAIACR,Catalog record present for Gaia DR3 source,CATALOG_RECORD,int,AstroQuery
+SIMBADCR,Catalog record present for SIMBAD object,CATALOG_RECORD,int,AstroQuery

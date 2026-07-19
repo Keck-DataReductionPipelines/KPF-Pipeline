@@ -4,13 +4,14 @@ KPF AstroQuery module.
 Consolidates every external astronomical-catalog lookup the pipeline needs into
 a single L0-stage module. Given a raw L0 frame, it resolves the target's
 astrometry from Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), and snapshots the
-DCS/TCS target astrometry already on the raw header, then hands all three back on
-a lightweight ``catalog_record`` dict attached to the L0 object.
+DCS/TCS target astrometry already on the raw header, then writes all three to the
+L0 ``CATALOG_RECORD`` extension -- a BinTable with one row per resolved source and
+``WMKOCR``/``GAIACR``/``SIMBADCR`` presence flags on its header.
 
-The dict is the bridge across an ordering problem: the query results ultimately
-belong on the EPRV PRIMARY catalog keywords (``C*#``), but the WMKO -> EPRV
-PRIMARY conversion does not happen until ``KPF0.to_kpf1()`` downstream. Rather
-than write headers here, AstroQuery tracks the queried quantities on the L0 and
+The extension is the bridge across an ordering problem: the query results
+ultimately belong on the EPRV PRIMARY catalog keywords (``C*#``), but the WMKO ->
+EPRV PRIMARY conversion does not happen until ``KPF0.to_kpf1()`` downstream. Rather
+than write PRIMARY here, AstroQuery records the queried quantities on the L0 and
 lets ``to_kpf1()`` overlay them onto the L1 PRIMARY (a follow-up integration).
 
 AstroQuery never modifies the L0 PRIMARY header -- that header is a pure
@@ -26,6 +27,7 @@ import logging
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import Angle
+from astropy.table import Table
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
@@ -65,15 +67,47 @@ _SIMBAD_UNITS = {
 _WMKO_FRAME = "FK5"
 _WMKO_EQUINOX = 2000.0
 
+# Schema of the CATALOG_RECORD BinTable extension: one row per resolved source,
+# carrying the canonical record fields plus a leading 'source' label. Float columns
+# hold NaN where a value is missing; string columns hold "". Units document the
+# canonical schema (deg, mas/yr incl. cos Dec, mas, km/s, Julian years).
+_CATALOG_COLUMNS = (
+    "source",
+    "source_id",
+    "ra",
+    "dec",
+    "pmra",
+    "pmdec",
+    "parallax",
+    "rv",
+    "frame",
+    "epoch",
+    "equinox",
+)
+_CATALOG_STR_COLUMNS = frozenset({"source", "source_id", "frame"})
+_CATALOG_UNITS = {
+    "ra": u.deg,
+    "dec": u.deg,
+    "pmra": u.mas / u.yr,
+    "pmdec": u.mas / u.yr,
+    "parallax": u.mas,
+    "rv": u.km / u.s,
+    "epoch": u.yr,
+    "equinox": u.yr,
+}
+# Presence flag written to the CATALOG_RECORD header per source (int 0/1).
+_CATALOG_FLAGS = {"wmko": "WMKOCR", "gaia": "GAIACR", "simbad": "SIMBADCR"}
+
 
 class AstroQuery:
     """
     Resolve target astrometry from external catalogs and attach it to an L0.
 
     Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT)
-    plus a verbatim snapshot of the DCS/TCS ``TARG*`` astrometry, and deposits all
-    three on ``l0_obj.catalog_record`` for downstream use (EPRV ``C*#`` catalog
-    keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science frames
+    plus a verbatim snapshot of the DCS/TCS ``TARG*`` astrometry, and writes all
+    three to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV ``C*#``
+    catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science
+    frames
     are supported: the constructor raises on a non-``Object`` IMTYPE (a calibration).
     Fail-soft otherwise: a missing GAIAID/OBJECT or a failed network lookup yields a
     ``None`` record rather than an error.
@@ -83,7 +117,7 @@ class AstroQuery:
     l0_obj : KPF0
         Raw L0 science frame (IMTYPE ``Object``). Its PRIMARY header (IMTYPE, GAIAID,
         OBJECT, TARG*) is read but never modified; the resolved catalog data is
-        attached as ``l0_obj.catalog_record``.
+        written to the L0 ``CATALOG_RECORD`` extension.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: use_gaia, use_simbad.
     """
@@ -373,18 +407,34 @@ class AstroQuery:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _attach_catalog_record(self, l0_obj):
-        """Deposit the resolved catalog records on ``l0_obj.catalog_record``.
+        """Write the resolved catalog records to the CATALOG_RECORD extension.
 
-        The module's sole output site (analogous to ``_set_headers`` on a
-        transform module). No header is written: the L0 PRIMARY is an immutable
-        pass-through to INSTRUMENT_HEADER, and the EPRV ``C*#`` keywords live on
-        the L1 PRIMARY, which ``KPF0.to_kpf1()`` builds downstream from this dict.
+        The module's sole output site (analogous to ``_set_headers`` on a transform
+        module). Builds a BinTable with one row per resolved source (canonical ICRS
+        schema; missing floats -> NaN, missing source_id -> "") and sets the
+        WMKOCR/GAIACR/SIMBADCR presence flags on the extension header. The L0 PRIMARY
+        is never touched -- the EPRV ``C*#`` keywords are built later in
+        ``KPF0.to_kpf1()``; this extension is the L0-stage bridge to that step.
         """
-        l0_obj.catalog_record = {
-            "gaia": self._gaia,
-            "simbad": self._simbad,
-            "wmko": self._wmko,
-        }
+        records = {"wmko": self._wmko, "gaia": self._gaia, "simbad": self._simbad}
+        rows = [
+            {"source": src, **rec} for src, rec in records.items() if rec is not None
+        ]
+        table = Table()
+        for name in _CATALOG_COLUMNS:
+            if name in _CATALOG_STR_COLUMNS:
+                table[name] = np.array(
+                    ["" if r[name] is None else r[name] for r in rows], dtype=str
+                )
+            else:
+                table[name] = np.array(
+                    [np.nan if r[name] is None else r[name] for r in rows], dtype=float
+                )
+                table[name].unit = _CATALOG_UNITS[name]
+        l0_obj.set_data("CATALOG_RECORD", table)
+
+        for source, keyword in _CATALOG_FLAGS.items():
+            l0_obj.set_keyword(keyword, 1 if records[source] is not None else 0)
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -402,10 +452,11 @@ class AstroQuery:
         Returns
         -------
         l0_obj : KPF0
-            The input L0 (PRIMARY unchanged), now carrying ``catalog_record`` with
-            the ``gaia`` / ``simbad`` / ``wmko`` records (each a dict or None), and
-            an 'astro_query' receipt entry. Unusually for a pipeline module this
-            returns an L0, not the next level -- AstroQuery runs before assembly.
+            The input L0 (PRIMARY unchanged), now carrying the ``CATALOG_RECORD``
+            extension (one row per resolved source, with WMKOCR/GAIACR/SIMBADCR
+            presence flags) and an 'astro_query' receipt entry. Unusually for a
+            pipeline module this returns an L0, not the next level -- AstroQuery
+            runs before assembly.
         """
         if use_gaia is not None:
             self.use_gaia = use_gaia

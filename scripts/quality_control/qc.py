@@ -84,9 +84,9 @@ def main():
 
     obs_id = args.obs_id or getattr(data, "obs_id", None) or "unknown"
 
-    # AstroQuery resolves target astrometry onto data.catalog_record, which the L0
-    # pointing-offset diagnostics consume; run it before the checkpoint. Only L0
-    # needs it, and AstroQuery requires a science (IMTYPE 'Object') frame.
+    # AstroQuery resolves target astrometry into data's CATALOG_RECORD extension,
+    # which the L0 pointing-offset diagnostics consume; run it before the checkpoint.
+    # Only L0 needs it, and AstroQuery requires a science (IMTYPE 'Object') frame.
     if args.level == "L0":
         try:
             astro_config = ConfigHandler(args.config) if args.config else None

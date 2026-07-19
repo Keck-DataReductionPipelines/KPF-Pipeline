@@ -138,6 +138,11 @@ class KPF0(KPFDataModel):
                     all_cols = df.columns.union(receipt_columns, sort=False)
                     df = df.reindex(columns=all_cols).fillna("")
                 self.receipt = df
+            elif ext_name == "CATALOG_RECORD":
+                # astropy reads NaN float cells back as masked; fill to NaN so
+                # consumers see one missing-value sentinel regardless of whether the
+                # table was just built by AstroQuery or round-tripped through FITS.
+                self.set_data(ext_name, Table.read(hdu).filled(np.nan))
             elif fits_type == "ImageHDU":
                 # np.array (not asarray) materializes the memmapped HDU into RAM
                 # before from_fits closes the file; a view would dangle afterward.

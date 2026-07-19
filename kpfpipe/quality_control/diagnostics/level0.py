@@ -2,6 +2,7 @@
 
 import logging
 
+import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
@@ -10,56 +11,64 @@ from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 logger = logging.getLogger(__name__)
 
-# Record fields the pointing offset needs; a None in any of them (or a missing
-# record) makes the source unusable, and the offset is emitted present-but-empty.
-_OFFSET_FIELDS = ("ra", "dec", "pmra", "pmdec", "parallax", "epoch", "frame")
+# Numeric record fields the pointing offset needs; a NaN in any (a missing
+# measurement) makes the source unusable, and the offset is emitted present-but-
+# empty. 'frame' is a fixed literal AstroQuery always sets, so it is not gated here.
+_OFFSET_FIELDS = ("ra", "dec", "pmra", "pmdec", "parallax", "epoch")
+
+# CATALOG_RECORD presence flag (int 0/1) per source, on the extension header.
+_FLAG_KEYWORDS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
 
 
 class DiagL0(Diagnostics):
     """Diagnostics for KPF Level 0 raw data products.
 
     The pointing-offset metrics compare the telescope pointing against the target
-    astrometry resolved upstream by AstroQuery and attached as ``l0.catalog_record``
-    (Gaia / SIMBAD / DCS, all in one canonical ICRS schema). When a source's
-    astrometry is unavailable the offset is emitted present-but-empty (a valueless
-    card) and a WARNING is logged -- diagnostics record what they can and leave
-    error-raising to the checkpoint layer.
+    astrometry resolved upstream by AstroQuery and written to the L0
+    ``CATALOG_RECORD`` extension (Gaia / SIMBAD / DCS, all in one canonical ICRS
+    schema). When a source's astrometry is unavailable the offset is emitted
+    present-but-empty (a valueless card) and a WARNING is logged -- diagnostics
+    record what they can and leave error-raising to the checkpoint layer.
     """
 
     LEVEL = "L0"
 
     def _catalog_record(self, source):
-        """Usable ``catalog_record`` record for ``source``, or None with a WARNING.
+        """The CATALOG_RECORD row for ``source``, or None with a WARNING.
 
-        Handles the three contingencies: AstroQuery not run (no ``catalog_record``),
-        the source's record absent (lookup disabled/failed, or WMKO unavailable),
-        or a record present but missing a field the offset needs.
+        Handles the three contingencies: AstroQuery not run (no presence flag on the
+        CATALOG_RECORD header), the source's record absent (flag 0 -- lookup
+        disabled/failed, or WMKO unavailable), or a record present but missing a
+        measurement the offset needs. The flag is written with the row, so flag 1
+        guarantees exactly one matching row.
         """
-        catalog = getattr(self.kpf_obj, "catalog_record", None)
-        if catalog is None:
+        hdr = self.kpf_obj.headers["CATALOG_RECORD"]
+        keyword = _FLAG_KEYWORDS[source]
+        if keyword not in hdr:
             logger.warning(
-                "no catalog_record on L0 (run AstroQuery first); "
+                "no CATALOG_RECORD flags on L0 (run AstroQuery first); "
                 "%s pointing offset unavailable",
                 source,
             )
             return None
-        rec = catalog.get(source)
-        if rec is None:
+        if not hdr[keyword]:
             logger.warning(
-                "no %s astrometry in catalog_record; pointing offset unavailable",
+                "no %s astrometry in CATALOG_RECORD; pointing offset unavailable",
                 source,
             )
             return None
-        if any(rec.get(field) is None for field in _OFFSET_FIELDS):
+        table = self.kpf_obj.data["CATALOG_RECORD"]
+        row = table[table["source"] == source][0]
+        if any(np.isnan(row[field]) for field in _OFFSET_FIELDS):
             logger.warning(
-                "incomplete %s record in catalog_record; pointing offset unavailable",
+                "incomplete %s record in CATALOG_RECORD; pointing offset unavailable",
                 source,
             )
             return None
-        return rec
+        return row
 
     def _record_skycoord(self, rec):
-        """ICRS SkyCoord from a ``catalog_record`` record (canonical units).
+        """ICRS SkyCoord from a CATALOG_RECORD record (canonical units).
 
         AstroQuery normalizes every source ('gaia'/'simbad'/'wmko') to the same
         schema -- ICRS, RA/Dec deg, proper motion mas/yr (RA incl. cos Dec),

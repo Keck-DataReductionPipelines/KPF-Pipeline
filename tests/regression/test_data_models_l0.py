@@ -36,12 +36,13 @@ class TestKPF0:
         assert l0.level == 0
         assert l0.obs_id == "KP.20240113.00001.00"
         assert "PRIMARY" in l0.extensions
-        # Real KPF0 objects always carry QUALITY_CONTROL and RECEIPT extensions
-        # (RECEIPT is the registry home of the DRP-RUN provenance cards, stamped
-        # at read).
+        # Real KPF0 objects always carry QUALITY_CONTROL, RECEIPT, and CATALOG_RECORD
+        # extensions (RECEIPT is the registry home of the DRP-RUN provenance cards,
+        # stamped at read; CATALOG_RECORD holds AstroQuery's astrometry).
         assert "QUALITY_CONTROL" in l0.extensions
         assert "RECEIPT" in l0.extensions
-        assert len(l0.extensions) == 3
+        assert "CATALOG_RECORD" in l0.extensions
+        assert len(l0.extensions) == 4
 
     def test_round_trip(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
