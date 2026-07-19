@@ -148,14 +148,14 @@ class TestEmptyLevels:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 -- pointing offsets from catalog_query (GAIAOFF, TARGOFF, OBJOFF)
+# DiagL0 -- pointing offsets from catalog_record (GAIAOFF, TARGOFF, OBJOFF)
 # ---------------------------------------------------------------------------
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
 
 
 def _record_at(coord, **overrides):
-    """A canonical catalog_query record placed at ``coord`` (zero PM, finite plx)."""
+    """A canonical catalog_record record placed at ``coord`` (zero PM, finite plx)."""
     rec = {
         "source_id": "test",
         "ra": coord.ra.deg,
@@ -173,14 +173,14 @@ def _record_at(coord, **overrides):
 
 
 def _make_l0_with_catalog():
-    """A KPF0 with L0 PRIMARY pointing and a fully-populated catalog_query whose
+    """A KPF0 with L0 PRIMARY pointing and a fully-populated catalog_record whose
     gaia/simbad/wmko records all sit at the pointing (all three offsets ~ 0)."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
     pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
-    l0.catalog_query = {src: _record_at(pt) for src in ("gaia", "simbad", "wmko")}
+    l0.catalog_record = {src: _record_at(pt) for src in ("gaia", "simbad", "wmko")}
     return l0
 
 
@@ -198,7 +198,7 @@ class TestDiagL0Offsets:
         # the still-at-pointing wmko record keeps TARGOFF ~ 0.
         l0 = _make_l0_with_catalog()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
-        l0.catalog_query["gaia"] = _record_at(
+        l0.catalog_record["gaia"] = _record_at(
             pt.directional_offset_by(0 * u.deg, 10 * u.arcsec)
         )
         results = DiagL0(l0).run()
@@ -211,8 +211,8 @@ class TestDiagL0Contingency:
 
     _KEYS = ("GAIAOFF", "TARGOFF", "OBJOFF")
 
-    def test_no_catalog_query_all_empty(self, caplog):
-        # AstroQuery not run: no catalog_query attribute at all.
+    def test_no_catalog_record_all_empty(self, caplog):
+        # AstroQuery not run: no catalog_record attribute at all.
         l0 = KPF0()
         l0.headers["PRIMARY"]["RA"] = _PT_RA
         l0.headers["PRIMARY"]["DEC"] = _PT_DEC
@@ -223,24 +223,24 @@ class TestDiagL0Contingency:
         # All three present (registered) but valueless (read back as None).
         for key in self._KEYS:
             assert key in qc and qc[key] is None
-        assert caplog.text.count("no catalog_query on L0") == 3
+        assert caplog.text.count("no catalog_record on L0") == 3
 
     def test_source_none_emits_empty_for_that_source(self, caplog):
         # Gaia lookup disabled/failed -> GAIAOFF empty; wmko/simbad still compute.
         l0 = _make_l0_with_catalog()
-        l0.catalog_query["gaia"] = None
+        l0.catalog_record["gaia"] = None
         with caplog.at_level(logging.WARNING):
             results = DiagL0(l0).run()
         assert results["GAIAOFF"][0] is None
         assert results["TARGOFF"][0] < 0.1
         assert results["OBJOFF"][0] < 0.1
-        assert "no gaia astrometry in catalog_query" in caplog.text
+        assert "no gaia astrometry in catalog_record" in caplog.text
 
     def test_incomplete_record_emits_empty(self, caplog):
         # A record present but missing a field the offset needs (e.g. parallax).
         l0 = _make_l0_with_catalog()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
-        l0.catalog_query["wmko"] = _record_at(pt, parallax=None)
+        l0.catalog_record["wmko"] = _record_at(pt, parallax=None)
         with caplog.at_level(logging.WARNING):
             results = DiagL0(l0).run()
         assert results["TARGOFF"][0] is None

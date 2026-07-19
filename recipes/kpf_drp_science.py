@@ -58,7 +58,7 @@ def main(config, args):
     l0 = KPF0.from_fits(kpf_filepath(obs_id, "L0", data_root=data_root_in))
 
     # Consolidate external-catalog lookups up front: resolve target astrometry
-    # (Gaia/SIMBAD + DCS snapshot) onto l0.catalog_query for the L0 diagnostics
+    # (Gaia/SIMBAD + DCS snapshot) onto l0.catalog_record for the L0 diagnostics
     # (and, later, barycentric correction) to consume.
     logger.info("resolving catalog astrometry for %s", obs_id)
     astro_query = AstroQuery(l0, config)

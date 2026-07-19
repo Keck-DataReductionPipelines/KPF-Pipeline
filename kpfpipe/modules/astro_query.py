@@ -5,7 +5,7 @@ Consolidates every external astronomical-catalog lookup the pipeline needs into
 a single L0-stage module. Given a raw L0 frame, it resolves the target's
 astrometry from Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), and snapshots the
 DCS/TCS target astrometry already on the raw header, then hands all three back on
-a lightweight ``catalog_query`` dict attached to the L0 object.
+a lightweight ``catalog_record`` dict attached to the L0 object.
 
 The dict is the bridge across an ordering problem: the query results ultimately
 belong on the EPRV PRIMARY catalog keywords (``C*#``), but the WMKO -> EPRV
@@ -72,7 +72,7 @@ class AstroQuery:
 
     Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT)
     plus a verbatim snapshot of the DCS/TCS ``TARG*`` astrometry, and deposits all
-    three on ``l0_obj.catalog_query`` for downstream use (EPRV ``C*#`` catalog
+    three on ``l0_obj.catalog_record`` for downstream use (EPRV ``C*#`` catalog
     keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science frames
     are supported: the constructor raises on a non-``Object`` IMTYPE (a calibration).
     Fail-soft otherwise: a missing GAIAID/OBJECT or a failed network lookup yields a
@@ -83,7 +83,7 @@ class AstroQuery:
     l0_obj : KPF0
         Raw L0 science frame (IMTYPE ``Object``). Its PRIMARY header (IMTYPE, GAIAID,
         OBJECT, TARG*) is read but never modified; the resolved catalog data is
-        attached as ``l0_obj.catalog_query``.
+        attached as ``l0_obj.catalog_record``.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: use_gaia, use_simbad.
     """
@@ -372,15 +372,15 @@ class AstroQuery:
         ]
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
-    def _attach_catalog_query(self, l0_obj):
-        """Deposit the resolved catalog records on ``l0_obj.catalog_query``.
+    def _attach_catalog_record(self, l0_obj):
+        """Deposit the resolved catalog records on ``l0_obj.catalog_record``.
 
         The module's sole output site (analogous to ``_set_headers`` on a
         transform module). No header is written: the L0 PRIMARY is an immutable
         pass-through to INSTRUMENT_HEADER, and the EPRV ``C*#`` keywords live on
         the L1 PRIMARY, which ``KPF0.to_kpf1()`` builds downstream from this dict.
         """
-        l0_obj.catalog_query = {
+        l0_obj.catalog_record = {
             "gaia": self._gaia,
             "simbad": self._simbad,
             "wmko": self._wmko,
@@ -402,7 +402,7 @@ class AstroQuery:
         Returns
         -------
         l0_obj : KPF0
-            The input L0 (PRIMARY unchanged), now carrying ``catalog_query`` with
+            The input L0 (PRIMARY unchanged), now carrying ``catalog_record`` with
             the ``gaia`` / ``simbad`` / ``wmko`` records (each a dict or None), and
             an 'astro_query' receipt entry. Unusually for a pipeline module this
             returns an L0, not the next level -- AstroQuery runs before assembly.
@@ -416,7 +416,7 @@ class AstroQuery:
         self._gaia = self.query_gaia()
         self._simbad = self.query_simbad()
 
-        self._attach_catalog_query(self.l0_obj)
+        self._attach_catalog_record(self.l0_obj)
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")
 
