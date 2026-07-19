@@ -15,7 +15,7 @@ from kpfpipe import REPO_ROOT
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import masters_stack_subdir
+from kpfpipe.utils.io import kpf_directory
 from kpfpipe.utils.kpf_utils import get_obs_id
 from kpfpipe.utils.stats import optimize_lsq
 
@@ -877,7 +877,13 @@ class WLS(BaseMasterModule):
         if not self._frame_diagnostics:
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
-        directory = masters_stack_subdir(os.path.dirname(master_path), "thar", "L2")
+        directory = kpf_directory(
+            kind="cal_stack",
+            data_root=self._masters_output,
+            level="L2",
+            obs_id=get_obs_id(master_path),
+            cal_type="thar",
+        )
         os.makedirs(directory, exist_ok=True)
         path = os.path.join(
             directory, f"{get_obs_id(master_path)}_master_thar_diagnostics.h5"
@@ -936,7 +942,13 @@ class WLS(BaseMasterModule):
         if not self._l2_obj_cache:
             raise RuntimeError("No frames available; run make_master_l2() first")
 
-        directory = masters_stack_subdir(os.path.dirname(master_path), "thar", "L2")
+        directory = kpf_directory(
+            kind="cal_stack",
+            data_root=self._masters_output,
+            level="L2",
+            obs_id=get_obs_id(master_path),
+            cal_type="thar",
+        )
         os.makedirs(directory, exist_ok=True)
         # These are deliberately non-EPRV diagnostic products; KPF2.to_fits' EPRV
         # filename-convention warning for the {obs_id}_thar_L2 name is expected.

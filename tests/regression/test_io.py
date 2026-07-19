@@ -597,6 +597,51 @@ class TestKpfDirectory:
         )
         assert path == "/data/QLP/20240405/KP.20240405.49597.71/L0"
 
+    def test_cal_stack_by_obs_id(self):
+        path = kpf_directory(
+            kind="cal_stack",
+            data_root="/data",
+            level="L2",
+            obs_id=self.OBS_ID,
+            cal_type="thar",
+        )
+        assert path == "/data/masters/20240405/thar_L2"
+
+    def test_cal_stack_by_datecode(self):
+        path = kpf_directory(
+            kind="cal_stack",
+            data_root="/data",
+            level="L2",
+            datecode="20240405",
+            cal_type="flat",
+        )
+        assert path == "/data/masters/20240405/flat_L2"
+
+    def test_cal_stack_unknown_cal_type_raises(self):
+        with pytest.raises(ValueError, match="cal_type must be one of"):
+            kpf_directory(
+                kind="cal_stack",
+                data_root="/data",
+                level="L2",
+                datecode="20240405",
+                cal_type="lfc",
+            )
+
+    def test_cal_stack_missing_cal_type_raises(self):
+        with pytest.raises(ValueError, match="cal_type must be one of"):
+            kpf_directory(
+                kind="cal_stack", data_root="/data", level="L2", datecode="20240405"
+            )
+
+    def test_cal_stack_missing_level_raises(self):
+        with pytest.raises(ValueError, match="'level' must be"):
+            kpf_directory(
+                kind="cal_stack",
+                data_root="/data",
+                datecode="20240405",
+                cal_type="thar",
+            )
+
     def test_qlp_rejects_datecode(self):
         with pytest.raises(ValueError, match="requires obs_id"):
             kpf_directory(

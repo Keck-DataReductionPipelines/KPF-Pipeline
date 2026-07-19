@@ -551,19 +551,12 @@ def kpf_filename(obs_id, level, *, master=None):
     return f"{prefix}_{eprv_ts}.fits"
 
 
-_DIRECTORY_KINDS = ("science", "masters", "QLP")
+_DIRECTORY_KINDS = ("science", "masters", "QLP", "cal_stack")
 
 
-def masters_stack_subdir(masters, kind, level):
-    """Subdirectory of a masters night dir holding the per-frame stacked inputs
-    (and diagnostics) for a ``kind`` master at ``level`` -- e.g. ``thar``/``L2``
-    gives ``{masters}/thar_L2`` for the WLS per-frame L2s. Single source of the
-    name, shared by wls.py (writer) and reduce.py (stale-clear); future kinds:
-    flat_L2, thar_L4, and the other wls inputs (lfc, etalon)."""
-    return os.path.join(masters, f"{kind}_{level}")
-
-
-def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
+def kpf_directory(
+    kind, *, data_root, level=None, obs_id=None, datecode=None, cal_type=None
+):
     """Output directory for a KPF product tree.
 
     The single authority for the on-disk output layout; ``kpf_filepath`` and the
@@ -576,29 +569,35 @@ def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
     works -- ``masters`` in particular is often built from a bare ``datecode``
     (e.g. the CLI ``--datecode``, before any frame obs_id is in hand).
 
-    ===========  =========================================================
-    ``kind``     directory
-    ===========  =========================================================
-    ``science``  ``{data_root}/{level}/{datecode}`` -- L0/L1/L2/L4 products
-    ``masters``  ``{data_root}/masters/{datecode}`` (``level`` unused)
-    ``QLP``      ``{data_root}/QLP/{datecode}/{obs_id}/{level}`` -- quicklook
-    ===========  =========================================================
+    ============  =========================================================
+    ``kind``      directory
+    ============  =========================================================
+    ``science``   ``{data_root}/{level}/{datecode}`` -- L0/L1/L2/L4 products
+    ``masters``   ``{data_root}/masters/{datecode}`` (``level`` unused)
+    ``QLP``       ``{data_root}/QLP/{datecode}/{obs_id}/{level}`` -- quicklook
+    ``cal_stack`` ``{data_root}/masters/{datecode}/{cal_type}_{level}`` -- the
+                  per-frame stacked inputs/diagnostics feeding a ``cal_type``
+                  master (e.g. ``cal_type='thar'``/``L2`` -> ``.../thar_L2``)
+    ============  =========================================================
 
     Parameters
     ----------
     kind : str
-        Which output tree: 'science', 'masters', or 'QLP'.
+        Which output tree: 'science', 'masters', 'QLP', or 'cal_stack'.
     data_root : str
         Root data directory (e.g. '/data/kpf/'); a non-empty string.
     level : str or None, optional
-        Data level 'L0'/'L1'/'L2'/'L4'. Required for ``science`` and ``QLP``;
-        unused for ``masters``.
+        Data level 'L0'/'L1'/'L2'/'L4'. Required for ``science``, ``QLP``, and
+        ``cal_stack``; unused for ``masters``.
     obs_id : str or None, optional
         Observation ID (e.g. 'KP.20240405.49597.71'); the datecode source and,
         for ``QLP``, a path component. Mutually exclusive with ``datecode``.
     datecode : str or None, optional
         Datecode 'YYYYMMDD' directly. Mutually exclusive with ``obs_id``; not
         accepted for ``QLP`` (which needs the full obs_id).
+    cal_type : str or None, optional
+        Calibration type ('bias'/'dark'/'flat'/'thar') naming the stack
+        subdirectory. Required for ``cal_stack``; unused otherwise.
 
     Returns
     -------
@@ -610,7 +609,8 @@ def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
     ValueError
         If ``data_root`` is not a non-empty string, ``kind`` is unrecognized, the
         obs_id/datecode source is missing/ambiguous/invalid, ``datecode`` is given
-        for ``QLP``, or ``level`` is missing/invalid for a kind that needs it.
+        for ``QLP``, ``level`` is missing/invalid for a kind that needs it, or
+        ``cal_type`` is missing/invalid for ``cal_stack``.
     """
     if not isinstance(data_root, str) or not data_root:
         raise ValueError(f"data_root must be a non-empty string; got {data_root!r}")
@@ -635,12 +635,19 @@ def kpf_directory(kind, *, data_root, level=None, obs_id=None, datecode=None):
     if kind == "masters":
         return os.path.join(data_root, "masters", datecode)
 
-    # science and QLP both carry a data level.
+    # science, QLP, and cal_stack all carry a data level.
     if level not in ("L0", "L1", "L2", "L4"):
         raise ValueError(
             f"'level' must be 'L0', 'L1', 'L2', or 'L4' for kind={kind!r}; "
             f"got {level!r}"
         )
+    if kind == "cal_stack":
+        if cal_type not in _CAL_TYPES:
+            raise ValueError(
+                f"cal_type must be one of {list(_CAL_TYPES)} for kind='cal_stack'; "
+                f"got {cal_type!r}"
+            )
+        return os.path.join(data_root, "masters", datecode, f"{cal_type}_{level}")
     if kind == "science":
         return os.path.join(data_root, level, datecode)
     # kind == "QLP": the obs_id names a path component.

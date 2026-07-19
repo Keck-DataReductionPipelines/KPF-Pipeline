@@ -35,7 +35,7 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import kpf_directory, kpf_filepath, masters_stack_subdir
+from kpfpipe.utils.io import kpf_directory, kpf_filepath
 from kpfpipe.utils.kpf_utils import is_obs_id
 from kpfpipe.utils.logger import setup_logging
 from scripts.processing import (
@@ -252,7 +252,13 @@ def clear_stale_outputs(config, args):
         )
         for pattern in _MASTER_OUTPUT_GLOBS:
             paths += glob.glob(os.path.join(masters_dir, pattern))
-        stack_subdir = masters_stack_subdir(masters_dir, "thar", "L2")
+        stack_subdir = kpf_directory(
+            kind="cal_stack",
+            data_root=data_root,
+            level="L2",
+            datecode=args.datecode,
+            cal_type="thar",
+        )
         if os.path.isdir(stack_subdir):
             shutil.rmtree(stack_subdir)
             logger.info("removed stale output dir: %s", stack_subdir)
