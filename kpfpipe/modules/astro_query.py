@@ -102,8 +102,7 @@ class AstroQuery:
         GAIAID may arrive as a prefixed string (e.g. 'Gaia DR3 12345'); take the
         trailing token and require it to be all digits.
         """
-        primary = self.l0_obj.headers.get("PRIMARY")
-        raw = primary.get("GAIAID") if primary is not None else None
+        raw = self.l0_obj.headers["PRIMARY"].get("GAIAID")
         if raw is None:
             return None
         token = str(raw).strip().split()[-1] if str(raw).strip() else ""
@@ -115,8 +114,7 @@ class AstroQuery:
         KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
         SIMBAD resolves only with an 'HD ' prefix; named targets pass through.
         """
-        primary = self.l0_obj.headers.get("PRIMARY")
-        obj = primary.get("OBJECT") if primary is not None else None
+        obj = self.l0_obj.headers["PRIMARY"].get("OBJECT")
         if obj is None:
             return None
         obj = str(obj).strip()
@@ -150,11 +148,13 @@ class AstroQuery:
         record schema, or None when the frame carries no target pointing (TARGRA
         absent -- e.g. a calibration frame).
         """
-        primary = self.l0_obj.headers.get("PRIMARY")
-        if primary is None or primary.get("TARGRA") is None:
+        primary = self.l0_obj.headers["PRIMARY"]
+        if primary.get("TARGRA") is None:
+            logger.warning("no TARGRA on L0 PRIMARY; WMKO/DCS astrometry unavailable")
             return None
         record = {"source_id": primary.get("OBJECT")}
         record.update({field: primary.get(card) for field, card in _WMKO_KEYS.items()})
+        logger.info("successfully built record for wmko")
         return record
 
     def query_gaia(self):
@@ -168,7 +168,9 @@ class AstroQuery:
             return None
         gaia_id = self._gaia_source_id()
         if gaia_id is None:
-            logger.debug("no usable GAIAID on L0 PRIMARY; skipping Gaia query")
+            logger.warning(
+                "no usable GAIAID on L0 PRIMARY; Gaia astrometry unavailable"
+            )
             return None
         query = f"""
         SELECT ra, dec, pmra, pmdec, parallax, radial_velocity, ref_epoch
@@ -179,9 +181,13 @@ class AstroQuery:
         try:
             row = Gaia.launch_job(query).get_results()[0]
         except Exception as e:
-            logger.warning("Gaia query failed (%s: %s); skipping", type(e).__name__, e)
+            logger.warning(
+                "Gaia query failed (%s: %s); Gaia astrometry unavailable",
+                type(e).__name__,
+                e,
+            )
             return None
-        return {
+        record = {
             "source_id": gaia_id,
             "ra": self._scalar(row["ra"]),
             "dec": self._scalar(row["dec"]),
@@ -193,6 +199,8 @@ class AstroQuery:
             "epoch": self._scalar(row["ref_epoch"]),
             "equinox": 2000.0,
         }
+        logger.info("successfully built record for gaia")
+        return record
 
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
@@ -206,7 +214,9 @@ class AstroQuery:
             return None
         name = self._object_name()
         if name is None:
-            logger.debug("no OBJECT name on L0 PRIMARY; skipping SIMBAD query")
+            logger.warning(
+                "no OBJECT name on L0 PRIMARY; SIMBAD astrometry unavailable"
+            )
             return None
         logger.info("querying SIMBAD for %r", name)
         try:
@@ -215,14 +225,18 @@ class AstroQuery:
             result = simbad.query_object(name)
         except Exception as e:
             logger.warning(
-                "SIMBAD query failed (%s: %s); skipping", type(e).__name__, e
+                "SIMBAD query failed (%s: %s); SIMBAD astrometry unavailable",
+                type(e).__name__,
+                e,
             )
             return None
         if result is None or len(result) == 0:
-            logger.warning("SIMBAD returned no match for %r; skipping", name)
+            logger.warning(
+                "SIMBAD returned no match for %r; SIMBAD astrometry unavailable", name
+            )
             return None
         row = result[0]
-        return {
+        record = {
             "source_id": name,
             "ra": self._scalar(row["ra"]),
             "dec": self._scalar(row["dec"]),
@@ -234,6 +248,8 @@ class AstroQuery:
             "epoch": 2000.0,
             "equinox": 2000.0,
         }
+        logger.info("successfully built record for simbad")
+        return record
 
     # ------------------------------------------------------------------
     # Private helpers - module execution
