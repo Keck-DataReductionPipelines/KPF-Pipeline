@@ -16,7 +16,7 @@ from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory
-from kpfpipe.utils.kpf_utils import get_obs_id
+from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.stats import optimize_lsq
 
 logger = logging.getLogger(__name__)

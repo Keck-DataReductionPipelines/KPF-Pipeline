@@ -36,7 +36,7 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
-from kpfpipe.utils.kpf_utils import is_obs_id
+from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,

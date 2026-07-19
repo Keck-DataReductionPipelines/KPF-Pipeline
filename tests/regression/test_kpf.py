@@ -1,8 +1,8 @@
-"""Tests for kpfpipe.utils.kpf_utils: KPF timestamp/obs_id conversion utilities."""
+"""Tests for kpfpipe.utils.kpf: KPF timestamp/obs_id conversion utilities."""
 
 import pytest
 
-from kpfpipe.utils.kpf_utils import (
+from kpfpipe.utils.kpf import (
     get_datecode,
     get_obs_id,
     get_timestamp,

@@ -41,7 +41,7 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range
-from kpfpipe.utils.kpf_utils import get_datecode, get_obs_id, is_datecode
+from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,

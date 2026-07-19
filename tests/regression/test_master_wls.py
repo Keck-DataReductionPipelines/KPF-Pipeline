@@ -15,7 +15,7 @@ import kpfpipe.modules.masters.base as base_module
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
-from kpfpipe.utils.kpf_utils import get_obs_id
+from kpfpipe.utils.kpf import get_obs_id
 
 from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
 

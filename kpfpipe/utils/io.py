@@ -9,7 +9,7 @@ from datetime import datetime
 import pandas as pd
 from astropy.io import fits
 
-from kpfpipe.utils.kpf_utils import (
+from kpfpipe.utils.kpf import (
     get_datecode,
     get_obs_id,
     get_timestamp,

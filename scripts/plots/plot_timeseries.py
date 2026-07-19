@@ -39,7 +39,7 @@ from astropy.io import fits
 
 import kpfpipe
 from kpfpipe.utils.io import datecode_dirs_in_range, kpf_filepath
-from kpfpipe.utils.kpf_utils import is_datecode, is_obs_id
+from kpfpipe.utils.kpf import is_datecode, is_obs_id
 from kpfpipe.utils.stats import flag_outliers
 
 _REPO = kpfpipe.REPO_ROOT

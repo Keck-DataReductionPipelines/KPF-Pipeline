@@ -26,7 +26,7 @@ from kpfpipe.utils.io import (
     load_junk_obs_ids,
     read_token_file,
 )
-from kpfpipe.utils.kpf_utils import get_timestamp, utc_to_hst
+from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
