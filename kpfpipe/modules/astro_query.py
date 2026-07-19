@@ -5,7 +5,7 @@ Consolidates every external astronomical-catalog lookup the pipeline needs into
 a single L0-stage module. Given a raw L0 frame, it resolves the target's
 astrometry from Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), and snapshots the
 DCS/TCS target astrometry already on the raw header, then hands all three back on
-a lightweight ``catalog_info`` dict attached to the L0 object.
+a lightweight ``catalog_query`` dict attached to the L0 object.
 
 The dict is the bridge across an ordering problem: the query results ultimately
 belong on the EPRV PRIMARY catalog keywords (``C*#``), but the WMKO -> EPRV
@@ -45,10 +45,10 @@ _WMKO_KEYS = {
     "pmra": "TARGPMRA",
     "pmdec": "TARGPMDC",
     "parallax": "TARGPLAX",
+    "rv": "TARGRADV",
     "frame": "TARGFRAM",
     "epoch": "TARGEPOC",
     "equinox": "TARGEQUI",
-    "rv": "TARGRADV",
 }
 
 
@@ -58,7 +58,7 @@ class AstroQuery:
 
     Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT)
     plus a verbatim snapshot of the DCS/TCS ``TARG*`` astrometry, and deposits all
-    three on ``l0_obj.catalog_info`` for downstream use (EPRV ``C*#`` catalog
+    three on ``l0_obj.catalog_query`` for downstream use (EPRV ``C*#`` catalog
     keywords, DiagL0 pointing offsets, BarycentricCorrection). Fail-soft: a frame
     with no GAIAID/OBJECT (e.g. a calibration) or a failed network lookup yields a
     ``None`` record rather than an error.
@@ -67,7 +67,7 @@ class AstroQuery:
     ----------
     l0_obj : KPF0
         Raw L0 frame. Its PRIMARY header (GAIAID, OBJECT, TARG*) is read but never
-        modified; the resolved catalog data is attached as ``l0_obj.catalog_info``.
+        modified; the resolved catalog data is attached as ``l0_obj.catalog_query``.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: use_gaia, use_simbad.
     """
@@ -153,7 +153,9 @@ class AstroQuery:
         primary = self.l0_obj.headers.get("PRIMARY")
         if primary is None or primary.get("TARGRA") is None:
             return None
-        return {field: primary.get(card) for field, card in _WMKO_KEYS.items()}
+        record = {"source_id": primary.get("OBJECT")}
+        record.update({field: primary.get(card) for field, card in _WMKO_KEYS.items()})
+        return record
 
     def query_gaia(self):
         """Query Gaia DR3 for the target's ICRS astrometry, or None (fail-soft).
@@ -187,7 +189,9 @@ class AstroQuery:
             "pmdec": self._scalar(row["pmdec"]),
             "parallax": self._scalar(row["parallax"]),
             "rv": self._scalar(row["radial_velocity"]),
-            "ref_epoch": self._scalar(row["ref_epoch"]),
+            "frame": "icrs",
+            "epoch": self._scalar(row["ref_epoch"]),
+            "equinox": 2000.0,
         }
 
     def query_simbad(self):
@@ -219,14 +223,16 @@ class AstroQuery:
             return None
         row = result[0]
         return {
-            "name": name,
+            "source_id": name,
             "ra": self._scalar(row["ra"]),
             "dec": self._scalar(row["dec"]),
             "pmra": self._scalar(row["pmra"]),
             "pmdec": self._scalar(row["pmdec"]),
             "parallax": self._scalar(row["plx_value"]),
             "rv": self._scalar(row["rvz_radvel"]),
+            "frame": "icrs",
             "epoch": 2000.0,
+            "equinox": 2000.0,
         }
 
     # ------------------------------------------------------------------
@@ -236,7 +242,7 @@ class AstroQuery:
     def _track_info(self):
         """Build and cache the info() summary text from instance attributes."""
         gaia = self._gaia["source_id"] if self._gaia else "n/a"
-        simbad = self._simbad["name"] if self._simbad else "n/a"
+        simbad = self._simbad["source_id"] if self._simbad else "n/a"
         wmko = "resolved" if self._wmko else "n/a"
         lines = [
             "AstroQuery",
@@ -247,15 +253,15 @@ class AstroQuery:
         ]
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
-    def _attach_catalog_info(self, l0_obj):
-        """Deposit the resolved catalog records on ``l0_obj.catalog_info``.
+    def _attach_catalog_query(self, l0_obj):
+        """Deposit the resolved catalog records on ``l0_obj.catalog_query``.
 
         The module's sole output site (analogous to ``_set_headers`` on a
         transform module). No header is written: the L0 PRIMARY is an immutable
         pass-through to INSTRUMENT_HEADER, and the EPRV ``C*#`` keywords live on
         the L1 PRIMARY, which ``KPF0.to_kpf1()`` builds downstream from this dict.
         """
-        l0_obj.catalog_info = {
+        l0_obj.catalog_query = {
             "gaia": self._gaia,
             "simbad": self._simbad,
             "wmko": self._wmko,
@@ -277,7 +283,7 @@ class AstroQuery:
         Returns
         -------
         l0_obj : KPF0
-            The input L0 (PRIMARY unchanged), now carrying ``catalog_info`` with
+            The input L0 (PRIMARY unchanged), now carrying ``catalog_query`` with
             the ``gaia`` / ``simbad`` / ``wmko`` records (each a dict or None), and
             an 'astro_query' receipt entry. Unusually for a pipeline module this
             returns an L0, not the next level -- AstroQuery runs before assembly.
@@ -291,7 +297,7 @@ class AstroQuery:
         self._gaia = self.query_gaia()
         self._simbad = self.query_simbad()
 
-        self._attach_catalog_info(self.l0_obj)
+        self._attach_catalog_query(self.l0_obj)
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")
 
