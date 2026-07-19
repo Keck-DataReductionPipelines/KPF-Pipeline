@@ -12,6 +12,10 @@ console = true                          # mirror records to stderr
 chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
+[MODULE_ASTRO_QUERY]
+use_gaia = true
+use_simbad = true
+
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
 readnoise_sigma = 10.0

@@ -1,130 +1,39 @@
 """Diagnostics for KPF Level 0 (raw CCD) data products."""
 
-import logging
-import re
-
-import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
-from astroquery.gaia import Gaia
-from astroquery.simbad import Simbad
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
-logger = logging.getLogger(__name__)
-
 
 class DiagL0(Diagnostics):
-    """Diagnostics for KPF Level 0 raw data products."""
+    """Diagnostics for KPF Level 0 raw data products.
+
+    The pointing-offset metrics compare the telescope pointing against the target
+    astrometry resolved upstream by AstroQuery and attached as ``l0.catalog_query``
+    (Gaia / SIMBAD / DCS, all in one canonical ICRS schema); DiagL0 assumes that
+    dict is present and fully populated.
+    """
 
     LEVEL = "L0"
 
-    # Keys each metric needs; absent -> metric is N/A for that frame (skip).
-    _POINTING_KEYS = ("RA", "DEC", "MJD-OBS")
-    _TARGET_KEYS = (
-        "TARGRA",
-        "TARGDEC",
-        "TARGPMRA",
-        "TARGPMDC",
-        "TARGPLAX",
-        "TARGFRAM",
-        "TARGEPOC",
-    )
+    def _record_skycoord(self, source):
+        """ICRS SkyCoord from a ``catalog_query`` record (canonical units).
 
-    @staticmethod
-    def _present(hdr, keys):
-        """True if every key in ``keys`` is present and non-None in ``hdr``."""
-        return all(hdr.get(k) is not None for k in keys)
-
-    # Astrometry helpers reproduced from BarycentricCorrection._gaia_astrometry /
-    # ._wmko_astrometry (there they read INSTRUMENT_HEADER; at L0 the natives are
-    # on PRIMARY). The two copies are kept in sync by hand.
-
-    def _gaia_source_id(self):
-        """Digit-only Gaia DR3 id from L0 GAIAID, or None if absent/malformed."""
-        raw = self.kpf_obj.headers["PRIMARY"].get("GAIAID")
-        if raw is None:
-            return None
-        token = re.split(r"\s+", str(raw).strip())[-1]
-        return token if token.isdigit() else None
-
-    def _gaia_astrometry(self):
-        """Gaia DR3 SkyCoord (ICRS, PM+distance, Gaia epoch) for the L0 GAIAID."""
-        gaia_id = self._gaia_source_id()
-        if gaia_id is None:
-            raise ValueError("no usable Gaia source id in L0 PRIMARY GAIAID")
-        query = f"""
-        SELECT ra, dec, pmra, pmdec, parallax, ref_epoch
-        FROM gaiadr3.gaia_source
-        WHERE source_id = {gaia_id}
+        AstroQuery normalizes every source ('gaia'/'simbad'/'wmko') to the same
+        schema -- ICRS, RA/Dec deg, proper motion mas/yr (RA incl. cos Dec),
+        parallax mas, epoch in Julian years -- so one builder serves all three.
         """
-        result = Gaia.launch_job(query).get_results()[0]
+        rec = self.kpf_obj.catalog_query[source]
         return SkyCoord(
-            ra=result["ra"] * u.deg,
-            dec=result["dec"] * u.deg,
-            pm_ra_cosdec=result["pmra"] * u.mas / u.yr,
-            pm_dec=result["pmdec"] * u.mas / u.yr,
-            distance=(1e3 / result["parallax"]) * u.pc,
-            obstime=Time(result["ref_epoch"], format="jyear"),
-            frame="icrs",
-        )
-
-    def _wmko_astrometry(self):
-        """WMKO/DCS target SkyCoord from L0 PRIMARY TARG* astrometry.
-
-        TARGPMRA is s/yr (-> mas/yr via x15 cos(dec)); TARGPLAX is mas (-> pc).
-        """
-        hdr = self.kpf_obj.headers["PRIMARY"]
-        pos = SkyCoord(hdr["TARGRA"], hdr["TARGDEC"], unit=(u.hourangle, u.deg))
-        pm_ra_cosdec = float(hdr["TARGPMRA"]) * 15.0 * np.cos(pos.dec.rad) * 1e3
-        return SkyCoord(
-            ra=pos.ra,
-            dec=pos.dec,
-            pm_ra_cosdec=pm_ra_cosdec * u.mas / u.yr,
-            pm_dec=float(hdr["TARGPMDC"]) * 1e3 * u.mas / u.yr,
-            distance=(1e3 / float(hdr["TARGPLAX"])) * u.pc,
-            frame=str(hdr["TARGFRAM"]).lower(),
-            obstime=Time(float(hdr["TARGEPOC"]), format="jyear"),
-        )
-
-    def _object_name(self):
-        """SIMBAD-resolvable name from L0 PRIMARY OBJECT, or None if absent.
-
-        KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
-        SIMBAD resolves only with an 'HD ' prefix; named targets pass through.
-        """
-        obj = self.kpf_obj.headers["PRIMARY"].get("OBJECT")
-        if obj is None:
-            return None
-        obj = str(obj).strip()
-        if not obj:
-            return None
-        return f"HD {obj}" if obj.isdigit() else obj
-
-    def _simbad_astrometry(self):
-        """SIMBAD SkyCoord (ICRS J2000, PM+distance) for the L0 OBJECT name.
-
-        SIMBAD reports ICRS coordinates at epoch J2000.0; column names are the
-        astroquery 0.4.11 lowercase schema (ra/dec in deg, pmra/pmdec, plx_value).
-        """
-        name = self._object_name()
-        if name is None:
-            raise ValueError("no OBJECT name in L0 PRIMARY header")
-        simbad = Simbad()
-        simbad.add_votable_fields("pmra", "pmdec", "plx")
-        result = simbad.query_object(name)
-        if result is None or len(result) == 0:
-            raise ValueError(f"SIMBAD returned no match for {name!r}")
-        row = result[0]
-        return SkyCoord(
-            ra=row["ra"] * u.deg,
-            dec=row["dec"] * u.deg,
-            pm_ra_cosdec=row["pmra"] * u.mas / u.yr,
-            pm_dec=row["pmdec"] * u.mas / u.yr,
-            distance=(1e3 / row["plx_value"]) * u.pc,
-            obstime=Time(2000.0, format="jyear"),
-            frame="icrs",
+            ra=rec["ra"] * u.deg,
+            dec=rec["dec"] * u.deg,
+            pm_ra_cosdec=rec["pmra"] * u.mas / u.yr,
+            pm_dec=rec["pmdec"] * u.mas / u.yr,
+            distance=(1e3 / rec["parallax"]) * u.pc,
+            obstime=Time(rec["epoch"], format="jyear"),
+            frame=rec["frame"],
         )
 
     def _pointing(self):
@@ -136,68 +45,32 @@ class DiagL0(Diagnostics):
         """Observation epoch (Time) from L0 PRIMARY MJD-OBS, for PM propagation."""
         return Time(float(self.kpf_obj.headers["PRIMARY"]["MJD-OBS"]), format="mjd")
 
-    def gaia_ra_dec_offset(self):
-        """GAIAOFF: arcsec, RA/DEC pointing vs GAIAID position at obs epoch.
+    def _offset(self, source):
+        """Arcsec separation of the pointing from a catalog source at obs epoch.
 
-        Skipped when the frame has no pointing or no usable GAIAID; a Gaia
-        network/lookup failure warns and skips (fail-soft).
+        The catalog position is propagated to the observation epoch (proper
+        motion) before the comparison, so the offset reflects where the source
+        actually sits at the time of the exposure.
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
-        if (
-            not self._present(hdr, self._POINTING_KEYS)
-            or self._gaia_source_id() is None
-        ):
-            return {}
-        try:
-            gaia = self._gaia_astrometry().apply_space_motion(
-                new_obstime=self._obs_time()
-            )
-        except Exception as e:
-            logger.warning(
-                "GAIAOFF skipped: Gaia lookup failed (%s: %s)", type(e).__name__, e
-            )
-            return {}
-        sep = float(self._pointing().separation(gaia).arcsec)
-        return self._tag(GAIAOFF=round(sep, 4))
+        coord = self._record_skycoord(source).apply_space_motion(
+            new_obstime=self._obs_time()
+        )
+        return round(float(self._pointing().separation(coord).arcsec), 4)
+
+    def gaia_ra_dec_offset(self):
+        """GAIAOFF: arcsec, RA/DEC pointing vs Gaia catalog position at obs epoch."""
+        return self._tag(GAIAOFF=self._offset("gaia"))
 
     gaia_ra_dec_offset._diag_name = "gaia_ra_dec_offset"
 
     def target_ra_dec_offset(self):
-        """TARGOFF: arcsec, RA/DEC pointing vs TARGRA/DEC target at obs epoch.
-
-        Skipped when the frame has no pointing or no DCS target (e.g. a
-        calibration frame).
-        """
-        hdr = self.kpf_obj.headers["PRIMARY"]
-        if not self._present(hdr, self._POINTING_KEYS + self._TARGET_KEYS):
-            return {}
-        target = self._wmko_astrometry().apply_space_motion(
-            new_obstime=self._obs_time()
-        )
-        sep = float(self._pointing().separation(target).arcsec)
-        return self._tag(TARGOFF=round(sep, 4))
+        """TARGOFF: arcsec, RA/DEC pointing vs DCS target position at obs epoch."""
+        return self._tag(TARGOFF=self._offset("wmko"))
 
     target_ra_dec_offset._diag_name = "target_ra_dec_offset"
 
     def object_ra_dec_offset(self):
-        """OBJOFF: arcsec, RA/DEC pointing vs SIMBAD(OBJECT) position at obs epoch.
-
-        Skipped when the frame has no pointing or no OBJECT name; a SIMBAD
-        network/lookup failure (or an unresolvable name) warns and skips.
-        """
-        hdr = self.kpf_obj.headers["PRIMARY"]
-        if not self._present(hdr, self._POINTING_KEYS) or self._object_name() is None:
-            return {}
-        try:
-            obj = self._simbad_astrometry().apply_space_motion(
-                new_obstime=self._obs_time()
-            )
-        except Exception as e:
-            logger.warning(
-                "OBJOFF skipped: SIMBAD lookup failed (%s: %s)", type(e).__name__, e
-            )
-            return {}
-        sep = float(self._pointing().separation(obj).arcsec)
-        return self._tag(OBJOFF=round(sep, 4))
+        """OBJOFF: arcsec, RA/DEC pointing vs SIMBAD(OBJECT) position at obs epoch."""
+        return self._tag(OBJOFF=self._offset("simbad"))
 
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"

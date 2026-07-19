@@ -1,7 +1,6 @@
 """Tests for the Diagnostics framework and per-level subclasses."""
 
 import logging
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -141,18 +140,6 @@ class TestDiagnosticsBase:
 
 
 class TestEmptyLevels:
-    def _make_obj(self):
-        class _FakeObj:
-            headers = {"PRIMARY": {}}
-            data = {}
-
-        return _FakeObj()
-
-    def test_diag_l0_runs_cleanly(self):
-        # No RA/DEC/GAIAID -> GAIAOFF/TARGOFF both skip (fail-soft), no crash.
-        results = DiagL0(self._make_obj()).run()
-        assert results == {}
-
     def test_diag_l1_runs_cleanly(self):
         # DATE-OBS present (required) but no RECEIPT cal paths -> calibration_ages
         # returns {} (no crash). DATE-OBS itself is now a required read.
@@ -161,180 +148,62 @@ class TestEmptyLevels:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 -- pointing / identity offsets (GAIAOFF, TARGOFF)
+# DiagL0 -- pointing offsets from catalog_query (GAIAOFF, TARGOFF, OBJOFF)
 # ---------------------------------------------------------------------------
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
 
 
-def _make_l0_pointing(**overrides):
-    """A KPF0 with L0 PRIMARY pointing + DCS target + GAIAID natives.
-
-    Pass ``KEY=None`` to omit a native (used to exercise the skip paths).
-    """
-    prim = {
-        "RA": _PT_RA,
-        "DEC": _PT_DEC,
-        "MJD-OBS": 60540.6,
-        "GAIAID": "DR3 12345",
-        "TARGRA": _PT_RA,
-        "TARGDEC": _PT_DEC,
-        "TARGPMRA": 0.0,
-        "TARGPMDC": 0.0,
-        "TARGPLAX": 100.0,
-        "TARGFRAM": "FK5",
-        "TARGEPOC": 2000.0,
+def _record_at(coord, **overrides):
+    """A canonical catalog_query record placed at ``coord`` (zero PM, finite plx)."""
+    rec = {
+        "source_id": "test",
+        "ra": coord.ra.deg,
+        "dec": coord.dec.deg,
+        "pmra": 0.0,
+        "pmdec": 0.0,
+        "parallax": 100.0,
+        "rv": 0.0,
+        "frame": "icrs",
+        "epoch": 2016.0,
+        "equinox": 2000.0,
     }
-    prim.update(overrides)
+    rec.update(overrides)
+    return rec
+
+
+def _make_l0_with_catalog():
+    """A KPF0 with L0 PRIMARY pointing and a fully-populated catalog_query whose
+    gaia/simbad/wmko records all sit at the pointing (all three offsets ~ 0)."""
     l0 = KPF0()
-    for k, v in prim.items():
-        if v is not None:
-            l0.headers["PRIMARY"][k] = v
+    l0.headers["PRIMARY"]["RA"] = _PT_RA
+    l0.headers["PRIMARY"]["DEC"] = _PT_DEC
+    l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
+    pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+    l0.catalog_query = {src: _record_at(pt) for src in ("gaia", "simbad", "wmko")}
     return l0
 
 
-def _fake_gaia_job(ra_deg, dec_deg):
-    """Stand-in for Gaia.launch_job: a one-row results Table, no network.
-
-    Zero proper motion so ``apply_space_motion`` leaves the position at
-    (ra_deg, dec_deg).
-    """
-    tbl = Table(
-        {
-            "ra": [ra_deg],
-            "dec": [dec_deg],
-            "pmra": [0.0],
-            "pmdec": [0.0],
-            "parallax": [100.0],
-            "ref_epoch": [2016.0],
-        }
-    )
-
-    class _Job:
-        def get_results(self):
-            return tbl
-
-    return _Job()
-
-
-class TestDiagL0Pointing:
-    def _gaia_at_pointing(self):
-        # Gaia source placed exactly at the pointing -> GAIAOFF ~ 0.
-        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
-        return _fake_gaia_job(pt.ra.deg, pt.dec.deg)
-
+class TestDiagL0Offsets:
     def test_offsets_written_to_quality_control(self):
-        l0 = _make_l0_pointing()
-        with patch(
-            "kpfpipe.quality_control.diagnostics.level0.Gaia.launch_job",
-            return_value=self._gaia_at_pointing(),
-        ):
-            results = DiagL0(l0).run()
-        # Pointing == target == Gaia position, so both offsets are ~0 (TARGOFF
-        # carries the ~23 mas ICRS<->FK5 frame bias); well under the 1" budget.
-        assert results["GAIAOFF"][0] < 0.1
-        assert results["TARGOFF"][0] < 0.1
-        # set_keyword routed both to QUALITY_CONTROL.
-        assert l0.headers["QUALITY_CONTROL"]["GAIAOFF"] == results["GAIAOFF"][0]
-        assert l0.headers["QUALITY_CONTROL"]["TARGOFF"] == results["TARGOFF"][0]
-
-    def test_skip_when_no_pointing(self):
-        # A calibration-like frame with no RA/DEC/target -> both metrics N/A.
-        l0 = _make_l0_pointing(RA=None, DEC=None, TARGRA=None, GAIAID=None)
+        # All three sources sit at the pointing -> every offset ~0, routed to QC.
+        l0 = _make_l0_with_catalog()
         results = DiagL0(l0).run()
-        assert "GAIAOFF" not in results
-        assert "TARGOFF" not in results
+        for key in ("GAIAOFF", "TARGOFF", "OBJOFF"):
+            assert results[key][0] < 0.1
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
-    def test_skip_gaiaoff_when_no_gaiaid(self, caplog):
-        # Pointing + target present, GAIAID absent -> TARGOFF only, no warning.
-        l0 = _make_l0_pointing(GAIAID=None)
-        with caplog.at_level(logging.WARNING):
-            results = DiagL0(l0).run()
-        assert "GAIAOFF" not in results
-        assert "TARGOFF" in results
-        assert "GAIAOFF skipped" not in caplog.text
-
-    def test_gaia_failure_warns_and_skips(self, caplog):
-        # Gaia unreachable -> GAIAOFF warns and skips; the network-free TARGOFF
-        # still computes (fail-soft, so the L0 checkpoint does not fail).
-        l0 = _make_l0_pointing()
-        with (
-            patch(
-                "kpfpipe.quality_control.diagnostics.level0.Gaia.launch_job",
-                side_effect=ConnectionError("gaia down"),
-            ),
-            caplog.at_level(logging.WARNING),
-        ):
-            results = DiagL0(l0).run()
-        assert "GAIAOFF skipped" in caplog.text
-        assert "GAIAOFF" not in results
-        assert "TARGOFF" in results
-
-
-# ---------------------------------------------------------------------------
-# DiagL0 -- OBJECT-name offset via SIMBAD (OBJOFF)
-# ---------------------------------------------------------------------------
-
-
-def _fake_simbad(ra_deg=None, dec_deg=None, no_match=False):
-    """Stand-in for the Simbad class: Simbad() -> instance whose query_object
-    returns a one-row Table (astroquery 0.4.11 schema), or None for no match."""
-    instance = MagicMock()
-    if no_match:
-        instance.query_object.return_value = None
-    else:
-        instance.query_object.return_value = Table(
-            {
-                "ra": [ra_deg],
-                "dec": [dec_deg],
-                "pmra": [0.0],
-                "pmdec": [0.0],
-                "plx_value": [100.0],
-            }
-        )
-    return instance
-
-
-class TestDiagL0Object:
-    def test_object_offset_routed_to_quality_control(self):
-        # GAIAID absent -> GAIAOFF skips silently (no Gaia network); OBJECT set,
-        # SIMBAD placed at the pointing -> OBJOFF ~ 0, routed to QUALITY_CONTROL.
-        l0 = _make_l0_pointing(GAIAID=None)
-        l0.headers["PRIMARY"]["OBJECT"] = "10700"
+    def test_offset_reflects_catalog_separation(self):
+        # Move the Gaia record 10" north of the pointing -> GAIAOFF ~ 10", while
+        # the still-at-pointing wmko record keeps TARGOFF ~ 0.
+        l0 = _make_l0_with_catalog()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
-        with patch(
-            "kpfpipe.quality_control.diagnostics.level0.Simbad",
-            return_value=_fake_simbad(pt.ra.deg, pt.dec.deg),
-        ):
-            results = DiagL0(l0).run()
-        assert results["OBJOFF"][0] < 0.1
-        assert l0.headers["QUALITY_CONTROL"]["OBJOFF"] == results["OBJOFF"][0]
-
-    def test_object_name_hd_prefix(self):
-        # Bare-numeric OBJECT gets an 'HD ' prefix; named targets pass through.
-        l0 = _make_l0_pointing()
-        l0.headers["PRIMARY"]["OBJECT"] = "10700"
-        assert DiagL0(l0)._object_name() == "HD 10700"
-        l0.headers["PRIMARY"]["OBJECT"] = "tau Cet"
-        assert DiagL0(l0)._object_name() == "tau Cet"
-
-    def test_skip_when_no_object(self):
-        # No OBJECT native -> metric N/A, skip silently (no SIMBAD call).
-        l0 = _make_l0_pointing()  # helper sets no OBJECT
-        assert DiagL0(l0).object_ra_dec_offset() == {}
-
-    def test_simbad_no_match_warns_and_skips(self, caplog):
-        l0 = _make_l0_pointing()
-        l0.headers["PRIMARY"]["OBJECT"] = "NotARealStar"
-        with (
-            patch(
-                "kpfpipe.quality_control.diagnostics.level0.Simbad",
-                return_value=_fake_simbad(no_match=True),
-            ),
-            caplog.at_level(logging.WARNING),
-        ):
-            assert DiagL0(l0).object_ra_dec_offset() == {}
-        assert "OBJOFF skipped" in caplog.text
+        l0.catalog_query["gaia"] = _record_at(
+            pt.directional_offset_by(0 * u.deg, 10 * u.arcsec)
+        )
+        results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] == pytest.approx(10.0, abs=0.1)
+        assert results["TARGOFF"][0] < 0.1
 
 
 # ---------------------------------------------------------------------------
