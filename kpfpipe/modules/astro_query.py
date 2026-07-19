@@ -191,7 +191,7 @@ class AstroQuery:
         surprise so a silent DCS format change cannot corrupt the record.
         """
         frame = primary.get("TARGFRAM")
-        equinox = self._scalar(primary.get("TARGEQUI"))
+        equinox = primary.get("TARGEQUI")
         ra, dec = primary.get("TARGRA"), primary.get("TARGDEC")
         problems = []
         if not (isinstance(frame, str) and frame.strip().upper() == _WMKO_FRAME):
@@ -230,8 +230,8 @@ class AstroQuery:
             return None
         self._verify_wmko_format(primary)
         dec_deg = Angle(primary["TARGDEC"], unit=u.deg).deg
-        pmra = self._scalar(primary.get("TARGPMRA"))
-        pmdec = self._scalar(primary.get("TARGPMDC"))
+        pmra = primary.get("TARGPMRA")
+        pmdec = primary.get("TARGPMDC")
         record = {
             "source_id": primary.get("OBJECT"),
             "ra": Angle(primary["TARGRA"], unit=u.hourangle).to(u.deg).value,
@@ -240,11 +240,11 @@ class AstroQuery:
             if pmra is None
             else pmra * 15.0 * np.cos(np.radians(dec_deg)) * 1e3,
             "pmdec": None if pmdec is None else pmdec * 1e3,
-            "parallax": self._scalar(primary.get("TARGPLAX")),
-            "rv": self._scalar(primary.get("TARGRADV")),
+            "parallax": primary.get("TARGPLAX"),
+            "rv": primary.get("TARGRADV"),
             "frame": "icrs",
-            "epoch": self._scalar(primary.get("TARGEPOC")),
-            "equinox": self._scalar(primary.get("TARGEQUI")),
+            "epoch": primary.get("TARGEPOC"),
+            "equinox": primary.get("TARGEQUI"),
         }
         logger.info("successfully built record for wmko")
         return record
