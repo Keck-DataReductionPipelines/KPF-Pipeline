@@ -1,7 +1,10 @@
 """ConfigHandler: load TOML config files with optional overrides."""
 
+import logging
 import tomllib
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigHandler:
@@ -58,7 +61,18 @@ class ConfigHandler:
 
         params = {}
         for section in sections:
-            section_cfg = self.config.get(section, {})
+            if section not in self.config:
+                raise KeyError(f"Config section {section!r} absent from {self.path}")
+            section_cfg = self.config[section]
+            if section_cfg:
+                logger.debug(
+                    "Config section %r loaded (%d entries)", section, len(section_cfg)
+                )
+            else:
+                logger.debug(
+                    "Config section %r present but empty; no params contributed",
+                    section,
+                )
 
             for key, value in section_cfg.items():
                 if isinstance(value, dict):

@@ -1,5 +1,7 @@
 """Tests for L0 quicklook plots."""
 
+import os
+
 import matplotlib
 import numpy as np
 import pytest
@@ -11,6 +13,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level0 import KPF0
+
+
+@pytest.fixture(autouse=True)
+def _close_figures():
+    """Close any figures a test left open (the output_dir=None path returns them)."""
+    yield
+    plt.close("all")
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -31,6 +41,7 @@ def synthetic_4amp_l0(tmp_path):
     primary.header["OBJECT"] = "synthetic-4amp"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -58,6 +69,7 @@ def synthetic_2amp_l0(tmp_path):
     primary.header["OBJECT"] = "synthetic-2amp"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:38"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -84,6 +96,7 @@ def small_2amp_l0(tmp_path):
     primary.header["OBJECT"] = "small-2amp"
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-04-05T01:00:39"
+    primary.header["OFNAME"] = os.path.basename(fn)
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -107,7 +120,7 @@ class TestPlotL0Constructor:
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
         qlp = PlotL0(synthetic_4amp_l0)
-        assert qlp.l0_obj is synthetic_4amp_l0
+        assert qlp.kpf_obj is synthetic_4amp_l0
         assert qlp.obs_id == "KP.20240405.00001.00"
         assert qlp.name == "synthetic-4amp"
         assert qlp.output_dir is None
@@ -203,6 +216,7 @@ class TestStitchedImage2To16:
 
         primary = fits.PrimaryHDU()
         primary.header["OBJECT"] = "high-value"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in range(1, 5):
@@ -324,6 +338,7 @@ class TestPlotL0Run:
 
         primary = fits.PrimaryHDU()
         primary.header["OBJECT"] = "green-only"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for amp in range(1, 5):
             data = rng.normal(1000, 3, (100, 100)).astype(np.float32)

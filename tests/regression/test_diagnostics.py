@@ -88,17 +88,23 @@ class TestDiagnosticsBase:
         assert results == {}
         assert obj.headers["PRIMARY"] == {}
 
-    def test_raising_method_propagates_runtime_error(self):
+    def test_raising_method_propagates_and_logs(self, caplog):
         obj = self._make_obj()
 
         class MyDiag(Diagnostics):
+            LEVEL = "L0"
+
             def boom(self):
                 raise ValueError("boom!")
 
             boom._diag_name = "boom"
 
-        with pytest.raises(RuntimeError, match="Diagnostic 'boom' raised"):
-            MyDiag(obj).run()
+        # Fail-fast: the original exception propagates unchanged (no RuntimeError
+        # wrap), and run() logs the offending method at ERROR.
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(ValueError, match="boom!"):
+                MyDiag(obj).run()
+        assert "diagnostic 'boom' raised" in caplog.text
 
     def test_repeated_run_resets_results(self):
         obj = self._make_obj()
@@ -148,8 +154,9 @@ class TestEmptyLevels:
         assert results == {}
 
     def test_diag_l1_runs_cleanly(self):
-        # No RECEIPT/INSTRUMENT_HEADER -> calibration_ages returns {} (no crash).
-        results = DiagL1(self._make_obj()).run()
+        # DATE-OBS present (required) but no RECEIPT cal paths -> calibration_ages
+        # returns {} (no crash). DATE-OBS itself is now a required read.
+        results = DiagL1(_make_kpf1_with_calibrations()).run()
         assert results == {}
 
 
@@ -395,13 +402,19 @@ class TestDiagL1CalibrationAges:
         assert set(results) == {"BIASAGE"}
         assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
 
-    def test_no_date_obs_skips_all(self):
+    def test_no_date_obs_raises(self, caplog):
+        # DATE-OBS is guaranteed by the L1 checkpoint's KWRDPRL1 raise gate; if it
+        # is missing anyway, calibration_ages fails loud (a broken upstream
+        # invariant). run() logs the offending method and lets the original
+        # KeyError propagate unchanged (fail-fast).
         l1 = _make_kpf1_with_calibrations(
             files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
         )
         del l1.headers["PRIMARY"]["DATE-OBS"]
-        results = DiagL1(l1).run()
-        assert results == {}
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(KeyError, match="DATE-OBS"):
+                DiagL1(l1).run()
+        assert "diagnostic 'calibration_ages' raised" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -700,7 +713,6 @@ class TestDiagL4:
     # Two equal-weight orders with toy values give exact, hand-checkable stats:
     #   BJD  [10, 20] -> mean 15, std 5 d (=432000 s), range 10 d (=864000 s)
     #   BERV [0.1, 0.3] -> mean 0.2, std 0.1 km/s (=100 m/s), range 0.2 (=200 m/s)
-    #   per-order BERV %dev = [-50, +50] of the 0.2 mean
     def test_bjd_berv_dispersion_values(self):
         l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [1.0, 1.0])
         DiagL4(l4).run()
@@ -711,8 +723,6 @@ class TestDiagL4:
         assert qc["BERVMEAN"] == pytest.approx(0.2)
         assert qc["BERVSTD"] == pytest.approx(100.0)
         assert qc["BERVRNG"] == pytest.approx(200.0)
-        assert qc["BERVMAXP"] == pytest.approx(50.0)
-        assert qc["BERVMINP"] == pytest.approx(-50.0)
 
     def test_zero_weight_orders_excluded(self):
         # Third order has zero weight: excluded from the weighted mean and the

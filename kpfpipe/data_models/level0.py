@@ -66,11 +66,7 @@ class KPF0(KPFDataModel):
         self._read(hdul)
         # Derive obs_id before stamping: _stamp_wmko_tracking writes it as the
         # ORIGID provenance card, so it must be known by then.
-        if self.filename is not None:
-            try:
-                self.obs_id = get_obs_id(self.filename)
-            except ValueError:
-                pass
+        self.obs_id = get_obs_id(self.filename)
         if "PRIMARY" in self.headers:
             self._stamp_wmko_tracking()
 
@@ -80,22 +76,28 @@ class KPF0(KPFDataModel):
         The single population site for DRPVERNO, PROGID/KOAID, DRPSTATU, and ORIGID
         (the original L0 obs_id), written to their registry home (RECEIPT) via
         ``set_keyword`` and ridden forward onto L1/L2/L4 (see ``to_kpf1``).
-        DRPVERNO/DRPSTATU are always (re)stamped; a missing PROGID/KOAID defaults
-        to UNKNOWN with a warning; ORIGID is stamped only when the obs_id resolved.
+        DRPVERNO/DRPSTATU/ORIGID are always (re)stamped. KOAID and PROGID are not
+        on the raw WMKO PRIMARY -- they map from OFNAME and PROGNAME respectively.
+        A missing PROGNAME defaults PROGID to UNKNOWN with a warning; a missing
+        OFNAME (the archive obs_id) raises.
         """
         self.set_keyword("DRPVERNO", __version__)
         self.set_keyword("DRPSTATU", _DRPSTATU_DEFAULT)
-        if self.obs_id is not None:
-            self.set_keyword("ORIGID", self.obs_id)
+        self.set_keyword("ORIGID", self.obs_id)
         primary = self.headers["PRIMARY"]
-        for key in ("PROGID", "KOAID"):
-            value = primary.get(key)
-            if not value:
-                logger.warning(
-                    "%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key
-                )
-                value = "UNKNOWN"
-            self.set_keyword(key, value)
+
+        koaid = primary.get("OFNAME")
+        if not koaid:
+            raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
+        self.set_keyword("KOAID", koaid)
+
+        progname = primary.get("PROGNAME")
+        if not progname:
+            logger.warning(
+                "PROGNAME absent from L0 PRIMARY; defaulting PROGID to 'UNKNOWN'"
+            )
+            progname = "UNKNOWN"
+        self.set_keyword("PROGID", progname)
 
     def _read(self, hdul):
         """Read all extensions from an L0 FITS HDUList.
@@ -119,8 +121,8 @@ class KPF0(KPFDataModel):
             if ext_name not in self.extensions:
                 if ext_name != "PRIMARY":
                     if ext_name not in _KNOWN_L0_EXTENSIONS:
-                        logger.warning(
-                            "Non-standard extension '%s' found in L0 file.", ext_name
+                        raise ValueError(
+                            f"Non-standard extension {ext_name!r} in L0 file"
                         )
                     self.create_extension(ext_name, fits_type)
 
@@ -175,6 +177,8 @@ class KPF0(KPFDataModel):
             raise NameError("Filename must end with .fits")
 
         self.receipt_add_entry("to_fits", f"out_filepath={fn}", "PASS")
+        # Warn-only advisory (match rvdata); the write still proceeds.
+        self.check_filename_convention(fn)
 
         if "PRIMARY" in self.headers:
             self.headers["PRIMARY"]["FILENAME"] = (

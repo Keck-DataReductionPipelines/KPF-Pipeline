@@ -7,15 +7,13 @@ Covers:
   - QCL1 full run on an all-good synthetic L1 (TestQCL1Run)
   - QCL2 checks (TestQCL2)
   - QCL4 checks (TestQCL4)
-  - CLI smoke tests (TestQCScript)
 
 All tests use synthetic in-memory data -- no real KPF files required.
+The qc.py CLI smoke tests live in test_qc_script.py.
 """
 
 import logging
 import os
-import subprocess
-import sys
 import types
 
 import numpy as np
@@ -215,20 +213,19 @@ class TestQCBase:
 
         QC.run() writes each result via ``set_keyword`` and aggregates ISGOOD; it
         does NOT validate headers (that moved to the checkpoints layer). It reads
-        each check's comment off ``keyword_registry.routing`` (empty here -- these
-        synthetic keys aren't registered, so comment "") and derives ISGOOD as the
-        AND over ``keyword_registry.qc_flag_keywords`` present on QUALITY_CONTROL,
-        so the stub declares the synthetic check keys as the QC-flag set. This fake
-        stores every keyword on QUALITY_CONTROL (value only).
+        each check's comment off ``keyword_registry.routing`` (the synthetic keys
+        are registered here with blank comments) and derives ISGOOD as the AND over
+        ``keyword_registry.qc_flag_keywords`` present on QUALITY_CONTROL, so the
+        stub declares the synthetic check keys as the QC-flag set. This fake stores
+        every keyword on QUALITY_CONTROL (value only).
         """
+        qc_keys = frozenset({"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "ISGOOD"})
 
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             keyword_registry = types.SimpleNamespace(
-                routing={},
-                qc_flag_keywords=frozenset(
-                    {"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "ISGOOD"}
-                ),
+                routing={k: ("QUALITY_CONTROL", "") for k in qc_keys},
+                qc_flag_keywords=qc_keys,
             )
 
             def set_keyword(self, key, value):
@@ -276,17 +273,23 @@ class TestQCBase:
         assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHKFAIL"] == 0
 
-    def test_raising_check_propagates_runtime_error(self):
+    def test_raising_check_propagates_and_logs(self, caplog):
         obj = self._make_obj()
 
         class MyQC(QC):
+            LEVEL = "L0"
+
             def check_boom(self):
                 raise ValueError("boom!")
 
             check_boom._qc_key = "BOOM"
 
-        with pytest.raises(RuntimeError, match="QC check 'check_boom' raised"):
-            MyQC(obj).run()
+        # Fail-fast: the original exception propagates unchanged (no RuntimeError
+        # wrap), and run() logs the offending check at ERROR.
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(ValueError, match="boom!"):
+                MyQC(obj).run()
+        assert "QC check 'check_boom' raised" in caplog.text
 
     def test_empty_subclass_isgood_1(self):
         obj = self._make_obj()
@@ -372,6 +375,7 @@ class TestQCL0:
         fn = str(tmp_path / "KP.20240405.00002.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in range(1, 5):
@@ -387,6 +391,7 @@ class TestQCL0:
         fn = str(tmp_path / "KP.20240405.00003.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in (1, 2):
@@ -402,6 +407,7 @@ class TestQCL0:
         fn = str(tmp_path / "KP.20240405.00004.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+        primary.header["OFNAME"] = os.path.basename(fn)
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in (1, 2, 3):  # 3 amps -> not a valid 2/4-amp readout
@@ -529,29 +535,26 @@ class TestQCL0:
         assert seen["data_input"] == str(tmp_path)
 
     def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
-        """obs_id=None → passes without consulting the list."""
+        """obs_id=None is not in any junk list → passes (documented residual: an
+        unresolved obs_id is not caught here)."""
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
-        def _boom(data_input):
-            raise AssertionError("load_junk_obs_ids must not be consulted")
-
-        monkeypatch.setattr(mod, "load_junk_obs_ids", _boom)
+        monkeypatch.setattr(
+            mod, "load_junk_obs_ids", lambda data_input: {"KP.20240101.99999.00"}
+        )
         l0 = _make_kpf0(tmp_path)
         l0.dirname = str(tmp_path / "L0" / "20240405")
         l0.obs_id = None
         assert QCL0(l0).not_junk() is True
 
-    def test_not_junk_pass_unknown_dirname(self, tmp_path, monkeypatch):
-        """No source dir on the object → passes without consulting the list."""
-        import kpfpipe.quality_control.qc_flags.level0 as mod
-
-        def _boom(data_input):
-            raise AssertionError("load_junk_obs_ids must not be consulted")
-
-        monkeypatch.setattr(mod, "load_junk_obs_ids", _boom)
+    def test_not_junk_raises_on_unknown_dirname(self, tmp_path):
+        """dirname is set on every L0 read; an absent one is a broken upstream
+        invariant and fails loud (os.path.dirname(None) → TypeError) rather than
+        silently passing."""
         l0 = _make_kpf0(tmp_path)
         l0.dirname = None
-        assert QCL0(l0).not_junk() is True
+        with pytest.raises(TypeError):
+            QCL0(l0).not_junk()
 
     def test_not_junk_key_present(self):
         qc = QCL0.__dict__["not_junk"]
@@ -915,9 +918,13 @@ class TestQCL2:
         kpf2.set_data("GREEN_SCI1_VAR", var)
         assert QCL2(kpf2).variance_positive() is False
 
-    def test_variance_positive_fail_no_var(self):
+    def test_variance_positive_raises_on_shape_mismatch(self):
+        # FLUX populated but VAR left at its default empty (0,) shape is a
+        # malformed product: the shape-mismatched comparison raises rather than
+        # silently skipping the fiber.
         kpf2 = _make_kpf2_with_flux()  # no VAR populated
-        assert QCL2(kpf2).variance_positive() is False
+        with pytest.raises(ValueError):
+            QCL2(kpf2).variance_positive()
 
     # --- science_snr (L2SNROK) ---
 
@@ -954,120 +961,18 @@ class TestQCL2:
 
 
 # ---------------------------------------------------------------------------
-# Task 6: CLI smoke tests
-# ---------------------------------------------------------------------------
-
-_REPO_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-
-
-def _write_l0_fixture(path, *, passing=True):
-    """Write a minimal L0 FITS fixture at path.
-
-    passing=True  → all QCL0 checks pass (valid header keywords, EXPTIME finite
-                    and consistent with ELAPSED, amps present).
-    passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
-    """
-    primary = fits.PrimaryHDU()
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    # Requested EXPTIME within tolerance of the elapsed time (_GOOD_DATES
-    # ELAPSED = 12.07) so EXPTIMOK's ELAPSED-consistency check passes.
-    primary.header["EXPTIME"] = 12.0 if passing else -1.0
-    primary.header["OBJECT"] = "synthetic"
-    primary.header["OFNAME"] = os.path.basename(path)
-    primary.header["IMTYPE"] = "Object"
-    for k, v in _GOOD_DATES.items():  # self-consistent raw times so DATTIMOK passes
-        primary.header[k] = v
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = np.ones((10, 10), dtype=np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    fits.HDUList(hdus).writeto(path, overwrite=True)
-
-
-def _run_qc_script(fixture_path, level="L0", extra_args=None):
-    """Run scripts/quality_control/qc.py via subprocess, return the CompletedProcess."""
-    cmd = [
-        sys.executable,
-        "scripts/quality_control/qc.py",
-        "--input",
-        str(fixture_path),
-        "--level",
-        level,
-    ]
-    if extra_args:
-        cmd.extend(extra_args)
-    env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
-    return subprocess.run(cmd, cwd=_REPO_ROOT, env=env, capture_output=True, text=True)
-
-
-class TestQCScript:
-    """Smoke tests for scripts/quality_control/qc.py via subprocess."""
-
-    def test_all_passing_exit_0_isgood_pass(self, tmp_path):
-        """All-good L0 → exit code 0, stdout contains 'ISGOOD: PASS'."""
-        fixture = tmp_path / "KP.20240405.00001.00.fits"
-        _write_l0_fixture(str(fixture), passing=True)
-
-        result = _run_qc_script(fixture, level="L0")
-
-        assert result.returncode == 0, (
-            f"Expected exit 0, got {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
-        assert "ISGOOD: PASS" in result.stdout, (
-            f"Expected 'ISGOOD: PASS' in stdout:\n{result.stdout}"
-        )
-
-    def test_failure_injected_exit_1_isgood_fail(self, tmp_path):
-        """L0 with negative EXPTIME → exit code 1, stdout contains 'ISGOOD: FAIL'."""
-        fixture = tmp_path / "KP.20240405.00002.00.fits"
-        _write_l0_fixture(str(fixture), passing=False)
-
-        result = _run_qc_script(fixture, level="L0")
-
-        assert result.returncode == 1, (
-            f"Expected exit 1, got {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
-        assert "ISGOOD: FAIL" in result.stdout, (
-            f"Expected 'ISGOOD: FAIL' in stdout:\n{result.stdout}"
-        )
-
-    def test_missing_file_exit_2(self, tmp_path):
-        """Non-existent file → exit code 2."""
-        missing = tmp_path / "does_not_exist.fits"
-        result = _run_qc_script(missing, level="L0")
-        assert result.returncode == 2
-
-    def test_no_args_exit_nonzero(self):
-        """No args → argparse error → non-zero exit."""
-        env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
-        result = subprocess.run(
-            [sys.executable, "scripts/quality_control/qc.py"],
-            cwd=_REPO_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode != 0
-
-
-# ---------------------------------------------------------------------------
 # QCL4 -- CCF/RV presence and BERV percent-change (ported from v2.12)
 # (timing consistency moved to QCL0 / DATTIMOK)
 # ---------------------------------------------------------------------------
 
 
-def _make_l4(*, sci=True, rv_filled=True, maxpc=None, minpc=None):
-    """KPF4 with science CCF/RV and optional per-order BERV %-deviation metrics.
+def _make_l4(*, sci=True, rv_filled=True, bervrng=None, bjdrng=None, sci_obj=None):
+    """KPF4 with science CCF/RV and optional per-order BERV/BJD range metrics.
 
     ``rv_filled=False`` seeds the RV table with NaN RVs (a CrossCorrelation-only
-    L4, before RadialVelocity), so DATAPRL4 must fail.
+    L4, before RadialVelocity), so DATAPRL4 must fail. ``sci_obj`` sets the SCI2
+    illumination (INSTRUMENT_HEADER SCI-OBJ); the BERV/BJD tolerance checks only
+    apply when it is 'target'.
     """
     l4 = KPF4()
     if sci:
@@ -1082,13 +987,18 @@ def _make_l4(*, sci=True, rv_filled=True, maxpc=None, minpc=None):
                     {
                         "ORDER_INDEX": np.arange(_NORDER_TOTAL),
                         "RV": rv_col,
+                        "BJD_TDB": np.full(_NORDER_TOTAL, 2460000.0),
+                        "BERV": np.zeros(_NORDER_TOTAL),
+                        "WEIGHT": np.ones(_NORDER_TOTAL),
                     }
                 ),
             )
-    if maxpc is not None:
-        l4.headers["QUALITY_CONTROL"]["BERVMAXP"] = maxpc
-    if minpc is not None:
-        l4.headers["QUALITY_CONTROL"]["BERVMINP"] = minpc
+    if bervrng is not None:
+        l4.headers["QUALITY_CONTROL"]["BERVRNG"] = bervrng
+    if bjdrng is not None:
+        l4.headers["QUALITY_CONTROL"]["BJDRNG"] = bjdrng
+    if sci_obj is not None:
+        l4.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
     return l4
 
 
@@ -1104,15 +1014,67 @@ class TestQCL4:
         # did not) -> the RVs are the L4 product, so DATAPRL4 must fail.
         assert QCL4(_make_l4(rv_filled=False)).ccf_rv_present() is False
 
-    def test_bcv_percent_change_pass(self):
-        assert QCL4(_make_l4(maxpc=0.3, minpc=-0.4)).berv_within_tolerance() is True
+    def test_ccf_rv_present_fail_when_columns_missing(self):
+        # RV filled but the per-order BJD_TDB/BERV/WEIGHT columns the DiagL4
+        # dispersion metrics consume are absent -> DATAPRL4 must fail.
+        l4 = KPF4()
+        for fiber in ("SCI1", "SCI2", "SCI3"):
+            l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
+            l4.set_data(
+                f"{fiber}_RV",
+                Table(
+                    {
+                        "ORDER_INDEX": np.arange(_NORDER_TOTAL),
+                        "RV": np.zeros(_NORDER_TOTAL),
+                    }
+                ),
+            )
+        assert QCL4(l4).ccf_rv_present() is False
 
-    def test_bcv_percent_change_fail(self):
-        assert QCL4(_make_l4(maxpc=1.5, minpc=-0.2)).berv_within_tolerance() is False
+    def test_berv_within_tolerance_pass(self):
+        l4 = _make_l4(sci_obj="target", bervrng=0.05)
+        assert QCL4(l4).berv_within_tolerance() is True
 
-    def test_bcv_percent_change_absent_passes(self):
-        # No BERVMAXP/BERVMINP (e.g. calibration frame) -> nothing to flag.
-        assert QCL4(_make_l4()).berv_within_tolerance() is True
+    def test_berv_within_tolerance_fail(self):
+        l4 = _make_l4(sci_obj="target", bervrng=0.5)
+        assert QCL4(l4).berv_within_tolerance() is False
+
+    def test_berv_within_tolerance_non_target_passes(self):
+        # SCI2 not star-illuminated (e.g. thar/etalon) -> not applicable, passes
+        # even with an out-of-tolerance BERVRNG present.
+        l4 = _make_l4(sci_obj="etalon", bervrng=0.5)
+        assert QCL4(l4).berv_within_tolerance() is True
+
+    def test_berv_within_tolerance_raises_when_sci_obj_absent(self):
+        # A frame with no SCI-OBJ is malformed (CrossCorrelation requires it
+        # upstream) -> raise, not silently pass as a non-target source.
+        with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
+            QCL4(_make_l4(bervrng=0.05)).berv_within_tolerance()
+
+    def test_berv_within_tolerance_target_absent_fails(self):
+        # Target frame but DiagL4 skipped the metric (degenerate weights / NaN
+        # barycorr) -> malformed, must fail rather than pass vacuously.
+        assert QCL4(_make_l4(sci_obj="target")).berv_within_tolerance() is False
+
+    def test_bjd_within_tolerance_pass(self):
+        l4 = _make_l4(sci_obj="target", bjdrng=0.5)
+        assert QCL4(l4).bjd_within_tolerance() is True
+
+    def test_bjd_within_tolerance_fail(self):
+        l4 = _make_l4(sci_obj="target", bjdrng=2.0)
+        assert QCL4(l4).bjd_within_tolerance() is False
+
+    def test_bjd_within_tolerance_non_target_passes(self):
+        assert (
+            QCL4(_make_l4(sci_obj="etalon", bjdrng=2.0)).bjd_within_tolerance() is True
+        )
+
+    def test_bjd_within_tolerance_raises_when_sci_obj_absent(self):
+        with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
+            QCL4(_make_l4(bjdrng=0.5)).bjd_within_tolerance()
+
+    def test_bjd_within_tolerance_target_absent_fails(self):
+        assert QCL4(_make_l4(sci_obj="target")).bjd_within_tolerance() is False
 
     def test_required_keywords_present(self):
         l4 = _make_l4()
@@ -1125,21 +1087,22 @@ class TestQCL4:
             assert QCL4(l4).required_keywords_present() is False
 
     def test_run_all_good_isgood(self):
-        l4 = _make_l4(maxpc=0.1, minpc=-0.1)
+        l4 = _make_l4(sci_obj="target", bervrng=0.05, bjdrng=0.5)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
-        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "BERVOK"}
+        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "BERVOK", "BJDOK"}
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1
+        assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1 and qc["BJDOK"] == 1
         assert qc["ISGOOD"] == 1
 
     def test_run_flags_failure_in_isgood(self):
-        l4 = _make_l4(sci=False, maxpc=2.0, minpc=-2.0)  # no CCF/RV, bad BCV
+        # no CCF/RV, and out-of-tolerance BERV/BJD ranges on a target frame
+        l4 = _make_l4(sci=False, sci_obj="target", bervrng=0.5, bjdrng=2.0)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         l4.headers["QUALITY_CONTROL"]  # ensure present
         QCL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0
+        assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0 and qc["BJDOK"] == 0
         assert qc["ISGOOD"] == 0

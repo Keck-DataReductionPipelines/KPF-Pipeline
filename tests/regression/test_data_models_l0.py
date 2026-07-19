@@ -47,7 +47,7 @@ class TestKPF0:
         l0 = KPF0.from_fits(synthetic_l0_file)
         original_green = l0.data["GREEN_AMP1"].copy()
 
-        out_fn = str(tmp_path / "roundtrip_l0.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10.fits")
         l0.to_fits(out_fn)
 
         l0_reread = KPF0.from_fits(out_fn)
@@ -71,7 +71,7 @@ class TestKPF0:
         extension, which L0's default extension set lacks)."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l0.receipt_add_entry("image_assembly", "", "PASS")
-        out_fn = str(tmp_path / "roundtrip_receipt_l0.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10.fits")
         l0.to_fits(out_fn)
 
         modules = KPF0.from_fits(out_fn).receipt["FUNCTION"].values
@@ -102,17 +102,17 @@ class TestKPF0ErrorPaths:
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
         primary.header["DATE-OBS"] = "2024-01-13T00:00:02"
+        primary.header["OFNAME"] = "KP.20240113.00002.00.fits"
         hdul = fits.HDUList([primary, *extra_hdus])
         hdul.writeto(fn, overwrite=True)
         hdul.close()
         return fn
 
-    def test_warns_on_unknown_extension(self, caplog, tmp_path):
+    def test_raises_on_unknown_extension(self, tmp_path):
         weird = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="MYSTERY")
         fn = self._minimal_l0(tmp_path, extra_hdus=[weird])
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(ValueError, match="Non-standard extension 'MYSTERY'"):
             KPF0.from_fits(fn)
-        assert "Non-standard extension" in caplog.text
 
     def test_parses_receipt_with_entries(self, tmp_path):
         receipt = Table({"FUNCTION": ["init"], "STATUS": ["PASS"]})
@@ -148,6 +148,28 @@ class TestKPF0ErrorPaths:
         l0.to_fits(out)
         assert os.path.isfile(out)
 
+    def test_from_fits_raises_on_unparseable_filename(self, tmp_path):
+        """A filename carrying no obs_id fails loud on read (get_obs_id) rather
+        than silently reading with obs_id=None."""
+        fn = str(tmp_path / "not_a_kpf_name.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["INSTRUME"] = "KPF"
+        fits.HDUList([primary]).writeto(fn, overwrite=True)
+        with pytest.raises(ValueError, match="No obs_id found"):
+            KPF0.from_fits(fn)
+
+    def test_to_fits_warns_on_nonconforming_name_but_writes(
+        self, caplog, synthetic_l0_file, tmp_path
+    ):
+        """to_fits runs the warn-only filename advisory: a non-conforming output
+        name warns but the write still proceeds."""
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        out = str(tmp_path / "not_kpf_convention.fits")
+        with caplog.at_level(logging.WARNING):
+            l0.to_fits(out)
+        assert "does not follow the KPF L0 naming" in caplog.text
+        assert os.path.isfile(out)
+
 
 class TestKPF0Provenance:
     """from_fits stamps the WMKO DRP-RUN provenance cards onto the L0 RECEIPT
@@ -160,11 +182,11 @@ class TestKPF0Provenance:
         assert receipt.get("DRPVERNO") == importlib.metadata.version("kpfpipe")
         assert receipt.get("DRPSTATU") == "File ingested into KPF-DRP"
 
-    def test_from_fits_carries_native_program_ids(self, synthetic_l0_file):
-        """PROGID/KOAID present in the WMKO-native file drive the RECEIPT cards."""
+    def test_from_fits_maps_native_program_ids(self, synthetic_l0_file):
+        """The native OFNAME/PROGNAME cards map to the KOAID/PROGID RECEIPT cards."""
         receipt = KPF0.from_fits(synthetic_l0_file).headers["RECEIPT"]
         assert receipt.get("PROGID") == "K123"
-        assert receipt.get("KOAID") == "KP.20240113.23249.10"
+        assert receipt.get("KOAID") == "KP.20240113.23249.10.fits"
 
     def test_from_fits_stamps_origid_from_obs_id(self, synthetic_l0_file):
         """ORIGID is inferred from the resolved obs_id and stamped onto RECEIPT."""
@@ -173,13 +195,25 @@ class TestKPF0Provenance:
         assert l0.headers["RECEIPT"].get("ORIGID") == "KP.20240113.23249.10"
         assert "ORIGID" not in l0.headers["PRIMARY"]
 
-    def test_from_fits_defaults_program_ids_to_unknown_and_warns(
+    def test_from_fits_defaults_progid_to_unknown_and_warns(
         self, caplog, synthetic_l0_minimal
     ):
-        """A file lacking PROGID/KOAID defaults both to UNKNOWN and warns."""
+        """A file lacking PROGNAME defaults PROGID to UNKNOWN and warns; KOAID is
+        still mapped from the present OFNAME."""
         with caplog.at_level(logging.WARNING):
             l0 = KPF0.from_fits(synthetic_l0_minimal)
-        assert "PROGID absent" in caplog.text
+        assert "PROGNAME absent" in caplog.text
         receipt = l0.headers["RECEIPT"]
         assert receipt.get("PROGID") == "UNKNOWN"
-        assert receipt.get("KOAID") == "UNKNOWN"
+        assert receipt.get("KOAID") == "KP.20240113.00001.00.fits"
+
+    def test_from_fits_raises_when_ofname_absent(self, tmp_path):
+        """A file lacking OFNAME cannot set KOAID (the archive obs_id) and must
+        fail loud rather than stamp a placeholder."""
+        fn = str(tmp_path / "KP.20240113.00003.00.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["INSTRUME"] = "KPF"
+        primary.header["DATE-OBS"] = "2024-01-13T00:00:03"
+        fits.HDUList([primary]).writeto(fn, overwrite=True)
+        with pytest.raises(ValueError, match="OFNAME absent"):
+            KPF0.from_fits(fn)

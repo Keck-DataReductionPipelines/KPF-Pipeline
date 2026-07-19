@@ -12,6 +12,14 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.quality_control.quicklook.level4 import PlotL4
 
+
+@pytest.fixture(autouse=True)
+def _close_figures():
+    """Close any figures a test left open (the output_dir=None path returns them)."""
+    yield
+    plt.close("all")
+
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER = NORDER_GREEN + NORDER_RED

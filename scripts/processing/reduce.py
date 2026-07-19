@@ -233,30 +233,29 @@ def clear_stale_outputs(config, args):
     night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded), plus
     the whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the
     diagnostics HDF5), so a rebuilt thar master can never co-exist with a prior
-    run's frame L2s or diagnostics. A no-op when the output root is unconfigured
-    or nothing matches.
+    run's frame L2s or diagnostics. A no-op when nothing matches; raises KeyError
+    if the relevant output root is absent from [DATA_DIRS] (the recipe requires
+    the same key, so failing here surfaces a broken config one step earlier).
     """
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []
     if args.obs_id and is_obs_id(args.obs_id):
-        data_root = data_dirs.get("KPF_SCIENCE_OUTPUT")
-        if data_root:
-            paths = [
-                kpf_filepath(args.obs_id, level, data_root=data_root)
-                for level in ("L1", "L2", "L4")
-            ]
+        data_root = data_dirs["KPF_SCIENCE_OUTPUT"]
+        paths = [
+            kpf_filepath(args.obs_id, level, data_root=data_root)
+            for level in ("L1", "L2", "L4")
+        ]
     elif args.datecode:
-        data_root = data_dirs.get("KPF_MASTERS_OUTPUT")
-        if data_root:
-            masters_dir = kpf_directory(
-                kind="masters", data_root=data_root, datecode=args.datecode
-            )
-            for pattern in _MASTER_OUTPUT_GLOBS:
-                paths += glob.glob(os.path.join(masters_dir, pattern))
-            stack_subdir = masters_stack_subdir(masters_dir, "thar", "L2")
-            if os.path.isdir(stack_subdir):
-                shutil.rmtree(stack_subdir)
-                logger.info("removed stale output dir: %s", stack_subdir)
+        data_root = data_dirs["KPF_MASTERS_OUTPUT"]
+        masters_dir = kpf_directory(
+            kind="masters", data_root=data_root, datecode=args.datecode
+        )
+        for pattern in _MASTER_OUTPUT_GLOBS:
+            paths += glob.glob(os.path.join(masters_dir, pattern))
+        stack_subdir = masters_stack_subdir(masters_dir, "thar", "L2")
+        if os.path.isdir(stack_subdir):
+            shutil.rmtree(stack_subdir)
+            logger.info("removed stale output dir: %s", stack_subdir)
 
     for path in paths:
         if os.path.isfile(path):

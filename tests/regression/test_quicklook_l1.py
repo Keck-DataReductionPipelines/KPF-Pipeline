@@ -11,6 +11,14 @@ import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level1 import KPF1
 
+
+@pytest.fixture(autouse=True)
+def _close_figures():
+    """Close any figures a test left open (the output_dir=None path returns them)."""
+    yield
+    plt.close("all")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -94,7 +102,7 @@ class TestPlotL1Constructor:
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 
         qlp = PlotL1(synthetic_l1)
-        assert qlp.l1_obj is synthetic_l1
+        assert qlp.kpf_obj is synthetic_l1
         assert qlp.obs_id == "KP.20240405.00001.00"
         assert qlp.name == "synthetic-l1"
         assert qlp.output_dir is None

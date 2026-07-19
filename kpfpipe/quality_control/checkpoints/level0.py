@@ -9,6 +9,7 @@ class CheckpointL0(Checkpoint):
     """Checkpoints for KPF Level 0 raw data products."""
 
     LEVEL = "L0"
-    RAISE_FLAGS = ("DATAPRL0",)  # missing raw data is fatal; other flags warn.
+    # Missing raw data or a missing required PRIMARY keyword is fatal; others warn.
+    RAISE_FLAGS = ("DATAPRL0", "KWRDPRL0")
     DIAGNOSTICS = DiagL0
     QC = QCL0

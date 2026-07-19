@@ -30,21 +30,20 @@ class Diagnostics:
     def _tag(self, **values):
         """Pair each ``keyword=value`` with its registry-sourced FITS comment.
 
-        Sources the comment from the keyword registry (single source of truth)
-        so ``self.results`` stays in sync with the ``set_keyword`` header write.
+        Sources the comment from the keyword registry (single source of truth) so
+        ``self.results`` stays in sync with the ``set_keyword`` header write. Every
+        emitted keyword must be registered; an unregistered one raises rather than
+        getting a blank comment.
         """
         routing = self.kpf_obj.keyword_registry.routing
-        out = {}
-        for kw, value in values.items():
-            route = routing.get(kw)
-            out[kw] = (value, route[1] if route is not None else "")
-        return out
+        return {kw: (value, routing[kw][1]) for kw, value in values.items()}
 
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.
 
         Resets ``self.results`` at the start so calling ``run()`` repeatedly
-        is deterministic.
+        is deterministic. A method that raises is logged at ERROR (naming it) and
+        re-raised unchanged -- fail-fast; halting is the checkpoint layer's role.
 
         Returns
         -------
@@ -56,17 +55,17 @@ class Diagnostics:
         for name, fn in self._iter_methods():
             try:
                 output = fn()
+                if not output:
+                    continue
+                for kw, (value, comment) in output.items():
+                    self.results[kw] = (value, comment)
+                    # set_keyword routes each metric to its registry home; the FITS
+                    # comment is the registry Description (the metric-dict comment is
+                    # retained in self.results only).
+                    self.kpf_obj.set_keyword(kw, value)
             except Exception as e:
-                raise RuntimeError(f"Diagnostic {name!r} raised: {e}") from e
-
-            if not output:
-                continue
-            for kw, (value, comment) in output.items():
-                self.results[kw] = (value, comment)
-                # set_keyword routes each metric to its registry home; the FITS
-                # comment is the registry Description (the metric-dict comment is
-                # retained in self.results only).
-                self.kpf_obj.set_keyword(kw, value)
+                logger.error("%s diagnostic %r raised: %s", self.LEVEL, name, e)
+                raise
 
         for kw, (value, comment) in self.results.items():
             logger.debug("%s %s = %s — %s", self.LEVEL, kw, value, comment)

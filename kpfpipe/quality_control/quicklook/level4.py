@@ -1,14 +1,10 @@
 """L4 quicklook plots for KPF cross-correlation functions (CCFs) and RVs."""
 
-import os
-from datetime import UTC, datetime
-
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kpfpipe.quality_control.quicklook._save_png import save_png
+from kpfpipe.quality_control.quicklook.base import Plot
 
-_DPI = 200
 # Orderlet panels, left-to-right, in the canonical KPF order.
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
@@ -23,7 +19,7 @@ _ORDER_OFFSET = 0.5
 _RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
 
 
-class PlotL4:
+class PlotL4(Plot):
     """Quicklook plots for KPF L4 (RVs and CCFs) data.
 
     Parameters
@@ -37,18 +33,12 @@ class PlotL4:
         ``l4_obj.obs_id`` (populated on every construction path).
     """
 
+    LEVEL = "L4"
     _PLOT_METHODS = ("ccf_grid",)
 
     def __init__(self, l4_obj, output_dir=None, obs_id=None):
-        self.l4_obj = l4_obj
-        self.output_dir = output_dir
+        super().__init__(l4_obj, output_dir, obs_id)
         self.fibers = _FIBERS
-
-        primary = (
-            l4_obj.headers.get("PRIMARY", {}) if hasattr(l4_obj, "headers") else {}
-        )
-        self.obs_id = obs_id or getattr(l4_obj, "obs_id", None) or ""
-        self.name = primary.get("OBJECT", "") if primary else ""
 
     # ------------------------------------------------------------------
     # Data access helpers
@@ -61,7 +51,7 @@ class PlotL4:
         signal (all zero/NaN) -- e.g. the zero-filled half of the concatenated
         cube when RVs were only computed for the other chip.
         """
-        arr = self.l4_obj.data.get(f"{chip.upper()}_{fiber.upper()}_CCF")
+        arr = self.kpf_obj.data.get(f"{chip.upper()}_{fiber.upper()}_CCF")
         if arr is None:
             return None
         arr = np.asarray(arr, dtype=float)
@@ -74,23 +64,23 @@ class PlotL4:
     def _ext_header(self, fiber, suffix):
         """Return the {fiber}_{suffix} extension header (resolving its alias)."""
         key = f"{fiber.upper()}_{suffix}"
-        if hasattr(self.l4_obj.data, "_resolve"):
-            key = self.l4_obj.data._resolve(key)
-        return self.l4_obj.headers.get(key, {}) or {}
+        if hasattr(self.kpf_obj.data, "_resolve"):
+            key = self.kpf_obj.data._resolve(key)
+        return self.kpf_obj.headers.get(key, {}) or {}
 
     def _velocity_grid(self, fiber, nvel):
-        """Velocity axis [km/s] from the CCF header, or sample index fallback."""
+        """Velocity axis [km/s] from the CCF header.
+
+        CrossCorrelation writes VELSTART/VELSTEP/VELNSTEP on every CCF it
+        produces, so their absence on a populated CCF is a malformed product
+        (fail loud) rather than a state to substitute sample indices for.
+        """
         hdr = self._ext_header(fiber, "CCF")
-        start = hdr.get("VELSTART") if hdr else None
-        step = hdr.get("VELSTEP") if hdr else None
-        nstep = hdr.get("VELNSTEP") if hdr else None
-        if start is None or step is None:
-            return np.arange(nvel)
-        n = int(nstep) if nstep is not None else nvel
-        return np.arange(n) * float(step) + float(start)
+        n = int(hdr["VELNSTEP"]) if "VELNSTEP" in hdr else nvel
+        return np.arange(n) * float(hdr["VELSTEP"]) + float(hdr["VELSTART"])
 
     def _ccf_mask(self, fiber):
-        return self._ext_header(fiber, "CCF").get("CCFMASK", "") or ""
+        return self._ext_header(fiber, "CCF")["CCFMASK"]
 
     def _combined_rv(self, chip, fiber):
         """Per-CCD orderlet-combined RV [km/s], or None.
@@ -100,7 +90,8 @@ class PlotL4:
         read from there, not PRIMARY/INSTRUMENT_HEADER.
         """
         n = "1" if chip.upper() == "GREEN" else "2"
-        val = self._ext_header(fiber, "RV").get(f"CCD{n}RV{_RV_SFX[fiber.upper()]}")
+        key = f"CCD{n}RV{_RV_SFX[fiber.upper()]}"
+        val = self._ext_header(fiber, "RV").get(key)
         if val is None:
             return None
         try:
@@ -136,36 +127,12 @@ class PlotL4:
         return [base[i % len(base)] for i in range(n)]
 
     # ------------------------------------------------------------------
-    # Common decoration
-    # ------------------------------------------------------------------
-
-    def _decorate_and_save(self, fig, plot_name, chip):
-        """Add the standard QLP timestamp and save if output_dir is set."""
-        current_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-        fig.text(
-            0.99,
-            0.005,
-            f"KPF QLP: {current_time} UT",
-            fontsize=8,
-            color="darkgray",
-            ha="right",
-            va="bottom",
-        )
-        if self.output_dir is not None:
-            prefix = f"{self.obs_id}_" if self.obs_id else ""
-            path = os.path.join(
-                self.output_dir, f"{prefix}L4_{plot_name}_{chip.lower()}_zoomable.png"
-            )
-            save_png(fig, path, dpi=_DPI, compress_level=6)
-        return fig
-
-    # ------------------------------------------------------------------
     # Plots
     # ------------------------------------------------------------------
 
     def _rv_table(self, chip, fiber):
         """Return the per-order RV table (chip-sliced) for a fiber, or None."""
-        tab = self.l4_obj.data.get(f"{chip.upper()}_{fiber.upper()}_RV")
+        tab = self.kpf_obj.data.get(f"{chip.upper()}_{fiber.upper()}_RV")
         if tab is None or len(tab) == 0:
             return None
         return tab
@@ -332,52 +299,3 @@ class PlotL4:
         fig.suptitle(title, fontsize=30)
         fig.tight_layout()
         return self._decorate_and_save(fig, "ccf_grid", chip)
-
-    # ------------------------------------------------------------------
-    # Driver
-    # ------------------------------------------------------------------
-
-    def run(self, which):
-        """Generate the requested plot(s) for every chip that has CCF data.
-
-        Follows the shared Quicklook ``run()`` contract:
-        saved-and-closed when ``output_dir`` is set, returned open when it
-        is ``None``.
-
-        Parameters
-        ----------
-        which : str
-            'all' to run every implemented plot, or the name of a single
-            plot method (one of ``self._PLOT_METHODS``).
-
-        Returns
-        -------
-        dict
-            Maps ``{method_name}_{chip}`` to its matplotlib.Figure; useful
-            for tests and introspection.
-        """
-        if which == "all":
-            names = self._PLOT_METHODS
-        elif which in self._PLOT_METHODS:
-            names = (which,)
-        else:
-            raise ValueError(
-                f"unknown plot {which!r}; expected 'all' or one of {self._PLOT_METHODS}"
-            )
-
-        if self.output_dir is not None:
-            os.makedirs(self.output_dir, exist_ok=True)
-
-        figures = {}
-        for chip in ("green", "red"):
-            if not self._has_chip(chip):
-                continue
-            for name in names:
-                fig = getattr(self, name)(chip)
-                if fig is None:
-                    continue
-                figures[f"{name}_{chip}"] = fig
-                # Close only saved figures (Quicklook run() contract).
-                if self.output_dir is not None:
-                    plt.close(fig)
-        return figures

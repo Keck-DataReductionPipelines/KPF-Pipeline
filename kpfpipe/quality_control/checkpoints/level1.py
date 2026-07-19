@@ -9,6 +9,7 @@ class CheckpointL1(Checkpoint):
     """Checkpoints for KPF Level 1 assembled FFI products."""
 
     LEVEL = "L1"
-    RAISE_FLAGS = ("DATAPRL1",)  # missing assembled CCDs is fatal; other flags warn.
+    # Missing assembled CCDs or a required PRIMARY keyword is fatal; others warn.
+    RAISE_FLAGS = ("DATAPRL1", "KWRDPRL1")
     DIAGNOSTICS = DiagL1
     QC = QCL1

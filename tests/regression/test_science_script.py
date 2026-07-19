@@ -3,7 +3,7 @@
 Cover the driver's own surface: arg parsing and obs_id validation, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
 at least one frame failed). The shared fan-out engine (``run_stage``, the
-cores-based job sizing) lives in ``_dispatch`` and is tested in test_dispatch.py.
+cores-based job sizing) lives in ``_dispatch`` and is tested in test_dispatch_script.py.
 
 Unit tests use trivial subprocess stubs -- no real testdata needed.
 """

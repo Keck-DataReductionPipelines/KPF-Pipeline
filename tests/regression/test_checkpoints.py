@@ -85,15 +85,16 @@ class TestQCFlags:
             CheckpointL2(l2).qc_flags()
 
     def test_nonraise_flag_zero_warns(self, caplog):
-        # KWRDPRL2 is not a RAISE_FLAG, so a 0 lands in the ISGOOD summary rather
-        # than raising (DATAPRL2 = 1, so no fatal flag).
+        # L2VAROK is not a RAISE_FLAG, so a 0 lands in the ISGOOD summary rather
+        # than raising (DATAPRL2/KWRDPRL2 = 1, so no fatal flag).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")
-        l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (0, "required present")
+        l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (1, "required present")
+        l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "variance positive")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
         assert "ISGOOD=0" in caplog.text
-        assert "KWRDPRL2" in caplog.text
+        assert "L2VAROK" in caplog.text
 
     def test_all_pass_silent(self, caplog):
         l2 = KPF2()
@@ -117,11 +118,15 @@ class TestQCFlags:
         # stage's job (see test_qc_flags), so the checkpoint need not repeat it.
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
+        l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (
+            1,
+            "required present",
+        )  # avoid raise
         l2.headers["QUALITY_CONTROL"]["RNOK"] = (0, "L1 read noise (propagated)")
-        l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (0, "L2 required present")
+        l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "L2 variance positive")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
-        assert "KWRDPRL2" in caplog.text
+        assert "L2VAROK" in caplog.text
         assert "RNOK" in caplog.text
 
     def test_registry_qc_flag_sets_scoping(self):
@@ -179,9 +184,13 @@ class TestRunFoldsDiagnosticsAndQC:
         assert chk.qc_results == {"ISGOOD": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self, caplog):
-        # Base Checkpoint has DIAGNOSTICS = QC = None (LEVEL None skips PRIMARY):
-        # run() does the checkpoint methods only and leaves qc_results empty.
-        chk = Checkpoint(KPF2())  # clean, empty -> checkpoint methods are silent
+        # A concrete-level checkpoint with DIAGNOSTICS = QC = None: run() does the
+        # checkpoint methods only and leaves qc_results empty. (LEVEL must be a
+        # recognized level -- qc_flags() looks it up directly, no silent default.)
+        class NoStageCheckpoint(Checkpoint):
+            LEVEL = "L2"
+
+        chk = NoStageCheckpoint(KPF2())  # clean, empty -> checkpoint methods silent
         with caplog.at_level(logging.WARNING):
             chk.run()
         assert chk.qc_results == {}
@@ -196,8 +205,13 @@ class TestRunFoldsDiagnosticsAndQC:
 def _make_l4(*, sci=True):
     """KPF4 good enough for CheckpointL4.run(): science CCF + RV tables (with
     BJD_TDB/BERV/WEIGHT for DiagL4) and the required PRIMARY keywords seeded so
-    KWRDPRL4 passes. (Timing consistency is an L0 check, DATTIMOK, not L4.)"""
+    KWRDPRL4 passes. (Timing consistency is an L0 check, DATTIMOK, not L4.)
+
+    SCI-OBJ is 'target' (star-illuminated) so the BJDOK/BERVOK gates apply, and the
+    per-order BJD/BERV jitter is kept well inside those range gates (1 s / 0.1 m/s)
+    so a good product passes."""
     l4 = KPF4()
+    l4.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "target"
     if sci:
         rng = np.random.default_rng(3)
         for fiber in ("SCI1", "SCI2", "SCI3"):
@@ -208,8 +222,8 @@ def _make_l4(*, sci=True):
                     {
                         "ORDER_INDEX": np.arange(_NORDER_TOTAL),
                         "RV": rng.normal(0, 1e-3, _NORDER_TOTAL),
-                        "BJD_TDB": 2460000.0 + rng.normal(0, 1e-4, _NORDER_TOTAL),
-                        "BERV": 7.9 + rng.normal(0, 1e-4, _NORDER_TOTAL),
+                        "BJD_TDB": 2460000.0 + rng.normal(0, 1e-7, _NORDER_TOTAL),
+                        "BERV": 7.9 + rng.normal(0, 1e-7, _NORDER_TOTAL),
                         "WEIGHT": np.ones(_NORDER_TOTAL),
                     }
                 ),
@@ -237,12 +251,11 @@ class TestCheckpointL4:
         with pytest.raises(ValueError, match="DATAPRL4 = 0"):
             CheckpointL4(l4).run()
 
-    def test_nonraise_flag_warns(self, caplog):
-        # KWRDPRL4 = 0 (a required PRIMARY keyword missing); not a RAISE_FLAG, so
-        # it warns rather than raises.
+    def test_run_raises_when_required_keyword_missing(self):
+        # KWRDPRL4 is fatal (in RAISE_FLAGS): a missing required PRIMARY keyword
+        # -> KWRDPRL4 = 0 -> run() raises.
         l4 = _make_l4()
         req = sorted(CheckpointL4.QC(l4)._required_primary_keywords())
         del l4.headers["PRIMARY"][req[0]]
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(ValueError, match="KWRDPRL4 = 0"):
             CheckpointL4(l4).run()
-        assert "KWRDPRL4 = 0" in caplog.text

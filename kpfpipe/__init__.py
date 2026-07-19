@@ -6,14 +6,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Installed package version (WMKO DRP-RUN-11); stamped onto RECEIPT as DRPVERNO
-# (the EPRV equivalent DRPTAG is the value carried on PRIMARY). Falls back to
-# "unknown" if the package metadata is unavailable (e.g. running from a source
-# tree that was never installed).
 try:
     __version__ = importlib.metadata.version("kpfpipe")
-except importlib.metadata.PackageNotFoundError:
-    __version__ = "unknown"
+except importlib.metadata.PackageNotFoundError as e:
+    raise RuntimeError(
+        "kpfpipe package metadata not found -- this can occur if the repository "
+        "was cloned but not installed. Install it into the kpfpipe conda env "
+        "before importing: `pip install -e KPF-Pipeline/`."
+    ) from e
 
 # By default use both CCDs and all five fibers
 DEFAULTS = {

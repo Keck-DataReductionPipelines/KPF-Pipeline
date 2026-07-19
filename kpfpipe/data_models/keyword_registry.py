@@ -138,6 +138,11 @@ class KeywordRegistry:
         "CLSRC",
     )
 
+    # STANDARD keys rvdata's header_map.csv maps but KPF deliberately does not
+    # register (parallactic angle, not carried on KPF products). Dropped silently;
+    # any *other* unregistered header_map key raises in _load_header_map.
+    _INTENTIONALLY_UNREGISTERED = frozenset({"PARANG", "PARANG2"})
+
     # Per-extension EPRV keyword CSVs (rvdata exposes no constant). RV#/CCF# share a
     # template; BARYCORR_*/BJD_TDB are per-extension.
     _EPRV_EXT_CSV = {
@@ -260,9 +265,10 @@ class KeywordRegistry:
         Realigns the fiber-indexed STANDARD keys from rvdata's CAL-first to KPF's
         SKY-first numbering (see ``_FIBER_INDEXED_BASES``), then keeps only genuine
         static native->EPRV rows so ``KPF0._map_header`` needs no in-loop filter.
-        Drops STANDARD keys absent from the registry (PARANG/PARANG2, warned) and
-        ``_DEFAULT_OVERRIDES`` keys (valued elsewhere). Runs after
-        ``_build_registry`` -- it filters against ``self.registered``.
+        Drops STANDARD keys absent from the registry (``_INTENTIONALLY_UNREGISTERED``,
+        silently) and ``_DEFAULT_OVERRIDES`` keys (valued elsewhere); any *other*
+        unregistered STANDARD key raises. Runs after ``_build_registry`` -- it
+        filters against ``self.registered``.
         """
         raw = pd.read_csv(_rvdata_inst_cfg / "header_map.csv")
         # Swap trace index 1<->5 for the fiber-indexed families (SKY<->CAL). A dict
@@ -272,14 +278,13 @@ class KeywordRegistry:
             swap[f"{base}1"], swap[f"{base}5"] = f"{base}5", f"{base}1"
         raw["STANDARD"] = raw["STANDARD"].replace(swap)
         eprv_keys = raw["STANDARD"].astype(str).str.strip()
-        unregistered = sorted(
-            set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
-        )
-        if unregistered:
-            logger.warning(
+        unregistered = set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
+        unexpected = sorted(unregistered - self._INTENTIONALLY_UNREGISTERED)
+        if unexpected:
+            raise ValueError(
                 "header_map.csv maps to STANDARD keys absent from the keyword "
-                "registry; they are dropped (not emitted): %s",
-                unregistered,
+                f"registry and not in _INTENTIONALLY_UNREGISTERED: {unexpected}. "
+                "Register them or add to _INTENTIONALLY_UNREGISTERED."
             )
         keep = eprv_keys.isin(self.registered) & ~eprv_keys.isin(
             self._DEFAULT_OVERRIDES.keys()
@@ -376,7 +381,7 @@ class KeywordRegistry:
         rows = []
         for _, r in df.iterrows():
             descr = "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
-            populated_by = str(r.get("PopulatedBy", "")).strip()
+            populated_by = str(r["PopulatedBy"]).strip()
             if populated_by == cls._EPRV_TAG:
                 raise ValueError(
                     f"{source}: keyword {str(r['Keyword']).strip()!r} has "
@@ -384,7 +389,7 @@ class KeywordRegistry:
                     "EPRV-row discriminator; use a real populating site instead"
                 )
             keyword = str(r["Keyword"]).strip()
-            dtype = str(r.get("DataType", "")).strip()
+            dtype = str(r["DataType"]).strip()
             level = level_of(r)
             ext_field = str(r["Extension"]).strip()
             if ext_field.endswith("*"):

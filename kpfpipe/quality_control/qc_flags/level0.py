@@ -126,15 +126,12 @@ class QCL0(QC):
         ``{KPF_DATA_INPUT}/vNext/reference/junk_obs.csv``;
         KPF_DATA_INPUT is recovered from the frame's own source directory, which
         rvdata records as ``self.dirname`` (``{KPF_DATA_INPUT}/L0/{datecode}``)
-        when the L0 is read. An absent list or unknown source dir yields
-        not-junk.
+        when the L0 is read. An absent list yields not-junk
+        (``load_junk_obs_ids`` returns the empty set); ``dirname`` is set on every
+        L0 read, so a missing one signals a broken upstream invariant.
         """
-        obs_id = self.kpf_obj.obs_id
-        dirname = getattr(self.kpf_obj, "dirname", None)
-        if not obs_id or not dirname:
-            return True
-        data_input = os.path.dirname(os.path.dirname(dirname))
-        return obs_id not in load_junk_obs_ids(data_input)
+        data_input = os.path.dirname(os.path.dirname(self.kpf_obj.dirname))
+        return self.kpf_obj.obs_id not in load_junk_obs_ids(data_input)
 
     not_junk._qc_key = "NOTJUNK"
 

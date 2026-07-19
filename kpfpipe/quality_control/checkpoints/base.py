@@ -52,8 +52,7 @@ class Checkpoint:
             except Exception as e:
                 logger.error("%s checkpoint %r raised: %s", self.LEVEL, name, e)
                 raise
-        qc_hdr = self.kpf_obj.headers.get("QUALITY_CONTROL")
-        isgood = qc_hdr.get("ISGOOD") if qc_hdr is not None else None
+        isgood = self.kpf_obj.headers["QUALITY_CONTROL"].get("ISGOOD")
         logger.info(
             "%s checkpoints passed (%d QC flag(s), ISGOOD=%s)",
             self.LEVEL,
@@ -100,13 +99,14 @@ class Checkpoint:
         QUALITY_CONTROL (the cross-level L0->L4 accumulation, ISGOOD excluded) by
         bare keyword -- each was already logged with its comment by the QC stage
         as the flag was written, so the names alone suffice here. A flag absent
-        from the header is skipped (its check did not run).
+        from the header is skipped (its check did not run). QUALITY_CONTROL is a
+        default extension and ``LEVEL`` a fixed subclass constant (L0/L1/L2/L4),
+        so a missing one is a broken invariant that raises (direct access) rather
+        than passing.
         """
-        header = self.kpf_obj.headers.get("QUALITY_CONTROL")
-        if header is None:
-            return
+        header = self.kpf_obj.headers["QUALITY_CONTROL"]
         reg = self.kpf_obj.keyword_registry
-        for key in sorted(reg.qc_flag_keywords_by_level.get(self.LEVEL, frozenset())):
+        for key in sorted(reg.qc_flag_keywords_by_level[self.LEVEL]):
             if key in self.RAISE_FLAGS and header.get(key) == 0:
                 raise ValueError(f"QC checkpoint failed: {key} = 0 ({self.LEVEL})")
         failing = sorted(

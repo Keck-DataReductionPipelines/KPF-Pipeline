@@ -75,8 +75,8 @@ def synthetic_l0_file(tmp_path):
     primary.header["OBJECT"] = "HD_10700"
     primary.header["IMTYPE"] = "Object"
     primary.header["GROBSERV"] = "Smith"
-    primary.header["PROGID"] = "K123"
-    primary.header["KOAID"] = "KP.20240113.23249.10"
+    primary.header["PROGNAME"] = "K123"
+    primary.header["OFNAME"] = "KP.20240113.23249.10.fits"
 
     telemetry = Table({"keyword": ["TEMP1", "TEMP2"], "average": [20.0, 21.0]})
     telemetry_hdu = fits.BinTableHDU(data=telemetry, name="TELEMETRY")
@@ -105,6 +105,7 @@ def synthetic_l0_minimal(tmp_path):
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-01-13T00:00:01"
+    primary.header["OFNAME"] = "KP.20240113.00001.00.fits"
 
     hdul = fits.HDUList([primary])
     hdul.writeto(fn, overwrite=True)
