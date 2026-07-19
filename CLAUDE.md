@@ -66,6 +66,8 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+Revise tests as needed when production code changes. Code design should drive test design, not the other way around. Do not contort production code to match pre-existing tests.
+
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 ## Project Overview
