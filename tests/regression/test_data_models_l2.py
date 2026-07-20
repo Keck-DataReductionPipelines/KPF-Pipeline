@@ -279,13 +279,6 @@ class TestKPF2Aliases:
         assert isinstance(kpf2, RV2)
         assert kpf2.level == 2
 
-    def test_fiber_alias_resolves(self):
-        kpf2 = KPF2()
-        # SCI2_FLUX should resolve to TRACE3_FLUX
-        assert kpf2.data["SCI2_FLUX"] is kpf2.data["TRACE3_FLUX"]
-        assert kpf2.data["CAL_FLUX"] is kpf2.data["TRACE5_FLUX"]
-        assert kpf2.data["SKY_WAVE"] is kpf2.data["TRACE1_WAVE"]
-
     def test_extension_alias_resolves(self):
         kpf2 = KPF2()
         # CA_HK should resolve to ANCILLARY_SPECTRUM

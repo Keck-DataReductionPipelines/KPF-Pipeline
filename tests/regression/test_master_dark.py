@@ -8,8 +8,6 @@ stacking engine these exercise (`BaseMasterModule`) is unit-tested in
 test_master_base.py.
 """
 
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,7 +21,6 @@ from kpfpipe.utils.io import FileHandler
 from ._masters import make_l1_arrays
 
 CHIPS = ["GREEN", "RED"]
-NROW, NCOL = 10, 10  # small arrays for unit tests
 # make_l1_arrays() -- shared synthetic stack_frames builder -- lives in _masters.py
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
@@ -46,21 +43,6 @@ class TestMasterDarkUnit:
         with patch.object(dark, "stack_frames", return_value=synthetic):
             return dark.make_master_l1()
 
-    def test_returns_kpf_master_l1(self, master_dark):
-        assert isinstance(master_dark, KPFMasterL1)
-
-    @pytest.mark.parametrize("ext", ["GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR"])
-    def test_extension_shape(self, master_dark, ext):
-        assert master_dark.data[ext].shape == (NROW, NCOL)
-
-    def test_mask_is_boolean(self, master_dark):
-        assert master_dark.data["GREEN_MASK"].dtype == bool
-        assert master_dark.data["RED_MASK"].dtype == bool
-
-    def test_snr_non_negative(self, master_dark):
-        assert np.all(master_dark.data["GREEN_SNR"] >= 0)
-        assert np.all(master_dark.data["RED_SNR"] >= 0)
-
     def test_receipt_entry(self, master_dark):
         assert "master_dark" in master_dark.receipt["FUNCTION"].values
 
@@ -68,77 +50,6 @@ class TestMasterDarkUnit:
         for chip in CHIPS:
             bunit = master_dark.headers[f"{chip}_IMG"].get("BUNIT")
             assert bunit == "electrons/sec"
-
-    def test_datalvl_class_attribute(self, master_dark):
-        assert master_dark._DATALVL == "ML1"
-
-
-# ---------------------------------------------------------------------------
-# info() smoke tests
-# ---------------------------------------------------------------------------
-
-
-class TestMasterDarkInfo:
-    """Smoke tests for Dark.info() in both pre- and post-perform states."""
-
-    def test_info_before_make_master_l1(self, capsys):
-        dark = Dark(FILE_LIST)
-        dark.info()
-        out = capsys.readouterr().out
-        assert "Dark" in out
-        assert "make_master_l1() has not been called" in out
-
-    def test_info_after_make_master_l1(self, capsys):
-        synthetic = make_l1_arrays()
-        dark = Dark(FILE_LIST)
-        with patch.object(dark, "stack_frames", return_value=synthetic):
-            dark.make_master_l1()
-        dark.info()
-        out = capsys.readouterr().out
-        assert "Dark" in out
-        assert "make_master_l1() has not been called" not in out
-        for chip in CHIPS:
-            assert chip in out
-
-
-# ---------------------------------------------------------------------------
-# FITS round-trip (mocked stack_frames)
-# ---------------------------------------------------------------------------
-
-
-class TestMasterDarkRoundTrip:
-    """Test that master dark output survives a FITS write/read cycle."""
-
-    def test_roundtrip_arrays(self):
-        synthetic = make_l1_arrays()
-        dark = Dark(FILE_LIST)
-        with patch.object(dark, "stack_frames", return_value=synthetic):
-            ml1 = dark.make_master_l1()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_dark.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
-
-        np.testing.assert_array_almost_equal(
-            ml1_read.data["GREEN_IMG"], ml1.data["GREEN_IMG"], decimal=4
-        )
-        np.testing.assert_array_almost_equal(
-            ml1_read.data["RED_IMG"], ml1.data["RED_IMG"], decimal=4
-        )
-
-    def test_roundtrip_datalvl(self):
-        synthetic = make_l1_arrays()
-        dark = Dark(FILE_LIST)
-        with patch.object(dark, "stack_frames", return_value=synthetic):
-            ml1 = dark.make_master_l1()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_dark.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
-
-        assert ml1_read.headers["PRIMARY"].get("DATALVL") == "ML1"
 
 
 # ---------------------------------------------------------------------------

@@ -782,12 +782,11 @@ class TestPerform:
         )
         return BarycentricCorrection(synthetic_kpf2)
 
-    def test_returns_kpf2(self, bc_monkeypatched):
-        assert isinstance(bc_monkeypatched.perform(), KPF2)
-
     def test_returns_same_object(self, bc_monkeypatched):
         original = bc_monkeypatched.l2_obj
-        assert bc_monkeypatched.perform() is original
+        result = bc_monkeypatched.perform()
+        assert result is original
+        assert isinstance(result, KPF2)
 
     def test_bjd_tdb_extension_populated(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
