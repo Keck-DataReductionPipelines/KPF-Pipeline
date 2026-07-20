@@ -360,8 +360,7 @@ class TestBuildVelocityGrid:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def cc_kpf2():
+def _build_cc_kpf2():
     """KPF2 with identical per-order synthetic spectra (absorption at _MASK_CENTERS
     shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
     kpf2 = KPF2()
@@ -394,16 +393,44 @@ def cc_kpf2():
     return kpf2
 
 
-@pytest.fixture
-def cc_module(cc_kpf2, monkeypatch):
-    """CrossCorrelation on a narrow grid with the line mask stubbed to _MASK_CENTERS."""
+def _stub_line_mask(mp):
+    """Patch _build_line_mask to the fixed _MASK_CENTERS top-hat mask."""
     mask = _make_mask(_MASK_CENTERS)
-    monkeypatch.setattr(
+    mp.setattr(
         CrossCorrelation,
         "_build_line_mask",
         lambda self, chip, fiber, mask_width=None: mask,
     )
+
+
+@pytest.fixture
+def cc_kpf2():
+    """KPF2 with identical per-order synthetic spectra (absorption at _MASK_CENTERS
+    shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
+    return _build_cc_kpf2()
+
+
+@pytest.fixture
+def cc_module(cc_kpf2, monkeypatch):
+    """CrossCorrelation on a narrow grid with the line mask stubbed to _MASK_CENTERS."""
+    _stub_line_mask(monkeypatch)
     return CrossCorrelation(cc_kpf2, config={"ccf_window": _RANGE_KMS})
+
+
+@pytest.fixture(scope="module")
+def performed():
+    """Run the default full perform() once and share the (module, L4) read-only.
+
+    Every TestPerform test below inspects a different facet of the *same*
+    default-args L4 (shapes, RV columns, CCF/RV header cards, the injected dip);
+    recomputing it per test cost ~0.9s x ~9 tests. The line-mask stub only has to
+    be live during perform(), so a MonkeyPatch context (the function-scoped
+    monkeypatch fixture can't reach module scope) wraps the build. No consuming
+    test mutates the module or the L4, so the shared object stays read-only."""
+    with pytest.MonkeyPatch.context() as mp:
+        _stub_line_mask(mp)
+        cc = CrossCorrelation(_build_cc_kpf2(), config={"ccf_window": _RANGE_KMS})
+        return cc, cc.perform()
 
 
 class TestComputeCCFPublic:
@@ -463,8 +490,8 @@ class TestComputeCCFPublic:
 class TestPerform:
     _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CAL-OBJ='None' -> skipped
 
-    def test_returns_kpf4_with_per_orderlet_extensions(self, cc_module):
-        l4 = cc_module.perform()
+    def test_returns_kpf4_with_per_orderlet_extensions(self, performed):
+        cc_module, l4 = performed
         assert isinstance(l4, KPF4)
         for fiber in self._ILLUMINATED:
             assert l4.data[f"{fiber}_CCF"].shape == (NORDER, _NVEL)
@@ -490,52 +517,52 @@ class TestPerform:
             assert np.issubdtype(table["ORDER_INDEX"].dtype, np.integer)
             assert np.issubdtype(table["ECHELLE_ORDER"].dtype, np.integer)
 
-    def test_rv_columns_are_nan_placeholders(self, cc_module):
+    def test_rv_columns_are_nan_placeholders(self, performed):
         # CrossCorrelation seeds the RV table metadata but leaves RV/RV_ERR NaN
         # for RadialVelocity to fill.
-        l4 = cc_module.perform()
+        cc_module, l4 = performed
         for fiber in self._ILLUMINATED:
             table = l4.data[f"{fiber}_RV"]
             assert np.all(np.isnan(np.asarray(table["RV"], dtype=float)))
             assert np.all(np.isnan(np.asarray(table["RV_ERR"], dtype=float)))
 
-    def test_unilluminated_fiber_skipped(self, cc_module):
+    def test_unilluminated_fiber_skipped(self, performed):
         # CAL-OBJ='None' -> no CCF cube, CCF variance, or RV table written.
-        l4 = cc_module.perform()
+        cc_module, l4 = performed
         assert l4.data["CAL_CCF"].size == 0
         assert l4.data["CAL_CCF_VAR"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
 
-    def test_ccf_chip_halves_populated(self, cc_module):
-        l4 = cc_module.perform()
+    def test_ccf_chip_halves_populated(self, performed):
+        cc_module, l4 = performed
         assert l4.data["GREEN_SCI2_CCF"].shape == (NORDER_GREEN, _NVEL)
         assert l4.data["RED_SCI2_CCF"].shape == (NORDER_RED, _NVEL)
         assert np.any(l4.data["GREEN_SCI2_CCF"])
         assert np.any(l4.data["RED_SCI2_CCF"])
 
-    def test_ccf_var_persisted(self, cc_module):
+    def test_ccf_var_persisted(self, performed):
         # The per-bin CCF variance cube is written alongside the CCF and matches
         # the variance compute_ccfs cached.
-        l4 = cc_module.perform()
+        cc_module, l4 = performed
         for chip, norder in (("GREEN", NORDER_GREEN), ("RED", NORDER_RED)):
             var = l4.data[f"{chip}_SCI2_CCF_VAR"]
             assert var.shape == (norder, _NVEL)
             np.testing.assert_array_equal(var, cc_module._ccf_var[f"{chip}_SCI2"])
         assert np.any(l4.data["GREEN_SCI2_CCF_VAR"])
 
-    def test_dip_at_injected_velocity_illuminated_orderlets(self, cc_module):
+    def test_dip_at_injected_velocity_illuminated_orderlets(self, performed):
         # The CCFs dip at the injected velocity (no RV fit here, just the CCF).
-        l4 = cc_module.perform()
+        cc_module, l4 = performed
         vel = cc_module._velocity_grid["RED_SCI2"]
         for fiber in self._ILLUMINATED:
             ccf0 = np.asarray(l4.data[f"{fiber}_CCF"])[0]
             assert vel[np.argmin(ccf0)] == pytest.approx(_V_INJECT, abs=0.3)
 
-    def test_rv_table_weight_column_matches_order_weights(self, cc_module):
+    def test_rv_table_weight_column_matches_order_weights(self, performed):
         # The per-order CCF-combination weights (ccf_order_weights.csv, column
         # by the orderlet's mask) are persisted as the WEIGHT column, green
         # orders then red, matching _get_order_weights.
-        l4 = cc_module.perform()
+        cc_module, l4 = performed
         for fiber in self._ILLUMINATED:
             weight = np.asarray(l4.data[f"{fiber}_RV"]["WEIGHT"], dtype=float)
             expected = np.concatenate(
@@ -547,11 +574,11 @@ class TestPerform:
             assert weight.shape == (NORDER,)
             np.testing.assert_array_equal(weight, expected)
 
-    def test_rv_table_order_id_and_echelle_columns(self, cc_module):
+    def test_rv_table_order_id_and_echelle_columns(self, performed):
         # ORDER_ID is the KPF chip/fiber/order name, 1-based per chip (green then
         # red). ECHELLE_ORDER is the physical grating order (detector.toml),
         # blue->red: GREEN 137..103, RED 102..71.
-        l4 = cc_module.perform()
+        cc_module, l4 = performed
         for fiber in self._ILLUMINATED:
             table = l4.data[f"{fiber}_RV"]
             order_id = np.asarray(table["ORDER_ID"])
@@ -565,11 +592,11 @@ class TestPerform:
             assert echelle[NORDER_GREEN] == 102
             assert echelle[-1] == 71
 
-    def test_ccf_and_rv_headers(self, cc_module):
+    def test_ccf_and_rv_headers(self, performed):
         # CrossCorrelation stamps the CCF EPRV keywords and the RV table-structure
         # CTYPE cards, but NOT the RV-processing descriptors (those are
         # RadialVelocity's, Phase 2) or any PRIMARY combined RV.
-        l4 = cc_module.perform()
+        cc_module, l4 = performed
         ccf_hdr = l4.headers["SCI2_CCF"]
         assert ccf_hdr["CTYPE1"] == "Velocity"
         assert ccf_hdr["CTYPE2"] == "Order-N"
@@ -646,8 +673,8 @@ class TestConstructor:
         cc_module.info()
         assert "perform() has not been called" in capsys.readouterr().out
 
-    def test_info_after_perform(self, cc_module, capsys):
-        cc_module.perform()
+    def test_info_after_perform(self, performed, capsys):
+        cc_module, _ = performed
         cc_module.info()
         out = capsys.readouterr().out
         assert "CrossCorrelation" in out

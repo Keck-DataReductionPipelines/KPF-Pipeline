@@ -19,6 +19,9 @@ import pytest
 
 from scripts.processing import _dispatch as f
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 _OK = [sys.executable, "-c", "pass"]
 _FAIL = [sys.executable, "-c", "import sys; sys.exit(1)"]
 _SLEEP = [sys.executable, "-c", "import time; time.sleep(30)"]  # a wedged job

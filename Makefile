@@ -1,4 +1,4 @@
-.PHONY: notebook test test-fast test-serial profile profile-science profile-masters
+.PHONY: notebook test test-fast test-cli test-qlp test-serial test-debug profile profile-science profile-masters
 
 notebook:
 	jupyter notebook --port ${KPFPIPE_PORT} --allow-root --ip=0.0.0.0 --no-browser
@@ -12,14 +12,31 @@ notebook:
 test:
 	conda run -n kpfpipe python -m pytest tests/ -n auto --dist loadscope
 
-# Fast pre-commit subset: everything except @pytest.mark.slow (integration +
-# heavy-compute). The default during day-to-day development.
+# Fast pre-commit subset: recipes and below. Excludes @pytest.mark.slow
+# (integration + heavy-compute), @pytest.mark.cli (the scripts/CLI/tools layer),
+# and @pytest.mark.quicklook (slow QLP PNG rendering, off the production path).
+# The default during day-to-day development.
 test-fast:
-	conda run -n kpfpipe python -m pytest tests/ -m "not slow" -n auto --dist loadscope
+	conda run -n kpfpipe python -m pytest tests/ -m "not slow and not cli and not quicklook" -n auto --dist loadscope
+
+# scripts/CLI/tools layer only (@pytest.mark.cli) -- run when working on
+# scripts/ or tools/ directly. The full `make test` covers this too.
+test-cli:
+	conda run -n kpfpipe python -m pytest tests/ -m cli -n auto --dist loadscope
+
+# Quicklook/QLP render suite only (@pytest.mark.quicklook) -- run when working on
+# the quicklook plots directly. The full `make test` covers this too.
+test-qlp:
+	conda run -n kpfpipe python -m pytest tests/ -m quicklook -n auto --dist loadscope
 
 # Serial fallback (no xdist) — for debugging parallel/receipt issues.
 test-serial:
 	conda run -n kpfpipe python -m pytest tests/
+
+# Debug loop: rerun only last-failed (--lf) and halt at the first failure (-x).
+# Run a full target once to seed the failure cache, then iterate on this.
+test-debug:
+	conda run -n kpfpipe python -m pytest --lf -x
 
 # ---------------------------------------------------------------------------
 # Profiling ("tallest tentpole" suite). Standalone harnesses in tests/profiling/

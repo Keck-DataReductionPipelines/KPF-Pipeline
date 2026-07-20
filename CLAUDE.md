@@ -66,7 +66,9 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-Revise tests as needed when production code changes. Code design should drive test design, not the other way around. Do not contort production code to match pre-existing tests.
+### 5. Communicate Clearly
+
+**Be extremely concise when reporting. Sacrifice grammar for brevity.**
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
@@ -129,9 +131,12 @@ via PR. This overrides any generic "main branch" default from the environment.
 # `conda run -n kpfpipe ...`). Base-system Python lacks rvdata → ModuleNotFoundError.
 # The `make` targets wrap conda run. Run from KPF-Pipeline/ (git receipt system).
 
-make test-fast   # fast pre-commit subset: everything except @pytest.mark.slow (~16s); the default
 make test        # full suite, parallel
+make test-fast   # fast pre-commit subset; excludes slow + cli + quicklook markers; the default
+make test-cli    # scripts/CLI/tools layer only (@pytest.mark.cli); for work in scripts/ or tools/
+make test-qlp    # quicklook/QLP render suite only (@pytest.mark.quicklook); for work in the quicklook plots
 make test-serial # serial fallback for debugging parallel/receipt issues
+make test-debug  # iteration loop: rerun only last-failed (--lf), halt at first failure (-x)
 
 # Single test/class — append ::Class or ::Class::test_name to the file path
 conda run -n kpfpipe python -m pytest tests/regression/test_data_models_l2.py::TestKPF2Aliases -v
@@ -150,12 +155,42 @@ make profile   # all; also profile-science / profile-masters / profile-<module>
 
 ## Testing
 
-No git hook runs tests (`pre-commit` is ruff-only), so match scope to the change: touched
-file(s) while iterating; `make test-fast` before committing; `make test` (full) only for wide
-blast radius (a PR; a core/shared-module change — data models, base classes, `kpfpipe/__init__.py`
-constants, anything integration tests exercise; or a cross-cutting refactor). `test-fast` skips
-the `slow` integration tests (real-frame assembly/overscan, master stacking, full L0→L2, WLS
-orientation). Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
+No git hook runs tests (`pre-commit` is ruff-only), so *you* decide when — and the default is
+**not yet**. Run tests when meaningful change has *accumulated* and reached a natural
+checkpoint, not reflexively after every edit. Bias toward under-running: batching a few edits
+before one verification beats breaking flow (and burning context) on each touch. Match scope to
+blast radius:
+
+- **Mid-change / trivial edits** (a few lines, a rename, an obviously-incomplete step) — don't
+  run. Keep working; verify once the change is coherent.
+- **A coherent unit of work is done or before you commit** — run the *targeted* file(s) for what you
+  touched (`pytest tests/regression/test_<area>.py`), or `make test-fast` if it spans the pipeline core.
+- **Wide blast radius only** — `make test` (full). Reserve for a substantial core/shared-module
+  change, a cross-cutting refactor, or a PR. Not routine.
+- **Scripts/CLI/tools layer** — `make test-cli` or the focused file.
+- **Quicklook/QLP plots** — `make test-qlp` or the focused file.
+- **Chasing a failure** — `make test-debug` (reruns last-failed, halts at first).
+
+Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
+
+Revise tests as needed when production code changes. Code design should drive test design, not the 
+other way around. Do not contort production code to match pre-existing tests.
+
+## Reading Files
+
+Reading a file loads its full text into context, so locate before you load — the target
+span, not the whole file:
+
+- **Repo code** — Grep for the symbol/definition, then Read a bounded window
+  (`offset`/`limit`) around the hit. Read a file whole only when it's short or you're about
+  to edit much of it. For "where is X?" across many files, hand the search to an Explore
+  subagent — it reads the dumps, you keep the conclusion.
+- **Governing docs** (262–622 lines each) — grep the doc's headers
+  (`grep -nE '^#+ ' docs/dev/<doc>.md`) or the keyword, then Read only that section. Read one
+  end-to-end only for a comprehensive review, not a spot-check.
+- **Large command output** (full logs, `--durations`, wide greps) — redirect to the
+  scratchpad and inspect with `grep`/`head`/`wc` rather than letting it flood context:
+  `cmd > $SCRATCH/out.txt 2>&1; grep … $SCRATCH/out.txt`.
 
 ## Design Decisions
 

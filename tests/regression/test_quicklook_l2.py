@@ -11,6 +11,10 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
 
+# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
+# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+pytestmark = pytest.mark.quicklook
+
 
 @pytest.fixture(autouse=True)
 def _close_figures():

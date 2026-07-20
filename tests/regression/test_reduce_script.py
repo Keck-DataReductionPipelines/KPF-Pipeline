@@ -17,6 +17,9 @@ import pytest
 
 from scripts.processing import reduce as red
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 
 def _stub_recipe(tmp_path, sentinel):
     """A recipe file whose main() records the resolved KPF_DATA_INPUT."""

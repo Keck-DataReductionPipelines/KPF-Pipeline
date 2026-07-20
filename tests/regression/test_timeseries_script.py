@@ -20,6 +20,9 @@ from astropy.io import fits
 
 from scripts.processing import timeseries as _ts
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 _OID1 = "KP.20240101.03600.00"
 _BASE_ARGS = ["--target", "10700", "--date_range", "20240101", "20240131"]
 

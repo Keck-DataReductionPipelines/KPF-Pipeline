@@ -11,9 +11,13 @@ Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 
 from pathlib import Path
 
+import pytest
 from astropy.io import fits
 
 from scripts.processing import _scan
+
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
 
 
 def _write_l0(data_input, datecode, seconds, obj="10700", imtype="Object"):

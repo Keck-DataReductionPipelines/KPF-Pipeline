@@ -14,6 +14,9 @@ import pytest
 
 from scripts.processing import science as _science
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 _OID1 = "KP.20240405.40113.57"
 _OID2 = "KP.20240405.40237.36"
 

@@ -7,12 +7,12 @@ import numpy as np
 import pytest
 from astropy import units as u
 from astropy.coordinates import SkyCoord
-from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.quality_control.diagnostics import (
     DiagL0,
@@ -24,7 +24,8 @@ from kpfpipe.quality_control.diagnostics import (
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NCOL = DETECTOR["ccd"]["ncol"]
+_NCOL_TEST = 8  # small, even column count for synthetic FLUX/VAR (DiagL2 reads
+# only per-fiber NaN counts and zero-flux ratios, so real detector width is moot)
 
 _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
@@ -422,45 +423,26 @@ class TestDiagL1CalibrationAges:
 # ---------------------------------------------------------------------------
 
 
-def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0):
-    """Build a minimal KPF1, convert to KPF2, populate FLUX/VAR extensions
-    with controllable NaN and zero fractions across all (chip, fiber) pairs.
+def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0, populate=True):
+    """Build a minimal KPF2 and populate FLUX extensions with controllable NaN
+    and zero fractions across all (chip, fiber) pairs.
 
-    Each FLUX extension has shape (norder[chip], NCOL). Each is initialized
-    to ones, then a fraction is replaced with NaN, then a fraction with 0.0.
+    A bare KPF2() already exposes the FLUX extensions DiagL2 reads (no FITS
+    round-trip needed -- mirrors test_qc_flags._make_kpf2_with_flux). Each FLUX
+    extension has shape (norder[chip], _NCOL_TEST), initialized to ones, then a
+    fraction replaced with NaN, then a fraction with 0.0. With populate=False no
+    FLUX arrays are set -- the "no data populated" schema cases.
     """
-    from io import BytesIO
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
-    green_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD")
-    green_var = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR")
-    red_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD")
-    red_var = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR")
-
-    # Round-trip via in-memory FITS to produce a valid KPF1 → to_kpf2().
-    buf = BytesIO()
-    fits.HDUList([primary, green_ccd, green_var, red_ccd, red_var]).writeto(buf)
-    buf.seek(0)
-    import os
-    import tempfile
-
-    with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
-        tmp.write(buf.read())
-        tmp_path = tmp.name
-    try:
-        l1 = KPF1.from_fits(tmp_path)
-    finally:
-        os.unlink(tmp_path)
-    kpf2 = l1.to_kpf2()
+    kpf2 = KPF2()
+    if not populate:
+        return kpf2
 
     norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
     rng = np.random.default_rng(42)
     for chip in ("GREEN", "RED"):
         for fiber in _FIBERS:
             n = norder[chip]
-            arr = np.ones((n, NCOL), dtype=np.float32)
+            arr = np.ones((n, _NCOL_TEST), dtype=np.float32)
             mask = rng.random(arr.shape)
             if nan_frac > 0:
                 arr[mask < nan_frac] = np.nan
@@ -491,39 +473,7 @@ class TestDiagL2NanCounts:
     def test_writes_keys_even_when_no_data(self):
         """KPF2 with no FLUX extensions populated should still write all 5
         keys with value 0 (consistent header schema)."""
-        # Build a KPF2 without populating any FLUX arrays.
-        from io import BytesIO
-
-        primary = fits.PrimaryHDU()
-        primary.header["INSTRUME"] = "KPF"
-        primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
-        hdul = fits.HDUList(
-            [
-                primary,
-                fits.ImageHDU(
-                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD"
-                ),
-                fits.ImageHDU(
-                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR"
-                ),
-                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD"),
-                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR"),
-            ]
-        )
-        buf = BytesIO()
-        hdul.writeto(buf)
-        buf.seek(0)
-        import os
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
-            tmp.write(buf.read())
-            tmp_path = tmp.name
-        try:
-            l1 = KPF1.from_fits(tmp_path)
-        finally:
-            os.unlink(tmp_path)
-        kpf2 = l1.to_kpf2()
+        kpf2 = _make_kpf2_with_flux(populate=False)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
@@ -541,47 +491,24 @@ class TestDiagL2ZeroFlux:
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
 
-    def test_zerofrac_approximate_when_partial(self):
-        """50% zeros sprinkled randomly → ZEROFRAC ≈ 0.5 within sampling error."""
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
+    def test_zerofrac_half_when_half_zero(self):
+        """Exactly half of every fiber's flux pixels zeroed → ZEROFRAC == 0.5.
+
+        Deterministic even/odd pattern (each array has an even pixel count), so
+        the result is exact and independent of array size and seed.
+        """
+        kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
+        for chip in ("GREEN", "RED"):
+            for fiber in _FIBERS:
+                arr = np.ones_like(np.asarray(kpf2.data[f"{chip}_{fiber}_FLUX"]))
+                arr.reshape(-1)[::2] = 0.0  # every other pixel → exactly 50%
+                kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
         DiagL2(kpf2).run()
-        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(
-            0.5, abs=0.01
-        )
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.5)
 
     def test_zerofrac_skipped_when_no_data(self):
         """KPF2 with no populated FLUX extensions → no ZEROFRAC key written."""
-        from io import BytesIO
-
-        primary = fits.PrimaryHDU()
-        primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
-        hdul = fits.HDUList(
-            [
-                primary,
-                fits.ImageHDU(
-                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD"
-                ),
-                fits.ImageHDU(
-                    data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR"
-                ),
-                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD"),
-                fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_VAR"),
-            ]
-        )
-        buf = BytesIO()
-        hdul.writeto(buf)
-        buf.seek(0)
-        import os
-        import tempfile
-
-        with tempfile.NamedTemporaryFile(suffix=".fits", delete=False) as tmp:
-            tmp.write(buf.read())
-            tmp_path = tmp.name
-        try:
-            l1 = KPF1.from_fits(tmp_path)
-        finally:
-            os.unlink(tmp_path)
-        kpf2 = l1.to_kpf2()
+        kpf2 = _make_kpf2_with_flux(populate=False)
         DiagL2(kpf2).run()
         assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]
 
@@ -593,7 +520,7 @@ def _set_fiber_arrays(kpf2, suffix, value, chips=("GREEN", "RED"), fibers=_FIBER
         for fiber in fibers:
             kpf2.set_data(
                 f"{chip}_{fiber}_{suffix}",
-                np.full((norder[chip], NCOL), value, dtype=np.float32),
+                np.full((norder[chip], _NCOL_TEST), value, dtype=np.float32),
             )
 
 

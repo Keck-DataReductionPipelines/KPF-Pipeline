@@ -26,11 +26,14 @@ from kpfpipe.data_models.masters.base import KPFMasterModel
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def synthetic_masters_l1_file(tmp_path):
-    """Create a minimal synthetic Masters L1 FITS file."""
+@pytest.fixture(scope="module")
+def synthetic_masters_l1_file(tmp_path_factory):
+    """Create a minimal synthetic Masters L1 FITS file (module-scoped read-only
+    source: consumers only from_fits() read it)."""
     rng = np.random.default_rng(20240113)
-    fn = str(tmp_path / "KP.20240113.23249.10_master_bias_L1.fits")
+    fn = str(
+        tmp_path_factory.mktemp("ml1") / "KP.20240113.23249.10_master_bias_L1.fits"
+    )
 
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"

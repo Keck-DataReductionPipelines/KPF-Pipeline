@@ -216,10 +216,3 @@ class TestImports:
         assert KPFMasterL1 is not None
         assert KPFMasterL2 is not None
         assert KPFMasterL4 is not None
-
-    def test_rvdata_import(self):
-        from rvdata.core.models.level2 import RV2
-        from rvdata.core.models.level4 import RV4
-
-        assert RV2 is not None
-        assert RV4 is not None

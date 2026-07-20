@@ -73,11 +73,16 @@ def _make_science_l2(wls_path=None):
     return l2
 
 
-@pytest.fixture
-def master_wls_path(tmp_path):
-    """Write a synthetic KPFMasterL2 to disk and return its path."""
+@pytest.fixture(scope="module")
+def master_wls_path(tmp_path_factory):
+    """Write a synthetic KPFMasterL2 to disk and return its path.
+
+    Module-scoped read-only source: perform()/load_wls() only read the master (they
+    copy WAVE onto a fresh science L2), so the write happens once per module."""
     master = _make_master_l2()
-    path = str(tmp_path / "KP.20240405.03637.00_master_thar_L2.fits")
+    path = str(
+        tmp_path_factory.mktemp("wls") / "KP.20240405.03637.00_master_thar_L2.fits"
+    )
     master.to_fits(path)
     return path
 
