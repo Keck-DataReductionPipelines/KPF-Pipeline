@@ -16,7 +16,7 @@ When any two conflict, the higher one wins.
 
 The legacy v2.12 DRP has reached a point where:
 
--   Development speed is limited by framework complexity.
+-   Development velocity is limited by framework complexity.
 -   Debugging is slowed by hidden state and infrastructure coupling.
 -   Reprocessing is brittle.
 -   Calibration strategy (especially WLS + drift) needs structural rethinking.
