@@ -11,6 +11,10 @@ import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level1 import KPF1
 
+# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
+# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+pytestmark = pytest.mark.quicklook
+
 
 @pytest.fixture(autouse=True)
 def _close_figures():

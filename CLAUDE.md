@@ -132,8 +132,9 @@ via PR. This overrides any generic "main branch" default from the environment.
 # The `make` targets wrap conda run. Run from KPF-Pipeline/ (git receipt system).
 
 make test        # full suite, parallel
-make test-fast   # fast pre-commit subset; excludes slow + cli markers; the default
+make test-fast   # fast pre-commit subset; excludes slow + cli + quicklook markers; the default
 make test-cli    # scripts/CLI/tools layer only (@pytest.mark.cli); for work in scripts/ or tools/
+make test-qlp    # quicklook/QLP render suite only (@pytest.mark.quicklook); for work in the quicklook plots
 make test-serial # serial fallback for debugging parallel/receipt issues
 make test-debug  # iteration loop: rerun only last-failed (--lf), halt at first failure (-x)
 
@@ -167,6 +168,7 @@ blast radius:
 - **Wide blast radius only** — `make test` (full). Reserve for a substantial core/shared-module
   change, a cross-cutting refactor, or a PR. Not routine.
 - **Scripts/CLI/tools layer** — `make test-cli` or the focused file.
+- **Quicklook/QLP plots** — `make test-qlp` or the focused file.
 - **Chasing a failure** — `make test-debug` (reruns last-failed, halts at first).
 
 Layout: architecture *Tests → Regression*; conventions: style guide §C.8.

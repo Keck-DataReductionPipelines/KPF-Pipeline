@@ -49,6 +49,12 @@ def pytest_configure(config):
         "excluded from the fast pre-commit subset, which covers recipes and "
         "below. Run in the full suite or focused with `-m cli`",
     )
+    config.addinivalue_line(
+        "markers",
+        "quicklook: quicklook/QLP render test (slow PNG rendering, an offshoot "
+        "from the production path); excluded from the fast pre-commit subset. "
+        "Run in the full suite or focused with `-m quicklook`",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
