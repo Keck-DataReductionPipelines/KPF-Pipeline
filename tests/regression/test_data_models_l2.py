@@ -37,11 +37,14 @@ NORDER = NORDER_GREEN + NORDER_RED
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def synthetic_masters_l2_file(tmp_path):
-    """Create a minimal synthetic Masters L2 FITS file."""
+@pytest.fixture(scope="module")
+def synthetic_masters_l2_file(tmp_path_factory):
+    """Create a minimal synthetic Masters L2 FITS file (module-scoped read-only
+    source: consumers only from_fits() read it)."""
     rng = np.random.default_rng(20240113)
-    fn = str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
+    fn = str(
+        tmp_path_factory.mktemp("ml2") / "KP.20240113.23249.10_master_thar_L2.fits"
+    )
 
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"

@@ -38,10 +38,13 @@ L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def synthetic_4amp_l0(tmp_path):
-    """Create a synthetic L0 FITS file with 4-amp readout on both CCDs."""
-    fn = str(tmp_path / "KP.20240101.00001.00.fits")
+@pytest.fixture(scope="module")
+def synthetic_4amp_l0(tmp_path_factory):
+    """Create a synthetic L0 FITS file with 4-amp readout on both CCDs.
+
+    Module-scoped read-only source: every consumer only from_fits() reads it, so
+    the ~140 MB write happens once instead of per test."""
+    fn = str(tmp_path_factory.mktemp("l0_4amp") / "KP.20240101.00001.00.fits")
     rng = np.random.default_rng(42)
 
     # 4-amp dimensions: 2040 imaging rows + 30 parallel overscan,
@@ -193,28 +196,29 @@ class TestImageAssemblyFlat:
 class TestImageAssembly4Amp:
     """Test 4-amp mode assembly using synthetic data."""
 
-    def test_4amp_produces_valid_l1(self, synthetic_4amp_l0):
+    @pytest.fixture(scope="class")
+    def l1_4amp(self, synthetic_4amp_l0):
+        """Assemble the synthetic 4-amp L0 once; shared read-only across the class.
+
+        perform() itself counts amplifiers, so ia.namp/ia.dims are populated."""
         l0 = KPF0.from_fits(synthetic_4amp_l0)
         ia = ImageAssembly(l0)
-        l1 = ia.perform()
+        return ia.perform(), ia
 
+    def test_4amp_produces_valid_l1(self, l1_4amp):
+        l1, _ = l1_4amp
         assert isinstance(l1, KPF1)
         assert l1.data["GREEN_CCD"].shape == (4080, 4080)
         assert l1.data["RED_CCD"].shape == (4080, 4080)
 
-    def test_4amp_detects_four_amplifiers(self, synthetic_4amp_l0):
-        l0 = KPF0.from_fits(synthetic_4amp_l0)
-        ia = ImageAssembly(l0)
-        ia.count_amplifiers("GREEN")
-        ia.count_amplifiers("RED")
+    def test_4amp_detects_four_amplifiers(self, l1_4amp):
+        _, ia = l1_4amp
         assert ia.namp["GREEN"] == 4
         assert ia.namp["RED"] == 4
         assert ia.dims["GREEN"] == (2040, 2040)
 
-    def test_4amp_read_noise_all_amps(self, synthetic_4amp_l0):
-        l0 = KPF0.from_fits(synthetic_4amp_l0)
-        ia = ImageAssembly(l0)
-        l1 = ia.perform()
+    def test_4amp_read_noise_all_amps(self, l1_4amp):
+        l1, ia = l1_4amp
 
         # 4-amp mode: should have 8 read noise measurements
         assert len(ia.readnoise) == 8
@@ -243,20 +247,14 @@ class TestImageAssembly4Amp:
         ]:
             assert key in l1.headers["QUALITY_CONTROL"]
 
-    def test_4amp_bias_near_zero(self, synthetic_4amp_l0):
+    def test_4amp_bias_near_zero(self, l1_4amp):
         """Synthetic bias with known noise should be near zero after overscan."""
-        l0 = KPF0.from_fits(synthetic_4amp_l0)
-        ia = ImageAssembly(l0)
-        l1 = ia.perform()
-
+        l1, _ = l1_4amp
         assert abs(np.nanmedian(l1.data["GREEN_CCD"])) < 10.0
         assert abs(np.nanmedian(l1.data["RED_CCD"])) < 10.0
 
-    def test_4amp_no_nans(self, synthetic_4amp_l0):
-        l0 = KPF0.from_fits(synthetic_4amp_l0)
-        ia = ImageAssembly(l0)
-        l1 = ia.perform()
-
+    def test_4amp_no_nans(self, l1_4amp):
+        l1, _ = l1_4amp
         assert not np.any(np.isnan(l1.data["GREEN_CCD"]))
         assert not np.any(np.isnan(l1.data["RED_CCD"]))
 

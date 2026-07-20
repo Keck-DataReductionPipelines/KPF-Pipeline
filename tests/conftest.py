@@ -72,11 +72,12 @@ def pytest_collection_modifyitems(config, items):
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def synthetic_l0_file(tmp_path):
-    """Create a minimal synthetic L0 FITS file."""
+@pytest.fixture(scope="session")
+def synthetic_l0_file(tmp_path_factory):
+    """Create a minimal synthetic L0 FITS file (session-scoped read-only source:
+    every consumer only from_fits() reads it and writes outputs to its own tmp_path)."""
     rng = np.random.default_rng(_SEED)
-    fn = str(tmp_path / "KP.20240113.23249.10.fits")
+    fn = str(tmp_path_factory.mktemp("l0") / "KP.20240113.23249.10.fits")
 
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
@@ -126,11 +127,12 @@ def synthetic_l0_minimal(tmp_path):
     return fn
 
 
-@pytest.fixture
-def synthetic_l1_file(tmp_path):
-    """Create a minimal synthetic L1 FITS file."""
+@pytest.fixture(scope="session")
+def synthetic_l1_file(tmp_path_factory):
+    """Create a minimal synthetic L1 FITS file (session-scoped read-only source:
+    every consumer only from_fits() reads it and writes outputs to its own tmp_path)."""
     rng = np.random.default_rng(_SEED)
-    fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
+    fn = str(tmp_path_factory.mktemp("l1") / "kpf_L1_20240113T102656.fits")
 
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
