@@ -12,6 +12,8 @@ import re
 
 import numpy as np
 import pandas as pd
+from astropy import units as u
+from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
@@ -35,6 +37,37 @@ _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
 # Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
 # Each module overwrites it via the receipt_add_entry override (see base.py).
 _DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
+
+# Schema of the CATALOG_RECORD BinTable extension: one row per resolved source
+# (wmko/gaia/simbad), carrying the canonical record fields plus a leading 'source'
+# label. Float columns hold NaN where a value is missing; string columns hold "".
+# Units document the canonical schema (deg, mas/yr incl. cos Dec, mas, km/s, jyear).
+_CATALOG_COLUMNS = (
+    "source",
+    "source_id",
+    "ra",
+    "dec",
+    "pmra",
+    "pmdec",
+    "parallax",
+    "rv",
+    "frame",
+    "epoch",
+    "equinox",
+)
+_CATALOG_STR_COLUMNS = frozenset({"source", "source_id", "frame"})
+_CATALOG_UNITS = {
+    "ra": u.deg,
+    "dec": u.deg,
+    "pmra": u.mas / u.yr,
+    "pmdec": u.mas / u.yr,
+    "parallax": u.mas,
+    "rv": u.km / u.s,
+    "epoch": u.yr,
+    "equinox": u.yr,
+}
+# Presence flag written to the CATALOG_RECORD header per source (int 0/1).
+_CATALOG_FLAGS = {"wmko": "WMKOCR", "gaia": "GAIACR", "simbad": "SIMBADCR"}
 
 
 class KPF0(KPFDataModel):
@@ -69,6 +102,9 @@ class KPF0(KPFDataModel):
         self.obs_id = get_obs_id(self.filename)
         if "PRIMARY" in self.headers:
             self._stamp_wmko_tracking()
+            # Populate the native (telescope-side) wmko row of CATALOG_RECORD from
+            # the raw TARG* astrometry.
+            self.set_catalog_record("wmko", self._wmko_catalog_record())
 
     def _stamp_wmko_tracking(self):
         """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
@@ -98,6 +134,86 @@ class KPF0(KPFDataModel):
             )
             progname = "UNKNOWN"
         self.set_keyword("PROGID", progname)
+
+    def _wmko_catalog_record(self):
+        """Build the native WMKO/DCS target record from L0 PRIMARY TARG*.
+
+        Telescope-side astrometry (no external query), converted to the canonical
+        schema: TARGRA/TARGDEC sexagesimal (hourangle / deg) -> deg; TARGPMRA s/yr
+        and TARGPMDC arcsec/yr -> mas/yr; TARGFRAM FK5 J2000 relabeled ICRS (the
+        ~23 mas frame tie is negligible). Returns None -- so the frame gets
+        WMKOCR=0 -- when there is no target pointing (TARGRA absent, e.g. a
+        calibration) or the TARG* astrometry cannot be parsed (warned, never
+        raised, so a malformed file still loads). Well-formedness is gated
+        downstream by QCL0 (RADECOK), not here.
+        """
+        primary = self.headers["PRIMARY"]
+        if primary.get("TARGRA") is None:
+            return None
+        try:
+            dec = Angle(primary["TARGDEC"], unit=u.deg).deg
+            pmra, pmdec = primary.get("TARGPMRA"), primary.get("TARGPMDC")
+            return {
+                "source_id": primary.get("OBJECT"),
+                "ra": Angle(primary["TARGRA"], unit=u.hourangle).to(u.deg).value,
+                "dec": dec,
+                "pmra": None
+                if pmra is None
+                else pmra * 15.0 * np.cos(np.radians(dec)) * 1e3,
+                "pmdec": None if pmdec is None else pmdec * 1e3,
+                "parallax": primary.get("TARGPLAX"),
+                "rv": primary.get("TARGRADV"),
+                "frame": "icrs",
+                "epoch": primary.get("TARGEPOC"),
+                "equinox": primary.get("TARGEQUI"),
+            }
+        except Exception as exc:
+            logger.warning(
+                "could not build wmko CATALOG_RECORD from L0 PRIMARY TARG* "
+                "(%s: %s); left empty",
+                type(exc).__name__,
+                exc,
+            )
+            return None
+
+    def set_catalog_record(self, source, record):
+        """Upsert one source's row into the CATALOG_RECORD extension + set its flag.
+
+        The single writer for CATALOG_RECORD, shared by the read path (``wmko``) and
+        AstroQuery (``gaia``/``simbad``). ``record`` is a canonical record dict (the
+        _CATALOG_COLUMNS fields minus ``source``) or None. Existing rows for other
+        sources are preserved (upsert), so callers add their row independently. A
+        None record clears the source's flag and writes no row; otherwise the row is
+        (re)written and the flag set to 1. Missing floats become NaN, missing strings
+        "".
+        """
+        table = self.data["CATALOG_RECORD"]
+        rows = {}
+        if table.colnames:
+            for row in table:
+                rows[str(row["source"])] = {
+                    name: row[name] for name in _CATALOG_COLUMNS
+                }
+        if record is None:
+            rows.pop(source, None)
+        else:
+            rows[source] = {"source": source, **record}
+
+        ordered = list(rows.values())
+        new_table = Table()
+        for name in _CATALOG_COLUMNS:
+            if name in _CATALOG_STR_COLUMNS:
+                new_table[name] = np.array(
+                    ["" if r[name] is None else r[name] for r in ordered], dtype=str
+                )
+            else:
+                new_table[name] = np.array(
+                    [np.nan if r[name] is None else r[name] for r in ordered],
+                    dtype=float,
+                )
+                new_table[name].unit = _CATALOG_UNITS[name]
+        self.set_data("CATALOG_RECORD", new_table)
+        self.set_keyword(_CATALOG_FLAGS[source], 1 if record is not None else 0)
 
     def _read(self, hdul):
         """Read all extensions from an L0 FITS HDUList.

@@ -1,12 +1,12 @@
 """
 KPF AstroQuery module.
 
-Consolidates every external astronomical-catalog lookup the pipeline needs into
-a single L0-stage module. Given a raw L0 frame, it resolves the target's
-astrometry from Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), and snapshots the
-DCS/TCS target astrometry already on the raw header, then writes all three to the
-L0 ``CATALOG_RECORD`` extension -- a BinTable with one row per resolved source and
-``WMKOCR``/``GAIACR``/``SIMBADCR`` presence flags on its header.
+Consolidates the pipeline's external astronomical-catalog lookups into a single
+L0-stage module. Given a raw L0 frame, it resolves the target's astrometry from
+Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT) and writes those two rows to the L0
+``CATALOG_RECORD`` extension via ``KPF0.set_catalog_record``, setting the
+``GAIACR``/``SIMBADCR`` presence flags. The third (``wmko``) row is telescope-native
+(no query) and is populated by ``KPF0`` at read time, not here.
 
 The extension is the bridge across an ordering problem: the query results
 ultimately belong on the EPRV PRIMARY catalog keywords (``C*#``), but the WMKO ->
@@ -15,7 +15,7 @@ than write PRIMARY here, AstroQuery records the queried quantities on the L0 and
 lets ``to_kpf1()`` overlay them onto the L1 PRIMARY (a follow-up integration).
 
 AstroQuery never modifies the L0 PRIMARY header -- that header is a pure
-pass-through to INSTRUMENT_HEADER. The three records share one schema and one set
+pass-through to INSTRUMENT_HEADER. All three records share one schema and one set
 of units and reference frame, so a consumer reads any source identically: ICRS,
 RA/Dec in degrees, proper motion in mas/yr (RA including cos(Dec)), parallax in
 mas, RV in km/s, epoch/equinox in Julian years. Per-fiber fan-out and derived
@@ -26,8 +26,6 @@ import logging
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import Angle
-from astropy.table import Table
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
@@ -63,61 +61,25 @@ _SIMBAD_UNITS = {
     "rvz_radvel": u.km / u.s,
 }
 
-# The DCS TARG* astrometry format the wmko conversion assumes (verified before use).
-_WMKO_FRAME = "FK5"
-_WMKO_EQUINOX = 2000.0
-
-# Schema of the CATALOG_RECORD BinTable extension: one row per resolved source,
-# carrying the canonical record fields plus a leading 'source' label. Float columns
-# hold NaN where a value is missing; string columns hold "". Units document the
-# canonical schema (deg, mas/yr incl. cos Dec, mas, km/s, Julian years).
-_CATALOG_COLUMNS = (
-    "source",
-    "source_id",
-    "ra",
-    "dec",
-    "pmra",
-    "pmdec",
-    "parallax",
-    "rv",
-    "frame",
-    "epoch",
-    "equinox",
-)
-_CATALOG_STR_COLUMNS = frozenset({"source", "source_id", "frame"})
-_CATALOG_UNITS = {
-    "ra": u.deg,
-    "dec": u.deg,
-    "pmra": u.mas / u.yr,
-    "pmdec": u.mas / u.yr,
-    "parallax": u.mas,
-    "rv": u.km / u.s,
-    "epoch": u.yr,
-    "equinox": u.yr,
-}
-# Presence flag written to the CATALOG_RECORD header per source (int 0/1).
-_CATALOG_FLAGS = {"wmko": "WMKOCR", "gaia": "GAIACR", "simbad": "SIMBADCR"}
-
 
 class AstroQuery:
     """
-    Resolve target astrometry from external catalogs and attach it to an L0.
+    Resolve target astrometry from external catalogs and write it to an L0.
 
-    Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT)
-    plus a verbatim snapshot of the DCS/TCS ``TARG*`` astrometry, and writes all
-    three to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV ``C*#``
-    catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science
-    frames
-    are supported: the constructor raises on a non-``Object`` IMTYPE (a calibration).
-    Fail-soft otherwise: a missing GAIAID/OBJECT or a failed network lookup yields a
-    ``None`` record rather than an error.
+    Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT) and
+    writes their rows to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV
+    ``C*#`` catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). The
+    native ``wmko`` row is populated by ``KPF0`` at read time, not here. Only science
+    frames are supported: the constructor raises on a non-``Object`` IMTYPE (a
+    calibration). Fail-soft otherwise: a missing GAIAID/OBJECT or a failed network
+    lookup yields a ``None`` record rather than an error.
 
     Parameters
     ----------
     l0_obj : KPF0
         Raw L0 science frame (IMTYPE ``Object``). Its PRIMARY header (IMTYPE, GAIAID,
-        OBJECT, TARG*) is read but never modified; the resolved catalog data is
-        written to the L0 ``CATALOG_RECORD`` extension.
+        OBJECT) is read but never modified; the resolved catalog data is written to
+        the L0 ``CATALOG_RECORD`` extension via ``set_catalog_record``.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: use_gaia, use_simbad.
     """
@@ -146,7 +108,6 @@ class AstroQuery:
 
         self._gaia = None  # Gaia DR3 record; set by query_gaia()
         self._simbad = None  # SIMBAD record; set by query_simbad()
-        self._wmko = None  # DCS/TCS TARG* record; set by read_wmko_target()
         self._info = None
 
     # ------------------------------------------------------------------
@@ -215,73 +176,9 @@ class AstroQuery:
                 "assumptions must be revalidated before use."
             )
 
-    def _verify_wmko_format(self, primary):
-        """Verify the DCS TARG* astrometry is in the assumed input format.
-
-        The wmko conversion assumes FK5 J2000 with sexagesimal TARGRA/TARGDEC
-        (hourangle/deg), TARGPMRA in s/yr and TARGPMDC in arcsec/yr. The pm units
-        are not encoded in the header, but the frame, equinox, and sexagesimal
-        coordinate format are -- verify those and raise ``ValueError`` on any
-        surprise so a silent DCS format change cannot corrupt the record.
-        """
-        frame = primary.get("TARGFRAM")
-        equinox = primary.get("TARGEQUI")
-        ra, dec = primary.get("TARGRA"), primary.get("TARGDEC")
-        problems = []
-        if not (isinstance(frame, str) and frame.strip().upper() == _WMKO_FRAME):
-            problems.append(f"TARGFRAM={frame!r} (expected {_WMKO_FRAME!r})")
-        if equinox != _WMKO_EQUINOX:
-            problems.append(f"TARGEQUI={equinox!r} (expected {_WMKO_EQUINOX})")
-        if not (
-            isinstance(ra, str) and ":" in ra and isinstance(dec, str) and ":" in dec
-        ):
-            problems.append(f"TARGRA/TARGDEC not sexagesimal ({ra!r}, {dec!r})")
-        if problems:
-            raise ValueError(
-                "unexpected WMKO/DCS astrometry format: "
-                + "; ".join(problems)
-                + "; AstroQuery assumes FK5 J2000 sexagesimal input. Verify the DCS "
-                "header format before proceeding."
-            )
-
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
-
-    def read_wmko_target(self):
-        """Read the DCS/TCS ``TARG*`` target astrometry from L0 PRIMARY.
-
-        Converts the native DCS values to the canonical schema (RA/Dec degrees,
-        proper motion mas/yr, ICRS): TARGRA/TARGDEC are sexagesimal (hourangle /
-        deg); TARGPMRA is time-seconds/yr (-> mas/yr via x15 cos(Dec)) and TARGPMDC
-        is arcsec/yr (-> mas/yr). TARGFRAM is FK5 J2000, relabeled ICRS (the ~23 mas
-        frame tie is negligible for this fallback record). Returns None when the
-        frame carries no target pointing (TARGRA absent -- e.g. a calibration).
-        """
-        primary = self.l0_obj.headers["PRIMARY"]
-        if primary.get("TARGRA") is None:
-            logger.warning("no TARGRA on L0 PRIMARY; WMKO/DCS astrometry unavailable")
-            return None
-        self._verify_wmko_format(primary)
-        dec_deg = Angle(primary["TARGDEC"], unit=u.deg).deg
-        pmra = primary.get("TARGPMRA")
-        pmdec = primary.get("TARGPMDC")
-        record = {
-            "source_id": primary.get("OBJECT"),
-            "ra": Angle(primary["TARGRA"], unit=u.hourangle).to(u.deg).value,
-            "dec": dec_deg,
-            "pmra": None
-            if pmra is None
-            else pmra * 15.0 * np.cos(np.radians(dec_deg)) * 1e3,
-            "pmdec": None if pmdec is None else pmdec * 1e3,
-            "parallax": primary.get("TARGPLAX"),
-            "rv": primary.get("TARGRADV"),
-            "frame": "icrs",
-            "epoch": primary.get("TARGEPOC"),
-            "equinox": primary.get("TARGEQUI"),
-        }
-        logger.info("successfully built record for wmko")
-        return record
 
     def query_gaia(self):
         """Query Gaia DR3 for the target's ICRS astrometry, or None (fail-soft).
@@ -396,45 +293,13 @@ class AstroQuery:
         """Build and cache the info() summary text from instance attributes."""
         gaia = self._gaia["source_id"] if self._gaia else "n/a"
         simbad = self._simbad["source_id"] if self._simbad else "n/a"
-        wmko = "resolved" if self._wmko else "n/a"
         lines = [
             "AstroQuery",
             f"  obs_id:  {self.l0_obj.obs_id or 'unknown'}",
             f"  Gaia DR3:  {gaia}",
             f"  SIMBAD:    {simbad}",
-            f"  WMKO/DCS:  {wmko}",
         ]
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
-
-    def _attach_catalog_record(self, l0_obj):
-        """Write the resolved catalog records to the CATALOG_RECORD extension.
-
-        The module's sole output site (analogous to ``_set_headers`` on a transform
-        module). Builds a BinTable with one row per resolved source (canonical ICRS
-        schema; missing floats -> NaN, missing source_id -> "") and sets the
-        WMKOCR/GAIACR/SIMBADCR presence flags on the extension header. The L0 PRIMARY
-        is never touched -- the EPRV ``C*#`` keywords are built later in
-        ``KPF0.to_kpf1()``; this extension is the L0-stage bridge to that step.
-        """
-        records = {"wmko": self._wmko, "gaia": self._gaia, "simbad": self._simbad}
-        rows = [
-            {"source": src, **rec} for src, rec in records.items() if rec is not None
-        ]
-        table = Table()
-        for name in _CATALOG_COLUMNS:
-            if name in _CATALOG_STR_COLUMNS:
-                table[name] = np.array(
-                    ["" if r[name] is None else r[name] for r in rows], dtype=str
-                )
-            else:
-                table[name] = np.array(
-                    [np.nan if r[name] is None else r[name] for r in rows], dtype=float
-                )
-                table[name].unit = _CATALOG_UNITS[name]
-        l0_obj.set_data("CATALOG_RECORD", table)
-
-        for source, keyword in _CATALOG_FLAGS.items():
-            l0_obj.set_keyword(keyword, 1 if records[source] is not None else 0)
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -442,7 +307,7 @@ class AstroQuery:
 
     def perform(self, *, use_gaia=None, use_simbad=None):
         """
-        Resolve external catalog astrometry and attach it to the L0.
+        Resolve external catalog astrometry and write it to the L0.
 
         Parameters
         ----------
@@ -452,9 +317,9 @@ class AstroQuery:
         Returns
         -------
         l0_obj : KPF0
-            The input L0 (PRIMARY unchanged), now carrying the ``CATALOG_RECORD``
-            extension (one row per resolved source, with WMKOCR/GAIACR/SIMBADCR
-            presence flags) and an 'astro_query' receipt entry. Unusually for a
+            The input L0 (PRIMARY unchanged), now with its ``gaia``/``simbad`` rows
+            written to the ``CATALOG_RECORD`` extension (the ``wmko`` row is native,
+            populated at read) and an 'astro_query' receipt entry. Unusually for a
             pipeline module this returns an L0, not the next level -- AstroQuery
             runs before assembly.
         """
@@ -463,11 +328,11 @@ class AstroQuery:
         if use_simbad is not None:
             self.use_simbad = use_simbad
 
-        self._wmko = self.read_wmko_target()
         self._gaia = self.query_gaia()
         self._simbad = self.query_simbad()
 
-        self._attach_catalog_record(self.l0_obj)
+        self.l0_obj.set_catalog_record("gaia", self._gaia)
+        self.l0_obj.set_catalog_record("simbad", self._simbad)
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")
 

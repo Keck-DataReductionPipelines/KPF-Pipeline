@@ -13,7 +13,6 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level4 import KPF4
-from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.quality_control.diagnostics import (
     DiagL0,
     DiagL1,
@@ -175,13 +174,9 @@ def _record_at(coord, **overrides):
 
 def _set_catalog_record(l0, records):
     """Write l0's CATALOG_RECORD extension + presence flags from a
-    {source: record-dict-or-None} mapping, via AstroQuery's own output path."""
-    l0.headers["PRIMARY"]["IMTYPE"] = "Object"
-    aq = AstroQuery(l0)
-    aq._wmko = records.get("wmko")
-    aq._gaia = records.get("gaia")
-    aq._simbad = records.get("simbad")
-    aq._attach_catalog_record(l0)
+    {source: record-dict-or-None} mapping, via KPF0.set_catalog_record."""
+    for source, record in records.items():
+        l0.set_catalog_record(source, record)
 
 
 def _make_l0_pointing():
