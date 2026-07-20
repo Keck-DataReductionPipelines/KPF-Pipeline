@@ -15,7 +15,7 @@ import kpfpipe.modules.masters.base as base_module
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
-from kpfpipe.utils.kpf_utils import get_obs_id
+from kpfpipe.utils.kpf import get_obs_id
 
 from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
 
@@ -24,6 +24,7 @@ NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL_TEST = 16
 
 FILE_LIST = sorted([f"KP.20240101.{i:05d}.00.fits" for i in range(8)])
+DATECODE = "20240101"  # datecode shared by FILE_LIST and the master obs_ids below
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,15 @@ def _linelist_df(chip, norder, waves):
         [(chip, o, int(echelle[o]), w) for o in range(norder) for w in waves],
         columns=["CHIP", "INDEX", "ECHELLE", "WAVE"],
     )
+
+
+def _master_and_stack(masters_output, obs_id="KP.20240101.00000.00"):
+    """The (master_path, stack_dir) pair in the canonical masters tree under
+    `masters_output` for a ThAr master keyed on `obs_id`. The stack subdir is
+    where WLS writes its per-frame L2s/diagnostics (via kpf_directory), beside
+    the master itself."""
+    night = masters_output / "masters" / DATECODE
+    return night / f"{obs_id}_master_thar_L2.fits", night / "thar_L2"
 
 
 @pytest.fixture
@@ -453,22 +463,18 @@ class TestMakeMasterL2:
         assert not (tmp_path / "thar_L2").exists()
 
     def test_master_path_writes_diagnostics_hdf5(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST)
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        master_path, thar_dir = _master_and_stack(tmp_path)
         wls.make_master_l2(master_path=str(master_path))
-        h5_path = (
-            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
-        )
+        h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         assert h5_path.exists()
 
     def test_save_diagnostics_post_hoc(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST)
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         wls.make_master_l2()  # no master_path; diagnostics stashed on self
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        master_path, thar_dir = _master_and_stack(tmp_path)
         wls.save_diagnostics(str(master_path))
-        h5_path = (
-            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
-        )
+        h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         assert h5_path.exists()
 
     def test_save_master_rejects_unknown_level(self, mock_make_master_l2, tmp_path):
@@ -478,8 +484,8 @@ class TestMakeMasterL2:
             wls.save_master("L4", str(tmp_path / "master.fits"))
 
     def test_master_path_writes_fits(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST)
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        master_path, _ = _master_and_stack(tmp_path)
         wls.make_master_l2(master_path=str(master_path))
         assert master_path.exists()
 
@@ -491,11 +497,10 @@ class TestMakeMasterL2:
         assert master_path.exists()
 
     def test_master_path_writes_per_frame_thar_l2(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST)
-        master_path = tmp_path / "masters" / "KP.20240101.00000.00_master_thar_L2.fits"
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        master_path, thar_dir = _master_and_stack(tmp_path)
         wls.make_master_l2(master_path=str(master_path))
 
-        thar_dir = master_path.parent / "thar_L2"
         written = sorted(p.name for p in thar_dir.glob("*_thar_L2.fits"))
         expected = sorted(f"{get_obs_id(fn)}_thar_L2.fits" for fn in FILE_LIST)
         assert written == expected
@@ -513,9 +518,9 @@ class TestMakeMasterL2:
             wls.save_reduced_frames(str(tmp_path / "master.fits"))
 
     def test_save_reduced_frames_refuses_overwrite(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST)
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         wls.make_master_l2()  # populates _l2_obj_cache, writes nothing
-        master_path = str(tmp_path / "master.fits")
+        master_path = str(_master_and_stack(tmp_path)[0])
         wls.save_reduced_frames(master_path)  # first write; overwrite defaults False
         with pytest.raises(FileExistsError, match="overwrite=True"):
             wls.save_reduced_frames(master_path)
@@ -529,12 +534,10 @@ class TestMakeMasterL2:
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
     def test_hdf5_structure(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST)
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        master_path, thar_dir = _master_and_stack(tmp_path)
         wls.make_master_l2(master_path=str(master_path))
-        h5_path = (
-            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
-        )
+        h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
 
         expected_coeffs_shape = (
             wls.polyorder_x + 1,
@@ -577,7 +580,7 @@ class TestMakeMasterL2:
                         assert np.all(np.isfinite(lines[key][...]))
 
     def test_rejected_frame_written_with_flag_and_no_coeffs(self, tmp_path):
-        wls = WLS(FILE_LIST)
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         lines = {
             "chip": np.array(["GREEN"]),
             "fiber": np.array(["SCI1"]),
@@ -605,11 +608,9 @@ class TestMakeMasterL2:
                 },
             ]
         }
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        master_path, thar_dir = _master_and_stack(tmp_path)
         wls.save_diagnostics(str(master_path))
-        h5_path = (
-            tmp_path / "thar_L2" / "KP.20240101.00000.00_master_thar_diagnostics.h5"
-        )
+        h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         with h5py.File(h5_path, "r") as h5:
             kept = h5["KP.20240101.00001.00"]["GREEN"]
             assert kept.attrs["rejected"] == np.False_
@@ -949,7 +950,7 @@ class TestMinStackSizeGate:
     below the threshold it raises, but the per-frame diagnostics/L2s are still
     written; at or above it, the master is produced."""
 
-    def _mock(self, monkeypatch, n_survivors, n_frames=8):
+    def _mock(self, monkeypatch, n_survivors, n_frames=8, masters_output=None):
         # n_survivors is an int (same count for every chip) or a {chip: count}
         # dict, so a test can make GREEN and RED pass/fail the gate independently.
         files = sorted(f"KP.20240101.{i:05d}.00.fits" for i in range(n_frames))
@@ -997,16 +998,16 @@ class TestMinStackSizeGate:
 
         monkeypatch.setattr(WLS, "_fit_and_qc_lines_stack", mock_fit)
         monkeypatch.setattr(WLS, "_combine_coeffs_stack", mock_combine)
-        return WLS(files)
+        config = {"KPF_MASTERS_OUTPUT": str(masters_output)} if masters_output else None
+        return WLS(files, config=config)
 
     def test_below_min_raises_but_diagnostics_written(self, monkeypatch, tmp_path):
-        wls = self._mock(monkeypatch, n_survivors=2)
+        wls = self._mock(monkeypatch, n_survivors=2, masters_output=tmp_path)
         wls.min_stack_size = 5
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        master_path, thar_dir = _master_and_stack(tmp_path)
         with pytest.raises(ValueError, match=r"passed line-fit QC"):
             wls.make_master_l2(master_path=str(master_path))
 
-        thar_dir = tmp_path / "thar_L2"
         # diagnostics + per-frame L2s persist despite the abort ...
         assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
         assert list(thar_dir.glob("*_thar_L2.fits"))
@@ -1014,9 +1015,9 @@ class TestMinStackSizeGate:
         assert not master_path.exists()
 
     def test_at_min_writes_master(self, monkeypatch, tmp_path):
-        wls = self._mock(monkeypatch, n_survivors=5)
+        wls = self._mock(monkeypatch, n_survivors=5, masters_output=tmp_path)
         wls.min_stack_size = 5
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        master_path, _ = _master_and_stack(tmp_path)
         ml2 = wls.make_master_l2(master_path=str(master_path))
         assert isinstance(ml2, KPFMasterL2)
         assert master_path.exists()
@@ -1025,13 +1026,12 @@ class TestMinStackSizeGate:
         # GREEN clears the gate (5 survivors) but RED does not (2): the build
         # raises naming the failing chip and withholds the master even though the
         # other chip passed. The diagnostics still persist (saved before the gate).
-        wls = self._mock(monkeypatch, {"GREEN": 5, "RED": 2})
+        wls = self._mock(monkeypatch, {"GREEN": 5, "RED": 2}, masters_output=tmp_path)
         wls.min_stack_size = 5
-        master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
+        master_path, thar_dir = _master_and_stack(tmp_path)
         with pytest.raises(ValueError, match=r"RED: only 2 frame"):
             wls.make_master_l2(master_path=str(master_path))
         assert not master_path.exists()
-        thar_dir = tmp_path / "thar_L2"
         assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
 
 

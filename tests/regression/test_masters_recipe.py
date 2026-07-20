@@ -44,7 +44,7 @@ class TestMastersRecipe:
     @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
         from kpfpipe.modules.masters.bias import Bias
-        from kpfpipe.utils.kpf_utils import get_obs_id
+        from kpfpipe.utils.kpf import get_obs_id
 
         tmp_path = tmp_path_factory.mktemp("recipe_out")
         data_root_out = str(tmp_path)

@@ -173,6 +173,9 @@ blast radius:
 
 Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
 
+Revise tests as needed when production code changes. Code design should drive test design, not the 
+other way around. Do not contort production code to match pre-existing tests.
+
 ## Reading Files
 
 Reading a file loads its full text into context, so locate before you load — the target
