@@ -14,7 +14,7 @@ import time
 
 from kpfpipe.modules.masters import WLS, Bias, Dark
 from kpfpipe.utils.io import FileHandler, kpf_filepath
-from kpfpipe.utils.kpf_utils import get_obs_id
+from kpfpipe.utils.kpf import get_obs_id
 from recipes._logging import masters_run_summary
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__

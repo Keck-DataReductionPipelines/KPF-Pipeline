@@ -29,7 +29,7 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import read_token_file
-from kpfpipe.utils.kpf_utils import get_datecode, is_obs_id
+from kpfpipe.utils.kpf import get_datecode, is_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 from scripts.processing._argparse import (

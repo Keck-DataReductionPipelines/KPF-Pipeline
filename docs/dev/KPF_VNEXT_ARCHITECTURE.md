@@ -60,7 +60,7 @@ kpfpipe/            scientist-facing building blocks (importable, no orchestrati
   data_models/      KPF0/1/2/4 + masters models, keyword registry, alias dicts, config CSVs
   modules/          processing algorithms (science + masters)
   quality_control/  quality control layers (diagnostics, qc_flags, checkpoints, quicklook)
-  utils/            shared helpers (io, logger, config, stats, astro, kpf_utils)
+  utils/            shared helpers (io, logger, config, stats, astro, kpf)
 recipes/            compose modules into an end-to-end reduction (kpf_drp_{science,masters}.py)
 configs/            default recipe parameters (kpf_drp_{science,masters}.toml)
 scripts/            run recipes many times (processing/, plots/, quality_control/)

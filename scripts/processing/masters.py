@@ -32,7 +32,7 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range, read_token_file
-from kpfpipe.utils.kpf_utils import is_datecode
+from kpfpipe.utils.kpf import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 from scripts.processing._argparse import (
