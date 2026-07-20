@@ -66,9 +66,11 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+### 5. Communicate Clearly
 
-**Communicate clearly:** be extremely consise when reporting information. Sacrifice grammar for brevity.
+**Be extremely concise when reporting. Sacrifice grammar for brevity.**
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 ## Project Overview
 
@@ -168,6 +170,22 @@ blast radius:
 - **Chasing a failure** — `make test-debug` (reruns last-failed, halts at first).
 
 Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
+
+## Reading Files
+
+Reading a file loads its full text into context, so locate before you load — the target
+span, not the whole file:
+
+- **Repo code** — Grep for the symbol/definition, then Read a bounded window
+  (`offset`/`limit`) around the hit. Read a file whole only when it's short or you're about
+  to edit much of it. For "where is X?" across many files, hand the search to an Explore
+  subagent — it reads the dumps, you keep the conclusion.
+- **Governing docs** (262–622 lines each) — grep the doc's headers
+  (`grep -nE '^#+ ' docs/dev/<doc>.md`) or the keyword, then Read only that section. Read one
+  end-to-end only for a comprehensive review, not a spot-check.
+- **Large command output** (full logs, `--durations`, wide greps) — redirect to the
+  scratchpad and inspect with `grep`/`head`/`wc` rather than letting it flood context:
+  `cmd > $SCRATCH/out.txt 2>&1; grep … $SCRATCH/out.txt`.
 
 ## Design Decisions
 
