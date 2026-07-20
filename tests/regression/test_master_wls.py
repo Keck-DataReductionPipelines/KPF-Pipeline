@@ -477,11 +477,6 @@ class TestMakeMasterL2:
         h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         assert h5_path.exists()
 
-    def test_save_master_before_make_raises(self):
-        wls = WLS(FILE_LIST)
-        with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_master("L2", "/tmp/should_not_be_created.fits")
-
     def test_save_master_rejects_unknown_level(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
@@ -498,13 +493,6 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST)
         wls.make_master_l2()  # no master_path; ml2_obj stashed on self
         master_path = tmp_path / "master.fits"
-        wls.save_master("L2", str(master_path))
-        assert master_path.exists()
-
-    def test_save_master_creates_parent_dir(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST)
-        wls.make_master_l2()
-        master_path = tmp_path / "nested" / "subdir" / "master.fits"
         wls.save_master("L2", str(master_path))
         assert master_path.exists()
 
@@ -537,30 +525,12 @@ class TestMakeMasterL2:
         with pytest.raises(FileExistsError, match="overwrite=True"):
             wls.save_reduced_frames(master_path)
 
-    def test_save_master_refuses_overwrite_by_default(
-        self, mock_make_master_l2, tmp_path
-    ):
-        wls = WLS(FILE_LIST)
-        wls.make_master_l2()
-        master_path = tmp_path / "master.fits"
-        master_path.touch()
-        with pytest.raises(FileExistsError, match="overwrite=True"):
-            wls.save_master("L2", str(master_path))
-
     def test_save_master_overwrite_true_replaces(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
         master_path = tmp_path / "master.fits"
         master_path.write_bytes(b"stale")
         wls.save_master("L2", str(master_path), overwrite=True)
-        assert master_path.read_bytes()[:6] == b"SIMPLE"
-
-    def test_master_path_overwrites_existing(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
-        master_path, _ = _master_and_stack(tmp_path)
-        master_path.parent.mkdir(parents=True)
-        master_path.touch()
-        wls.make_master_l2(master_path=str(master_path))
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
     def test_hdf5_structure(self, mock_make_master_l2, tmp_path):

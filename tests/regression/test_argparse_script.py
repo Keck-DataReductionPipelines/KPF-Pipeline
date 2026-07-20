@@ -13,6 +13,9 @@ import pytest
 
 from scripts.processing import _argparse
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 
 def _parse(parents, argv):
     return argparse.ArgumentParser(parents=parents).parse_args(argv)

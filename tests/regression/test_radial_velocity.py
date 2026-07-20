@@ -8,6 +8,7 @@ CrossCorrelation (mask monkeypatched, narrow grid) to get an L4, then exercise
 RadialVelocity on it.
 """
 
+import copy
 import logging
 
 import numpy as np
@@ -308,16 +309,28 @@ class TestCCFNoiseCorrLength:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def rv_l4(monkeypatch):
-    """A CCF-bearing L4 from CrossCorrelation (SCI on a star, SKY on sky, CAL dark)."""
-    return _make_l4(monkeypatch)
+@pytest.fixture(scope="module")
+def rv_l4():
+    """A CCF-bearing L4 from CrossCorrelation (SCI on a star, SKY on sky, CAL dark).
+
+    Module-scoped: the CrossCorrelation.perform() build is ~1s, so it runs once and
+    is shared read-only. The stub is only needed during that build, so a self-managed
+    MonkeyPatch context replaces the function-scoped ``monkeypatch`` fixture. Tests
+    that need a mutable object wrap this via the function-scoped ``rv_module``.
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        return _make_l4(mp)
 
 
 @pytest.fixture
 def rv_module(rv_l4):
-    """RadialVelocity on the CCF-bearing L4; CCF caches not yet loaded."""
-    return RadialVelocity(rv_l4, config={"rv_window": _RANGE_KMS})
+    """RadialVelocity on a per-test copy of the CCF-bearing L4; caches not yet loaded.
+
+    ``perform()`` mutates the L4 in place, so each test wraps a deepcopy of the
+    shared module-scoped ``rv_l4`` (a memcpy — the ~1s cost was the CCF compute,
+    not the data). This keeps per-test isolation while building the CCFs only once.
+    """
+    return RadialVelocity(copy.deepcopy(rv_l4), config={"rv_window": _RANGE_KMS})
 
 
 @pytest.fixture
@@ -508,15 +521,17 @@ class TestPerform:
         assert prim["RV"] == pytest.approx(expect_rv, abs=1e-9)
         assert prim["RVERR"] == pytest.approx(expect_err, rel=1e-9)
 
-    def test_primary_berv_bjdtdb_from_per_order(self, monkeypatch):
+    def test_primary_berv_bjdtdb_from_per_order(self, rv_module):
         # PRIMARY BERV/BJDTDB are the WEIGHT-weighted mean of the rep SCI fiber's
         # per-order BERV/BJD_TDB (RVn). Constant per-order values -> that value.
-        l4 = _make_l4(monkeypatch, berv=-12.3, bjd=2460123.5)
-        prim = (
-            RadialVelocity(l4, config={"rv_window": _RANGE_KMS})
-            .perform()
-            .headers["PRIMARY"]
-        )
+        # berv/bjd only seed the RV-table metadata columns (never the CCF compute),
+        # so overwrite them on the shared L4 rather than rebuild it via _make_l4.
+        l4 = rv_module.l4_obj
+        table = l4.data["SCI1_RV"]
+        table["BERV"] = -12.3
+        table["BJD_TDB"] = 2460123.5
+        l4.set_data("SCI1_RV", table)
+        prim = rv_module.perform().headers["PRIMARY"]
         assert prim["BERV"] == pytest.approx(-12.3)
         assert prim["BJDTDB"] == pytest.approx(2460123.5)
 

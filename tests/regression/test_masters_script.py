@@ -15,6 +15,9 @@ import pytest
 
 from scripts.processing import masters as _masters
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 
 class _FakeConfig:
     """Stand-in for ConfigHandler in the exit-code tests (no real file read)."""

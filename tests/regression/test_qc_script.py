@@ -11,7 +11,11 @@ import subprocess
 import sys
 
 import numpy as np
+import pytest
 from astropy.io import fits
+
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
 
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

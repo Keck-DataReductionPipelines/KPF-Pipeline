@@ -12,6 +12,9 @@ import pytest
 
 from tools import cli
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 
 class TestDispatch:
     @pytest.mark.parametrize("command", ["run", "masters", "science", "timeseries"])

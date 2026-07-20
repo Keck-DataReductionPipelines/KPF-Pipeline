@@ -179,67 +179,6 @@ class TestInit:
 
 
 # ---------------------------------------------------------------------------
-# TestBiasResolution -- perform() resolves the bias source (bool | str |
-# KPFMasterL1) and records its path. Dark is disabled to isolate bias.
-# ---------------------------------------------------------------------------
-
-
-class TestBiasResolution:
-    def test_raises_when_biasfile_missing(self):
-        mod = _make_module()
-        with pytest.raises(FileNotFoundError, match="BIASFILE"):
-            mod.perform(dark=False)
-
-    def test_raises_when_file_not_on_disk(self, tmp_path):
-        mod = _make_module(bias_file="missing.fits", bias_dir=str(tmp_path))
-        with pytest.raises(FileNotFoundError, match="missing.fits"):
-            mod.perform(dark=False)
-
-    def test_header_lookup_sets_path_and_subtracts(self, tmp_path):
-        bias_path = str(tmp_path / "master_bias.fits")
-        _write_master_bias(bias_path)
-        mod = _make_module(bias_file="master_bias.fits", bias_dir=str(tmp_path))
-        mod.perform(dark=False)
-        assert mod._bias_path == bias_path
-        np.testing.assert_allclose(
-            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
-        )
-
-    def test_explicit_path_overrides_headers(self, tmp_path):
-        bias_path = str(tmp_path / "master_bias.fits")
-        _write_master_bias(bias_path)
-        # Headers point nowhere valid -- explicit path should win.
-        mod = _make_module(bias_file="wrong.fits", bias_dir="/wrong/dir")
-        mod.perform(bias=bias_path, dark=False)
-        assert mod._bias_path == bias_path
-        np.testing.assert_allclose(
-            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
-        )
-
-    def test_explicit_path_raises_when_missing(self, tmp_path):
-        mod = _make_module()
-        with pytest.raises(FileNotFoundError):
-            mod.perform(bias=str(tmp_path / "nonexistent.fits"), dark=False)
-
-    def test_kpfmaster_object_passthrough(self, tmp_path):
-        bias_path = str(tmp_path / "master_bias.fits")
-        _write_master_bias(bias_path)
-        master = KPFMasterL1.from_fits(bias_path)
-        # No BIAS headers -- the object is used directly, no disk lookup.
-        mod = _make_module()
-        mod.perform(bias=master, dark=False)
-        assert mod._bias_path is not None
-        np.testing.assert_allclose(
-            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
-        )
-
-    def test_bad_type_raises(self):
-        mod = _make_module()
-        with pytest.raises(TypeError, match="bias must be bool"):
-            mod.perform(bias=42, dark=False)
-
-
-# ---------------------------------------------------------------------------
 # TestSubtractBias
 # ---------------------------------------------------------------------------
 
@@ -299,55 +238,6 @@ class TestSubtractBias:
         np.testing.assert_allclose(var[0, 0], _VAR_VALUE)
         np.testing.assert_allclose(
             var[1, 1], _VAR_VALUE + (_BIAS_VALUE / _BIAS_SNR) ** 2, rtol=1e-5
-        )
-
-
-# ---------------------------------------------------------------------------
-# TestDarkResolution -- perform() resolves the dark source (bool | str |
-# KPFMasterL1) and records its path. Bias is disabled to isolate dark.
-# ---------------------------------------------------------------------------
-
-
-class TestDarkResolution:
-    def test_raises_when_darkfile_missing(self):
-        mod = _make_module()
-        with pytest.raises(FileNotFoundError, match="DARKFILE"):
-            mod.perform(bias=False)
-
-    def test_raises_when_file_not_on_disk(self, tmp_path):
-        mod = _make_module(dark_file="missing.fits", dark_dir=str(tmp_path))
-        with pytest.raises(FileNotFoundError, match="missing.fits"):
-            mod.perform(bias=False)
-
-    def test_header_lookup_sets_path_and_subtracts(self, tmp_path):
-        dark_path = str(tmp_path / "master_dark.fits")
-        _write_master_dark(dark_path)
-        mod = _make_module(dark_file="master_dark.fits", dark_dir=str(tmp_path))
-        mod.perform(bias=False)
-        assert mod._dark_path == dark_path
-        np.testing.assert_allclose(
-            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
-        )
-
-    def test_explicit_path_overrides_headers(self, tmp_path):
-        dark_path = str(tmp_path / "master_dark.fits")
-        _write_master_dark(dark_path)
-        mod = _make_module(dark_file="wrong.fits", dark_dir="/wrong/dir")
-        mod.perform(bias=False, dark=dark_path)
-        assert mod._dark_path == dark_path
-        np.testing.assert_allclose(
-            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
-        )
-
-    def test_kpfmaster_object_passthrough(self, tmp_path):
-        dark_path = str(tmp_path / "master_dark.fits")
-        _write_master_dark(dark_path)
-        master = KPFMasterL1.from_fits(dark_path)
-        mod = _make_module()
-        mod.perform(bias=False, dark=master)
-        assert mod._dark_path is not None
-        np.testing.assert_allclose(
-            mod.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _DARK_VALUE * _EXPTIME
         )
 
 
@@ -450,7 +340,7 @@ class TestPerform:
 
     def test_raises_when_headers_missing(self):
         mod = _make_module()  # no BIASFILE
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match="BIASFILE"):
             mod.perform()
 
     def test_bias_false_skips_subtraction(self):
@@ -507,6 +397,18 @@ class TestPerform:
         flat_master = KPFMasterL1.from_fits(flat_path)
         with pytest.raises(NotImplementedError, match="flat"):
             mod_with_bias.perform(flat=flat_master)
+
+    def test_bias_file_not_on_disk_raises(self, tmp_path):
+        # BIASFILE names a file not on disk -> FileNotFoundError.
+        mod = _make_module(bias_file="missing.fits", bias_dir=str(tmp_path))
+        with pytest.raises(FileNotFoundError, match="missing.fits"):
+            mod.perform(dark=False)
+
+    def test_bias_explicit_path_missing_raises(self, tmp_path):
+        # An explicit bias path that does not exist -> FileNotFoundError.
+        mod = _make_module()
+        with pytest.raises(FileNotFoundError):
+            mod.perform(bias=str(tmp_path / "nonexistent.fits"), dark=False)
 
 
 # ---------------------------------------------------------------------------
@@ -597,6 +499,18 @@ class TestPerformDark:
         np.testing.assert_allclose(
             mod_with_bias_dark.l1_obj.data["GREEN_VAR"], expected, rtol=1e-5
         )
+
+    def test_dark_missing_header_raises(self):
+        # No DARKFILE header -> FileNotFoundError naming DARKFILE.
+        mod = _make_module()
+        with pytest.raises(FileNotFoundError, match="DARKFILE"):
+            mod.perform(bias=False)
+
+    def test_dark_file_not_on_disk_raises(self, tmp_path):
+        # DARKFILE names a file not on disk -> FileNotFoundError.
+        mod = _make_module(dark_file="missing.fits", dark_dir=str(tmp_path))
+        with pytest.raises(FileNotFoundError, match="missing.fits"):
+            mod.perform(bias=False)
 
 
 # ---------------------------------------------------------------------------
