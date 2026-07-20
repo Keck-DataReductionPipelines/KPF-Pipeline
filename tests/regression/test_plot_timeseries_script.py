@@ -16,6 +16,9 @@ from astropy.io import fits
 from kpfpipe.utils.io import kpf_filepath
 from scripts.plots import plot_timeseries as _pt
 
+# scripts/CLI/tools-layer suite: excluded from `make test-fast`.
+pytestmark = pytest.mark.cli
+
 _BASE_ARGS = [
     "--target", "10700",
     "--date_range", "20240101", "20240131",

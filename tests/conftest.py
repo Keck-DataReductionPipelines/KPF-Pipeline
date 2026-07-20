@@ -43,6 +43,12 @@ def pytest_configure(config):
         "slow: slow integration or heavy-compute test; excluded from the fast "
         "pre-commit subset (`-m 'not slow'`), run in the full suite",
     )
+    config.addinivalue_line(
+        "markers",
+        "cli: scripts/CLI/tools-layer test (imports scripts.* / tools.*); "
+        "excluded from the fast pre-commit subset, which covers recipes and "
+        "below. Run in the full suite or focused with `-m cli`",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
