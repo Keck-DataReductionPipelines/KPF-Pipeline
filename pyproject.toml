@@ -53,6 +53,11 @@ include = ["kpfpipe*", "tools*", "scripts*", "recipes*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Quiet output to economize on token/log footprint: -q collapses the progress
+# line, --no-header drops the platform/plugins banner, --tb=short trims failure
+# tracebacks to the assertion + one frame. Re-run a single failure with
+# --tb=long when you need the full frame context.
+addopts = "-q --no-header --tb=short"
 filterwarnings = [
     # astropy truncates over-long FITS card comments; the masters INPUT_FILES
     # round-trip deliberately writes long paths, so this is expected, not a bug.
