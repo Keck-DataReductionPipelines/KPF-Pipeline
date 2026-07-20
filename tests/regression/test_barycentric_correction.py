@@ -10,7 +10,7 @@ import logging
 import astropy.units as u
 import numpy as np
 import pytest
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import Distance, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
@@ -260,6 +260,47 @@ class TestGetNormalizedFlux:
         bc = BarycentricCorrection(synthetic_kpf2)
         _, f = bc._get_normalized_flux()
         np.testing.assert_allclose(f, _FLUX_VALUE * 1.48424 / 100.0, rtol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# _compute_barycorr (staticmethod) -- the one non-stubbed regression pin
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+class TestComputeBarycorrReference:
+    """The real barycorrpy handoff, pinned to a golden value.
+
+    Every perform() test stubs _compute_barycorr, so this is the only guard that
+    the real barycorrpy wiring stays correct: the ICRS ra/dec/pm/parallax, the
+    J2000 epoch, UTC->JD, Keck lat/lon/alt, and the m/s units and sign. It calls
+    barycorrpy directly (no stub) and may download JPL ephemeris on first run,
+    hence @slow. Golden values are pinned to barycorrpy==0.4.4 (see pyproject).
+    """
+
+    def test_matches_barycorrpy_reference(self):
+        # Fixed Tau Ceti-like astrometry at a fixed UTC epoch, observed from Keck.
+        skycoord = SkyCoord(
+            ra=26.0213 * u.deg,
+            dec=-15.9395 * u.deg,
+            pm_ra_cosdec=-1721.05 * u.mas / u.yr,
+            pm_dec=854.16 * u.mas / u.yr,
+            distance=Distance(parallax=273.96 * u.mas),
+            obstime=Time("J2000.0"),
+            frame="icrs",
+        )
+        t = Time("2024-06-15T09:00:00.000", scale="utc")
+        bc_vel, bjd_tdb = BarycentricCorrection._compute_barycorr(
+            skycoord, t, BarycentricCorrection.KECK_LOCATION
+        )
+        # Physical sanity: BERV within Earth's orbital +/-30 km/s; BJD_TDB within
+        # a few minutes of JD_UTC (clock + Romer light-travel delay).
+        assert abs(bc_vel[0]) < 3.0e4
+        assert abs(bjd_tdb[0] - t.utc.jd) < 0.01
+        # Regression pins (1 cm/s, ~0.1 s): catch any frame/unit/sign rewiring,
+        # well above barycorrpy/ephemeris/IERS numerical noise at the pinned version.
+        assert bc_vel[0] == pytest.approx(24627.871206121636, abs=1e-2)
+        assert bjd_tdb[0] == pytest.approx(2460476.873644211, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------
