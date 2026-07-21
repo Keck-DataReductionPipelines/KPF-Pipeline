@@ -230,8 +230,9 @@ class FileHandler:
 
         Parameters
         ----------
-        datecode : str
-            Observing-night datecode 'YYYYMMDD'.
+        datecode : str or int
+            Observing-night datecode 'YYYYMMDD'; an int (e.g. 20240405) is
+            coerced to its string form.
         cache : {False, "r", "w", "rw", "wr"}, default False
             Which side(s) of the on-disk cache to use. ``False`` (default) always
             scans fresh and never touches the cache. ``"r"`` reads a current cache
@@ -260,6 +261,7 @@ class FileHandler:
             raise ValueError(
                 f"cache must be False or one of 'r'/'w'/'rw'/'wr', got {cache!r}"
             )
+        datecode = str(datecode)
         read_cache = cache and "r" in cache
         write_cache = cache and "w" in cache
 
@@ -481,6 +483,7 @@ class FileHandler:
         """
         if self._masters_output is None:
             raise ValueError("FileHandler has no KPF_MASTERS_OUTPUT configured")
+        datecode = str(datecode)
         night_dir = kpf_directory(
             kind="masters", data_root=self._masters_output, datecode=datecode
         )

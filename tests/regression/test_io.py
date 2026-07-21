@@ -323,6 +323,20 @@ class TestBuildCalibrationStacksRealData:
         assert lists[0] == sorted(lists[0])
 
 
+@pytest.mark.slow
+class TestBuildMiniDatabaseDatecodeType:
+    """build_mini_database accepts an int datecode as well as a 'YYYYMMDD' string."""
+
+    def test_int_datecode_matches_string(self):
+        from_int = FileHandler(
+            {"KPF_DATA_INPUT": str(TESTDATA_DIR)}
+        ).build_mini_database(20240405)
+        from_str = FileHandler(
+            {"KPF_DATA_INPUT": str(TESTDATA_DIR)}
+        ).build_mini_database("20240405")
+        pd.testing.assert_frame_equal(from_int, from_str)
+
+
 # ---------------------------------------------------------------------------
 # datecode_dirs_in_range
 # ---------------------------------------------------------------------------
@@ -522,6 +536,10 @@ class TestFindMasters:
     def test_raises_without_masters_output(self):
         with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
             FileHandler({}).find_masters("bias", "L1", "20240405")
+
+    def test_accepts_int_datecode(self, tmp_path):
+        fh = FileHandler({"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        assert fh.find_masters("bias", "L1", 20240405) == []
 
     @pytest.mark.parametrize(
         "cal_type,level",
