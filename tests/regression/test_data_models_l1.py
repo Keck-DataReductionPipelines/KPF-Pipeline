@@ -10,6 +10,7 @@ import logging
 import re
 
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 
@@ -264,6 +265,19 @@ class TestHeaderMapFiberRealignment:
         assert self._source("EXSNR1")[0] == "SNRSC452"
         assert self._source("EXSNR5")[0] == "SNRSC852"
 
+    def test_sci_catalog_source_cells_blanked(self):
+        # The SCI-fiber (2,3,4) catalog C*# cards are populated by the CATALOG_RECORD
+        # overlay in to_kpf1, so their raw TARG*/GAIAID header_map source cells are
+        # blanked (INSTRUMENT and DEFAULT both NaN). SKY(1)/CAL(5) defaults are intact.
+        hm = KPF1.keyword_registry.header_map
+        for base in ("CID", "CSRC", "CRA", "CDEC", "CPMR", "CRV", "CZ", "CLSRC"):
+            for i in (2, 3, 4):
+                r = hm[hm["STANDARD"].astype(str).str.strip() == f"{base}{i}"].iloc[0]
+                assert pd.isna(r["INSTRUMENT"]) and pd.isna(r["DEFAULT"])
+        assert self._source("CSRC1")[1] == "sky"  # SKY default intact
+        assert self._source("CRV5")[1] == "0"  # CAL default intact
+        assert self._source("CLSRC5")[0] == "CAL-OBJ"  # CAL native card intact
+
 
 class TestToKpf1:
     def test_to_kpf1_creates_kpf1(self, synthetic_l0_file):
@@ -278,6 +292,75 @@ class TestToKpf1:
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
         assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
+
+    # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.
+    _KPF_DRP = {
+        "object": "Gaia123",
+        "radec_src": "gaia",
+        "plx_src": "gaia",
+        "rv_src": "gaia",
+        "ra": "12:00:00.0000",
+        "dec": "+40:00:00.000",
+        "pmra": 0.5,
+        "pmdec": -0.3,
+        "parallax": 50.0,
+        "rv": 10.0,
+        "frame": "icrs",
+        "epoch": 2016.0,
+        "equinox": 2000.0,
+    }
+
+    @staticmethod
+    def _l0_with_catalog(record):
+        # A science KPF0 carrying a canonical 'kpf-drp' CATALOG_RECORD row (no
+        # network); to_kpf1 overlays it onto the SCI-fiber C*# cards.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.set_catalog_record("kpf-drp", record)
+        return l0
+
+    def test_catalog_overlay_populates_sci_cards(self):
+        # Direct copy of the canonical row onto every SCI fiber (2,3,4), no conversion.
+        p = self._l0_with_catalog(dict(self._KPF_DRP)).to_kpf1().headers["PRIMARY"]
+        for i in (2, 3, 4):
+            assert p[f"CID{i}"] == "Gaia123"
+            assert p[f"CSRC{i}"] == "gaia"
+            assert p[f"CRA{i}"] == "12:00:00.0000"
+            assert p[f"CDEC{i}"] == "+40:00:00.000"
+            assert p[f"CPMR{i}"] == 0.5
+            assert p[f"CPMD{i}"] == -0.3
+            assert p[f"CPLX{i}"] == 50.0
+            assert p[f"CRV{i}"] == 10.0
+            assert p[f"CEPCH{i}"] == 2016.0
+            assert p[f"CEQNX{i}"] == 2000.0
+
+    def test_catalog_overlay_skips_missing_optional(self):
+        # parallax/rv absent from the canonical row -> those cards stay blank; the
+        # coherent position block is still written.
+        record = {**self._KPF_DRP, "parallax": None, "rv": None}
+        p = self._l0_with_catalog(record).to_kpf1().headers["PRIMARY"]
+        assert not p.get("CPLX2")
+        assert not p.get("CRV2")
+        assert p["CRA2"] == "12:00:00.0000"
+
+    def test_no_catalog_record_leaves_sci_cards_blank(self, synthetic_l0_file):
+        # No AstroQuery / no 'kpf-drp' row -> SCI C*# cards blank, never raw TARG*.
+        p = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
+        for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
+            assert not p.get(kw)
+
+    def test_catalog_overlay_warns_on_mixed_sources(self, caplog):
+        # rv from a different catalog than the position -> WARNING at PRIMARY commit.
+        record = {**self._KPF_DRP, "rv_src": "simbad"}
+        with caplog.at_level(logging.WARNING):
+            self._l0_with_catalog(record).to_kpf1()
+        assert "mixed sources" in caplog.text
+
+    def test_catalog_overlay_single_source_no_warning(self, caplog):
+        # All provenance labels agree (gaia) -> no mixed-source warning.
+        with caplog.at_level(logging.WARNING):
+            self._l0_with_catalog(dict(self._KPF_DRP)).to_kpf1()
+        assert "mixed sources" not in caplog.text
 
     def test_to_kpf1_converts_native_to_eprv(self, synthetic_l0_file):
         """to_kpf1 renames WMKO natives to their EPRV PRIMARY counterparts."""

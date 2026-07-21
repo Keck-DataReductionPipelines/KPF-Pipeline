@@ -31,6 +31,13 @@ _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
 _KNOWN_L0_EXTENSIONS = set(_L0_EXTENSIONS["Name"].tolist())
 
+# Science-fiber trace indices; the fibers the catalog C*# overlay in to_kpf1
+# targets (SKY/CAL keep their header_map defaults).
+_TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
+_SCI_TRACES = tuple(
+    _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
+)
+
 # WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
 _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
 
@@ -46,9 +53,9 @@ _DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
 # intrinsic to the coordinates and never sourced separately), 'plx_src' (parallax),
 # 'rv_src' (rv). For a plain source row each provenance label is the row's own
 # 'source'; the merged row names whichever source won each block (or "" when none
-# supplied it). Every source
-# is sanitized to the EPRV C*# PRIMARY format so to_kpf1 can copy cells straight onto
-# the catalog cards: RA/Dec are sexagesimal strings (RA hour-angle 'h:m:s', Dec deg
+# supplied it). Every source is sanitized to the EPRV C*# PRIMARY format so to_kpf1
+# can copy cells straight onto the catalog cards: RA/Dec are sexagesimal strings
+# (RA hour-angle 'h:m:s', Dec deg
 # 'd:m:s', ICRS), proper motion is arcsec/yr (RA incl. cos Dec), parallax mas, RV
 # km/s, epoch/equinox in Julian years. Float columns hold NaN where a value is
 # missing; string columns (RA/Dec included) hold "".
@@ -400,6 +407,74 @@ class KPF0(KPFDataModel):
             )
         return out
 
+    # CATALOG_RECORD canonical column -> EPRV C*# keyword base. The row is stored in
+    # EPRV C*# format already, so the overlay is a direct copy (no conversion).
+    _CATALOG_CARD_BASES = {
+        "object": "CID",
+        "radec_src": "CSRC",
+        "ra": "CRA",
+        "dec": "CDEC",
+        "pmra": "CPMR",
+        "pmdec": "CPMD",
+        "parallax": "CPLX",
+        "rv": "CRV",
+        "epoch": "CEPCH",
+        "equinox": "CEQNX",
+    }
+
+    def _catalog_primary_cards(self):
+        """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
+
+        Returns ``{C-keyword: value}`` for every science fiber (SCI1-3, see
+        ``_SCI_TRACES``), a direct copy of the canonical row's already-EPRV-format
+        cells. Returns ``{}`` -- leaving the SCI C*# cards blank -- when there is no
+        usable canonical astrometry (no CATALOG_RECORD data, no 'kpf-drp' row, or an
+        empty RA/Dec). A per-card missing value (NaN float / "" string, e.g. a target
+        with no measured parallax or rv) is skipped so that card stays blank rather
+        than carrying 'nan'. Emits a WARNING when the canonical astrometry landing on
+        PRIMARY was assembled from more than one catalog (position/parallax/rv from
+        different sources), so the C*# block is not internally single-source.
+        """
+        table = self.data.get("CATALOG_RECORD")
+        if table is None or not table.colnames:
+            return {}
+        match = table[table["source"] == "kpf-drp"]
+        if len(match) == 0:
+            return {}
+        row = match[0]
+        if str(row["ra"]).strip() == "" or str(row["dec"]).strip() == "":
+            return {}
+
+        provenance = {
+            str(row[col]).strip()
+            for col in ("radec_src", "plx_src", "rv_src")
+            if str(row[col]).strip()
+        }
+        if len(provenance) > 1:
+            logger.warning(
+                "PRIMARY catalog keywords assembled from mixed sources "
+                "(radec=%s, parallax=%s, rv=%s); C*# astrometry is not "
+                "internally single-source",
+                row["radec_src"],
+                str(row["plx_src"]) or '""',
+                str(row["rv_src"]) or '""',
+            )
+
+        cards = {}
+        for col, base in self._CATALOG_CARD_BASES.items():
+            value = row[col]
+            if col in _CATALOG_STR_COLUMNS:
+                if str(value).strip() == "":
+                    continue
+                value = str(value)
+            else:
+                if np.isnan(value):
+                    continue
+                value = float(value)
+            for i in _SCI_TRACES:
+                cards[f"{base}{i}"] = value
+        return cards
+
     def to_kpf1(self):
         """Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
@@ -420,6 +495,13 @@ class KPF0(KPFDataModel):
         # L0 PRIMARY verbatim into the immutable INSTRUMENT_HEADER.
         if "PRIMARY" in self.headers:
             for key, value in self._map_header().items():
+                kpf1.headers["PRIMARY"][key] = value
+
+            # Overlay the merged canonical astrometry (CATALOG_RECORD 'kpf-drp' row)
+            # onto the SCI-fiber EPRV C*# cards -- the sole writer of those cards
+            # (their raw TARG*/GAIAID mapping is neutralized in the header_map). Empty
+            # when there is no canonical row, leaving the seeded cards blank.
+            for key, value in self._catalog_primary_cards().items():
                 kpf1.headers["PRIMARY"][key] = value
 
             if "INSTRUMENT_HEADER" not in kpf1.extensions:
