@@ -261,6 +261,24 @@ class TestBuildCalibrationStacks:
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
+    def test_max_stack_size_truncates_to_earliest(self):
+        # Each bias cluster holds 5 files; max_stack_size=3 keeps the earliest 3.
+        lists = _cluster("bias", _make_mini_db(), max_stack_size=3)
+        assert lists[0] == sorted(_BIAS_A)[:3]
+        assert lists[1] == sorted(_BIAS_B)[:3]
+
+    def test_max_stack_size_noop_when_within_limit(self):
+        # A ceiling at or above the cluster size leaves every stack intact.
+        lists = _cluster("bias", _make_mini_db(), max_stack_size=5)
+        assert lists[0] == sorted(_BIAS_A)
+        assert lists[1] == sorted(_BIAS_B)
+
+    def test_max_stack_size_warns_when_truncating(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            _cluster("bias", _make_mini_db(), max_stack_size=3)
+        assert "5 bias L0 frames detected" in caplog.text
+        assert "using only 3 frames" in caplog.text
+
     def test_invalid_imtype_raises(self):
         with pytest.raises(ValueError, match="cal_type must be one of"):
             _cluster("bogus", _make_mini_db())

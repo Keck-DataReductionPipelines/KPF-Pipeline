@@ -55,6 +55,7 @@ def main(config, args):
     for files in file_handler.build_calibration_stacks(
         "bias",
         min_stack_size=config.get_params(["BIAS"])["min_stack_size"],
+        max_stack_size=config.get_params(["BIAS"])["max_stack_size"],
         groupby="time_of_day",
     ):
         bias_path = kpf_filepath(
@@ -71,6 +72,7 @@ def main(config, args):
     for files in file_handler.build_calibration_stacks(
         "dark",
         min_stack_size=config.get_params(["DARK"])["min_stack_size"],
+        max_stack_size=config.get_params(["DARK"])["max_stack_size"],
         groupby="obs_night",
     ):
         dark_path = kpf_filepath(
@@ -87,6 +89,7 @@ def main(config, args):
     for files in file_handler.build_calibration_stacks(
         "flat",
         min_stack_size=config.get_params(["FLAT"])["min_stack_size"],
+        max_stack_size=config.get_params(["FLAT"])["max_stack_size"],
         groupby="time_of_day",
     ):
         flat_path = kpf_filepath(
@@ -102,6 +105,7 @@ def main(config, args):
     for files in file_handler.build_calibration_stacks(
         "thar",
         min_stack_size=config.get_params(["WLS"])["min_stack_size"],
+        max_stack_size=config.get_params(["WLS"])["max_stack_size"],
         groupby="time_of_day",
     ):
         obs_id = get_obs_id(files[0])

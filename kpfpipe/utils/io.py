@@ -371,6 +371,7 @@ class FileHandler:
         cal_type,
         *,
         min_stack_size=1,
+        max_stack_size=None,
         cluster_gap_seconds=7200,
         groupby="time_of_day",
         exclude_junk=True,
@@ -394,7 +395,9 @@ class FileHandler:
           routinely straddle HST midnight and belong in a single nightly stack.
 
         Every returned stack has at least ``min_stack_size`` files; undersized
-        stacks are dropped, and it raises when none meets the threshold.
+        stacks are dropped, and it raises when none meets the threshold. A stack
+        with more than ``max_stack_size`` files is truncated to its first
+        ``max_stack_size`` (earliest by time), with a warning.
 
         Parameters
         ----------
@@ -404,6 +407,11 @@ class FileHandler:
             Minimum number of files required per stack; undersized stacks are
             dropped. The default of 1 keeps every cluster (a no-op filter); the
             masters recipe passes the configured per-cal-type value.
+        max_stack_size : int or None, default None
+            Maximum number of files used per stack; oversized stacks are
+            truncated to their earliest ``max_stack_size`` frames. The default of
+            None imposes no ceiling; the masters recipe passes the configured
+            per-cal-type value.
         cluster_gap_seconds : int, default 7200
             Gap [s] between consecutive frames that splits one session from the
             next. The 2-hour default separates KPF morning vs. evening sessions.
@@ -461,6 +469,23 @@ class FileHandler:
                 f"'{cal_type}' groupby={groupby} produced no cluster with at least "
                 f"min_stack_size={min_stack_size} files"
             )
+
+        if max_stack_size is not None:
+            capped = []
+            for c in clusters:
+                if len(c) > max_stack_size:
+                    logger.warning(
+                        "%d %s L0 frames detected...using only %d frames to "
+                        "construct master. Increase max_stack_size if higher S/N "
+                        "is desired",
+                        len(c),
+                        cal_type,
+                        max_stack_size,
+                    )
+                    c = c[:max_stack_size]
+                capped.append(c)
+            clusters = capped
+
         # Which frames feed each master is a decision point (DRP-RUN-08).
         logger.info(
             "'%s' frames form %d cluster(s); sizes: %s",
