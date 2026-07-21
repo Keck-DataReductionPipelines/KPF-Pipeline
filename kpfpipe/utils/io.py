@@ -124,8 +124,12 @@ class FileHandler:
     """
 
     def __init__(self, data_dirs):
-        self._data_input = data_dirs.get("KPF_DATA_INPUT")
-        self._masters_output = data_dirs.get("KPF_MASTERS_OUTPUT")
+        data_input = data_dirs.get("KPF_DATA_INPUT")
+        masters_output = data_dirs.get("KPF_MASTERS_OUTPUT")
+        self._data_input = os.path.abspath(data_input) if data_input else None
+        self._masters_output = (
+            os.path.abspath(masters_output) if masters_output else None
+        )
         self._mini_db = None  # loaded night's readable frames (build_mini_database)
         self._full_scan_mini_db = None  # full scan of every file, written to the cache
 
