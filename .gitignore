@@ -77,7 +77,8 @@ docs/_build/
 target/
 
 # Jupyter Notebook
-notebooks/
+notebooks/*
+!notebooks/order_trace_issue_1398.ipynb
 .ipynb_checkpoints
 
 # IPython

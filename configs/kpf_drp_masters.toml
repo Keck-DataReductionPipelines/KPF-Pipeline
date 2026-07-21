@@ -47,5 +47,26 @@ bias = true
 dark = true
 flat = false
 
+[MODULE_ORDER_TRACE]
+poly_degree = 3
+sample_count = 65
+row_half_window = 7
+col_half_window = 3
+profile_smoothing_sigma = 1.0
+background_smoothing_sigma = 20.0
+candidate_prominence_sigma = 4.0
+candidate_distance_pixels = 5
+winsor_percentile = 90.0
+fit_sigma = 4.0
+fit_max_iterations = 8
+min_valid_fraction = 0.5
+width_sigma = 2.8
+width_half_window = 14
+width_default = 11.0
+orderlet_gap_pixels = 2.0
+era_definitions_path = "reference/kpf_instrument_eras.csv"
+order_trace_green_path = "reference/order_trace_green.csv"
+order_trace_red_path = "reference/order_trace_red.csv"
+
 [MODULE_SPECTRAL_EXTRACTION]
 extraction_method = "box"
