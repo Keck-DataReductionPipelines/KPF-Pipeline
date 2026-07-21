@@ -128,6 +128,32 @@ def synthetic_setup(tmp_path):
 
 
 class TestTraceRecovery:
+    def test_edge_center_recovers_flat_topped_profile(self):
+        rng = np.random.default_rng(1398)
+        rows = np.arange(90, dtype=float)
+        expected_center = 41.35
+        half_width = 4.4
+        profile = 0.5 * (
+            np.tanh((rows - (expected_center - half_width)) / 0.45)
+            - np.tanh((rows - (expected_center + half_width)) / 0.45)
+        )
+        image = np.repeat((10.0 + 1000.0 * profile)[:, None], 31, axis=1)
+        image += rng.normal(0.0, 2.0, image.shape)
+
+        tracer = OrderTrace(
+            "wideflat.fits",
+            {
+                "row_half_window": 9,
+                "col_half_window": 2,
+                "profile_smoothing_sigma": 0.7,
+            },
+        )
+        measured = tracer._local_edge_center(
+            image, column=15, guess=expected_center + 1.5
+        )
+
+        assert measured == pytest.approx(expected_center, abs=0.15)
+
     def test_recovers_cubic_centers_widths_and_schema(
         self, tmp_path, monkeypatch, synthetic_setup
     ):

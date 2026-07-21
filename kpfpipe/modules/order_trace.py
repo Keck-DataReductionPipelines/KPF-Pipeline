@@ -43,6 +43,9 @@ _DEFAULTS = {
     "candidate_prominence_sigma": 4.0,
     "candidate_distance_pixels": 5,
     "winsor_percentile": 90.0,
+    "edge_levels": [0.25, 0.40, 0.55, 0.70],
+    "edge_min_width_pixels": 3.0,
+    "edge_max_center_spread": 0.75,
     "fit_sigma": 4.0,
     "fit_max_iterations": 8,
     "min_valid_fraction": 0.5,
@@ -131,6 +134,19 @@ class OrderTrace:
             raise ValueError("min_valid_fraction must be in (0, 1]")
         if not 0.0 < float(self.winsor_percentile) <= 100.0:
             raise ValueError("winsor_percentile must be in (0, 100]")
+        edge_levels = np.asarray(self.edge_levels, dtype=float)
+        if (
+            edge_levels.ndim != 1
+            or edge_levels.size < 2
+            or not np.isfinite(edge_levels).all()
+            or np.any((edge_levels <= 0.0) | (edge_levels >= 1.0))
+        ):
+            raise ValueError("edge_levels must contain at least two values in (0, 1)")
+        if (
+            float(self.edge_min_width_pixels) <= 0.0
+            or float(self.edge_max_center_spread) <= 0.0
+        ):
+            raise ValueError("edge-center constraints must be positive")
         if (
             float(self.width_sigma) <= 0
             or int(self.width_half_window) < 2
@@ -296,8 +312,8 @@ class OrderTrace:
         )
         return peaks.astype(float)
 
-    def _local_center(self, image, column, guess, candidates):
-        """Measure a robust subpixel center in a small window around ``guess``."""
+    def _local_peak_center(self, image, column, guess, candidates):
+        """Measure a subpixel center for a peaked CAL-fiber profile."""
         if not np.isfinite(guess):
             return np.nan
 
@@ -335,13 +351,103 @@ class OrderTrace:
             return np.nan
         return float(np.average(rows[lo:hi], weights=weights))
 
-    def _trace_centers(self, image, seed_coeffs, sample_x, candidate_rows):
+    @staticmethod
+    def _threshold_crossing(rows, values, index, direction, threshold):
+        """Interpolate one threshold crossing away from an illuminated core."""
+        current = int(index)
+        adjacent = current + int(direction)
+        while 0 <= adjacent < values.size and values[adjacent] >= threshold:
+            current = adjacent
+            adjacent = current + int(direction)
+        if adjacent < 0 or adjacent >= values.size:
+            return np.nan
+
+        value_inside = values[current]
+        value_outside = values[adjacent]
+        denominator = value_inside - value_outside
+        if not np.isfinite(denominator) or denominator <= 0.0:
+            return np.nan
+        fraction = (value_inside - threshold) / denominator
+        return float(rows[current] + fraction * (rows[adjacent] - rows[current]))
+
+    def _local_edge_center(self, image, column, guess):
+        """Measure the geometric center of a flat-topped orderlet from its edges."""
+        if not np.isfinite(guess):
+            return np.nan
+
+        half_window = int(self.row_half_window)
+        r0 = max(0, int(np.floor(guess)) - half_window)
+        r1 = min(image.shape[0], int(np.ceil(guess)) + half_window + 1)
+        if r1 - r0 < 5:
+            return np.nan
+
+        full_profile = self._column_profile(image, column)
+        background = gaussian_filter1d(
+            full_profile,
+            sigma=float(self.background_smoothing_sigma),
+            mode="nearest",
+        )
+        values = gaussian_filter1d(
+            full_profile[r0:r1] - background[r0:r1],
+            sigma=float(self.profile_smoothing_sigma),
+            mode="nearest",
+        )
+        rows = np.arange(r0, r1, dtype=float)
+        if not np.isfinite(values).all():
+            return np.nan
+
+        baseline = np.nanpercentile(values, 20.0)
+        amplitude = np.nanpercentile(values, 90.0) - baseline
+        if not np.isfinite(amplitude) or amplitude <= 0.0:
+            return np.nan
+
+        centers = []
+        guess_index = int(np.argmin(np.abs(rows - guess)))
+        for level in np.asarray(self.edge_levels, dtype=float):
+            threshold = baseline + level * amplitude
+            illuminated = np.flatnonzero(values >= threshold)
+            if illuminated.size == 0:
+                continue
+            core = illuminated[np.argmin(np.abs(illuminated - guess_index))]
+            lower = self._threshold_crossing(rows, values, core, -1, threshold)
+            upper = self._threshold_crossing(rows, values, core, 1, threshold)
+            width = upper - lower
+            if (
+                np.isfinite(lower)
+                and np.isfinite(upper)
+                and width >= float(self.edge_min_width_pixels)
+            ):
+                centers.append((lower + upper) / 2.0)
+
+        minimum = max(2, int(np.ceil(len(self.edge_levels) / 2)))
+        if len(centers) < minimum:
+            return np.nan
+        centers = np.asarray(centers, dtype=float)
+        center = float(np.nanmedian(centers))
+        spread = 1.4826 * np.nanmedian(np.abs(centers - center))
+        if spread > float(self.edge_max_center_spread):
+            return np.nan
+        return center
+
+    def _local_center(self, image, column, guess, candidates, fiber):
+        """Dispatch to the profile estimator appropriate for one fiber."""
+        if fiber == "CAL":
+            return self._local_peak_center(image, column, guess, candidates)
+        return self._local_edge_center(image, column, guess)
+
+    def _trace_centers(
+        self, image, seed_coeffs, sample_x, candidate_rows, fiber
+    ):
         """Follow one orderlet from the detector center toward both edges."""
         seed_y = np.polynomial.polynomial.polyval(sample_x, seed_coeffs)
         centers = np.full(sample_x.size, np.nan, dtype=float)
         anchor = int(np.argmin(np.abs(sample_x - image.shape[1] // 2)))
         centers[anchor] = self._local_center(
-            image, sample_x[anchor], seed_y[anchor], candidate_rows[anchor]
+            image,
+            sample_x[anchor],
+            seed_y[anchor],
+            candidate_rows[anchor],
+            fiber,
         )
 
         directions = (
@@ -356,7 +462,7 @@ class OrderTrace:
                 else:
                     guess = seed_y[i]
                 measured = self._local_center(
-                    image, sample_x[i], guess, candidate_rows[i]
+                    image, sample_x[i], guess, candidate_rows[i], fiber
                 )
                 centers[i] = measured
                 if np.isfinite(measured):
@@ -534,7 +640,9 @@ class OrderTrace:
                 )
                 continue
 
-            measured = self._trace_centers(image, seed_coeffs, sample_x, candidate_rows)
+            measured = self._trace_centers(
+                image, seed_coeffs, sample_x, candidate_rows, seed.Fiber
+            )
             try:
                 coeffs, keep, rms = self._robust_polynomial_fit(
                     sample_x.astype(float), measured
