@@ -38,7 +38,32 @@ _DEFAULTS = {
     **DEFAULTS,
     "use_gaia": True,
     "use_simbad": True,
+    "use_wmko": True,
 }
+
+# Source-merge configuration for the canonical ``kpf-drp`` row. Priority order
+# (highest first) governs which source supplies the coherent position block and,
+# independently, the parallax and RV. _PRESENCE_FLAGS maps each source to its
+# CATALOG_RECORD header flag (a local mirror of level0._CATALOG_FLAGS, matching the
+# DiagL0 convention of not importing the private schema).
+_MERGE_PRIORITY = ("gaia", "simbad", "wmko")
+_PRESENCE_FLAGS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
+# The position block is taken together from one source so ra/dec/PM/epoch stay
+# internally consistent; parallax and rv are filled per-column.
+_POSITION_FIELDS = ("ra", "dec", "pmra", "pmdec", "epoch")
+_MERGE_STR_FIELDS = frozenset({"source_id", "frame"})
+_MERGE_READ_FIELDS = (
+    "source_id",
+    "ra",
+    "dec",
+    "pmra",
+    "pmdec",
+    "parallax",
+    "rv",
+    "frame",
+    "epoch",
+    "equinox",
+)
 
 # Column units AstroQuery assumes for each catalog result, verified before the
 # values are trusted so a silent upstream schema change fails loudly instead of
@@ -108,6 +133,7 @@ class AstroQuery:
 
         self._gaia = None  # Gaia DR3 record; set by query_gaia()
         self._simbad = None  # SIMBAD record; set by query_simbad()
+        self._canonical = None  # merged kpf-drp record; set by merge_catalog_records()
         self._info = None
 
     # ------------------------------------------------------------------
@@ -285,6 +311,124 @@ class AstroQuery:
         logger.info("successfully built record for simbad")
         return record
 
+    def _read_catalog_row(self, table, source):
+        """Read one CATALOG_RECORD row into a record dict, or None if absent.
+
+        Coerces the missing-value sentinels back to None (NaN floats, "" strings) so
+        the merge sees a single "missing" marker per cell regardless of source.
+        """
+        match = table[table["source"] == source]
+        if len(match) == 0:
+            return None
+        row = match[0]
+        record = {}
+        for name in _MERGE_READ_FIELDS:
+            value = row[name]
+            if name in _MERGE_STR_FIELDS:
+                record[name] = None if str(value) == "" else str(value)
+            else:
+                f = float(value)
+                record[name] = None if np.isnan(f) else f
+        return record
+
+    def merge_catalog_records(self):
+        """Merge the source rows into the canonical ``kpf-drp`` CATALOG_RECORD row.
+
+        Combines the ``gaia``/``simbad``/``wmko`` rows (each gated by its ``use_*``
+        toggle and presence flag) into one canonical record, in ``_MERGE_PRIORITY``
+        order: the coherent position block (ra/dec/pmra/pmdec/epoch, plus frame/equinox)
+        is taken together from the highest-priority source that supplies it complete,
+        while parallax and rv are each filled independently from the highest-priority
+        source that has them. ``astr_src`` records the position source's label; an
+        optional parallax/rv borrowed from a different source is a DEBUG-level note
+        (Gaia commonly lacks radial_velocity, so this is routine, not an error).
+
+        Raises ``ValueError`` when a coherent position block (ra, dec, pmra, pmdec,
+        epoch) cannot be assembled from the enabled sources -- without a position there
+        is nothing to correct, so its absence must fail loudly. parallax and rv are
+        optional: filled when any source has them, else left missing (NaN) for the
+        downstream consumer to default (as BarycentricCorrection already does).
+        """
+        table = self.l0_obj.data["CATALOG_RECORD"]
+        header = self.l0_obj.headers["CATALOG_RECORD"]
+
+        # Candidate (source_label, record) pairs in priority order, gated by toggle
+        # and presence flag.
+        candidates = []
+        for source in _MERGE_PRIORITY:
+            if not getattr(self, f"use_{source}"):
+                continue
+            if not header.get(_PRESENCE_FLAGS[source]):
+                continue
+            record = self._read_catalog_row(table, source)
+            if record is not None:
+                candidates.append((source, record))
+
+        base = next(
+            (
+                (source, record)
+                for source, record in candidates
+                if all(record[f] is not None for f in _POSITION_FIELDS)
+            ),
+            None,
+        )
+        if base is None:
+            enabled = [s for s in _MERGE_PRIORITY if getattr(self, f"use_{s}")]
+            raise ValueError(
+                f"cannot build a canonical astrometry position for "
+                f"{self.l0_obj.obs_id or 'unknown'}: missing ra/dec/pmra/pmdec/epoch "
+                f"across enabled sources {enabled}"
+            )
+        base_source, base_record = base
+
+        # parallax and rv are optional; take each from the highest-priority source
+        # that has it, or leave missing.
+        parallax_source, parallax_value = next(
+            (
+                (source, record["parallax"])
+                for source, record in candidates
+                if record["parallax"] is not None
+            ),
+            (None, None),
+        )
+        rv_source, rv_value = next(
+            (
+                (source, record["rv"])
+                for source, record in candidates
+                if record["rv"] is not None
+            ),
+            (None, None),
+        )
+
+        mixed = [
+            f"{field}={src}"
+            for field, src in (("parallax", parallax_source), ("rv", rv_source))
+            if src is not None and src != base_source
+        ]
+        if mixed:
+            logger.debug(
+                "canonical astrometry mixes sources: position=%s, %s",
+                base_source,
+                ", ".join(mixed),
+            )
+
+        record = {
+            "source_id": base_record["source_id"],
+            "astr_src": base_source,
+            "ra": base_record["ra"],
+            "dec": base_record["dec"],
+            "pmra": base_record["pmra"],
+            "pmdec": base_record["pmdec"],
+            "parallax": parallax_value,
+            "rv": rv_value,
+            "frame": base_record["frame"],
+            "epoch": base_record["epoch"],
+            "equinox": base_record["equinox"],
+        }
+        self._canonical = record
+        self.l0_obj.set_catalog_record("kpf-drp", record)
+        return record
+
     # ------------------------------------------------------------------
     # Private helpers - module execution
     # ------------------------------------------------------------------
@@ -293,11 +437,13 @@ class AstroQuery:
         """Build and cache the info() summary text from instance attributes."""
         gaia = self._gaia["source_id"] if self._gaia else "n/a"
         simbad = self._simbad["source_id"] if self._simbad else "n/a"
+        canonical = self._canonical["astr_src"] if self._canonical else "n/a"
         lines = [
             "AstroQuery",
             f"  obs_id:  {self.l0_obj.obs_id or 'unknown'}",
             f"  Gaia DR3:  {gaia}",
             f"  SIMBAD:    {simbad}",
+            f"  canonical position source:  {canonical}",
         ]
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
@@ -333,6 +479,10 @@ class AstroQuery:
 
         self.l0_obj.set_catalog_record("gaia", self._gaia)
         self.l0_obj.set_catalog_record("simbad", self._simbad)
+        # Merge the source rows (gaia/simbad/wmko) into the canonical kpf-drp row that
+        # downstream (to_kpf1 C*#, barycentric correction) consumes. Raises if a
+        # complete set cannot be assembled.
+        self.merge_catalog_records()
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")
 

@@ -39,12 +39,16 @@ _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
 _DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
 
 # Schema of the CATALOG_RECORD BinTable extension: one row per resolved source
-# (wmko/gaia/simbad), carrying the canonical record fields plus a leading 'source'
-# label. Float columns hold NaN where a value is missing; string columns hold "".
-# Units document the canonical schema (deg, mas/yr incl. cos Dec, mas, km/s, jyear).
+# (wmko/gaia/simbad) plus the merged 'kpf-drp' canonical row, carrying the record
+# fields plus a leading 'source' label and 'astr_src' (the source label whose
+# astrometry supplied this row's position block -- itself for a source row, the
+# merge base for the canonical row). Float columns hold NaN where a value is
+# missing; string columns hold "". Units document the canonical schema (deg, mas/yr
+# incl. cos Dec, mas, km/s, jyear).
 _CATALOG_COLUMNS = (
     "source",
     "source_id",
+    "astr_src",
     "ra",
     "dec",
     "pmra",
@@ -55,7 +59,7 @@ _CATALOG_COLUMNS = (
     "epoch",
     "equinox",
 )
-_CATALOG_STR_COLUMNS = frozenset({"source", "source_id", "frame"})
+_CATALOG_STR_COLUMNS = frozenset({"source", "source_id", "astr_src", "frame"})
 _CATALOG_UNITS = {
     "ra": u.deg,
     "dec": u.deg,
@@ -179,13 +183,16 @@ class KPF0(KPFDataModel):
     def set_catalog_record(self, source, record):
         """Upsert one source's row into the CATALOG_RECORD extension + set its flag.
 
-        The single writer for CATALOG_RECORD, shared by the read path (``wmko``) and
-        AstroQuery (``gaia``/``simbad``). ``record`` is a canonical record dict (the
-        _CATALOG_COLUMNS fields minus ``source``) or None. Existing rows for other
-        sources are preserved (upsert), so callers add their row independently. A
-        None record clears the source's flag and writes no row; otherwise the row is
-        (re)written and the flag set to 1. Missing floats become NaN, missing strings
-        "".
+        The single writer for CATALOG_RECORD, shared by the read path (``wmko``),
+        AstroQuery (``gaia``/``simbad`` and the merged ``kpf-drp`` row). ``record`` is a
+        canonical record dict (the _CATALOG_COLUMNS fields minus ``source``) or None.
+        ``astr_src`` defaults to ``source`` when the record omits it (a source row's
+        position is its own); the merged row supplies its base's label explicitly.
+        Existing rows for other sources are preserved (upsert), so callers add their row
+        independently. A None record clears the source's flag and writes no row;
+        otherwise the row is (re)written and the flag set to 1. A source without a
+        registered presence flag (e.g. ``kpf-drp``, which must always be present) writes
+        no flag keyword. Missing floats become NaN, missing strings "".
         """
         table = self.data["CATALOG_RECORD"]
         rows = {}
@@ -197,7 +204,7 @@ class KPF0(KPFDataModel):
         if record is None:
             rows.pop(source, None)
         else:
-            rows[source] = {"source": source, **record}
+            rows[source] = {"source": source, "astr_src": source, **record}
 
         ordered = list(rows.values())
         new_table = Table()
@@ -213,7 +220,9 @@ class KPF0(KPFDataModel):
                 )
                 new_table[name].unit = _CATALOG_UNITS[name]
         self.set_data("CATALOG_RECORD", new_table)
-        self.set_keyword(_CATALOG_FLAGS[source], 1 if record is not None else 0)
+        flag = _CATALOG_FLAGS.get(source)
+        if flag is not None:
+            self.set_keyword(flag, 1 if record is not None else 0)
 
     def _read(self, hdul):
         """Read all extensions from an L0 FITS HDUList.
