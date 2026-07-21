@@ -12,12 +12,12 @@ class Flat(BaseMasterModule):
     """
     Construct a master flat frame from a stack of L0 flat exposures.
 
-    Standard reduction: a flat is bias- and dark-subtracted. The associated
-    master bias and master dark are subtracted from each frame before stacking
-    with sigma-clipped statistics, interpolating bad pixels, and performing a
-    final trend-aware outlier pass. Outputs a KPFMasterL1 containing per-chip
-    IMG, SNR, and MASK extensions; the IMG is a unitless relative throughput
-    (no BUNIT).
+    Stacks frames using sigma-clipped statistics, interpolates bad pixels,
+    and performs a final outlier pass on the combined image. Outputs a
+    KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions; the IMG is
+    a unitless relative throughput (no BUNIT).
+
+    Standard reduction: a flat is bias- and dark-subtracted before stacking.
 
     Parameters
     ----------

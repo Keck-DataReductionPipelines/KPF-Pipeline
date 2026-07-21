@@ -47,8 +47,7 @@ class TestMasterFlatUnit:
         assert "master_flat" in master_flat.receipt["FUNCTION"].values
 
     def test_bunit_is_unset(self, master_flat):
-        # A flat is a unitless relative throughput, so it carries no BUNIT
-        # (contrast the bias "electrons" / dark "electrons/sec").
+        # A flat is a unitless relative throughput, so it carries no BUNIT.
         for chip in CHIPS:
             assert master_flat.headers[f"{chip}_IMG"].get("BUNIT") is None
 
@@ -104,7 +103,7 @@ class TestMasterFlatRegression:
 
     def test_flat_is_illuminated(self, master_flat):
         # A flat is an illuminated exposure, so the stacked image has real
-        # positive signal (unlike a near-zero bias or tiny dark-current rate).
+        # positive signal.
         for chip in CHIPS:
             median = np.nanmedian(master_flat.data[f"{chip}_IMG"])
             assert median > 0
