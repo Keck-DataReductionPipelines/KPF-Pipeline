@@ -46,10 +46,10 @@ class TestMasterFlatUnit:
     def test_receipt_entry(self, master_flat):
         assert "master_flat" in master_flat.receipt["FUNCTION"].values
 
-    def test_bunit_is_unset(self, master_flat):
-        # A flat is a unitless relative throughput, so it carries no BUNIT.
+    def test_bunit_is_electrons(self, master_flat):
+        # A flat IMG is the total electrons summed over the stack.
         for chip in CHIPS:
-            assert master_flat.headers[f"{chip}_IMG"].get("BUNIT") is None
+            assert master_flat.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
 
 
 # ---------------------------------------------------------------------------
@@ -108,9 +108,9 @@ class TestMasterFlatRegression:
             median = np.nanmedian(master_flat.data[f"{chip}_IMG"])
             assert median > 0
 
-    def test_bunit_is_unset(self, master_flat):
+    def test_bunit_is_electrons(self, master_flat):
         for chip in CHIPS:
-            assert master_flat.headers[f"{chip}_IMG"].get("BUNIT") is None
+            assert master_flat.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
 
     def test_snr_never_negative(self, master_flat):
         for chip in CHIPS:

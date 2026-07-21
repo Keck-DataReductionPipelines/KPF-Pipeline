@@ -15,7 +15,7 @@ class Flat(BaseMasterModule):
     Stacks frames using sigma-clipped statistics, interpolates bad pixels,
     and performs a final outlier pass on the combined image. Outputs a
     KPFMasterL1 containing per-chip IMG, SNR, and MASK extensions; the IMG is
-    a unitless relative throughput (no BUNIT).
+    the total electrons summed over the stack (BUNIT 'electrons').
 
     Standard reduction: a flat is bias- and dark-subtracted before stacking.
 
