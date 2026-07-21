@@ -11,10 +11,12 @@ from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 logger = logging.getLogger(__name__)
 
-# Numeric record fields the pointing offset needs; a NaN in any (a missing
-# measurement) makes the source unusable, and the offset is emitted present-but-
-# empty. 'frame' is a fixed literal AstroQuery always sets, so it is not gated here.
-_OFFSET_FIELDS = ("ra", "dec", "pmra", "pmdec", "parallax", "epoch")
+# Record fields the pointing offset needs; a missing one (an empty RA/Dec string or
+# a NaN measurement) makes the source unusable, and the offset is emitted present-
+# but-empty. RA/Dec are sexagesimal strings (EPRV C*# format), the rest floats.
+# 'frame' is a fixed literal AstroQuery always sets, so it is not gated here.
+_OFFSET_STR_FIELDS = ("ra", "dec")
+_OFFSET_NUM_FIELDS = ("pmra", "pmdec", "parallax", "epoch")
 
 # CATALOG_RECORD presence flag (int 0/1) per source, on the extension header.
 _FLAG_KEYWORDS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
@@ -59,7 +61,10 @@ class DiagL0(Diagnostics):
             return None
         table = self.kpf_obj.data["CATALOG_RECORD"]
         row = table[table["source"] == source][0]
-        if any(np.isnan(row[field]) for field in _OFFSET_FIELDS):
+        missing = any(
+            str(row[field]).strip() == "" for field in _OFFSET_STR_FIELDS
+        ) or any(np.isnan(row[field]) for field in _OFFSET_NUM_FIELDS)
+        if missing:
             logger.warning(
                 "incomplete %s record in CATALOG_RECORD; pointing offset unavailable",
                 source,
@@ -68,20 +73,22 @@ class DiagL0(Diagnostics):
         return row
 
     def _record_skycoord(self, rec):
-        """ICRS SkyCoord from a CATALOG_RECORD record (canonical units).
+        """ICRS SkyCoord from a CATALOG_RECORD record (EPRV C*# format).
 
-        AstroQuery normalizes every source ('gaia'/'simbad'/'wmko') to the same
-        schema -- ICRS, RA/Dec deg, proper motion mas/yr (RA incl. cos Dec),
-        parallax mas, epoch in Julian years -- so one builder serves all three.
+        Every source ('gaia'/'simbad'/'wmko') is sanitized to the same schema --
+        ICRS, RA/Dec sexagesimal strings (RA hour-angle, Dec deg), proper motion
+        arcsec/yr (RA incl. cos Dec), parallax mas, epoch in Julian years -- so one
+        builder serves all three.
         """
         return SkyCoord(
-            ra=rec["ra"] * u.deg,
-            dec=rec["dec"] * u.deg,
-            pm_ra_cosdec=rec["pmra"] * u.mas / u.yr,
-            pm_dec=rec["pmdec"] * u.mas / u.yr,
-            distance=(1e3 / rec["parallax"]) * u.pc,
-            obstime=Time(rec["epoch"], format="jyear"),
-            frame=rec["frame"],
+            ra=rec["ra"],
+            dec=rec["dec"],
+            unit=(u.hourangle, u.deg),
+            pm_ra_cosdec=float(rec["pmra"]) * u.arcsec / u.yr,
+            pm_dec=float(rec["pmdec"]) * u.arcsec / u.yr,
+            distance=(1e3 / float(rec["parallax"])) * u.pc,
+            obstime=Time(float(rec["epoch"]), format="jyear"),
+            frame=str(rec["frame"]),
         )
 
     def _pointing(self):

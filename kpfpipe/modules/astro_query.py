@@ -15,17 +15,19 @@ than write PRIMARY here, AstroQuery records the queried quantities on the L0 and
 lets ``to_kpf1()`` overlay them onto the L1 PRIMARY (a follow-up integration).
 
 AstroQuery never modifies the L0 PRIMARY header -- that header is a pure
-pass-through to INSTRUMENT_HEADER. All three records share one schema and one set
-of units and reference frame, so a consumer reads any source identically: ICRS,
-RA/Dec in degrees, proper motion in mas/yr (RA including cos(Dec)), parallax in
-mas, RV in km/s, epoch/equinox in Julian years. Per-fiber fan-out and derived
-quantities (offsets, redshift) remain the jobs of downstream consumers.
+pass-through to INSTRUMENT_HEADER. All three records share one schema, sanitized to
+the EPRV C*# PRIMARY format so a consumer reads any source identically and to_kpf1
+can copy cells straight onto the catalog cards: ICRS, RA/Dec as sexagesimal strings
+(RA hour-angle, Dec deg), proper motion in arcsec/yr (RA including cos(Dec)),
+parallax in mas, RV in km/s, epoch/equinox in Julian years. Per-fiber fan-out and
+derived quantities (offsets, redshift) remain the jobs of downstream consumers.
 """
 
 import logging
 
 import astropy.units as u
 import numpy as np
+from astropy.coordinates import Angle
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
@@ -48,12 +50,16 @@ _DEFAULTS = {
 # DiagL0 convention of not importing the private schema).
 _MERGE_PRIORITY = ("gaia", "simbad", "wmko")
 _PRESENCE_FLAGS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
-# The position block is taken together from one source so ra/dec/PM/epoch stay
-# internally consistent; parallax and rv are filled per-column.
-_POSITION_FIELDS = ("ra", "dec", "pmra", "pmdec", "epoch")
-_MERGE_STR_FIELDS = frozenset({"source_id", "frame"})
+# The position block is taken together from one source so ra/dec/PM and their frame
+# and reference epoch stay internally consistent -- a frame or epoch from a different
+# source than the coordinates would be meaningless. equinox rides with the same base
+# (an ICRS formality) but is not gated, so a WMKO base missing TARGEQUI still
+# qualifies. parallax and rv are the only per-column fills. All of frame/epoch/equinox
+# therefore share the row's radec_src provenance.
+_POSITION_FIELDS = ("ra", "dec", "pmra", "pmdec", "epoch", "frame")
+_MERGE_STR_FIELDS = frozenset({"object", "frame", "ra", "dec"})
 _MERGE_READ_FIELDS = (
-    "source_id",
+    "object",
     "ra",
     "dec",
     "pmra",
@@ -245,12 +251,24 @@ class AstroQuery:
             return None
         self._verify_units(results, _GAIA_UNITS, "Gaia DR3")
         row = results[0]
+        ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
+        pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
+        # Sanitize to the EPRV C*# format: RA/Dec deg -> sexagesimal (RA hour-angle,
+        # Dec deg); proper motion mas/yr -> arcsec/yr.
         record = {
-            "source_id": gaia_id,
-            "ra": self._scalar(row["ra"]),
-            "dec": self._scalar(row["dec"]),
-            "pmra": self._scalar(row["pmra"]),
-            "pmdec": self._scalar(row["pmdec"]),
+            "object": gaia_id,
+            "ra": None
+            if ra is None
+            else Angle(ra, u.deg).to_string(
+                unit=u.hourangle, sep=":", pad=True, precision=4
+            ),
+            "dec": None
+            if dec is None
+            else Angle(dec, u.deg).to_string(
+                unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
+            ),
+            "pmra": None if pmra is None else pmra / 1e3,
+            "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["parallax"]),
             "rv": self._scalar(row["radial_velocity"]),
             "frame": "icrs",
@@ -296,12 +314,24 @@ class AstroQuery:
             return None
         self._verify_units(result, _SIMBAD_UNITS, "SIMBAD")
         row = result[0]
+        ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
+        pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
+        # Sanitize to the EPRV C*# format: RA/Dec deg -> sexagesimal (RA hour-angle,
+        # Dec deg); proper motion mas/yr -> arcsec/yr.
         record = {
-            "source_id": name,
-            "ra": self._scalar(row["ra"]),
-            "dec": self._scalar(row["dec"]),
-            "pmra": self._scalar(row["pmra"]),
-            "pmdec": self._scalar(row["pmdec"]),
+            "object": name,
+            "ra": None
+            if ra is None
+            else Angle(ra, u.deg).to_string(
+                unit=u.hourangle, sep=":", pad=True, precision=4
+            ),
+            "dec": None
+            if dec is None
+            else Angle(dec, u.deg).to_string(
+                unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
+            ),
+            "pmra": None if pmra is None else pmra / 1e3,
+            "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["plx_value"]),
             "rv": self._scalar(row["rvz_radvel"]),
             "frame": "icrs",
@@ -336,12 +366,17 @@ class AstroQuery:
 
         Combines the ``gaia``/``simbad``/``wmko`` rows (each gated by its ``use_*``
         toggle and presence flag) into one canonical record, in ``_MERGE_PRIORITY``
-        order: the coherent position block (ra/dec/pmra/pmdec/epoch, plus frame/equinox)
-        is taken together from the highest-priority source that supplies it complete,
-        while parallax and rv are each filled independently from the highest-priority
-        source that has them. ``astr_src`` records the position source's label; an
-        optional parallax/rv borrowed from a different source is a DEBUG-level note
-        (Gaia commonly lacks radial_velocity, so this is routine, not an error).
+        order: the coherent position block -- ra/dec/pmra/pmdec, plus the frame, epoch,
+        and equinox that make them meaningful -- is taken together from the highest-
+        priority source that supplies it complete, while parallax and rv are each filled
+        independently from the highest-priority source that has them. frame, epoch, and
+        equinox are intrinsic to the coordinates (a frame or epoch from another source
+        would be inconsistent), so they always ride with the position, sharing radec_src
+        provenance rather than getting their own labels. The three provenance labels
+        record where each block came from -- ``radec_src`` (position + frame/epoch/
+        equinox), ``plx_src`` (parallax), ``rv_src`` (rv), each "" when nothing supplied
+        it; a parallax/rv borrowed from a different source than the position is a DEBUG
+        note (Gaia commonly lacks radial_velocity, so this is routine, not an error).
 
         Raises ``ValueError`` when a coherent position block (ra, dec, pmra, pmdec,
         epoch) cannot be assembled from the enabled sources -- without a position there
@@ -413,8 +448,10 @@ class AstroQuery:
             )
 
         record = {
-            "source_id": base_record["source_id"],
-            "astr_src": base_source,
+            "object": base_record["object"],
+            "radec_src": base_source,
+            "plx_src": parallax_source if parallax_source is not None else "",
+            "rv_src": rv_source if rv_source is not None else "",
             "ra": base_record["ra"],
             "dec": base_record["dec"],
             "pmra": base_record["pmra"],
@@ -435,9 +472,9 @@ class AstroQuery:
 
     def _track_info(self):
         """Build and cache the info() summary text from instance attributes."""
-        gaia = self._gaia["source_id"] if self._gaia else "n/a"
-        simbad = self._simbad["source_id"] if self._simbad else "n/a"
-        canonical = self._canonical["astr_src"] if self._canonical else "n/a"
+        gaia = self._gaia["object"] if self._gaia else "n/a"
+        simbad = self._simbad["object"] if self._simbad else "n/a"
+        canonical = self._canonical["radec_src"] if self._canonical else "n/a"
         lines = [
             "AstroQuery",
             f"  obs_id:  {self.l0_obj.obs_id or 'unknown'}",

@@ -10,18 +10,33 @@ import logging
 
 import numpy as np
 import pytest
+from astropy import units as u
+from astropy.coordinates import Angle
 
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import AstroQuery
 
 
-def _record(source_id, ra=180.0, **overrides):
-    """A complete canonical record at ``ra`` (zero PM, finite plx/rv). Pass a field
-    as None (via overrides) to mark it missing."""
+def _ra_str(deg):
+    """RA in deg -> the EPRV C*# sexagesimal hour-angle string the schema stores."""
+    return Angle(deg, u.deg).to_string(unit=u.hourangle, sep=":", pad=True, precision=4)
+
+
+def _dec_str(deg):
+    """Dec in deg -> the EPRV C*# sexagesimal string the schema stores."""
+    return Angle(deg, u.deg).to_string(
+        unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
+    )
+
+
+def _record(obj, ra=180.0, **overrides):
+    """A complete canonical record at ``ra`` (zero PM, finite plx/rv), in the EPRV
+    C*# format: RA/Dec sexagesimal strings, PM arcsec/yr. Pass a field as None (via
+    overrides) to mark it missing."""
     rec = {
-        "source_id": source_id,
-        "ra": ra,
-        "dec": 40.0,
+        "object": obj,
+        "ra": _ra_str(ra),
+        "dec": _dec_str(40.0),
         "pmra": 1.0,
         "pmdec": 2.0,
         "parallax": 50.0,
@@ -54,9 +69,9 @@ class TestMergeCatalogRecords:
         AstroQuery(l0).merge_catalog_records()
 
         row = _merged_row(l0)
-        assert row["astr_src"] == "gaia"
-        assert row["source_id"] == "G123"
-        assert row["ra"] == pytest.approx(180.0)
+        assert row["radec_src"] == "gaia"
+        assert row["object"] == "G123"
+        assert row["ra"] == _ra_str(180.0)
         assert row["parallax"] == pytest.approx(50.0)
         assert row["rv"] == pytest.approx(10.0)
         # Four rows now: gaia + the merged kpf-drp, and no CATCR presence flag.
@@ -75,8 +90,8 @@ class TestMergeCatalogRecords:
         AstroQuery(l0).merge_catalog_records()
 
         row = _merged_row(l0)
-        assert row["astr_src"] == "gaia"
-        assert row["ra"] == pytest.approx(10.0)
+        assert row["radec_src"] == "gaia"
+        assert row["ra"] == _ra_str(10.0)
 
     def test_rv_filled_from_lower_priority_logs_mix(self, caplog):
         # Gaia supplies position + parallax but lacks rv -> rv borrowed from SIMBAD.
@@ -91,9 +106,11 @@ class TestMergeCatalogRecords:
             AstroQuery(l0).merge_catalog_records()
 
         row = _merged_row(l0)
-        assert row["astr_src"] == "gaia"  # position still from Gaia
+        assert row["radec_src"] == "gaia"  # position still from Gaia
         assert row["rv"] == pytest.approx(99.0)  # rv from SIMBAD
+        assert row["rv_src"] == "simbad"
         assert row["parallax"] == pytest.approx(50.0)  # parallax stayed with Gaia
+        assert row["plx_src"] == "gaia"
         assert "mixes sources" in caplog.text
 
     def test_parallax_priority_over_wmko(self):
@@ -106,7 +123,9 @@ class TestMergeCatalogRecords:
             }
         )
         AstroQuery(l0).merge_catalog_records()
-        assert _merged_row(l0)["parallax"] == pytest.approx(7.0)
+        row = _merged_row(l0)
+        assert row["parallax"] == pytest.approx(7.0)
+        assert row["plx_src"] == "simbad"
 
     def test_wmko_only(self, caplog):
         l0 = _make_l0({"wmko": _record("W")})
@@ -114,8 +133,8 @@ class TestMergeCatalogRecords:
             AstroQuery(l0).merge_catalog_records()
 
         row = _merged_row(l0)
-        assert row["astr_src"] == "wmko"
-        assert row["source_id"] == "W"
+        assert row["radec_src"] == "wmko"
+        assert row["object"] == "W"
         assert "mixes sources" not in caplog.text  # single source, no mixing
 
     def test_missing_position_raises(self):
@@ -142,8 +161,9 @@ class TestMergeCatalogRecords:
         AstroQuery(l0).merge_catalog_records()
 
         row = _merged_row(l0)
-        assert row["astr_src"] == "gaia"
+        assert row["radec_src"] == "gaia"
         assert np.isnan(row["rv"])
+        assert row["rv_src"] == ""  # nothing supplied rv -> empty provenance
         assert row["parallax"] == pytest.approx(50.0)  # parallax still filled
 
     def test_use_wmko_gates_merge_only(self):
@@ -152,16 +172,20 @@ class TestMergeCatalogRecords:
         l0 = _make_l0({"gaia": _record("G"), "wmko": _record("W")})
         AstroQuery(l0, {"use_wmko": False}).merge_catalog_records()
 
-        assert _merged_row(l0)["astr_src"] == "gaia"
+        assert _merged_row(l0)["radec_src"] == "gaia"
         table = l0.data["CATALOG_RECORD"]
         assert len(table[table["source"] == "wmko"]) == 1  # wmko row preserved
         assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 1
 
 
-class TestSingleSourceAstrSrc:
-    def test_source_row_astr_src_defaults_to_source(self):
-        # A plain source row's astr_src is its own label (its position is its own).
+class TestSingleSourceProvenance:
+    def test_source_row_provenance_defaults_to_source(self):
+        # A plain source row's provenance labels are all its own label (its values
+        # are its own).
         l0 = _make_l0({"gaia": _record("G"), "wmko": _record("W")})
         table = l0.data["CATALOG_RECORD"]
-        assert table[table["source"] == "gaia"][0]["astr_src"] == "gaia"
-        assert table[table["source"] == "wmko"][0]["astr_src"] == "wmko"
+        gaia = table[table["source"] == "gaia"][0]
+        wmko = table[table["source"] == "wmko"][0]
+        for col in ("radec_src", "plx_src", "rv_src"):
+            assert gaia[col] == "gaia"
+            assert wmko[col] == "wmko"

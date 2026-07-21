@@ -39,16 +39,25 @@ _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
 _DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
 
 # Schema of the CATALOG_RECORD BinTable extension: one row per resolved source
-# (wmko/gaia/simbad) plus the merged 'kpf-drp' canonical row, carrying the record
-# fields plus a leading 'source' label and 'astr_src' (the source label whose
-# astrometry supplied this row's position block -- itself for a source row, the
-# merge base for the canonical row). Float columns hold NaN where a value is
-# missing; string columns hold "". Units document the canonical schema (deg, mas/yr
-# incl. cos Dec, mas, km/s, jyear).
+# (wmko/gaia/simbad) plus the merged 'kpf-drp' canonical row. Columns: 'source' (the
+# nominal source this row came from), 'object' (the target name supplied to the
+# query), and three provenance labels naming the source each value block was taken
+# from -- 'radec_src' (ra/dec/pmra/pmdec plus their frame/epoch/equinox, which are
+# intrinsic to the coordinates and never sourced separately), 'plx_src' (parallax),
+# 'rv_src' (rv). For a plain source row each provenance label is the row's own
+# 'source'; the merged row names whichever source won each block (or "" when none
+# supplied it). Every source
+# is sanitized to the EPRV C*# PRIMARY format so to_kpf1 can copy cells straight onto
+# the catalog cards: RA/Dec are sexagesimal strings (RA hour-angle 'h:m:s', Dec deg
+# 'd:m:s', ICRS), proper motion is arcsec/yr (RA incl. cos Dec), parallax mas, RV
+# km/s, epoch/equinox in Julian years. Float columns hold NaN where a value is
+# missing; string columns (RA/Dec included) hold "".
 _CATALOG_COLUMNS = (
     "source",
-    "source_id",
-    "astr_src",
+    "object",
+    "radec_src",
+    "plx_src",
+    "rv_src",
     "ra",
     "dec",
     "pmra",
@@ -59,12 +68,12 @@ _CATALOG_COLUMNS = (
     "epoch",
     "equinox",
 )
-_CATALOG_STR_COLUMNS = frozenset({"source", "source_id", "astr_src", "frame"})
+_CATALOG_STR_COLUMNS = frozenset(
+    {"source", "object", "radec_src", "plx_src", "rv_src", "frame", "ra", "dec"}
+)
 _CATALOG_UNITS = {
-    "ra": u.deg,
-    "dec": u.deg,
-    "pmra": u.mas / u.yr,
-    "pmdec": u.mas / u.yr,
+    "pmra": u.arcsec / u.yr,
+    "pmdec": u.arcsec / u.yr,
     "parallax": u.mas,
     "rv": u.km / u.s,
     "epoch": u.yr,
@@ -142,11 +151,12 @@ class KPF0(KPFDataModel):
     def _wmko_catalog_record(self):
         """Build the native WMKO/DCS target record from L0 PRIMARY TARG*.
 
-        Telescope-side astrometry (no external query), converted to the canonical
-        schema: TARGRA/TARGDEC sexagesimal (hourangle / deg) -> deg; TARGPMRA s/yr
-        and TARGPMDC arcsec/yr -> mas/yr; TARGFRAM FK5 J2000 relabeled ICRS (the
-        ~23 mas frame tie is negligible). Returns None -- so the frame gets
-        WMKOCR=0 -- when there is no target pointing (TARGRA absent, e.g. a
+        Telescope-side astrometry (no external query), sanitized to the EPRV C*#
+        format: TARGRA/TARGDEC sexagesimal reformatted to the canonical RA
+        hour-angle / Dec deg 'h:m:s' strings; TARGPMRA time-s/yr -> arcsec/yr
+        (x15 cos Dec), TARGPMDC already arcsec/yr; TARGFRAM FK5 J2000 relabeled
+        ICRS (the ~23 mas frame tie is negligible). Returns None -- so the frame
+        gets WMKOCR=0 -- when there is no target pointing (TARGRA absent, e.g. a
         calibration) or the TARG* astrometry cannot be parsed (warned, never
         raised, so a malformed file still loads). Well-formedness is gated
         downstream by QCL0 (RADECOK), not here.
@@ -155,16 +165,17 @@ class KPF0(KPFDataModel):
         if primary.get("TARGRA") is None:
             return None
         try:
-            dec = Angle(primary["TARGDEC"], unit=u.deg).deg
+            ra = Angle(primary["TARGRA"], unit=u.hourangle)
+            dec = Angle(primary["TARGDEC"], unit=u.deg)
             pmra, pmdec = primary.get("TARGPMRA"), primary.get("TARGPMDC")
             return {
-                "source_id": primary.get("OBJECT"),
-                "ra": Angle(primary["TARGRA"], unit=u.hourangle).to(u.deg).value,
-                "dec": dec,
-                "pmra": None
-                if pmra is None
-                else pmra * 15.0 * np.cos(np.radians(dec)) * 1e3,
-                "pmdec": None if pmdec is None else pmdec * 1e3,
+                "object": primary.get("OBJECT"),
+                "ra": ra.to_string(unit=u.hourangle, sep=":", pad=True, precision=4),
+                "dec": dec.to_string(
+                    unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
+                ),
+                "pmra": None if pmra is None else pmra * 15.0 * np.cos(dec.radian),
+                "pmdec": None if pmdec is None else pmdec,
                 "parallax": primary.get("TARGPLAX"),
                 "rv": primary.get("TARGRADV"),
                 "frame": "icrs",
@@ -186,13 +197,14 @@ class KPF0(KPFDataModel):
         The single writer for CATALOG_RECORD, shared by the read path (``wmko``),
         AstroQuery (``gaia``/``simbad`` and the merged ``kpf-drp`` row). ``record`` is a
         canonical record dict (the _CATALOG_COLUMNS fields minus ``source``) or None.
-        ``astr_src`` defaults to ``source`` when the record omits it (a source row's
-        position is its own); the merged row supplies its base's label explicitly.
-        Existing rows for other sources are preserved (upsert), so callers add their row
-        independently. A None record clears the source's flag and writes no row;
-        otherwise the row is (re)written and the flag set to 1. A source without a
-        registered presence flag (e.g. ``kpf-drp``, which must always be present) writes
-        no flag keyword. Missing floats become NaN, missing strings "".
+        The three provenance labels (``radec_src``/``plx_src``/``rv_src``) default to
+        ``source`` when the record omits them (a source row's values are its own); the
+        merged row supplies each explicitly. Existing rows for other sources are
+        preserved (upsert), so callers add their row independently. A None record clears
+        the source's flag and writes no row; otherwise the row is (re)written and the
+        flag set to 1. A source without a registered presence flag (e.g. ``kpf-drp``,
+        which must always be present) writes no flag keyword. Missing floats become NaN,
+        missing strings "".
         """
         table = self.data["CATALOG_RECORD"]
         rows = {}
@@ -204,7 +216,13 @@ class KPF0(KPFDataModel):
         if record is None:
             rows.pop(source, None)
         else:
-            rows[source] = {"source": source, "astr_src": source, **record}
+            rows[source] = {
+                "source": source,
+                "radec_src": source,
+                "plx_src": source,
+                "rv_src": source,
+                **record,
+            }
 
         ordered = list(rows.values())
         new_table = Table()

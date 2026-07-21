@@ -249,14 +249,15 @@ class TestKPF0CatalogRecord:
         return fn
 
     def test_wmko_row_populated_from_targ(self, tmp_path):
-        """Well-formed TARG* -> WMKOCR=1 and a converted wmko row (h->deg, etc.)."""
+        """Well-formed TARG* -> WMKOCR=1 and a wmko row sanitized to the EPRV C*#
+        format (RA/Dec sexagesimal strings, PM arcsec/yr)."""
         l0 = KPF0.from_fits(self._l0_with_targ(tmp_path, **self._GOOD_TARG))
         assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 1
         table = l0.data["CATALOG_RECORD"]
         wmko = table[table["source"] == "wmko"][0]
-        assert wmko["ra"] == pytest.approx(180.0)  # 12h -> 180 deg
-        assert wmko["dec"] == pytest.approx(40.0)
-        assert wmko["source_id"] == "testtarget"
+        assert wmko["ra"] == "12:00:00.0000"  # RA hour-angle sexagesimal
+        assert wmko["dec"] == "+40:00:00.000"
+        assert wmko["object"] == "testtarget"
 
     def test_no_target_sets_flag_zero_silently(self, tmp_path, caplog):
         """A frame with no TARGRA (calibration) -> WMKOCR=0, no row, no warning."""

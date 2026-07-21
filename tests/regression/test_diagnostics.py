@@ -156,11 +156,14 @@ _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
 
 
 def _record_at(coord, **overrides):
-    """A canonical catalog record placed at ``coord`` (zero PM, finite plx)."""
+    """A canonical catalog record placed at ``coord`` (zero PM, finite plx), in the
+    EPRV C*# format: RA/Dec sexagesimal strings, PM arcsec/yr."""
     rec = {
-        "source_id": "test",
-        "ra": coord.ra.deg,
-        "dec": coord.dec.deg,
+        "object": "test",
+        "ra": coord.ra.to_string(unit=u.hourangle, sep=":", pad=True, precision=4),
+        "dec": coord.dec.to_string(
+            unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
+        ),
         "pmra": 0.0,
         "pmdec": 0.0,
         "parallax": 100.0,
