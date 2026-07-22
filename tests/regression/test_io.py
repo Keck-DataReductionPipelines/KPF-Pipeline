@@ -261,6 +261,24 @@ class TestBuildCalibrationStacks:
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
+    def test_max_stack_size_truncates_to_earliest(self):
+        # Each bias cluster holds 5 files; max_stack_size=3 keeps the earliest 3.
+        lists = _cluster("bias", _make_mini_db(), max_stack_size=3)
+        assert lists[0] == sorted(_BIAS_A)[:3]
+        assert lists[1] == sorted(_BIAS_B)[:3]
+
+    def test_max_stack_size_noop_when_within_limit(self):
+        # A ceiling at or above the cluster size leaves every stack intact.
+        lists = _cluster("bias", _make_mini_db(), max_stack_size=5)
+        assert lists[0] == sorted(_BIAS_A)
+        assert lists[1] == sorted(_BIAS_B)
+
+    def test_max_stack_size_warns_when_truncating(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            _cluster("bias", _make_mini_db(), max_stack_size=3)
+        assert "5 bias L0 frames detected" in caplog.text
+        assert "using only 3 frames" in caplog.text
+
     def test_invalid_imtype_raises(self):
         with pytest.raises(ValueError, match="cal_type must be one of"):
             _cluster("bogus", _make_mini_db())
@@ -321,6 +339,20 @@ class TestBuildCalibrationStacksRealData:
         assert len(lists) == 1
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
+
+
+@pytest.mark.slow
+class TestBuildMiniDatabaseDatecodeType:
+    """build_mini_database accepts an int datecode as well as a 'YYYYMMDD' string."""
+
+    def test_int_datecode_matches_string(self):
+        from_int = FileHandler(
+            {"KPF_DATA_INPUT": str(TESTDATA_DIR)}
+        ).build_mini_database(20240405)
+        from_str = FileHandler(
+            {"KPF_DATA_INPUT": str(TESTDATA_DIR)}
+        ).build_mini_database("20240405")
+        pd.testing.assert_frame_equal(from_int, from_str)
 
 
 # ---------------------------------------------------------------------------
@@ -522,6 +554,10 @@ class TestFindMasters:
     def test_raises_without_masters_output(self):
         with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
             FileHandler({}).find_masters("bias", "L1", "20240405")
+
+    def test_accepts_int_datecode(self, tmp_path):
+        fh = FileHandler({"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        assert fh.find_masters("bias", "L1", 20240405) == []
 
     @pytest.mark.parametrize(
         "cal_type,level",

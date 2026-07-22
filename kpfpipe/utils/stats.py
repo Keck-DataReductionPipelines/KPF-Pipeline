@@ -142,21 +142,6 @@ def optimize_lsq(x, y, linemodel):
     return theta, rms
 
 
-def _mad_std(x, med=None, axis=None, keepdims=False):
-    """NaN-aware drop-in for ``astropy.stats.mad_std``: MAD scaled to a Gaussian
-    sigma, ``1.482602218505602 * median(|x - median(x)|)``, reduced over ``axis``.
-
-    Adds a reusable pre-computed median ``med`` (must be reduced over the same
-    ``axis`` with ``keepdims=True`` so it broadcasts against ``x``) plus
-    ``axis``/``keepdims`` control over the final MAD reduction.
-    """
-    if med is None:
-        med = np.nanmedian(x, axis=axis, keepdims=True)
-    return 1.482602218505602 * np.nanmedian(
-        np.abs(x - med), axis=axis, keepdims=keepdims
-    )
-
-
 def _smooth_filter(x, size=None, *, axes=None):
     """Median- then Gaussian-smooth ``x`` (chains scipy's ``median_filter`` and
     ``gaussian_filter``).
@@ -181,7 +166,9 @@ def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
       the frames that deviate across the stack).
     - ``method="trend"`` smooths ``x`` *along* ``axis`` (see ``_smooth_filter``) and
       judges each element against that local trend, so it tolerates structure
-      that varies smoothly along ``axis`` (e.g. illumination along dispersion).
+      that varies smoothly along ``axis`` (e.g. illumination along dispersion). The
+      deviation is scaled by a local (rolling) MAD rather than one global MAD, so
+      it tolerates heteroscedasticity (scatter that grows with the local level).
 
     ``axis=None`` compares every element to a single global statistic.
     """
@@ -189,17 +176,19 @@ def flag_outliers(x, sigma, axis=None, kernel_size=None, method="median"):
 
     if method == "median":
         med = np.nanmedian(x, axis=axis, keepdims=True)
-        # Reuse one abs-dev buffer (MAD, then normalize in place) to avoid extra
-        # full-size temporaries on the datacube.
         dev = np.abs(x - med)
         mad = 1.482602218505602 * np.nanmedian(dev, axis=axis, keepdims=True)
+        # Reuse one abs-dev compute to avoid extra temporary arrays.
         dev /= mad + eps
         out = dev > sigma
 
     elif method == "trend":
         trend = _smooth_filter(x, size=kernel_size, axes=axis)
-        mad = _mad_std(x - trend)
-        out = np.abs(x - trend) / (mad + eps) > sigma
+        dev = np.abs(x - trend)
+        mad = 1.482602218505602 * _smooth_filter(dev, size=kernel_size, axes=axis)
+        # Reuse one abs-dev compute to avoid extra temporary arrays.
+        dev /= mad + eps
+        out = dev > sigma
 
     else:
         raise ValueError(f"method must be 'median' or 'trend'; {method} not supported")
