@@ -47,7 +47,7 @@ bias = true
 dark = true
 flat = false
 
-[MODULE_ORDER_TRACE]
+[ORDER_TRACE]
 poly_degree = 3
 
 [MODULE_SPECTRAL_EXTRACTION]

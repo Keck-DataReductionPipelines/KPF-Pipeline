@@ -1,4 +1,4 @@
-"""KPF spectral order tracing from a single raw wideflat exposure."""
+"""KPF spectral order tracing from one master-flat image."""
 
 import logging
 import os
@@ -11,11 +11,9 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
 from kpfpipe import DEFAULTS, REPO_ROOT
-from kpfpipe.data_models.level0 import KPF0
-from kpfpipe.modules.calibration_association import CalibrationAssociation
-from kpfpipe.modules.image_assembly import ImageAssembly
-from kpfpipe.modules.image_processing import ImageProcessing
+from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -46,43 +44,41 @@ _DEFAULTS = {
 
 class OrderTrace:
     """
-    Measure spectral traces from one raw KPF wideflat and write trace CSVs.
+    Measure spectral traces from one vNext KPF master flat and write trace CSVs.
 
-    The raw exposure is assembled and bias-subtracted with the standard vNext
-    modules. Existing trace references provide approximate locations and
-    ``(Fiber, Order)`` identities only; all output geometry is measured from the
-    input wideflat.
+    Existing trace references provide approximate locations and ``(Fiber,
+    Order)`` identities only; all output geometry is measured from the input
+    master flat. This masters module is standalone rather than a
+    ``BaseMasterModule`` subclass because it consumes one completed L1 master
+    instead of stacking L0 exposures.
 
     Parameters
     ----------
-    wideflat_filename : str or pathlib.Path
-        Raw L0 wideflat FITS filename.
+    master_flat_filename : str or pathlib.Path
+        vNext ``KPFMasterL1`` flat FITS filename.
     config : None | dict | ConfigHandler
         Module configuration. ``ConfigHandler`` values are read from DATA_DIRS,
-        TRACES, and MODULE_ORDER_TRACE, whose only module-specific parameter is
-        ``poly_degree``. The same configuration is forwarded to image assembly,
-        calibration association, and image processing.
+        TRACES, and ORDER_TRACE, whose only module-specific parameter is
+        ``poly_degree``.
     """
 
-    def __init__(self, wideflat_filename, config=None):
-        self.wideflat_filename = str(wideflat_filename)
-        self._config = config
+    def __init__(self, master_flat_filename, config=None):
+        self.master_flat_filename = str(master_flat_filename)
 
         if config is None:
             params = {}
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "TRACES", "MODULE_ORDER_TRACE"])
+            params = config.get_params(["DATA_DIRS", "TRACES", "ORDER_TRACE"])
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._l1_obj = None
+        self._master_flat = None
         self._instrument_era = None
-        self._bias_path = None
         self._anchor_shifts = {}
         self._fit_rms = {}
         self._results = None
@@ -109,24 +105,23 @@ class OrderTrace:
         return normalised
 
     def _validate_parameters(self):
-        """Validate the configured polynomial degree before reading the wideflat."""
+        """Validate the configured polynomial degree before reading the flat."""
         if not 1 <= int(self.poly_degree) <= 3:
             raise ValueError("poly_degree must be between 1 and 3")
 
-    def _preprocess(self, chips):
-        """Load, assemble, associate a bias, and bias-subtract the wideflat."""
-        path = Path(self.wideflat_filename)
+    def _load_master_flat(self):
+        """Load and validate the vNext L1 master-flat product."""
+        path = Path(self.master_flat_filename)
         if not path.is_file():
-            raise FileNotFoundError(f"Wideflat file not found: {path}")
+            raise FileNotFoundError(f"Master flat not found: {path}")
 
-        l0_obj = KPF0.from_fits(str(path))
-        l1_obj = ImageAssembly(l0_obj, self._config).perform(chips=chips)
-        l1_obj = CalibrationAssociation(l1_obj, self._config).perform(["bias"])
-        self._bias_path = l1_obj.headers["RECEIPT"]["BIASFILE"]
-        l1_obj = ImageProcessing(l1_obj, self._config).perform(
-            chips=chips, bias=True, dark=False, flat=False
-        )
-        return l1_obj
+        master_flat = KPFMasterL1.from_fits(str(path))
+        master_type = master_flat.headers["PRIMARY"].get("MASTYPE")
+        if str(master_type).lower() != "flat":
+            raise ValueError(
+                f"{path} is not a vNext flat master (MASTYPE={master_type!r})"
+            )
+        return master_flat
 
     def _resolve_instrument_era(self, date_obs):
         """Return the unique INSTERA containing ``date_obs``, or None."""
@@ -213,11 +208,11 @@ class OrderTrace:
         return table
 
     def _chip_image(self, chip):
-        """Return one finite, two-dimensional bias-subtracted CCD image."""
-        extension = f"{chip}_CCD"
-        if extension not in self._l1_obj.data:
+        """Return one finite, two-dimensional master-flat CCD image."""
+        extension = f"{chip}_IMG"
+        if extension not in self._master_flat.data:
             raise KeyError(f"{extension} extension is not available")
-        image = np.asarray(self._l1_obj.data[extension])
+        image = np.asarray(self._master_flat.data[extension])
         if image.ndim != 2:
             raise ValueError(f"{extension} must be a 2D image")
         if not np.issubdtype(image.dtype, np.number):
@@ -721,8 +716,7 @@ class OrderTrace:
         )
         lines = [
             "OrderTrace",
-            f"  wideflat: {self.wideflat_filename}",
-            f"  bias:     {self._bias_path}",
+            f"  master flat: {self.master_flat_filename}",
             f"  INSTERA:  {era}",
             "",
             f"  {'chip':<8s} {'traces':>7s} {'seed shift':>12s} "
@@ -742,9 +736,11 @@ class OrderTrace:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, chips=None, *, output_dir, cal_order3_y=None, overwrite=False):
+    def make_order_trace(
+        self, chips=None, *, output_dir, cal_order3_y=None, overwrite=False
+    ):
         """
-        Trace requested CCDs and always write their compatible CSV tables.
+        Build order-trace calibrations from the requested master-flat CCDs.
 
         Parameters
         ----------
@@ -768,7 +764,7 @@ class OrderTrace:
         Raises
         ------
         FileNotFoundError
-            If the wideflat, bias master, era table, or trace reference is absent.
+            If the master flat, era table, or trace reference is absent.
         ValueError
             If the era/anchor, detected geometry, or output table is invalid.
         FileExistsError
@@ -780,12 +776,13 @@ class OrderTrace:
         self._validate_parameters()
         anchors = self._validate_manual_anchors(chips, cal_order3_y)
 
-        self._l1_obj = self._preprocess(chips)
-        date_obs = self._l1_obj.headers["PRIMARY"]["DATE-OBS"]
-        self._instrument_era = self._resolve_instrument_era(date_obs)
+        self._master_flat = self._load_master_flat()
+        timestamp = get_timestamp(self.master_flat_filename)
+        observation_time = kpf_timestamp_to_datetime(timestamp)
+        self._instrument_era = self._resolve_instrument_era(observation_time)
         if self._instrument_era is None and anchors is None:
             raise ValueError(
-                f"DATE-OBS {date_obs} is outside the defined instrument eras; "
+                f"master timestamp {timestamp} is outside the defined instrument eras; "
                 "provide cal_order3_y for every requested chip"
             )
 
@@ -797,7 +794,6 @@ class OrderTrace:
 
         self._results = results
         self._write_results(results, output_dir, bool(overwrite))
-        self._l1_obj.receipt_add_entry("order_trace", "", "PASS")
         self._track_info(chips)
         logger.info("%s", self._info)
         return results
@@ -805,6 +801,6 @@ class OrderTrace:
     def info(self):
         """Print a summary of the module configuration and tracing results."""
         if self._info is None:
-            print(f"{type(self).__name__}: perform() has not been called")
+            print(f"{type(self).__name__}: make_order_trace() has not been called")
         else:
             print(self._info)

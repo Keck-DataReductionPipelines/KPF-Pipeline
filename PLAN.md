@@ -1,15 +1,15 @@
-# Single-Wideflat Order Trace Module
+# Single-Master-Flat Order Trace Module
 
 ## Summary
 
-Create a clean vNext `OrderTrace` module that reads one raw L0 wideflat, performs overscan removal and bias subtraction, discovers and measures both CCDs’ traces, and always writes pipeline-compatible GREEN and RED CSV files. Legacy code supplies scientific ideas only; the implementation follows current repository architecture and style.
+Create a clean vNext masters `OrderTrace` module that reads one completed `KPFMasterL1` flat, discovers and measures both CCDs’ traces, and writes pipeline-compatible GREEN and RED CSV files. Legacy code supplies scientific ideas only; the implementation follows current repository architecture and style.
 
 ## Public Interface
 
 ```python
-tracer = OrderTrace(wideflat_filename, config=None)
+tracer = OrderTrace(master_flat_filename, config=None)
 
-tables = tracer.perform(
+tables = tracer.make_order_trace(
     chips=None,
     output_dir=output_dir,
     cal_order3_y=None,
@@ -26,9 +26,9 @@ tables = tracer.perform(
 
 ## Implementation
 
-- Add `kpfpipe/modules/order_trace.py` as a standalone class following the required constructor, method ordering, configuration, logging, receipt, and `info()` conventions.
-- Load the raw L0 filename with `KPF0`, run `ImageAssembly`, associate a bias through `CalibrationAssociation`, and run `ImageProcessing` with bias enabled and dark/flat disabled.
-- Resolve the observation’s `INSTERA` from `DATE-OBS`. Update `reference/kpf_instrument_eras.csv` from the newer legacy definitions while retaining the vNext `INSTERA` schema.
+- Add `kpfpipe/modules/masters/order_trace.py` as a standalone masters class following the required constructor, method ordering, configuration, logging, and `info()` conventions. It does not subclass `BaseMasterModule` because it consumes one completed master rather than stacking L0 exposures.
+- Load and validate one vNext `KPFMasterL1` flat, using the `GREEN_IMG` and `RED_IMG` extensions. Legacy FITS layouts are not supported.
+- Resolve the observation’s `INSTERA` from the KPF timestamp in the master filename. Update `reference/kpf_instrument_eras.csv` from the newer legacy definitions while retaining the vNext `INSTERA` schema.
 - For now, every known era uses `reference/order_trace_green.csv` and `reference/order_trace_red.csv` as approximate seed geometry. No new manifest is added.
 - If the observation is outside a defined era, require `cal_order3_y` for every requested chip. Also allow these anchors to override initialization for a known era.
 - Translate each chip’s seed template vertically so its CAL/order-3 curve matches the supplied row at `x=0`. Templates provide search windows and fiber/order identity only; their fitted values are never copied into the result.
@@ -38,16 +38,16 @@ tables = tracer.perform(
 - Measure `BottomEdge` and `TopEdge` from robust cross-dispersion profiles, using the legacy Gaussian-width and neighboring-valley constraints with a two-pixel orderlet gap. Derive `X1` and `X2` from valid measured coverage.
 - Label traces in detector-row order as SKY, SCI1, SCI2, SCI3, CAL for each order. Omit a trace only when its predicted and measured coverage is wholly off-detector, preserving the existing 175-row GREEN and 159-row RED behavior for the 2024 reference era.
 - Validate both requested tables completely before writing either file, then write them atomically.
-- Add `[MODULE_ORDER_TRACE]` configuration containing only the user-facing polynomial degree; keep stable reference paths private and numerical tuning as semi-hidden method defaults.
-- Do not restore the stashed implementation, modify the notebook, change `SpectralExtraction`, or integrate the module into recipes/CLI in this phase.
+- Add `[ORDER_TRACE]` masters configuration containing only the user-facing polynomial degree; keep stable reference paths private and numerical tuning as semi-hidden method defaults.
+- Update the development notebook call site for the masters API. Do not restore the stashed implementation, change `SpectralExtraction`, or integrate the module into recipes/CLI in this phase.
 
 ## Test Plan
 
 - Synthetic curved-trace tests verify recovery of centers to within one pixel, positive measured widths, correct horizontal bounds, canonical labeling, non-crossing traces, and cubic coefficient orientation.
 - Test known-era lookup, era-table gaps, unknown-era failure without anchors, per-chip manual anchor translation, and chip-subset validation.
-- Mock the preprocessing modules to verify raw L0 loading, image assembly, bias association/subtraction, and explicit exclusion of dark/flat corrections.
+- Mock `KPFMasterL1.from_fits` to verify master loading, vNext extension use, and flat-master validation.
 - Verify exact CSV schema, row ordering, filenames, round-trip values, overwrite protection, and compatibility with `SpectralExtraction`.
-- Add a slow, testdata-gated run for `KP.20240923.00139.44`, expecting 175 GREEN and 159 RED rows and sub-pixel fit residuals against measured centers.
+- Add a slow, testdata-gated run for a 2024 vNext master flat, expecting 175 GREEN and 159 RED rows and sub-pixel fit residuals against measured centers.
 
 ## Assumptions
 
