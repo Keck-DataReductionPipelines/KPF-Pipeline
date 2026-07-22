@@ -17,18 +17,20 @@ from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
 
-_TRACE_COLUMNS = [
-    "Coeff0",
-    "Coeff1",
-    "Coeff2",
-    "Coeff3",
+_REFERENCE_COEFFICIENT_COLUMNS = [f"Coeff{i}" for i in range(4)]
+_TRACE_GEOMETRY_COLUMNS = [
     "BottomEdge",
     "TopEdge",
     "X1",
     "X2",
+]
+_TRACE_ID_COLUMNS = [
     "Fiber",
     "Order",
 ]
+_REFERENCE_TRACE_COLUMNS = (
+    _REFERENCE_COEFFICIENT_COLUMNS + _TRACE_GEOMETRY_COLUMNS + _TRACE_ID_COLUMNS
+)
 
 _ERA_DEFINITIONS_PATH = REPO_ROOT / "reference/kpf_instrument_eras.csv"
 _ORDER_TRACE_PATHS = {
@@ -88,6 +90,14 @@ class OrderTrace:
     # Private helpers
     # ------------------------------------------------------------------
 
+    def _coefficient_columns(self):
+        """Return output coefficient columns for the configured fit degree."""
+        degree = int(self.poly_degree)
+        if degree < 0:
+            raise ValueError("poly_degree must be non-negative")
+        coefficient_count = max(len(_REFERENCE_COEFFICIENT_COLUMNS), degree + 1)
+        return [f"Coeff{i}" for i in range(coefficient_count)]
+
     def _load_master_flat(self):
         """Load and validate the vNext L1 master-flat product."""
         path = Path(self.master_flat_filename)
@@ -138,15 +148,15 @@ class OrderTrace:
         if not path.is_file():
             raise FileNotFoundError(f"Order-trace reference not found: {path}")
         table = pd.read_csv(path, index_col=0)
-        if list(table.columns) != _TRACE_COLUMNS:
+        if list(table.columns) != _REFERENCE_TRACE_COLUMNS:
             raise ValueError(
-                f"{path} has incompatible columns; expected {_TRACE_COLUMNS}"
+                f"{path} has incompatible columns; expected {_REFERENCE_TRACE_COLUMNS}"
             )
         if table.duplicated(["Fiber", "Order"]).any():
             raise ValueError(f"{path} contains duplicate Fiber/Order rows")
 
         table = table.copy()
-        numeric = _TRACE_COLUMNS[:8]
+        numeric = _REFERENCE_COEFFICIENT_COLUMNS + _TRACE_GEOMETRY_COLUMNS
         table[numeric] = table[numeric].apply(pd.to_numeric, errors="raise")
         table["Order"] = pd.to_numeric(table["Order"], errors="raise").astype(int)
 
@@ -364,9 +374,7 @@ class OrderTrace:
             return self._local_peak_center(image, column, guess, candidates)
         return self._local_edge_center(image, column, guess)
 
-    def _trace_centers(
-        self, image, seed_coeffs, sample_x, candidate_rows, fiber
-    ):
+    def _trace_centers(self, image, seed_coeffs, sample_x, candidate_rows, fiber):
         """Follow one orderlet from the detector center toward both edges."""
         seed_y = np.polynomial.polynomial.polyval(sample_x, seed_coeffs)
         centers = np.full(sample_x.size, np.nan, dtype=float)
@@ -408,6 +416,7 @@ class OrderTrace:
     ):
         """Fit a polynomial with iterative median/MAD residual rejection."""
         degree = int(self.poly_degree)
+        coefficient_columns = self._coefficient_columns()
         keep = np.isfinite(x) & np.isfinite(y)
         minimum = max(degree + 1, int(np.ceil(x.size * min_valid_fraction)))
         if keep.sum() < minimum:
@@ -431,7 +440,7 @@ class OrderTrace:
             keep = updated
 
         coeffs = np.polynomial.polynomial.polyfit(x[keep], y[keep], degree)
-        padded = np.zeros(4, dtype=float)
+        padded = np.zeros(len(coefficient_columns), dtype=float)
         padded[: coeffs.size] = coeffs
         residual = y[keep] - np.polynomial.polynomial.polyval(x[keep], padded)
         rms = float(np.sqrt(np.mean(residual**2)))
@@ -457,9 +466,7 @@ class OrderTrace:
         signal = np.clip(profile - np.nanpercentile(profile, 20.0), 0.0, None)
         if not np.any(signal > 0):
             return np.nan, np.nan
-        signal = np.minimum(
-            signal, np.nanpercentile(signal, winsor_percentile)
-        )
+        signal = np.minimum(signal, np.nanpercentile(signal, winsor_percentile))
         offsets = rows - center
 
         widths = []
@@ -503,13 +510,14 @@ class OrderTrace:
 
     def _constrain_neighbor_widths(self, rows, ncol, orderlet_gap_pixels=2.0):
         """Keep adjacent apertures separated by the required orderlet gap."""
+        coefficient_columns = self._coefficient_columns()
         x_mid = (ncol - 1) / 2.0
         for lower, upper in zip(rows[:-1], rows[1:], strict=False):
             lower_y = np.polynomial.polynomial.polyval(
-                x_mid, [lower[f"Coeff{i}"] for i in range(4)]
+                x_mid, [lower[column] for column in coefficient_columns]
             )
             upper_y = np.polynomial.polynomial.polyval(
-                x_mid, [upper[f"Coeff{i}"] for i in range(4)]
+                x_mid, [upper[column] for column in coefficient_columns]
             )
             separation = upper_y - lower_y
             available = separation - orderlet_gap_pixels
@@ -525,14 +533,20 @@ class OrderTrace:
 
     def _validate_trace_table(self, chip, table, nrow, ncol, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
-        if list(table.columns) != _TRACE_COLUMNS:
+        coefficient_columns = self._coefficient_columns()
+        trace_columns = (
+            coefficient_columns + _TRACE_GEOMETRY_COLUMNS + _TRACE_ID_COLUMNS
+        )
+        if list(table.columns) != trace_columns:
             raise ValueError(f"{chip} output has incompatible columns")
         if table.empty:
             raise ValueError(f"{chip} produced no trace rows")
         if table.duplicated(["Fiber", "Order"]).any():
             raise ValueError(f"{chip} output has duplicate Fiber/Order rows")
 
-        numeric = table[_TRACE_COLUMNS[:8]].to_numpy(dtype=float)
+        numeric = table[coefficient_columns + _TRACE_GEOMETRY_COLUMNS].to_numpy(
+            dtype=float
+        )
         if not np.isfinite(numeric).all():
             raise ValueError(f"{chip} output contains non-finite geometry")
         if not ((table["BottomEdge"] > 0) & (table["TopEdge"] > 0)).all():
@@ -543,7 +557,7 @@ class OrderTrace:
             raise ValueError(f"{chip} output contains reversed column bounds")
 
         test_x = np.linspace(0, ncol - 1, 17)
-        coeffs = table[[f"Coeff{i}" for i in range(4)]].to_numpy(dtype=float)
+        coeffs = table[coefficient_columns].to_numpy(dtype=float)
         centers = np.array(
             [np.polynomial.polynomial.polyval(test_x, coeff) for coeff in coeffs]
         )
@@ -563,6 +577,7 @@ class OrderTrace:
         """Measure all seeded orderlets on one CCD and return the output table."""
         image = self._chip_image(chip)
         nrow, ncol = image.shape
+        coefficient_columns = self._coefficient_columns()
         sample_x = self._sample_columns(ncol)
         candidate_rows = [self._candidate_rows(image, column) for column in sample_x]
 
@@ -570,7 +585,8 @@ class OrderTrace:
         rms_values = []
         for seed in seed_table.itertuples(index=False):
             seed_coeffs = np.array(
-                [getattr(seed, f"Coeff{i}") for i in range(4)], dtype=float
+                [getattr(seed, column) for column in _REFERENCE_COEFFICIENT_COLUMNS],
+                dtype=float,
             )
             predicted = np.polynomial.polynomial.polyval(sample_x, seed_coeffs)
             if not np.any(
@@ -605,10 +621,7 @@ class OrderTrace:
             kept_x = sample_x[keep]
             rows.append(
                 {
-                    "Coeff0": coeffs[0],
-                    "Coeff1": coeffs[1],
-                    "Coeff2": coeffs[2],
-                    "Coeff3": coeffs[3],
+                    **dict(zip(coefficient_columns, coeffs, strict=True)),
                     "BottomEdge": bottom,
                     "TopEdge": top,
                     "X1": int(kept_x.min()),
@@ -620,7 +633,10 @@ class OrderTrace:
             rms_values.append(rms)
 
         self._constrain_neighbor_widths(rows, ncol)
-        table = pd.DataFrame(rows, columns=_TRACE_COLUMNS)
+        trace_columns = (
+            coefficient_columns + _TRACE_GEOMETRY_COLUMNS + _TRACE_ID_COLUMNS
+        )
+        table = pd.DataFrame(rows, columns=trace_columns)
         self._validate_trace_table(chip, table, nrow, ncol)
         self._fit_rms[chip] = np.asarray(rms_values, dtype=float)
         return table
@@ -691,7 +707,7 @@ class OrderTrace:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_order_trace(
+    def make_master_order_trace(
         self, chips=None, *, output_dir, cal_order3_y=None, overwrite=False
     ):
         """
@@ -759,6 +775,8 @@ class OrderTrace:
     def info(self):
         """Print a summary of the module configuration and tracing results."""
         if self._info is None:
-            print(f"{type(self).__name__}: make_order_trace() has not been called")
+            print(
+                f"{type(self).__name__}: make_master_order_trace() has not been called"
+            )
         else:
             print(self._info)

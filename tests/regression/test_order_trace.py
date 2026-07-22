@@ -157,7 +157,7 @@ class TestTraceRecovery:
         tracer = OrderTrace(master_path, config)
         monkeypatch.setattr(tracer, "_load_master_flat", lambda: master_flat)
 
-        result = tracer.make_order_trace(
+        result = tracer.make_master_order_trace(
             chips=["GREEN"], output_dir=tmp_path / "out"
         )
         table = result["GREEN"]
@@ -195,6 +195,23 @@ class TestTraceRecovery:
         assert data.shape[1] == master_flat.data["GREEN_IMG"].shape[1]
         assert np.nanmax(weight) == 1.0
 
+    def test_higher_degree_extends_coefficient_schema(
+        self, tmp_path, monkeypatch, synthetic_setup
+    ):
+        master_flat, expected, _ = synthetic_setup
+        master_path = tmp_path / "KP.20240923.00139.44_master_flat_L1.fits"
+        tracer = OrderTrace(master_path, {"poly_degree": 5})
+        monkeypatch.setattr(tracer, "_load_master_flat", lambda: master_flat)
+
+        table = tracer.make_master_order_trace(
+            chips=["GREEN"], output_dir=tmp_path / "degree-five"
+        )["GREEN"]
+
+        expected_columns = [f"Coeff{i}" for i in range(6)] + _TRACE_COLUMNS[4:]
+        assert list(table.columns) == expected_columns
+        assert len(table) == len(expected)
+        assert np.isfinite(table[[f"Coeff{i}" for i in range(6)]]).all().all()
+
     def test_manual_new_era_anchor_translates_seed(
         self, tmp_path, monkeypatch, synthetic_setup
     ):
@@ -206,7 +223,7 @@ class TestTraceRecovery:
         monkeypatch.setattr(tracer, "_load_master_flat", lambda: unknown_master)
 
         with pytest.raises(ValueError, match="outside the defined instrument eras"):
-            tracer.make_order_trace(
+            tracer.make_master_order_trace(
                 chips=["GREEN"], output_dir=tmp_path / "missing-anchor"
             )
 
@@ -215,7 +232,7 @@ class TestTraceRecovery:
             for fiber, order, coeffs in shifted_rows
             if fiber == "CAL" and order == 3
         )
-        result = tracer.make_order_trace(
+        result = tracer.make_master_order_trace(
             chips=["GREEN"],
             output_dir=tmp_path / "manual",
             cal_order3_y={"GREEN": cal_order3},
@@ -252,8 +269,7 @@ class TestEraAndInputValidation:
     def test_config_does_not_require_data_directory_paths(self, tmp_path):
         config_path = tmp_path / "order_trace.toml"
         config_path.write_text(
-            '[TRACES]\nchips = ["GREEN", "RED"]\n'
-            '[ORDER_TRACE]\npoly_degree = 2\n'
+            '[TRACES]\nchips = ["GREEN", "RED"]\n[ORDER_TRACE]\npoly_degree = 2\n'
         )
 
         tracer = OrderTrace(
@@ -269,13 +285,12 @@ class TestEraAndInputValidation:
         with pytest.raises(ValueError, match="missing requested chips"):
             tracer._validate_manual_anchors(["GREEN", "RED"], {"GREEN": 272.0})
 
+
 class TestMasterFlatLoading:
     def test_loads_vnext_master_flat(self, tmp_path, monkeypatch):
         master_path = tmp_path / "KP.20240923.00139.44_master_flat_L1.fits"
         master_path.touch()
-        master_flat = StubMasterFlat(
-            {"GREEN": np.ones((8, 8), dtype=np.float32)}
-        )
+        master_flat = StubMasterFlat({"GREEN": np.ones((8, 8), dtype=np.float32)})
         calls = {}
 
         class FakeKPFMasterL1:
@@ -350,7 +365,7 @@ def test_real_20240923_master_flat(tmp_path):
         pytest.skip("a 20240923 vNext master flat is not installed")
 
     tracer = OrderTrace(masters[0])
-    tables = tracer.make_order_trace(output_dir=tmp_path)
+    tables = tracer.make_master_order_trace(output_dir=tmp_path)
 
     assert len(tables["GREEN"]) == 175
     assert len(tables["RED"]) == 159
