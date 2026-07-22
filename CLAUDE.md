@@ -68,7 +68,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ### 5. Communicate Clearly
 
-**Be extremely concise when reporting. Sacrifice grammar for brevity.**
+- Be extremely concise. Sacrifice grammar for conciseness.
+- Do not over-explain. Do not get lost in irrelevant details.
+- Choose your words carefully. A single clear explanation is better than several overlapping verbose explanations.
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
@@ -173,7 +175,7 @@ blast radius:
 
 Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
 
-Revise tests as needed when production code changes. Code design should drive test design, not the 
+Revise tests as needed when production code changes. Code design should drive test design, not the
 other way around. Do not contort production code to match pre-existing tests.
 
 ## Reading Files

@@ -124,8 +124,12 @@ class FileHandler:
     """
 
     def __init__(self, data_dirs):
-        self._data_input = data_dirs.get("KPF_DATA_INPUT")
-        self._masters_output = data_dirs.get("KPF_MASTERS_OUTPUT")
+        data_input = data_dirs.get("KPF_DATA_INPUT")
+        masters_output = data_dirs.get("KPF_MASTERS_OUTPUT")
+        self._data_input = os.path.abspath(data_input) if data_input else None
+        self._masters_output = (
+            os.path.abspath(masters_output) if masters_output else None
+        )
         self._mini_db = None  # loaded night's readable frames (build_mini_database)
         self._full_scan_mini_db = None  # full scan of every file, written to the cache
 
@@ -230,8 +234,9 @@ class FileHandler:
 
         Parameters
         ----------
-        datecode : str
-            Observing-night datecode 'YYYYMMDD'.
+        datecode : str or int
+            Observing-night datecode 'YYYYMMDD'; an int (e.g. 20240405) is
+            coerced to its string form.
         cache : {False, "r", "w", "rw", "wr"}, default False
             Which side(s) of the on-disk cache to use. ``False`` (default) always
             scans fresh and never touches the cache. ``"r"`` reads a current cache
@@ -260,6 +265,7 @@ class FileHandler:
             raise ValueError(
                 f"cache must be False or one of 'r'/'w'/'rw'/'wr', got {cache!r}"
             )
+        datecode = str(datecode)
         read_cache = cache and "r" in cache
         write_cache = cache and "w" in cache
 
@@ -365,6 +371,7 @@ class FileHandler:
         cal_type,
         *,
         min_stack_size=1,
+        max_stack_size=None,
         cluster_gap_seconds=7200,
         groupby="time_of_day",
         exclude_junk=True,
@@ -388,7 +395,9 @@ class FileHandler:
           routinely straddle HST midnight and belong in a single nightly stack.
 
         Every returned stack has at least ``min_stack_size`` files; undersized
-        stacks are dropped, and it raises when none meets the threshold.
+        stacks are dropped, and it raises when none meets the threshold. A stack
+        with more than ``max_stack_size`` files is truncated to its first
+        ``max_stack_size`` (earliest by time), with a warning.
 
         Parameters
         ----------
@@ -398,6 +407,11 @@ class FileHandler:
             Minimum number of files required per stack; undersized stacks are
             dropped. The default of 1 keeps every cluster (a no-op filter); the
             masters recipe passes the configured per-cal-type value.
+        max_stack_size : int or None, default None
+            Maximum number of files used per stack; oversized stacks are
+            truncated to their earliest ``max_stack_size`` frames. The default of
+            None imposes no ceiling; the masters recipe passes the configured
+            per-cal-type value.
         cluster_gap_seconds : int, default 7200
             Gap [s] between consecutive frames that splits one session from the
             next. The 2-hour default separates KPF morning vs. evening sessions.
@@ -455,6 +469,23 @@ class FileHandler:
                 f"'{cal_type}' groupby={groupby} produced no cluster with at least "
                 f"min_stack_size={min_stack_size} files"
             )
+
+        if max_stack_size is not None:
+            capped = []
+            for c in clusters:
+                if len(c) > max_stack_size:
+                    logger.warning(
+                        "%d %s L0 frames detected...using only %d frames to "
+                        "construct master. Increase max_stack_size if higher S/N "
+                        "is desired",
+                        len(c),
+                        cal_type,
+                        max_stack_size,
+                    )
+                    c = c[:max_stack_size]
+                capped.append(c)
+            clusters = capped
+
         # Which frames feed each master is a decision point (DRP-RUN-08).
         logger.info(
             "'%s' frames form %d cluster(s); sizes: %s",
@@ -481,6 +512,7 @@ class FileHandler:
         """
         if self._masters_output is None:
             raise ValueError("FileHandler has no KPF_MASTERS_OUTPUT configured")
+        datecode = str(datecode)
         night_dir = kpf_directory(
             kind="masters", data_root=self._masters_output, datecode=datecode
         )
