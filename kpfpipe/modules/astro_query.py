@@ -368,6 +368,11 @@ class AstroQuery:
             "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["parallax"]),
             "rv": self._scalar(row["radial_velocity"]),
+            # frame/equinox are catalog-definitional, not query columns: Gaia DR3
+            # astrometry is ICRS (Gaia-CRF3, aligned to ICRS) by construction, and
+            # ICRS carries no equinox -- 2000.0 is the J2000 convention the EPRV
+            # standard's Required CEQNX# demands. Only epoch is a real query output
+            # (ref_epoch, J2016.0 for DR3).
             "frame": "icrs",
             "epoch": self._scalar(row["ref_epoch"]),
             "equinox": 2000.0,
@@ -431,6 +436,12 @@ class AstroQuery:
             "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["plx_value"]),
             "rv": self._scalar(row["rvz_radvel"]),
+            # frame/epoch/equinox are all definitional here, not query columns:
+            # astroquery's SIMBAD returns basic ra/dec in ICRS at equinox and epoch
+            # J2000 by construction, with no per-object frame/epoch/equinox field to
+            # read. (Contrast query_gaia, whose epoch is the real ref_epoch column;
+            # SIMBAD's epoch is fixed at 2000.0 by the default output, not queried.)
+            # equinox 2000.0 satisfies the EPRV standard's Required CEQNX#.
             "frame": "icrs",
             "epoch": 2000.0,
             "equinox": 2000.0,
