@@ -28,15 +28,16 @@ class QC:
 
     @staticmethod
     def _hdr_float(hdr, key):
-        """Return float value for a header key, or None if absent/empty/non-numeric.
+        """Return float value for a header key, or None if the card is absent/empty.
 
         A present-but-empty (valueless) card and an absent key both read back as
-        None (which ``float`` rejects); a stray non-numeric value is caught too, so
-        a check reading the key degrades gracefully rather than raising.
+        None (which ``float`` rejects with TypeError), so a check reading the key
+        degrades gracefully. A present-but-non-numeric value is malformed, not
+        missing: it raises ValueError, which ``QC.run`` surfaces (fail loud).
         """
         try:
             return float(hdr.get(key))
-        except (TypeError, ValueError):
+        except TypeError:
             return None
 
     @staticmethod

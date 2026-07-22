@@ -84,17 +84,21 @@ def main():
 
     obs_id = args.obs_id or getattr(data, "obs_id", None) or "unknown"
 
-    # The native wmko row of CATALOG_RECORD (and TARGOFF) is populated at read;
-    # AstroQuery adds the gaia/simbad rows the L0 pointing-offset diagnostics also
-    # consume, so run it before the checkpoint. Only L0 needs it, and AstroQuery
-    # requires a science (IMTYPE 'Object') frame.
+    # AstroQuery resolves the gaia/simbad/wmko rows of CATALOG_RECORD that the L0
+    # pointing-offset diagnostics consume, so run it before the checkpoint. It runs
+    # only on L0 science frames (IMTYPE 'Object'); calibration frames have no target
+    # to resolve, so skip them rather than error. A resolution failure is non-fatal
+    # here -- the frame is still inspectable, the offsets just come out empty.
     if args.level == "L0":
-        try:
-            astro_config = ConfigHandler(args.config) if args.config else None
-            AstroQuery(data, astro_config).perform()
-        except Exception as exc:
-            print(f"Error: AstroQuery failed: {exc}", file=sys.stderr)
-            sys.exit(2)
+        imtype = str(data.headers["PRIMARY"].get("IMTYPE", "")).strip().lower()
+        if imtype == "object":
+            try:
+                astro_config = ConfigHandler(args.config) if args.config else None
+                AstroQuery(data, astro_config).perform()
+            except Exception as exc:
+                print(f"Warning: AstroQuery failed: {exc}", file=sys.stderr)
+        else:
+            print(f"Skipping AstroQuery (IMTYPE={imtype!r}, not a science frame)")
 
     # ------------------------------------------------------------------ #
     # Run QC (via the Checkpoint stage, which folds in Diagnostics + QC and

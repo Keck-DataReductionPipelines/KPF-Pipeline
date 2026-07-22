@@ -355,6 +355,20 @@ class TestQCBase:
         # A passing flag never warns.
         assert not any("CHKOK" in r.getMessage() for r in warnings)
 
+    def test_hdr_float_absent_empty_none_corrupt_raises(self):
+        # Absent and valueless cards degrade to None (checks skip/FAIL gracefully);
+        # a present-but-non-numeric card is malformed and raises (fail loud, so
+        # QC.run surfaces it) rather than being silently swallowed.
+        hdr = fits.Header()
+        hdr["NUM"] = 3.5
+        hdr["EMPTY"] = None  # present-but-empty (valueless) card
+        hdr["STR"] = "not-a-number"
+        assert QC._hdr_float(hdr, "NUM") == 3.5
+        assert QC._hdr_float(hdr, "MISSING") is None  # absent
+        assert QC._hdr_float(hdr, "EMPTY") is None  # valueless
+        with pytest.raises(ValueError):
+            QC._hdr_float(hdr, "STR")  # corrupt -> surfaces
+
 
 # ---------------------------------------------------------------------------
 # Task 3: QCL0 checks

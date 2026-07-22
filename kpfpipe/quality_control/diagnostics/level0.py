@@ -11,10 +11,11 @@ from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 logger = logging.getLogger(__name__)
 
-# Record fields the pointing offset needs; a missing one (an empty RA/Dec string or
-# a NaN measurement) makes the source unusable, and the offset is emitted present-
-# but-empty. RA/Dec are sexagesimal strings (EPRV C*# format), the rest floats.
-# 'frame' is a fixed literal AstroQuery always sets, so it is not gated here.
+# Record fields the pointing offset needs; a missing one (an empty RA/Dec string, a
+# NaN measurement, or a non-positive parallax -- routine for faint Gaia sources)
+# makes the source unusable, and the offset is emitted present-but-empty. RA/Dec are
+# sexagesimal strings (EPRV C*# format), the rest floats. 'frame' is a fixed literal
+# AstroQuery always sets, so it is not gated here.
 _OFFSET_STR_FIELDS = ("ra", "dec")
 _OFFSET_NUM_FIELDS = ("pmra", "pmdec", "parallax", "epoch")
 
@@ -61,9 +62,11 @@ class DiagL0(Diagnostics):
             return None
         table = self.kpf_obj.data["CATALOG_RECORD"]
         row = table[table["source"] == source][0]
-        missing = any(
-            str(row[field]).strip() == "" for field in _OFFSET_STR_FIELDS
-        ) or any(np.isnan(row[field]) for field in _OFFSET_NUM_FIELDS)
+        missing = (
+            any(str(row[field]).strip() == "" for field in _OFFSET_STR_FIELDS)
+            or any(np.isnan(row[field]) for field in _OFFSET_NUM_FIELDS)
+            or float(row["parallax"]) <= 0
+        )
         if missing:
             logger.warning(
                 "incomplete %s record in CATALOG_RECORD; pointing offset unavailable",
@@ -106,15 +109,26 @@ class DiagL0(Diagnostics):
         Returns None (present-but-empty keyword) when the source astrometry is
         unavailable; otherwise the catalog position is propagated to the
         observation epoch (proper motion) before the comparison, so the offset
-        reflects where the source actually sits at the time of the exposure.
+        reflects where the source actually sits at the time of the exposure. Any
+        residual malformed astrometry (e.g. an unparseable epoch) is caught and
+        emitted empty rather than raised -- error-raising is the checkpoint's job.
         """
         rec = self._catalog_record(source)
         if rec is None:
             return None
-        coord = self._record_skycoord(rec).apply_space_motion(
-            new_obstime=self._obs_time()
-        )
-        return round(float(self._pointing().separation(coord).arcsec), 4)
+        try:
+            coord = self._record_skycoord(rec).apply_space_motion(
+                new_obstime=self._obs_time()
+            )
+            return round(float(self._pointing().separation(coord).arcsec), 4)
+        except Exception as exc:
+            logger.warning(
+                "could not compute %s pointing offset (%s: %s); emitting empty",
+                source,
+                type(exc).__name__,
+                exc,
+            )
+            return None
 
     def gaia_ra_dec_offset(self):
         """GAIAOFF: arcsec, RA/DEC pointing vs Gaia catalog position at obs epoch."""

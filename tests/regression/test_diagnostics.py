@@ -279,6 +279,45 @@ class TestDiagL0Contingency:
         assert results["TARGOFF"][0] is None
         assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
 
+    @pytest.mark.parametrize("bad_plx", [0.0, -5.0])
+    def test_nonpositive_parallax_emits_empty(self, bad_plx, caplog):
+        # Gaia DR3 reports parallax <= 0 for faint sources; a distance can't be
+        # formed from it, so the source is unusable and the offset comes out empty
+        # rather than raising (ZeroDivisionError / negative distance).
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt, parallax=bad_plx),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt),
+            },
+        )
+        with caplog.at_level(logging.WARNING):
+            results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] is None
+        assert results["OBJOFF"][0] < 0.1
+        assert "incomplete gaia record in CATALOG_RECORD" in caplog.text
+
+    def test_malformed_astrometry_emits_empty(self, caplog):
+        # A record that passes the completeness check but is malformed (unparseable
+        # RA) is caught by _offset's backstop -> empty offset, not a raised frame.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt, ra="garbage"),
+            },
+        )
+        with caplog.at_level(logging.WARNING):
+            results = DiagL0(l0).run()  # must not raise
+        assert results["TARGOFF"][0] is None
+        assert "could not compute wmko pointing offset" in caplog.text
+
 
 # ---------------------------------------------------------------------------
 # DiagL1 -- master calibration ages
