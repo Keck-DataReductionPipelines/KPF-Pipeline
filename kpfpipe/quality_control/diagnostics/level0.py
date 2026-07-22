@@ -94,15 +94,6 @@ class DiagL0(Diagnostics):
             frame=str(rec["frame"]),
         )
 
-    def _pointing(self):
-        """Telescope pointing SkyCoord from L0 PRIMARY RA/DEC (sexagesimal h/deg)."""
-        hdr = self.kpf_obj.headers["PRIMARY"]
-        return SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
-
-    def _obs_time(self):
-        """Observation epoch (Time) from L0 PRIMARY MJD-OBS, for PM propagation."""
-        return Time(float(self.kpf_obj.headers["PRIMARY"]["MJD-OBS"]), format="mjd")
-
     def _offset(self, source):
         """Arcsec separation of the pointing from a catalog source at obs epoch.
 
@@ -117,10 +108,11 @@ class DiagL0(Diagnostics):
         if rec is None:
             return None
         try:
-            coord = self._record_skycoord(rec).apply_space_motion(
-                new_obstime=self._obs_time()
-            )
-            return round(float(self._pointing().separation(coord).arcsec), 4)
+            hdr = self.kpf_obj.headers["PRIMARY"]
+            pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
+            obs_time = Time(float(hdr["MJD-OBS"]), format="mjd")
+            coord = self._record_skycoord(rec).apply_space_motion(new_obstime=obs_time)
+            return round(float(pointing.separation(coord).arcsec), 4)
         except Exception as exc:
             logger.warning(
                 "could not compute %s pointing offset (%s: %s); emitting empty",
