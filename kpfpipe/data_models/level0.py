@@ -12,8 +12,6 @@ import re
 
 import numpy as np
 import pandas as pd
-from astropy import units as u
-from astropy.coordinates import Angle
 from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
@@ -44,50 +42,6 @@ _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
 # Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
 # Each module overwrites it via the receipt_add_entry override (see base.py).
 _DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
-
-# Schema of the CATALOG_RECORD BinTable extension: one row per resolved source
-# (wmko/gaia/simbad) plus the merged 'kpf-drp' canonical row. Columns: 'source' (the
-# nominal source this row came from), 'object' (the target name supplied to the
-# query), and three provenance labels naming the source each value block was taken
-# from -- 'radec_src' (ra/dec/pmra/pmdec plus their frame/epoch/equinox, which are
-# intrinsic to the coordinates and never sourced separately), 'plx_src' (parallax),
-# 'rv_src' (rv). For a plain source row each provenance label is the row's own
-# 'source'; the merged row names whichever source won each block (or "" when none
-# supplied it). Every source is sanitized to the EPRV C*# PRIMARY format so to_kpf1
-# can copy cells straight onto the catalog cards: RA/Dec are sexagesimal strings
-# (RA hour-angle 'h:m:s', Dec deg
-# 'd:m:s', ICRS), proper motion is arcsec/yr (RA incl. cos Dec), parallax mas, RV
-# km/s, epoch/equinox in Julian years. Float columns hold NaN where a value is
-# missing; string columns (RA/Dec included) hold "".
-_CATALOG_COLUMNS = (
-    "source",
-    "object",
-    "radec_src",
-    "plx_src",
-    "rv_src",
-    "ra",
-    "dec",
-    "pmra",
-    "pmdec",
-    "parallax",
-    "rv",
-    "frame",
-    "epoch",
-    "equinox",
-)
-_CATALOG_STR_COLUMNS = frozenset(
-    {"source", "object", "radec_src", "plx_src", "rv_src", "frame", "ra", "dec"}
-)
-_CATALOG_UNITS = {
-    "pmra": u.arcsec / u.yr,
-    "pmdec": u.arcsec / u.yr,
-    "parallax": u.mas,
-    "rv": u.km / u.s,
-    "epoch": u.yr,
-    "equinox": u.yr,
-}
-# Presence flag written to the CATALOG_RECORD header per source (int 0/1).
-_CATALOG_FLAGS = {"wmko": "WMKOCR", "gaia": "GAIACR", "simbad": "SIMBADCR"}
 
 
 class KPF0(KPFDataModel):
@@ -122,9 +76,6 @@ class KPF0(KPFDataModel):
         self.obs_id = get_obs_id(self.filename)
         if "PRIMARY" in self.headers:
             self._stamp_wmko_tracking()
-            # Populate the native (telescope-side) wmko row of CATALOG_RECORD from
-            # the raw TARG* astrometry.
-            self.set_catalog_record("wmko", self._wmko_catalog_record())
 
     def _stamp_wmko_tracking(self):
         """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
@@ -154,100 +105,6 @@ class KPF0(KPFDataModel):
             )
             progname = "UNKNOWN"
         self.set_keyword("PROGID", progname)
-
-    def _wmko_catalog_record(self):
-        """Build the native WMKO/DCS target record from L0 PRIMARY TARG*.
-
-        Telescope-side astrometry (no external query), sanitized to the EPRV C*#
-        format: TARGRA/TARGDEC sexagesimal reformatted to the canonical RA
-        hour-angle / Dec deg 'h:m:s' strings; TARGPMRA time-s/yr -> arcsec/yr
-        (x15 cos Dec), TARGPMDC already arcsec/yr; TARGFRAM FK5 J2000 relabeled
-        ICRS (the ~23 mas frame tie is negligible). Returns None -- so the frame
-        gets WMKOCR=0 -- when there is no target pointing (TARGRA absent, e.g. a
-        calibration) or the TARG* astrometry cannot be parsed (warned, never
-        raised, so a malformed file still loads). Well-formedness is gated
-        downstream by QCL0 (RADECOK), not here.
-        """
-        primary = self.headers["PRIMARY"]
-        if primary.get("TARGRA") is None:
-            return None
-        try:
-            ra = Angle(primary["TARGRA"], unit=u.hourangle)
-            dec = Angle(primary["TARGDEC"], unit=u.deg)
-            pmra, pmdec = primary.get("TARGPMRA"), primary.get("TARGPMDC")
-            return {
-                "object": primary.get("OBJECT"),
-                "ra": ra.to_string(unit=u.hourangle, sep=":", pad=True, precision=4),
-                "dec": dec.to_string(
-                    unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
-                ),
-                "pmra": None if pmra is None else pmra * 15.0 * np.cos(dec.radian),
-                "pmdec": None if pmdec is None else pmdec,
-                "parallax": primary.get("TARGPLAX"),
-                "rv": primary.get("TARGRADV"),
-                "frame": "icrs",
-                "epoch": primary.get("TARGEPOC"),
-                "equinox": primary.get("TARGEQUI"),
-            }
-        except Exception as exc:
-            logger.warning(
-                "could not build wmko CATALOG_RECORD from L0 PRIMARY TARG* "
-                "(%s: %s); left empty",
-                type(exc).__name__,
-                exc,
-            )
-            return None
-
-    def set_catalog_record(self, source, record):
-        """Upsert one source's row into the CATALOG_RECORD extension + set its flag.
-
-        The single writer for CATALOG_RECORD, shared by the read path (``wmko``),
-        AstroQuery (``gaia``/``simbad`` and the merged ``kpf-drp`` row). ``record`` is a
-        canonical record dict (the _CATALOG_COLUMNS fields minus ``source``) or None.
-        The three provenance labels (``radec_src``/``plx_src``/``rv_src``) default to
-        ``source`` when the record omits them (a source row's values are its own); the
-        merged row supplies each explicitly. Existing rows for other sources are
-        preserved (upsert), so callers add their row independently. A None record clears
-        the source's flag and writes no row; otherwise the row is (re)written and the
-        flag set to 1. A source without a registered presence flag (e.g. ``kpf-drp``,
-        which must always be present) writes no flag keyword. Missing floats become NaN,
-        missing strings "".
-        """
-        table = self.data["CATALOG_RECORD"]
-        rows = {}
-        if table.colnames:
-            for row in table:
-                rows[str(row["source"])] = {
-                    name: row[name] for name in _CATALOG_COLUMNS
-                }
-        if record is None:
-            rows.pop(source, None)
-        else:
-            rows[source] = {
-                "source": source,
-                "radec_src": source,
-                "plx_src": source,
-                "rv_src": source,
-                **record,
-            }
-
-        ordered = list(rows.values())
-        new_table = Table()
-        for name in _CATALOG_COLUMNS:
-            if name in _CATALOG_STR_COLUMNS:
-                new_table[name] = np.array(
-                    ["" if r[name] is None else r[name] for r in ordered], dtype=str
-                )
-            else:
-                new_table[name] = np.array(
-                    [np.nan if r[name] is None else r[name] for r in ordered],
-                    dtype=float,
-                )
-                new_table[name].unit = _CATALOG_UNITS[name]
-        self.set_data("CATALOG_RECORD", new_table)
-        flag = _CATALOG_FLAGS.get(source)
-        if flag is not None:
-            self.set_keyword(flag, 1 if record is not None else 0)
 
     def _read(self, hdul):
         """Read all extensions from an L0 FITS HDUList.
@@ -427,23 +284,29 @@ class KPF0(KPFDataModel):
 
         Returns ``{C-keyword: value}`` for every science fiber (SCI1-3, see
         ``_SCI_TRACES``), a direct copy of the canonical row's already-EPRV-format
-        cells. Returns ``{}`` -- leaving the SCI C*# cards blank -- when there is no
-        usable canonical astrometry (no CATALOG_RECORD data, no 'kpf-drp' row, or an
-        empty RA/Dec). A per-card missing value (NaN float / "" string, e.g. a target
-        with no measured parallax or rv) is skipped so that card stays blank rather
-        than carrying 'nan'. Emits a WARNING when the canonical astrometry landing on
-        PRIMARY was assembled from more than one catalog (position/parallax/rv from
-        different sources), so the C*# block is not internally single-source.
+        cells. A per-card missing value (NaN float / "" string, e.g. a target with no
+        measured parallax or rv) is skipped so that card stays blank rather than
+        carrying 'nan'. Emits a WARNING when the canonical astrometry landing on PRIMARY
+        was assembled from more than one catalog (position/parallax/rv from different
+        sources), so the C*# block is not internally single-source.
+
+        Requires that AstroQuery has already populated CATALOG_RECORD -- its sole
+        writer, which always emits the 'kpf-drp' row with a resolved position. An empty
+        CATALOG_RECORD therefore means AstroQuery has not run: mandatory for a science
+        frame (IMTYPE 'Object'), which raises ``ValueError``; expected-absent for a
+        calibration (no target), which yields ``{}`` (SCI C*# cards left blank).
         """
-        table = self.data.get("CATALOG_RECORD")
-        if table is None or not table.colnames:
+        table = self.data["CATALOG_RECORD"]
+        if not table.colnames:
+            imtype = self.headers["PRIMARY"].get("IMTYPE")
+            if str(imtype).strip().lower() == "object":
+                raise ValueError(
+                    "CATALOG_RECORD is empty; run AstroQuery before to_kpf1 "
+                    "(science frames require resolved target astrometry)"
+                )
             return {}
-        match = table[table["source"] == "kpf-drp"]
-        if len(match) == 0:
-            return {}
-        row = match[0]
-        if str(row["ra"]).strip() == "" or str(row["dec"]).strip() == "":
-            return {}
+
+        row = table[table["source"] == "kpf-drp"][0]
 
         provenance = {
             str(row[col]).strip()
@@ -463,10 +326,9 @@ class KPF0(KPFDataModel):
         cards = {}
         for col, base in self._CATALOG_CARD_BASES.items():
             value = row[col]
-            if col in _CATALOG_STR_COLUMNS:
-                if str(value).strip() == "":
+            if isinstance(value, str):
+                if value.strip() == "":
                     continue
-                value = str(value)
             else:
                 if np.isnan(value):
                     continue
@@ -498,9 +360,10 @@ class KPF0(KPFDataModel):
                 kpf1.headers["PRIMARY"][key] = value
 
             # Overlay the merged canonical astrometry (CATALOG_RECORD 'kpf-drp' row)
-            # onto the SCI-fiber EPRV C*# cards -- the sole writer of those cards
-            # (their raw TARG*/GAIAID mapping is neutralized in the header_map). Empty
-            # when there is no canonical row, leaving the seeded cards blank.
+            # onto the SCI-fiber EPRV C*# cards -- the sole writer of those cards (their
+            # raw TARG*/GAIAID mapping is neutralized in the header_map). Assumes
+            # AstroQuery has run: raises for a science frame whose CATALOG_RECORD is
+            # empty; blank (cards left unset) for a calibration frame.
             for key, value in self._catalog_primary_cards().items():
                 kpf1.headers["PRIMARY"][key] = value
 

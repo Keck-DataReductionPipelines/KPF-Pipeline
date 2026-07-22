@@ -3,10 +3,11 @@ KPF AstroQuery module.
 
 Consolidates the pipeline's external astronomical-catalog lookups into a single
 L0-stage module. Given a raw L0 frame, it resolves the target's astrometry from
-Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT) and writes those two rows to the L0
-``CATALOG_RECORD`` extension via ``KPF0.set_catalog_record``, setting the
-``GAIACR``/``SIMBADCR`` presence flags. The third (``wmko``) row is telescope-native
-(no query) and is populated by ``KPF0`` at read time, not here.
+Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), builds the telescope-native ``wmko``
+row from the L0 PRIMARY ``TARG*`` astrometry (no query), and writes all three rows
+to the L0 ``CATALOG_RECORD`` extension, setting the ``WMKOCR``/``GAIACR``/``SIMBADCR``
+presence flags. ``KPF0.read`` leaves ``CATALOG_RECORD`` empty; AstroQuery is its sole
+populator.
 
 The extension is the bridge across an ordering problem: the query results
 ultimately belong on the EPRV PRIMARY catalog keywords (``C*#``), but the WMKO ->
@@ -28,6 +29,7 @@ import logging
 import astropy.units as u
 import numpy as np
 from astropy.coordinates import Angle
+from astropy.table import Table
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
@@ -45,11 +47,8 @@ _DEFAULTS = {
 
 # Source-merge configuration for the canonical ``kpf-drp`` row. Priority order
 # (highest first) governs which source supplies the coherent position block and,
-# independently, the parallax and RV. _PRESENCE_FLAGS maps each source to its
-# CATALOG_RECORD header flag (a local mirror of level0._CATALOG_FLAGS, matching the
-# DiagL0 convention of not importing the private schema).
+# independently, the parallax and RV.
 _MERGE_PRIORITY = ("gaia", "simbad", "wmko")
-_PRESENCE_FLAGS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
 # The position block is taken together from one source so ra/dec/PM and their frame
 # and reference epoch stay internally consistent -- a frame or epoch from a different
 # source than the coordinates would be meaningless. equinox rides with the same base
@@ -92,16 +91,62 @@ _SIMBAD_UNITS = {
     "rvz_radvel": u.km / u.s,
 }
 
+# CATALOG_RECORD extension write schema. AstroQuery is the sole populator: one row per
+# resolved source (wmko/gaia/simbad) plus the merged 'kpf-drp' canonical row. Columns:
+# 'source' (the row's nominal source), 'object' (the target name supplied to the
+# query), three provenance labels naming the source each value block came from --
+# 'radec_src' (ra/dec/pmra/pmdec plus their frame/epoch/equinox, intrinsic to the
+# coordinates and never sourced separately), 'plx_src' (parallax), 'rv_src' (rv) --
+# then the values. For a plain source row each provenance label is the row's own
+# 'source'; the merged row names whichever source won each block (or "" when none
+# supplied it). Every source is sanitized to the EPRV C*# PRIMARY format so
+# KPF0.to_kpf1 can copy cells straight onto the catalog cards: RA/Dec sexagesimal
+# strings (RA hour-angle 'h:m:s', Dec deg 'd:m:s', ICRS), proper motion arcsec/yr (RA
+# incl. cos Dec), parallax mas, RV km/s, epoch/equinox in Julian years. Float columns
+# hold NaN where a value is missing; string columns (RA/Dec included) hold "".
+_CATALOG_COLUMNS = (
+    "source",
+    "object",
+    "radec_src",
+    "plx_src",
+    "rv_src",
+    "ra",
+    "dec",
+    "pmra",
+    "pmdec",
+    "parallax",
+    "rv",
+    "frame",
+    "epoch",
+    "equinox",
+)
+_CATALOG_STR_COLUMNS = frozenset(
+    {"source", "object", "radec_src", "plx_src", "rv_src", "frame", "ra", "dec"}
+)
+
+# RA / DEC are sexagesimal strings, so not subject to astropy unit conversion
+_CATALOG_UNITS = {
+    "pmra": u.arcsec / u.yr,
+    "pmdec": u.arcsec / u.yr,
+    "parallax": u.mas,
+    "rv": u.km / u.s,
+    "epoch": u.yr,
+    "equinox": u.yr,
+}
+# Presence flag written to the CATALOG_RECORD header per source (int 0/1). DiagL0 keeps
+# its own local mirror (the DiagL0 convention of not importing this schema).
+_CATALOG_FLAGS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
+
 
 class AstroQuery:
     """
     Resolve target astrometry from external catalogs and write it to an L0.
 
-    Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT) and
-    writes their rows to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV
-    ``C*#`` catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). The
-    native ``wmko`` row is populated by ``KPF0`` at read time, not here. Only science
-    frames are supported: the constructor raises on a non-``Object`` IMTYPE (a
+    Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT),
+    builds the native ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry, and writes
+    all three rows to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV
+    ``C*#`` catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). Only
+    science frames are supported: the constructor raises on a non-``Object`` IMTYPE (a
     calibration). Fail-soft otherwise: a missing GAIAID/OBJECT or a failed network
     lookup yields a ``None`` record rather than an error.
 
@@ -109,8 +154,8 @@ class AstroQuery:
     ----------
     l0_obj : KPF0
         Raw L0 science frame (IMTYPE ``Object``). Its PRIMARY header (IMTYPE, GAIAID,
-        OBJECT) is read but never modified; the resolved catalog data is written to
-        the L0 ``CATALOG_RECORD`` extension via ``set_catalog_record``.
+        OBJECT, TARG*) is read but never modified; the resolved catalog data is written
+        to the L0 ``CATALOG_RECORD`` extension.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: use_gaia, use_simbad.
     """
@@ -137,6 +182,7 @@ class AstroQuery:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
+        self._wmko = None  # native WMKO record; set by read_wmko_header()
         self._gaia = None  # Gaia DR3 record; set by query_gaia()
         self._simbad = None  # SIMBAD record; set by query_simbad()
         self._canonical = None  # merged kpf-drp record; set by merge_catalog_records()
@@ -207,6 +253,57 @@ class AstroQuery:
                 f"{expected}. The catalog schema may have changed; AstroQuery's unit "
                 "assumptions must be revalidated before use."
             )
+
+    def _write_catalog_record(self, source, record):
+        """Upsert one source's row into the L0 CATALOG_RECORD extension + set its flag.
+
+        The single writer for CATALOG_RECORD (``wmko``/``gaia``/``simbad`` and the
+        merged ``kpf-drp`` row). ``record`` is a canonical record dict (the
+        _CATALOG_COLUMNS fields minus ``source``) or None. The three provenance labels
+        (``radec_src``/``plx_src``/``rv_src``) default to ``source`` when the record
+        omits them (a source row's values are its own); the merged row supplies each
+        explicitly. Existing rows for other sources are preserved (upsert). A None
+        record clears the source's flag and writes no row; otherwise the row is
+        (re)written and the flag set to 1. A source without a registered presence flag
+        (e.g. ``kpf-drp``, which must always be present) writes no flag keyword. Missing
+        floats become NaN, missing strings "".
+        """
+        l0 = self.l0_obj
+        table = l0.data["CATALOG_RECORD"]
+        rows = {}
+        if table.colnames:
+            for row in table:
+                rows[str(row["source"])] = {
+                    name: row[name] for name in _CATALOG_COLUMNS
+                }
+        if record is None:
+            rows.pop(source, None)
+        else:
+            rows[source] = {
+                "source": source,
+                "radec_src": source,
+                "plx_src": source,
+                "rv_src": source,
+                **record,
+            }
+
+        ordered = list(rows.values())
+        new_table = Table()
+        for name in _CATALOG_COLUMNS:
+            if name in _CATALOG_STR_COLUMNS:
+                new_table[name] = np.array(
+                    ["" if r[name] is None else r[name] for r in ordered], dtype=str
+                )
+            else:
+                new_table[name] = np.array(
+                    [np.nan if r[name] is None else r[name] for r in ordered],
+                    dtype=float,
+                )
+                new_table[name].unit = _CATALOG_UNITS[name]
+        l0.set_data("CATALOG_RECORD", new_table)
+        flag = _CATALOG_FLAGS.get(source)
+        if flag is not None:
+            l0.set_keyword(flag, 1 if record is not None else 0)
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -341,6 +438,51 @@ class AstroQuery:
         logger.info("successfully built record for simbad")
         return record
 
+    def read_wmko_header(self):
+        """Read the native WMKO/DCS astrometry from L0 PRIMARY TARG*, or None.
+
+        The telescope-side counterpart to query_gaia/query_simbad: no external
+        query, just the raw TARG* pointing, sanitized to the EPRV C*# format --
+        TARGRA/TARGDEC sexagesimal reformatted to the canonical RA hour-angle / Dec
+        deg 'h:m:s' strings; TARGPMRA time-s/yr -> arcsec/yr (x15 cos Dec), TARGPMDC
+        already arcsec/yr; TARGFRAM FK5 J2000 relabeled ICRS (the ~23 mas frame tie is
+        negligible). Returns None -- so the frame gets WMKOCR=0 -- when there is no
+        target pointing (TARGRA absent) or the TARG* astrometry cannot be parsed
+        (warned, never raised, so a malformed file still loads). Well-formedness is
+        gated downstream by QCL0 (RADECOK), not here.
+        """
+        primary = self.l0_obj.headers["PRIMARY"]
+        if primary.get("TARGRA") is None:
+            return None
+        try:
+            ra = Angle(primary["TARGRA"], unit=u.hourangle)
+            dec = Angle(primary["TARGDEC"], unit=u.deg)
+            pmra, pmdec = primary.get("TARGPMRA"), primary.get("TARGPMDC")
+            record = {
+                "object": primary.get("OBJECT"),
+                "ra": ra.to_string(unit=u.hourangle, sep=":", pad=True, precision=4),
+                "dec": dec.to_string(
+                    unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
+                ),
+                "pmra": None if pmra is None else pmra * 15.0 * np.cos(dec.radian),
+                "pmdec": None if pmdec is None else pmdec,
+                "parallax": primary.get("TARGPLAX"),
+                "rv": primary.get("TARGRADV"),
+                "frame": "icrs",
+                "epoch": primary.get("TARGEPOC"),
+                "equinox": primary.get("TARGEQUI"),
+            }
+        except Exception as exc:
+            logger.warning(
+                "could not build wmko CATALOG_RECORD from L0 PRIMARY TARG* "
+                "(%s: %s); left empty",
+                type(exc).__name__,
+                exc,
+            )
+            return None
+        logger.info("successfully built record for wmko")
+        return record
+
     def _read_catalog_row(self, table, source):
         """Read one CATALOG_RECORD row into a record dict, or None if absent.
 
@@ -393,7 +535,7 @@ class AstroQuery:
         for source in _MERGE_PRIORITY:
             if not getattr(self, f"use_{source}"):
                 continue
-            if not header.get(_PRESENCE_FLAGS[source]):
+            if not header.get(_CATALOG_FLAGS[source]):
                 continue
             record = self._read_catalog_row(table, source)
             if record is not None:
@@ -463,7 +605,7 @@ class AstroQuery:
             "equinox": base_record["equinox"],
         }
         self._canonical = record
-        self.l0_obj.set_catalog_record("kpf-drp", record)
+        self._write_catalog_record("kpf-drp", record)
         return record
 
     # ------------------------------------------------------------------
@@ -500,22 +642,26 @@ class AstroQuery:
         Returns
         -------
         l0_obj : KPF0
-            The input L0 (PRIMARY unchanged), now with its ``gaia``/``simbad`` rows
-            written to the ``CATALOG_RECORD`` extension (the ``wmko`` row is native,
-            populated at read) and an 'astro_query' receipt entry. Unusually for a
-            pipeline module this returns an L0, not the next level -- AstroQuery
-            runs before assembly.
+            The input L0 (PRIMARY unchanged), now with its ``wmko``/``gaia``/``simbad``
+            rows and the merged ``kpf-drp`` row written to the ``CATALOG_RECORD``
+            extension, and an 'astro_query' receipt entry. Unusually for a pipeline
+            module this returns an L0, not the next level -- AstroQuery runs before
+            assembly.
         """
         if use_gaia is not None:
             self.use_gaia = use_gaia
         if use_simbad is not None:
             self.use_simbad = use_simbad
 
+        self._wmko = self.read_wmko_header()
         self._gaia = self.query_gaia()
         self._simbad = self.query_simbad()
 
-        self.l0_obj.set_catalog_record("gaia", self._gaia)
-        self.l0_obj.set_catalog_record("simbad", self._simbad)
+        # Write all three source rows (wmko is native, built from L0 PRIMARY TARG*;
+        # gaia/simbad from the queries above); KPF0.read leaves CATALOG_RECORD empty.
+        self._write_catalog_record("wmko", self._wmko)
+        self._write_catalog_record("gaia", self._gaia)
+        self._write_catalog_record("simbad", self._simbad)
         # Merge the source rows (gaia/simbad/wmko) into the canonical kpf-drp row that
         # downstream (to_kpf1 C*#, barycentric correction) consumes. Raises if a
         # complete set cannot be assembled.

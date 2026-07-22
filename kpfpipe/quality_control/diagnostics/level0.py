@@ -19,7 +19,7 @@ _OFFSET_STR_FIELDS = ("ra", "dec")
 _OFFSET_NUM_FIELDS = ("pmra", "pmdec", "parallax", "epoch")
 
 # CATALOG_RECORD presence flag (int 0/1) per source, on the extension header.
-_FLAG_KEYWORDS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
+_CATALOG_FLAGS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
 
 
 class DiagL0(Diagnostics):
@@ -45,7 +45,7 @@ class DiagL0(Diagnostics):
         guarantees exactly one matching row.
         """
         hdr = self.kpf_obj.headers["CATALOG_RECORD"]
-        keyword = _FLAG_KEYWORDS[source]
+        keyword = _CATALOG_FLAGS[source]
         if keyword not in hdr:
             logger.warning(
                 "no CATALOG_RECORD flags on L0 (run AstroQuery first); "
