@@ -57,9 +57,8 @@ class OrderTrace:
     master_flat_filename : str or pathlib.Path
         vNext ``KPFMasterL1`` flat FITS filename.
     config : None | dict | ConfigHandler
-        Module configuration. ``ConfigHandler`` values are read from DATA_DIRS,
-        TRACES, and ORDER_TRACE, whose only module-specific parameter is
-        ``poly_degree``.
+        Module configuration. ``ConfigHandler`` values are read from TRACES and
+        ORDER_TRACE, whose only module-specific parameter is ``poly_degree``.
     """
 
     def __init__(self, master_flat_filename, config=None):
@@ -70,7 +69,7 @@ class OrderTrace:
         elif isinstance(config, dict):
             params = config
         elif isinstance(config, ConfigHandler):
-            params = config.get_params(["DATA_DIRS", "TRACES", "ORDER_TRACE"])
+            params = config.get_params(["TRACES", "ORDER_TRACE"])
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
@@ -89,26 +88,6 @@ class OrderTrace:
     # Private helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _normalise_chips(chips):
-        """Return validated uppercase chip names without changing their order."""
-        normalised = [str(chip).upper() for chip in chips]
-        if not normalised:
-            raise ValueError("chips must contain at least one CCD")
-        if len(set(normalised)) != len(normalised):
-            raise ValueError("chips must not contain duplicates")
-        unknown = [chip for chip in normalised if chip not in {"GREEN", "RED"}]
-        if unknown:
-            raise ValueError(
-                f"unsupported chip(s) {unknown}; expected GREEN and/or RED"
-            )
-        return normalised
-
-    def _validate_parameters(self):
-        """Validate the configured polynomial degree before reading the flat."""
-        if not 1 <= int(self.poly_degree) <= 3:
-            raise ValueError("poly_degree must be between 1 and 3")
-
     def _load_master_flat(self):
         """Load and validate the vNext L1 master-flat product."""
         path = Path(self.master_flat_filename)
@@ -122,30 +101,6 @@ class OrderTrace:
                 f"{path} is not a vNext flat master (MASTYPE={master_type!r})"
             )
         return master_flat
-
-    def _resolve_instrument_era(self, date_obs):
-        """Return the unique INSTERA containing ``date_obs``, or None."""
-        path = _ERA_DEFINITIONS_PATH
-        if not path.is_file():
-            raise FileNotFoundError(f"Instrument-era table not found: {path}")
-
-        eras = pd.read_csv(path, skipinitialspace=True)
-        required = {"INSTERA", "UT_start_date", "UT_end_date"}
-        missing = required.difference(eras.columns)
-        if missing:
-            raise ValueError(
-                f"Instrument-era table is missing columns: {sorted(missing)}"
-            )
-
-        observation_time = pd.to_datetime(date_obs, utc=True).tz_localize(None)
-        starts = pd.to_datetime(eras["UT_start_date"], utc=True).dt.tz_localize(None)
-        ends = pd.to_datetime(eras["UT_end_date"], utc=True).dt.tz_localize(None)
-        matches = eras.loc[(starts <= observation_time) & (observation_time <= ends)]
-        if len(matches) > 1:
-            raise ValueError(f"DATE-OBS {date_obs} matches multiple instrument eras")
-        if matches.empty:
-            return None
-        return float(matches.iloc[0]["INSTERA"])
 
     def _validate_manual_anchors(self, chips, cal_order3_y):
         """Return uppercase, finite manual anchors for the requested chips."""
@@ -772,14 +727,17 @@ class OrderTrace:
         """
         if chips is None:
             chips = self.chips
-        chips = self._normalise_chips(chips)
-        self._validate_parameters()
         anchors = self._validate_manual_anchors(chips, cal_order3_y)
 
         self._master_flat = self._load_master_flat()
         timestamp = get_timestamp(self.master_flat_filename)
         observation_time = kpf_timestamp_to_datetime(timestamp)
-        self._instrument_era = self._resolve_instrument_era(observation_time)
+        eras = pd.read_csv(_ERA_DEFINITIONS_PATH, skipinitialspace=True)
+        in_era = (pd.to_datetime(eras["UT_start_date"]) <= observation_time) & (
+            observation_time <= pd.to_datetime(eras["UT_end_date"])
+        )
+        era = eras.loc[in_era, "INSTERA"]
+        self._instrument_era = None if era.empty else float(era.iloc[0])
         if self._instrument_era is None and anchors is None:
             raise ValueError(
                 f"master timestamp {timestamp} is outside the defined instrument eras; "

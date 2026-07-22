@@ -51,6 +51,10 @@ tables = tracer.make_order_trace(
 
 ## Assumptions
 
+- Requested chip names come from the vNext GREEN/RED trace configuration; the corresponding master-flat image data are always present.
+- `poly_degree` comes from the maintained masters configuration and does not require redundant runtime validation in `OrderTrace`.
+- Repository-owned era and seed-trace files are anchored directly to `REPO_ROOT`; the input master filename and output directory are explicit caller-provided paths, with no data-root fallback.
+- The repository instrument-era table is static and maintained: its columns and non-overlapping date ranges are trusted rather than revalidated at runtime.
 - GREEN uses `reference/order_trace_green.csv`; RED uses `reference/order_trace_red.csv` for every currently defined era.
 - Manual positions refer to the post-assembly, overscan-removed detector orientation at column zero.
 - New-era execution generates candidate CSVs but does not automatically edit reference files or register a new era.

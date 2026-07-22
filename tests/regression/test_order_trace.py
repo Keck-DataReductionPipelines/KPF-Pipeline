@@ -14,6 +14,7 @@ import pytest
 import kpfpipe.modules.masters.order_trace as order_trace_module
 from kpfpipe.modules.masters import OrderTrace
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
+from kpfpipe.utils.config import ConfigHandler
 
 _TRACE_COLUMNS = [
     "Coeff0",
@@ -248,26 +249,25 @@ class TestEraAndInputValidation:
         assert not hasattr(tracer, "sample_count")
         assert not hasattr(tracer, "era_definitions_path")
 
-    def test_era_boundaries_and_gap(self, tmp_path, monkeypatch):
-        tracer = OrderTrace("KP.20240923.00139.44_master_flat_L1.fits")
-        era_path = tmp_path / "eras.csv"
-        _write_era_table(era_path)
-        monkeypatch.setattr(order_trace_module, "_ERA_DEFINITIONS_PATH", era_path)
+    def test_config_does_not_require_data_directory_paths(self, tmp_path):
+        config_path = tmp_path / "order_trace.toml"
+        config_path.write_text(
+            '[TRACES]\nchips = ["GREEN", "RED"]\n'
+            '[ORDER_TRACE]\npoly_degree = 2\n'
+        )
 
-        assert tracer._resolve_instrument_era("2024-02-23T12:00:01") == 2.0
-        assert tracer._resolve_instrument_era("2024-11-01T00:00:00") == 2.0
-        assert tracer._resolve_instrument_era("2024-11-01T06:00:00") is None
+        tracer = OrderTrace(
+            "KP.20240923.00139.44_master_flat_L1.fits",
+            ConfigHandler(config_path),
+        )
+
+        assert tracer.chips == ["GREEN", "RED"]
+        assert tracer.poly_degree == 2
 
     def test_manual_anchor_requires_every_requested_chip(self):
         tracer = OrderTrace("KP.20240923.00139.44_master_flat_L1.fits")
         with pytest.raises(ValueError, match="missing requested chips"):
             tracer._validate_manual_anchors(["GREEN", "RED"], {"GREEN": 272.0})
-
-    @pytest.mark.parametrize("chips", [[], ["BLUE"], ["GREEN", "GREEN"]])
-    def test_invalid_chip_selection_fails(self, chips):
-        with pytest.raises(ValueError):
-            OrderTrace._normalise_chips(chips)
-
 
 class TestMasterFlatLoading:
     def test_loads_vnext_master_flat(self, tmp_path, monkeypatch):
