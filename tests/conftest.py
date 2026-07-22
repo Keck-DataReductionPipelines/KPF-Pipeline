@@ -72,6 +72,38 @@ def pytest_collection_modifyitems(config, items):
 # ---------------------------------------------------------------------------
 
 
+def _catalog_record_hdu():
+    """A CATALOG_RECORD BinTableHDU carrying the canonical 'kpf-drp' row (built via
+    AstroQuery's writer for schema fidelity). A science L0 reaches to_kpf1 only after
+    AstroQuery has populated this, so the fixture embeds it; without it to_kpf1 raises
+    on a science frame. Single-source (gaia) so the overlay logs no mixed-source
+    warning."""
+    from kpfpipe.data_models.level0 import KPF0
+    from kpfpipe.modules.astro_query import AstroQuery
+
+    l0 = KPF0()
+    l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+    AstroQuery(l0)._write_catalog_record(
+        "kpf-drp",
+        {
+            "object": "Gaia_HD10700",
+            "radec_src": "gaia",
+            "plx_src": "gaia",
+            "rv_src": "gaia",
+            "ra": "01:44:04.0000",
+            "dec": "-15:56:14.900",
+            "pmra": -1.7,
+            "pmdec": 0.85,
+            "parallax": 273.8,
+            "rv": -16.6,
+            "frame": "icrs",
+            "epoch": 2016.0,
+            "equinox": 2000.0,
+        },
+    )
+    return fits.BinTableHDU(data=l0.data["CATALOG_RECORD"], name="CATALOG_RECORD")
+
+
 @pytest.fixture(scope="session")
 def synthetic_l0_file(tmp_path_factory):
     """Create a minimal synthetic L0 FITS file (session-scoped read-only source:
@@ -102,6 +134,7 @@ def synthetic_l0_file(tmp_path_factory):
             image_hdu("RED_AMP1", (32, 32), rng),
             image_hdu("CA_HK", (16, 16), rng),
             telemetry_hdu,
+            _catalog_record_hdu(),
         ]
     )
     hdul.writeto(fn, overwrite=True)

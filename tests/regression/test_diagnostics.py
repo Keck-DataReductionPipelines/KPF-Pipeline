@@ -13,6 +13,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.quality_control.diagnostics import (
     DiagL0,
     DiagL1,
@@ -178,14 +179,17 @@ def _record_at(coord, **overrides):
 
 def _set_catalog_record(l0, records):
     """Write l0's CATALOG_RECORD extension + presence flags from a
-    {source: record-dict-or-None} mapping, via KPF0.set_catalog_record."""
+    {source: record-dict-or-None} mapping, via AstroQuery's writer."""
+    aq = AstroQuery(l0)
     for source, record in records.items():
-        l0.set_catalog_record(source, record)
+        aq._write_catalog_record(source, record)
 
 
 def _make_l0_pointing():
-    """A KPF0 with just an L0 PRIMARY pointing (RA/DEC/MJD-OBS), no catalog yet."""
+    """A KPF0 with just an L0 PRIMARY pointing (RA/DEC/MJD-OBS), no catalog yet.
+    IMTYPE 'Object' so AstroQuery (the CATALOG_RECORD writer) accepts it."""
     l0 = KPF0()
+    l0.headers["PRIMARY"]["IMTYPE"] = "Object"
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6

@@ -18,6 +18,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.data_models.masters.base import KPFMasterModel
+from kpfpipe.modules.astro_query import AstroQuery
 
 # synthetic_l0_file, synthetic_l0_minimal, synthetic_l1_file fixtures live in
 # tests/conftest.py
@@ -316,7 +317,7 @@ class TestToKpf1:
         # network); to_kpf1 overlays it onto the SCI-fiber C*# cards.
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
-        l0.set_catalog_record("kpf-drp", record)
+        AstroQuery(l0)._write_catalog_record("kpf-drp", record)
         return l0
 
     def test_catalog_overlay_populates_sci_cards(self):
@@ -343,9 +344,21 @@ class TestToKpf1:
         assert not p.get("CRV2")
         assert p["CRA2"] == "12:00:00.0000"
 
-    def test_no_catalog_record_leaves_sci_cards_blank(self, synthetic_l0_file):
-        # No AstroQuery / no 'kpf-drp' row -> SCI C*# cards blank, never raw TARG*.
-        p = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
+    def test_science_frame_without_catalog_raises(self):
+        # A science frame (IMTYPE Object) whose CATALOG_RECORD is empty means
+        # AstroQuery never ran -> to_kpf1 fails loudly rather than emitting blank
+        # (or raw TARG*) SCI cards.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        with pytest.raises(ValueError, match="CATALOG_RECORD is empty"):
+            l0.to_kpf1()
+
+    def test_calibration_frame_without_catalog_leaves_sci_cards_blank(self):
+        # A calibration frame carries no target astrometry, so an empty
+        # CATALOG_RECORD is expected: to_kpf1 succeeds with blank SCI C*# cards.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        p = l0.to_kpf1().headers["PRIMARY"]
         for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
             assert not p.get(kw)
 

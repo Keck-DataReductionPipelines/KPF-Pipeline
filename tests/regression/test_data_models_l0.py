@@ -221,58 +221,24 @@ class TestKPF0Provenance:
 
 
 class TestKPF0CatalogRecord:
-    """The native wmko row of CATALOG_RECORD is populated at read from TARG*
-    (config/L0-headers.csv PopulatedBy = KPF0.from_fits) -- best-effort and never
-    fatal, so a malformed file still loads."""
+    """KPF0.read() creates the CATALOG_RECORD extension but no longer populates it --
+    AstroQuery is its sole populator (the native wmko row moved to
+    AstroQuery.read_wmko_header; see test_astro_query.py)."""
 
-    _GOOD_TARG = {
-        "TARGRA": "12:00:00.00",
-        "TARGDEC": "+40:00:00.0",
-        "TARGFRAM": "FK5",
-        "TARGEQUI": 2000.0,
-        "TARGPMRA": 0.0,
-        "TARGPMDC": 0.0,
-        "TARGPLAX": 100.0,
-        "TARGEPOC": 2000.0,
-    }
-
-    def _l0_with_targ(self, tmp_path, **targ):
+    def test_read_leaves_catalog_record_empty(self, tmp_path):
+        """A raw L0 read (even with TARG* present) leaves CATALOG_RECORD empty and
+        unflagged until AstroQuery runs."""
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
-        primary.header["DATE-OBS"] = "2024-04-05T00:00:01"
         primary.header["OFNAME"] = "KP.20240405.00001.00.fits"
         primary.header["OBJECT"] = "testtarget"
-        for key, value in targ.items():
-            primary.header[key] = value
+        primary.header["IMTYPE"] = "Object"
+        primary.header["TARGRA"] = "12:00:00.00"
+        primary.header["TARGDEC"] = "+40:00:00.0"
         fits.HDUList([primary]).writeto(fn, overwrite=True)
-        return fn
 
-    def test_wmko_row_populated_from_targ(self, tmp_path):
-        """Well-formed TARG* -> WMKOCR=1 and a wmko row sanitized to the EPRV C*#
-        format (RA/Dec sexagesimal strings, PM arcsec/yr)."""
-        l0 = KPF0.from_fits(self._l0_with_targ(tmp_path, **self._GOOD_TARG))
-        assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 1
-        table = l0.data["CATALOG_RECORD"]
-        wmko = table[table["source"] == "wmko"][0]
-        assert wmko["ra"] == "12:00:00.0000"  # RA hour-angle sexagesimal
-        assert wmko["dec"] == "+40:00:00.000"
-        assert wmko["object"] == "testtarget"
-
-    def test_no_target_sets_flag_zero_silently(self, tmp_path, caplog):
-        """A frame with no TARGRA (calibration) -> WMKOCR=0, no row, no warning."""
-        with caplog.at_level(logging.WARNING):
-            l0 = KPF0.from_fits(self._l0_with_targ(tmp_path))
-        assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 0
+        l0 = KPF0.from_fits(fn)
+        assert "CATALOG_RECORD" in l0.extensions
         assert len(l0.data["CATALOG_RECORD"]) == 0
-        assert "CATALOG_RECORD" not in caplog.text
-
-    def test_malformed_targ_warns_and_loads(self, tmp_path, caplog):
-        """Unparseable TARG* astrometry warns, sets WMKOCR=0 (no row), and the file
-        still loads (no raise)."""
-        targ = {**self._GOOD_TARG, "TARGDEC": "not-a-coordinate"}
-        with caplog.at_level(logging.WARNING):
-            l0 = KPF0.from_fits(self._l0_with_targ(tmp_path, **targ))
-        assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 0
-        assert len(l0.data["CATALOG_RECORD"]) == 0
-        assert "could not build wmko CATALOG_RECORD" in caplog.text
+        assert "WMKOCR" not in l0.headers["CATALOG_RECORD"]

@@ -1,9 +1,9 @@
 """Regression tests for the AstroQuery module.
 
 Focus: ``merge_catalog_records`` -- the merge of the gaia/simbad/wmko CATALOG_RECORD
-rows into the canonical ``kpf-drp`` row. The external Gaia/SIMBAD queries are not
-exercised here (no network); rows are written directly via ``KPF0.set_catalog_record``
-and the merge is driven off them.
+rows into the canonical ``kpf-drp`` row -- and ``read_wmko_header``. The external
+Gaia/SIMBAD queries are not exercised here (no network); rows are written directly via
+``AstroQuery._write_catalog_record`` and the merge is driven off them.
 """
 
 import logging
@@ -50,11 +50,13 @@ def _record(obj, ra=180.0, **overrides):
 
 
 def _make_l0(records, imtype="object"):
-    """A science KPF0 (IMTYPE) with the given {source: record} rows written."""
+    """A science KPF0 (IMTYPE) with the given {source: record} rows written directly
+    via AstroQuery's writer (no network)."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = imtype
+    aq = AstroQuery(l0)
     for source, record in records.items():
-        l0.set_catalog_record(source, record)
+        aq._write_catalog_record(source, record)
     return l0
 
 
@@ -189,3 +191,70 @@ class TestSingleSourceProvenance:
         for col in ("radec_src", "plx_src", "rv_src"):
             assert gaia[col] == "gaia"
             assert wmko[col] == "wmko"
+
+
+class TestReadWmkoHeader:
+    """read_wmko_header builds the native wmko record from L0 PRIMARY TARG* (moved
+    here from KPF0 read-time population); fail-soft on absent/malformed astrometry."""
+
+    _GOOD_TARG = {
+        "TARGRA": "12:00:00.00",
+        "TARGDEC": "+40:00:00.0",
+        "TARGFRAM": "FK5",
+        "TARGEQUI": 2000.0,
+        "TARGPMRA": 0.0,
+        "TARGPMDC": 0.0,
+        "TARGPLAX": 100.0,
+        "TARGEPOC": 2000.0,
+    }
+
+    @staticmethod
+    def _l0_targ(**targ):
+        l0 = KPF0()
+        p = l0.headers["PRIMARY"]
+        p["IMTYPE"] = "object"
+        p["OBJECT"] = "testtarget"
+        for key, value in targ.items():
+            p[key] = value
+        return l0
+
+    def test_good_targ_builds_row_and_flag(self):
+        # Well-formed TARG* -> a wmko record sanitized to the EPRV C*# format;
+        # writing it sets WMKOCR=1.
+        l0 = self._l0_targ(**self._GOOD_TARG)
+        aq = AstroQuery(l0)
+        aq._write_catalog_record("wmko", aq.read_wmko_header())
+        assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 1
+        table = l0.data["CATALOG_RECORD"]
+        wmko = table[table["source"] == "wmko"][0]
+        assert wmko["ra"] == "12:00:00.0000"  # RA hour-angle sexagesimal
+        assert wmko["dec"] == "+40:00:00.000"
+        assert wmko["object"] == "testtarget"
+
+    def test_pmra_time_to_angle_conversion(self):
+        # TARGPMRA is DCS seconds-of-time/yr: read_wmko_header must convert it to
+        # on-sky arcsec/yr via x15 x cos(dec). TARGPMDC is already arcsec/yr and
+        # passes through. Uses a non-zero TARGPMRA so the factor is exercised (a
+        # zero would pass regardless).
+        dec_deg = 40.0
+        rec = AstroQuery(
+            self._l0_targ(**{**self._GOOD_TARG, "TARGPMRA": 0.5, "TARGPMDC": 2.0})
+        ).read_wmko_header()
+
+        expected_pmra = 0.5 * 15.0 * np.cos(np.deg2rad(dec_deg))
+        assert rec["pmra"] == pytest.approx(expected_pmra)
+        assert expected_pmra != pytest.approx(0.5)  # factor actually applied
+        assert rec["pmdec"] == pytest.approx(2.0)  # dec PM unchanged
+
+    def test_no_targ_returns_none_no_warning(self, caplog):
+        # No TARGRA (e.g. a science frame with no pointing) -> None, silently.
+        with caplog.at_level(logging.WARNING):
+            assert AstroQuery(self._l0_targ()).read_wmko_header() is None
+        assert "CATALOG_RECORD" not in caplog.text
+
+    def test_malformed_targ_warns_returns_none(self, caplog):
+        # Unparseable TARG* astrometry -> warns and returns None (never raises).
+        l0 = self._l0_targ(**{**self._GOOD_TARG, "TARGDEC": "not-a-coordinate"})
+        with caplog.at_level(logging.WARNING):
+            assert AstroQuery(l0).read_wmko_header() is None
+        assert "could not build wmko CATALOG_RECORD" in caplog.text
