@@ -15,13 +15,11 @@ EPRV PRIMARY conversion does not happen until ``KPF0.to_kpf1()`` downstream. Rat
 than write PRIMARY here, AstroQuery records the queried quantities on the L0 and
 lets ``to_kpf1()`` overlay them onto the L1 PRIMARY (a follow-up integration).
 
-AstroQuery never modifies the L0 PRIMARY header -- that header is a pure
-pass-through to INSTRUMENT_HEADER. All three records share one schema, sanitized to
-the EPRV C*# PRIMARY format so a consumer reads any source identically and to_kpf1
-can copy cells straight onto the catalog cards: ICRS, RA/Dec as sexagesimal strings
-(RA hour-angle, Dec deg), proper motion in arcsec/yr (RA including cos(Dec)),
-parallax in mas, RV in km/s, epoch/equinox in Julian years. Per-fiber fan-out and
-derived quantities (offsets, redshift) remain the jobs of downstream consumers.
+AstroQuery never modifies the L0 PRIMARY header (a pure pass-through to
+INSTRUMENT_HEADER). All three source rows and the merged ``kpf-drp`` row share one
+schema in the EPRV C*# PRIMARY format (see ``_CATALOG_COLUMNS``), so a consumer reads
+any source identically and ``to_kpf1`` can copy cells straight onto the catalog cards.
+Per-fiber fan-out and derived quantities (offsets, redshift) are downstream jobs.
 """
 
 import logging
@@ -46,13 +44,13 @@ _DEFAULTS = {
     "use_wmko_tcs": True,
 }
 
-# Fields that together make a coherent position block: the merge takes them from a
-# single source so ra/dec/PM and the frame/epoch that qualify them stay internally
-# consistent -- a frame or epoch from a different source than the coordinates would
-# be meaningless. equinox is not gated (an ICRS formality), so a WMKO base missing
-# TARGEQUI still qualifies; frame/epoch/equinox share the position's radec_src
-# provenance. Merge priority (highest first) is gaia > simbad > wmko.
-_POSITION_FIELDS = ("ra", "dec", "pmra", "pmdec", "epoch", "frame")
+# The astrometric block the merge takes whole from one source: ra/dec/pmra/pmdec/
+# parallax are one astrometric fit -- proper motion without the parallax it was measured
+# against is nearly meaningless -- plus the frame/epoch that qualify the coordinates.
+# equinox is not gated (an ICRS formality), so a WMKO base missing TARGEQUI still
+# qualifies. rv is handled separately (base source, else TARGRADV). Priority (highest
+# first): gaia > simbad > wmko.
+_ASTROMETRY = ("ra", "dec", "pmra", "pmdec", "parallax", "epoch", "frame")
 
 # Column units AstroQuery assumes for each catalog result, verified before the
 # values are trusted so a silent upstream schema change fails loudly instead of
@@ -75,19 +73,14 @@ _SIMBAD_UNITS = {
     "rvz_radvel": u.km / u.s,
 }
 
-# CATALOG_RECORD extension write schema. AstroQuery is the sole populator: one row per
-# resolved source (wmko/gaia/simbad) plus the merged 'kpf-drp' canonical row. Columns:
-# 'source' (the row's nominal source), 'object' (the target name supplied to the
-# query), three provenance labels naming the source each value block came from --
-# 'radec_src' (ra/dec/pmra/pmdec plus their frame/epoch/equinox, intrinsic to the
-# coordinates and never sourced separately), 'plx_src' (parallax), 'rv_src' (rv) --
-# then the values. For a plain source row each provenance label is the row's own
-# 'source'; the merged row names whichever source won each block (or "" when none
-# supplied it). Every source is sanitized to the EPRV C*# PRIMARY format so
-# KPF0.to_kpf1 can copy cells straight onto the catalog cards: RA/Dec sexagesimal
-# strings (RA hour-angle 'h:m:s', Dec deg 'd:m:s', ICRS), proper motion arcsec/yr (RA
-# incl. cos Dec), parallax mas, RV km/s, epoch/equinox in Julian years. Float columns
-# hold NaN where a value is missing; string columns (RA/Dec included) hold "".
+# CATALOG_RECORD write schema (AstroQuery is the sole populator): one row per resolved
+# source (wmko/gaia/simbad) plus the merged 'kpf-drp' row. 'source' labels the row,
+# 'object' is the queried target name, and radec_src/plx_src/rv_src name the source each
+# value block (position, parallax, rv) came from -- its own 'source' for a plain source
+# row, the winning source (or "" if none) for the merged row. Values are in the EPRV
+# C*# PRIMARY format: RA/Dec sexagesimal strings (RA hour-angle, Dec deg, ICRS), PM
+# arcsec/yr (RA incl. cos Dec), parallax mas, rv km/s, epoch/equinox Julian years.
+# Missing floats -> NaN, missing strings -> "".
 _CATALOG_COLUMNS = (
     "source",
     "object",
@@ -222,12 +215,9 @@ class AstroQuery:
     def _sexagesimal_radec(coord):
         """ICRS SkyCoord -> the EPRV C*# sexagesimal (ra, dec) strings.
 
-        The single formatter for the canonical colon-separated 'h:m:s' cards
-        (RA hour-angle, Dec deg) shared by every CATALOG_RECORD source, so a
-        precision/padding change lands in one place. astropy's combined hmsdms
-        already pads and signs; we just split the two axes back apart. RA/Dec are
-        basic quantities -- a coord that cannot be built from them raises upstream
-        rather than being papered over.
+        The single formatter for the canonical colon-separated 'h:m:s' cards (RA
+        hour-angle, Dec deg), so a precision/padding change lands in one place.
+        astropy's combined hmsdms already pads and signs; we just split the two axes.
         """
         return tuple(coord.to_string("hmsdms", sep=":", precision=4).split())
 
@@ -253,18 +243,15 @@ class AstroQuery:
             )
 
     def _write_catalog_record(self, source, record):
-        """Upsert one source's row into the L0 CATALOG_RECORD extension + set its flag.
+        """Upsert one source's row into the L0 CATALOG_RECORD extension, set its flag.
 
-        The single writer for CATALOG_RECORD (``wmko``/``gaia``/``simbad`` and the
-        merged ``kpf-drp`` row). ``record`` is a canonical record dict (the
-        _CATALOG_COLUMNS fields minus ``source``) or None. The three provenance labels
-        (``radec_src``/``plx_src``/``rv_src``) default to ``source`` when the record
-        omits them (a source row's values are its own); the merged row supplies each
-        explicitly. Existing rows for other sources are preserved (upsert). A None
-        record clears the source's flag and writes no row; otherwise the row is
-        (re)written and the flag set to 1. A source without a registered presence flag
-        (e.g. ``kpf-drp``, which must always be present) writes no flag keyword. Missing
-        floats become NaN, missing strings "".
+        The sole writer for CATALOG_RECORD (``wmko``/``gaia``/``simbad`` and the merged
+        ``kpf-drp`` row). ``record`` is a canonical record dict or None; a None record
+        drops the source's row and clears its flag, otherwise the row is (re)written and
+        the flag set to 1. Provenance labels (``radec_src``/``plx_src``/``rv_src``)
+        default to ``source`` when the record omits them (a source row's values are its
+        own); the merged row supplies them explicitly. Other sources' rows are preserved
+        (upsert). ``kpf-drp`` writes no flag. Missing floats become NaN, strings "".
         """
         l0 = self.l0_obj
         table = l0.data["CATALOG_RECORD"]
@@ -360,11 +347,9 @@ class AstroQuery:
             "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["parallax"]),
             "rv": self._scalar(row["radial_velocity"]),
-            # frame/equinox are catalog-definitional, not query columns: Gaia DR3
-            # astrometry is ICRS (Gaia-CRF3, aligned to ICRS) by construction, and
-            # ICRS carries no equinox -- 2000.0 is the J2000 convention the EPRV
-            # standard's Required CEQNX# demands. Only epoch is a real query output
-            # (ref_epoch, J2016.0 for DR3).
+            # frame/equinox are definitional, not queried: Gaia DR3 is ICRS (Gaia-CRF3)
+            # with no equinox -- 2000.0 is the J2000 convention EPRV's Required CEQNX#
+            # demands. Only epoch (ref_epoch, J2016.0 for DR3) is a real query output.
             "frame": "icrs",
             "epoch": self._scalar(row["ref_epoch"]),
             "equinox": 2000.0,
@@ -423,12 +408,10 @@ class AstroQuery:
             "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["plx_value"]),
             "rv": self._scalar(row["rvz_radvel"]),
-            # frame/epoch/equinox are all definitional here, not query columns:
-            # astroquery's SIMBAD returns basic ra/dec in ICRS at equinox and epoch
-            # J2000 by construction, with no per-object frame/epoch/equinox field to
-            # read. (Contrast query_gaia, whose epoch is the real ref_epoch column;
-            # SIMBAD's epoch is fixed at 2000.0 by the default output, not queried.)
-            # equinox 2000.0 satisfies the EPRV standard's Required CEQNX#.
+            # frame/epoch/equinox are definitional here, not queried: astroquery's
+            # SIMBAD returns basic ra/dec as ICRS J2000, with no per-object
+            # frame/epoch/equinox to read (unlike Gaia's real ref_epoch). equinox 2000.0
+            # satisfies EPRV's Required CEQNX#.
             "frame": "icrs",
             "epoch": 2000.0,
             "equinox": 2000.0,
@@ -440,20 +423,15 @@ class AstroQuery:
     def read_wmko_header(self):
         """Read the native WMKO/DCS astrometry from L0 PRIMARY TARG*, or None.
 
-        The telescope-side counterpart to query_gaia/query_simbad: no external
-        query, just the raw TARG* pointing, sanitized to the EPRV C*# format --
-        TARGRA/TARGDEC sexagesimal reformatted to the canonical RA hour-angle / Dec
-        deg 'h:m:s' strings; TARGPMRA time-s/yr -> arcsec/yr (x15 cos Dec), TARGPMDC
-        already arcsec/yr. The native FK5 (J2000) pointing is then rotated to ICRS
-        here via astropy's tested SkyCoord machinery, so all three CATALOG_RECORD
-        sources share one frame (Gaia/SIMBAD are already ICRS) and nothing downstream
-        has to track fk5. KPF pointing is always FK5, so a TARGFRAM that is not FK5
-        (absent included) raises rather than being coerced -- a wrong frame would
-        silently corrupt the barycentric correction. Returns None -- so the frame gets
-        WMKOCR=0 -- when there is no target pointing (TARGRA absent) or the TARG*
-        astrometry cannot be parsed (warned, never raised, so a malformed file still
-        loads). Well-formedness is gated downstream by QCL0 (RADECOK), not here.
-        Whether it runs at all is gated upstream in perform by ``use_wmko_tcs``.
+        The telescope-side counterpart to query_gaia/query_simbad: no query, just the
+        raw TARG* pointing sanitized to the EPRV C*# format (TARGPMRA time-s/yr ->
+        arcsec/yr via x15 cos Dec; TARGPMDC already arcsec/yr) and rotated from its
+        native FK5 (J2000) to ICRS, so all three sources share one frame. KPF pointing
+        is always FK5, so a non-FK5 TARGFRAM (absent included) raises rather than being
+        coerced -- a wrong frame would corrupt the barycentric correction. Returns None
+        (WMKOCR=0) when there is no pointing (TARGRA absent) or the TARG* astrometry
+        cannot be parsed (warned, never raised). Gated upstream in perform by
+        ``use_wmko_tcs``.
         """
         primary = self.l0_obj.headers["PRIMARY"]
         if primary.get("TARGRA") is None:
@@ -471,12 +449,11 @@ class AstroQuery:
             pmra, pmdec = primary.get("TARGPMRA"), primary.get("TARGPMDC")
             equinox = primary.get("TARGEQUI")
 
-            # Rotate the native FK5 pointing to ICRS via SkyCoord. Position always;
-            # proper motion too when both components are present (TARGPMRA time-s/yr
-            # -> on-sky arcsec/yr via x15 cos Dec first -- a single component has no
-            # meaning under the rotation, so it is both-or-neither). A frame rotation
-            # carries no time propagation, so epoch is unchanged; parallax/RV are
-            # rotation-invariant and pass through untouched.
+            # Rotate the native FK5 pointing to ICRS. Position always; proper motion too
+            # when both components are present (TARGPMRA time-s/yr -> arcsec/yr via x15
+            # cos Dec first; a lone component is meaningless under rotation, so it is
+            # both-or-neither). Rotation carries no time propagation, so epoch is
+            # unchanged; parallax/RV are rotation-invariant.
             fk5 = FK5(
                 equinox="J2000" if equinox is None else Time(equinox, format="jyear")
             )
@@ -518,92 +495,72 @@ class AstroQuery:
 
         Consumes the in-memory gaia/simbad/wmko records this instance just built
         (``None`` for a source that was toggled off or resolved nothing), in priority
-        order gaia > simbad > wmko: the coherent position block -- ra/dec/pmra/pmdec
-        plus the frame, epoch, and equinox that make them meaningful -- is taken
-        together from the highest-priority source that supplies it complete, while
-        parallax and rv are each filled independently from the highest-priority source
-        that has them. frame/epoch/equinox are intrinsic to the coordinates and ride
-        with the position under its ``radec_src`` provenance. The three provenance
-        labels record where each block came from -- ``radec_src`` (position),
-        ``plx_src`` (parallax), ``rv_src`` (rv), each "" when nothing supplied it; a
-        parallax/rv borrowed from a source other than the position is a routine DEBUG
-        note (Gaia commonly lacks radial_velocity).
+        order gaia > simbad > wmko. The canonical record is the highest-priority source
+        that supplies a complete astrometric solution -- ra/dec/pmra/pmdec/parallax plus
+        the frame, epoch, and equinox that make them meaningful -- taken whole, since
+        those fields are one measurement and must not be spliced across catalogs. Its rv
+        rides along; when that source has none (Gaia commonly lacks radial_velocity), rv
+        falls back to the telescope TARGRADV on PRIMARY (not borrowed from a lower-
+        priority catalog). ``radec_src``/``plx_src`` name the astrometric source;
+        ``rv_src`` names the rv source ("wmko" for the TARGRADV fallback, "" when
+        nothing supplied it).
 
         Raises ``ValueError`` when no source supplies a complete ra/dec/pmra/pmdec/
-        epoch block -- without a position there is nothing to correct, so it must fail
-        loudly. parallax and rv are optional, left missing when no source has them.
+        parallax/epoch block -- without a position there is nothing to correct, so it
+        must fail loudly. rv is optional, left missing when neither the astrometric
+        source nor TARGRADV supplies it.
         """
-        # The source records are ours, just built and schema-clean (missing cells are
-        # None), so consume them directly in priority order -- no re-read of the table
-        # we just wrote, and a toggled-off source is already None.
-        candidates = [
-            (source, record)
-            for source, record in (
-                ("gaia", self._gaia),
-                ("simbad", self._simbad),
-                ("wmko", self._wmko),
-            )
-            if record is not None
-        ]
+        # Our own records, just built and schema-clean; assemble in priority order (a
+        # source toggled off or that resolved nothing is already None).
+        candidates = []
+        for source, record in (
+            ("gaia", self._gaia),
+            ("simbad", self._simbad),
+            ("wmko", self._wmko),
+        ):
+            if record is not None:
+                candidates.append((source, record))
 
-        base = next(
-            (
-                (source, record)
-                for source, record in candidates
-                if all(record[f] is not None for f in _POSITION_FIELDS)
-            ),
-            None,
-        )
-        if base is None:
+        # Take the whole astrometric block from the first source that has it complete;
+        # raise if none does (without a position there is nothing to correct).
+        base_source, base_record = None, None
+        for source, record in candidates:
+            if all(record[field] is not None for field in _ASTROMETRY):
+                base_source, base_record = source, record
+                break
+        if base_record is None:
             available = [source for source, _ in candidates]
             raise ValueError(
                 f"cannot build a canonical astrometry position for "
                 f"{self.l0_obj.obs_id or 'unknown'}: no source supplies a complete "
-                f"ra/dec/pmra/pmdec/epoch block (have {available})"
+                f"ra/dec/pmra/pmdec/parallax/epoch block (have {available})"
             )
-        base_source, base_record = base
 
-        # parallax and rv are optional; take each from the highest-priority source
-        # that has it, or leave missing.
-        parallax_source, parallax_value = next(
-            (
-                (source, record["parallax"])
-                for source, record in candidates
-                if record["parallax"] is not None
-            ),
-            (None, None),
-        )
-        rv_source, rv_value = next(
-            (
-                (source, record["rv"])
-                for source, record in candidates
-                if record["rv"] is not None
-            ),
-            (None, None),
-        )
-
-        mixed = [
-            f"{field}={src}"
-            for field, src in (("parallax", parallax_source), ("rv", rv_source))
-            if src is not None and src != base_source
-        ]
-        if mixed:
-            logger.debug(
-                "canonical astrometry mixes sources: position=%s, %s",
-                base_source,
-                ", ".join(mixed),
-            )
+        # rv from the base source, else telescope TARGRADV off PRIMARY -- independent of
+        # use_wmko_tcs (which gates only the wmko position row) and already km/s, so no
+        # conversion.
+        rv_value = base_record["rv"]
+        rv_source = base_source
+        if rv_value is None:
+            rv_value = self._scalar(self.l0_obj.headers["PRIMARY"].get("TARGRADV"))
+            rv_source = "wmko" if rv_value is not None else ""
+            if rv_value is not None:
+                logger.warning(
+                    "no catalog supplied a radial velocity; falling back to the "
+                    "telescope TARGRADV=%s km/s from L0 PRIMARY",
+                    rv_value,
+                )
 
         record = {
             "object": base_record["object"],
             "radec_src": base_source,
-            "plx_src": parallax_source if parallax_source is not None else "",
-            "rv_src": rv_source if rv_source is not None else "",
+            "plx_src": base_source,
+            "rv_src": rv_source,
             "ra": base_record["ra"],
             "dec": base_record["dec"],
             "pmra": base_record["pmra"],
             "pmdec": base_record["pmdec"],
-            "parallax": parallax_value,
+            "parallax": base_record["parallax"],
             "rv": rv_value,
             "frame": base_record["frame"],
             "epoch": base_record["epoch"],

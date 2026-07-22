@@ -50,12 +50,15 @@ def _record(obj, ra=180.0, **overrides):
     return rec
 
 
-def _merge(records):
+def _merge(records, targradv=None):
     """Merge the given {source: in-memory record} the way perform does: preset each
     source's just-built record on a fresh AstroQuery, then merge. Returns the
-    canonical kpf-drp record dict (missing cells are None, as merge emits them)."""
+    canonical kpf-drp record dict (missing cells are None, as merge emits them).
+    ``targradv`` seeds L0 PRIMARY TARGRADV so the rv fallback can be exercised."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "object"
+    if targradv is not None:
+        l0.headers["PRIMARY"]["TARGRADV"] = targradv
     aq = AstroQuery(l0)
     for source, record in records.items():
         setattr(aq, f"_{source}", record)
@@ -83,41 +86,69 @@ class TestMergeCatalogRecords:
         assert row["radec_src"] == "gaia"
         assert row["ra"] == _ra_str(10.0)
 
-    def test_rv_filled_from_lower_priority_logs_mix(self, caplog):
-        # Gaia supplies position + parallax but lacks rv -> rv borrowed from SIMBAD.
-        with caplog.at_level(logging.DEBUG, logger="kpfpipe.modules.astro_query"):
-            row = _merge(
-                {
-                    "gaia": _record("G", rv=None),
-                    "simbad": _record("S", rv=99.0),
-                    "wmko": _record("W"),
-                }
-            )
-        assert row["radec_src"] == "gaia"  # position still from Gaia
-        assert row["rv"] == pytest.approx(99.0)  # rv from SIMBAD
-        assert row["rv_src"] == "simbad"
-        assert row["parallax"] == pytest.approx(50.0)  # parallax stayed with Gaia
-        assert row["plx_src"] == "gaia"
-        assert "mixes sources" in caplog.text
-
-    def test_parallax_priority_over_wmko(self):
-        # Gaia lacks parallax; SIMBAD (higher priority than WMKO) supplies it.
+    def test_rv_rides_with_astrometric_base(self):
+        # rv comes from the astrometric base source, not borrowed across catalogs:
+        # Gaia is the base and supplies rv, so SIMBAD's rv is ignored.
         row = _merge(
             {
-                "gaia": _record("G", parallax=None),
-                "simbad": _record("S", parallax=7.0),
-                "wmko": _record("W", parallax=8.0),
+                "gaia": _record("G", rv=11.0),
+                "simbad": _record("S", rv=99.0),
             }
         )
+        assert row["radec_src"] == "gaia"
+        assert row["rv"] == pytest.approx(11.0)
+        assert row["rv_src"] == "gaia"
+
+    def test_rv_not_borrowed_from_lower_priority(self):
+        # rv is no longer borrowed across catalogs: Gaia is the base and lacks rv;
+        # SIMBAD's rv is NOT pulled in, and with no TARGRADV rv is left missing.
+        row = _merge(
+            {
+                "gaia": _record("G", rv=None),
+                "simbad": _record("S", rv=99.0),
+            }
+        )
+        assert row["radec_src"] == "gaia"
+        assert row["rv"] is None
+        assert row["rv_src"] == ""
+
+    def test_rv_missing_falls_back_to_targradv(self, caplog):
+        # Base (Gaia) lacks rv -> rv comes from the telescope TARGRADV on PRIMARY (km/s,
+        # no conversion), tagged rv_src='wmko', with a WARNING.
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.modules.astro_query"):
+            row = _merge({"gaia": _record("G", rv=None)}, targradv=-4.5)
+        assert row["radec_src"] == "gaia"
+        assert row["rv"] == pytest.approx(-4.5)
+        assert row["rv_src"] == "wmko"
+        assert "falling back to the telescope TARGRADV" in caplog.text
+
+    def test_missing_parallax_disqualifies_astrometric_base(self):
+        # parallax is part of the astrometric block: Gaia lacking it is disqualified as
+        # the base entirely, so the whole position (and parallax) comes from SIMBAD,
+        # the highest-priority source that supplies a complete solution.
+        row = _merge(
+            {
+                "gaia": _record("G", ra=10.0, parallax=None),
+                "simbad": _record("S", ra=20.0, parallax=7.0),
+                "wmko": _record("W", ra=30.0, parallax=8.0),
+            }
+        )
+        assert row["radec_src"] == "simbad"
+        assert row["ra"] == _ra_str(20.0)  # position from SIMBAD, not Gaia
         assert row["parallax"] == pytest.approx(7.0)
         assert row["plx_src"] == "simbad"
 
-    def test_wmko_only(self, caplog):
-        with caplog.at_level(logging.DEBUG, logger="kpfpipe.modules.astro_query"):
-            row = _merge({"wmko": _record("W")})
+    def test_lone_source_missing_parallax_raises(self):
+        # parallax is part of the astrometric block, so a sole source lacking it cannot
+        # anchor the canonical position.
+        with pytest.raises(ValueError, match="position"):
+            _merge({"gaia": _record("G", parallax=None)})
+
+    def test_wmko_only(self):
+        row = _merge({"wmko": _record("W")})
         assert row["radec_src"] == "wmko"
         assert row["object"] == "W"
-        assert "mixes sources" not in caplog.text  # single source, no mixing
+        assert row["rv_src"] == "wmko"  # rv rides with the sole source
 
     def test_no_source_raises(self):
         # No source built a record -> nothing to correct -> raise.
