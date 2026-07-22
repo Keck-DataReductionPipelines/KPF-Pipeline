@@ -87,7 +87,7 @@ def _write_astro_config(path):
     requires the three sections to exist (empty is fine)."""
     path.write_text(
         "[DATA_DIRS]\n[TRACES]\n"
-        "[MODULE_ASTRO_QUERY]\nuse_gaia = false\nuse_simbad = false\n"
+        "[MODULE_ASTRO_QUERY]\ndo_gaia_query = false\ndo_simbad_query = false\n"
     )
     return path
 

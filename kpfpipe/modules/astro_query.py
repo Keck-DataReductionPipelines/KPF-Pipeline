@@ -41,35 +41,18 @@ logger = logging.getLogger(__name__)
 
 _DEFAULTS = {
     **DEFAULTS,
-    "use_gaia": True,
-    "use_simbad": True,
-    "use_wmko": True,
+    "do_gaia_query": True,
+    "do_simbad_query": True,
+    "use_wmko_tcs": True,
 }
 
-# Source-merge configuration for the canonical ``kpf-drp`` row. Priority order
-# (highest first) governs which source supplies the coherent position block and,
-# independently, the parallax and RV.
-_MERGE_PRIORITY = ("gaia", "simbad", "wmko")
-# The position block is taken together from one source so ra/dec/PM and their frame
-# and reference epoch stay internally consistent -- a frame or epoch from a different
-# source than the coordinates would be meaningless. equinox rides with the same base
-# (an ICRS formality) but is not gated, so a WMKO base missing TARGEQUI still
-# qualifies. parallax and rv are the only per-column fills. All of frame/epoch/equinox
-# therefore share the row's radec_src provenance.
+# Fields that together make a coherent position block: the merge takes them from a
+# single source so ra/dec/PM and the frame/epoch that qualify them stay internally
+# consistent -- a frame or epoch from a different source than the coordinates would
+# be meaningless. equinox is not gated (an ICRS formality), so a WMKO base missing
+# TARGEQUI still qualifies; frame/epoch/equinox share the position's radec_src
+# provenance. Merge priority (highest first) is gaia > simbad > wmko.
 _POSITION_FIELDS = ("ra", "dec", "pmra", "pmdec", "epoch", "frame")
-_MERGE_STR_FIELDS = frozenset({"object", "frame", "ra", "dec"})
-_MERGE_READ_FIELDS = (
-    "object",
-    "ra",
-    "dec",
-    "pmra",
-    "pmdec",
-    "parallax",
-    "rv",
-    "frame",
-    "epoch",
-    "equinox",
-)
 
 # Column units AstroQuery assumes for each catalog result, verified before the
 # values are trusted so a silent upstream schema change fails loudly instead of
@@ -158,7 +141,8 @@ class AstroQuery:
         OBJECT, TARG*) is read but never modified; the resolved catalog data is written
         to the L0 ``CATALOG_RECORD`` extension.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: use_gaia, use_simbad.
+        Module configuration. Recognized keys: do_gaia_query, do_simbad_query,
+        use_wmko_tcs.
     """
 
     def __init__(self, l0_obj, config=None):
@@ -326,13 +310,12 @@ class AstroQuery:
     def query_gaia(self):
         """Query Gaia DR3 for the target's ICRS astrometry, or None (fail-soft).
 
-        Returns None (warned) when disabled, when GAIAID yields no usable
-        source_id, when the lookup fails, or when the source is not found. Raises
-        ValueError if the result's column units differ from the assumed canonical
-        schema (deg, mas/yr, mas, km/s, epoch in Julian years; ICRS).
+        Returns None (warned) when GAIAID yields no usable source_id, when the
+        lookup fails, or when the source is not found. Raises ValueError if the
+        result's column units differ from the assumed canonical schema (deg,
+        mas/yr, mas, km/s, epoch in Julian years; ICRS). Whether it runs at all is
+        gated upstream in perform by ``do_gaia_query``.
         """
-        if not self.use_gaia:
-            return None
         gaia_id = self._gaia_source_id()
         if gaia_id is None:
             logger.warning(
@@ -387,19 +370,19 @@ class AstroQuery:
             "equinox": 2000.0,
         }
         logger.info("successfully built record for gaia")
+        self._write_catalog_record("gaia", record)
         return record
 
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
-        Returns None when disabled, when L0 has no OBJECT name, or when the lookup
-        fails / resolves nothing (warned, not raised). Raises ValueError if the
-        result's column units differ from the assumed schema. Column schema is the
+        Returns None when L0 has no OBJECT name, or when the lookup fails /
+        resolves nothing (warned, not raised). Raises ValueError if the result's
+        column units differ from the assumed schema. Column schema is the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value
-        mas, rvz_radvel km/s).
+        mas, rvz_radvel km/s). Whether it runs at all is gated upstream in perform
+        by ``do_simbad_query``.
         """
-        if not self.use_simbad:
-            return None
         name = self._simbad_resolvable_name()
         if name is None:
             logger.warning(
@@ -451,6 +434,7 @@ class AstroQuery:
             "equinox": 2000.0,
         }
         logger.info("successfully built record for simbad")
+        self._write_catalog_record("simbad", record)
         return record
 
     def read_wmko_header(self):
@@ -469,6 +453,7 @@ class AstroQuery:
         WMKOCR=0 -- when there is no target pointing (TARGRA absent) or the TARG*
         astrometry cannot be parsed (warned, never raised, so a malformed file still
         loads). Well-formedness is gated downstream by QCL0 (RADECOK), not here.
+        Whether it runs at all is gated upstream in perform by ``use_wmko_tcs``.
         """
         primary = self.l0_obj.headers["PRIMARY"]
         if primary.get("TARGRA") is None:
@@ -524,66 +509,42 @@ class AstroQuery:
                 exc,
             )
             return None
-        logger.info("successfully built record for wmko")
-        return record
-
-    def _read_catalog_row(self, table, source):
-        """Read one CATALOG_RECORD row into a record dict, or None if absent.
-
-        Coerces the missing-value sentinels back to None (NaN floats, "" strings) so
-        the merge sees a single "missing" marker per cell regardless of source.
-        """
-        match = table[table["source"] == source]
-        if len(match) == 0:
-            return None
-        row = match[0]
-        record = {}
-        for name in _MERGE_READ_FIELDS:
-            value = row[name]
-            if name in _MERGE_STR_FIELDS:
-                record[name] = None if str(value) == "" else str(value)
-            else:
-                f = float(value)
-                record[name] = None if np.isnan(f) else f
+        logger.info("successfully built record for wmko-tcs")
+        self._write_catalog_record("wmko", record)
         return record
 
     def merge_catalog_records(self):
-        """Merge the source rows into the canonical ``kpf-drp`` CATALOG_RECORD row.
+        """Merge the built source records into the canonical ``kpf-drp`` row.
 
-        Combines the ``gaia``/``simbad``/``wmko`` rows (each gated by its ``use_*``
-        toggle and presence flag) into one canonical record, in ``_MERGE_PRIORITY``
-        order: the coherent position block -- ra/dec/pmra/pmdec, plus the frame, epoch,
-        and equinox that make them meaningful -- is taken together from the highest-
-        priority source that supplies it complete, while parallax and rv are each filled
-        independently from the highest-priority source that has them. frame, epoch, and
-        equinox are intrinsic to the coordinates (a frame or epoch from another source
-        would be inconsistent), so they always ride with the position, sharing radec_src
-        provenance rather than getting their own labels. The three provenance labels
-        record where each block came from -- ``radec_src`` (position + frame/epoch/
-        equinox), ``plx_src`` (parallax), ``rv_src`` (rv), each "" when nothing supplied
-        it; a parallax/rv borrowed from a different source than the position is a DEBUG
-        note (Gaia commonly lacks radial_velocity, so this is routine, not an error).
+        Consumes the in-memory gaia/simbad/wmko records this instance just built
+        (``None`` for a source that was toggled off or resolved nothing), in priority
+        order gaia > simbad > wmko: the coherent position block -- ra/dec/pmra/pmdec
+        plus the frame, epoch, and equinox that make them meaningful -- is taken
+        together from the highest-priority source that supplies it complete, while
+        parallax and rv are each filled independently from the highest-priority source
+        that has them. frame/epoch/equinox are intrinsic to the coordinates and ride
+        with the position under its ``radec_src`` provenance. The three provenance
+        labels record where each block came from -- ``radec_src`` (position),
+        ``plx_src`` (parallax), ``rv_src`` (rv), each "" when nothing supplied it; a
+        parallax/rv borrowed from a source other than the position is a routine DEBUG
+        note (Gaia commonly lacks radial_velocity).
 
-        Raises ``ValueError`` when a coherent position block (ra, dec, pmra, pmdec,
-        epoch) cannot be assembled from the enabled sources -- without a position there
-        is nothing to correct, so its absence must fail loudly. parallax and rv are
-        optional: filled when any source has them, else left missing (NaN) for the
-        downstream consumer to default (as BarycentricCorrection already does).
+        Raises ``ValueError`` when no source supplies a complete ra/dec/pmra/pmdec/
+        epoch block -- without a position there is nothing to correct, so it must fail
+        loudly. parallax and rv are optional, left missing when no source has them.
         """
-        table = self.l0_obj.data["CATALOG_RECORD"]
-        header = self.l0_obj.headers["CATALOG_RECORD"]
-
-        # Candidate (source_label, record) pairs in priority order, gated by toggle
-        # and presence flag.
-        candidates = []
-        for source in _MERGE_PRIORITY:
-            if not getattr(self, f"use_{source}"):
-                continue
-            if not header.get(_CATALOG_FLAGS[source]):
-                continue
-            record = self._read_catalog_row(table, source)
-            if record is not None:
-                candidates.append((source, record))
+        # The source records are ours, just built and schema-clean (missing cells are
+        # None), so consume them directly in priority order -- no re-read of the table
+        # we just wrote, and a toggled-off source is already None.
+        candidates = [
+            (source, record)
+            for source, record in (
+                ("gaia", self._gaia),
+                ("simbad", self._simbad),
+                ("wmko", self._wmko),
+            )
+            if record is not None
+        ]
 
         base = next(
             (
@@ -594,11 +555,11 @@ class AstroQuery:
             None,
         )
         if base is None:
-            enabled = [s for s in _MERGE_PRIORITY if getattr(self, f"use_{s}")]
+            available = [source for source, _ in candidates]
             raise ValueError(
                 f"cannot build a canonical astrometry position for "
-                f"{self.l0_obj.obs_id or 'unknown'}: missing ra/dec/pmra/pmdec/epoch "
-                f"across enabled sources {enabled}"
+                f"{self.l0_obj.obs_id or 'unknown'}: no source supplies a complete "
+                f"ra/dec/pmra/pmdec/epoch block (have {available})"
             )
         base_source, base_record = base
 
@@ -674,14 +635,14 @@ class AstroQuery:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def perform(self, *, use_gaia=None, use_simbad=None):
+    def perform(self, *, do_gaia_query=None, do_simbad_query=None, use_wmko_tcs=None):
         """
         Resolve external catalog astrometry and write it to the L0.
 
         Parameters
         ----------
-        use_gaia, use_simbad : bool, optional
-            Override the configured query toggles for this call.
+        do_gaia_query, do_simbad_query, use_wmko_tcs : bool, optional
+            Override the configured source toggles for this call.
 
         Returns
         -------
@@ -692,20 +653,20 @@ class AstroQuery:
             module this returns an L0, not the next level -- AstroQuery runs before
             assembly.
         """
-        if use_gaia is not None:
-            self.use_gaia = use_gaia
-        if use_simbad is not None:
-            self.use_simbad = use_simbad
+        if do_gaia_query is not None:
+            self.do_gaia_query = do_gaia_query
+        if do_simbad_query is not None:
+            self.do_simbad_query = do_simbad_query
+        if use_wmko_tcs is not None:
+            self.use_wmko_tcs = use_wmko_tcs
 
-        self._wmko = self.read_wmko_header()
-        self._gaia = self.query_gaia()
-        self._simbad = self.query_simbad()
+        # Each source is gated here: a toggled-off source is neither queried nor
+        # built, so its row stays absent. Each method that runs looks up its
+        # astrometry and writes its own CATALOG_RECORD row in one go.
+        self._wmko = self.read_wmko_header() if self.use_wmko_tcs else None
+        self._gaia = self.query_gaia() if self.do_gaia_query else None
+        self._simbad = self.query_simbad() if self.do_simbad_query else None
 
-        # Write all three source rows (wmko is native, built from L0 PRIMARY TARG*;
-        # gaia/simbad from the queries above); KPF0.read leaves CATALOG_RECORD empty.
-        self._write_catalog_record("wmko", self._wmko)
-        self._write_catalog_record("gaia", self._gaia)
-        self._write_catalog_record("simbad", self._simbad)
         # Merge the source rows (gaia/simbad/wmko) into the canonical kpf-drp row that
         # downstream (to_kpf1 C*#, barycentric correction) consumes. Raises if a
         # complete set cannot be assembled.
