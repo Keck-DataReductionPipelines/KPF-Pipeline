@@ -235,6 +235,19 @@ class AstroQuery:
         return None if np.isnan(f) else f
 
     @staticmethod
+    def _sexagesimal_radec(coord):
+        """ICRS SkyCoord -> the EPRV C*# sexagesimal (ra, dec) strings.
+
+        The single formatter for the canonical colon-separated 'h:m:s' cards
+        (RA hour-angle, Dec deg) shared by every CATALOG_RECORD source, so a
+        precision/padding change lands in one place. astropy's combined hmsdms
+        already pads and signs; we just split the two axes back apart. RA/Dec are
+        basic quantities -- a coord that cannot be built from them raises upstream
+        rather than being papered over.
+        """
+        return tuple(coord.to_string("hmsdms", sep=":", precision=4).split())
+
+    @staticmethod
     def _verify_units(table, expected, source):
         """Verify a query result's column units before its values are trusted.
 
@@ -353,18 +366,13 @@ class AstroQuery:
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
         # Sanitize to the EPRV C*# format: RA/Dec deg -> sexagesimal (RA hour-angle,
         # Dec deg); proper motion mas/yr -> arcsec/yr.
+        ra_str, dec_str = self._sexagesimal_radec(
+            SkyCoord(ra, dec, unit=u.deg, frame="icrs")
+        )
         record = {
             "object": gaia_id,
-            "ra": None
-            if ra is None
-            else Angle(ra, u.deg).to_string(
-                unit=u.hourangle, sep=":", pad=True, precision=4
-            ),
-            "dec": None
-            if dec is None
-            else Angle(dec, u.deg).to_string(
-                unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
-            ),
+            "ra": ra_str,
+            "dec": dec_str,
             "pmra": None if pmra is None else pmra / 1e3,
             "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["parallax"]),
@@ -421,18 +429,13 @@ class AstroQuery:
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
         # Sanitize to the EPRV C*# format: RA/Dec deg -> sexagesimal (RA hour-angle,
         # Dec deg); proper motion mas/yr -> arcsec/yr.
+        ra_str, dec_str = self._sexagesimal_radec(
+            SkyCoord(ra, dec, unit=u.deg, frame="icrs")
+        )
         record = {
             "object": name,
-            "ra": None
-            if ra is None
-            else Angle(ra, u.deg).to_string(
-                unit=u.hourangle, sep=":", pad=True, precision=4
-            ),
-            "dec": None
-            if dec is None
-            else Angle(dec, u.deg).to_string(
-                unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
-            ),
+            "ra": ra_str,
+            "dec": dec_str,
             "pmra": None if pmra is None else pmra / 1e3,
             "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["plx_value"]),
@@ -500,14 +503,11 @@ class AstroQuery:
                 components["pm_dec"] = pmdec * u.arcsec / u.yr
             icrs = SkyCoord(**components).transform_to(ICRS())
 
+            ra_str, dec_str = self._sexagesimal_radec(icrs)
             record = {
                 "object": primary.get("OBJECT"),
-                "ra": icrs.ra.to_string(
-                    unit=u.hourangle, sep=":", pad=True, precision=4
-                ),
-                "dec": icrs.dec.to_string(
-                    unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
-                ),
+                "ra": ra_str,
+                "dec": dec_str,
                 "pmra": icrs.pm_ra_cosdec.to_value(u.arcsec / u.yr) if has_pm else None,
                 "pmdec": icrs.pm_dec.to_value(u.arcsec / u.yr) if has_pm else None,
                 "parallax": primary.get("TARGPLAX"),
