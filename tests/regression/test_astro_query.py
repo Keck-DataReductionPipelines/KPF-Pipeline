@@ -1,21 +1,24 @@
 """Regression tests for the AstroQuery module.
 
-Focus: ``merge_catalog_records`` -- the merge of the gaia/simbad/wmko records into
-the canonical ``kpf-drp`` row -- and ``read_wmko_header``. The external Gaia/SIMBAD
-queries are not exercised here (no network); merge is driven off in-memory source
-records preset on the instance (as perform's build steps leave them), and
-read_wmko_header off synthetic L0 PRIMARY TARG*.
+Covers ``merge_catalog_records`` -- the merge of the gaia/simbad/wmko records into
+the canonical ``kpf-drp`` row -- ``read_wmko_header`` (off synthetic L0 PRIMARY
+TARG*), and the external Gaia/SIMBAD query contract (``TestExternalQueries``). The
+network is never touched: ``Gaia.launch_job``/``Simbad`` are mocked with one-row
+result Tables, so query parsing, each fail-soft None+warning path, and the
+``_verify_units`` schema-drift guard are exercised offline.
 """
 
 import logging
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from astropy import units as u
-from astropy.coordinates import Angle
+from astropy.coordinates import Angle, SkyCoord
+from astropy.table import Column, Table
 
 from kpfpipe.data_models import KPF0
-from kpfpipe.modules.astro_query import AstroQuery
+from kpfpipe.modules.astro_query import _GAIA_UNITS, _SIMBAD_UNITS, AstroQuery
 
 
 def _ra_str(deg):
@@ -289,3 +292,253 @@ class TestReadWmkoHeader:
         with pytest.raises(ValueError, match="position"):
             aq.perform()
         assert aq._wmko is None
+
+
+# ---------------------------------------------------------------------------
+# External Gaia / SIMBAD queries -- mocked (no network)
+# ---------------------------------------------------------------------------
+
+# Default one-row result values, keyed to each catalog's canonical column schema.
+# pmra/pmdec are 500 / -250 mas/yr so the mas->arcsec/yr conversion (/1e3) is
+# visible (0.5 / -0.25); ra/dec 180/40 deg drive the sexagesimal formatting.
+_GAIA_VALUES = {
+    "ra": 180.0,
+    "dec": 40.0,
+    "pmra": 500.0,
+    "pmdec": -250.0,
+    "parallax": 100.0,
+    "radial_velocity": 12.3,
+    "ref_epoch": 2016.0,
+}
+_SIMBAD_VALUES = {
+    "ra": 180.0,
+    "dec": 40.0,
+    "pmra": 500.0,
+    "pmdec": -250.0,
+    "plx_value": 100.0,
+    "rvz_radvel": 12.3,
+}
+
+
+def _units_table(unit_map, value_map, unit_overrides=None):
+    """One-row astropy Table with canonical column units.
+
+    A plain Table (not QTable), so ``_verify_units`` sees ``column.unit`` while row
+    access yields plain floats for ``_scalar``. ``unit_overrides`` swaps a column's
+    unit to drive the schema-drift guard.
+    """
+    units = dict(unit_map)
+    if unit_overrides:
+        units.update(unit_overrides)
+    table = Table()
+    for col, unit in units.items():
+        table[col] = Column([value_map[col]], unit=unit)
+    return table
+
+
+def _gaia_table(values=None, units=None):
+    vals = {**_GAIA_VALUES, **(values or {})}
+    return _units_table(_GAIA_UNITS, vals, units)
+
+
+def _simbad_table(values=None, units=None):
+    vals = {**_SIMBAD_VALUES, **(values or {})}
+    return _units_table(_SIMBAD_UNITS, vals, units)
+
+
+def _gaia_job(table):
+    """Stand-in for Gaia.launch_job(query): an object whose get_results() -> table."""
+    job = MagicMock()
+    job.get_results.return_value = table
+    return job
+
+
+def _simbad_instance(table):
+    """Stand-in for Simbad(): an instance whose query_object() -> table (or None)."""
+    inst = MagicMock()
+    inst.query_object.return_value = table
+    return inst
+
+
+def _l0_for_query(**primary):
+    """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID/OBJECT)."""
+    l0 = KPF0()
+    l0.headers["PRIMARY"]["IMTYPE"] = "object"
+    for key, value in primary.items():
+        l0.headers["PRIMARY"][key] = value
+    return l0
+
+
+def _patch_gaia(job_or_exc):
+    target = "kpfpipe.modules.astro_query.Gaia.launch_job"
+    if isinstance(job_or_exc, Exception):
+        return patch(target, side_effect=job_or_exc)
+    return patch(target, return_value=job_or_exc)
+
+
+class TestExternalQueries:
+    """Gaia/SIMBAD query parsing, fail-soft None+warning, and the unit guard."""
+
+    # -- pure helpers ------------------------------------------------------
+
+    def test_scalar_variants(self):
+        # astroquery hands back masked/NaN cells for unmeasured quantities; all the
+        # missing/unusable forms must coerce to a clean None, real values to float.
+        assert AstroQuery._scalar(None) is None
+        assert AstroQuery._scalar(np.ma.masked) is None
+        assert AstroQuery._scalar(float("nan")) is None
+        assert AstroQuery._scalar("not-a-number") is None
+        assert AstroQuery._scalar(3.5) == 3.5
+        assert AstroQuery._scalar("2.5") == 2.5
+
+    def test_gaia_source_id(self):
+        assert AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))._gaia_source_id() == (
+            "12345"
+        )
+        assert AstroQuery(_l0_for_query(GAIAID="12345"))._gaia_source_id() == "12345"
+        assert AstroQuery(_l0_for_query())._gaia_source_id() is None
+        assert (
+            AstroQuery(_l0_for_query(GAIAID="Gaia DR3 abc"))._gaia_source_id() is None
+        )
+        assert AstroQuery(_l0_for_query(GAIAID=""))._gaia_source_id() is None
+
+    def test_simbad_resolvable_name(self):
+        assert (
+            AstroQuery(_l0_for_query(OBJECT="10700"))._simbad_resolvable_name()
+            == "HD 10700"
+        )
+        assert (
+            AstroQuery(_l0_for_query(OBJECT="tau Cet"))._simbad_resolvable_name()
+            == "tau Cet"
+        )
+        assert AstroQuery(_l0_for_query())._simbad_resolvable_name() is None
+        assert AstroQuery(_l0_for_query(OBJECT=""))._simbad_resolvable_name() is None
+
+    def test_verify_units_missing_and_mismatch_raise(self):
+        AstroQuery._verify_units(_gaia_table(), _GAIA_UNITS, "Gaia DR3")  # no raise
+        dropped = _gaia_table()
+        dropped.remove_column("parallax")
+        with pytest.raises(ValueError, match="unexpected column units"):
+            AstroQuery._verify_units(dropped, _GAIA_UNITS, "Gaia DR3")
+        bad = _gaia_table(units={"parallax": u.arcsec})
+        with pytest.raises(ValueError, match="unexpected column units"):
+            AstroQuery._verify_units(bad, _GAIA_UNITS, "Gaia DR3")
+
+    # -- Gaia --------------------------------------------------------------
+
+    def test_query_gaia_parses_and_writes(self):
+        l0 = _l0_for_query(GAIAID="Gaia DR3 12345")
+        aq = AstroQuery(l0)
+        with _patch_gaia(_gaia_job(_gaia_table())):
+            rec = aq.query_gaia()
+        assert rec is not None
+        exp_ra, exp_dec = AstroQuery._sexagesimal_radec(
+            SkyCoord(180.0, 40.0, unit=u.deg, frame="icrs")
+        )
+        assert rec["ra"] == exp_ra and rec["dec"] == exp_dec
+        assert rec["pmra"] == pytest.approx(0.5)  # 500 mas/yr -> arcsec/yr
+        assert rec["pmdec"] == pytest.approx(-0.25)
+        assert rec["parallax"] == pytest.approx(100.0)
+        assert rec["rv"] == pytest.approx(12.3)
+        assert rec["epoch"] == pytest.approx(2016.0)
+        assert rec["frame"] == "icrs"
+        assert rec["equinox"] == pytest.approx(2000.0)
+        assert rec["object"] == "12345"
+        # Row + presence flag written to CATALOG_RECORD.
+        assert l0.headers["CATALOG_RECORD"]["GAIACR"] == 1
+        assert "gaia" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
+
+    def test_query_gaia_missing_rv_becomes_none(self):
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        with _patch_gaia(_gaia_job(_gaia_table({"radial_velocity": float("nan")}))):
+            rec = aq.query_gaia()
+        assert rec["rv"] is None
+
+    def test_query_gaia_no_gaiaid_returns_none(self, caplog):
+        aq = AstroQuery(_l0_for_query())  # no GAIAID
+        with caplog.at_level(logging.WARNING):
+            assert aq.query_gaia() is None
+        assert "no usable GAIAID" in caplog.text
+
+    def test_query_gaia_lookup_failure_returns_none(self, caplog):
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        with (
+            _patch_gaia(ConnectionError("gaia down")),
+            caplog.at_level(logging.WARNING),
+        ):
+            assert aq.query_gaia() is None
+        assert "Gaia query failed" in caplog.text
+
+    def test_query_gaia_no_match_returns_none(self, caplog):
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        with _patch_gaia(_gaia_job(Table())), caplog.at_level(logging.WARNING):
+            assert aq.query_gaia() is None
+        assert "no match" in caplog.text
+
+    def test_query_gaia_unit_mismatch_raises(self):
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        with _patch_gaia(_gaia_job(_gaia_table(units={"parallax": u.arcsec}))):
+            with pytest.raises(ValueError, match="unexpected column units"):
+                aq.query_gaia()
+
+    # -- SIMBAD ------------------------------------------------------------
+
+    def test_query_simbad_parses_and_writes(self):
+        l0 = _l0_for_query(OBJECT="10700")
+        aq = AstroQuery(l0)
+        with patch(
+            "kpfpipe.modules.astro_query.Simbad",
+            return_value=_simbad_instance(_simbad_table()),
+        ):
+            rec = aq.query_simbad()
+        assert rec is not None
+        exp_ra, exp_dec = AstroQuery._sexagesimal_radec(
+            SkyCoord(180.0, 40.0, unit=u.deg, frame="icrs")
+        )
+        assert rec["ra"] == exp_ra and rec["dec"] == exp_dec
+        assert rec["pmra"] == pytest.approx(0.5)
+        assert rec["pmdec"] == pytest.approx(-0.25)
+        assert rec["parallax"] == pytest.approx(100.0)
+        assert rec["rv"] == pytest.approx(12.3)
+        assert rec["object"] == "HD 10700"  # bare-numeric OBJECT -> HD prefix
+        assert rec["frame"] == "icrs"
+        assert rec["epoch"] == pytest.approx(2000.0)
+        assert l0.headers["CATALOG_RECORD"]["SIMBADCR"] == 1
+
+    def test_query_simbad_no_object_returns_none(self, caplog):
+        aq = AstroQuery(_l0_for_query())
+        with caplog.at_level(logging.WARNING):
+            assert aq.query_simbad() is None
+        assert "no OBJECT name" in caplog.text
+
+    def test_query_simbad_lookup_failure_returns_none(self, caplog):
+        aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
+        inst = MagicMock()
+        inst.query_object.side_effect = ConnectionError("simbad down")
+        with (
+            patch("kpfpipe.modules.astro_query.Simbad", return_value=inst),
+            caplog.at_level(logging.WARNING),
+        ):
+            assert aq.query_simbad() is None
+        assert "SIMBAD query failed" in caplog.text
+
+    def test_query_simbad_no_match_returns_none(self, caplog):
+        aq = AstroQuery(_l0_for_query(OBJECT="NotARealStar"))
+        with (
+            patch(
+                "kpfpipe.modules.astro_query.Simbad",
+                return_value=_simbad_instance(None),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            assert aq.query_simbad() is None
+        assert "no match" in caplog.text
+
+    def test_query_simbad_unit_mismatch_raises(self):
+        aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
+        with patch(
+            "kpfpipe.modules.astro_query.Simbad",
+            return_value=_simbad_instance(_simbad_table(units={"plx_value": u.arcsec})),
+        ):
+            with pytest.raises(ValueError, match="unexpected column units"):
+                aq.query_simbad()
