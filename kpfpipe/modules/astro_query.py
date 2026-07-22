@@ -445,15 +445,25 @@ class AstroQuery:
         query, just the raw TARG* pointing, sanitized to the EPRV C*# format --
         TARGRA/TARGDEC sexagesimal reformatted to the canonical RA hour-angle / Dec
         deg 'h:m:s' strings; TARGPMRA time-s/yr -> arcsec/yr (x15 cos Dec), TARGPMDC
-        already arcsec/yr; TARGFRAM FK5 J2000 relabeled ICRS (the ~23 mas frame tie is
-        negligible). Returns None -- so the frame gets WMKOCR=0 -- when there is no
-        target pointing (TARGRA absent) or the TARG* astrometry cannot be parsed
-        (warned, never raised, so a malformed file still loads). Well-formedness is
-        gated downstream by QCL0 (RADECOK), not here.
+        already arcsec/yr; TARGFRAM stored as the record's true astropy frame (its
+        lowercase form, 'fk5'), never relabeled -- downstream SkyCoord performs any
+        FK5->ICRS conversion. KPF pointing is always FK5 (J2000), so a TARGFRAM that is
+        not FK5 (absent included) raises rather than being coerced: a wrong frame would
+        silently corrupt the barycentric correction. Returns None -- so the frame gets
+        WMKOCR=0 -- when there is no target pointing (TARGRA absent) or the TARG*
+        astrometry cannot be parsed (warned, never raised, so a malformed file still
+        loads). Well-formedness is gated downstream by QCL0 (RADECOK), not here.
         """
         primary = self.l0_obj.headers["PRIMARY"]
         if primary.get("TARGRA") is None:
             return None
+        targfram = str(primary.get("TARGFRAM") or "").strip()
+        if targfram.upper() != "FK5":
+            raise ValueError(
+                f"unexpected TARGFRAM={primary.get('TARGFRAM')!r}; KPF pointing must "
+                "be 'FK5' (J2000). Refusing to guess the frame, which would corrupt "
+                "the barycentric correction."
+            )
         try:
             ra = Angle(primary["TARGRA"], unit=u.hourangle)
             dec = Angle(primary["TARGDEC"], unit=u.deg)
@@ -468,7 +478,7 @@ class AstroQuery:
                 "pmdec": None if pmdec is None else pmdec,
                 "parallax": primary.get("TARGPLAX"),
                 "rv": primary.get("TARGRADV"),
-                "frame": "icrs",
+                "frame": targfram.lower(),
                 "epoch": primary.get("TARGEPOC"),
                 "equinox": primary.get("TARGEQUI"),
             }

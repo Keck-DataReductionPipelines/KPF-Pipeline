@@ -219,8 +219,8 @@ class TestReadWmkoHeader:
         return l0
 
     def test_good_targ_builds_row_and_flag(self):
-        # Well-formed TARG* -> a wmko record sanitized to the EPRV C*# format;
-        # writing it sets WMKOCR=1.
+        # Well-formed FK5 TARG* -> a wmko record sanitized to the EPRV C*# format,
+        # carrying its true frame ('fk5', not relabeled ICRS); writing it sets WMKOCR=1.
         l0 = self._l0_targ(**self._GOOD_TARG)
         aq = AstroQuery(l0)
         aq._write_catalog_record("wmko", aq.read_wmko_header())
@@ -230,6 +230,7 @@ class TestReadWmkoHeader:
         assert wmko["ra"] == "12:00:00.0000"  # RA hour-angle sexagesimal
         assert wmko["dec"] == "+40:00:00.000"
         assert wmko["object"] == "testtarget"
+        assert wmko["frame"] == "fk5"  # true frame, not relabeled ICRS
 
     def test_pmra_time_to_angle_conversion(self):
         # TARGPMRA is DCS seconds-of-time/yr: read_wmko_header must convert it to
@@ -258,3 +259,16 @@ class TestReadWmkoHeader:
         with caplog.at_level(logging.WARNING):
             assert AstroQuery(l0).read_wmko_header() is None
         assert "could not build wmko CATALOG_RECORD" in caplog.text
+
+    def test_non_fk5_frame_raises(self):
+        # KPF pointing is always FK5; any other TARGFRAM (e.g. galactic) raises
+        # rather than being coerced onto a frame it does not have.
+        l0 = self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "galactic"})
+        with pytest.raises(ValueError, match="TARGFRAM"):
+            AstroQuery(l0).read_wmko_header()
+
+    def test_absent_frame_raises(self):
+        # An absent TARGFRAM cannot be verified as FK5 -> raise (never guess a frame).
+        targ = {k: v for k, v in self._GOOD_TARG.items() if k != "TARGFRAM"}
+        with pytest.raises(ValueError, match="TARGFRAM"):
+            AstroQuery(self._l0_targ(**targ)).read_wmko_header()
