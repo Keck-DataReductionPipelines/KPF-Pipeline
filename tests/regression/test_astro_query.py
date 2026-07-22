@@ -219,18 +219,25 @@ class TestReadWmkoHeader:
         return l0
 
     def test_good_targ_builds_row_and_flag(self):
-        # Well-formed FK5 TARG* -> a wmko record sanitized to the EPRV C*# format,
-        # carrying its true frame ('fk5', not relabeled ICRS); writing it sets WMKOCR=1.
+        # Well-formed FK5 TARG* -> a wmko record rotated to ICRS (so all sources
+        # share one frame), sanitized to the EPRV C*# format; writing sets WMKOCR=1.
         l0 = self._l0_targ(**self._GOOD_TARG)
         aq = AstroQuery(l0)
         aq._write_catalog_record("wmko", aq.read_wmko_header())
         assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 1
         table = l0.data["CATALOG_RECORD"]
         wmko = table[table["source"] == "wmko"][0]
-        assert wmko["ra"] == "12:00:00.0000"  # RA hour-angle sexagesimal
-        assert wmko["dec"] == "+40:00:00.000"
         assert wmko["object"] == "testtarget"
-        assert wmko["frame"] == "fk5"  # true frame, not relabeled ICRS
+        assert wmko["frame"] == "icrs"  # native FK5 rotated to ICRS, not relabeled
+        # ICRS position sits within the ~tens-of-mas FK5->ICRS frame bias of the
+        # FK5 input, and is shifted from it (a real rotation, not a copy).
+        ra = Angle(wmko["ra"], unit=u.hourangle)
+        dec = Angle(wmko["dec"], unit=u.deg)
+        fk5_ra = Angle(self._GOOD_TARG["TARGRA"], unit=u.hourangle)
+        fk5_dec = Angle(self._GOOD_TARG["TARGDEC"], unit=u.deg)
+        assert abs((ra - fk5_ra).arcsec) < 1.0
+        assert abs((dec - fk5_dec).arcsec) < 1.0
+        assert wmko["ra"] != "12:00:00.0000"  # rotated, not copied
 
     def test_pmra_time_to_angle_conversion(self):
         # TARGPMRA is DCS seconds-of-time/yr: read_wmko_header must convert it to

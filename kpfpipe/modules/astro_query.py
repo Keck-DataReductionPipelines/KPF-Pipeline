@@ -28,8 +28,9 @@ import logging
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import Angle
+from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
 from astropy.table import Table
+from astropy.time import Time
 from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
@@ -456,10 +457,11 @@ class AstroQuery:
         query, just the raw TARG* pointing, sanitized to the EPRV C*# format --
         TARGRA/TARGDEC sexagesimal reformatted to the canonical RA hour-angle / Dec
         deg 'h:m:s' strings; TARGPMRA time-s/yr -> arcsec/yr (x15 cos Dec), TARGPMDC
-        already arcsec/yr; TARGFRAM stored as the record's true astropy frame (its
-        lowercase form, 'fk5'), never relabeled -- downstream SkyCoord performs any
-        FK5->ICRS conversion. KPF pointing is always FK5 (J2000), so a TARGFRAM that is
-        not FK5 (absent included) raises rather than being coerced: a wrong frame would
+        already arcsec/yr. The native FK5 (J2000) pointing is then rotated to ICRS
+        here via astropy's tested SkyCoord machinery, so all three CATALOG_RECORD
+        sources share one frame (Gaia/SIMBAD are already ICRS) and nothing downstream
+        has to track fk5. KPF pointing is always FK5, so a TARGFRAM that is not FK5
+        (absent included) raises rather than being coerced -- a wrong frame would
         silently corrupt the barycentric correction. Returns None -- so the frame gets
         WMKOCR=0 -- when there is no target pointing (TARGRA absent) or the TARG*
         astrometry cannot be parsed (warned, never raised, so a malformed file still
@@ -479,19 +481,40 @@ class AstroQuery:
             ra = Angle(primary["TARGRA"], unit=u.hourangle)
             dec = Angle(primary["TARGDEC"], unit=u.deg)
             pmra, pmdec = primary.get("TARGPMRA"), primary.get("TARGPMDC")
+            equinox = primary.get("TARGEQUI")
+
+            # Rotate the native FK5 pointing to ICRS via SkyCoord. Position always;
+            # proper motion too when both components are present (TARGPMRA time-s/yr
+            # -> on-sky arcsec/yr via x15 cos Dec first -- a single component has no
+            # meaning under the rotation, so it is both-or-neither). A frame rotation
+            # carries no time propagation, so epoch is unchanged; parallax/RV are
+            # rotation-invariant and pass through untouched.
+            fk5 = FK5(
+                equinox="J2000" if equinox is None else Time(equinox, format="jyear")
+            )
+            components = {"ra": ra, "dec": dec, "frame": fk5}
+            has_pm = pmra is not None and pmdec is not None
+            if has_pm:
+                cosdec = np.cos(dec.radian)
+                components["pm_ra_cosdec"] = pmra * 15.0 * cosdec * u.arcsec / u.yr
+                components["pm_dec"] = pmdec * u.arcsec / u.yr
+            icrs = SkyCoord(**components).transform_to(ICRS())
+
             record = {
                 "object": primary.get("OBJECT"),
-                "ra": ra.to_string(unit=u.hourangle, sep=":", pad=True, precision=4),
-                "dec": dec.to_string(
+                "ra": icrs.ra.to_string(
+                    unit=u.hourangle, sep=":", pad=True, precision=4
+                ),
+                "dec": icrs.dec.to_string(
                     unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
                 ),
-                "pmra": None if pmra is None else pmra * 15.0 * np.cos(dec.radian),
-                "pmdec": None if pmdec is None else pmdec,
+                "pmra": icrs.pm_ra_cosdec.to_value(u.arcsec / u.yr) if has_pm else None,
+                "pmdec": icrs.pm_dec.to_value(u.arcsec / u.yr) if has_pm else None,
                 "parallax": primary.get("TARGPLAX"),
                 "rv": primary.get("TARGRADV"),
-                "frame": targfram.lower(),
+                "frame": "icrs",
                 "epoch": primary.get("TARGEPOC"),
-                "equinox": primary.get("TARGEQUI"),
+                "equinox": 2000.0,
             }
         except Exception as exc:
             logger.warning(
