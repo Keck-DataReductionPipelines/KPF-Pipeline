@@ -106,24 +106,19 @@ def _write_era_table(path, start="2024-02-23 12:00:01", end="2024-11-01 00:00:00
 
 
 @pytest.fixture
-def synthetic_setup(tmp_path):
+def synthetic_setup(tmp_path, monkeypatch):
     image, trace_rows = _synthetic_traces()
     seed_path = tmp_path / "seed.csv"
     era_path = tmp_path / "eras.csv"
     _write_seed_table(seed_path, trace_rows, seed_offset=1.5)
     _write_era_table(era_path)
-    config = {
-        "chips": ["GREEN"],
-        "sample_count": 33,
-        "col_half_window": 1,
-        "background_smoothing_sigma": 8.0,
-        "candidate_prominence_sigma": 2.0,
-        "candidate_distance_pixels": 6,
-        "width_half_window": 8,
-        "era_definitions_path": str(era_path),
-        "order_trace_green_path": str(seed_path),
-        "order_trace_red_path": str(seed_path),
-    }
+    monkeypatch.setattr(order_trace_module, "_ERA_DEFINITIONS_PATH", era_path)
+    monkeypatch.setattr(
+        order_trace_module,
+        "_ORDER_TRACE_PATHS",
+        {"GREEN": seed_path, "RED": seed_path},
+    )
+    config = {"poly_degree": 3}
     return StubL1({"GREEN": image}), trace_rows, config
 
 
@@ -140,16 +135,13 @@ class TestTraceRecovery:
         image = np.repeat((10.0 + 1000.0 * profile)[:, None], 31, axis=1)
         image += rng.normal(0.0, 2.0, image.shape)
 
-        tracer = OrderTrace(
-            "wideflat.fits",
-            {
-                "row_half_window": 9,
-                "col_half_window": 2,
-                "profile_smoothing_sigma": 0.7,
-            },
-        )
+        tracer = OrderTrace("wideflat.fits")
         measured = tracer._local_edge_center(
-            image, column=15, guess=expected_center + 1.5
+            image,
+            column=15,
+            guess=expected_center + 1.5,
+            row_half_window=9,
+            profile_smoothing_sigma=0.7,
         )
 
         assert measured == pytest.approx(expected_center, abs=0.15)
@@ -161,7 +153,7 @@ class TestTraceRecovery:
         tracer = OrderTrace(tmp_path / "wideflat.fits", config)
         monkeypatch.setattr(tracer, "_preprocess", lambda chips: l1_obj)
 
-        result = tracer.perform(output_dir=tmp_path / "out")
+        result = tracer.perform(chips=["GREEN"], output_dir=tmp_path / "out")
         table = result["GREEN"]
 
         assert list(table.columns) == _TRACE_COLUMNS
@@ -207,7 +199,7 @@ class TestTraceRecovery:
         monkeypatch.setattr(tracer, "_preprocess", lambda chips: unknown_l1)
 
         with pytest.raises(ValueError, match="outside the defined instrument eras"):
-            tracer.perform(output_dir=tmp_path / "missing-anchor")
+            tracer.perform(chips=["GREEN"], output_dir=tmp_path / "missing-anchor")
 
         cal_order3 = next(
             coeffs[0]
@@ -215,6 +207,7 @@ class TestTraceRecovery:
             if fiber == "CAL" and order == 3
         )
         result = tracer.perform(
+            chips=["GREEN"],
             output_dir=tmp_path / "manual",
             cal_order3_y={"GREEN": cal_order3},
         )
@@ -233,10 +226,25 @@ class TestTraceRecovery:
 
 
 class TestEraAndInputValidation:
-    def test_era_boundaries_and_gap(self, tmp_path):
+    def test_only_polynomial_degree_is_module_configurable(self):
+        tracer = OrderTrace(
+            "wideflat.fits",
+            {
+                "poly_degree": 2,
+                "sample_count": 3,
+                "era_definitions_path": "/tmp/not-used.csv",
+            },
+        )
+
+        assert tracer.poly_degree == 2
+        assert not hasattr(tracer, "sample_count")
+        assert not hasattr(tracer, "era_definitions_path")
+
+    def test_era_boundaries_and_gap(self, tmp_path, monkeypatch):
         tracer = OrderTrace("wideflat.fits")
-        tracer.era_definitions_path = str(tmp_path / "eras.csv")
-        _write_era_table(tracer.era_definitions_path)
+        era_path = tmp_path / "eras.csv"
+        _write_era_table(era_path)
+        monkeypatch.setattr(order_trace_module, "_ERA_DEFINITIONS_PATH", era_path)
 
         assert tracer._resolve_instrument_era("2024-02-23T12:00:01") == 2.0
         assert tracer._resolve_instrument_era("2024-11-01T00:00:00") == 2.0

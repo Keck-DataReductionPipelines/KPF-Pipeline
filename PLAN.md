@@ -38,7 +38,7 @@ tables = tracer.perform(
 - Measure `BottomEdge` and `TopEdge` from robust cross-dispersion profiles, using the legacy Gaussian-width and neighboring-valley constraints with a two-pixel orderlet gap. Derive `X1` and `X2` from valid measured coverage.
 - Label traces in detector-row order as SKY, SCI1, SCI2, SCI3, CAL for each order. Omit a trace only when its predicted and measured coverage is wholly off-detector, preserving the existing 175-row GREEN and 159-row RED behavior for the 2024 reference era.
 - Validate both requested tables completely before writing either file, then write them atomically.
-- Add `[MODULE_ORDER_TRACE]` configuration to the masters configuration with the notebook/legacy defaults for sampling, search windows, rejection, polynomial degree, width estimation, and reference paths.
+- Add `[MODULE_ORDER_TRACE]` configuration containing only the user-facing polynomial degree; keep stable reference paths private and numerical tuning as semi-hidden method defaults.
 - Do not restore the stashed implementation, modify the notebook, change `SpectralExtraction`, or integrate the module into recipes/CLI in this phase.
 
 ## Test Plan

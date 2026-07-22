@@ -32,30 +32,15 @@ _TRACE_COLUMNS = [
     "Order",
 ]
 
+_ERA_DEFINITIONS_PATH = REPO_ROOT / "reference/kpf_instrument_eras.csv"
+_ORDER_TRACE_PATHS = {
+    "GREEN": REPO_ROOT / "reference/order_trace_green.csv",
+    "RED": REPO_ROOT / "reference/order_trace_red.csv",
+}
+
 _DEFAULTS = {
     **DEFAULTS,
     "poly_degree": 3,
-    "sample_count": 65,
-    "row_half_window": 7,
-    "col_half_window": 3,
-    "profile_smoothing_sigma": 1.0,
-    "background_smoothing_sigma": 20.0,
-    "candidate_prominence_sigma": 4.0,
-    "candidate_distance_pixels": 5,
-    "winsor_percentile": 90.0,
-    "edge_levels": [0.25, 0.40, 0.55, 0.70],
-    "edge_min_width_pixels": 3.0,
-    "edge_max_center_spread": 0.75,
-    "fit_sigma": 4.0,
-    "fit_max_iterations": 8,
-    "min_valid_fraction": 0.5,
-    "width_sigma": 2.8,
-    "width_half_window": 14,
-    "width_default": 11.0,
-    "orderlet_gap_pixels": 2.0,
-    "era_definitions_path": str(REPO_ROOT / "reference/kpf_instrument_eras.csv"),
-    "order_trace_green_path": str(REPO_ROOT / "reference/order_trace_green.csv"),
-    "order_trace_red_path": str(REPO_ROOT / "reference/order_trace_red.csv"),
 }
 
 
@@ -74,8 +59,9 @@ class OrderTrace:
         Raw L0 wideflat FITS filename.
     config : None | dict | ConfigHandler
         Module configuration. ``ConfigHandler`` values are read from DATA_DIRS,
-        TRACES, and MODULE_ORDER_TRACE. The same configuration is forwarded to
-        image assembly, calibration association, and image processing.
+        TRACES, and MODULE_ORDER_TRACE, whose only module-specific parameter is
+        ``poly_degree``. The same configuration is forwarded to image assembly,
+        calibration association, and image processing.
     """
 
     def __init__(self, wideflat_filename, config=None):
@@ -123,42 +109,9 @@ class OrderTrace:
         return normalised
 
     def _validate_parameters(self):
-        """Validate numerical configuration before reading the wideflat."""
+        """Validate the configured polynomial degree before reading the wideflat."""
         if not 1 <= int(self.poly_degree) <= 3:
             raise ValueError("poly_degree must be between 1 and 3")
-        if int(self.sample_count) < 2 * int(self.poly_degree) + 1:
-            raise ValueError("sample_count is too small for the polynomial fit")
-        if int(self.row_half_window) < 2 or int(self.col_half_window) < 0:
-            raise ValueError("trace search windows must be non-negative and usable")
-        if not 0.0 < float(self.min_valid_fraction) <= 1.0:
-            raise ValueError("min_valid_fraction must be in (0, 1]")
-        if not 0.0 < float(self.winsor_percentile) <= 100.0:
-            raise ValueError("winsor_percentile must be in (0, 100]")
-        edge_levels = np.asarray(self.edge_levels, dtype=float)
-        if (
-            edge_levels.ndim != 1
-            or edge_levels.size < 2
-            or not np.isfinite(edge_levels).all()
-            or np.any((edge_levels <= 0.0) | (edge_levels >= 1.0))
-        ):
-            raise ValueError("edge_levels must contain at least two values in (0, 1)")
-        if (
-            float(self.edge_min_width_pixels) <= 0.0
-            or float(self.edge_max_center_spread) <= 0.0
-        ):
-            raise ValueError("edge-center constraints must be positive")
-        if (
-            float(self.width_sigma) <= 0
-            or int(self.width_half_window) < 2
-            or float(self.width_default) <= 0
-        ):
-            raise ValueError("width-estimation parameters must be positive")
-
-    @staticmethod
-    def _repository_path(value):
-        """Resolve a configured reference path relative to the repository."""
-        path = Path(value)
-        return path if path.is_absolute() else REPO_ROOT / path
 
     def _preprocess(self, chips):
         """Load, assemble, associate a bias, and bias-subtract the wideflat."""
@@ -177,7 +130,7 @@ class OrderTrace:
 
     def _resolve_instrument_era(self, date_obs):
         """Return the unique INSTERA containing ``date_obs``, or None."""
-        path = self._repository_path(self.era_definitions_path)
+        path = _ERA_DEFINITIONS_PATH
         if not path.is_file():
             raise FileNotFoundError(f"Instrument-era table not found: {path}")
 
@@ -224,9 +177,10 @@ class OrderTrace:
                 raise ValueError(f"cal_order3_y[{chip!r}] must be finite")
         return anchors
 
-    def _reference_path(self, chip):
-        """Return the configured trace-reference path for one chip."""
-        return self._repository_path(getattr(self, f"order_trace_{chip.lower()}_path"))
+    @staticmethod
+    def _reference_path(chip):
+        """Return the repository trace-reference path for one chip."""
+        return _ORDER_TRACE_PATHS[chip]
 
     def _load_seed_table(self, chip, manual_anchor=None):
         """Load and optionally translate one chip's approximate trace table."""
@@ -270,15 +224,14 @@ class OrderTrace:
             raise TypeError(f"{extension} must contain numeric data")
         return image
 
-    def _sample_columns(self, ncol):
+    def _sample_columns(self, ncol, sample_count=65):
         """Return evenly spaced, unique detector columns including both edges."""
-        return np.unique(np.linspace(0, ncol - 1, int(self.sample_count), dtype=int))
+        return np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
 
-    def _column_profile(self, image, column):
+    def _column_profile(self, image, column, col_half_window=3):
         """Return a robust cross-dispersion profile around one detector column."""
-        half_window = int(self.col_half_window)
-        c0 = max(0, int(column) - half_window)
-        c1 = min(image.shape[1], int(column) + half_window + 1)
+        c0 = max(0, int(column) - col_half_window)
+        c1 = min(image.shape[1], int(column) + col_half_window + 1)
         profile = np.nanmedian(image[:, c0:c1], axis=1)
         finite = np.isfinite(profile)
         if not finite.any():
@@ -286,11 +239,19 @@ class OrderTrace:
         fill = np.nanmedian(profile[finite])
         return np.where(finite, profile, fill).astype(float, copy=False)
 
-    def _candidate_rows(self, image, column):
+    def _candidate_rows(
+        self,
+        image,
+        column,
+        background_smoothing_sigma=20.0,
+        profile_smoothing_sigma=1.0,
+        candidate_distance_pixels=5,
+        candidate_prominence_sigma=4.0,
+    ):
         """Locate illuminated trace candidates in one median column strip."""
         profile = self._column_profile(image, column)
         background = gaussian_filter1d(
-            profile, sigma=float(self.background_smoothing_sigma), mode="nearest"
+            profile, sigma=background_smoothing_sigma, mode="nearest"
         )
         residual = profile - background
         residual_center = np.nanmedian(residual)
@@ -302,28 +263,36 @@ class OrderTrace:
 
         smoothed = gaussian_filter1d(
             np.clip(residual, 0.0, None),
-            sigma=float(self.profile_smoothing_sigma),
+            sigma=profile_smoothing_sigma,
             mode="nearest",
         )
         peaks, _ = find_peaks(
             smoothed,
-            distance=max(1, int(self.candidate_distance_pixels)),
-            prominence=float(self.candidate_prominence_sigma) * noise,
+            distance=candidate_distance_pixels,
+            prominence=candidate_prominence_sigma * noise,
         )
         return peaks.astype(float)
 
-    def _local_peak_center(self, image, column, guess, candidates):
+    def _local_peak_center(
+        self,
+        image,
+        column,
+        guess,
+        candidates,
+        row_half_window=7,
+        profile_smoothing_sigma=1.0,
+        winsor_percentile=90.0,
+    ):
         """Measure a subpixel center for a peaked CAL-fiber profile."""
         if not np.isfinite(guess):
             return np.nan
 
-        half_window = int(self.row_half_window)
-        nearby = candidates[np.abs(candidates - guess) <= half_window]
+        nearby = candidates[np.abs(candidates - guess) <= row_half_window]
         if nearby.size:
             guess = nearby[np.argmin(np.abs(nearby - guess))]
 
-        r0 = max(0, int(np.floor(guess)) - half_window)
-        r1 = min(image.shape[0], int(np.ceil(guess)) + half_window + 1)
+        r0 = max(0, int(np.floor(guess)) - row_half_window)
+        r1 = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
         if r1 - r0 < 3:
             return np.nan
 
@@ -333,7 +302,7 @@ class OrderTrace:
         signal = np.clip(profile - background, 0.0, None)
         smoothed = gaussian_filter1d(
             np.nan_to_num(signal),
-            sigma=float(self.profile_smoothing_sigma),
+            sigma=profile_smoothing_sigma,
             mode="nearest",
         )
         if not np.any(smoothed > 0):
@@ -345,7 +314,7 @@ class OrderTrace:
         weights = signal[lo:hi]
         if not np.isfinite(weights).all() or weights.sum() <= 0:
             return np.nan
-        limit = np.nanpercentile(weights, float(self.winsor_percentile))
+        limit = np.nanpercentile(weights, winsor_percentile)
         weights = np.minimum(weights, limit)
         if weights.sum() <= 0:
             return np.nan
@@ -370,26 +339,36 @@ class OrderTrace:
         fraction = (value_inside - threshold) / denominator
         return float(rows[current] + fraction * (rows[adjacent] - rows[current]))
 
-    def _local_edge_center(self, image, column, guess):
+    def _local_edge_center(
+        self,
+        image,
+        column,
+        guess,
+        row_half_window=7,
+        background_smoothing_sigma=20.0,
+        profile_smoothing_sigma=1.0,
+        edge_levels=(0.25, 0.40, 0.55, 0.70),
+        edge_min_width_pixels=3.0,
+        edge_max_center_spread=0.75,
+    ):
         """Measure the geometric center of a flat-topped orderlet from its edges."""
         if not np.isfinite(guess):
             return np.nan
 
-        half_window = int(self.row_half_window)
-        r0 = max(0, int(np.floor(guess)) - half_window)
-        r1 = min(image.shape[0], int(np.ceil(guess)) + half_window + 1)
+        r0 = max(0, int(np.floor(guess)) - row_half_window)
+        r1 = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
         if r1 - r0 < 5:
             return np.nan
 
         full_profile = self._column_profile(image, column)
         background = gaussian_filter1d(
             full_profile,
-            sigma=float(self.background_smoothing_sigma),
+            sigma=background_smoothing_sigma,
             mode="nearest",
         )
         values = gaussian_filter1d(
             full_profile[r0:r1] - background[r0:r1],
-            sigma=float(self.profile_smoothing_sigma),
+            sigma=profile_smoothing_sigma,
             mode="nearest",
         )
         rows = np.arange(r0, r1, dtype=float)
@@ -403,7 +382,7 @@ class OrderTrace:
 
         centers = []
         guess_index = int(np.argmin(np.abs(rows - guess)))
-        for level in np.asarray(self.edge_levels, dtype=float):
+        for level in edge_levels:
             threshold = baseline + level * amplitude
             illuminated = np.flatnonzero(values >= threshold)
             if illuminated.size == 0:
@@ -415,17 +394,17 @@ class OrderTrace:
             if (
                 np.isfinite(lower)
                 and np.isfinite(upper)
-                and width >= float(self.edge_min_width_pixels)
+                and width >= edge_min_width_pixels
             ):
                 centers.append((lower + upper) / 2.0)
 
-        minimum = max(2, int(np.ceil(len(self.edge_levels) / 2)))
+        minimum = max(2, int(np.ceil(len(edge_levels) / 2)))
         if len(centers) < minimum:
             return np.nan
         centers = np.asarray(centers, dtype=float)
         center = float(np.nanmedian(centers))
         spread = 1.4826 * np.nanmedian(np.abs(centers - center))
-        if spread > float(self.edge_max_center_spread):
+        if spread > edge_max_center_spread:
             return np.nan
         return center
 
@@ -469,23 +448,30 @@ class OrderTrace:
                     previous = i
         return centers
 
-    def _robust_polynomial_fit(self, x, y):
+    def _robust_polynomial_fit(
+        self,
+        x,
+        y,
+        min_valid_fraction=0.5,
+        fit_max_iterations=8,
+        fit_sigma=4.0,
+    ):
         """Fit a polynomial with iterative median/MAD residual rejection."""
         degree = int(self.poly_degree)
         keep = np.isfinite(x) & np.isfinite(y)
-        minimum = max(degree + 1, int(np.ceil(x.size * self.min_valid_fraction)))
+        minimum = max(degree + 1, int(np.ceil(x.size * min_valid_fraction)))
         if keep.sum() < minimum:
             raise ValueError(
                 f"only {keep.sum()} of {x.size} trace centers are valid; "
                 f"at least {minimum} are required"
             )
 
-        for _ in range(int(self.fit_max_iterations)):
+        for _ in range(fit_max_iterations):
             coeffs = np.polynomial.polynomial.polyfit(x[keep], y[keep], degree)
             residual = y - np.polynomial.polynomial.polyval(x, coeffs)
             center = np.nanmedian(residual[keep])
             scale = 1.4826 * np.nanmedian(np.abs(residual[keep] - center))
-            limit = max(0.25, float(self.fit_sigma) * scale)
+            limit = max(0.25, fit_sigma * scale)
             updated = np.isfinite(y) & (np.abs(residual - center) <= limit)
             if updated.sum() < minimum:
                 break
@@ -501,11 +487,18 @@ class OrderTrace:
         rms = float(np.sqrt(np.mean(residual**2)))
         return padded, keep, rms
 
-    def _width_at_column(self, image, column, center):
+    def _width_at_column(
+        self,
+        image,
+        column,
+        center,
+        width_half_window=14,
+        winsor_percentile=90.0,
+        width_sigma=2.8,
+    ):
         """Estimate lower and upper Gaussian widths at one trace sample."""
-        half_window = int(self.width_half_window)
-        r0 = max(0, int(np.floor(center)) - half_window)
-        r1 = min(image.shape[0], int(np.ceil(center)) + half_window + 1)
+        r0 = max(0, int(np.floor(center)) - width_half_window)
+        r1 = min(image.shape[0], int(np.ceil(center)) + width_half_window + 1)
         if r1 - r0 < 5:
             return np.nan, np.nan
 
@@ -515,7 +508,7 @@ class OrderTrace:
         if not np.any(signal > 0):
             return np.nan, np.nan
         signal = np.minimum(
-            signal, np.nanpercentile(signal, float(self.winsor_percentile))
+            signal, np.nanpercentile(signal, winsor_percentile)
         )
         offsets = rows - center
 
@@ -530,10 +523,12 @@ class OrderTrace:
             # preserves aperture asymmetry without the unstable unconstrained
             # half-Gaussian fits used by the legacy implementation.
             sigma = np.sqrt(np.sum(weights * distance**2) / np.sum(weights))
-            widths.append(float(self.width_sigma) * sigma)
+            widths.append(width_sigma * sigma)
         return tuple(widths)
 
-    def _estimate_widths(self, image, coeffs, x, keep):
+    def _estimate_widths(
+        self, image, coeffs, x, keep, width_half_window=14, width_default=11.0
+    ):
         """Return robust lower/upper aperture widths from accepted samples."""
         lower = []
         upper = []
@@ -551,13 +546,13 @@ class OrderTrace:
             raise ValueError(
                 "fewer than three valid samples for trace-width estimation"
             )
-        maximum = min(float(self.width_half_window), float(self.width_default))
+        maximum = min(width_half_window, width_default)
         bottom = float(np.clip(np.nanmedian(lower), 1.0, maximum))
         top = float(np.clip(np.nanmedian(upper), 1.0, maximum))
         return bottom, top
 
-    def _constrain_neighbor_widths(self, rows, ncol):
-        """Keep adjacent apertures separated by the configured orderlet gap."""
+    def _constrain_neighbor_widths(self, rows, ncol, orderlet_gap_pixels=2.0):
+        """Keep adjacent apertures separated by the required orderlet gap."""
         x_mid = (ncol - 1) / 2.0
         for lower, upper in zip(rows[:-1], rows[1:], strict=False):
             lower_y = np.polynomial.polynomial.polyval(
@@ -567,7 +562,7 @@ class OrderTrace:
                 x_mid, [upper[f"Coeff{i}"] for i in range(4)]
             )
             separation = upper_y - lower_y
-            available = separation - float(self.orderlet_gap_pixels)
+            available = separation - orderlet_gap_pixels
             requested = lower["TopEdge"] + upper["BottomEdge"]
             if available <= 0:
                 raise ValueError(
@@ -578,7 +573,7 @@ class OrderTrace:
                 lower["TopEdge"] *= scale
                 upper["BottomEdge"] *= scale
 
-    def _validate_trace_table(self, chip, table, nrow, ncol):
+    def _validate_trace_table(self, chip, table, nrow, ncol, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
         if list(table.columns) != _TRACE_COLUMNS:
             raise ValueError(f"{chip} output has incompatible columns")
@@ -604,8 +599,8 @@ class OrderTrace:
         )
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
-        covered = (centers >= -float(self.row_half_window)) & (
-            centers <= nrow - 1 + float(self.row_half_window)
+        covered = (centers >= -row_half_window) & (
+            centers <= nrow - 1 + row_half_window
         )
         if not covered.any(axis=1).all():
             raise ValueError(f"{chip} output contains a wholly off-detector trace")
@@ -614,7 +609,7 @@ class OrderTrace:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def _trace_chip(self, chip, seed_table):
+    def _trace_chip(self, chip, seed_table, row_half_window=7):
         """Measure all seeded orderlets on one CCD and return the output table."""
         image = self._chip_image(chip)
         nrow, ncol = image.shape
@@ -629,8 +624,8 @@ class OrderTrace:
             )
             predicted = np.polynomial.polynomial.polyval(sample_x, seed_coeffs)
             if not np.any(
-                (predicted >= -float(self.row_half_window))
-                & (predicted <= nrow - 1 + float(self.row_half_window))
+                (predicted >= -row_half_window)
+                & (predicted <= nrow - 1 + row_half_window)
             ):
                 logger.warning(
                     "%s %s order %d is wholly off detector; omitting trace",
