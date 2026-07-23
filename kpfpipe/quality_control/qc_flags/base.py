@@ -30,10 +30,9 @@ class QC:
     def _hdr_float(hdr, key):
         """Return float value for a header key, or None if the card is absent/empty.
 
-        A present-but-empty (valueless) card and an absent key both read back as
-        None (which ``float`` rejects with TypeError), so a check reading the key
-        degrades gracefully. A present-but-non-numeric value is malformed, not
-        missing: it raises ValueError, which ``QC.run`` surfaces (fail loud).
+        An absent or valueless card reads back as None (``float`` raises TypeError),
+        degrading gracefully. A present-but-non-numeric value is malformed: the
+        ValueError propagates for ``QC.run`` to surface (fail loud).
         """
         try:
             return float(hdr.get(key))

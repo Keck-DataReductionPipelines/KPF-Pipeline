@@ -11,11 +11,10 @@ from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 logger = logging.getLogger(__name__)
 
-# Record fields the pointing offset needs; a missing one (an empty RA/Dec string, a
-# NaN measurement, or a non-positive parallax -- routine for faint Gaia sources)
-# makes the source unusable, and the offset is emitted present-but-empty. RA/Dec are
-# sexagesimal strings (EPRV C*# format), the rest floats. 'frame' is a fixed literal
-# AstroQuery always sets, so it is not gated here.
+# Record fields the pointing offset needs; an incomplete one (empty RA/Dec string,
+# NaN measurement, or non-positive parallax -- routine for faint Gaia sources) makes
+# the source unusable, so its offset is emitted present-but-empty. RA/Dec are
+# sexagesimal strings, the rest floats.
 _OFFSET_STR_FIELDS = ("ra", "dec")
 _OFFSET_NUM_FIELDS = ("pmra", "pmdec", "parallax", "epoch")
 
@@ -27,11 +26,9 @@ class DiagL0(Diagnostics):
     """Diagnostics for KPF Level 0 raw data products.
 
     The pointing-offset metrics compare the telescope pointing against the target
-    astrometry resolved upstream by AstroQuery and written to the L0
-    ``CATALOG_RECORD`` extension (Gaia / SIMBAD / DCS, all in one canonical ICRS
-    schema). When a source's astrometry is unavailable the offset is emitted
-    present-but-empty (a valueless card) and a WARNING is logged -- diagnostics
-    record what they can and leave error-raising to the checkpoint layer.
+    astrometry AstroQuery resolves into the L0 ``CATALOG_RECORD`` extension (Gaia /
+    SIMBAD / DCS, one canonical ICRS schema). An unavailable source yields a
+    present-but-empty offset and a WARNING -- error-raising is the checkpoint's job.
     """
 
     LEVEL = "L0"
@@ -39,11 +36,10 @@ class DiagL0(Diagnostics):
     def _catalog_record(self, source):
         """The CATALOG_RECORD row for ``source``, or None with a WARNING.
 
-        Handles the three contingencies: AstroQuery not run (no presence flag on the
-        CATALOG_RECORD header), the source's record absent (flag 0 -- lookup
-        disabled/failed, or WMKO unavailable), or a record present but missing a
-        measurement the offset needs. The flag is written with the row, so flag 1
-        guarantees exactly one matching row.
+        Returns None when AstroQuery has not run (no presence flag), the source's
+        record is absent (flag 0), or a present record is missing a measurement the
+        offset needs. The flag is written with the row, so flag 1 guarantees exactly
+        one matching row.
         """
         hdr = self.kpf_obj.headers["CATALOG_RECORD"]
         keyword = _CATALOG_FLAGS[source]
@@ -76,12 +72,11 @@ class DiagL0(Diagnostics):
         return row
 
     def _record_skycoord(self, rec):
-        """ICRS SkyCoord from a CATALOG_RECORD record (EPRV C*# format).
+        """ICRS SkyCoord from a CATALOG_RECORD record.
 
-        Every source ('gaia'/'simbad'/'wmko') is sanitized to the same schema --
-        ICRS, RA/Dec sexagesimal strings (RA hour-angle, Dec deg), proper motion
-        arcsec/yr (RA incl. cos Dec), parallax mas, epoch in Julian years -- so one
-        builder serves all three.
+        The canonical schema all three sources share: RA/Dec sexagesimal strings
+        (RA hour-angle, Dec deg), proper motion arcsec/yr (RA incl. cos Dec),
+        parallax mas, epoch in Julian years.
         """
         return SkyCoord(
             ra=rec["ra"],
@@ -97,12 +92,10 @@ class DiagL0(Diagnostics):
     def _offset(self, source):
         """Arcsec separation of the pointing from a catalog source at obs epoch.
 
-        Returns None (present-but-empty keyword) when the source astrometry is
-        unavailable; otherwise the catalog position is propagated to the
-        observation epoch (proper motion) before the comparison, so the offset
-        reflects where the source actually sits at the time of the exposure. Any
-        residual malformed astrometry (e.g. an unparseable epoch) is caught and
-        emitted empty rather than raised -- error-raising is the checkpoint's job.
+        Returns None (present-but-empty) when the source astrometry is unavailable
+        or malformed (an unparseable value is caught and emitted empty, not raised);
+        otherwise the catalog position is proper-motion propagated to the obs epoch
+        before the comparison.
         """
         rec = self._catalog_record(source)
         if rec is None:

@@ -43,8 +43,7 @@ _FLUX_VALUE = 100.0  # uniform ADU per reading
 
 # SCI2 catalog cards, as KPF0.to_kpf1 writes them from AstroQuery's canonical record:
 # ICRS, RA/Dec sexagesimal (RA hourangle, Dec deg), PM arcsec/yr, parallax mas, rv
-# km/s, epoch Julian years. RA 180 deg / Dec 0 / 100 pc, matching the astrometry the
-# stubbed Gaia query used to supply.
+# km/s, epoch Julian years. RA 180 deg / Dec 0 / 100 pc.
 _CATALOG_CARDS = {
     "CSRC3": "gaia",
     "CID3": "1234567890123456789",
@@ -691,9 +690,8 @@ class TestFluxWeightedMidpointFormat:
 
 
 class TestGetAstrometry:
-    """The C*# cards are AstroQuery's canonical record; this is the unit
-    conversion into barycorrpy's argument set, plus the parallax sanitation the
-    faithful-catalog-record contract pushes downstream."""
+    """Convert the C*# cards into barycorrpy's argument set and sanitize the
+    parallax."""
 
     def test_converts_cards_to_barycorrpy_units(self, synthetic_kpf2):
         primary = synthetic_kpf2.headers["PRIMARY"]
@@ -726,9 +724,8 @@ class TestGetAstrometry:
     # an absent card (covered below) or a blank one, never as NaN.
     @pytest.mark.parametrize("parallax", [-0.4, 0.0, ""])
     def test_unusable_parallax_becomes_zero(self, caplog, synthetic_kpf2, parallax):
-        """AstroQuery persists catalog values faithfully -- a negative Gaia parallax
-        is routine -- so BarycentricCorrection degrades to px=0 rather than
-        computing a negative distance."""
+        """A negative or zero catalog parallax (routine for faint Gaia sources)
+        degrades to px=0, not a negative distance."""
         synthetic_kpf2.headers["PRIMARY"]["CPLX3"] = parallax
         bc = BarycentricCorrection(synthetic_kpf2)
         with caplog.at_level(logging.WARNING):
@@ -909,8 +906,8 @@ class TestPerform:
         BarycentricCorrection(synthetic_kpf2).perform()
         assert captured["rv_mps"] == pytest.approx(81870.0)
 
-    def test_missing_crv_defaults_to_zero(self, bc_monkeypatched, monkeypatch):
-        """No CRV3 on PRIMARY (no catalog rv, no TARGRADV) → rv_mps=0."""
+    def test_missing_crv_defaults_to_zero(self, caplog, bc_monkeypatched, monkeypatch):
+        """No CRV3 on PRIMARY (no catalog rv, no TARGRADV) → rv_mps=0, warns."""
         # synthetic_kpf2 fixture does not set CRV3
         captured = {}
 
@@ -922,8 +919,10 @@ class TestPerform:
         monkeypatch.setattr(
             BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
         )
-        bc_monkeypatched.perform()
+        with caplog.at_level(logging.WARNING):
+            bc_monkeypatched.perform()
         assert captured["rv_mps"] == 0.0
+        assert "CRV3" in caplog.text
 
     def test_state_populated(self, bc_monkeypatched):
         for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):

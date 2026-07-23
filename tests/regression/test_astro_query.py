@@ -35,8 +35,8 @@ def _dec_str(deg):
 
 
 def _record(obj, ra=180.0, **overrides):
-    """A complete canonical record at ``ra`` (zero PM, finite plx/rv), in the EPRV
-    C*# format: RA/Dec sexagesimal strings, PM arcsec/yr. Pass a field as None (via
+    """A complete canonical record at ``ra`` (finite PM/plx/rv) in the EPRV C*#
+    format: RA/Dec sexagesimal strings, PM arcsec/yr. Pass a field as None (via
     overrides) to mark it missing."""
     rec = {
         "object": obj,
@@ -93,8 +93,7 @@ class TestMergeCatalogRecords:
         assert row["ra"] == _ra_str(10.0)
 
     def test_rv_rides_with_astrometric_base(self):
-        # rv comes from the astrometric base source, not borrowed across catalogs:
-        # Gaia is the base and supplies rv, so SIMBAD's rv is ignored.
+        # rv comes from the astrometric base (Gaia), not borrowed from SIMBAD.
         row = _merge(
             {
                 "gaia": _record("G", rv=11.0),
@@ -106,8 +105,7 @@ class TestMergeCatalogRecords:
         assert row["rv_src"] == "gaia"
 
     def test_color_rides_with_astrometric_base(self):
-        # color/color_name come from the astrometric base source, like the position:
-        # Gaia is the base, so its color wins over SIMBAD's.
+        # color/color_name ride with the astrometric base (Gaia), like the position.
         row = _merge(
             {
                 "gaia": _record("G", color=1.1, color_name="Gaia BP-RP"),
@@ -119,8 +117,8 @@ class TestMergeCatalogRecords:
         assert row["color_name"] == "Gaia BP-RP"
 
     def test_rv_not_borrowed_from_lower_priority(self):
-        # rv is no longer borrowed across catalogs: Gaia is the base and lacks rv;
-        # SIMBAD's rv is NOT pulled in, and with no TARGRADV rv is left missing.
+        # Gaia is the base and lacks rv; SIMBAD's rv is not pulled in, and with no
+        # TARGRADV rv is left missing.
         row = _merge(
             {
                 "gaia": _record("G", rv=None),
@@ -142,9 +140,8 @@ class TestMergeCatalogRecords:
         assert "falling back to the telescope TARGRADV" in caplog.text
 
     def test_missing_parallax_disqualifies_astrometric_base(self):
-        # parallax is part of the astrometric block: Gaia lacking it is disqualified as
-        # the base entirely, so the whole position (and parallax) comes from SIMBAD,
-        # the highest-priority source that supplies a complete solution.
+        # parallax is part of the astrometric block, so Gaia lacking it is disqualified
+        # as the base; the whole position comes from SIMBAD (next complete source).
         row = _merge(
             {
                 "gaia": _record("G", ra=10.0, parallax=None),
@@ -158,9 +155,7 @@ class TestMergeCatalogRecords:
         assert row["plx_src"] == "simbad"
 
     def test_demoted_source_warns_naming_missing_field(self, caplog):
-        # A present-but-incomplete higher-priority source is demoted to a lower one;
-        # the fallback must be auditable, not silent -- warn naming the dropped
-        # source and the field(s) it lacks (contrast the rv fallback, which warns).
+        # A demoted higher-priority source warns, naming the source and missing field.
         with caplog.at_level(logging.WARNING, logger="kpfpipe.modules.astro_query"):
             row = _merge(
                 {
@@ -353,12 +348,10 @@ class TestReadWmkoHeader:
         assert "could not build wmko CATALOG_RECORD" in caplog.text
 
     def test_nonnumeric_numeric_fields_laundered_to_none(self):
-        # A non-numeric TARG* numeric card must be laundered to None via _scalar,
-        # matching the gaia/simbad paths -- otherwise the stray value survives the
-        # merge's is-not-None completeness gate as a valid-looking astrometric
-        # solution and corrupts the float CATALOG_RECORD. (A NaN cannot occur --
-        # astropy rejects NaN in FITS headers -- and a valueless card already reads
-        # back as None; a stray string is the residual reachable case.)
+        # A non-numeric TARG* numeric card must be laundered to None via _scalar;
+        # otherwise the stray value survives the merge's completeness gate as a
+        # valid-looking solution. (A stray string is the residual reachable case:
+        # astropy rejects NaN in headers, and a valueless card already reads as None.)
         rec = AstroQuery(
             self._l0_targ(**{**self._GOOD_TARG, "TARGPLAX": "UNKNOWN"})
         ).read_wmko_header()
@@ -378,9 +371,8 @@ class TestReadWmkoHeader:
             AstroQuery(self._l0_targ(**targ)).read_wmko_header()
 
     def test_use_wmko_tcs_false_skips_build(self):
-        # use_wmko_tcs gates the wmko build in perform, like do_gaia_query/
-        # do_simbad_query gate their queries: off -> read_wmko_header is not called,
-        # so no wmko record and (catalogs off too) no position -> merge raises.
+        # use_wmko_tcs off -> read_wmko_header is not called; with catalogs off too,
+        # no position -> merge raises.
         aq = AstroQuery(
             self._l0_targ(**self._GOOD_TARG),
             {"do_gaia_query": False, "do_simbad_query": False, "use_wmko_tcs": False},

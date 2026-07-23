@@ -2,25 +2,19 @@
 KPF AstroQuery module.
 
 Consolidates the pipeline's external astronomical-catalog lookups into a single
-L0-stage module. Given a raw L0 frame, it resolves the target's astrometry from
-Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), builds the telescope-native ``wmko``
-row from the L0 PRIMARY ``TARG*`` astrometry (no query), and writes all three rows
-to the L0 ``CATALOG_RECORD`` extension, setting the ``WMKOCR``/``GAIACR``/``SIMBADCR``
-presence flags. ``KPF0.read`` leaves ``CATALOG_RECORD`` empty; AstroQuery is its sole
-populator.
+L0-stage module. Given a raw L0 science frame, it resolves the target's astrometry
+from Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), builds the telescope-native
+``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry (no query), merges them into a
+canonical ``kpf-drp`` row, and writes all four rows to the L0 ``CATALOG_RECORD``
+extension with the ``WMKOCR``/``GAIACR``/``SIMBADCR`` presence flags. AstroQuery is
+the extension's sole populator.
 
-The extension is the bridge across an ordering problem: the query results
-ultimately belong on the EPRV PRIMARY catalog keywords (``C*#``), but the WMKO ->
-EPRV PRIMARY conversion does not happen until ``KPF0.to_kpf1()`` downstream. Rather
-than write PRIMARY here, AstroQuery records the queried quantities on the L0 and
-lets ``to_kpf1()`` overlay them onto the L1 PRIMARY (a follow-up integration).
-
-AstroQuery never modifies the L0 PRIMARY header (a pure pass-through to
-INSTRUMENT_HEADER). All three source rows and the merged ``kpf-drp`` row share one
-schema in the EPRV C*# PRIMARY format (see ``_CATALOG_COLUMNS``), so a consumer reads
-any source identically and ``to_kpf1`` can copy cells straight onto the catalog cards.
-The redshift z (``CZ#``) is derived from rv here and rides along in the record; per-
-fiber fan-out and pointing offsets remain downstream jobs.
+CATALOG_RECORD bridges an ordering problem: the results ultimately belong on the
+EPRV PRIMARY catalog keywords (``C*#``), but the WMKO -> EPRV PRIMARY conversion does
+not happen until ``KPF0.to_kpf1()`` downstream, which overlays the merged record onto
+those cards. AstroQuery never modifies the L0 PRIMARY header. All rows share one
+schema in the EPRV C*# PRIMARY format (see ``_CATALOG_COLUMNS``), so ``to_kpf1`` can
+copy cells straight onto the catalog cards.
 """
 
 import logging
@@ -46,17 +40,13 @@ _DEFAULTS = {
     "use_wmko_tcs": True,
 }
 
-# The astrometric block the merge takes whole from one source: ra/dec/pmra/pmdec/
-# parallax are one astrometric fit -- proper motion without the parallax it was measured
-# against is nearly meaningless -- plus the frame/epoch that qualify the coordinates.
-# equinox is not gated (an ICRS formality), so a WMKO base missing TARGEQUI still
-# qualifies. rv is handled separately (base source, else TARGRADV). Priority (highest
-# first): gaia > simbad > wmko.
+# The astrometric block the merge takes whole from one source: one fit -- proper
+# motion is meaningless without the parallax it was measured against -- plus the frame/
+# epoch that qualify the coordinates. equinox and rv are handled separately.
 _ASTROMETRY = ("ra", "dec", "pmra", "pmdec", "parallax", "epoch", "frame")
 
-# Column units AstroQuery assumes for each catalog result, verified before the
-# values are trusted so a silent upstream schema change fails loudly instead of
-# corrupting the record.
+# Column units each catalog result is expected to carry, verified before its values
+# are trusted so a silent upstream schema change fails loudly (see _verify_units).
 _GAIA_UNITS = {
     "ra": u.deg,
     "dec": u.deg,
@@ -80,17 +70,13 @@ _SIMBAD_UNITS = {
 }
 
 # CATALOG_RECORD write schema (AstroQuery is the sole populator): one row per resolved
-# source (wmko/gaia/simbad) plus the merged 'kpf-drp' row. 'source' labels the row,
-# 'object' is the queried target name, and radec_src/plx_src/rv_src name the source each
-# value block (position, parallax, rv) came from -- its own 'source' for a plain source
-# row, the winning source (or "" if none) for the merged row. Values are in the EPRV
-# C*# PRIMARY format: RA/Dec sexagesimal strings (RA hour-angle, Dec deg, ICRS), PM
-# arcsec/yr (RA incl. cos Dec), parallax mas, rv km/s, z the dimensionless relativistic
-# redshift derived from rv, epoch/equinox Julian years. color is a photometric color
-# index (a magnitude difference, mag) and color_name labels which one, differing by
-# source: Gaia "Gaia BP-RP" (G_BP - G_RP), SIMBAD "B-V" (Johnson B - V), WMKO "G-J"
-# (GAIAMAG - 2MASSMAG); both blank when the source lacks a needed magnitude. Missing
-# floats -> NaN, strings -> "".
+# source (wmko/gaia/simbad) plus the merged 'kpf-drp' row. radec_src/plx_src/rv_src
+# name the source each value block came from -- its own for a source row, the winner
+# (or "" if none) for the merged row. Values are in the EPRV C*# PRIMARY format: RA/Dec
+# sexagesimal strings (ICRS), PM arcsec/yr (RA incl. cos Dec), parallax mas, rv km/s, z
+# the redshift derived from rv, epoch/equinox Julian years. color is a color index and
+# color_name labels it (Gaia "Gaia BP-RP", SIMBAD "B-V", WMKO "G-J"), both blank when a
+# magnitude is missing. Missing floats -> NaN, strings -> "".
 _CATALOG_COLUMNS = (
     "source",
     "object",
@@ -387,8 +373,7 @@ class AstroQuery:
         row = results[0]
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
-        # Sanitize to the EPRV C*# format: RA/Dec deg -> sexagesimal (RA hour-angle,
-        # Dec deg); proper motion mas/yr -> arcsec/yr.
+        # To the EPRV C*# format: deg -> sexagesimal; PM mas/yr -> arcsec/yr.
         ra_str, dec_str = self._sexagesimal_radec(
             SkyCoord(ra, dec, unit=u.deg, frame="icrs")
         )
@@ -456,8 +441,7 @@ class AstroQuery:
         row = result[0]
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
-        # Sanitize to the EPRV C*# format: RA/Dec deg -> sexagesimal (RA hour-angle,
-        # Dec deg); proper motion mas/yr -> arcsec/yr.
+        # To the EPRV C*# format: deg -> sexagesimal; PM mas/yr -> arcsec/yr.
         ra_str, dec_str = self._sexagesimal_radec(
             SkyCoord(ra, dec, unit=u.deg, frame="icrs")
         )
@@ -519,11 +503,10 @@ class AstroQuery:
             )
             equinox = self._scalar(primary.get("TARGEQUI"))
 
-            # Rotate the native FK5 pointing to ICRS. Position always; proper motion too
+            # Rotate the native FK5 pointing to ICRS: position always, proper motion too
             # when both components are present (TARGPMRA time-s/yr -> arcsec/yr via x15
-            # cos Dec first; a lone component is meaningless under rotation, so it is
-            # both-or-neither). Rotation carries no time propagation, so epoch is
-            # unchanged; parallax/RV are rotation-invariant.
+            # cos Dec first; a lone component is meaningless under rotation). Rotation
+            # carries no time propagation, so epoch is unchanged.
             fk5 = FK5(
                 equinox="J2000" if equinox is None else Time(equinox, format="jyear")
             )
@@ -588,8 +571,7 @@ class AstroQuery:
         must fail loudly. rv is optional, left missing when neither the astrometric
         source nor TARGRADV supplies it.
         """
-        # Our own records, just built and schema-clean; assemble in priority order (a
-        # source toggled off or that resolved nothing is already None).
+        # Assemble candidates in priority order (a source with no record is None).
         candidates = []
         for source, record in (
             ("gaia", self._gaia),
@@ -599,10 +581,8 @@ class AstroQuery:
             if record is not None:
                 candidates.append((source, record))
 
-        # Take the whole astrometric block from the first source that has it complete;
-        # raise if none does (without a position there is nothing to correct). A
-        # present-but-incomplete higher-priority source is demoted -- warn (naming the
-        # missing fields) so the fallback is auditable, not silent.
+        # First source with a complete block wins; a present-but-incomplete
+        # higher-priority source is demoted with an auditable warning.
         base_source, base_record = None, None
         for source, record in candidates:
             missing = [field for field in _ASTROMETRY if record[field] is None]
@@ -624,8 +604,7 @@ class AstroQuery:
             )
 
         # rv from the base source, else telescope TARGRADV off PRIMARY -- independent of
-        # use_wmko_tcs (which gates only the wmko position row) and already km/s, so no
-        # conversion.
+        # use_wmko_tcs (which gates only the wmko position row).
         rv_value = base_record["rv"]
         rv_source = base_source
         if rv_value is None:
@@ -706,16 +685,14 @@ class AstroQuery:
         if use_wmko_tcs is not None:
             self.use_wmko_tcs = use_wmko_tcs
 
-        # Each source is gated here: a toggled-off source is neither queried nor
-        # built, so its row stays absent. Each method that runs looks up its
-        # astrometry and writes its own CATALOG_RECORD row in one go.
+        # Gate each source: a toggled-off source is neither queried nor built. Each
+        # method that runs writes its own CATALOG_RECORD row.
         self._wmko = self.read_wmko_header() if self.use_wmko_tcs else None
         self._gaia = self.query_gaia() if self.do_gaia_query else None
         self._simbad = self.query_simbad() if self.do_simbad_query else None
 
-        # Merge the source rows (gaia/simbad/wmko) into the canonical kpf-drp row that
-        # downstream (to_kpf1 C*#, barycentric correction) consumes. Raises if a
-        # complete set cannot be assembled.
+        # Merge the source rows into the canonical kpf-drp row; raises if no complete
+        # position can be assembled.
         self.merge_catalog_records()
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")

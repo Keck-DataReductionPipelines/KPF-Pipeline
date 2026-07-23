@@ -16,14 +16,12 @@ _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amp
 _TIME_TOL_S = 0.1  # DATE-END - DATE-BEG vs ELAPSED tolerance (v2.12 quality_control.py)
 
 # Physical-range bounds for the canonical CATALOG_RECORD astrometry, ported from the
-# v2.12 quality_control.py good_TARG_headers L0 checks. epoch/equinox are Julian years,
-# rv km/s, parallax mas, proper motion arcsec/yr. The epoch/equinox window is
-# exclusive-low / inclusive-high (1950 < x <= 2050), matching legacy. Two vNext
-# additions to the legacy value bounds, both justified by our source being Gaia (not the
-# DCS TARG* header) and both feeding the barycentric correction: the parallax LOWER
-# bound (a negative Gaia parallax is routine and would be a negative distance), and the
-# proper-motion bound (legacy had it but left it commented out for unit uncertainty --
-# moot here, where PM is canonical arcsec/yr; the highest-PM star is ~10.4"/yr).
+# v2.12 quality_control.py good_TARG_headers L0 checks. The epoch/equinox window is
+# exclusive-low / inclusive-high (1950 < x <= 2050), matching legacy. Two are vNext
+# additions justified by our Gaia source (both feed the barycentric correction): the
+# parallax LOWER bound (a negative Gaia parallax is routine, and gives a negative
+# distance), and the proper-motion bound (canonical arcsec/yr here; highest real PM
+# is ~10.4"/yr).
 _EPOCH_RANGE = (1950.0, 2050.0)
 _MAX_ABS_RV = 350.0  # km/s (Chubak et al. 2012, arXiv:1207.6212, Fig. 8)
 _PARALLAX_RANGE = (0.0, 1000.0)  # mas; 0 < plx < 1000 (> 0 and < 1 arcsec)
@@ -172,18 +170,14 @@ class QCL0(QC):
         """Canonical CATALOG_RECORD astrometry values are physically plausible.
 
         Ports the v2.12 good_TARG_headers range checks onto the merged ``kpf-drp``
-        row AstroQuery resolves (the astrometry that feeds the barycentric
-        correction), not the raw WMKO TARG* keywords. Each field is checked only when
-        present: epoch/equinox in (1950, 2050] Julian years, |rv| <= 350 km/s,
-        parallax in (0, 1000) mas, and |pmra|/|pmdec| <= 15 arcsec/yr. The parallax
-        lower bound and the PM bound are vNext additions justified by our Gaia source
-        (see the module bounds comment); both would otherwise corrupt the barycentric
-        correction (negative distance / wrong obs-epoch position).
+        row AstroQuery resolves (the astrometry feeding the barycentric correction),
+        not the raw WMKO TARG* keywords. Each field is checked only when present:
+        epoch/equinox in (1950, 2050] Julian years, |rv| <= 350 km/s, parallax in
+        (0, 1000) mas, |pmra|/|pmdec| <= 15 arcsec/yr. The parallax lower bound and
+        the PM bound are vNext additions (see the module bounds comment).
 
-        Passes when there is no ``kpf-drp`` row -- a calibration frame carries no
-        target astrometry, and this is value sanity, not a presence check (a science
-        frame's missing astrometry is caught upstream: AstroQuery raises at merge,
-        to_kpf1 on an empty Object record).
+        Passes when there is no ``kpf-drp`` row: this is value sanity, not a presence
+        check -- a science frame's missing astrometry is caught upstream.
         """
         table = self.kpf_obj.data["CATALOG_RECORD"]
         match = table[table["source"] == "kpf-drp"] if table.colnames else table

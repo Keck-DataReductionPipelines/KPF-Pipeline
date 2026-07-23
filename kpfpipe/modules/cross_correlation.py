@@ -212,18 +212,13 @@ class CrossCorrelation:
     def _get_systemic_rv(self):
         """Target systemic RV (PRIMARY CRV3) [km/s] -- the stellar CCF grid center.
 
-        CRV3 is AstroQuery's canonical catalog rv (the telescope TARGRADV is its own
-        last-resort fallback), overlaid onto the SCI fibers by KPF0.to_kpf1 -- so the
-        CCF grid is centered on the same systemic velocity the barycentric correction
-        used, rather than on the raw DCS value.
-
-        Raises rather than defaulting to 0: the grid center decides where the CCF dip
-        is searched for, so a window centered on the wrong velocity simply misses the
-        star.
+        CRV3 is AstroQuery's canonical catalog rv, overlaid onto the SCI fibers by
+        KPF0.to_kpf1, so the CCF grid centers on the same systemic velocity the
+        barycentric correction used. Raises rather than defaulting to 0: a grid
+        centered on the wrong velocity misses the star.
         """
-        # The 3 is the SCI2 trace: the C*# cards are written identically to every
-        # science fiber (SCI1-3 = traces 2-4), and SCI2 is the trace
-        # BarycentricCorrection reads, so both stages use the same systemic rv.
+        # CRV3 is the SCI2 trace, the trace BarycentricCorrection reads; the C*#
+        # cards are written identically to all science fibers (traces 2-4).
         primary = self.l2_obj.headers.get("PRIMARY", {})
         try:
             star_rv = float(primary.get("CRV3"))

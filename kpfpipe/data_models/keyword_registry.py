@@ -122,11 +122,10 @@ class KeywordRegistry:
         "JD_UTC": None,
     }
 
-    # Per-fiber catalog C*# keyword bases. On the SCI fibers these are populated by
-    # the CATALOG_RECORD overlay in KPF0.to_kpf1 (the merged canonical astrometry),
-    # not by the raw TARG*/GAIAID header_map mapping; _load_header_map blanks those
-    # SCI source cells so the overlay is the sole writer and, absent a canonical row,
-    # the cards stay empty. SKY(1)/CAL(5) keep their header_map defaults.
+    # Per-fiber catalog C*# keyword bases. On the SCI fibers these come from the
+    # CATALOG_RECORD overlay in KPF0.to_kpf1, not the raw TARG*/GAIAID mapping --
+    # _load_header_map blanks those SCI source cells so the overlay is the sole
+    # writer. SKY(1)/CAL(5) keep their header_map defaults.
     _CATALOG_BASES = (
         "CSRC",
         "CID",
@@ -304,10 +303,9 @@ class KeywordRegistry:
         )
         self.header_map = raw[keep].reset_index(drop=True)
 
-        # The SCI-fiber catalog C*# cards come from the CATALOG_RECORD overlay in
-        # KPF0.to_kpf1, not from the raw TARG*/GAIAID mapping: blank their INSTRUMENT
-        # and DEFAULT so _map_header emits nothing and the overlay is the sole writer.
-        # SKY(1)/CAL(5) are untouched (they keep their header_map defaults).
+        # Blank the SCI-fiber catalog C*# INSTRUMENT/DEFAULT source cells so
+        # _map_header emits nothing and the CATALOG_RECORD overlay (KPF0.to_kpf1) is
+        # their sole writer; SKY(1)/CAL(5) keep their header_map defaults.
         sci_catalog_keys = {
             f"{base}{i}" for base in self._CATALOG_BASES for i in _SCI_TRACES
         }

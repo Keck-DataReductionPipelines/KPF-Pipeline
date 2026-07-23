@@ -35,12 +35,10 @@ logger = logging.getLogger(__name__)
 
 _DEFAULTS = {**DEFAULTS}
 
-# The position block the correction cannot proceed without. AstroQuery's merge refuses
-# to emit a canonical row without it, so an absent card means AstroQuery never ran (or
-# this is a calibration frame, which BarycentricCorrection must not be called on).
-# The trailing 3 here and on the CPLX3/CSRC3/CRV3 reads below is the SCI2 trace: the
-# C*# cards are written identically to every science fiber (SCI1-3 = traces 2-4), and
-# SCI2 is the reference fiber this module already uses for SCI2_WAVE / SCI2_FLUX.
+# The position block the correction cannot proceed without; an absent card means
+# AstroQuery never ran. The trailing 3 (here and on CPLX3/CSRC3/CRV3 below) selects
+# the SCI2 trace: the C*# cards are written identically to every science fiber
+# (SCI1-3 = traces 2-4), and SCI2 is the fiber this module uses for SCI2_WAVE/FLUX.
 _REQUIRED_CARDS = ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3")
 
 
@@ -321,12 +319,10 @@ class BarycentricCorrection:
         """
         Convert a caller-supplied SkyCoord into barycorrpy's argument set.
 
-        The interactive escape hatch behind ``perform(skycoord=...)``: same output as
-        ``_get_astrometry``, sourced from the object instead of the header. Deliberately
-        unvalidated -- the SkyCoord is rotated to ICRS and read, and astropy raises on
-        its own if the object was built without the proper motion, distance, or obstime
-        the correction needs. No sanitation either: a caller passing explicit astrometry
-        is asking for exactly those numbers.
+        Backs ``perform(skycoord=...)``: same output as ``_get_astrometry``, sourced
+        from the object instead of the header. Unvalidated -- the SkyCoord is rotated to
+        ICRS and read, and astropy raises if it lacks the proper motion, distance, or
+        obstime the correction needs.
         """
         icrs = skycoord.icrs
         return {
@@ -374,9 +370,8 @@ class BarycentricCorrection:
                     f"catalog record reaches the C*# cards"
                 )
 
-            # A parallax card is written only when the catalog measured one, and its
-            # value is the catalog's own (QC flags an unphysical one via CATLOGOK, but
-            # does not repair it).
+            # The parallax card is the catalog's own value; QC flags an unphysical one
+            # via CATLOGOK but does not repair it, so sanitize here.
             parallax = primary.get("CPLX3")
             try:
                 px = float(parallax)
@@ -622,11 +617,20 @@ class BarycentricCorrection:
         else:
             astrometry = self._get_astrometry()
 
-        # CRV3 (SCI2 trace) is in km/s; barycorrpy expects rv in m/s. Missing → 0.
-        # AstroQuery already falls back to the telescope TARGRADV when no catalog
-        # supplied an rv, so this card is the systemic RV whatever its provenance.
+        # CRV3 (SCI2 trace) is in km/s; barycorrpy expects rv in m/s.
         primary = self.l2_obj.headers["PRIMARY"]
-        rv_mps = float(primary.get("CRV3", 0.0) or 0.0) * 1000.0
+        systemic_rv = primary.get("CRV3")
+        try:
+            rv_kms = float(systemic_rv)
+        except (TypeError, ValueError):
+            rv_kms = np.nan
+        if not np.isfinite(rv_kms):
+            logger.warning(
+                "CRV3=%s is missing or unusable; using rv=0 (no systemic RV)",
+                systemic_rv,
+            )
+            rv_kms = 0.0
+        rv_mps = rv_kms * 1000.0
 
         bc_vel_mps, bjd_tdb = self._compute_barycorr(
             astrometry,
@@ -709,12 +713,11 @@ class BarycentricCorrection:
             ``interpolate`` / ``extrapolate`` / ``fix_outliers``. See that method
             for semantics.
         skycoord : False | SkyCoord, optional
-            Astrometry override for interactive use: when given, the correction is
-            computed from this SkyCoord instead of the PRIMARY C*# cards, which stay
-            untouched. Lets a user retry with different astrometry on an L2 in hand,
-            rather than re-reducing from L0 to re-run AstroQuery. The production path
-            leaves this False. The SkyCoord is used as-is -- it must carry proper
-            motion, distance, and obstime, and astropy raises if it does not.
+            Astrometry override for interactive use: when given, the correction uses
+            this SkyCoord instead of the PRIMARY C*# cards, which stay untouched --
+            lets a user retry with different astrometry on an L2 in hand without
+            re-running AstroQuery from L0. Used as-is: it must carry proper motion,
+            distance, and obstime, and astropy raises if it does not.
 
         Returns
         -------

@@ -286,19 +286,16 @@ class KPF0(KPFDataModel):
         """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
 
         Returns ``{C-keyword: value}`` for every science fiber (SCI1-3, see
-        ``_SCI_TRACES``), a direct copy of the canonical row's already-EPRV-format
-        cells. A per-card missing value (NaN float / "" string, e.g. a target with no
-        measured parallax or rv) is skipped so that card stays blank rather than
-        carrying 'nan'. Emits a WARNING when the canonical astrometry landing on PRIMARY
-        was assembled from more than one catalog (position/parallax/rv from different
-        sources), so the C*# block is not internally single-source.
+        ``_SCI_TRACES``) -- a direct copy of the canonical row's already-EPRV-format
+        cells, skipping any card whose value is missing (NaN / "") so it stays blank
+        rather than carrying 'nan'. Warns when the canonical astrometry was assembled
+        from more than one catalog (position/parallax/rv from different sources), so
+        the C*# block is not internally single-source.
 
-        AstroQuery is the sole writer of CATALOG_RECORD, always emitting the 'kpf-drp'
-        row with a resolved position. An empty CATALOG_RECORD therefore means AstroQuery
-        has not run: on a science frame (IMTYPE 'Object') this yields ``{}`` with a
-        WARNING (the SCI C*# cards stay blank, so BarycentricCorrection and
-        CrossCorrelation will fail downstream); on a calibration (no target) it yields
-        ``{}`` silently.
+        AstroQuery is the sole writer of CATALOG_RECORD, so an empty table means it has
+        not run: on a science frame (IMTYPE 'Object') this returns ``{}`` with a WARNING
+        (the blank cards then fail BarycentricCorrection/CrossCorrelation downstream);
+        on a calibration it returns ``{}`` silently.
         """
         table = self.data["CATALOG_RECORD"]
         if not table.colnames:
@@ -365,11 +362,8 @@ class KPF0(KPFDataModel):
                 kpf1.headers["PRIMARY"][key] = value
 
             # Overlay the merged canonical astrometry (CATALOG_RECORD 'kpf-drp' row)
-            # onto the SCI-fiber EPRV C*# cards -- the sole writer of those cards (their
-            # raw TARG*/GAIAID mapping is neutralized in the header_map). When
-            # AstroQuery has not run the cards are left blank: with a WARNING for a
-            # science frame (BarycentricCorrection/CrossCorrelation then fail),
-            # silently for a calibration frame.
+            # onto the SCI-fiber EPRV C*# cards -- their sole writer (the raw
+            # TARG*/GAIAID mapping is neutralized in the header_map).
             for key, value in self._catalog_primary_cards().items():
                 kpf1.headers["PRIMARY"][key] = value
 
