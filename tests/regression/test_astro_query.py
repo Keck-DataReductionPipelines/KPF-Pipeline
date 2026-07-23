@@ -141,6 +141,20 @@ class TestMergeCatalogRecords:
         assert row["parallax"] == pytest.approx(7.0)
         assert row["plx_src"] == "simbad"
 
+    def test_demoted_source_warns_naming_missing_field(self, caplog):
+        # A present-but-incomplete higher-priority source is demoted to a lower one;
+        # the fallback must be auditable, not silent -- warn naming the dropped
+        # source and the field(s) it lacks (contrast the rv fallback, which warns).
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.modules.astro_query"):
+            row = _merge(
+                {
+                    "gaia": _record("G", parallax=None),
+                    "simbad": _record("S"),
+                }
+            )
+        assert row["radec_src"] == "simbad"
+        assert "gaia astrometry incomplete (missing parallax)" in caplog.text
+
     def test_lone_source_missing_parallax_raises(self):
         # parallax is part of the astrometric block, so a sole source lacking it cannot
         # anchor the canonical position.

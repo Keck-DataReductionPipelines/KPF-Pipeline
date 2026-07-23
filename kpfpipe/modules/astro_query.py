@@ -525,12 +525,21 @@ class AstroQuery:
                 candidates.append((source, record))
 
         # Take the whole astrometric block from the first source that has it complete;
-        # raise if none does (without a position there is nothing to correct).
+        # raise if none does (without a position there is nothing to correct). A
+        # present-but-incomplete higher-priority source is demoted -- warn (naming the
+        # missing fields) so the fallback is auditable, not silent.
         base_source, base_record = None, None
         for source, record in candidates:
-            if all(record[field] is not None for field in _ASTROMETRY):
+            missing = [field for field in _ASTROMETRY if record[field] is None]
+            if not missing:
                 base_source, base_record = source, record
                 break
+            logger.warning(
+                "%s astrometry incomplete (missing %s); skipping it as the "
+                "astrometric base",
+                source,
+                ", ".join(missing),
+            )
         if base_record is None:
             available = [source for source, _ in candidates]
             raise ValueError(
