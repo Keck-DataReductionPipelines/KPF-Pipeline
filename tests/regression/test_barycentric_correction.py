@@ -7,8 +7,10 @@ SCI2 catalog cards on PRIMARY. barycorrpy calls are stubbed via monkeypatching.
 
 import logging
 
+import astropy.units as u
 import numpy as np
 import pytest
+from astropy.coordinates import Distance, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
@@ -963,6 +965,140 @@ class TestPerform:
         # No monkeypatch on _fix_expmeter_outliers -- real filter runs.
         kpf2 = BarycentricCorrection(synthetic_kpf2).perform(fix_expmeter_outliers=True)
         assert np.all(np.isfinite(np.asarray(kpf2.data["BJD_TDB"])))
+
+
+# ---------------------------------------------------------------------------
+# perform(skycoord=...) -- interactive astrometry override
+# ---------------------------------------------------------------------------
+
+
+def _user_skycoord(ra_deg=90.0):
+    """A fully-specified SkyCoord, as an interactive caller would build one."""
+    return SkyCoord(
+        ra=ra_deg * u.deg,
+        dec=30.0 * u.deg,
+        pm_ra_cosdec=100.0 * u.mas / u.yr,
+        pm_dec=-50.0 * u.mas / u.yr,
+        distance=Distance(parallax=25.0 * u.mas),
+        obstime=Time(2020.0, format="jyear"),
+        frame="icrs",
+    )
+
+
+class TestSkycoordOverride:
+    """A user-supplied SkyCoord bypasses the PRIMARY C*# cards, so an L2 in hand can
+    be re-corrected with different astrometry without re-reducing from L0."""
+
+    @staticmethod
+    def _capture(monkeypatch):
+        captured = {}
+
+        def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
+            captured.update(astrometry)
+            n = len(np.atleast_1d(obs_times.jd))
+            return np.zeros(n), np.atleast_1d(obs_times.jd)
+
+        monkeypatch.setattr(
+            BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
+        )
+        monkeypatch.setattr(
+            BarycentricCorrection,
+            "_fix_expmeter_outliers",
+            staticmethod(lambda f, kernel_size=5: f.copy()),
+        )
+        return captured
+
+    def test_converts_skycoord_to_barycorrpy_units(self, synthetic_kpf2, monkeypatch):
+        captured = self._capture(monkeypatch)
+        BarycentricCorrection(synthetic_kpf2).perform(skycoord=_user_skycoord())
+
+        assert captured["ra"] == pytest.approx(90.0)
+        assert captured["dec"] == pytest.approx(30.0)
+        assert captured["pmra"] == pytest.approx(100.0)
+        assert captured["pmdec"] == pytest.approx(-50.0)
+        assert captured["px"] == pytest.approx(25.0)
+        assert captured["epoch"] == pytest.approx(Time(2020.0, format="jyear").jd)
+
+    def test_overrides_the_header_cards(self, synthetic_kpf2, monkeypatch):
+        """The fixture's CRA3 is 12h (180 deg); the override must win."""
+        captured = self._capture(monkeypatch)
+        BarycentricCorrection(synthetic_kpf2).perform(skycoord=_user_skycoord())
+        assert captured["ra"] == pytest.approx(90.0)
+
+    def test_works_without_catalog_cards(self, synthetic_kpf2, monkeypatch):
+        """The whole point of the escape hatch: an L2 whose C*# cards are absent
+        (AstroQuery never ran) can still be corrected interactively."""
+        for card in ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3"):
+            del synthetic_kpf2.headers["PRIMARY"][card]
+        captured = self._capture(monkeypatch)
+
+        kpf2 = BarycentricCorrection(synthetic_kpf2).perform(skycoord=_user_skycoord())
+
+        assert captured["ra"] == pytest.approx(90.0)
+        assert len(kpf2.data["BJD_TDB"]) == NORDER
+
+    def test_header_cards_not_modified(self, synthetic_kpf2, monkeypatch):
+        self._capture(monkeypatch)
+        BarycentricCorrection(synthetic_kpf2).perform(skycoord=_user_skycoord())
+        assert synthetic_kpf2.headers["PRIMARY"]["CRA3"] == "12:00:00.0000"
+
+    def test_records_user_provenance(self, synthetic_kpf2, monkeypatch):
+        self._capture(monkeypatch)
+        bc = BarycentricCorrection(synthetic_kpf2)
+        bc.perform(skycoord=_user_skycoord())
+        assert bc._astrometry_source == "user SkyCoord"
+
+    def test_override_is_not_cached(self, synthetic_kpf2, monkeypatch):
+        """The override must not poison _astrometry, or a later header-path call
+        would silently reuse the user's values."""
+        captured = self._capture(monkeypatch)
+        bc = BarycentricCorrection(synthetic_kpf2)
+        bc.perform(skycoord=_user_skycoord())
+        assert bc._astrometry is None
+
+        bc.perform()  # no override -> back to the header
+        assert captured["ra"] == pytest.approx(180.0)
+
+    def test_default_reads_the_header(self, synthetic_kpf2, monkeypatch):
+        captured = self._capture(monkeypatch)
+        BarycentricCorrection(synthetic_kpf2).perform()
+        assert captured["ra"] == pytest.approx(180.0)
+
+    @pytest.mark.parametrize(
+        "kwargs, error, match",
+        [
+            # No proper motion -> the frame carries no velocity data.
+            (
+                {"distance": Distance(parallax=25.0 * u.mas)},
+                TypeError,
+                "no associated differentials",
+            ),
+            # No distance -> .distance is a dimensionless 1.0, not convertible to pc.
+            (
+                {
+                    "pm_ra_cosdec": 100.0 * u.mas / u.yr,
+                    "pm_dec": -50.0 * u.mas / u.yr,
+                },
+                u.UnitConversionError,
+                "not convertible",
+            ),
+        ],
+    )
+    def test_incomplete_skycoord_raises(
+        self, synthetic_kpf2, monkeypatch, kwargs, error, match
+    ):
+        """Deliberately unvalidated: astropy raises on its own for a SkyCoord built
+        without the components the correction needs."""
+        self._capture(monkeypatch)
+        incomplete = SkyCoord(
+            ra=90.0 * u.deg,
+            dec=30.0 * u.deg,
+            obstime=Time(2020.0, format="jyear"),
+            frame="icrs",
+            **kwargs,
+        )
+        with pytest.raises(error, match=match):
+            BarycentricCorrection(synthetic_kpf2).perform(skycoord=incomplete)
 
 
 # ---------------------------------------------------------------------------

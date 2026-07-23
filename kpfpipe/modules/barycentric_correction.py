@@ -62,7 +62,8 @@ class BarycentricCorrection:
         Extracted L2 frame. Must have EXPMETER_SCI populated and SCI2_WAVE
         populated by WavelengthCalibration. PRIMARY must carry the SCI2 catalog
         cards (CRA3/CDEC3/CPMR3/CPMD3/CEPCH3, written by AstroQuery via
-        KPF0.to_kpf1). INSTRUMENT_HEADER (the preserved L1 PRIMARY) must contain
+        KPF0.to_kpf1), unless perform() is given a ``skycoord`` override.
+        INSTRUMENT_HEADER (the preserved L1 PRIMARY) must contain
         DATE-BEG/DATE-END when extrapolating.
     config : None | dict | ConfigHandler
         Module configuration. Recognizes no module-specific keys.
@@ -317,6 +318,28 @@ class BarycentricCorrection:
     # Private helpers -- barycorr handoffs
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _astrometry_from_skycoord(skycoord):
+        """
+        Convert a caller-supplied SkyCoord into barycorrpy's argument set.
+
+        The interactive escape hatch behind ``perform(skycoord=...)``: same output as
+        ``_get_astrometry``, sourced from the object instead of the header. Deliberately
+        unvalidated -- the SkyCoord is rotated to ICRS and read, and astropy raises on
+        its own if the object was built without the proper motion, distance, or obstime
+        the correction needs. No sanitation either: a caller passing explicit astrometry
+        is asking for exactly those numbers.
+        """
+        icrs = skycoord.icrs
+        return {
+            "ra": icrs.ra.to_value(u.deg),
+            "dec": icrs.dec.to_value(u.deg),
+            "pmra": icrs.pm_ra_cosdec.to_value(u.mas / u.yr),
+            "pmdec": icrs.pm_dec.to_value(u.mas / u.yr),
+            "px": 1e3 / icrs.distance.to_value(u.pc),
+            "epoch": icrs.obstime.jd,
+        }
+
     def _get_astrometry(self):
         """
         Read the target astrometry off the PRIMARY C*# cards (cached).
@@ -559,6 +582,7 @@ class BarycentricCorrection:
         interpolate_expmeter_flux=True,
         extrapolate_expmeter_flux=True,
         fix_expmeter_outliers=True,
+        skycoord=False,
     ):
         """
         Compute the barycentric correction at the flux-weighted photon-midpoint
@@ -577,6 +601,8 @@ class BarycentricCorrection:
                 : bool, optional
             Forwarded to compute_flux_weighted_midpoint_times() as its
             ``interpolate`` / ``extrapolate`` / ``fix_outliers``.
+        skycoord : False | SkyCoord, optional
+            Use this astrometry instead of the PRIMARY C*# cards. See perform().
 
         Returns
         -------
@@ -593,7 +619,13 @@ class BarycentricCorrection:
             extrapolate=extrapolate_expmeter_flux,
             fix_outliers=fix_expmeter_outliers,
         )
-        astrometry = self._get_astrometry()
+        if skycoord:
+            # Caller-supplied astrometry: not cached onto self._astrometry, so a later
+            # call without skycoord still reads the header rather than this override.
+            astrometry = self._astrometry_from_skycoord(skycoord)
+            self._astrometry_source = "user SkyCoord"
+        else:
+            astrometry = self._get_astrometry()
 
         # CRV# is in km/s; barycorrpy expects rv in m/s. Missing → 0. AstroQuery
         # already falls back to the telescope TARGRADV when no catalog supplied an rv,
@@ -669,6 +701,7 @@ class BarycentricCorrection:
         interpolate_expmeter_flux=True,
         extrapolate_expmeter_flux=True,
         fix_expmeter_outliers=True,
+        skycoord=False,
     ):
         """
         Compute per-order barycentric correction and store it on the KPF2.
@@ -680,6 +713,13 @@ class BarycentricCorrection:
             Forwarded to compute_flux_weighted_midpoint_times() as its
             ``interpolate`` / ``extrapolate`` / ``fix_outliers``. See that method
             for semantics.
+        skycoord : False | SkyCoord, optional
+            Astrometry override for interactive use: when given, the correction is
+            computed from this SkyCoord instead of the PRIMARY C*# cards, which stay
+            untouched. Lets a user retry with different astrometry on an L2 in hand,
+            rather than re-reducing from L0 to re-run AstroQuery. The production path
+            leaves this False. The SkyCoord is used as-is -- it must carry proper
+            motion, distance, and obstime, and astropy raises if it does not.
 
         Returns
         -------
@@ -692,6 +732,7 @@ class BarycentricCorrection:
             interpolate_expmeter_flux=interpolate_expmeter_flux,
             extrapolate_expmeter_flux=extrapolate_expmeter_flux,
             fix_expmeter_outliers=fix_expmeter_outliers,
+            skycoord=skycoord,
         )
         bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(
             output="orders", **kwargs
