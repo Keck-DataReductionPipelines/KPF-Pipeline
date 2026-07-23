@@ -254,20 +254,20 @@ class BarycentricCorrection:
         return t_ext, f_ext
 
     def _compute_per_channel_flux_weighted_midpoint_time(
-        self, interpolate=True, extrapolate=True, fix_expmeter_outliers=True
+        self, interpolate=True, extrapolate=True, fix_outliers=True
     ):
         """
         Flux-weighted midpoint time per expmeter channel -> (w_em [Å], t_em [JD-UTC]).
 
         Optionally fills gaps between readings (``interpolate``), before/after the
         shutter window (``extrapolate``, using DATE-BEG/DATE-END), and replaces
-        outlier readings (``fix_expmeter_outliers``) before collapsing the time
-        axis to a flux-weighted mean per channel.
+        outlier readings (``fix_outliers``) before collapsing the time axis to a
+        flux-weighted mean per channel.
         """
         t_beg, t_mid, t_end = self._get_timestamps()
         w_em, f = self._get_normalized_flux()
 
-        if fix_expmeter_outliers:
+        if fix_outliers:
             f = self._fix_expmeter_outliers(f)
 
         # Cache boundary readings; f[0] and f[-1] get clobbered by later vstacks.
@@ -425,7 +425,7 @@ class BarycentricCorrection:
         output="orders",
         interpolate=True,
         extrapolate=True,
-        fix_expmeter_outliers=True,
+        fix_outliers=True,
         weight_percentile=90,
     ):
         """
@@ -450,7 +450,7 @@ class BarycentricCorrection:
             If True, estimate flux during gaps before the first or after the
             last expmeter reading, using DATE-BEG / DATE-END from
             INSTRUMENT_HEADER.
-        fix_expmeter_outliers : bool, optional
+        fix_outliers : bool, optional
             If True (default), detect and replace outlier expmeter readings.
         weight_percentile : float, optional
             Per-order SCI2 brightness percentile used to weight orders for the
@@ -480,12 +480,12 @@ class BarycentricCorrection:
 
         # Reuse the cached integration when the toggles match (perform() asks
         # for 'orders' then 'ccds').
-        key = (interpolate, extrapolate, fix_expmeter_outliers)
+        key = (interpolate, extrapolate, fix_outliers)
         if self._exposure_meter is None or self._exposure_meter[0] != key:
             w_em, t_em = self._compute_per_channel_flux_weighted_midpoint_time(
                 interpolate=interpolate,
                 extrapolate=extrapolate,
-                fix_expmeter_outliers=fix_expmeter_outliers,
+                fix_outliers=fix_outliers,
             )
             self._exposure_meter = (key, w_em, t_em)
         _, w_em, t_em = self._exposure_meter
@@ -556,8 +556,8 @@ class BarycentricCorrection:
     def compute_barycentric_correction(
         self,
         output="orders",
-        interpolate=True,
-        extrapolate=True,
+        interpolate_expmeter_flux=True,
+        extrapolate_expmeter_flux=True,
         fix_expmeter_outliers=True,
     ):
         """
@@ -573,8 +573,10 @@ class BarycentricCorrection:
         ----------
         output : {'expmeter', 'orders', 'ccds'}
             Binning level; forwarded to compute_flux_weighted_midpoint_times().
-        interpolate, extrapolate, fix_expmeter_outliers : bool, optional
-            Forwarded to compute_flux_weighted_midpoint_times().
+        interpolate_expmeter_flux, extrapolate_expmeter_flux, fix_expmeter_outliers
+                : bool, optional
+            Forwarded to compute_flux_weighted_midpoint_times() as its
+            ``interpolate`` / ``extrapolate`` / ``fix_outliers``.
 
         Returns
         -------
@@ -587,9 +589,9 @@ class BarycentricCorrection:
         """
         _, t_fwm = self.compute_flux_weighted_midpoint_times(
             output=output,
-            interpolate=interpolate,
-            extrapolate=extrapolate,
-            fix_expmeter_outliers=fix_expmeter_outliers,
+            interpolate=interpolate_expmeter_flux,
+            extrapolate=extrapolate_expmeter_flux,
+            fix_outliers=fix_expmeter_outliers,
         )
         astrometry = self._get_astrometry()
 
@@ -664,8 +666,8 @@ class BarycentricCorrection:
     def perform(
         self,
         *,
-        interpolate=True,
-        extrapolate=True,
+        interpolate_expmeter_flux=True,
+        extrapolate_expmeter_flux=True,
         fix_expmeter_outliers=True,
     ):
         """
@@ -673,9 +675,11 @@ class BarycentricCorrection:
 
         Parameters
         ----------
-        interpolate, extrapolate, fix_expmeter_outliers : bool, optional
-            Forwarded to compute_flux_weighted_midpoint_times(). See that
-            method for semantics.
+        interpolate_expmeter_flux, extrapolate_expmeter_flux, fix_expmeter_outliers
+                : bool, optional
+            Forwarded to compute_flux_weighted_midpoint_times() as its
+            ``interpolate`` / ``extrapolate`` / ``fix_outliers``. See that method
+            for semantics.
 
         Returns
         -------
@@ -685,8 +689,8 @@ class BarycentricCorrection:
             extension headers, and a 'barycentric_correction' receipt entry.
         """
         kwargs = dict(
-            interpolate=interpolate,
-            extrapolate=extrapolate,
+            interpolate_expmeter_flux=interpolate_expmeter_flux,
+            extrapolate_expmeter_flux=extrapolate_expmeter_flux,
             fix_expmeter_outliers=fix_expmeter_outliers,
         )
         bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(

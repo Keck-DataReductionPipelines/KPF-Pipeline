@@ -319,7 +319,7 @@ class TestFluxWeightedMidpointExpmeter:
             output="expmeter",
             interpolate=False,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
         _, t_mid, _ = bc._get_timestamps()
         np.testing.assert_allclose(np.mean(t_fwm.jd), np.mean(t_mid.jd), atol=1e-6)
@@ -330,7 +330,7 @@ class TestFluxWeightedMidpointExpmeter:
             output="expmeter",
             interpolate=False,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
         assert w.shape == (len(_WAVE_COLS),)
         assert len(t_fwm) == len(_WAVE_COLS)
@@ -355,7 +355,7 @@ class TestFluxWeightedMidpointExpmeter:
             output="expmeter",
             interpolate=False,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
 
         # Compare midpoints as seconds from the first reading: JD magnitudes
@@ -402,7 +402,7 @@ class TestFluxWeightedMidpointExpmeter:
                 output="expmeter",
                 interpolate=False,
                 extrapolate=False,
-                fix_expmeter_outliers=False,
+                fix_outliers=False,
             )
 
     def test_interpolate_shifts_midpoint_with_front_weighted_flux(self, synthetic_kpf2):
@@ -429,13 +429,13 @@ class TestFluxWeightedMidpointExpmeter:
             output="expmeter",
             interpolate=False,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
         _, t_yes = bc.compute_flux_weighted_midpoint_times(
             output="expmeter",
             interpolate=True,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
         # Shift should be sub-minute → tens of microdays, easily > 1e-9 days
         assert np.mean(t_yes.jd) > np.mean(t_no.jd) + 1e-7
@@ -475,13 +475,13 @@ class TestFluxWeightedMidpointExpmeter:
             output="expmeter",
             interpolate=False,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
         _, t_yes = bc.compute_flux_weighted_midpoint_times(
             output="expmeter",
             interpolate=False,
             extrapolate=True,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
         # Bright first reading + 2-minute leading shutter gap → big leading
         # extrapolation pulls FWM clearly earlier than the no-extrap case.
@@ -489,7 +489,7 @@ class TestFluxWeightedMidpointExpmeter:
 
 
 class TestFluxWeightedMidpointOrders:
-    _KWARGS = dict(interpolate=False, extrapolate=False, fix_expmeter_outliers=False)
+    _KWARGS = dict(interpolate=False, extrapolate=False, fix_outliers=False)
 
     def test_output_shape(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
@@ -544,7 +544,7 @@ class TestFluxWeightedMidpointOrders:
 
 
 class TestFluxWeightedMidpointCcds:
-    _KWARGS = dict(interpolate=False, extrapolate=False, fix_expmeter_outliers=False)
+    _KWARGS = dict(interpolate=False, extrapolate=False, fix_outliers=False)
 
     def test_output_shape(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
@@ -678,7 +678,7 @@ class TestFluxWeightedMidpointFormat:
         w, t = bc.compute_flux_weighted_midpoint_times(
             interpolate=False,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
         assert w.shape == (NORDER,)
 
@@ -1002,7 +1002,7 @@ class TestMissingHeader:
                 output="expmeter",
                 interpolate=False,
                 extrapolate=True,
-                fix_expmeter_outliers=False,
+                fix_outliers=False,
             )
 
     def test_missing_date_beg_ok_without_extrapolate(self, synthetic_kpf2):
@@ -1014,5 +1014,5 @@ class TestMissingHeader:
             output="expmeter",
             interpolate=False,
             extrapolate=False,
-            fix_expmeter_outliers=False,
+            fix_outliers=False,
         )
