@@ -35,15 +35,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULTS = {**DEFAULTS}
 
-# The PRIMARY C*# catalog cards are written identically to every science fiber
-# (SCI1-3 = traces 2-4); read SCI2, the reference fiber this module already uses for
-# SCI2_WAVE / SCI2_FLUX.
-_CATALOG_TRACE = 3
-
 # The position block the correction cannot proceed without. AstroQuery's merge refuses
 # to emit a canonical row without it, so an absent card means AstroQuery never ran (or
 # this is a calibration frame, which BarycentricCorrection must not be called on).
-_REQUIRED_CARDS = ("CRA", "CDEC", "CPMR", "CPMD", "CEPCH")
+# The trailing 3 here and on the CPLX3/CSRC3/CRV3 reads below is the SCI2 trace: the
+# C*# cards are written identically to every science fiber (SCI1-3 = traces 2-4), and
+# SCI2 is the reference fiber this module already uses for SCI2_WAVE / SCI2_FLUX.
+_REQUIRED_CARDS = ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3")
 
 
 class BarycentricCorrection:
@@ -363,12 +361,10 @@ class BarycentricCorrection:
         """
         if self._astrometry is None:
             primary = self.l2_obj.headers["PRIMARY"]
-            cards = {
-                base: primary.get(f"{base}{_CATALOG_TRACE}") for base in _REQUIRED_CARDS
-            }
+            cards = {name: primary.get(name) for name in _REQUIRED_CARDS}
             missing = [
-                f"{base}{_CATALOG_TRACE}"
-                for base, value in cards.items()
+                name
+                for name, value in cards.items()
                 if value is None or str(value).strip() == ""
             ]
             if missing:
@@ -381,29 +377,28 @@ class BarycentricCorrection:
             # A parallax card is written only when the catalog measured one, and its
             # value is the catalog's own (QC flags an unphysical one via CATLOGOK, but
             # does not repair it).
-            parallax = primary.get(f"CPLX{_CATALOG_TRACE}")
+            parallax = primary.get("CPLX3")
             try:
                 px = float(parallax)
             except (TypeError, ValueError):
                 px = np.nan
             if not np.isfinite(px) or px <= 0:
                 logger.warning(
-                    "CPLX%d=%s is missing or unusable; using px=0 (no parallax)",
-                    _CATALOG_TRACE,
+                    "CPLX3=%s is missing or unusable; using px=0 (no parallax)",
                     parallax,
                 )
                 px = 0.0
 
             self._astrometry = {
-                "ra": Angle(cards["CRA"], unit=u.hourangle).deg,
-                "dec": Angle(cards["CDEC"], unit=u.deg).deg,
+                "ra": Angle(cards["CRA3"], unit=u.hourangle).deg,
+                "dec": Angle(cards["CDEC3"], unit=u.deg).deg,
                 # C*# proper motion is arcsec/yr (RA incl. cos Dec); barycorrpy mas/yr.
-                "pmra": float(cards["CPMR"]) * 1e3,
-                "pmdec": float(cards["CPMD"]) * 1e3,
+                "pmra": float(cards["CPMR3"]) * 1e3,
+                "pmdec": float(cards["CPMD3"]) * 1e3,
                 "px": px,
-                "epoch": Time(float(cards["CEPCH"]), format="jyear").jd,
+                "epoch": Time(float(cards["CEPCH3"]), format="jyear").jd,
             }
-            self._astrometry_source = primary.get(f"CSRC{_CATALOG_TRACE}") or "unknown"
+            self._astrometry_source = primary.get("CSRC3") or "unknown"
         return self._astrometry
 
     @staticmethod
@@ -627,11 +622,11 @@ class BarycentricCorrection:
         else:
             astrometry = self._get_astrometry()
 
-        # CRV# is in km/s; barycorrpy expects rv in m/s. Missing → 0. AstroQuery
-        # already falls back to the telescope TARGRADV when no catalog supplied an rv,
-        # so this card is the systemic RV whatever its provenance.
+        # CRV3 (SCI2 trace) is in km/s; barycorrpy expects rv in m/s. Missing → 0.
+        # AstroQuery already falls back to the telescope TARGRADV when no catalog
+        # supplied an rv, so this card is the systemic RV whatever its provenance.
         primary = self.l2_obj.headers["PRIMARY"]
-        rv_mps = float(primary.get(f"CRV{_CATALOG_TRACE}", 0.0) or 0.0) * 1000.0
+        rv_mps = float(primary.get("CRV3", 0.0) or 0.0) * 1000.0
 
         bc_vel_mps, bjd_tdb = self._compute_barycorr(
             astrometry,
