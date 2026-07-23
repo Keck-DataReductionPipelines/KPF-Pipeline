@@ -268,6 +268,18 @@ class TestReadWmkoHeader:
             assert AstroQuery(l0).read_wmko_header() is None
         assert "could not build wmko CATALOG_RECORD" in caplog.text
 
+    def test_nonnumeric_numeric_fields_laundered_to_none(self):
+        # A non-numeric TARG* numeric card must be laundered to None via _scalar,
+        # matching the gaia/simbad paths -- otherwise the stray value survives the
+        # merge's is-not-None completeness gate as a valid-looking astrometric
+        # solution and corrupts the float CATALOG_RECORD. (A NaN cannot occur --
+        # astropy rejects NaN in FITS headers -- and a valueless card already reads
+        # back as None; a stray string is the residual reachable case.)
+        rec = AstroQuery(
+            self._l0_targ(**{**self._GOOD_TARG, "TARGPLAX": "UNKNOWN"})
+        ).read_wmko_header()
+        assert rec["parallax"] is None
+
     def test_non_fk5_frame_raises(self):
         # KPF pointing is always FK5; any other TARGFRAM (e.g. galactic) raises
         # rather than being coerced onto a frame it does not have.

@@ -446,8 +446,11 @@ class AstroQuery:
         try:
             ra = Angle(primary["TARGRA"], unit=u.hourangle)
             dec = Angle(primary["TARGDEC"], unit=u.deg)
-            pmra, pmdec = primary.get("TARGPMRA"), primary.get("TARGPMDC")
-            equinox = primary.get("TARGEQUI")
+            pmra, pmdec = (
+                self._scalar(primary.get("TARGPMRA")),
+                self._scalar(primary.get("TARGPMDC")),
+            )
+            equinox = self._scalar(primary.get("TARGEQUI"))
 
             # Rotate the native FK5 pointing to ICRS. Position always; proper motion too
             # when both components are present (TARGPMRA time-s/yr -> arcsec/yr via x15
@@ -472,10 +475,10 @@ class AstroQuery:
                 "dec": dec_str,
                 "pmra": icrs.pm_ra_cosdec.to_value(u.arcsec / u.yr) if has_pm else None,
                 "pmdec": icrs.pm_dec.to_value(u.arcsec / u.yr) if has_pm else None,
-                "parallax": primary.get("TARGPLAX"),
-                "rv": primary.get("TARGRADV"),
+                "parallax": self._scalar(primary.get("TARGPLAX")),
+                "rv": self._scalar(primary.get("TARGRADV")),
                 "frame": "icrs",
-                "epoch": primary.get("TARGEPOC"),
+                "epoch": self._scalar(primary.get("TARGEPOC")),
                 "equinox": 2000.0,
             }
         except Exception as exc:
