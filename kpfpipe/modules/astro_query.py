@@ -423,7 +423,9 @@ class AstroQuery:
         logger.info("querying SIMBAD for %r", name)
         try:
             simbad = Simbad()
-            simbad.add_votable_fields("pmra", "pmdec", "plx", "rvz_radvel", "B", "V")
+            simbad.add_votable_fields(
+                "pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V"
+            )
             result = simbad.query_object(name)
         except Exception as e:
             logger.warning(
