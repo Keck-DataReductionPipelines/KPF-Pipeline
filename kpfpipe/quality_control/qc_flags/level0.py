@@ -15,6 +15,20 @@ _AMPS_PER_CHIP = 4  # GREEN_AMP1..4 / RED_AMP1..4 (only a subset is read out)
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 _TIME_TOL_S = 0.1  # DATE-END - DATE-BEG vs ELAPSED tolerance (v2.12 quality_control.py)
 
+# Physical-range bounds for the canonical CATALOG_RECORD astrometry, ported from the
+# v2.12 quality_control.py good_TARG_headers L0 checks. epoch/equinox are Julian years,
+# rv km/s, parallax mas, proper motion arcsec/yr. The epoch/equinox window is
+# exclusive-low / inclusive-high (1950 < x <= 2050), matching legacy. Two vNext
+# additions to the legacy value bounds, both justified by our source being Gaia (not the
+# DCS TARG* header) and both feeding the barycentric correction: the parallax LOWER
+# bound (a negative Gaia parallax is routine and would be a negative distance), and the
+# proper-motion bound (legacy had it but left it commented out for unit uncertainty --
+# moot here, where PM is canonical arcsec/yr; the highest-PM star is ~10.4"/yr).
+_EPOCH_RANGE = (1950.0, 2050.0)
+_MAX_ABS_RV = 350.0  # km/s (Chubak et al. 2012, arXiv:1207.6212, Fig. 8)
+_PARALLAX_RANGE = (0.0, 1000.0)  # mas; 0 < plx < 1000 (> 0 and < 1 arcsec)
+_MAX_ABS_PM = 15.0  # arcsec/yr, per component
+
 
 def _parse_iso(value):
     """Parse an ISO-8601 datetime string, or None if missing/unparseable."""
@@ -66,13 +80,13 @@ class QCL0(QC):
     header_keywords_present._qc_key = "KWRDPRL0"
 
     def times_consistent(self):
-        """DATE-BEG < DATE-MID < DATE-END and |(END-BEG) - ELAPSED| < 0.1 s.
+        """DATE-BEG <= DATE-MID <= DATE-END.
 
         Ports v2.12 ``L2_datetime``. At L0 the raw instrument times live on the
         WMKO-native PRIMARY (the header later snapshotted verbatim into
         INSTRUMENT_HEADER at to_kpf1); the 0/1 flag then propagates downstream
-        on QUALITY_CONTROL. Passes the duration check when ELAPSED is absent --
-        only the present cards are checked.
+        on QUALITY_CONTROL. ELAPSED consistency is validated in exptime_sane
+        (EXPTIMOK), so it is not repeated here.
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         beg, mid, end = (
@@ -80,15 +94,7 @@ class QCL0(QC):
         )
         if beg is None or mid is None or end is None:
             return False
-        if not (beg <= mid <= end):
-            return False
-        elapsed = self._hdr_float(hdr, "ELAPSED")
-        if (
-            elapsed is not None
-            and abs((end - beg).total_seconds() - elapsed) > _TIME_TOL_S
-        ):
-            return False
-        return True
+        return beg <= mid <= end
 
     times_consistent._qc_key = "DATTIMOK"
 
@@ -155,3 +161,49 @@ class QCL0(QC):
         return True
 
     radec_consistent._qc_key = "RADECOK"
+
+    @staticmethod
+    def _row_float(row, field):
+        """A CATALOG_RECORD numeric cell as float, or None for an absent (NaN) one."""
+        value = float(row[field])
+        return None if np.isnan(value) else value
+
+    def catalog_values_sane(self):
+        """Canonical CATALOG_RECORD astrometry values are physically plausible.
+
+        Ports the v2.12 good_TARG_headers range checks onto the merged ``kpf-drp``
+        row AstroQuery resolves (the astrometry that feeds the barycentric
+        correction), not the raw WMKO TARG* keywords. Each field is checked only when
+        present: epoch/equinox in (1950, 2050] Julian years, |rv| <= 350 km/s,
+        parallax in (0, 1000) mas, and |pmra|/|pmdec| <= 15 arcsec/yr. The parallax
+        lower bound and the PM bound are vNext additions justified by our Gaia source
+        (see the module bounds comment); both would otherwise corrupt the barycentric
+        correction (negative distance / wrong obs-epoch position).
+
+        Passes when there is no ``kpf-drp`` row -- a calibration frame carries no
+        target astrometry, and this is value sanity, not a presence check (a science
+        frame's missing astrometry is caught upstream: AstroQuery raises at merge,
+        to_kpf1 on an empty Object record).
+        """
+        table = self.kpf_obj.data["CATALOG_RECORD"]
+        match = table[table["source"] == "kpf-drp"] if table.colnames else table
+        if not len(match):
+            return True
+        row = match[0]
+        for field in ("epoch", "equinox"):
+            val = self._row_float(row, field)
+            if val is not None and not (_EPOCH_RANGE[0] < val <= _EPOCH_RANGE[1]):
+                return False
+        rv = self._row_float(row, "rv")
+        if rv is not None and abs(rv) > _MAX_ABS_RV:
+            return False
+        plax = self._row_float(row, "parallax")
+        if plax is not None and not (_PARALLAX_RANGE[0] < plax < _PARALLAX_RANGE[1]):
+            return False
+        for field in ("pmra", "pmdec"):
+            pm = self._row_float(row, field)
+            if pm is not None and abs(pm) > _MAX_ABS_PM:
+                return False
+        return True
+
+    catalog_values_sane._qc_key = "CATLOGOK"
