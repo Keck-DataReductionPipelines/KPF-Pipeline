@@ -1,5 +1,4 @@
 Keyword,Description,Extension,DataType,PopulatedBy
-ASTRSRC,Astrometry source used for barycentric correction,RECEIPT,str,BarycentricCorrection
 CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
 CCD2BJD,RED photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
 CCD1BKMS,GREEN barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection

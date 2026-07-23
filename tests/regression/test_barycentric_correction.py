@@ -1,16 +1,14 @@
 """Tests for the BarycentricCorrection module (KPF2 -> KPF2).
 
 Static-method unit tests require no fixtures. Integration tests use a
-synthetic KPF2 with a small EXPMETER_SCI table and populated SCI2_WAVE.
-Gaia and barycorrpy calls are stubbed via monkeypatching.
+synthetic KPF2 with a small EXPMETER_SCI table, populated SCI2_WAVE, and the
+SCI2 catalog cards on PRIMARY. barycorrpy calls are stubbed via monkeypatching.
 """
 
 import logging
 
-import astropy.units as u
 import numpy as np
 import pytest
-from astropy.coordinates import Distance, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
@@ -41,6 +39,22 @@ _T0 = "2024-01-01T"
 _WAVE_COLS = ["5000", "5100", "5200", "5300"]  # 100Å spacing → dispersion = 100Å
 _FLUX_VALUE = 100.0  # uniform ADU per reading
 
+# SCI2 catalog cards, as KPF0.to_kpf1 writes them from AstroQuery's canonical record:
+# ICRS, RA/Dec sexagesimal (RA hourangle, Dec deg), PM arcsec/yr, parallax mas, rv
+# km/s, epoch Julian years. RA 180 deg / Dec 0 / 100 pc, matching the astrometry the
+# stubbed Gaia query used to supply.
+_CATALOG_CARDS = {
+    "CSRC3": "gaia",
+    "CID3": "1234567890123456789",
+    "CRA3": "12:00:00.0000",
+    "CDEC3": "+00:00:00.000",
+    "CPMR3": 0.0,
+    "CPMD3": 0.0,
+    "CPLX3": 10.0,
+    "CEPCH3": 2016.0,
+    "CEQNX3": 2000.0,
+}
+
 
 def _make_expmeter_table():
     begs = [f"{_T0}00:00:00.000", f"{_T0}00:02:00.000", f"{_T0}00:04:00.000"]
@@ -65,7 +79,11 @@ def synthetic_kpf2():
     # KPF-native keywords live in INSTRUMENT_HEADER on L2 (preserved L1 PRIMARY).
     kpf2.headers["INSTRUMENT_HEADER"]["DATE-BEG"] = f"{_T0}00:00:00.000"
     kpf2.headers["INSTRUMENT_HEADER"]["DATE-END"] = f"{_T0}00:05:00.000"
-    kpf2.headers["INSTRUMENT_HEADER"]["GAIAID"] = "DR3 1234567890123456789"
+
+    # Target astrometry reaches L2 on the EPRV PRIMARY C*# cards (AstroQuery ->
+    # KPF0.to_kpf1 -> KPF1.to_kpf2); BarycentricCorrection issues no query.
+    for key, value in _CATALOG_CARDS.items():
+        kpf2.headers["PRIMARY"][key] = value
 
     kpf2.set_data("EXPMETER_SCI", _make_expmeter_table())
 
@@ -77,19 +95,6 @@ def synthetic_kpf2():
             )
 
     return kpf2
-
-
-def _fake_skycoord():
-    """Deterministic ICRS SkyCoord with realistic proper motion / parallax."""
-    return SkyCoord(
-        ra=180.0 * u.deg,
-        dec=0.0 * u.deg,
-        pm_ra_cosdec=0.0 * u.mas / u.yr,
-        pm_dec=0.0 * u.mas / u.yr,
-        distance=100.0 * u.pc,
-        obstime=Time(2016.0, format="jyear"),
-        frame="icrs",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -280,18 +285,17 @@ class TestComputeBarycorrReference:
 
     def test_matches_barycorrpy_reference(self):
         # Fixed Tau Ceti-like astrometry at a fixed UTC epoch, observed from Keck.
-        skycoord = SkyCoord(
-            ra=26.0213 * u.deg,
-            dec=-15.9395 * u.deg,
-            pm_ra_cosdec=-1721.05 * u.mas / u.yr,
-            pm_dec=854.16 * u.mas / u.yr,
-            distance=Distance(parallax=273.96 * u.mas),
-            obstime=Time("J2000.0"),
-            frame="icrs",
-        )
+        astrometry = {
+            "ra": 26.0213,
+            "dec": -15.9395,
+            "pmra": -1721.05,
+            "pmdec": 854.16,
+            "px": 273.96,
+            "epoch": Time("J2000.0").jd,
+        }
         t = Time("2024-06-15T09:00:00.000", scale="utc")
         bc_vel, bjd_tdb = BarycentricCorrection._compute_barycorr(
-            skycoord, t, BarycentricCorrection.KECK_LOCATION
+            astrometry, t, BarycentricCorrection.KECK_LOCATION
         )
         # Physical sanity: BERV within Earth's orbital +/-30 km/s; BJD_TDB within
         # a few minutes of JD_UTC (clock + Romer light-travel delay).
@@ -680,114 +684,84 @@ class TestFluxWeightedMidpointFormat:
 
 
 # ---------------------------------------------------------------------------
-# _gaia_astrometry input validation
+# _get_astrometry -- read the PRIMARY C*# cards, convert, sanitize
 # ---------------------------------------------------------------------------
 
 
-class TestQueryGaiaValidation:
-    """Reject non-numeric source IDs before they hit the ADQL query string."""
+class TestGetAstrometry:
+    """The C*# cards are AstroQuery's canonical record; this is the unit
+    conversion into barycorrpy's argument set, plus the parallax sanitation the
+    faithful-catalog-record contract pushes downstream."""
 
-    @pytest.mark.parametrize(
-        "bad_id",
-        [
-            "foo",  # not a number at all
-            "12345 OR 1=1",  # injection attempt
-            "12345; DROP TABLE",
-            "",
-            "12.34",  # decimal
-            "-12345",  # negative
-        ],
-    )
-    def test_non_numeric_raises(self, synthetic_kpf2, bad_id):
-        synthetic_kpf2.headers["INSTRUMENT_HEADER"]["GAIAID"] = bad_id
+    def test_converts_cards_to_barycorrpy_units(self, synthetic_kpf2):
+        primary = synthetic_kpf2.headers["PRIMARY"]
+        primary["CPMR3"] = 0.5  # arcsec/yr
+        primary["CPMD3"] = -0.3  # arcsec/yr
+
+        astrometry = BarycentricCorrection(synthetic_kpf2)._get_astrometry()
+
+        # RA sexagesimal hourangle / Dec sexagesimal deg -> deg
+        assert astrometry["ra"] == pytest.approx(180.0)
+        assert astrometry["dec"] == pytest.approx(0.0)
+        # arcsec/yr -> mas/yr
+        assert astrometry["pmra"] == pytest.approx(500.0)
+        assert astrometry["pmdec"] == pytest.approx(-300.0)
+        # parallax stays mas; epoch Julian years -> JD
+        assert astrometry["px"] == pytest.approx(10.0)
+        assert astrometry["epoch"] == pytest.approx(Time(2016.0, format="jyear").jd)
+
+    def test_records_provenance_from_csrc(self, synthetic_kpf2):
+        synthetic_kpf2.headers["PRIMARY"]["CSRC3"] = "simbad"
         bc = BarycentricCorrection(synthetic_kpf2)
-        with pytest.raises(ValueError, match="all digits"):
-            bc._gaia_astrometry()
+        bc._get_astrometry()
+        assert bc._astrometry_source == "simbad"
 
+    def test_result_is_cached(self, synthetic_kpf2):
+        bc = BarycentricCorrection(synthetic_kpf2)
+        assert bc._get_astrometry() is bc._get_astrometry()
 
-# ---------------------------------------------------------------------------
-# _get_skycoord -- Gaia first, WMKO header fallback, else raise
-# ---------------------------------------------------------------------------
-
-
-class TestAstrometryResolution:
-    @staticmethod
-    def _add_wmko_keys(kpf2):
-        inst = kpf2.headers["INSTRUMENT_HEADER"]
-        inst["TARGRA"] = "10:59:27.50"
-        inst["TARGDEC"] = "+40:25:50.0"
-        inst["TARGEPOC"] = 2000.0
-        inst["TARGFRAM"] = "FK5"
-        inst["TARGPLAX"] = 72.0  # mas
-        inst["TARGPMRA"] = 0.0  # time-s/yr
-        inst["TARGPMDC"] = 0.0  # arcsec/yr
-
-    def test_gaia_used_when_enabled(self, synthetic_kpf2, monkeypatch):
-        sentinel = _fake_skycoord()
-        monkeypatch.setattr(
-            BarycentricCorrection, "_gaia_astrometry", lambda self: sentinel
-        )
-        # defaults: use_gaia_astrometry=True, use_wmko_fallback=False
-        assert BarycentricCorrection(synthetic_kpf2)._get_skycoord() is sentinel
-
-    def test_falls_back_to_wmko_on_gaia_error(
-        self, caplog, synthetic_kpf2, monkeypatch
-    ):
-        self._add_wmko_keys(synthetic_kpf2)
-
-        def boom(self):
-            raise ConnectionError("gaia server down")
-
-        monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", boom)
-
-        bc = BarycentricCorrection(synthetic_kpf2, config={"use_wmko_fallback": True})
+    # NaN is not representable in a FITS header, so an unmeasured parallax arrives as
+    # an absent card (covered below) or a blank one, never as NaN.
+    @pytest.mark.parametrize("parallax", [-0.4, 0.0, ""])
+    def test_unusable_parallax_becomes_zero(self, caplog, synthetic_kpf2, parallax):
+        """AstroQuery persists catalog values faithfully -- a negative Gaia parallax
+        is routine -- so BarycentricCorrection degrades to px=0 rather than
+        computing a negative distance."""
+        synthetic_kpf2.headers["PRIMARY"]["CPLX3"] = parallax
+        bc = BarycentricCorrection(synthetic_kpf2)
         with caplog.at_level(logging.WARNING):
-            sc = bc._get_skycoord()
-        assert "ConnectionError" in caplog.text
-        assert sc.icrs.distance.to(u.pc).value == pytest.approx(1e3 / 72.0)
+            astrometry = bc._get_astrometry()
+        assert astrometry["px"] == 0.0
+        assert "CPLX3" in caplog.text
 
-    def test_wmko_only_when_gaia_disabled(self, synthetic_kpf2, monkeypatch):
-        self._add_wmko_keys(synthetic_kpf2)
+    def test_missing_parallax_becomes_zero(self, caplog, synthetic_kpf2):
+        """CPLX# is Required=No in the EPRV standard and is skipped from PRIMARY
+        when the catalog measured none."""
+        del synthetic_kpf2.headers["PRIMARY"]["CPLX3"]
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with caplog.at_level(logging.WARNING):
+            astrometry = bc._get_astrometry()
+        assert astrometry["px"] == 0.0
+        assert "CPLX3" in caplog.text
 
-        def fail(self):
-            raise AssertionError("Gaia should not be queried when disabled")
+    @pytest.mark.parametrize("card", ["CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3"])
+    def test_missing_position_card_raises(self, synthetic_kpf2, card):
+        """The position block is all-or-nothing: AstroQuery's merge refuses to emit a
+        canonical row without it, so a gap means the pipeline is misordered."""
+        del synthetic_kpf2.headers["PRIMARY"][card]
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with pytest.raises(ValueError, match=card):
+            bc._get_astrometry()
 
-        monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", fail)
-
-        bc = BarycentricCorrection(
-            synthetic_kpf2,
-            config={"use_gaia_astrometry": False, "use_wmko_fallback": True},
-        )
-        sc = bc._get_skycoord()
-        assert sc.ra.deg == pytest.approx(164.8645833)
-
-    def test_raises_and_surfaces_gaia_error_when_both_unavailable(
-        self, synthetic_kpf2, monkeypatch
-    ):
-        def boom(self):
-            raise ValueError("Gaia source_id must be all digits; got 'foo'")
-
-        monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", boom)
-
-        bc = BarycentricCorrection(synthetic_kpf2)  # wmko fallback off by default
-        with pytest.raises(ValueError, match="all digits"):
-            bc._get_skycoord()
-
-    def test_wmko_proper_motion_and_parallax_units(self, synthetic_kpf2):
-        self._add_wmko_keys(synthetic_kpf2)
-        inst = synthetic_kpf2.headers["INSTRUMENT_HEADER"]
-        inst["TARGPMRA"] = 0.01  # time-s/yr
-        inst["TARGPMDC"] = -0.5  # arcsec/yr
-
-        sc = BarycentricCorrection(synthetic_kpf2)._wmko_astrometry()
-        expected_pmra = 0.01 * 15.0 * np.cos(sc.dec.rad) * 1e3  # -> mas/yr (cosdec)
-        assert sc.pm_ra_cosdec.to(u.mas / u.yr).value == pytest.approx(expected_pmra)
-        assert sc.pm_dec.to(u.mas / u.yr).value == pytest.approx(-500.0)
-        assert sc.distance.to(u.pc).value == pytest.approx(1e3 / 72.0)
+    def test_blank_position_card_raises(self, synthetic_kpf2):
+        synthetic_kpf2.headers["PRIMARY"]["CRA3"] = ""
+        bc = BarycentricCorrection(synthetic_kpf2)
+        with pytest.raises(ValueError, match="run AstroQuery"):
+            bc._get_astrometry()
 
 
 # ---------------------------------------------------------------------------
-# perform() -- Gaia and barycorrpy stubbed
+# perform() -- barycorrpy stubbed
 # ---------------------------------------------------------------------------
 
 
@@ -796,12 +770,9 @@ class TestPerform:
 
     @pytest.fixture
     def bc_monkeypatched(self, synthetic_kpf2, monkeypatch):
-        """BarycentricCorrection with Gaia + barycorrpy stubbed."""
+        """BarycentricCorrection with barycorrpy stubbed."""
 
-        def mock_query(self):
-            return _fake_skycoord()
-
-        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
+        def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
             n = len(np.atleast_1d(obs_times.jd))
             bc_vel = np.full(n, TestPerform.DELTA_RV_MPS, dtype=float)
             # BJD = JD + 500s (light-travel approx); same for every order in this stub
@@ -811,7 +782,6 @@ class TestPerform:
         def passthrough(f, kernel_size=5):
             return f.copy()
 
-        monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", mock_query)
         monkeypatch.setattr(
             BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
         )
@@ -912,17 +882,14 @@ class TestPerform:
         modules = bc_monkeypatched.l2_obj.receipt["FUNCTION"].values
         assert "barycentric_correction" in modules
 
-    def test_targradv_converted_km_to_m_and_passed_through(
+    def test_crv_converted_km_to_m_and_passed_through(
         self, synthetic_kpf2, monkeypatch
     ):
-        """TARGRADV (km/s) should arrive at _compute_barycorr as m/s."""
-        synthetic_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = 81.87  # km/s
+        """CRV3 (km/s) should arrive at _compute_barycorr as m/s."""
+        synthetic_kpf2.headers["PRIMARY"]["CRV3"] = 81.87  # km/s
         captured = {}
 
-        def mock_query(self):
-            return _fake_skycoord()
-
-        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
+        def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
             captured["rv_mps"] = rv_mps
             n = len(np.atleast_1d(obs_times.jd))
             return np.zeros(n), np.atleast_1d(obs_times.jd)
@@ -930,7 +897,6 @@ class TestPerform:
         def passthrough(f, kernel_size=5):
             return f.copy()
 
-        monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", mock_query)
         monkeypatch.setattr(
             BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
         )
@@ -941,12 +907,12 @@ class TestPerform:
         BarycentricCorrection(synthetic_kpf2).perform()
         assert captured["rv_mps"] == pytest.approx(81870.0)
 
-    def test_missing_targradv_defaults_to_zero(self, bc_monkeypatched, monkeypatch):
-        """No TARGRADV in INSTRUMENT_HEADER → rv_mps=0 passed through."""
-        # synthetic_kpf2 fixture does not set TARGRADV
+    def test_missing_crv_defaults_to_zero(self, bc_monkeypatched, monkeypatch):
+        """No CRV3 on PRIMARY (no catalog rv, no TARGRADV) → rv_mps=0."""
+        # synthetic_kpf2 fixture does not set CRV3
         captured = {}
 
-        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
+        def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
             captured["rv_mps"] = rv_mps
             n = len(np.atleast_1d(obs_times.jd))
             return np.full(n, TestPerform.DELTA_RV_MPS), np.atleast_1d(obs_times.jd)
@@ -961,49 +927,11 @@ class TestPerform:
         for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
             assert getattr(bc_monkeypatched, attr) is None
         kpf2 = bc_monkeypatched.perform()
-        assert bc_monkeypatched._astrometry_source == "Gaia DR3"
+        assert bc_monkeypatched._astrometry_source == "gaia"
         for key in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             assert len(kpf2.data[key]) == NORDER
         for attr in ("_ccd_bjd", "_ccd_kms", "_ccd_z"):
             assert len(getattr(bc_monkeypatched, attr)) == 2
-
-    def test_records_gaia_provenance(self, bc_monkeypatched):
-        kpf2 = bc_monkeypatched.perform()
-        astrsrc = kpf2.headers["RECEIPT"].get("ASTRSRC")
-        assert astrsrc == "Gaia DR3"
-
-    def test_perform_falls_back_and_records_wmko_provenance(
-        self, caplog, synthetic_kpf2, monkeypatch
-    ):
-        TestAstrometryResolution._add_wmko_keys(synthetic_kpf2)
-
-        def boom(self):
-            raise ConnectionError("gaia down")
-
-        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
-            n = len(np.atleast_1d(obs_times.jd))
-            return np.zeros(n), np.atleast_1d(obs_times.jd)
-
-        monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", boom)
-        monkeypatch.setattr(
-            BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
-        )
-        monkeypatch.setattr(
-            BarycentricCorrection,
-            "_fix_expmeter_outliers",
-            staticmethod(lambda f, kernel_size=5: f.copy()),
-        )
-
-        bc = BarycentricCorrection(synthetic_kpf2)  # defaults: gaia on, wmko off
-        with caplog.at_level(logging.WARNING):
-            kpf2 = bc.perform(
-                use_wmko_fallback=True
-            )  # override the toggle for this call
-        assert "ConnectionError" in caplog.text
-
-        astrsrc = kpf2.headers["RECEIPT"].get("ASTRSRC")
-        assert astrsrc == "WMKO header"
-        assert bc._astrometry_source == "WMKO header"
 
     def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):
         """Exercise fix_expmeter_outliers=True through perform() with a
@@ -1024,14 +952,10 @@ class TestPerform:
             "2024-01-01T01:00:00.000"
         )
 
-        def mock_query(self):
-            return _fake_skycoord()
-
-        def mock_compute(skycoord, obs_times, location, rv_mps=0.0):
+        def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
             n = len(np.atleast_1d(obs_times.jd))
             return np.full(n, 1000.0), np.atleast_1d(obs_times.jd)
 
-        monkeypatch.setattr(BarycentricCorrection, "_gaia_astrometry", mock_query)
         monkeypatch.setattr(
             BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
         )
@@ -1053,11 +977,11 @@ class TestConstructor:
 
 
 class TestMissingHeader:
-    """perform() should fail loudly when required INSTRUMENT_HEADER keys are absent."""
+    """perform() should fail loudly when required header keys are absent."""
 
-    def test_missing_gaiaid_raises(self, synthetic_kpf2, monkeypatch):
+    def test_missing_catalog_cards_raises(self, synthetic_kpf2, monkeypatch):
         # Stub _fix_expmeter_outliers so we don't hit the griddata degeneracy
-        # before reaching the GAIAID lookup.
+        # before reaching the catalog-card lookup.
         def passthrough(f, kernel_size=5):
             return f.copy()
 
@@ -1065,11 +989,9 @@ class TestMissingHeader:
             BarycentricCorrection, "_fix_expmeter_outliers", staticmethod(passthrough)
         )
 
-        del synthetic_kpf2.headers["INSTRUMENT_HEADER"]["GAIAID"]
+        del synthetic_kpf2.headers["PRIMARY"]["CRA3"]
         bc = BarycentricCorrection(synthetic_kpf2)
-        # With the WMKO fallback disabled (default), the Gaia-side KeyError is
-        # surfaced inside the "no target astrometry" error.
-        with pytest.raises(ValueError, match="GAIAID"):
+        with pytest.raises(ValueError, match="CRA3"):
             bc.perform()
 
     def test_missing_date_beg_raises_when_extrapolating(self, synthetic_kpf2):

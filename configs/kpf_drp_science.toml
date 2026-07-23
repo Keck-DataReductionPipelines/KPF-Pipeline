@@ -35,8 +35,6 @@ extraction_method = "box"
 [MODULE_WAVELENGTH_CALIBRATION]
 
 [MODULE_BARYCENTRIC_CORRECTION]
-use_gaia_astrometry = true
-use_wmko_fallback = false
 
 [MODULE_CROSS_CORRELATION]
 ccf_mask_width = 1.0
