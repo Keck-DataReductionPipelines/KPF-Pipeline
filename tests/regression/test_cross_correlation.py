@@ -167,7 +167,7 @@ def header_kpf2():
     """KPF2 with only the header keywords the build/dispatch helpers need."""
     kpf2 = KPF2()
     kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 5772.0
-    kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = 0.0
+    kpf2.headers["PRIMARY"]["CRV3"] = 0.0
     kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "Target"
     kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = "Sky"
     kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "None"
@@ -218,7 +218,7 @@ class TestDispatch:
             CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "CAL")
 
     def test_settings_target(self, header_kpf2):
-        header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = 11.1  # SCI-OBJ='Target'
+        header_kpf2.headers["PRIMARY"]["CRV3"] = 11.1  # SCI-OBJ='Target'
         s = CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "SCI2")
         assert s == {
             "object": "target",
@@ -293,10 +293,17 @@ class TestStellarMaskName:
         with pytest.raises(ValueError, match="TARGTEFF"):
             CrossCorrelation(header_kpf2)._resolve_stellar_mask()
 
-    def test_missing_targradv_raises(self, header_kpf2):
-        del header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"]
-        with pytest.raises(ValueError, match="TARGRADV"):
+    def test_missing_crv_raises(self, header_kpf2):
+        """No default to 0: a grid centered on the wrong velocity misses the star."""
+        del header_kpf2.headers["PRIMARY"]["CRV3"]
+        with pytest.raises(ValueError, match="CRV3"):
             CrossCorrelation(header_kpf2)._get_systemic_rv()
+
+    def test_ignores_instrument_header_targradv(self, header_kpf2):
+        """The canonical catalog rv wins; the raw DCS value is no longer consulted."""
+        header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = -42.0
+        header_kpf2.headers["PRIMARY"]["CRV3"] = 7.5
+        assert CrossCorrelation(header_kpf2)._get_systemic_rv() == pytest.approx(7.5)
 
 
 class TestBuildLineMask:
@@ -329,9 +336,7 @@ class TestBuildLineMask:
 
 class TestBuildVelocityGrid:
     def test_centered_on_systemic_rv(self, header_kpf2):
-        header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = (
-            10.0  # SCI2 grid center = TARGRADV
-        )
+        header_kpf2.headers["PRIMARY"]["CRV3"] = 10.0  # SCI2 grid center = CRV3
         grid = CrossCorrelation(header_kpf2)._build_velocity_grid("GREEN", "SCI2")
         assert grid.mean() == pytest.approx(10.0)
 
@@ -365,7 +370,7 @@ def _build_cc_kpf2():
     shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
     kpf2 = KPF2()
     kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 5772.0
-    kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = 0.0
+    kpf2.headers["PRIMARY"]["CRV3"] = 0.0
     # Illumination sources: SCI on a star, SKY on sky, CAL dark (skipped).
     kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "Target"
     kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = "Sky"
