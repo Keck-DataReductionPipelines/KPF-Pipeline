@@ -278,6 +278,8 @@ class KPF0(KPFDataModel):
         "z": "CZ",
         "epoch": "CEPCH",
         "equinox": "CEQNX",
+        "color": "CCLR",
+        "color_name": "CCLRN",
     }
 
     def _catalog_primary_cards(self):

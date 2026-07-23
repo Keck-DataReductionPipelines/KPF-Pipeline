@@ -311,6 +311,8 @@ class TestToKpf1:
         "frame": "icrs",
         "epoch": 2016.0,
         "equinox": 2000.0,
+        "color": 1.23,
+        "color_name": "Gaia BP-RP",
     }
 
     @staticmethod
@@ -337,15 +339,25 @@ class TestToKpf1:
             assert p[f"CZ{i}"] == pytest.approx(compute_redshift(10.0 * u.km / u.s))
             assert p[f"CEPCH{i}"] == 2016.0
             assert p[f"CEQNX{i}"] == 2000.0
+            assert p[f"CCLR{i}"] == 1.23
+            assert p[f"CCLRN{i}"] == "Gaia BP-RP"
 
     def test_catalog_overlay_skips_missing_optional(self):
         # parallax/rv absent from the canonical row -> those cards stay blank; the
         # coherent position block is still written.
-        record = {**self._KPF_DRP, "parallax": None, "rv": None}
+        record = {
+            **self._KPF_DRP,
+            "parallax": None,
+            "rv": None,
+            "color": None,
+            "color_name": None,
+        }
         p = self._l0_with_catalog(record).to_kpf1().headers["PRIMARY"]
         assert not p.get("CPLX2")
         assert not p.get("CRV2")
         assert not p.get("CZ2")  # z derives from rv, so it is blank when rv is absent
+        assert not p.get("CCLR2")
+        assert not p.get("CCLRN2")
         assert p["CRA2"] == "12:00:00.0000"
 
     def test_science_frame_without_catalog_warns_and_leaves_blank(self, caplog):

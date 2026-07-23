@@ -65,6 +65,8 @@ _GAIA_UNITS = {
     "parallax": u.mas,
     "radial_velocity": u.km / u.s,
     "ref_epoch": u.yr,
+    "phot_bp_mean_mag": u.mag,
+    "phot_rp_mean_mag": u.mag,
 }
 _SIMBAD_UNITS = {
     "ra": u.deg,
@@ -73,6 +75,8 @@ _SIMBAD_UNITS = {
     "pmdec": u.mas / u.yr,
     "plx_value": u.mas,
     "rvz_radvel": u.km / u.s,
+    "B": None,
+    "V": None,
 }
 
 # CATALOG_RECORD write schema (AstroQuery is the sole populator): one row per resolved
@@ -82,8 +86,11 @@ _SIMBAD_UNITS = {
 # row, the winning source (or "" if none) for the merged row. Values are in the EPRV
 # C*# PRIMARY format: RA/Dec sexagesimal strings (RA hour-angle, Dec deg, ICRS), PM
 # arcsec/yr (RA incl. cos Dec), parallax mas, rv km/s, z the dimensionless relativistic
-# redshift derived from rv, epoch/equinox Julian years. Missing floats -> NaN, missing
-# strings -> "".
+# redshift derived from rv, epoch/equinox Julian years. color is a photometric color
+# index (a magnitude difference, mag) and color_name labels which one, differing by
+# source: Gaia "Gaia BP-RP" (G_BP - G_RP), SIMBAD "B-V" (Johnson B - V), WMKO "G-J"
+# (GAIAMAG - 2MASSMAG); both blank when the source lacks a needed magnitude. Missing
+# floats -> NaN, strings -> "".
 _CATALOG_COLUMNS = (
     "source",
     "object",
@@ -100,9 +107,21 @@ _CATALOG_COLUMNS = (
     "frame",
     "epoch",
     "equinox",
+    "color",
+    "color_name",
 )
 _CATALOG_STR_COLUMNS = frozenset(
-    {"source", "object", "radec_src", "plx_src", "rv_src", "frame", "ra", "dec"}
+    {
+        "source",
+        "object",
+        "radec_src",
+        "plx_src",
+        "rv_src",
+        "frame",
+        "ra",
+        "dec",
+        "color_name",
+    }
 )
 
 # RA / DEC are sexagesimal strings, so not subject to astropy unit conversion
@@ -114,6 +133,7 @@ _CATALOG_UNITS = {
     "z": u.dimensionless_unscaled,
     "epoch": u.yr,
     "equinox": u.yr,
+    "color": u.mag,
 }
 # Presence flag written to the CATALOG_RECORD header per source (int 0/1). DiagL0 keeps
 # its own local mirror (the DiagL0 convention of not importing this schema).
@@ -229,6 +249,18 @@ class AstroQuery:
         return float(compute_redshift(rv_kms * u.km / u.s))
 
     @staticmethod
+    def _color(blue_mag, red_mag, name):
+        """The (color, color_name) pair for a bluer-minus-redder magnitude difference.
+
+        Returns ``(blue_mag - red_mag, name)``, or ``(None, None)`` when either
+        magnitude is missing -- a color index needs both, and pairing the value with
+        its label keeps a blank color from carrying an orphan name.
+        """
+        if blue_mag is None or red_mag is None:
+            return None, None
+        return blue_mag - red_mag, name
+
+    @staticmethod
     def _sexagesimal_radec(coord):
         """ICRS SkyCoord -> the EPRV C*# sexagesimal (ra, dec) strings.
 
@@ -296,11 +328,12 @@ class AstroQuery:
         for name in _CATALOG_COLUMNS:
             if name in _CATALOG_STR_COLUMNS:
                 new_table[name] = np.array(
-                    ["" if r[name] is None else r[name] for r in ordered], dtype=str
+                    ["" if r.get(name) is None else r.get(name) for r in ordered],
+                    dtype=str,
                 )
             else:
                 new_table[name] = np.array(
-                    [np.nan if r[name] is None else r[name] for r in ordered],
+                    [np.nan if r.get(name) is None else r.get(name) for r in ordered],
                     dtype=float,
                 )
                 new_table[name].unit = _CATALOG_UNITS[name]
@@ -319,8 +352,8 @@ class AstroQuery:
         Returns None (warned) when GAIAID yields no usable source_id, when the
         lookup fails, or when the source is not found. Raises ValueError if the
         result's column units differ from the assumed canonical schema (deg,
-        mas/yr, mas, km/s, epoch in Julian years; ICRS). Whether it runs at all is
-        gated upstream in perform by ``do_gaia_query``.
+        mas/yr, mas, km/s, epoch in Julian years, BP/RP magnitudes in mag; ICRS).
+        Whether it runs at all is gated upstream in perform by ``do_gaia_query``.
         """
         gaia_id = self._gaia_source_id()
         if gaia_id is None:
@@ -329,7 +362,8 @@ class AstroQuery:
             )
             return None
         query = f"""
-        SELECT ra, dec, pmra, pmdec, parallax, radial_velocity, ref_epoch
+        SELECT ra, dec, pmra, pmdec, parallax, radial_velocity, ref_epoch,
+               phot_bp_mean_mag, phot_rp_mean_mag
         FROM gaiadr3.gaia_source
         WHERE source_id = {gaia_id}
         """
@@ -358,6 +392,11 @@ class AstroQuery:
         ra_str, dec_str = self._sexagesimal_radec(
             SkyCoord(ra, dec, unit=u.deg, frame="icrs")
         )
+        color, color_name = self._color(
+            self._scalar(row["phot_bp_mean_mag"]),
+            self._scalar(row["phot_rp_mean_mag"]),
+            "Gaia BP-RP",
+        )
         record = {
             "object": gaia_id,
             "ra": ra_str,
@@ -372,6 +411,8 @@ class AstroQuery:
             "frame": "icrs",
             "epoch": self._scalar(row["ref_epoch"]),
             "equinox": 2000.0,
+            "color": color,
+            "color_name": color_name,
         }
         logger.info("successfully built record for gaia")
         self._write_catalog_record("gaia", record)
@@ -384,8 +425,9 @@ class AstroQuery:
         resolves nothing (warned, not raised). Raises ValueError if the result's
         column units differ from the assumed schema. Column schema is the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value
-        mas, rvz_radvel km/s). Whether it runs at all is gated upstream in perform
-        by ``do_simbad_query``.
+        mas, rvz_radvel km/s); the Johnson B/V magnitude columns come back unlabeled
+        (unit None) and form the B-V color. Whether it runs at all is gated upstream
+        in perform by ``do_simbad_query``.
         """
         name = self._simbad_resolvable_name()
         if name is None:
@@ -396,7 +438,7 @@ class AstroQuery:
         logger.info("querying SIMBAD for %r", name)
         try:
             simbad = Simbad()
-            simbad.add_votable_fields("pmra", "pmdec", "plx", "rvz_radvel")
+            simbad.add_votable_fields("pmra", "pmdec", "plx", "rvz_radvel", "B", "V")
             result = simbad.query_object(name)
         except Exception as e:
             logger.warning(
@@ -419,6 +461,9 @@ class AstroQuery:
         ra_str, dec_str = self._sexagesimal_radec(
             SkyCoord(ra, dec, unit=u.deg, frame="icrs")
         )
+        color, color_name = self._color(
+            self._scalar(row["B"]), self._scalar(row["V"]), "B-V"
+        )
         record = {
             "object": name,
             "ra": ra_str,
@@ -434,6 +479,8 @@ class AstroQuery:
             "frame": "icrs",
             "epoch": 2000.0,
             "equinox": 2000.0,
+            "color": color,
+            "color_name": color_name,
         }
         logger.info("successfully built record for simbad")
         self._write_catalog_record("simbad", record)
@@ -447,7 +494,8 @@ class AstroQuery:
         arcsec/yr via x15 cos Dec; TARGPMDC already arcsec/yr) and rotated from its
         native FK5 (J2000) to ICRS, so all three sources share one frame. KPF pointing
         is always FK5, so a non-FK5 TARGFRAM (absent included) raises rather than being
-        coerced -- a wrong frame would corrupt the barycentric correction. Returns None
+        coerced -- a wrong frame would corrupt the barycentric correction. The G-J color
+        comes straight off PRIMARY (GAIAMAG - 2MASSMAG), no frame handling. Returns None
         (WMKOCR=0) when there is no pointing (TARGRA absent) or the TARG* astrometry
         cannot be parsed (warned, never raised). Gated upstream in perform by
         ``use_wmko_tcs``.
@@ -488,6 +536,11 @@ class AstroQuery:
             icrs = SkyCoord(**components).transform_to(ICRS())
 
             ra_str, dec_str = self._sexagesimal_radec(icrs)
+            color, color_name = self._color(
+                self._scalar(primary.get("GAIAMAG")),
+                self._scalar(primary.get("2MASSMAG")),
+                "G-J",
+            )
             record = {
                 "object": primary.get("OBJECT"),
                 "ra": ra_str,
@@ -499,6 +552,8 @@ class AstroQuery:
                 "frame": "icrs",
                 "epoch": self._scalar(primary.get("TARGEPOC")),
                 "equinox": 2000.0,
+                "color": color,
+                "color_name": color_name,
             }
         except Exception as exc:
             logger.warning(
@@ -523,9 +578,10 @@ class AstroQuery:
         those fields are one measurement and must not be spliced across catalogs. Its rv
         rides along; when that source has none (Gaia commonly lacks radial_velocity), rv
         falls back to the telescope TARGRADV on PRIMARY (not borrowed from a lower-
-        priority catalog). ``radec_src``/``plx_src`` name the astrometric source;
-        ``rv_src`` names the rv source ("wmko" for the TARGRADV fallback, "" when
-        nothing supplied it).
+        priority catalog). Its ``color``/``color_name`` ride along too (whichever the
+        base source carries, or blank). ``radec_src``/``plx_src`` name the astrometric
+        source; ``rv_src`` names the rv source ("wmko" for the TARGRADV fallback, ""
+        when nothing supplied).
 
         Raises ``ValueError`` when no source supplies a complete ra/dec/pmra/pmdec/
         parallax/epoch block -- without a position there is nothing to correct, so it
@@ -596,6 +652,8 @@ class AstroQuery:
             "frame": base_record["frame"],
             "epoch": base_record["epoch"],
             "equinox": base_record["equinox"],
+            "color": base_record["color"],
+            "color_name": base_record["color_name"],
         }
         self._canonical = record
         self._write_catalog_record("kpf-drp", record)

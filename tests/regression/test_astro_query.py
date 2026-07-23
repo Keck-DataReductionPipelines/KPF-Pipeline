@@ -49,6 +49,8 @@ def _record(obj, ra=180.0, **overrides):
         "frame": "icrs",
         "epoch": 2016.0,
         "equinox": 2000.0,
+        "color": 0.8,
+        "color_name": "Gaia BP-RP",
     }
     rec.update(overrides)
     return rec
@@ -102,6 +104,19 @@ class TestMergeCatalogRecords:
         assert row["radec_src"] == "gaia"
         assert row["rv"] == pytest.approx(11.0)
         assert row["rv_src"] == "gaia"
+
+    def test_color_rides_with_astrometric_base(self):
+        # color/color_name come from the astrometric base source, like the position:
+        # Gaia is the base, so its color wins over SIMBAD's.
+        row = _merge(
+            {
+                "gaia": _record("G", color=1.1, color_name="Gaia BP-RP"),
+                "simbad": _record("S", color=0.6, color_name="B-V"),
+            }
+        )
+        assert row["radec_src"] == "gaia"
+        assert row["color"] == pytest.approx(1.1)
+        assert row["color_name"] == "Gaia BP-RP"
 
     def test_rv_not_borrowed_from_lower_priority(self):
         # rv is no longer borrowed across catalogs: Gaia is the base and lacks rv;
@@ -238,6 +253,18 @@ class TestRedshift:
         assert np.isnan(row["z"])
 
 
+class TestColor:
+    """_color pairs a bluer-minus-redder magnitude difference with its label."""
+
+    def test_color_variants(self):
+        assert AstroQuery._color(9.5, 8.5, "Gaia BP-RP") == (
+            pytest.approx(1.0),
+            "Gaia BP-RP",
+        )
+        assert AstroQuery._color(None, 8.5, "B-V") == (None, None)
+        assert AstroQuery._color(9.5, None, "B-V") == (None, None)
+
+
 class TestReadWmkoHeader:
     """read_wmko_header builds the native wmko record from L0 PRIMARY TARG* (moved
     here from KPF0 read-time population); fail-soft on absent/malformed astrometry."""
@@ -298,6 +325,19 @@ class TestReadWmkoHeader:
         assert rec["pmra"] == pytest.approx(expected_pmra)
         assert expected_pmra != pytest.approx(0.5)  # factor actually applied
         assert rec["pmdec"] == pytest.approx(2.0)  # dec PM unchanged
+
+    def test_builds_g_minus_j_color(self):
+        # The G-J color comes straight off PRIMARY: GAIAMAG - 2MASSMAG.
+        rec = AstroQuery(
+            self._l0_targ(**{**self._GOOD_TARG, "GAIAMAG": 7.25, "2MASSMAG": 5.5})
+        ).read_wmko_header()
+        assert rec["color"] == pytest.approx(1.75)
+        assert rec["color_name"] == "G-J"
+
+    def test_absent_magnitude_leaves_color_none(self):
+        # A missing GAIAMAG/2MASSMAG -> no color (both fields None), not an error.
+        rec = AstroQuery(self._l0_targ(**self._GOOD_TARG)).read_wmko_header()
+        assert rec["color"] is None and rec["color_name"] is None
 
     def test_no_targ_returns_none_no_warning(self, caplog):
         # No TARGRA (e.g. a science frame with no pointing) -> None, silently.
@@ -365,6 +405,8 @@ _GAIA_VALUES = {
     "parallax": 100.0,
     "radial_velocity": 12.3,
     "ref_epoch": 2016.0,
+    "phot_bp_mean_mag": 9.5,
+    "phot_rp_mean_mag": 8.5,
 }
 _SIMBAD_VALUES = {
     "ra": 180.0,
@@ -373,6 +415,8 @@ _SIMBAD_VALUES = {
     "pmdec": -250.0,
     "plx_value": 100.0,
     "rvz_radvel": 12.3,
+    "B": 9.5,
+    "V": 8.5,
 }
 
 
@@ -500,6 +544,8 @@ class TestExternalQueries:
         assert rec["frame"] == "icrs"
         assert rec["equinox"] == pytest.approx(2000.0)
         assert rec["object"] == "12345"
+        assert rec["color"] == pytest.approx(1.0)  # G_BP - G_RP
+        assert rec["color_name"] == "Gaia BP-RP"
         # Row + presence flag written to CATALOG_RECORD.
         assert l0.headers["CATALOG_RECORD"]["GAIACR"] == 1
         assert "gaia" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
@@ -509,6 +555,25 @@ class TestExternalQueries:
         with _patch_gaia(_gaia_job(_gaia_table({"radial_velocity": float("nan")}))):
             rec = aq.query_gaia()
         assert rec["rv"] is None
+
+    def test_query_gaia_missing_photometry_leaves_color_none(self):
+        # A color needs both magnitudes; one unmeasured (masked/NaN) -> no color.
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        with _patch_gaia(_gaia_job(_gaia_table({"phot_rp_mean_mag": float("nan")}))):
+            rec = aq.query_gaia()
+        assert rec["color"] is None and rec["color_name"] is None
+
+    def test_record_without_color_writes_blank(self):
+        # A record that omits color/color_name writes NaN / "" for them, not an error.
+        record = _record("K")
+        record.pop("color")
+        record.pop("color_name")
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "object"
+        aq = AstroQuery(l0)
+        aq._write_catalog_record("kpf-drp", record)
+        row = l0.data["CATALOG_RECORD"][0]
+        assert np.isnan(row["color"]) and row["color_name"] == ""
 
     def test_query_gaia_no_gaiaid_returns_none(self, caplog):
         aq = AstroQuery(_l0_for_query())  # no GAIAID
@@ -559,7 +624,20 @@ class TestExternalQueries:
         assert rec["object"] == "HD 10700"  # bare-numeric OBJECT -> HD prefix
         assert rec["frame"] == "icrs"
         assert rec["epoch"] == pytest.approx(2000.0)
+        assert rec["color"] == pytest.approx(1.0)  # Johnson B - V
+        assert rec["color_name"] == "B-V"
         assert l0.headers["CATALOG_RECORD"]["SIMBADCR"] == 1
+
+    def test_query_simbad_missing_photometry_leaves_color_none(self):
+        # A color needs both magnitudes; one unmeasured -> no color.
+        l0 = _l0_for_query(OBJECT="10700")
+        aq = AstroQuery(l0)
+        with patch(
+            "kpfpipe.modules.astro_query.Simbad",
+            return_value=_simbad_instance(_simbad_table({"V": float("nan")})),
+        ):
+            rec = aq.query_simbad()
+        assert rec["color"] is None and rec["color_name"] is None
 
     def test_query_simbad_no_object_returns_none(self, caplog):
         aq = AstroQuery(_l0_for_query())
