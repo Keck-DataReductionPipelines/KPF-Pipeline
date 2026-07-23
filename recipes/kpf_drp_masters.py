@@ -2,17 +2,17 @@
 KPF masters construction recipe.
 
 Builds the nightly calibration master products for a single datecode from its
-raw L0 frames: master bias and master dark (L1), and master wavelength solution
-(L2) from ThAr exposures. Flat masters are scaffolded but not yet implemented.
-Each master is stacked by the corresponding module under `kpfpipe.modules.masters`
-and written to the output data root via the pipeline path helpers.
+raw L0 frames: master bias, master dark, and master flat (L1), and master
+wavelength solution (L2) from ThAr exposures. Each master is stacked by the
+corresponding module under `kpfpipe.modules.masters` and written to the output
+data root via the pipeline path helpers.
 """
 
 import logging
 import os
 import time
 
-from kpfpipe.modules.masters import WLS, Bias, Dark
+from kpfpipe.modules.masters import WLS, Bias, Dark, Flat
 from kpfpipe.utils.io import FileHandler, kpf_filepath
 from kpfpipe.utils.kpf import get_obs_id
 from recipes._logging import masters_run_summary
@@ -55,6 +55,7 @@ def main(config, args):
     for files in file_handler.build_calibration_stacks(
         "bias",
         min_stack_size=config.get_params(["BIAS"])["min_stack_size"],
+        max_stack_size=config.get_params(["BIAS"])["max_stack_size"],
         groupby="time_of_day",
     ):
         bias_path = kpf_filepath(
@@ -71,6 +72,7 @@ def main(config, args):
     for files in file_handler.build_calibration_stacks(
         "dark",
         min_stack_size=config.get_params(["DARK"])["min_stack_size"],
+        max_stack_size=config.get_params(["DARK"])["max_stack_size"],
         groupby="obs_night",
     ):
         dark_path = kpf_filepath(
@@ -81,18 +83,29 @@ def main(config, args):
         dark.make_master_l1(master_path=dark_path)
         built.append(("dark", dark_path, len(files)))
 
-    # master flat (not yet implemented)
-    # for files in file_handler.build_calibration_stacks('flat'):
-    #    flat_path = kpf_filepath(get_obs_id(files[0]), 'L1',
-    #                               data_root=data_root_masters, master='flat')
-    #    flat = Flat(files, config)
-    #    flat.make_master_l1(master_path=flat_path)
+    # Stack the flat frames into a master flat. Runs after the master bias and
+    # dark so CalibrationAssociation can subtract both from each flat frame (via
+    # _process_frame) before stacking.
+    for files in file_handler.build_calibration_stacks(
+        "flat",
+        min_stack_size=config.get_params(["FLAT"])["min_stack_size"],
+        max_stack_size=config.get_params(["FLAT"])["max_stack_size"],
+        groupby="time_of_day",
+    ):
+        flat_path = kpf_filepath(
+            get_obs_id(files[0]), "L1", data_root=data_root_masters, master="flat"
+        )
+        logger.info("stacking %d flat frames -> %s", len(files), flat_path)
+        flat = Flat(files, config)
+        flat.make_master_l1(master_path=flat_path)
+        built.append(("flat", flat_path, len(files)))
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.
     for files in file_handler.build_calibration_stacks(
         "thar",
         min_stack_size=config.get_params(["WLS"])["min_stack_size"],
+        max_stack_size=config.get_params(["WLS"])["max_stack_size"],
         groupby="time_of_day",
     ):
         obs_id = get_obs_id(files[0])

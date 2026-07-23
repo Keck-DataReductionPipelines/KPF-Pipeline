@@ -63,12 +63,12 @@ class BaseMasterModule:
 
     # Physical pixel units (BUNIT) by master type, written to the IMG
     # extensions in ``_build_ml1_obj``. A bias master is a stacked count image
-    # (electrons); a dark is normalized to a rate (electrons/sec); a flat is a
-    # unitless relative throughput (no BUNIT). Unknown types get no BUNIT.
+    # (electrons); a dark is normalized to a rate (electrons/sec); a flat is the
+    # total electrons summed over the stack (electrons). Unknown types get no BUNIT.
     _BUNIT_BY_TYPE = {
         "bias": "electrons",
         "dark": "electrons/sec",
-        "flat": None,
+        "flat": "electrons",
     }
 
     # QCL0 flags a frame must pass to enter a stack: data present, required
@@ -742,12 +742,13 @@ class BaseMasterModule:
 
             good &= exptime_sum > 0
 
-            # Exposure-weighted rate estimate: total counts over total exposure
-            # time across the surviving frames (the ML rate under Poisson
-            # statistics, correct for mixed exposures). For a bias stack
-            # exptime_sum is the survivor count, so this is the mean in electrons.
             img = np.zeros_like(counts)
-            img[good] = counts[good] / exptime_sum[good]
+            if cal_type == "flat":
+                # Master flat: total electrons summed over the stack.
+                img[good] = counts[good]
+            else:
+                # Exposure-weighted rate: counts / total exposure (bias: /count).
+                img[good] = counts[good] / exptime_sum[good]
 
             # SNR of the rate is invariant to the exposure normalization: the
             # total exposure cancels in |sum(counts)| / sqrt(sum(var)).
