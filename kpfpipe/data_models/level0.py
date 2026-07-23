@@ -290,19 +290,21 @@ class KPF0(KPFDataModel):
         was assembled from more than one catalog (position/parallax/rv from different
         sources), so the C*# block is not internally single-source.
 
-        Requires that AstroQuery has already populated CATALOG_RECORD -- its sole
-        writer, which always emits the 'kpf-drp' row with a resolved position. An empty
-        CATALOG_RECORD therefore means AstroQuery has not run: mandatory for a science
-        frame (IMTYPE 'Object'), which raises ``ValueError``; expected-absent for a
-        calibration (no target), which yields ``{}`` (SCI C*# cards left blank).
+        AstroQuery is the sole writer of CATALOG_RECORD, always emitting the 'kpf-drp'
+        row with a resolved position. An empty CATALOG_RECORD therefore means AstroQuery
+        has not run: on a science frame (IMTYPE 'Object') this yields ``{}`` with a
+        WARNING (the SCI C*# cards stay blank, so BarycentricCorrection and
+        CrossCorrelation will fail downstream); on a calibration (no target) it yields
+        ``{}`` silently.
         """
         table = self.data["CATALOG_RECORD"]
         if not table.colnames:
             imtype = self.headers["PRIMARY"].get("IMTYPE")
             if str(imtype).strip().lower() == "object":
-                raise ValueError(
-                    "CATALOG_RECORD is empty; run AstroQuery before to_kpf1 "
-                    "(science frames require resolved target astrometry)"
+                logger.warning(
+                    "CATALOG_RECORD is empty for a science frame; AstroQuery has not "
+                    "run, so the SCI C*# astrometry cards are left blank -- "
+                    "BarycentricCorrection and CrossCorrelation will fail downstream"
                 )
             return {}
 
@@ -361,9 +363,10 @@ class KPF0(KPFDataModel):
 
             # Overlay the merged canonical astrometry (CATALOG_RECORD 'kpf-drp' row)
             # onto the SCI-fiber EPRV C*# cards -- the sole writer of those cards (their
-            # raw TARG*/GAIAID mapping is neutralized in the header_map). Assumes
-            # AstroQuery has run: raises for a science frame whose CATALOG_RECORD is
-            # empty; blank (cards left unset) for a calibration frame.
+            # raw TARG*/GAIAID mapping is neutralized in the header_map). When
+            # AstroQuery has not run the cards are left blank: with a WARNING for a
+            # science frame (BarycentricCorrection/CrossCorrelation then fail),
+            # silently for a calibration frame.
             for key, value in self._catalog_primary_cards().items():
                 kpf1.headers["PRIMARY"][key] = value
 

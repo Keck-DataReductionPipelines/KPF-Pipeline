@@ -344,14 +344,18 @@ class TestToKpf1:
         assert not p.get("CRV2")
         assert p["CRA2"] == "12:00:00.0000"
 
-    def test_science_frame_without_catalog_raises(self):
+    def test_science_frame_without_catalog_warns_and_leaves_blank(self, caplog):
         # A science frame (IMTYPE Object) whose CATALOG_RECORD is empty means
-        # AstroQuery never ran -> to_kpf1 fails loudly rather than emitting blank
-        # (or raw TARG*) SCI cards.
+        # AstroQuery never ran. to_kpf1 succeeds with blank SCI C*# cards but warns
+        # that BarycentricCorrection and CrossCorrelation will fail downstream.
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
-        with pytest.raises(ValueError, match="CATALOG_RECORD is empty"):
-            l0.to_kpf1()
+        with caplog.at_level(logging.WARNING):
+            p = l0.to_kpf1().headers["PRIMARY"]
+        assert "CATALOG_RECORD is empty" in caplog.text
+        assert "will fail downstream" in caplog.text
+        for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
+            assert not p.get(kw)
 
     def test_calibration_frame_without_catalog_leaves_sci_cards_blank(self):
         # A calibration frame carries no target astrometry, so an empty
