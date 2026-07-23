@@ -19,7 +19,8 @@ AstroQuery never modifies the L0 PRIMARY header (a pure pass-through to
 INSTRUMENT_HEADER). All three source rows and the merged ``kpf-drp`` row share one
 schema in the EPRV C*# PRIMARY format (see ``_CATALOG_COLUMNS``), so a consumer reads
 any source identically and ``to_kpf1`` can copy cells straight onto the catalog cards.
-Per-fiber fan-out and derived quantities (offsets, redshift) are downstream jobs.
+The redshift z (``CZ#``) is derived from rv here and rides along in the record; per-
+fiber fan-out and pointing offsets remain downstream jobs.
 """
 
 import logging
@@ -33,6 +34,7 @@ from astroquery.gaia import Gaia
 from astroquery.simbad import Simbad
 
 from kpfpipe import DEFAULTS
+from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 
 logger = logging.getLogger(__name__)
@@ -79,8 +81,9 @@ _SIMBAD_UNITS = {
 # value block (position, parallax, rv) came from -- its own 'source' for a plain source
 # row, the winning source (or "" if none) for the merged row. Values are in the EPRV
 # C*# PRIMARY format: RA/Dec sexagesimal strings (RA hour-angle, Dec deg, ICRS), PM
-# arcsec/yr (RA incl. cos Dec), parallax mas, rv km/s, epoch/equinox Julian years.
-# Missing floats -> NaN, missing strings -> "".
+# arcsec/yr (RA incl. cos Dec), parallax mas, rv km/s, z the dimensionless relativistic
+# redshift derived from rv, epoch/equinox Julian years. Missing floats -> NaN, missing
+# strings -> "".
 _CATALOG_COLUMNS = (
     "source",
     "object",
@@ -93,6 +96,7 @@ _CATALOG_COLUMNS = (
     "pmdec",
     "parallax",
     "rv",
+    "z",
     "frame",
     "epoch",
     "equinox",
@@ -107,6 +111,7 @@ _CATALOG_UNITS = {
     "pmdec": u.arcsec / u.yr,
     "parallax": u.mas,
     "rv": u.km / u.s,
+    "z": u.dimensionless_unscaled,
     "epoch": u.yr,
     "equinox": u.yr,
 }
@@ -212,6 +217,18 @@ class AstroQuery:
         return None if np.isnan(f) else f
 
     @staticmethod
+    def _redshift(rv_kms):
+        """Relativistic redshift z for a catalog rv [km/s], or None if rv is missing.
+
+        Derived (see ``kpfpipe.utils.astro.compute_redshift``), carried on the record
+        so ``to_kpf1`` can overlay it onto the EPRV ``CZ#`` card without a consumer
+        recomputing it. Dimensionless.
+        """
+        if rv_kms is None:
+            return None
+        return float(compute_redshift(rv_kms * u.km / u.s))
+
+    @staticmethod
     def _sexagesimal_radec(coord):
         """ICRS SkyCoord -> the EPRV C*# sexagesimal (ra, dec) strings.
 
@@ -264,13 +281,15 @@ class AstroQuery:
         if record is None:
             rows.pop(source, None)
         else:
-            rows[source] = {
+            row = {
                 "source": source,
                 "radec_src": source,
                 "plx_src": source,
                 "rv_src": source,
                 **record,
             }
+            row["z"] = self._redshift(row["rv"])
+            rows[source] = row
 
         ordered = list(rows.values())
         new_table = Table()

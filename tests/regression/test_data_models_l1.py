@@ -9,6 +9,7 @@ import importlib.metadata
 import logging
 import re
 
+import astropy.units as u
 import numpy as np
 import pandas as pd
 import pytest
@@ -19,6 +20,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.data_models.masters.base import KPFMasterModel
 from kpfpipe.modules.astro_query import AstroQuery
+from kpfpipe.utils.astro import compute_redshift
 
 # synthetic_l0_file, synthetic_l0_minimal, synthetic_l1_file fixtures live in
 # tests/conftest.py
@@ -332,6 +334,7 @@ class TestToKpf1:
             assert p[f"CPMD{i}"] == -0.3
             assert p[f"CPLX{i}"] == 50.0
             assert p[f"CRV{i}"] == 10.0
+            assert p[f"CZ{i}"] == pytest.approx(compute_redshift(10.0 * u.km / u.s))
             assert p[f"CEPCH{i}"] == 2016.0
             assert p[f"CEQNX{i}"] == 2000.0
 
@@ -342,6 +345,7 @@ class TestToKpf1:
         p = self._l0_with_catalog(record).to_kpf1().headers["PRIMARY"]
         assert not p.get("CPLX2")
         assert not p.get("CRV2")
+        assert not p.get("CZ2")  # z derives from rv, so it is blank when rv is absent
         assert p["CRA2"] == "12:00:00.0000"
 
     def test_science_frame_without_catalog_warns_and_leaves_blank(self, caplog):

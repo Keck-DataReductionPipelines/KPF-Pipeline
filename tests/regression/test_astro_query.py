@@ -19,6 +19,7 @@ from astropy.table import Column, Table
 
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import _GAIA_UNITS, _SIMBAD_UNITS, AstroQuery
+from kpfpipe.utils.astro import compute_redshift
 
 
 def _ra_str(deg):
@@ -206,6 +207,35 @@ class TestSingleSourceProvenance:
         for col in ("radec_src", "plx_src", "rv_src"):
             assert gaia[col] == "gaia"
             assert wmko[col] == "wmko"
+
+
+class TestRedshift:
+    """z (CZ#) is derived from rv at write time, stored on every CATALOG_RECORD row."""
+
+    def test_redshift_helper_variants(self):
+        assert AstroQuery._redshift(None) is None
+        assert AstroQuery._redshift(0.0) == pytest.approx(0.0)
+        assert AstroQuery._redshift(10.0) == pytest.approx(
+            compute_redshift(10.0 * u.km / u.s)
+        )
+
+    def test_written_row_carries_redshift(self):
+        # A written row's z column is the redshift derived from its rv.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "object"
+        aq = AstroQuery(l0)
+        aq._write_catalog_record("gaia", _record("G", rv=11.0))
+        row = l0.data["CATALOG_RECORD"][0]
+        assert row["z"] == pytest.approx(compute_redshift(11.0 * u.km / u.s))
+
+    def test_missing_rv_leaves_redshift_nan(self):
+        # rv absent -> z is NaN (blank CZ# downstream), not an error.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "object"
+        aq = AstroQuery(l0)
+        aq._write_catalog_record("gaia", _record("G", rv=None))
+        row = l0.data["CATALOG_RECORD"][0]
+        assert np.isnan(row["z"])
 
 
 class TestReadWmkoHeader:

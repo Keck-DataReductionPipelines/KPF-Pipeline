@@ -275,6 +275,7 @@ class KPF0(KPFDataModel):
         "pmdec": "CPMD",
         "parallax": "CPLX",
         "rv": "CRV",
+        "z": "CZ",
         "epoch": "CEPCH",
         "equinox": "CEQNX",
     }
