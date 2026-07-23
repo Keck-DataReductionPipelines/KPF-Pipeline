@@ -1,7 +1,7 @@
 """Profile ``BarycentricCorrection.perform`` (per-order barycentric correction).
 
-Note: the first run may include a one-time Gaia DR3 network lookup, which the
-report will surface as a (non-compute) cumulative-time entry.
+Note: the first run may trigger barycorrpy's one-time IERS / leap-second table
+download; the report will surface that network time as a (non-compute) entry.
 
 Run with ``make profile-barycentric_correction`` or
 ``python tests/profiling/profile_barycentric_correction.py``. Requires real frames in
