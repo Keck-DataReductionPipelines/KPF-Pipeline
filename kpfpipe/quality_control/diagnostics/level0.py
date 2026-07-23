@@ -11,12 +11,13 @@ from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 logger = logging.getLogger(__name__)
 
-# Record fields the pointing offset needs; an incomplete one (empty RA/Dec string,
-# NaN measurement, or non-positive parallax -- routine for faint Gaia sources) makes
-# the source unusable, so its offset is emitted present-but-empty. RA/Dec are
-# sexagesimal strings, the rest floats.
+# Fields the pointing offset requires: RA/Dec (position) and epoch (the propagation
+# baseline). A record missing either is unusable, so its offset is emitted present-
+# but-empty. Proper motion and parallax are optional -- when absent they fall back to
+# zero for the offset only (see _record_skycoord), leaving CATALOG_RECORD untouched.
+# RA/Dec are sexagesimal strings, epoch a float.
 _OFFSET_STR_FIELDS = ("ra", "dec")
-_OFFSET_NUM_FIELDS = ("pmra", "pmdec", "parallax", "epoch")
+_OFFSET_REQUIRED_NUM_FIELDS = ("epoch",)
 
 # CATALOG_RECORD presence flag (int 0/1) per source, on the extension header.
 _CATALOG_FLAGS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
@@ -37,9 +38,8 @@ class DiagL0(Diagnostics):
         """The CATALOG_RECORD row for ``source``, or None with a WARNING.
 
         Returns None when AstroQuery has not run (no presence flag), the source's
-        record is absent (flag 0), or a present record is missing a measurement the
-        offset needs. The flag is written with the row, so flag 1 guarantees exactly
-        one matching row.
+        record is absent (flag 0), or a present record lacks a position or epoch. The
+        flag is written with the row, so flag 1 guarantees exactly one matching row.
         """
         hdr = self.kpf_obj.headers["CATALOG_RECORD"]
         keyword = _CATALOG_FLAGS[source]
@@ -58,14 +58,13 @@ class DiagL0(Diagnostics):
             return None
         table = self.kpf_obj.data["CATALOG_RECORD"]
         row = table[table["source"] == source][0]
-        missing = (
-            any(str(row[field]).strip() == "" for field in _OFFSET_STR_FIELDS)
-            or any(np.isnan(row[field]) for field in _OFFSET_NUM_FIELDS)
-            or float(row["parallax"]) <= 0
-        )
+        missing = any(
+            str(row[field]).strip() == "" for field in _OFFSET_STR_FIELDS
+        ) or any(np.isnan(row[field]) for field in _OFFSET_REQUIRED_NUM_FIELDS)
         if missing:
             logger.warning(
-                "incomplete %s record in CATALOG_RECORD; pointing offset unavailable",
+                "incomplete %s record in CATALOG_RECORD (no position or epoch); "
+                "pointing offset unavailable",
                 source,
             )
             return None
@@ -76,18 +75,34 @@ class DiagL0(Diagnostics):
 
         The canonical schema all three sources share: RA/Dec sexagesimal strings
         (RA hour-angle, Dec deg), proper motion arcsec/yr (RA incl. cos Dec),
-        parallax mas, epoch in Julian years.
+        parallax mas, epoch in Julian years. Proper motion and parallax fall back to
+        zero (no motion, no distance) when the record omits them -- for this offset
+        only; the CATALOG_RECORD values are left untouched.
         """
-        return SkyCoord(
-            ra=rec["ra"],
-            dec=rec["dec"],
-            unit=(u.hourangle, u.deg),
-            pm_ra_cosdec=float(rec["pmra"]) * u.arcsec / u.yr,
-            pm_dec=float(rec["pmdec"]) * u.arcsec / u.yr,
-            distance=(1e3 / float(rec["parallax"])) * u.pc,
-            obstime=Time(float(rec["epoch"]), format="jyear"),
-            frame=str(rec["frame"]),
-        )
+        pmra, pmdec = float(rec["pmra"]), float(rec["pmdec"])
+        parallax = float(rec["parallax"])
+        pm_missing = np.isnan(pmra) or np.isnan(pmdec)
+        plx_missing = np.isnan(parallax) or parallax <= 0
+        if pm_missing or plx_missing:
+            logger.debug(
+                "%s record missing %s; using PM=0, parallax=0 for the offset",
+                rec["source"],
+                " and ".join(
+                    n for n, m in (("PM", pm_missing), ("parallax", plx_missing)) if m
+                ),
+            )
+        kwargs = {
+            "ra": rec["ra"],
+            "dec": rec["dec"],
+            "unit": (u.hourangle, u.deg),
+            "pm_ra_cosdec": (0.0 if pm_missing else pmra) * u.arcsec / u.yr,
+            "pm_dec": (0.0 if pm_missing else pmdec) * u.arcsec / u.yr,
+            "obstime": Time(float(rec["epoch"]), format="jyear"),
+            "frame": str(rec["frame"]),
+        }
+        if not plx_missing:
+            kwargs["distance"] = (1e3 / parallax) * u.pc
+        return SkyCoord(**kwargs)
 
     def _offset(self, source):
         """Arcsec separation of the pointing from a catalog source at obs epoch.

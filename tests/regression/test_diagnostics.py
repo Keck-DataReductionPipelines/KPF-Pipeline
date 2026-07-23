@@ -263,7 +263,9 @@ class TestDiagL0Contingency:
         assert "no gaia astrometry in CATALOG_RECORD" in caplog.text
 
     def test_incomplete_record_emits_empty(self, caplog):
-        # A record present (flag 1) but missing a field the offset needs (parallax).
+        # A record present (flag 1) but missing a required field (epoch, the
+        # propagation baseline) -> unusable, offset empty. PM/parallax are not
+        # required (they fall back to zero); see the fall-back tests below.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -271,7 +273,7 @@ class TestDiagL0Contingency:
             {
                 "gaia": _record_at(pt),
                 "simbad": _record_at(pt),
-                "wmko": _record_at(pt, parallax=None),
+                "wmko": _record_at(pt, epoch=None),
             },
         )
         with caplog.at_level(logging.WARNING):
@@ -279,11 +281,11 @@ class TestDiagL0Contingency:
         assert results["TARGOFF"][0] is None
         assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
 
-    @pytest.mark.parametrize("bad_plx", [0.0, -5.0])
-    def test_nonpositive_parallax_emits_empty(self, bad_plx, caplog):
-        # Gaia DR3 reports parallax <= 0 for faint sources; a distance can't be
-        # formed from it, so the source is unusable and the offset comes out empty
-        # rather than raising (ZeroDivisionError / negative distance).
+    @pytest.mark.parametrize("bad_plx", [None, 0.0, -5.0])
+    def test_missing_or_nonpositive_parallax_falls_back(self, bad_plx, caplog):
+        # Gaia DR3 reports parallax <= 0 (or none) for faint sources; the offset
+        # falls back to parallax=0 (no distance) rather than emitting empty, so a
+        # frame with a Gaia position but no parallax still gets a finite offset.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -294,11 +296,35 @@ class TestDiagL0Contingency:
                 "wmko": _record_at(pt),
             },
         )
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.DEBUG):
             results = DiagL0(l0).run()
-        assert results["GAIAOFF"][0] is None
-        assert results["OBJOFF"][0] < 0.1
-        assert "incomplete gaia record in CATALOG_RECORD" in caplog.text
+        assert results["GAIAOFF"][0] < 0.1  # at the pointing -> ~0, not empty
+        assert "using PM=0, parallax=0" in caplog.text
+        # The fall-back is offset-local: CATALOG_RECORD keeps the original value.
+        tbl = l0.data["CATALOG_RECORD"]
+        stored = float(tbl[tbl["source"] == "gaia"]["parallax"][0])
+        if bad_plx is None:
+            assert np.isnan(stored)
+        else:
+            assert stored == pytest.approx(bad_plx)
+
+    def test_missing_pm_falls_back(self, caplog):
+        # A record with position + epoch but no proper motion still yields a finite
+        # offset (PM falls back to zero), not an empty one.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt, pmra=None, pmdec=None),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt),
+            },
+        )
+        with caplog.at_level(logging.DEBUG):
+            results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] < 0.1
+        assert "using PM=0, parallax=0" in caplog.text
 
     def test_malformed_astrometry_emits_empty(self, caplog):
         # A record that passes the completeness check but is malformed (unparseable
