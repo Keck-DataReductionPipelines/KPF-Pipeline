@@ -180,8 +180,10 @@ L2/L4 products and the barycentric/RV path depend on:
 | `CRA#`,`CDEC#` | Catalog RA / Dec | sexagesimal | Yes |
 | `CEQNX#`,`CEPCH#` | Catalog equinox / epoch | yr | Yes |
 | `CRV#` | Catalog systemic RV | km/s | Yes |
+| `CZ#` | Catalog redshift z (derived from `CRV#`) | | No |
 | `CPLX#` | Catalog parallax | mas | No |
 | `CPMR#`,`CPMD#` | Catalog proper motion RA / Dec | arcsec/yr | No |
+| `CCLR#`,`CCLRN#` | Catalog color (color 1 − color 2) + its name (e.g. `Gaia BP-RP`) | mag | No |
 | `OBSERVAT`,`TELESCOP` | Observatory / telescope | | Yes |
 | `OBSLON/LAT/ALT` | Observatory location | deg/deg/m | Yes |
 | `OBSGEO-X/Y/Z` | Cartesian site coordinates | m | No |
