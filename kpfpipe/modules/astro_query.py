@@ -561,8 +561,10 @@ class AstroQuery:
         those fields are one measurement and must not be spliced across catalogs. Its rv
         rides along; when that source has none (Gaia commonly lacks radial_velocity), rv
         falls back to the telescope TARGRADV on PRIMARY (not borrowed from a lower-
-        priority catalog). Its ``color``/``color_name`` ride along too (whichever the
-        base source carries, or blank). ``radec_src``/``plx_src`` name the astrometric
+        priority catalog). ``color``/``color_name`` ride along from the base source;
+        if it carries none, the highest-priority catalog that has a color supplies it
+        with a mixed-catalog warning (a color index is independent of the astrometry),
+        or blank when no source has one. ``radec_src``/``plx_src`` name the astrometric
         source; ``rv_src`` names the rv source ("wmko" for the TARGRADV fallback, ""
         when nothing supplied).
 
@@ -617,6 +619,23 @@ class AstroQuery:
                     rv_value,
                 )
 
+        # color/color_name from the base source; if it has none, borrow the highest-
+        # priority catalog that does. A color index is independent of the astrometry,
+        # so a mixed source is acceptable but flagged (mirrors the rv fallback).
+        color = base_record["color"]
+        color_name = base_record["color_name"]
+        if color is None:
+            for source, candidate in candidates:
+                if candidate["color"] is not None:
+                    color, color_name = candidate["color"], candidate["color_name"]
+                    logger.warning(
+                        "%s astrometric base has no color; using the %s %s color",
+                        base_source,
+                        source,
+                        color_name,
+                    )
+                    break
+
         record = {
             "object": base_record["object"],
             "radec_src": base_source,
@@ -631,8 +650,8 @@ class AstroQuery:
             "frame": base_record["frame"],
             "epoch": base_record["epoch"],
             "equinox": base_record["equinox"],
-            "color": base_record["color"],
-            "color_name": base_record["color_name"],
+            "color": color,
+            "color_name": color_name,
         }
         self._canonical = record
         self._write_catalog_record("kpf-drp", record)

@@ -116,6 +116,33 @@ class TestMergeCatalogRecords:
         assert row["color"] == pytest.approx(1.1)
         assert row["color_name"] == "Gaia BP-RP"
 
+    def test_color_borrowed_from_lower_priority_when_base_lacks(self, caplog):
+        # Base (Gaia) has no color -> borrowed from the next catalog that has one
+        # (SIMBAD), flagged by a mixed-catalog WARNING. Unlike rv, a color index is
+        # independent of the astrometry, so a cross-source color is acceptable.
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.modules.astro_query"):
+            row = _merge(
+                {
+                    "gaia": _record("G", color=None, color_name=None),
+                    "simbad": _record("S", color=0.6, color_name="B-V"),
+                }
+            )
+        assert row["radec_src"] == "gaia"
+        assert row["color"] == pytest.approx(0.6)
+        assert row["color_name"] == "B-V"
+        assert "astrometric base has no color" in caplog.text
+
+    def test_color_missing_everywhere_left_blank(self):
+        # No source supplies a color -> merged color stays blank, no borrow.
+        row = _merge(
+            {
+                "gaia": _record("G", color=None, color_name=None),
+                "simbad": _record("S", color=None, color_name=None),
+            }
+        )
+        assert row["color"] is None
+        assert row["color_name"] is None
+
     def test_rv_not_borrowed_from_lower_priority(self):
         # Gaia is the base and lacks rv; SIMBAD's rv is not pulled in, and with no
         # TARGRADV rv is left missing.
