@@ -94,8 +94,23 @@ class OrderTrace:
         degree = int(self.poly_degree)
         if degree < 0:
             raise ValueError(f"poly_degree must be non-negative, got {degree!r}")
-        coefficient_count = max(len(_REFERENCE_COEFFICIENT_COLUMNS), degree + 1)
-        return [f"Coeff{i}" for i in range(coefficient_count)]
+        return [f"Coeff{i}" for i in range(degree + 1)]
+
+    def _load_master_flat(self):
+        """Load and validate the vNext L1 master-flat product."""
+        if not os.path.isfile(self.master_flat_filename):
+            raise FileNotFoundError(
+                f"Master flat not found: {self.master_flat_filename}"
+            )
+
+        master_flat = KPFMasterL1.from_fits(self.master_flat_filename)
+        master_type = master_flat.headers["PRIMARY"].get("MASTYPE")
+        if str(master_type).lower() != "flat":
+            raise ValueError(
+                f"{self.master_flat_filename} is not a vNext flat master "
+                f"(MASTYPE={master_type!r})"
+            )
+        return master_flat
 
     def _validate_manual_anchors(self, chips, cal_order3_y):
         """Return uppercase, finite manual anchors for the requested chips."""
@@ -383,7 +398,6 @@ class OrderTrace:
     ):
         """Fit a polynomial with iterative median/MAD residual rejection."""
         degree = int(self.poly_degree)
-        coefficient_columns = self._coefficient_columns()
         keep = np.isfinite(x) & np.isfinite(y)
         minimum = max(degree + 1, int(np.ceil(x.size * min_valid_fraction)))
         if keep.sum() < minimum:
@@ -407,11 +421,9 @@ class OrderTrace:
             keep = updated
 
         coeffs = np.polynomial.polynomial.polyfit(x[keep], y[keep], degree)
-        padded = np.zeros(len(coefficient_columns), dtype=float)
-        padded[: coeffs.size] = coeffs
-        residual = y[keep] - np.polynomial.polynomial.polyval(x[keep], padded)
+        residual = y[keep] - np.polynomial.polynomial.polyval(x[keep], coeffs)
         rms = float(np.sqrt(np.mean(residual**2)))
-        return padded, keep, rms
+        return coeffs, keep, rms
 
     def _width_at_column(
         self,
@@ -703,7 +715,7 @@ class OrderTrace:
         Raises
         ------
         FileNotFoundError
-            If the era table or trace reference is absent.
+            If the master flat, era table, or trace reference is absent.
         ValueError
             If the era/anchor, detected geometry, or output table is invalid.
         FileExistsError
@@ -713,7 +725,7 @@ class OrderTrace:
             chips = self.chips
         anchors = self._validate_manual_anchors(chips, cal_order3_y)
 
-        self._master_flat = KPFMasterL1.from_fits(self.master_flat_filename)
+        self._master_flat = self._load_master_flat()
         timestamp = get_timestamp(self.master_flat_filename)
         observation_time = kpf_timestamp_to_datetime(timestamp)
         eras = pd.read_csv(_ERA_DEFINITIONS_PATH, skipinitialspace=True)
