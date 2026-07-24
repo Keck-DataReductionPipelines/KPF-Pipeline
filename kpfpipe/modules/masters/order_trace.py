@@ -19,6 +19,21 @@ Only the within-order orderlet spacing is treated as regular. The spacing
 
 OrderTrace applies no calibrations of its own; it consumes the master flat as
 delivered by the Flat module.
+
+Axis convention
+---------------
+Row and column here are numpy's, which is the *transpose* of the KPF physical
+convention -- a KPF scientist's "row" is this module's column. Throughout:
+
+- ``row`` (axis 0, ``nrow``, ``y``) is **cross-dispersion**: a trace is a few
+  pixels thick along it, and the fitted polynomial returns a row.
+- ``column`` (axis 1, ``ncol``, ``x``) is **dispersion**: a trace runs the
+  length of it, and the fitted polynomial takes a column as its argument.
+
+So every trace centerline is ``row = f(column)``, and the ``X1``/``X2`` output
+fields are the first and last *pixel column* over which that fit was measured.
+"Column" always means a pixel column; the fields of an output table are called
+fields, never columns.
 """
 
 import logging
@@ -64,7 +79,7 @@ class OrderTrace:
       - collecting touching mask pixels into clusters (8-connectivity)
       - curating clusters (rejecting artifacts, rejoining split traces)
       - identifying each cluster's fiber and echelle order index
-      - fitting a polynomial centerline to each identified trace
+      - fitting a polynomial centerline, row against column, to each trace
       - estimating aperture edges and enforcing the gap between neighbors
 
     Output always contains one row per expected trace (``norder`` x five
@@ -146,29 +161,70 @@ class OrderTrace:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _smooth_column(column, filter_par):
-        """Return the smooth lamp continuum underlying one detector column."""
-        stiffness = abs(float(filter_par))
-        nrow = column.size
-        superdiagonal = np.full(nrow, -stiffness)
-        diagonal = np.full(nrow, 1.0 + 2.0 * stiffness)
-        subdiagonal = np.full(nrow, -stiffness)
-        diagonal[0] = diagonal[-1] = 1.0 + stiffness
-        superdiagonal[0] = subdiagonal[-1] = 0.0
-        bands = np.vstack([superdiagonal, diagonal, subdiagonal])
-        return solve_banded((1, 1), bands, column)
+    def _single_column_inter_order_flux(pixels, smoothing_weight):
+        """Return the flux lying between the orders of one pixel column.
 
-    def _detect_illuminated_pixels(self, image, filter_par=20.0, trace_ratio=0.5):
-        """Return a boolean mask of illuminated pixels, one column at a time."""
+        ``pixels`` are raw master-flat values, straight off the detector.
+
+        A Whittaker smoother: the result minimizes
+        ``sum (f - pixels)**2 + smoothing_weight * sum (df/drow)**2``. Those
+        normal equations couple each pixel only to its two neighbors, so they
+        are the tridiagonal system solved here. Interior rows carry
+        ``1 + 2 * smoothing_weight``; the two ends carry one multiple less,
+        having one neighbor rather than two.
+
+        The default weight halves a 28-pixel period and passes a third of a
+        20-pixel one, so the solution rides over the orderlets (5-11 pixels
+        thick, spaced 16-20) while still following the far broader
+        order-to-order flux envelope.
+
+        ``solve_banded((1, 1), bands, pixels)`` solves ``A f = pixels`` for f,
+        the ``(1, 1)`` declaring one superdiagonal and one subdiagonal. With w
+        standing for ``smoothing_weight``, A is tridiagonal and symmetric:
+
+            [ 1+w   -w                    ]
+            [  -w  1+2w   -w              ]
+            [        -w  1+2w   -w        ]
+            [              -w  1+2w   -w  ]
+            [                    -w   1+w ]
+
+        Only those three diagonals are stored, in LAPACK's banded layout
+        ``bands[1 + i - j, j] = A[i, j]`` -- row 0 the superdiagonal, row 1 the
+        main diagonal, row 2 the subdiagonal. That indexing shifts row 0 one
+        place right and row 2 one place left, which is why ``bands[0, 0]`` and
+        ``bands[2, -1]`` fall outside A and are never read. LAPACK then runs a
+        banded LU with partial pivoting, costing O(nrow) at this bandwidth
+        rather than the O(nrow**3) a dense solve of the same system would.
+        """
+        nrow = pixels.size
+        off_diagonal = np.full(nrow, -smoothing_weight)
+        diagonal = np.full(nrow, 1.0 + 2.0 * smoothing_weight)
+        diagonal[[0, -1]] = 1.0 + smoothing_weight
+
+        # The matrix is symmetric, so one off-diagonal serves above and below.
+        # Banded storage never reads the two corner entries zeroed here.
+        bands = np.vstack([off_diagonal, diagonal, off_diagonal])
+        bands[0, 0] = bands[2, -1] = 0.0
+        return solve_banded((1, 1), bands, pixels)
+
+    def _detect_illuminated_pixels(self, image, smoothing_weight=20.0, trace_ratio=0.5):
+        """Return a boolean mask of illuminated pixels, one column at a time.
+
+        Each pixel column is reduced independently: no information crosses
+        between columns, so the threshold is local along dispersion.
+        """
         filled = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
-        mask = np.zeros(filled.shape, dtype=bool)
-        for column in range(filled.shape[1]):
-            # Subtracting the stiff smoothing solution leaves a high-pass
-            # residual, so the threshold below is set by orderlet contrast
-            # rather than by the absolute lamp level, which varies by an order
-            # of magnitude across the detector.
-            profile = filled[:, column]
-            residual = profile - self._smooth_column(profile, filter_par)
+        nrow, ncol = filled.shape
+        mask = np.zeros((nrow, ncol), dtype=bool)
+        for column in range(ncol):
+            # Subtracting the inter-order flux leaves the orderlet peaks
+            # standing alone, so the threshold below is set by orderlet
+            # contrast rather than by the absolute lamp level, which varies by
+            # an order of magnitude across the detector.
+            column_pixels = filled[:, column]
+            residual = column_pixels - self._single_column_inter_order_flux(
+                column_pixels, smoothing_weight
+            )
             positive_residual = np.clip(residual, 0.0, None)
             threshold = 0.5 * np.quantile(
                 positive_residual, trace_ratio, method="lower"
@@ -178,7 +234,13 @@ class OrderTrace:
 
     @staticmethod
     def _cluster_record(rows, columns):
-        """Bundle one cluster's pixels with the geometry used to curate it."""
+        """Bundle one cluster's pixels with the geometry used to curate it.
+
+        ``rows`` and ``columns`` are the cross-dispersion and dispersion pixel
+        indices of every pixel in the cluster. ``x1``/``x2`` are its first and
+        last pixel column, matching the output fields of the same name, and
+        ``row_at_x1``/``row_at_x2`` are where it sits across dispersion there.
+        """
         first_column, last_column = int(columns.min()), int(columns.max())
         return {
             "rows": rows,
@@ -212,14 +274,18 @@ class OrderTrace:
         ]
 
     def _center_column_band(self, ncol):
-        """Return the column range over which trace identity is measured."""
+        """Return the pixel columns over which trace identity is measured.
+
+        A narrow band at mid-dispersion, where every order is on the detector
+        and the orderlets of an order are cleanly separated across dispersion.
+        """
         half_width = max(1, ncol // 200)
         center = ncol // 2
         return center - half_width, center + half_width + 1
 
     @staticmethod
     def _band_pixels(cluster, band_start, band_stop):
-        """Return one cluster's rows and columns within a band of columns."""
+        """Return one cluster's pixel rows and columns inside a column band."""
         in_band = (cluster["columns"] >= band_start) & (cluster["columns"] < band_stop)
         return cluster["rows"][in_band], cluster["columns"][in_band]
 
@@ -259,16 +325,17 @@ class OrderTrace:
         for cluster in clusters:
             spanned_columns = cluster["x2"] - cluster["x1"] + 1
             rows, columns = self._band_pixels(cluster, band_start, band_stop)
-            # Thickness is measured in the same band that later fixes trace
-            # identity, so a detector-edge artifact running along a single row
-            # is rejected even when its full-frame pixel count looks trace-like.
+            # Cross-dispersion thickness: rows occupied per column, measured in
+            # the same band that later fixes trace identity. A detector-edge
+            # artifact running along a single row is therefore rejected even
+            # when its full-frame pixel count looks trace-like.
             thickness = rows.size / np.unique(columns).size if rows.size else 0.0
             if spanned_columns < min_spanned_columns:
-                reason = f"spans only {spanned_columns} columns"
+                reason = f"spans only {spanned_columns} pixel columns"
             elif rows.size == 0:
                 reason = "no pixels in the central column band"
             elif thickness < min_thickness:
-                reason = f"only {thickness:.1f} pixels thick at mid-detector"
+                reason = f"only {thickness:.1f} pixel rows thick at mid-detector"
             else:
                 kept.append(cluster)
                 continue
@@ -276,8 +343,12 @@ class OrderTrace:
         return kept
 
     @staticmethod
-    def _column_means(columns, rows):
-        """Collapse cluster pixels to one mean row per occupied column."""
+    def _mean_row_per_column(rows, columns):
+        """Collapse cluster pixels to one mean row per occupied pixel column.
+
+        Returns the occupied columns and their mean rows -- the (x, y) pair a
+        centerline is fitted through.
+        """
         row_total = np.bincount(columns, weights=rows)
         pixel_count = np.bincount(columns)
         occupied = np.flatnonzero(pixel_count)
@@ -297,19 +368,19 @@ class OrderTrace:
         if not host_near_gap.any() or not candidate_near_gap.any():
             return False
 
-        host_columns, host_rows = self._column_means(
-            host["columns"][host_near_gap], host["rows"][host_near_gap]
+        host_columns, host_mean_rows = self._mean_row_per_column(
+            host["rows"][host_near_gap], host["columns"][host_near_gap]
         )
-        candidate_columns, candidate_rows = self._column_means(
-            candidate["columns"][candidate_near_gap],
+        candidate_columns, candidate_mean_rows = self._mean_row_per_column(
             candidate["rows"][candidate_near_gap],
+            candidate["columns"][candidate_near_gap],
         )
         if host_columns.size < 2:
             return False
 
-        coeffs = np.polynomial.polynomial.polyfit(host_columns, host_rows, 1)
+        coeffs = np.polynomial.polynomial.polyfit(host_columns, host_mean_rows, 1)
         predicted = np.polynomial.polynomial.polyval(candidate_columns, coeffs)
-        residual = np.median(np.abs(candidate_rows - predicted))
+        residual = np.median(np.abs(candidate_mean_rows - predicted))
         return residual <= max_residual
 
     def _find_mergeable_pair(
@@ -365,8 +436,14 @@ class OrderTrace:
     # ------------------------------------------------------------------
 
     def _cluster_center_metrics(self, clusters, image):
-        """Measure row, mask thickness, and flux for each cluster at mid-detector."""
-        band_start, band_stop = self._center_column_band(image.shape[1])
+        """Measure row, mask thickness, and flux for each cluster at mid-detector.
+
+        The row is the cluster's cross-dispersion position there, and is what
+        the clusters are subsequently ordered by: sorting on it walks the
+        orderlets of the detector in the order they physically appear.
+        """
+        ncol = image.shape[1]
+        band_start, band_stop = self._center_column_band(ncol)
         records = []
         for index, cluster in enumerate(clusters):
             rows, columns = self._band_pixels(cluster, band_start, band_stop)
@@ -397,7 +474,7 @@ class OrderTrace:
         )
 
     def _orderlet_spacing(self, metrics, is_cal):
-        """Return the median row step between orderlets inside one order."""
+        """Return the median cross-dispersion step between orderlets of an order."""
         row_steps = np.diff(metrics["row"].to_numpy())
         if row_steps.size == 0:
             raise ValueError("a single cluster cannot fix the orderlet spacing")
@@ -534,11 +611,20 @@ class OrderTrace:
     # ------------------------------------------------------------------
 
     def _sample_columns(self, ncol, sample_count=65):
-        """Return evenly spaced, unique detector columns including both edges."""
+        """Return the pixel columns each trace is measured at, both edges included.
+
+        A centerline is fitted through one measurement per sample column, so
+        these are the dispersion positions the polynomial is constrained at.
+        """
         return np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
 
     def _column_profile(self, image, column, column_half_window=3):
-        """Return a robust cross-dispersion profile around one detector column."""
+        """Return a robust cross-dispersion profile at one detector column.
+
+        A profile rather than raw pixels: neighboring columns are median
+        combined, which suppresses noise without smearing, because a trace
+        moves only slightly across dispersion over so short a run along it.
+        """
         first_column = max(0, int(column) - column_half_window)
         last_column = min(image.shape[1], int(column) + column_half_window + 1)
         profile = np.nanmedian(image[:, first_column:last_column], axis=1)
@@ -552,17 +638,17 @@ class OrderTrace:
         self,
         image,
         column,
-        guess,
+        row_guess,
         row_half_window=7,
-        profile_smoothing_sigma=1.0,
+        signal_smoothing_sigma=1.0,
         winsor_percentile=90.0,
     ):
-        """Measure a subpixel center for a peaked CAL-fiber profile."""
-        if not np.isfinite(guess):
+        """Measure a subpixel row center for a peaked CAL-fiber profile."""
+        if not np.isfinite(row_guess):
             return np.nan
 
-        first_row = max(0, int(np.floor(guess)) - row_half_window)
-        last_row = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
+        first_row = max(0, int(np.floor(row_guess)) - row_half_window)
+        last_row = min(image.shape[0], int(np.ceil(row_guess)) + row_half_window + 1)
         if last_row - first_row < 3:
             return np.nan
 
@@ -572,7 +658,7 @@ class OrderTrace:
         signal = np.clip(profile - background, 0.0, None)
         smoothed = gaussian_filter1d(
             np.nan_to_num(signal),
-            sigma=profile_smoothing_sigma,
+            sigma=signal_smoothing_sigma,
             mode="nearest",
         )
         if not np.any(smoothed > 0):
@@ -613,20 +699,20 @@ class OrderTrace:
         self,
         image,
         column,
-        guess,
+        row_guess,
         row_half_window=7,
         background_smoothing_sigma=20.0,
-        profile_smoothing_sigma=1.0,
+        signal_smoothing_sigma=1.0,
         edge_levels=(0.25, 0.40, 0.55, 0.70),
         edge_min_width_pixels=3.0,
         edge_max_center_spread=0.75,
     ):
-        """Measure the geometric center of a flat-topped orderlet from its edges."""
-        if not np.isfinite(guess):
+        """Measure a flat-topped orderlet's geometric row center from its edges."""
+        if not np.isfinite(row_guess):
             return np.nan
 
-        first_row = max(0, int(np.floor(guess)) - row_half_window)
-        last_row = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
+        first_row = max(0, int(np.floor(row_guess)) - row_half_window)
+        last_row = min(image.shape[0], int(np.ceil(row_guess)) + row_half_window + 1)
         if last_row - first_row < 5:
             return np.nan
 
@@ -638,7 +724,7 @@ class OrderTrace:
         )
         signal = gaussian_filter1d(
             full_profile[first_row:last_row] - background[first_row:last_row],
-            sigma=profile_smoothing_sigma,
+            sigma=signal_smoothing_sigma,
             mode="nearest",
         )
         rows = np.arange(first_row, last_row, dtype=float)
@@ -651,13 +737,13 @@ class OrderTrace:
             return np.nan
 
         centers = []
-        guess_index = int(np.argmin(np.abs(rows - guess)))
+        row_guess_index = int(np.argmin(np.abs(rows - row_guess)))
         for level in edge_levels:
             threshold = baseline + level * amplitude
             illuminated = np.flatnonzero(signal >= threshold)
             if illuminated.size == 0:
                 continue
-            core_index = illuminated[np.argmin(np.abs(illuminated - guess_index))]
+            core_index = illuminated[np.argmin(np.abs(illuminated - row_guess_index))]
             bottom = self._threshold_crossing(rows, signal, core_index, -1, threshold)
             top = self._threshold_crossing(rows, signal, core_index, 1, threshold)
             width = top - bottom
@@ -677,11 +763,13 @@ class OrderTrace:
         return float(np.nanmedian(centers))
 
     def _trace_centers(self, image, cluster, sample_columns, fiber):
-        """Measure a subpixel center at every sample column of one cluster.
+        """Measure a subpixel row center at every sample column of one cluster.
 
-        The CAL orderlet is peaked and centers well on its brightest pixels;
-        SKY and the science orderlets are flat-topped, with no meaningful peak,
-        and are centered from their two edges instead.
+        The cluster's own mask pixels at a column give the starting row, so no
+        prior trace geometry is needed. The CAL orderlet is peaked and centers
+        well on its brightest pixels; SKY and the science orderlets are
+        flat-topped, with no meaningful peak, and are centered from their two
+        cross-dispersion edges instead.
         """
         measure_center = (
             self._local_peak_center if fiber == "CAL" else self._local_edge_center
@@ -691,33 +779,37 @@ class OrderTrace:
             in_column = cluster["columns"] == column
             if not in_column.any():
                 continue
-            guess = float(cluster["rows"][in_column].mean())
-            centers[index] = measure_center(image, column, guess)
+            row_guess = float(cluster["rows"][in_column].mean())
+            centers[index] = measure_center(image, column, row_guess)
         return centers
 
     def _robust_polynomial_fit(
         self,
-        columns,
+        sample_columns,
         centers,
         min_valid_fraction=0.5,
         fit_max_iterations=8,
         fit_sigma=4.0,
     ):
-        """Fit a polynomial with iterative median/MAD residual rejection."""
+        """Fit row center against pixel column, rejecting outliers by median/MAD."""
         degree = int(self.poly_degree)
-        kept = np.isfinite(columns) & np.isfinite(centers)
-        min_kept = max(degree + 1, int(np.ceil(columns.size * min_valid_fraction)))
+        kept = np.isfinite(sample_columns) & np.isfinite(centers)
+        min_kept = max(
+            degree + 1, int(np.ceil(sample_columns.size * min_valid_fraction))
+        )
         if kept.sum() < min_kept:
             raise ValueError(
-                f"only {kept.sum()} of {columns.size} trace centers are valid; "
-                f"at least {min_kept} are required"
+                f"only {kept.sum()} of {sample_columns.size} trace centers are "
+                f"valid; at least {min_kept} are required"
             )
 
         for _ in range(fit_max_iterations):
             coeffs = np.polynomial.polynomial.polyfit(
-                columns[kept], centers[kept], degree
+                sample_columns[kept], centers[kept], degree
             )
-            residual = centers - np.polynomial.polynomial.polyval(columns, coeffs)
+            residual = centers - np.polynomial.polynomial.polyval(
+                sample_columns, coeffs
+            )
             median_residual = np.nanmedian(residual[kept])
             residual_scatter = mad_std(residual[kept], ignore_nan=True)
             rejection_limit = max(0.25, fit_sigma * residual_scatter)
@@ -731,9 +823,11 @@ class OrderTrace:
                 break
             kept = still_valid
 
-        coeffs = np.polynomial.polynomial.polyfit(columns[kept], centers[kept], degree)
+        coeffs = np.polynomial.polynomial.polyfit(
+            sample_columns[kept], centers[kept], degree
+        )
         residual = centers[kept] - np.polynomial.polynomial.polyval(
-            columns[kept], coeffs
+            sample_columns[kept], coeffs
         )
         rms = float(np.sqrt(np.mean(residual**2)))
         return coeffs, kept, rms
@@ -747,7 +841,11 @@ class OrderTrace:
         winsor_percentile=90.0,
         width_sigma=2.8,
     ):
-        """Estimate the bottom and top Gaussian widths at one trace sample."""
+        """Estimate the aperture's half-widths below and above one trace sample.
+
+        Below and above are cross-dispersion, so the two widths become the
+        ``BottomEdge`` and ``TopEdge`` output fields.
+        """
         first_row = max(0, int(np.floor(center)) - width_half_window)
         last_row = min(image.shape[0], int(np.ceil(center)) + width_half_window + 1)
         if last_row - first_row < 5:
@@ -776,12 +874,18 @@ class OrderTrace:
         return tuple(widths)
 
     def _estimate_widths(
-        self, image, coeffs, columns, kept, width_half_window=14, width_default=11.0
+        self,
+        image,
+        coeffs,
+        sample_columns,
+        kept,
+        width_half_window=14,
+        width_default=11.0,
     ):
         """Return robust bottom/top aperture widths from accepted samples."""
         bottom_widths = []
         top_widths = []
-        kept_columns = columns[kept]
+        kept_columns = sample_columns[kept]
         stride = max(1, kept_columns.size // 24)
         for column in kept_columns[::stride]:
             center = np.polynomial.polynomial.polyval(column, coeffs)
@@ -801,7 +905,11 @@ class OrderTrace:
         return bottom, top
 
     def _constrain_neighbor_widths(self, records, ncol, orderlet_gap_pixels=2.0):
-        """Keep adjacent apertures separated by the required orderlet gap."""
+        """Keep adjacent apertures separated by the required orderlet gap.
+
+        Neighbors are adjacent across dispersion, which is why ``records`` must
+        arrive ordered by order index then fiber -- that is ascending row.
+        """
         coefficient_fields = self._coefficient_fields()
         middle_column = (ncol - 1) / 2.0
         for below, above in zip(records[:-1], records[1:], strict=False):
@@ -826,7 +934,7 @@ class OrderTrace:
         """Validate output schema, geometry, labels, and detector coverage."""
         coefficient_fields = self._coefficient_fields()
         if list(table.columns) != self._trace_fields():
-            raise ValueError(f"{chip} output has incompatible columns")
+            raise ValueError(f"{chip} output has incompatible fields")
 
         expected_traces = pd.MultiIndex.from_product(
             [range(self.norder[chip]), self.fibers], names=["Order", "Fiber"]
@@ -851,10 +959,13 @@ class OrderTrace:
         if not ((measured["BottomEdge"] > 0) & (measured["TopEdge"] > 0)).all():
             raise ValueError(f"{chip} output contains non-positive widths")
         if not ((measured["X1"] >= 0) & (measured["X2"] < ncol)).all():
-            raise ValueError(f"{chip} output contains out-of-range column bounds")
+            raise ValueError(f"{chip} output contains out-of-range pixel columns")
         if not (measured["X1"] <= measured["X2"]).all():
-            raise ValueError(f"{chip} output contains reversed column bounds")
+            raise ValueError(f"{chip} output contains reversed pixel columns")
 
+        # Traces are written in ascending row, so evaluating every centerline
+        # at the same columns must give rows that strictly increase down each
+        # column; anything else means two traces cross or are mislabelled.
         test_columns = np.linspace(0, ncol - 1, 17)
         coeffs = measured[coefficient_fields].to_numpy(dtype=float)
         centers = np.array(
@@ -888,7 +999,11 @@ class OrderTrace:
     def _measure_traces(
         self, chip, clusters, identities, image, full_coverage_fraction=0.9
     ):
-        """Fit every identified trace and assemble the output table for one CCD."""
+        """Fit every identified trace and assemble the output table for one CCD.
+
+        Coverage is the fraction of the dispersion direction a trace was
+        successfully measured over, and is what separates 'full' from 'partial'.
+        """
         nrow, ncol = image.shape
         coefficient_fields = self._coefficient_fields()
         sample_columns = self._sample_columns(ncol)
@@ -1041,7 +1156,7 @@ class OrderTrace:
         Notes
         -----
         Pipeline steps, repeated per CCD:
-        1. Threshold each detector column against its own smooth continuum,
+        1. Threshold each detector column against its own inter-order flux,
            giving a mask of illuminated pixels set by orderlet contrast rather
            than by the absolute lamp level
         2. Collect mask pixels that touch into clusters, taking all eight pixels
@@ -1049,13 +1164,15 @@ class OrderTrace:
         3. Reject clusters too small to be part of any trace
         4. Rejoin clusters that are separated pieces of one trace
         5. Reject clusters that cannot be identified at the detector center
-        6. Flag the CAL orderlet of each order, then count downward from each
-           CAL to label every cluster with its fiber and zero-based order index
-        7. Measure a subpixel center per sample column -- a winsorized centroid
-           for the peaked CAL profile, an edge midpoint for the flat-topped SKY
-           and science profiles -- and fit each trace with sigma-clipping
-        8. Estimate aperture edges and shrink them where neighboring apertures
-           would otherwise touch
+        6. Flag the CAL orderlet of each order, then count downward in row from
+           each CAL to label every cluster with its fiber and zero-based order
+           index
+        7. Measure a subpixel row center per sample column -- a winsorized
+           centroid for the peaked CAL profile, an edge midpoint for the
+           flat-topped SKY and science profiles -- and fit each trace's row
+           against column with sigma-clipping
+        8. Estimate aperture edges above and below each centerline, shrinking
+           them where neighboring apertures would otherwise touch
         9. Validate the assembled table and write ``order_trace_<chip>.csv``
 
         Steps 1-6 are pure detection and identification: identity is fixed from
