@@ -31,6 +31,11 @@ _TRACE_COLUMNS = [
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 
+# ---------------------------------------------------------------------------
+# Stubs and fixtures
+# ---------------------------------------------------------------------------
+
+
 class StubMasterFlat:
     """Minimal vNext master flat used by the numerical tests."""
 
@@ -123,6 +128,11 @@ def synthetic_setup(tmp_path, monkeypatch):
     )
     config = {"poly_degree": 3}
     return StubMasterFlat({"GREEN": image}), trace_rows, config
+
+
+# ---------------------------------------------------------------------------
+# Synthetic-image tests
+# ---------------------------------------------------------------------------
 
 
 class TestTraceRecovery:
@@ -355,22 +365,28 @@ class TestCSVWriting:
         tracer._write_results({"GREEN": table}, tmp_path, overwrite=True)
 
 
-@pytest.mark.slow
-@pytest.mark.requires_testdata
-def test_real_20240923_master_flat(tmp_path):
-    """Smoke-test a vNext 2024 master flat when local testdata are installed."""
-    testdata = Path(__file__).parent.parent / "testdata"
-    masters = sorted(testdata.glob("**/KP.20240923.*_master_flat_L1.fits"))
-    if not masters:
-        pytest.skip("a 20240923 vNext master flat is not installed")
+# ---------------------------------------------------------------------------
+# Real-data smoke test
+# ---------------------------------------------------------------------------
 
-    tracer = OrderTrace(masters[0])
-    tables = tracer.make_master_order_trace(output_dir=tmp_path)
 
-    assert len(tables["GREEN"]) == 175
-    assert len(tables["RED"]) == 159
-    for chip in ("GREEN", "RED"):
-        assert np.nanmedian(tracer._fit_rms[chip]) < 1.0
-        assert np.nanmax(tracer._fit_rms[chip]) < 2.0
-    assert (tmp_path / "order_trace_green.csv").is_file()
-    assert (tmp_path / "order_trace_red.csv").is_file()
+class TestRealData:
+    @pytest.mark.slow
+    @pytest.mark.requires_testdata
+    def test_real_20240923_master_flat(self, tmp_path):
+        """Smoke-test a vNext 2024 master flat when local testdata are installed."""
+        testdata = Path(__file__).parent.parent / "testdata"
+        masters = sorted(testdata.glob("**/KP.20240923.*_master_flat_L1.fits"))
+        if not masters:
+            pytest.skip("a 20240923 vNext master flat is not installed")
+
+        tracer = OrderTrace(masters[0])
+        tables = tracer.make_master_order_trace(output_dir=tmp_path)
+
+        assert len(tables["GREEN"]) == 175
+        assert len(tables["RED"]) == 159
+        for chip in ("GREEN", "RED"):
+            assert np.nanmedian(tracer._fit_rms[chip]) < 1.0
+            assert np.nanmax(tracer._fit_rms[chip]) < 2.0
+        assert (tmp_path / "order_trace_green.csv").is_file()
+        assert (tmp_path / "order_trace_red.csv").is_file()

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from astropy.stats import mad_std
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
@@ -48,11 +49,10 @@ class OrderTrace:
     """
     Measure spectral traces from one vNext KPF master flat and write trace CSVs.
 
-    Existing trace references provide approximate locations and ``(Fiber,
-    Order)`` identities only; all output geometry is measured from the input
-    master flat. This masters module is standalone rather than a
-    ``BaseMasterModule`` subclass because it consumes one completed L1 master
-    instead of stacking L0 exposures.
+    Existing trace references supply only approximate locations and ``(Fiber,
+    Order)`` identities; all output geometry is measured from the input flat.
+    Standalone rather than a ``BaseMasterModule`` subclass because it consumes
+    one completed L1 master instead of stacking L0 exposures.
 
     Parameters
     ----------
@@ -94,7 +94,7 @@ class OrderTrace:
         """Return output coefficient columns for the configured fit degree."""
         degree = int(self.poly_degree)
         if degree < 0:
-            raise ValueError("poly_degree must be non-negative")
+            raise ValueError(f"poly_degree must be non-negative, got {degree!r}")
         coefficient_count = max(len(_REFERENCE_COEFFICIENT_COLUMNS), degree + 1)
         return [f"Coeff{i}" for i in range(coefficient_count)]
 
@@ -214,8 +214,7 @@ class OrderTrace:
             profile, sigma=background_smoothing_sigma, mode="nearest"
         )
         residual = profile - background
-        residual_center = np.nanmedian(residual)
-        noise = 1.4826 * np.nanmedian(np.abs(residual - residual_center))
+        noise = mad_std(residual, ignore_nan=True)
         if not np.isfinite(noise) or noise <= 0:
             noise = np.nanstd(residual)
         if not np.isfinite(noise) or noise <= 0:
@@ -363,7 +362,7 @@ class OrderTrace:
             return np.nan
         centers = np.asarray(centers, dtype=float)
         center = float(np.nanmedian(centers))
-        spread = 1.4826 * np.nanmedian(np.abs(centers - center))
+        spread = mad_std(centers, ignore_nan=True)
         if spread > edge_max_center_spread:
             return np.nan
         return center
@@ -429,7 +428,7 @@ class OrderTrace:
             coeffs = np.polynomial.polynomial.polyfit(x[keep], y[keep], degree)
             residual = y - np.polynomial.polynomial.polyval(x, coeffs)
             center = np.nanmedian(residual[keep])
-            scale = 1.4826 * np.nanmedian(np.abs(residual[keep] - center))
+            scale = mad_std(residual[keep], ignore_nan=True)
             limit = max(0.25, fit_sigma * scale)
             updated = np.isfinite(y) & (np.abs(residual - center) <= limit)
             if updated.sum() < minimum:
