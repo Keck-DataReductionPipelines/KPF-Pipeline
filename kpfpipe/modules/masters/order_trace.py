@@ -152,18 +152,6 @@ class OrderTrace:
         self._anchor_shifts[chip] = shift
         return table
 
-    def _chip_image(self, chip):
-        """Return one finite, two-dimensional master-flat CCD image."""
-        extension = f"{chip}_IMG"
-        if extension not in self._master_flat.data:
-            raise KeyError(f"{extension} extension is not available")
-        image = np.asarray(self._master_flat.data[extension])
-        if image.ndim != 2:
-            raise ValueError(f"{extension} must be a 2D image")
-        if not np.issubdtype(image.dtype, np.number):
-            raise TypeError(f"{extension} must contain numeric data")
-        return image
-
     def _sample_columns(self, ncol, sample_count=65):
         """Return evenly spaced, unique detector columns including both edges."""
         return np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
@@ -554,7 +542,7 @@ class OrderTrace:
 
     def _trace_chip(self, chip, seed_table, row_half_window=7):
         """Measure all seeded orderlets on one CCD and return the output table."""
-        image = self._chip_image(chip)
+        image = self._master_flat.data[f"{chip}_IMG"]
         nrow, ncol = image.shape
         coefficient_columns = self._coefficient_columns()
         sample_x = self._sample_columns(ncol)
