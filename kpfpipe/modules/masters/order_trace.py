@@ -126,6 +126,7 @@ class OrderTrace:
             setattr(self, k, params.get(k, v))
 
         self._master_flat = None
+        self._image = {}
         self._fit_rms = {}
         self._trace_tables = None
         self._output_paths = {}
@@ -147,7 +148,11 @@ class OrderTrace:
         return self._coefficient_fields() + _TRACE_GEOMETRY_FIELDS + _TRACE_ID_FIELDS
 
     def _load_master_flat(self):
-        """Load and validate the vNext L1 master-flat product."""
+        """Load and validate the vNext L1 master-flat product.
+
+        Caches each CCD image as ``self._image[chip]``, the one place trace
+        measurement reads detector pixels from.
+        """
         if not os.path.isfile(self.master_flat_filename):
             raise FileNotFoundError(
                 f"Master flat not found: {self.master_flat_filename}"
@@ -160,6 +165,8 @@ class OrderTrace:
                 f"{self.master_flat_filename} is not a vNext flat master "
                 f"(MASTYPE={master_type!r})"
             )
+
+        self._image = {chip: master_flat.data[f"{chip}_IMG"] for chip in self.chips}
         return master_flat
 
     # ------------------------------------------------------------------
@@ -213,14 +220,14 @@ class OrderTrace:
         bands[0, 0] = bands[2, -1] = 0.0
         return solve_banded((1, 1), bands, pixels)
 
-    def _detect_illuminated_pixels(self, image, smoothing_weight=20.0, trace_ratio=0.5):
+    def _detect_illuminated_pixels(self, chip, smoothing_weight=20.0, trace_ratio=0.5):
         """Return a boolean mask of illuminated pixels, one column at a time.
 
         Each pixel column is reduced independently: no information crosses
         between columns, so the threshold is local along dispersion.
         """
-        filled = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
-        nrow, ncol = filled.shape
+        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
+        filled = np.nan_to_num(self._image[chip], nan=0.0, posinf=0.0, neginf=0.0)
         mask = np.zeros((nrow, ncol), dtype=bool)
         for j in range(ncol):
             # Subtracting the inter-order flux leaves the orderlet peaks
@@ -279,12 +286,13 @@ class OrderTrace:
             for start, stop in zip(bounds[:-1], bounds[1:], strict=True)
         ]
 
-    def _center_column_band(self, ncol):
+    def _center_column_band(self):
         """Return the pixel columns over which trace identity is measured.
 
         A narrow band at mid-dispersion, where every order is on the detector
         and the orderlets of an order are cleanly separated across dispersion.
         """
+        ncol = self.ccd["ncol"]
         half_width = max(1, ncol // 200)
         center = ncol // 2
         return center - half_width, center + half_width + 1
@@ -323,10 +331,10 @@ class OrderTrace:
         return kept
 
     def _reject_unidentifiable_clusters(
-        self, chip, clusters, ncol, min_spanned_columns=200, min_thickness=3.0
+        self, chip, clusters, min_spanned_columns=200, min_thickness=3.0
     ):
         """Drop rejoined clusters that cannot be identified as traces."""
-        band_start, band_stop = self._center_column_band(ncol)
+        band_start, band_stop = self._center_column_band()
         kept = []
         for cluster in clusters:
             spanned_columns = cluster["x2"] - cluster["x1"] + 1
@@ -441,15 +449,14 @@ class OrderTrace:
     # Private helpers - trace identity
     # ------------------------------------------------------------------
 
-    def _cluster_center_metrics(self, clusters, image):
+    def _cluster_center_metrics(self, chip, clusters):
         """Measure row, mask thickness, and flux for each cluster at mid-detector.
 
         The row is the cluster's cross-dispersion position there, and is what
         the clusters are subsequently ordered by: sorting on it walks the
         orderlets of the detector in the order they physically appear.
         """
-        ncol = image.shape[1]
-        band_start, band_stop = self._center_column_band(ncol)
+        band_start, band_stop = self._center_column_band()
         records = []
         for index, cluster in enumerate(clusters):
             rows, columns = self._band_pixels(cluster, band_start, band_stop)
@@ -458,7 +465,7 @@ class OrderTrace:
                     "cluster": index,
                     "row": float(rows.mean()),
                     "thickness": rows.size / np.unique(columns).size,
-                    "flux": float(np.median(image[rows, columns])),
+                    "flux": float(np.median(self._image[chip][rows, columns])),
                 }
             )
         metrics = pd.DataFrame(records)
@@ -579,12 +586,12 @@ class OrderTrace:
         orders_below = int(max(0.0, group_rows[0]) // group_spacing)
         return min(orders_below, norder - group_rows.size)
 
-    def _assign_trace_identity(self, chip, clusters, image):
+    def _assign_trace_identity(self, chip, clusters):
         """Label every cluster with its fiber and order index."""
         fibers = list(self.fibers)
         norder = self.norder[chip]
 
-        metrics = self._cluster_center_metrics(clusters, image)
+        metrics = self._cluster_center_metrics(chip, clusters)
         is_cal = self._flag_cal_clusters(metrics)
         metrics = self._assign_fiber_positions(chip, metrics, is_cal)
         metrics = self._drop_edge_groups(chip, metrics, norder)
@@ -616,15 +623,15 @@ class OrderTrace:
     # Private helpers - trace measurement
     # ------------------------------------------------------------------
 
-    def _sample_columns(self, ncol, sample_count=65):
+    def _sample_columns(self, sample_count=65):
         """Return the pixel columns each trace is measured at, both edges included.
 
         A centerline is fitted through one measurement per sample column, so
         these are the dispersion positions the polynomial is constrained at.
         """
-        return np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
+        return np.unique(np.linspace(0, self.ccd["ncol"] - 1, sample_count, dtype=int))
 
-    def _sample_column_profiles(self, image, sample_columns, column_half_window=3):
+    def _sample_column_profiles(self, chip, sample_columns, column_half_window=3):
         """Return the cross-dispersion profile at each sample column, keyed by column.
 
         Profiles rather than raw pixels: neighboring columns are median
@@ -639,7 +646,8 @@ class OrderTrace:
         ``nanmedian`` then ignores, giving exactly the truncated median a
         clamped per-column slice would.
         """
-        nrow, ncol = image.shape
+        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
+        image = self._image[chip]
         offsets = np.arange(-column_half_window, column_half_window + 1)
         window_columns = sample_columns[:, None] + offsets[None, :]
         on_detector = (window_columns >= 0) & (window_columns < ncol)
@@ -928,14 +936,14 @@ class OrderTrace:
         top = float(np.clip(np.nanmedian(top_widths), 1.0, width_ceiling))
         return bottom, top
 
-    def _constrain_neighbor_widths(self, records, ncol, orderlet_gap_pixels=2.0):
+    def _constrain_neighbor_widths(self, records, orderlet_gap_pixels=2.0):
         """Keep adjacent apertures separated by the required orderlet gap.
 
         Neighbors are adjacent across dispersion, which is why ``records`` must
         arrive ordered by order index then fiber -- that is ascending row.
         """
         coefficient_fields = self._coefficient_fields()
-        middle_column = (ncol - 1) / 2.0
+        middle_column = (self.ccd["ncol"] - 1) / 2.0
         for below, above in zip(records[:-1], records[1:], strict=False):
             below_center = np.polynomial.polynomial.polyval(
                 middle_column, [below[field] for field in coefficient_fields]
@@ -954,8 +962,9 @@ class OrderTrace:
                 below["TopEdge"] *= shrink
                 above["BottomEdge"] *= shrink
 
-    def _validate_trace_table(self, chip, table, nrow, ncol, row_half_window=7):
+    def _validate_trace_table(self, chip, table, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
+        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         coefficient_fields = self._coefficient_fields()
         if list(table.columns) != self._trace_fields():
             raise ValueError(f"{chip} output has incompatible fields")
@@ -1007,31 +1016,29 @@ class OrderTrace:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def _detect_traces(self, chip, image):
+    def _detect_traces(self, chip):
         """Detect, curate, and identify every trace on one CCD."""
-        mask = self._detect_illuminated_pixels(image)
+        mask = self._detect_illuminated_pixels(chip)
         clusters = self._label_clusters(mask)
         logger.info("%s: %d illuminated clusters found", chip, len(clusters))
 
         clusters = self._reject_small_clusters(chip, clusters)
         clusters = self._merge_fragmented_clusters(chip, clusters)
-        clusters = self._reject_unidentifiable_clusters(chip, clusters, image.shape[1])
+        clusters = self._reject_unidentifiable_clusters(chip, clusters)
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
-        return clusters, self._assign_trace_identity(chip, clusters, image)
+        return clusters, self._assign_trace_identity(chip, clusters)
 
-    def _measure_traces(
-        self, chip, clusters, identities, image, full_coverage_fraction=0.9
-    ):
+    def _measure_traces(self, chip, clusters, identities, full_coverage_fraction=0.9):
         """Fit every identified trace and assemble the output table for one CCD.
 
         Coverage is the fraction of the dispersion direction a trace was
         successfully measured over, and is what separates 'full' from 'partial'.
         """
-        nrow, ncol = image.shape
+        ncol = self.ccd["ncol"]
         coefficient_fields = self._coefficient_fields()
-        sample_columns = self._sample_columns(ncol)
-        column_profiles = self._sample_column_profiles(image, sample_columns)
+        sample_columns = self._sample_columns()
+        column_profiles = self._sample_column_profiles(chip, sample_columns)
 
         records = []
         rms_values = []
@@ -1080,10 +1087,10 @@ class OrderTrace:
             rms_values.append(rms)
 
         measured = [record for record in records if record["Status"] != "missing"]
-        self._constrain_neighbor_widths(measured, ncol)
+        self._constrain_neighbor_widths(measured)
 
         table = pd.DataFrame(records, columns=self._trace_fields())
-        self._validate_trace_table(chip, table, nrow, ncol)
+        self._validate_trace_table(chip, table)
         self._fit_rms[chip] = np.asarray(rms_values, dtype=float)
         return table
 
@@ -1215,9 +1222,8 @@ class OrderTrace:
 
         tables = {}
         for chip in chips:
-            image = self._master_flat.data[f"{chip}_IMG"]
-            clusters, identities = self._detect_traces(chip, image)
-            tables[chip] = self._measure_traces(chip, clusters, identities, image)
+            clusters, identities = self._detect_traces(chip)
+            tables[chip] = self._measure_traces(chip, clusters, identities)
 
         self._trace_tables = tables
         self._write_results(tables, output_dir, bool(overwrite))

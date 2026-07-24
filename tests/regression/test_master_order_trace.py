@@ -54,6 +54,17 @@ class StubMasterFlat:
         self.headers = {"PRIMARY": {"MASTYPE": master_type}}
 
 
+def _stub_master_class(master_flat):
+    """Return a KPFMasterL1 stand-in whose from_fits yields ``master_flat``."""
+
+    class FakeKPFMasterL1:
+        @classmethod
+        def from_fits(cls, filename):
+            return master_flat
+
+    return FakeKPFMasterL1
+
+
 def _orderlet_profile(offsets, fiber):
     """Return the cross-dispersion profile of one orderlet."""
     if fiber == "CAL":
@@ -92,21 +103,33 @@ def _tracer(tmp_path, image, monkeypatch, norder=3, **config):
     """Return an OrderTrace wired to a synthetic single-chip master flat."""
     master_path = tmp_path / "KP.20240405.00020.86_master_flat_L1.fits"
     master_path.touch()
+    nrow, ncol = image.shape
     tracer = OrderTrace(
-        master_path, {"chips": ["GREEN"], "norder": {"GREEN": norder}, **config}
+        master_path,
+        {
+            "chips": ["GREEN"],
+            "norder": {"GREEN": norder},
+            "ccd": {"nrow": nrow, "ncol": ncol},
+            **config,
+        },
     )
     monkeypatch.setattr(
-        tracer, "_load_master_flat", lambda: StubMasterFlat({"GREEN": image})
+        order_trace_module,
+        "KPFMasterL1",
+        _stub_master_class(StubMasterFlat({"GREEN": image})),
     )
+    # Load up front so the helpers below see the cached CCD images, as they do
+    # inside make_master_order_trace.
+    tracer._master_flat = tracer._load_master_flat()
     return tracer
 
 
-def _curated_clusters(tracer, image):
+def _curated_clusters(tracer):
     """Run detection and curation exactly as the module's own chain does."""
-    clusters = tracer._label_clusters(tracer._detect_illuminated_pixels(image))
+    clusters = tracer._label_clusters(tracer._detect_illuminated_pixels("GREEN"))
     clusters = tracer._reject_small_clusters("GREEN", clusters)
     clusters = tracer._merge_fragmented_clusters("GREEN", clusters)
-    return tracer._reject_unidentifiable_clusters("GREEN", clusters, image.shape[1])
+    return tracer._reject_unidentifiable_clusters("GREEN", clusters)
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +142,7 @@ class TestDetection:
         image, truth = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        curated = _curated_clusters(tracer, image)
+        curated = _curated_clusters(tracer)
 
         assert len(curated) == len(truth)
         for cluster in curated:
@@ -132,21 +155,21 @@ class TestDetection:
         image[318, :] = 5000.0
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        assert len(_curated_clusters(tracer, image)) == len(truth)
+        assert len(_curated_clusters(tracer)) == len(truth)
 
     def test_merges_a_fragmented_trace(self, tmp_path, monkeypatch):
         image, truth = _synthetic_flat()
-        tracer = _tracer(tmp_path, image, monkeypatch)
-
         # Blank a column band across the middle order's SCI1 trace only. The
         # far fragment is too short to be identified on its own, so the trace
         # is truncated at the gap unless the two pieces are rejoined.
         image[126:141, 300:340] = 20.0
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
         fragments = tracer._reject_small_clusters(
-            "GREEN", tracer._label_clusters(tracer._detect_illuminated_pixels(image))
+            "GREEN", tracer._label_clusters(tracer._detect_illuminated_pixels("GREEN"))
         )
         merged = tracer._merge_fragmented_clusters("GREEN", fragments)
-        curated = _curated_clusters(tracer, image)
+        curated = _curated_clusters(tracer)
 
         assert len(merged) == len(fragments) - 1
         assert len(curated) == len(truth)
@@ -159,9 +182,9 @@ class TestCalIdentification:
     def test_flags_every_cal_orderlet(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=4)
         tracer = _tracer(tmp_path, image, monkeypatch, norder=4)
-        clusters = _curated_clusters(tracer, image)
+        clusters = _curated_clusters(tracer)
 
-        metrics = tracer._cluster_center_metrics(clusters, image)
+        metrics = tracer._cluster_center_metrics("GREEN", clusters)
         flagged = np.flatnonzero(tracer._flag_cal_clusters(metrics))
 
         assert flagged.size == 4
@@ -172,9 +195,9 @@ class TestCalIdentification:
     ):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
-        clusters = _curated_clusters(tracer, image)
+        clusters = _curated_clusters(tracer)
 
-        metrics = tracer._cluster_center_metrics(clusters, image)
+        metrics = tracer._cluster_center_metrics("GREEN", clusters)
         metrics["is_cal"] = tracer._flag_cal_clusters(metrics)
         cal = metrics[metrics["is_cal"]]
         other = metrics[~metrics["is_cal"]]
@@ -185,9 +208,7 @@ class TestCalIdentification:
     def test_reports_a_flat_with_no_identifiable_cal(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
-        metrics = tracer._cluster_center_metrics(
-            _curated_clusters(tracer, image), image
-        )
+        metrics = tracer._cluster_center_metrics("GREEN", _curated_clusters(tracer))
 
         with pytest.raises(ValueError, match="no CAL orderlet identified"):
             tracer._assign_fiber_positions(
@@ -205,7 +226,7 @@ class TestTraceIdentity:
         image, truth = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        clusters, identities = tracer._detect_traces("GREEN", image)
+        clusters, identities = tracer._detect_traces("GREEN")
 
         assert list(identities.index) == _trace_labels(3)
         assert identities.notna().all()
@@ -223,7 +244,7 @@ class TestTraceIdentity:
         image, truth = _synthetic_flat(drop=dropped)
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        clusters, identities = tracer._detect_traces("GREEN", image)
+        clusters, identities = tracer._detect_traces("GREEN")
 
         assert list(identities.index) == _trace_labels(3)
         assert set(identities[identities.isna()].index) == set(dropped)
@@ -241,7 +262,7 @@ class TestTraceIdentity:
         tracer = _tracer(tmp_path, image, monkeypatch, norder=2)
 
         with caplog.at_level("WARNING"):
-            _, identities = tracer._detect_traces("GREEN", image)
+            _, identities = tracer._detect_traces("GREEN")
 
         assert list(identities.index) == _trace_labels(2)
         assert identities.notna().all()
@@ -357,21 +378,17 @@ class TestMasterFlatLoading:
     def test_loads_vnext_master_flat(self, tmp_path, monkeypatch):
         master_path = tmp_path / "KP.20240405.00020.86_master_flat_L1.fits"
         master_path.touch()
-        master_flat = StubMasterFlat({"GREEN": np.ones((8, 8), dtype=np.float32)})
-        calls = {}
-
-        class FakeKPFMasterL1:
-            @classmethod
-            def from_fits(cls, filename):
-                calls["filename"] = filename
-                return master_flat
-
-        monkeypatch.setattr(order_trace_module, "KPFMasterL1", FakeKPFMasterL1)
+        pixels = np.ones((8, 8), dtype=np.float32)
+        master_flat = StubMasterFlat({"GREEN": pixels, "RED": 2.0 * pixels})
+        monkeypatch.setattr(
+            order_trace_module, "KPFMasterL1", _stub_master_class(master_flat)
+        )
 
         tracer = OrderTrace(master_path)
 
         assert tracer._load_master_flat() is master_flat
-        assert calls["filename"] == str(master_path)
+        assert set(tracer._image) == {"GREEN", "RED"}
+        assert tracer._image["RED"] is master_flat.data["RED_IMG"]
 
     def test_rejects_non_flat_master(self, tmp_path, monkeypatch):
         master_path = tmp_path / "KP.20240405.00020.86_master_dark_L1.fits"
@@ -380,12 +397,9 @@ class TestMasterFlatLoading:
             {"GREEN": np.ones((8, 8), dtype=np.float32)}, master_type="dark"
         )
 
-        class FakeKPFMasterL1:
-            @classmethod
-            def from_fits(cls, filename):
-                return dark_master
-
-        monkeypatch.setattr(order_trace_module, "KPFMasterL1", FakeKPFMasterL1)
+        monkeypatch.setattr(
+            order_trace_module, "KPFMasterL1", _stub_master_class(dark_master)
+        )
         with pytest.raises(ValueError, match="not a vNext flat master"):
             OrderTrace(master_path)._load_master_flat()
 
