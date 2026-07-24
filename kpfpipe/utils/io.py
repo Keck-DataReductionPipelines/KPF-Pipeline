@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 # scalar FileHandler._seconds_since_j2000 computes when clustering frames.
 _J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0)
 
+# The mini-database cache is shared team state, so whoever scans a night first
+# must not lock everyone else out of rewriting it. No sticky bit on the
+# directory: it would block the os.replace of a CSV owned by another user.
+_CACHE_FILE_MODE = 0o666
+_CACHE_DIR_MODE = 0o777
+
 _MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
 # Derived, not read from a header key: UTC/HST from the filename's KPF timestamp,
 # ISJUNK from the observer junk list (see load_junk_obs_ids).
@@ -82,6 +88,17 @@ def datecode_dirs_in_range(root, start, end):
         for d in sorted(os.listdir(root))
         if is_datecode(d) and start <= d <= end and os.path.isdir(os.path.join(root, d))
     ]
+
+
+def _share_with_all_users(path, mode):
+    """Widen ``path`` to ``mode`` so every pipeline user can rewrite the shared
+    mini-database cache. Only the owner may chmod, so a path another user created
+    is left as-is -- harmless, as they created it through this same call.
+    """
+    try:
+        os.chmod(path, mode)
+    except OSError as e:
+        logger.debug("could not set mode %o on %s: %s", mode, path, e)
 
 
 def read_token_file(path):
@@ -187,13 +204,19 @@ class FileHandler:
         """Atomically write the full scan (``self._full_scan_mini_db``, one row per
         file) to ``datecode``'s cache CSV via a same-dir temp + ``os.replace``, so a
         concurrent reader never sees a half-written file. Writes the full scan, not
-        the cleaned ``self._mini_db``, to keep the row-count guardrail honest."""
+        the cleaned ``self._mini_db``, to keep the row-count guardrail honest.
+
+        File and directory are widened afterwards because ``mkstemp`` (0600) and
+        a umask-masked ``makedirs`` are both too strict to share."""
         cache_path = self._mini_db_cache_path(datecode)
         cache_dir = os.path.dirname(cache_path)
         os.makedirs(cache_dir, exist_ok=True)
+        _share_with_all_users(cache_dir, _CACHE_DIR_MODE)
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
         os.close(fd)
         try:
+            # os.replace carries the temp file's mode to the cache path.
+            _share_with_all_users(tmp, _CACHE_FILE_MODE)
             self._full_scan_mini_db.to_csv(tmp, index=False)
             os.replace(tmp, cache_path)
         except BaseException:

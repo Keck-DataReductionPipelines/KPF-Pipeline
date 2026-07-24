@@ -8,6 +8,7 @@ Integration tests (slow) use real L0 data from tests/testdata/L0/20240405/.
 
 import logging
 import os
+import stat
 from pathlib import Path
 
 import pandas as pd
@@ -828,6 +829,16 @@ class TestMiniDatabaseCache:
         assert list(cached.columns) == list(db.columns)
         assert len(cached) == len(db)
         assert cached["FILENAME"].tolist() == db["FILENAME"].tolist()
+
+    def test_cache_is_writable_by_every_user(self, tmp_path):
+        # A shared tree: mkstemp (0600) and a umask-masked makedirs would lock
+        # out everyone but the first writer.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        fh.build_mini_database("20240405", cache="w")
+
+        cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
+        assert stat.S_IMODE(cache.stat().st_mode) == 0o666
+        assert stat.S_IMODE(cache.parent.stat().st_mode) == 0o777
 
     def test_unreadable_frame_recorded_in_cache_not_in_memory(self, caplog, tmp_path):
         # An unreadable frame is omitted from the in-memory db (useless for
