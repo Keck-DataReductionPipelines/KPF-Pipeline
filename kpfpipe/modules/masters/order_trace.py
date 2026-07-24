@@ -180,42 +180,24 @@ class OrderTrace:
         ``pixels`` are raw master-flat values, straight off the detector.
 
         A Whittaker smoother: the result minimizes
-        ``sum (f - pixels)**2 + smoothing_weight * sum (df/drow)**2``. Those
-        normal equations couple each pixel only to its two neighbors, so they
-        are the tridiagonal system solved here. Interior rows carry
-        ``1 + 2 * smoothing_weight``; the two ends carry one multiple less,
-        having one neighbor rather than two.
+        ``sum (f - pixels)**2 + smoothing_weight * sum (df/drow)**2``. Its
+        normal equations are symmetric and tridiagonal -- each pixel couples
+        only to its two neighbors -- so ``solve_banded`` recovers f in O(nrow).
+        Subtracting it from ``pixels`` is the high-pass that isolates the
+        orderlet peaks.
 
-        The default weight halves a 28-pixel period and passes a third of a
-        20-pixel one, so the solution rides over the orderlets (5-11 pixels
-        thick, spaced 16-20) while still following the far broader
-        order-to-order flux envelope.
-
-        ``solve_banded((1, 1), bands, pixels)`` solves ``A f = pixels`` for f,
-        the ``(1, 1)`` declaring one superdiagonal and one subdiagonal. With w
-        standing for ``smoothing_weight``, A is tridiagonal and symmetric:
-
-            [ 1+w   -w                    ]
-            [  -w  1+2w   -w              ]
-            [        -w  1+2w   -w        ]
-            [              -w  1+2w   -w  ]
-            [                    -w   1+w ]
-
-        Only those three diagonals are stored, in LAPACK's banded layout
-        ``bands[1 + i - j, j] = A[i, j]`` -- row 0 the superdiagonal, row 1 the
-        main diagonal, row 2 the subdiagonal. That indexing shifts row 0 one
-        place right and row 2 one place left, which is why ``bands[0, 0]`` and
-        ``bands[2, -1]`` fall outside A and are never read. LAPACK then runs a
-        banded LU with partial pivoting, costing O(nrow) at this bandwidth
-        rather than the O(nrow**3) a dense solve of the same system would.
+        The default weight rides over the orderlets (5-11 pixels thick, spaced
+        16-20) while still following the far broader order-to-order flux
+        envelope.
         """
         nrow = pixels.size
         off_diagonal = np.full(nrow, -smoothing_weight)
         diagonal = np.full(nrow, 1.0 + 2.0 * smoothing_weight)
         diagonal[[0, -1]] = 1.0 + smoothing_weight
 
-        # The matrix is symmetric, so one off-diagonal serves above and below.
-        # Banded storage never reads the two corner entries zeroed here.
+        # solve_banded((1, 1), ...) declares one super- and one sub-diagonal.
+        # The matrix is symmetric, so one off-diagonal array serves both; its
+        # two out-of-matrix corner entries are zeroed here and never read.
         bands = np.vstack([off_diagonal, diagonal, off_diagonal])
         bands[0, 0] = bands[2, -1] = 0.0
         return solve_banded((1, 1), bands, pixels)
@@ -946,30 +928,35 @@ class OrderTrace:
         return bottom, top
 
     def _constrain_neighbor_widths(self, records, orderlet_gap_pixels=2.0):
-        """Keep adjacent apertures separated by the required orderlet gap.
+        """Clamp each aperture edge at the midline it shares with its neighbor.
 
-        Neighbors are adjacent across dispersion, which is why ``records`` must
-        arrive ordered by order index then fiber -- that is ascending row.
+        ``records`` arrive ascending in row (order then fiber), so consecutive
+        records are the neighbors that must not overlap. Each keeps its profile
+        width where there is room; where two would meet, both clamp to half the
+        space between their centerlines less a guard band. That space is
+        measured where the two centerlines run closest, so the apertures stay
+        disjoint across the whole detector, not only at mid-dispersion.
         """
         coefficient_fields = self._coefficient_fields()
-        middle_column = (self.ccd["ncol"] - 1) / 2.0
-        for below, above in zip(records[:-1], records[1:], strict=False):
-            below_center = np.polynomial.polynomial.polyval(
-                middle_column, [below[field] for field in coefficient_fields]
+        columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
+        centers = [
+            np.polynomial.polynomial.polyval(
+                columns, [record[field] for field in coefficient_fields]
             )
-            above_center = np.polynomial.polynomial.polyval(
-                middle_column, [above[field] for field in coefficient_fields]
-            )
-            available = (above_center - below_center) - orderlet_gap_pixels
-            requested = below["TopEdge"] + above["BottomEdge"]
-            if available <= 0:
+            for record in records
+        ]
+        for index, (below, above) in enumerate(
+            zip(records[:-1], records[1:], strict=False)
+        ):
+            closest_approach = float(np.min(centers[index + 1] - centers[index]))
+            half_space = (closest_approach - orderlet_gap_pixels) / 2.0
+            if half_space <= 0:
                 raise ValueError(
-                    "neighboring fitted traces cross or have no aperture gap"
+                    "neighboring fitted traces cross or leave no room for the "
+                    "orderlet gap"
                 )
-            if requested > available:
-                shrink = available / requested
-                below["TopEdge"] *= shrink
-                above["BottomEdge"] *= shrink
+            below["TopEdge"] = min(below["TopEdge"], half_space)
+            above["BottomEdge"] = min(above["BottomEdge"], half_space)
 
     def _validate_trace_table(self, chip, table, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
@@ -1015,6 +1002,14 @@ class OrderTrace:
         )
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
+
+        # The apertures themselves, not just the centerlines, must stay disjoint:
+        # every trace's upper edge below the next trace's lower edge everywhere.
+        upper = centers + measured["TopEdge"].to_numpy(dtype=float)[:, None]
+        lower = centers - measured["BottomEdge"].to_numpy(dtype=float)[:, None]
+        if np.any(lower[1:] <= upper[:-1]):
+            raise ValueError(f"{chip} fitted apertures overlap")
+
         on_detector = (centers >= -row_half_window) & (
             centers <= nrow - 1 + row_half_window
         )

@@ -289,6 +289,7 @@ class TestMakeMasterOrderTrace:
         assert labels == _trace_labels(3)
         assert (table["Status"] == "full").all()
         assert ((table["BottomEdge"] > 0) & (table["TopEdge"] > 0)).all()
+        _assert_apertures_disjoint(table, image.shape[1])
 
         columns = np.linspace(0, image.shape[1] - 1, 9)
         for row in table.itertuples(index=False):
@@ -439,6 +440,96 @@ class TestCSVWriting:
 
 
 # ---------------------------------------------------------------------------
+# Aperture non-overlap constraint
+# ---------------------------------------------------------------------------
+
+
+def _straight_trace(center, slope, bottom_edge, top_edge):
+    """A degree-3 record with a straight centerline and the given edges."""
+    return {
+        "Coeff0": center,
+        "Coeff1": slope,
+        "Coeff2": 0.0,
+        "Coeff3": 0.0,
+        "BottomEdge": bottom_edge,
+        "TopEdge": top_edge,
+    }
+
+
+def _assert_apertures_disjoint(table, ncol):
+    """No adjacent measured apertures overlap at any column."""
+    measured = table[table["Status"] != "missing"]
+    coeff_fields = [field for field in table.columns if field.startswith("Coeff")]
+    columns = np.linspace(0, ncol - 1, 201)
+    centers = np.array(
+        [
+            np.polynomial.polynomial.polyval(columns, coeffs)
+            for coeffs in measured[coeff_fields].to_numpy(dtype=float)
+        ]
+    )
+    upper = centers + measured["TopEdge"].to_numpy(dtype=float)[:, None]
+    lower = centers - measured["BottomEdge"].to_numpy(dtype=float)[:, None]
+    assert np.all(lower[1:] > upper[:-1])
+
+
+class TestApertureConstraint:
+    def _make_tracer(self, norder=1, ncol=400):
+        return OrderTrace(
+            "KP.20240405.00020.86_master_flat_L1.fits",
+            {"ccd": {"nrow": 400, "ncol": ncol}, "norder": {"GREEN": norder}},
+        )
+
+    def test_clamps_convergent_neighbours_and_keeps_roomy_ones(self):
+        tracer = self._make_tracer()
+        ncol = 400
+        # `above` tilts down to sit 4 px over `below` at the right edge; `roomy`
+        # stays a constant 30 px higher and is never contended.
+        below = _straight_trace(100.0, 0.0, 6.0, 6.0)
+        above = _straight_trace(130.0, (104.0 - 130.0) / (ncol - 1), 6.0, 6.0)
+        roomy = _straight_trace(160.0, 0.0, 6.0, 6.0)
+
+        tracer._constrain_neighbor_widths([below, above, roomy])
+
+        # 4 px apart less a 2 px gap leaves 1 px each side of the shared midline.
+        assert below["TopEdge"] == pytest.approx(1.0)
+        assert above["BottomEdge"] == pytest.approx(1.0)
+        # Uncontended edges keep their measured profile width.
+        assert below["BottomEdge"] == 6.0
+        assert above["TopEdge"] == 6.0
+        assert (roomy["BottomEdge"], roomy["TopEdge"]) == (6.0, 6.0)
+
+    def test_rejects_traces_too_close_for_the_gap(self):
+        tracer = self._make_tracer()
+        below = _straight_trace(100.0, 0.0, 6.0, 6.0)
+        above = _straight_trace(101.0, 0.0, 6.0, 6.0)
+        with pytest.raises(ValueError, match="orderlet gap"):
+            tracer._constrain_neighbor_widths([below, above])
+
+    def test_validation_rejects_overlapping_apertures(self):
+        tracer = self._make_tracer(norder=1)
+        centers = [100.0, 120.0, 140.0, 160.0, 180.0]
+        edges = [(6.0, 6.0), (6.0, 6.0), (6.0, 25.0), (25.0, 6.0), (6.0, 6.0)]
+        rows = [
+            {
+                **_straight_trace(center, 0.0, bottom, top),
+                "X1": 0.0,
+                "X2": 399.0,
+                "Fiber": fiber,
+                "Order": 0,
+                "Status": "full",
+            }
+            for fiber, center, (bottom, top) in zip(
+                _FIBERS, centers, edges, strict=True
+            )
+        ]
+        table = pd.DataFrame(rows, columns=_TRACE_FIELDS)
+
+        # Centerlines stay ordered, but the SCI2 and SCI3 apertures overlap.
+        with pytest.raises(ValueError, match="apertures overlap"):
+            tracer._validate_trace_table("GREEN", table)
+
+
+# ---------------------------------------------------------------------------
 # Real-data test
 # ---------------------------------------------------------------------------
 
@@ -464,6 +555,7 @@ class TestRealData:
 
         for chip in ("GREEN", "RED"):
             assert np.nanmedian(tracer._fit_rms[chip]) < 1.0
+            _assert_apertures_disjoint(tables[chip], tracer.ccd["ncol"])
             assert np.nanmax(tracer._fit_rms[chip]) < 2.0
             assert (tmp_path / f"order_trace_{chip.lower()}.csv").is_file()
 
