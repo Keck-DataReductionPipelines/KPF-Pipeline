@@ -246,23 +246,24 @@ class OrderTrace:
         return mask
 
     @staticmethod
-    def _cluster_record(rows, columns):
+    def _cluster_record(row_indices, col_indices):
         """Bundle one cluster's pixels with the geometry used to curate it.
 
-        ``rows`` and ``columns`` are the cross-dispersion and dispersion pixel
-        indices of every pixel in the cluster. ``x1``/``x2`` are its first and
-        last pixel column, matching the output fields of the same name, and
-        ``row_at_x1``/``row_at_x2`` are where it sits across dispersion there.
+        ``row_indices`` and ``col_indices`` are the cross-dispersion and
+        dispersion pixel indices of every pixel in the cluster. ``x1``/``x2``
+        are its first and last pixel column, matching the output fields of the
+        same name, and ``row_at_x1``/``row_at_x2`` are where it sits across
+        dispersion there.
         """
-        first_j, last_j = int(columns.min()), int(columns.max())
+        first_j, last_j = int(col_indices.min()), int(col_indices.max())
         return {
-            "rows": rows,
-            "columns": columns,
-            "npixel": int(rows.size),
+            "row_indices": row_indices,
+            "col_indices": col_indices,
+            "npixel": int(row_indices.size),
             "x1": first_j,
             "x2": last_j,
-            "row_at_x1": float(rows[columns == first_j].mean()),
-            "row_at_x2": float(rows[columns == last_j].mean()),
+            "row_at_x1": float(row_indices[col_indices == first_j].mean()),
+            "row_at_x2": float(row_indices[col_indices == last_j].mean()),
         }
 
     def _label_clusters(self, mask):
@@ -273,16 +274,16 @@ class OrderTrace:
         cluster.
         """
         labels, cluster_count = label(mask, structure=np.ones((3, 3), dtype=int))
-        rows, columns = np.nonzero(labels)
-        cluster_ids = labels[rows, columns]
+        row_indices, col_indices = np.nonzero(labels)
+        cluster_ids = labels[row_indices, col_indices]
 
         ordering = np.argsort(cluster_ids, kind="stable")
-        rows, columns = rows[ordering], columns[ordering]
+        row_indices, col_indices = row_indices[ordering], col_indices[ordering]
         # One contiguous run of pixels per cluster id, so a single searchsorted
         # gives every cluster's slice without revisiting the label image.
         bounds = np.searchsorted(cluster_ids[ordering], np.arange(1, cluster_count + 2))
         return [
-            self._cluster_record(rows[start:stop], columns[start:stop])
+            self._cluster_record(row_indices[start:stop], col_indices[start:stop])
             for start, stop in zip(bounds[:-1], bounds[1:], strict=True)
         ]
 
@@ -299,9 +300,11 @@ class OrderTrace:
 
     @staticmethod
     def _band_pixels(cluster, band_start, band_stop):
-        """Return one cluster's pixel rows and columns inside a column band."""
-        in_band = (cluster["columns"] >= band_start) & (cluster["columns"] < band_stop)
-        return cluster["rows"][in_band], cluster["columns"][in_band]
+        """Return one cluster's pixel row and column indices inside a column band."""
+        in_band = (cluster["col_indices"] >= band_start) & (
+            cluster["col_indices"] < band_stop
+        )
+        return cluster["row_indices"][in_band], cluster["col_indices"][in_band]
 
     @staticmethod
     def _log_rejection(chip, cluster, reason):
@@ -309,8 +312,8 @@ class OrderTrace:
         logger.debug(
             "%s: rejecting cluster at rows %d-%d, columns %d-%d (%s)",
             chip,
-            cluster["rows"].min(),
-            cluster["rows"].max(),
+            cluster["row_indices"].min(),
+            cluster["row_indices"].max(),
             cluster["x1"],
             cluster["x2"],
             reason,
@@ -338,15 +341,19 @@ class OrderTrace:
         kept = []
         for cluster in clusters:
             spanned_columns = cluster["x2"] - cluster["x1"] + 1
-            rows, columns = self._band_pixels(cluster, band_start, band_stop)
+            row_indices, col_indices = self._band_pixels(cluster, band_start, band_stop)
             # Cross-dispersion thickness: rows occupied per column, measured in
             # the same band that later fixes trace identity. A detector-edge
             # artifact running along a single row is therefore rejected even
             # when its full-frame pixel count looks trace-like.
-            thickness = rows.size / np.unique(columns).size if rows.size else 0.0
+            thickness = (
+                row_indices.size / np.unique(col_indices).size
+                if row_indices.size
+                else 0.0
+            )
             if spanned_columns < min_spanned_columns:
                 reason = f"spans only {spanned_columns} pixel columns"
-            elif rows.size == 0:
+            elif row_indices.size == 0:
                 reason = "no pixels in the central column band"
             elif thickness < min_thickness:
                 reason = f"only {thickness:.1f} pixel rows thick at mid-detector"
@@ -377,17 +384,17 @@ class OrderTrace:
         side are used and the fit is linear: the test asks whether the pieces
         line up locally, over which a trace's curvature is negligible.
         """
-        host_near_gap = host["columns"] >= host["x2"] - gap
-        candidate_near_gap = candidate["columns"] <= candidate["x1"] + gap
+        host_near_gap = host["col_indices"] >= host["x2"] - gap
+        candidate_near_gap = candidate["col_indices"] <= candidate["x1"] + gap
         if not host_near_gap.any() or not candidate_near_gap.any():
             return False
 
         host_columns, host_mean_rows = self._mean_row_per_column(
-            host["rows"][host_near_gap], host["columns"][host_near_gap]
+            host["row_indices"][host_near_gap], host["col_indices"][host_near_gap]
         )
         candidate_columns, candidate_mean_rows = self._mean_row_per_column(
-            candidate["rows"][candidate_near_gap],
-            candidate["columns"][candidate_near_gap],
+            candidate["row_indices"][candidate_near_gap],
+            candidate["col_indices"][candidate_near_gap],
         )
         if host_columns.size < 2:
             return False
@@ -437,8 +444,8 @@ class OrderTrace:
                 candidate["x2"],
             )
             combined = self._cluster_record(
-                np.concatenate([host["rows"], candidate["rows"]]),
-                np.concatenate([host["columns"], candidate["columns"]]),
+                np.concatenate([host["row_indices"], candidate["row_indices"]]),
+                np.concatenate([host["col_indices"], candidate["col_indices"]]),
             )
             clusters = [
                 cluster for index, cluster in enumerate(clusters) if index not in pair
@@ -459,13 +466,15 @@ class OrderTrace:
         band_start, band_stop = self._center_column_band()
         records = []
         for index, cluster in enumerate(clusters):
-            rows, columns = self._band_pixels(cluster, band_start, band_stop)
+            row_indices, col_indices = self._band_pixels(cluster, band_start, band_stop)
             records.append(
                 {
                     "cluster": index,
-                    "row": float(rows.mean()),
-                    "thickness": rows.size / np.unique(columns).size,
-                    "flux": float(np.median(self._image[chip][rows, columns])),
+                    "row": float(row_indices.mean()),
+                    "thickness": row_indices.size / np.unique(col_indices).size,
+                    "flux": float(
+                        np.median(self._image[chip][row_indices, col_indices])
+                    ),
                 }
             )
         metrics = pd.DataFrame(records)
@@ -809,10 +818,10 @@ class OrderTrace:
         )
         centers = np.full(sample_columns.size, np.nan, dtype=float)
         for sample, j in enumerate(sample_columns):
-            in_column = cluster["columns"] == j
+            in_column = cluster["col_indices"] == j
             if not in_column.any():
                 continue
-            row_guess = float(cluster["rows"][in_column].mean())
+            row_guess = float(cluster["row_indices"][in_column].mean())
             centers[sample] = measure_center(column_profiles[int(j)], row_guess)
         return centers
 

@@ -232,8 +232,8 @@ class TestTraceIdentity:
         assert identities.notna().all()
         for (order, fiber), index in identities.items():
             cluster = clusters[int(index)]
-            middle = cluster["columns"] == image.shape[1] // 2
-            assert cluster["rows"][middle].mean() == pytest.approx(
+            middle = cluster["col_indices"] == image.shape[1] // 2
+            assert cluster["row_indices"][middle].mean() == pytest.approx(
                 truth[(order, fiber)][image.shape[1] // 2], abs=1.0
             )
 
@@ -250,8 +250,8 @@ class TestTraceIdentity:
         assert set(identities[identities.isna()].index) == set(dropped)
         for (order, fiber), index in identities[identities.notna()].items():
             cluster = clusters[int(index)]
-            middle = cluster["columns"] == image.shape[1] // 2
-            assert cluster["rows"][middle].mean() == pytest.approx(
+            middle = cluster["col_indices"] == image.shape[1] // 2
+            assert cluster["row_indices"][middle].mean() == pytest.approx(
                 truth[(order, fiber)][image.shape[1] // 2], abs=1.0
             )
 
