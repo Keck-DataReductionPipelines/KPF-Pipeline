@@ -3,7 +3,6 @@
 import logging
 import os
 import tempfile
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -33,10 +32,10 @@ _REFERENCE_TRACE_COLUMNS = (
     _REFERENCE_COEFFICIENT_COLUMNS + _TRACE_GEOMETRY_COLUMNS + _TRACE_ID_COLUMNS
 )
 
-_ERA_DEFINITIONS_PATH = REPO_ROOT / "reference/kpf_instrument_eras.csv"
+_ERA_DEFINITIONS_PATH = f"{REPO_ROOT}/reference/kpf_instrument_eras.csv"
 _ORDER_TRACE_PATHS = {
-    "GREEN": REPO_ROOT / "reference/order_trace_green.csv",
-    "RED": REPO_ROOT / "reference/order_trace_red.csv",
+    "GREEN": f"{REPO_ROOT}/reference/order_trace_green.csv",
+    "RED": f"{REPO_ROOT}/reference/order_trace_red.csv",
 }
 
 _DEFAULTS = {
@@ -98,20 +97,6 @@ class OrderTrace:
         coefficient_count = max(len(_REFERENCE_COEFFICIENT_COLUMNS), degree + 1)
         return [f"Coeff{i}" for i in range(coefficient_count)]
 
-    def _load_master_flat(self):
-        """Load and validate the vNext L1 master-flat product."""
-        path = Path(self.master_flat_filename)
-        if not path.is_file():
-            raise FileNotFoundError(f"Master flat not found: {path}")
-
-        master_flat = KPFMasterL1.from_fits(str(path))
-        master_type = master_flat.headers["PRIMARY"].get("MASTYPE")
-        if str(master_type).lower() != "flat":
-            raise ValueError(
-                f"{path} is not a vNext flat master (MASTYPE={master_type!r})"
-            )
-        return master_flat
-
     def _validate_manual_anchors(self, chips, cal_order3_y):
         """Return uppercase, finite manual anchors for the requested chips."""
         if cal_order3_y is None:
@@ -137,15 +122,10 @@ class OrderTrace:
                 raise ValueError(f"cal_order3_y[{chip!r}] must be finite")
         return anchors
 
-    @staticmethod
-    def _reference_path(chip):
-        """Return the repository trace-reference path for one chip."""
-        return _ORDER_TRACE_PATHS[chip]
-
     def _load_seed_table(self, chip, manual_anchor=None):
         """Load and optionally translate one chip's approximate trace table."""
-        path = self._reference_path(chip)
-        if not path.is_file():
+        path = _ORDER_TRACE_PATHS[chip]
+        if not os.path.isfile(path):
             raise FileNotFoundError(f"Order-trace reference not found: {path}")
         table = pd.read_csv(path, index_col=0)
         if list(table.columns) != _REFERENCE_TRACE_COLUMNS:
@@ -642,12 +622,12 @@ class OrderTrace:
 
     def _write_results(self, results, output_dir, overwrite):
         """Stage and atomically install all requested CSV outputs."""
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         paths = {
-            chip: output_dir / f"order_trace_{chip.lower()}.csv" for chip in results
+            chip: os.path.join(output_dir, f"order_trace_{chip.lower()}.csv")
+            for chip in results
         }
-        existing = [str(path) for path in paths.values() if path.exists()]
+        existing = [path for path in paths.values() if os.path.exists(path)]
         if existing and not overwrite:
             raise FileExistsError(f"Order-trace output already exists: {existing}")
 
@@ -661,7 +641,7 @@ class OrderTrace:
                     dir=output_dir,
                     delete=False,
                 ) as stream:
-                    temporary[chip] = Path(stream.name)
+                    temporary[chip] = stream.name
                     table.to_csv(stream, lineterminator="\n")
 
             for chip, path in paths.items():
@@ -669,7 +649,8 @@ class OrderTrace:
                 temporary.pop(chip)
         finally:
             for path in temporary.values():
-                path.unlink(missing_ok=True)
+                if os.path.exists(path):
+                    os.remove(path)
 
         self._output_paths = paths
 
@@ -734,7 +715,7 @@ class OrderTrace:
         Raises
         ------
         FileNotFoundError
-            If the master flat, era table, or trace reference is absent.
+            If the era table or trace reference is absent.
         ValueError
             If the era/anchor, detected geometry, or output table is invalid.
         FileExistsError
@@ -744,7 +725,7 @@ class OrderTrace:
             chips = self.chips
         anchors = self._validate_manual_anchors(chips, cal_order3_y)
 
-        self._master_flat = self._load_master_flat()
+        self._master_flat = KPFMasterL1.from_fits(self.master_flat_filename)
         timestamp = get_timestamp(self.master_flat_filename)
         observation_time = kpf_timestamp_to_datetime(timestamp)
         eras = pd.read_csv(_ERA_DEFINITIONS_PATH, skipinitialspace=True)
