@@ -463,33 +463,37 @@ class OrderTrace:
         return metrics.sort_values("row").reset_index(drop=True)
 
     def _flag_cal_clusters(self, metrics, max_thickness=6.0, min_flux_ratio=1.8):
-        """Flag CAL orderlets: thinner and brighter than the orderlets around them.
+        """Add the boolean ``is_cal`` column, flagging each order's CAL orderlet.
 
-        Brightness is judged against the mean of the two clusters bracketing
-        each candidate. Lamp flux varies by an order of magnitude across the
+        A CAL is thinner and brighter than the orderlets around it. Brightness
+        is judged against the mean of the two clusters bracketing each
+        candidate. Lamp flux varies by an order of magnitude across the
         detector, and bracketing cancels that gradient where a running median
         of the neighborhood does not.
         """
         flux = metrics["flux"].to_numpy()
         flux_below = np.concatenate([flux[1:2], flux[:-1]])
         flux_above = np.concatenate([flux[1:], flux[-2:-1]])
-        return (metrics["thickness"].to_numpy() <= max_thickness) & (
+        metrics = metrics.copy()
+        metrics["is_cal"] = (metrics["thickness"].to_numpy() <= max_thickness) & (
             flux / ((flux_below + flux_above) / 2.0) > min_flux_ratio
         )
+        return metrics
 
-    def _orderlet_spacing(self, metrics, is_cal):
+    def _orderlet_spacing(self, metrics):
         """Return the median cross-dispersion step between orderlets of an order."""
         row_steps = np.diff(metrics["row"].to_numpy())
         if row_steps.size == 0:
             raise ValueError("a single cluster cannot fix the orderlet spacing")
 
         # A step that starts on a CAL crosses into the next order.
+        is_cal = metrics["is_cal"].to_numpy()
         within_order = row_steps[~is_cal[:-1]]
         if within_order.size:
             return float(np.median(within_order))
         return float(np.median(row_steps))
 
-    def _assign_fiber_positions(self, chip, metrics, is_cal):
+    def _assign_fiber_positions(self, chip, metrics):
         """Give every cluster its position in the fiber pattern and its order group.
 
         Each CAL closes an order, so positions are counted downward from a CAL
@@ -500,8 +504,8 @@ class OrderTrace:
         """
         cluster_rows = metrics["row"].to_numpy()
         cal_position = len(self.fibers) - 1
-        spacing = self._orderlet_spacing(metrics, is_cal)
-        cal_indices = np.flatnonzero(is_cal)
+        spacing = self._orderlet_spacing(metrics)
+        cal_indices = np.flatnonzero(metrics["is_cal"].to_numpy())
         if cal_indices.size == 0:
             raise ValueError(
                 f"{chip}: no CAL orderlet identified; cannot phase the fiber pattern"
@@ -583,8 +587,8 @@ class OrderTrace:
         norder = self.norder[chip]
 
         metrics = self._cluster_center_metrics(chip, clusters)
-        is_cal = self._flag_cal_clusters(metrics)
-        metrics = self._assign_fiber_positions(chip, metrics, is_cal)
+        metrics = self._flag_cal_clusters(metrics)
+        metrics = self._assign_fiber_positions(chip, metrics)
         metrics = self._drop_edge_groups(chip, metrics, norder)
 
         group_rows = metrics.groupby("group")["row"].mean().to_numpy()

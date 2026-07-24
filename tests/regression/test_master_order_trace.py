@@ -185,7 +185,7 @@ class TestCalIdentification:
         clusters = _curated_clusters(tracer)
 
         metrics = tracer._cluster_center_metrics("GREEN", clusters)
-        flagged = np.flatnonzero(tracer._flag_cal_clusters(metrics))
+        flagged = np.flatnonzero(tracer._flag_cal_clusters(metrics)["is_cal"])
 
         assert flagged.size == 4
         assert np.all(np.diff(flagged) == len(_FIBERS))
@@ -198,7 +198,7 @@ class TestCalIdentification:
         clusters = _curated_clusters(tracer)
 
         metrics = tracer._cluster_center_metrics("GREEN", clusters)
-        metrics["is_cal"] = tracer._flag_cal_clusters(metrics)
+        metrics = tracer._flag_cal_clusters(metrics)
         cal = metrics[metrics["is_cal"]]
         other = metrics[~metrics["is_cal"]]
 
@@ -210,10 +210,9 @@ class TestCalIdentification:
         tracer = _tracer(tmp_path, image, monkeypatch)
         metrics = tracer._cluster_center_metrics("GREEN", _curated_clusters(tracer))
 
+        metrics["is_cal"] = np.zeros(len(metrics), dtype=bool)
         with pytest.raises(ValueError, match="no CAL orderlet identified"):
-            tracer._assign_fiber_positions(
-                "GREEN", metrics, np.zeros(len(metrics), dtype=bool)
-            )
+            tracer._assign_fiber_positions("GREEN", metrics)
 
 
 # ---------------------------------------------------------------------------
