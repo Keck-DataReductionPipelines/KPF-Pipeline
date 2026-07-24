@@ -19,6 +19,9 @@ from kpfpipe.utils.config import ConfigHandler
 
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 _TRACE_FIELDS = [
+    "Chip",
+    "Fiber",
+    "Order",
     "Coeff0",
     "Coeff1",
     "Coeff2",
@@ -27,8 +30,6 @@ _TRACE_FIELDS = [
     "TopEdge",
     "X1",
     "X2",
-    "Fiber",
-    "Order",
     "Status",
 ]
 
@@ -119,7 +120,7 @@ def _tracer(tmp_path, image, monkeypatch, norder=3, **config):
         _stub_master_class(StubMasterFlat({"GREEN": image})),
     )
     # Load up front so the helpers below see the cached CCD images, as they do
-    # inside make_master_order_trace.
+    # inside make_master.
     tracer._master_flat = tracer._load_master_flat()
     return tracer
 
@@ -279,10 +280,10 @@ class TestMakeMasterOrderTrace:
         tracer = _tracer(tmp_path, image, monkeypatch)
         output_dir = tmp_path / "out"
 
-        tables = tracer.make_master_order_trace(output_dir=output_dir)
-        table = tables["GREEN"]
+        table = tracer.make_master(output_dir=output_dir)
 
         assert list(table.columns) == _TRACE_FIELDS
+        assert (table["Chip"] == "GREEN").all()
         assert len(table) == len(truth)
         labels = list(zip(table["Order"], table["Fiber"], strict=True))
         assert labels == _trace_labels(3)
@@ -297,14 +298,26 @@ class TestMakeMasterOrderTrace:
             expected = truth[(row.Order, row.Fiber)][columns.astype(int)]
             assert np.max(np.abs(fitted - expected)) < 0.5
 
-        written = pd.read_csv(output_dir / "order_trace_green.csv", index_col=0)
+        written = pd.read_csv(
+            output_dir / "KP.20240405.00020.86_master_order_trace.csv"
+        )
         pd.testing.assert_frame_equal(written, table)
+
+    def test_omitting_output_dir_builds_without_writing(self, tmp_path, monkeypatch):
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
+        table = tracer.make_master()
+
+        assert set(table["Chip"]) == {"GREEN"}
+        assert not list(tmp_path.glob("*master_order_trace.csv"))
+        assert "(not written)" in tracer._info
 
     def test_missing_trace_keeps_its_row(self, tmp_path, monkeypatch):
         image, truth = _synthetic_flat(drop=[(1, "SCI2")])
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        table = tracer.make_master_order_trace(output_dir=tmp_path / "out")["GREEN"]
+        table = tracer.make_master(output_dir=tmp_path / "out")
         missing = table[table["Status"] == "missing"]
 
         assert len(table) == len(truth)
@@ -317,9 +330,10 @@ class TestMakeMasterOrderTrace:
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch, poly_degree=5)
 
-        table = tracer.make_master_order_trace(output_dir=tmp_path / "out")["GREEN"]
+        table = tracer.make_master(output_dir=tmp_path / "out")
 
-        assert list(table.columns)[:6] == [f"Coeff{i}" for i in range(6)]
+        coeff_fields = [field for field in table.columns if field.startswith("Coeff")]
+        assert coeff_fields == [f"Coeff{i}" for i in range(6)]
 
     def test_reports_progress_only_after_running(self, tmp_path, monkeypatch, capsys):
         image, _ = _synthetic_flat()
@@ -328,7 +342,7 @@ class TestMakeMasterOrderTrace:
         tracer.info()
         assert "has not been called" in capsys.readouterr().out
 
-        tracer.make_master_order_trace(output_dir=tmp_path / "out")
+        tracer.make_master(output_dir=tmp_path / "out")
         tracer.info()
         assert "OrderTrace" in capsys.readouterr().out
 
@@ -409,11 +423,12 @@ class TestMasterFlatLoading:
 
 
 class TestCSVWriting:
-    def test_refuses_overwrite_and_supports_chip_subset(self, tmp_path):
+    def test_refuses_overwrite(self, tmp_path):
         tracer = OrderTrace("KP.20240405.00020.86_master_flat_L1.fits")
         table = pd.DataFrame(
             [
                 {
+                    "Chip": "GREEN",
                     "Coeff0": 10.0,
                     "Coeff1": 0.0,
                     "Coeff2": 0.0,
@@ -429,13 +444,19 @@ class TestCSVWriting:
             ],
             columns=_TRACE_FIELDS,
         )
+        tracer._trace_table = table
+        output = tmp_path / "traces.csv"
 
-        tracer._write_results({"GREEN": table}, tmp_path, overwrite=False)
-        assert (tmp_path / "order_trace_green.csv").is_file()
-        assert not (tmp_path / "order_trace_red.csv").exists()
+        tracer.save_master(output, overwrite=False)
+        assert output.is_file()
         with pytest.raises(FileExistsError):
-            tracer._write_results({"GREEN": table}, tmp_path, overwrite=False)
-        tracer._write_results({"GREEN": table}, tmp_path, overwrite=True)
+            tracer.save_master(output, overwrite=False)
+        tracer.save_master(output, overwrite=True)
+
+    def test_refuses_to_save_before_make_master(self, tmp_path):
+        tracer = OrderTrace("KP.20240405.00020.86_master_flat_L1.fits")
+        with pytest.raises(RuntimeError, match="run make_master"):
+            tracer.save_master(tmp_path / "traces.csv")
 
 
 # ---------------------------------------------------------------------------
@@ -511,6 +532,7 @@ class TestApertureConstraint:
         rows = [
             {
                 **_straight_trace(center, 0.0, bottom, top),
+                "Chip": "GREEN",
                 "X1": 0.0,
                 "X2": 399.0,
                 "Fiber": fiber,
@@ -545,18 +567,20 @@ class TestRealData:
 
         repo_root = Path(__file__).parent.parent.parent
         tracer = OrderTrace(masters[0])
-        tables = tracer.make_master_order_trace(output_dir=tmp_path)
+        combined = tracer.make_master(output_dir=tmp_path)
+        tables = {chip: combined[combined["Chip"] == chip] for chip in ("GREEN", "RED")}
 
         assert len(tables["GREEN"]) == 175
         assert len(tables["RED"]) == 160
         assert (tables["GREEN"]["Status"] != "missing").sum() == 175
         assert (tables["RED"]["Status"] != "missing").sum() >= 158
+        obs_id = masters[0].name.split("_master_flat")[0]
+        assert (tmp_path / f"{obs_id}_master_order_trace.csv").is_file()
 
         for chip in ("GREEN", "RED"):
             assert np.nanmedian(tracer._fit_rms[chip]) < 1.0
             _assert_apertures_disjoint(tables[chip], tracer.ccd["ncol"])
             assert np.nanmax(tracer._fit_rms[chip]) < 2.0
-            assert (tmp_path / f"order_trace_{chip.lower()}.csv").is_file()
 
             # The reference tables are 1-based in Order and predate this module;
             # they are used only as independent truth for position and labelling.

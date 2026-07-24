@@ -3,7 +3,8 @@ KPF Order Trace module.
 
 Locates the spectral traces on one completed vNext master flat -- where the
 illuminated pixels lie on each detector -- and writes a low-order polynomial
-describing every trace centerline, plus its aperture edges, to one CSV per CCD.
+describing every trace centerline, plus its aperture edges, to a single CSV
+covering all CCDs.
 
 Trace geometry is measured from the master flat alone. No pre-existing
 order-trace table is consulted, so the module never inherits the geometry it
@@ -58,16 +59,16 @@ from kpfpipe.utils.config import ConfigHandler
 
 logger = logging.getLogger(__name__)
 
+_TRACE_LABEL_FIELDS = [
+    "Chip",
+    "Fiber",
+    "Order",
+]
 _TRACE_GEOMETRY_FIELDS = [
     "BottomEdge",
     "TopEdge",
     "X1",
     "X2",
-]
-_TRACE_ID_FIELDS = [
-    "Fiber",
-    "Order",
-    "Status",
 ]
 
 _DEFAULTS = {
@@ -78,7 +79,8 @@ _DEFAULTS = {
 
 class OrderTrace:
     """
-    Measure spectral traces from one vNext KPF master flat and write trace CSVs.
+    Measure spectral traces from one vNext KPF master flat and write one trace
+    CSV covering all CCDs.
 
     Operations include:
       - reducing each detector column to a mask of illuminated pixels
@@ -88,10 +90,11 @@ class OrderTrace:
       - fitting a polynomial centerline, row against column, to each trace
       - estimating aperture edges and enforcing the gap between neighbors
 
-    Output always contains one row per expected trace (``norder`` x five
-    fibers), ordered by order index then by fiber. A trace that was not
-    detected, or whose fit failed, is written with NaN geometry and a ``Status``
-    of 'missing'; one measured over only part of the detector is written
+    Output always contains one row per expected trace of every CCD (``norder``
+    x five fibers per chip), ordered by chip then order index then fiber, each
+    row keyed by a leading ``Chip`` field. A trace that was not detected, or
+    whose fit failed, is written with NaN geometry and a ``Status`` of
+    'missing'; one measured over only part of the detector is written
     'partial'; one spanning essentially the whole detector is written 'full'.
     A trace that cannot be measured is therefore reported, never silently
     dropped, and the row count is fixed regardless of what was found.
@@ -128,8 +131,8 @@ class OrderTrace:
         self._master_flat = None
         self._image = {}
         self._fit_rms = {}
-        self._trace_tables = None
-        self._output_paths = {}
+        self._trace_table = None
+        self._output_path = None
         self._info = None
 
     # ------------------------------------------------------------------
@@ -145,7 +148,12 @@ class OrderTrace:
 
     def _trace_fields(self):
         """Return the full output field order for one trace table."""
-        return self._coefficient_fields() + _TRACE_GEOMETRY_FIELDS + _TRACE_ID_FIELDS
+        return (
+            _TRACE_LABEL_FIELDS
+            + self._coefficient_fields()
+            + _TRACE_GEOMETRY_FIELDS
+            + ["Status"]
+        )
 
     def _load_master_flat(self):
         """Load and validate the vNext L1 master-flat product.
@@ -1052,7 +1060,9 @@ class OrderTrace:
         rms_values = []
         for (order, fiber), cluster_index in identities.items():
             record = dict.fromkeys(coefficient_fields + _TRACE_GEOMETRY_FIELDS, np.nan)
-            record.update({"Fiber": fiber, "Order": order, "Status": "missing"})
+            record.update(
+                {"Chip": chip, "Fiber": fiber, "Order": order, "Status": "missing"}
+            )
 
             if pd.isna(cluster_index):
                 logger.warning(
@@ -1102,39 +1112,49 @@ class OrderTrace:
         self._fit_rms[chip] = np.asarray(rms_values, dtype=float)
         return table
 
-    def _write_results(self, tables, output_dir, overwrite):
-        """Stage and atomically install all requested CSV outputs."""
+    def _master_filename(self):
+        """Return the output CSV name, inherited from the master flat's obs id.
+
+        The master flat is ``{obs_id}_master_flat_L1.fits`` (WMKO DRP-RUN-05),
+        so the order-trace product it builds is the sibling
+        ``{obs_id}_master_order_trace.csv``.
+        """
+        obs_id = os.path.basename(self.master_flat_filename).split("_master_flat")[0]
+        return f"{obs_id}_master_order_trace.csv"
+
+    def save_master(self, path, *, overwrite=False):
+        """Stage and atomically install the cached order-trace CSV at ``path``.
+
+        Writes ``self._trace_table``, cached by ``make_master``, which must have
+        run first.
+        """
+        if self._trace_table is None:
+            raise RuntimeError("No traces available; run make_master() first")
+        if not overwrite and os.path.exists(path):
+            raise FileExistsError(
+                f"{path} already exists; pass overwrite=True to replace it"
+            )
+
+        output_dir = os.path.dirname(path) or "."
         os.makedirs(output_dir, exist_ok=True)
-        final_paths = {
-            chip: os.path.join(output_dir, f"order_trace_{chip.lower()}.csv")
-            for chip in tables
-        }
-        existing = [path for path in final_paths.values() if os.path.exists(path)]
-        if existing and not overwrite:
-            raise FileExistsError(f"Order-trace output already exists: {existing}")
-
-        staged_paths = {}
+        staged = None
         try:
-            for chip, table in tables.items():
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    suffix=".csv.tmp",
-                    prefix=f"order_trace_{chip.lower()}_",
-                    dir=output_dir,
-                    delete=False,
-                ) as stream:
-                    staged_paths[chip] = stream.name
-                    table.to_csv(stream, lineterminator="\n")
-
-            for chip, path in final_paths.items():
-                os.replace(staged_paths[chip], path)
-                staged_paths.pop(chip)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".csv.tmp",
+                prefix="order_trace_",
+                dir=output_dir,
+                delete=False,
+            ) as stream:
+                staged = stream.name
+                self._trace_table.to_csv(stream, index=False, lineterminator="\n")
+            os.replace(staged, path)
+            staged = None
         finally:
-            for path in staged_paths.values():
-                if os.path.exists(path):
-                    os.remove(path)
+            if staged and os.path.exists(staged):
+                os.remove(staged)
 
-        self._output_paths = final_paths
+        self._output_path = path
 
     # ------------------------------------------------------------------
     # Private helpers - module execution
@@ -1145,19 +1165,20 @@ class OrderTrace:
         lines = [
             "OrderTrace",
             f"  master flat: {self.master_flat_filename}",
+            f"  output:      {self._output_path or '(not written)'}",
             "",
             f"  {'chip':<8s} {'full':>6s} {'partial':>8s} {'missing':>8s} "
-            f"{'median RMS [pix]':>18s}  output",
-            "  " + "-" * 96,
+            f"{'median RMS [pix]':>18s}",
+            "  " + "-" * 60,
         ]
         for chip in chips:
-            status = self._trace_tables[chip]["Status"]
+            status = self._trace_table.loc[self._trace_table["Chip"] == chip, "Status"]
             median_rms = np.nanmedian(self._fit_rms[chip])
             lines.append(
                 f"  {chip:<8s} {(status == 'full').sum():>6d} "
                 f"{(status == 'partial').sum():>8d} "
                 f"{(status == 'missing').sum():>8d} "
-                f"{median_rms:>18.4f}  {self._output_paths[chip]}"
+                f"{median_rms:>18.4f}"
             )
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
@@ -1165,25 +1186,31 @@ class OrderTrace:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_order_trace(self, chips=None, *, output_dir, overwrite=False):
+    def make_master(self, chips=None, *, output_dir=None):
         """
         Build order-trace calibrations from the requested master-flat CCDs.
+
+        Every CCD's traces are gathered into one table, keyed by a leading
+        ``Chip`` field, and returned; pass ``output_dir`` to also persist it as
+        a single ``{obs_id}_master_order_trace.csv``, the obs id inherited from
+        the master flat.
 
         Parameters
         ----------
         chips : list of str, optional
             CCDs to trace. Defaults to configured GREEN and RED.
-        output_dir : str or pathlib.Path
-            Directory receiving ``order_trace_<chip>.csv``. Required.
-        overwrite : bool
-            Replace existing output CSVs when True. Defaults to False.
+        output_dir : str or pathlib.Path, optional
+            If provided, write ``{obs_id}_master_order_trace.csv`` into this
+            directory, replacing any existing file. When omitted, the table is
+            built and returned but nothing is written to disk.
 
         Returns
         -------
-        dict
-            Mapping of uppercase chip name to the DataFrame written for it.
-            Each table holds one row per expected trace, ordered by order index
-            then by fiber.
+        pandas.DataFrame
+            One row per expected trace across every requested CCD, ordered by
+            chip then order index then fiber, with fields ``Chip``, ``Fiber``,
+            ``Order``, ``Coeff0..N``, ``BottomEdge``, ``TopEdge``, ``X1``,
+            ``X2``, ``Status``.
 
         Raises
         ------
@@ -1192,8 +1219,6 @@ class OrderTrace:
         ValueError
             If no CAL orderlet can be identified, or if the assembled output
             table is invalid.
-        FileExistsError
-            If a requested output exists and ``overwrite`` is False.
 
         Notes
         -----
@@ -1215,7 +1240,8 @@ class OrderTrace:
            against column with sigma-clipping
         8. Estimate aperture edges above and below each centerline, shrinking
            them where neighboring apertures would otherwise touch
-        9. Validate the assembled table and write ``order_trace_<chip>.csv``
+        9. Validate each CCD's table, then write every CCD's traces to one
+           ``{obs_id}_master_order_trace.csv``
 
         Steps 1-6 are pure detection and identification: identity is fixed from
         the illuminated-pixel mask and cluster brightness before step 7 fits
@@ -1228,22 +1254,23 @@ class OrderTrace:
 
         self._master_flat = self._load_master_flat()
 
-        tables = {}
+        tables = []
         for chip in chips:
             clusters, identities = self._detect_traces(chip)
-            tables[chip] = self._measure_traces(chip, clusters, identities)
+            tables.append(self._measure_traces(chip, clusters, identities))
 
-        self._trace_tables = tables
-        self._write_results(tables, output_dir, bool(overwrite))
+        self._trace_table = pd.concat(tables, ignore_index=True)
+        if output_dir is not None:
+            self.save_master(
+                os.path.join(output_dir, self._master_filename()), overwrite=True
+            )
         self._track_info(chips)
         logger.info("%s", self._info)
-        return tables
+        return self._trace_table
 
     def info(self):
         """Print a summary of the module configuration and tracing results."""
         if self._info is None:
-            print(
-                f"{type(self).__name__}: make_master_order_trace() has not been called"
-            )
+            print(f"{type(self).__name__}: make_master() has not been called")
         else:
             print(self._info)
