@@ -1,4 +1,25 @@
-"""KPF spectral order tracing from one master-flat image."""
+"""
+KPF Order Trace module.
+
+Locates the spectral traces on one completed vNext master flat -- where the
+illuminated pixels lie on each detector -- and writes a low-order polynomial
+describing every trace centerline, plus its aperture edges, to one CSV per CCD.
+
+Trace geometry is measured from the master flat alone. No pre-existing
+order-trace table is consulted, so the module never inherits the geometry it
+exists to determine. Trace identity is established before any polynomial is
+fitted: the CAL orderlet is both narrower and several times brighter than the
+SKY and science orderlets, which fixes the phase of the repeating
+SKY-SCI1-SCI2-SCI3-CAL group, and each CAL closes one echelle order. Because
+each order is anchored on its own CAL, a trace missing anywhere in the frame
+shifts no other trace's label.
+
+Only the within-order orderlet spacing is treated as regular. The spacing
+*between* orders varies several-fold across a detector and is never assumed.
+
+OrderTrace applies no calibrations of its own; it consumes the master flat as
+delivered by the Flat module.
+"""
 
 import logging
 import os
@@ -7,36 +28,26 @@ import tempfile
 import numpy as np
 import pandas as pd
 from astropy.stats import mad_std
-from scipy.ndimage import gaussian_filter1d
-from scipy.signal import find_peaks
+from scipy.linalg import solve_banded
+from scipy.ndimage import gaussian_filter1d, label
 
-from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
 
-_REFERENCE_COEFFICIENT_COLUMNS = [f"Coeff{i}" for i in range(4)]
-_TRACE_GEOMETRY_COLUMNS = [
+_TRACE_GEOMETRY_FIELDS = [
     "BottomEdge",
     "TopEdge",
     "X1",
     "X2",
 ]
-_TRACE_ID_COLUMNS = [
+_TRACE_ID_FIELDS = [
     "Fiber",
     "Order",
+    "Status",
 ]
-_REFERENCE_TRACE_COLUMNS = (
-    _REFERENCE_COEFFICIENT_COLUMNS + _TRACE_GEOMETRY_COLUMNS + _TRACE_ID_COLUMNS
-)
-
-_ERA_DEFINITIONS_PATH = f"{REPO_ROOT}/reference/kpf_instrument_eras.csv"
-_ORDER_TRACE_PATHS = {
-    "GREEN": f"{REPO_ROOT}/reference/order_trace_green.csv",
-    "RED": f"{REPO_ROOT}/reference/order_trace_red.csv",
-}
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -48,8 +59,22 @@ class OrderTrace:
     """
     Measure spectral traces from one vNext KPF master flat and write trace CSVs.
 
-    Existing trace references supply only approximate locations and ``(Fiber,
-    Order)`` identities; all output geometry is measured from the input flat.
+    Operations include:
+      - reducing each detector column to a mask of illuminated pixels
+      - collecting touching mask pixels into clusters (8-connectivity)
+      - curating clusters (rejecting artifacts, rejoining split traces)
+      - identifying each cluster's fiber and echelle order index
+      - fitting a polynomial centerline to each identified trace
+      - estimating aperture edges and enforcing the gap between neighbors
+
+    Output always contains one row per expected trace (``norder`` x five
+    fibers), ordered by order index then by fiber. A trace that was not
+    detected, or whose fit failed, is written with NaN geometry and a ``Status``
+    of 'missing'; one measured over only part of the detector is written
+    'partial'; one spanning essentially the whole detector is written 'full'.
+    A trace that cannot be measured is therefore reported, never silently
+    dropped, and the row count is fixed regardless of what was found.
+
     Standalone rather than a ``BaseMasterModule`` subclass because it consumes
     one completed L1 master instead of stacking L0 exposures.
 
@@ -60,6 +85,8 @@ class OrderTrace:
     config : None | dict | ConfigHandler
         Module configuration. ``ConfigHandler`` values are read from TRACES and
         ORDER_TRACE, whose only module-specific parameter is ``poly_degree``.
+        Detection and curation thresholds are tuned to the instrument rather
+        than to a run, and are default arguments of the methods that use them.
     """
 
     def __init__(self, master_flat_filename, config=None):
@@ -78,23 +105,25 @@ class OrderTrace:
             setattr(self, k, params.get(k, v))
 
         self._master_flat = None
-        self._instrument_era = None
-        self._anchor_shifts = {}
         self._fit_rms = {}
-        self._results = None
+        self._trace_tables = None
         self._output_paths = {}
         self._info = None
 
     # ------------------------------------------------------------------
-    # Private helpers
+    # Private helpers - input
     # ------------------------------------------------------------------
 
-    def _coefficient_columns(self):
-        """Return output coefficient columns for the configured fit degree."""
+    def _coefficient_fields(self):
+        """Return output coefficient fields for the configured fit degree."""
         degree = int(self.poly_degree)
         if degree < 0:
             raise ValueError(f"poly_degree must be non-negative, got {degree!r}")
         return [f"Coeff{i}" for i in range(degree + 1)]
+
+    def _trace_fields(self):
+        """Return the full output field order for one trace table."""
+        return self._coefficient_fields() + _TRACE_GEOMETRY_FIELDS + _TRACE_ID_FIELDS
 
     def _load_master_flat(self):
         """Load and validate the vNext L1 master-flat product."""
@@ -112,115 +141,418 @@ class OrderTrace:
             )
         return master_flat
 
-    def _validate_manual_anchors(self, chips, cal_order3_y):
-        """Return uppercase, finite manual anchors for the requested chips."""
-        if cal_order3_y is None:
-            return None
-        if not isinstance(cal_order3_y, dict):
-            raise TypeError("cal_order3_y must be None or a dict keyed by chip")
+    # ------------------------------------------------------------------
+    # Private helpers - trace detection
+    # ------------------------------------------------------------------
 
-        anchors = {str(chip).upper(): value for chip, value in cal_order3_y.items()}
-        unknown = set(anchors).difference({"GREEN", "RED"})
-        if unknown:
-            raise ValueError(f"cal_order3_y has unsupported chips: {sorted(unknown)}")
-        missing = set(chips).difference(anchors)
-        if missing:
-            raise ValueError(
-                f"cal_order3_y is missing requested chips: {sorted(missing)}"
+    @staticmethod
+    def _smooth_column(column, filter_par):
+        """Return the smooth lamp continuum underlying one detector column."""
+        stiffness = abs(float(filter_par))
+        nrow = column.size
+        superdiagonal = np.full(nrow, -stiffness)
+        diagonal = np.full(nrow, 1.0 + 2.0 * stiffness)
+        subdiagonal = np.full(nrow, -stiffness)
+        diagonal[0] = diagonal[-1] = 1.0 + stiffness
+        superdiagonal[0] = subdiagonal[-1] = 0.0
+        bands = np.vstack([superdiagonal, diagonal, subdiagonal])
+        return solve_banded((1, 1), bands, column)
+
+    def _detect_illuminated_pixels(self, image, filter_par=20.0, trace_ratio=0.5):
+        """Return a boolean mask of illuminated pixels, one column at a time."""
+        filled = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
+        mask = np.zeros(filled.shape, dtype=bool)
+        for column in range(filled.shape[1]):
+            # Subtracting the stiff smoothing solution leaves a high-pass
+            # residual, so the threshold below is set by orderlet contrast
+            # rather than by the absolute lamp level, which varies by an order
+            # of magnitude across the detector.
+            profile = filled[:, column]
+            residual = profile - self._smooth_column(profile, filter_par)
+            positive_residual = np.clip(residual, 0.0, None)
+            threshold = 0.5 * np.quantile(
+                positive_residual, trace_ratio, method="lower"
             )
-        for chip in chips:
-            try:
-                anchors[chip] = float(anchors[chip])
-            except (TypeError, ValueError) as e:
-                raise TypeError(f"cal_order3_y[{chip!r}] must be numeric") from e
-            if not np.isfinite(anchors[chip]):
-                raise ValueError(f"cal_order3_y[{chip!r}] must be finite")
-        return anchors
+            mask[:, column] = residual > threshold + 1.0
+        return mask
 
-    def _load_seed_table(self, chip, manual_anchor=None):
-        """Load and optionally translate one chip's approximate trace table."""
-        path = _ORDER_TRACE_PATHS[chip]
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"Order-trace reference not found: {path}")
-        table = pd.read_csv(path, index_col=0)
-        if list(table.columns) != _REFERENCE_TRACE_COLUMNS:
-            raise ValueError(
-                f"{path} has incompatible columns; expected {_REFERENCE_TRACE_COLUMNS}"
+    @staticmethod
+    def _cluster_record(rows, columns):
+        """Bundle one cluster's pixels with the geometry used to curate it."""
+        first_column, last_column = int(columns.min()), int(columns.max())
+        return {
+            "rows": rows,
+            "columns": columns,
+            "npixel": int(rows.size),
+            "x1": first_column,
+            "x2": last_column,
+            "row_at_x1": float(rows[columns == first_column].mean()),
+            "row_at_x2": float(rows[columns == last_column].mean()),
+        }
+
+    def _label_clusters(self, mask):
+        """Collect touching illuminated pixels into clusters.
+
+        The 3x3 structure treats all eight surrounding pixels as adjacent
+        (8-connectivity), so pixels meeting only at a corner still join one
+        cluster.
+        """
+        labels, cluster_count = label(mask, structure=np.ones((3, 3), dtype=int))
+        rows, columns = np.nonzero(labels)
+        cluster_ids = labels[rows, columns]
+
+        ordering = np.argsort(cluster_ids, kind="stable")
+        rows, columns = rows[ordering], columns[ordering]
+        # One contiguous run of pixels per cluster id, so a single searchsorted
+        # gives every cluster's slice without revisiting the label image.
+        bounds = np.searchsorted(cluster_ids[ordering], np.arange(1, cluster_count + 2))
+        return [
+            self._cluster_record(rows[start:stop], columns[start:stop])
+            for start, stop in zip(bounds[:-1], bounds[1:], strict=True)
+        ]
+
+    def _center_column_band(self, ncol):
+        """Return the column range over which trace identity is measured."""
+        half_width = max(1, ncol // 200)
+        center = ncol // 2
+        return center - half_width, center + half_width + 1
+
+    @staticmethod
+    def _band_pixels(cluster, band_start, band_stop):
+        """Return one cluster's rows and columns within a band of columns."""
+        in_band = (cluster["columns"] >= band_start) & (cluster["columns"] < band_stop)
+        return cluster["rows"][in_band], cluster["columns"][in_band]
+
+    @staticmethod
+    def _log_rejection(chip, cluster, reason):
+        """Record one curated-away cluster and why it was discarded."""
+        logger.debug(
+            "%s: rejecting cluster at rows %d-%d, columns %d-%d (%s)",
+            chip,
+            cluster["rows"].min(),
+            cluster["rows"].max(),
+            cluster["x1"],
+            cluster["x2"],
+            reason,
+        )
+
+    def _reject_small_clusters(self, chip, clusters, min_cluster_pixels=500):
+        """Drop clusters too small to be any part of a trace.
+
+        Runs before fragments are rejoined, so it tests only pixel count: a
+        genuine fragment is short and may sit anywhere on the detector.
+        """
+        kept = []
+        for cluster in clusters:
+            if cluster["npixel"] < min_cluster_pixels:
+                self._log_rejection(chip, cluster, f"only {cluster['npixel']} pixels")
+            else:
+                kept.append(cluster)
+        return kept
+
+    def _reject_unidentifiable_clusters(
+        self, chip, clusters, ncol, min_spanned_columns=200, min_thickness=3.0
+    ):
+        """Drop rejoined clusters that cannot be identified as traces."""
+        band_start, band_stop = self._center_column_band(ncol)
+        kept = []
+        for cluster in clusters:
+            spanned_columns = cluster["x2"] - cluster["x1"] + 1
+            rows, columns = self._band_pixels(cluster, band_start, band_stop)
+            # Thickness is measured in the same band that later fixes trace
+            # identity, so a detector-edge artifact running along a single row
+            # is rejected even when its full-frame pixel count looks trace-like.
+            thickness = rows.size / np.unique(columns).size if rows.size else 0.0
+            if spanned_columns < min_spanned_columns:
+                reason = f"spans only {spanned_columns} columns"
+            elif rows.size == 0:
+                reason = "no pixels in the central column band"
+            elif thickness < min_thickness:
+                reason = f"only {thickness:.1f} pixels thick at mid-detector"
+            else:
+                kept.append(cluster)
+                continue
+            self._log_rejection(chip, cluster, reason)
+        return kept
+
+    @staticmethod
+    def _column_means(columns, rows):
+        """Collapse cluster pixels to one mean row per occupied column."""
+        row_total = np.bincount(columns, weights=rows)
+        pixel_count = np.bincount(columns)
+        occupied = np.flatnonzero(pixel_count)
+        return occupied.astype(float), row_total[occupied] / pixel_count[occupied]
+
+    def _bridges_gap(self, host, candidate, gap, max_residual):
+        """Test whether a candidate cluster continues a host across a column gap.
+
+        Compares one mean row per column rather than individual pixels, whose
+        scatter is the trace's cross-dispersion thickness and would swamp the
+        misalignment being measured. Only pixels within one gap width of either
+        side are used and the fit is linear: the test asks whether the pieces
+        line up locally, over which a trace's curvature is negligible.
+        """
+        host_near_gap = host["columns"] >= host["x2"] - gap
+        candidate_near_gap = candidate["columns"] <= candidate["x1"] + gap
+        if not host_near_gap.any() or not candidate_near_gap.any():
+            return False
+
+        host_columns, host_rows = self._column_means(
+            host["columns"][host_near_gap], host["rows"][host_near_gap]
+        )
+        candidate_columns, candidate_rows = self._column_means(
+            candidate["columns"][candidate_near_gap],
+            candidate["rows"][candidate_near_gap],
+        )
+        if host_columns.size < 2:
+            return False
+
+        coeffs = np.polynomial.polynomial.polyfit(host_columns, host_rows, 1)
+        predicted = np.polynomial.polynomial.polyval(candidate_columns, coeffs)
+        residual = np.median(np.abs(candidate_rows - predicted))
+        return residual <= max_residual
+
+    def _find_mergeable_pair(
+        self,
+        clusters,
+        max_gap_columns=512,
+        max_row_offset=10.0,
+        # Cluster edges are quantized to whole pixels, which puts a floor of
+        # about one pixel on how well two fragments can be shown to line up.
+        # Rival traces are a whole orderlet spacing apart, so two pixels of
+        # slack stays far from ambiguous.
+        max_residual_pixels=2.0,
+    ):
+        """Return the indices of the first two clusters lying on one curve."""
+        for host_index, host in enumerate(clusters):
+            for candidate_index, candidate in enumerate(clusters):
+                gap = candidate["x1"] - host["x2"]
+                if not 0 < gap <= max_gap_columns:
+                    continue
+                if abs(candidate["row_at_x1"] - host["row_at_x2"]) > max_row_offset:
+                    continue
+                if self._bridges_gap(host, candidate, gap, max_residual_pixels):
+                    return host_index, candidate_index
+        return None
+
+    def _merge_fragmented_clusters(self, chip, clusters):
+        """Rejoin clusters that are separated pieces of a single trace."""
+        clusters = list(clusters)
+        while True:
+            pair = self._find_mergeable_pair(clusters)
+            if pair is None:
+                return clusters
+            host, candidate = (clusters[index] for index in pair)
+            logger.info(
+                "%s: merging cluster fragments spanning columns %d-%d and %d-%d",
+                chip,
+                host["x1"],
+                host["x2"],
+                candidate["x1"],
+                candidate["x2"],
             )
-        if table.duplicated(["Fiber", "Order"]).any():
-            raise ValueError(f"{path} contains duplicate Fiber/Order rows")
+            combined = self._cluster_record(
+                np.concatenate([host["rows"], candidate["rows"]]),
+                np.concatenate([host["columns"], candidate["columns"]]),
+            )
+            clusters = [
+                cluster for index, cluster in enumerate(clusters) if index not in pair
+            ]
+            clusters.append(combined)
 
-        table = table.copy()
-        numeric = _REFERENCE_COEFFICIENT_COLUMNS + _TRACE_GEOMETRY_COLUMNS
-        table[numeric] = table[numeric].apply(pd.to_numeric, errors="raise")
-        table["Order"] = pd.to_numeric(table["Order"], errors="raise").astype(int)
+    # ------------------------------------------------------------------
+    # Private helpers - trace identity
+    # ------------------------------------------------------------------
 
-        shift = 0.0
-        if manual_anchor is not None:
-            anchor = table.loc[(table["Fiber"] == "CAL") & (table["Order"] == 3)]
-            if len(anchor) != 1:
-                raise ValueError(
-                    f"{path} must contain exactly one CAL/order-3 anchor row"
-                )
-            shift = float(manual_anchor) - float(anchor.iloc[0]["Coeff0"])
-            table["Coeff0"] += shift
-        self._anchor_shifts[chip] = shift
-        return table
+    def _cluster_center_metrics(self, clusters, image):
+        """Measure row, mask thickness, and flux for each cluster at mid-detector."""
+        band_start, band_stop = self._center_column_band(image.shape[1])
+        records = []
+        for index, cluster in enumerate(clusters):
+            rows, columns = self._band_pixels(cluster, band_start, band_stop)
+            records.append(
+                {
+                    "cluster": index,
+                    "row": float(rows.mean()),
+                    "thickness": rows.size / np.unique(columns).size,
+                    "flux": float(np.median(image[rows, columns])),
+                }
+            )
+        metrics = pd.DataFrame(records)
+        return metrics.sort_values("row").reset_index(drop=True)
+
+    def _flag_cal_clusters(self, metrics, max_thickness=6.0, min_flux_ratio=1.8):
+        """Flag CAL orderlets: thinner and brighter than the orderlets around them.
+
+        Brightness is judged against the mean of the two clusters bracketing
+        each candidate. Lamp flux varies by an order of magnitude across the
+        detector, and bracketing cancels that gradient where a running median
+        of the neighborhood does not.
+        """
+        flux = metrics["flux"].to_numpy()
+        flux_below = np.concatenate([flux[1:2], flux[:-1]])
+        flux_above = np.concatenate([flux[1:], flux[-2:-1]])
+        return (metrics["thickness"].to_numpy() <= max_thickness) & (
+            flux / ((flux_below + flux_above) / 2.0) > min_flux_ratio
+        )
+
+    def _orderlet_spacing(self, metrics, is_cal):
+        """Return the median row step between orderlets inside one order."""
+        row_steps = np.diff(metrics["row"].to_numpy())
+        if row_steps.size == 0:
+            raise ValueError("a single cluster cannot fix the orderlet spacing")
+
+        # A step that starts on a CAL crosses into the next order.
+        within_order = row_steps[~is_cal[:-1]]
+        if within_order.size:
+            return float(np.median(within_order))
+        return float(np.median(row_steps))
+
+    def _assign_fiber_positions(self, chip, metrics, is_cal):
+        """Give every cluster its position in the fiber pattern and its order group.
+
+        Each CAL closes an order, so positions are counted downward from a CAL
+        rather than propagated across the whole frame. Only the within-order
+        orderlet spacing is used to decide whether the next cluster down is the
+        adjacent orderlet or whether one was missed; the spacing *between*
+        orders varies several-fold across the detector and is never assumed.
+        """
+        cluster_rows = metrics["row"].to_numpy()
+        cal_position = len(self.fibers) - 1
+        spacing = self._orderlet_spacing(metrics, is_cal)
+        cal_indices = np.flatnonzero(is_cal)
+        if cal_indices.size == 0:
+            raise ValueError(
+                f"{chip}: no CAL orderlet identified; cannot phase the fiber pattern"
+            )
+
+        positions = np.full(len(metrics), -1)
+        groups = np.zeros(len(metrics), dtype=int)
+        for group, cal_index in enumerate(cal_indices):
+            positions[cal_index] = cal_position
+            groups[cal_index] = group
+
+            position, row = cal_position, cluster_rows[cal_index]
+            previous_cal = cal_indices[group - 1] + 1 if group else 0
+            for index in range(cal_index - 1, previous_cal - 1, -1):
+                position -= max(1, round((row - cluster_rows[index]) / spacing))
+                if position < 0:
+                    break
+                positions[index] = position
+                groups[index] = group
+                row = cluster_rows[index]
+
+        # An order whose CAL lies off the detector keeps only its lower
+        # orderlets, which are then in rank order from SKY upward.
+        for position, index in enumerate(range(cal_indices[-1] + 1, len(metrics))):
+            if position > cal_position:
+                break
+            positions[index] = position
+            groups[index] = cal_indices.size
+
+        for index in np.flatnonzero(positions < 0):
+            logger.warning(
+                "%s: discarding a cluster at row %.0f that fits no orderlet of the "
+                "fiber pattern",
+                chip,
+                cluster_rows[index],
+            )
+
+        metrics = metrics.copy()
+        metrics["Fiber"] = [self.fibers[max(p, 0)] for p in positions]
+        metrics["group"] = groups
+        return metrics[positions >= 0]
+
+    def _drop_edge_groups(self, chip, metrics, norder):
+        """Discard partial fiber groups beyond the expected number of orders.
+
+        An order lying mostly off the detector still shows its innermost
+        orderlets, which phase correctly but belong to no expected order. Such a
+        group is short, and always at one edge or the other.
+        """
+        group_sizes = metrics["group"].value_counts().sort_index()
+        while group_sizes.size > norder:
+            edge_groups = [group_sizes.index[0], group_sizes.index[-1]]
+            discarded = min(edge_groups, key=lambda group: group_sizes[group])
+            logger.warning(
+                "%s: %d fiber groups detected but %d orders expected; discarding a "
+                "group of %d orderlets at row %.0f",
+                chip,
+                group_sizes.size,
+                norder,
+                group_sizes[discarded],
+                metrics.loc[metrics["group"] == discarded, "row"].mean(),
+            )
+            metrics = metrics[metrics["group"] != discarded]
+            group_sizes = group_sizes.drop(discarded)
+        return metrics
+
+    @staticmethod
+    def _lowest_order_index(group_rows, norder):
+        """Best-guess count of whole orders falling below the lowest group."""
+        if group_rows.size >= norder:
+            return 0
+        group_spacing = np.median(np.diff(group_rows))
+        orders_below = int(max(0.0, group_rows[0]) // group_spacing)
+        return min(orders_below, norder - group_rows.size)
+
+    def _assign_trace_identity(self, chip, clusters, image):
+        """Label every cluster with its fiber and order index."""
+        fibers = list(self.fibers)
+        norder = self.norder[chip]
+
+        metrics = self._cluster_center_metrics(clusters, image)
+        is_cal = self._flag_cal_clusters(metrics)
+        metrics = self._assign_fiber_positions(chip, metrics, is_cal)
+        metrics = self._drop_edge_groups(chip, metrics, norder)
+
+        group_rows = metrics.groupby("group")["row"].mean().to_numpy()
+        lowest_order = self._lowest_order_index(group_rows, norder)
+        metrics["Order"] = metrics["group"] - metrics["group"].min() + lowest_order
+
+        beyond_last_order = metrics["Order"] >= norder
+        if beyond_last_order.any():
+            logger.warning(
+                "%s: discarding %d orderlets labelled beyond order %d",
+                chip,
+                int(beyond_last_order.sum()),
+                norder - 1,
+            )
+            metrics = metrics[~beyond_last_order]
+
+        cluster_by_trace = metrics.set_index(["Order", "Fiber"])["cluster"]
+        if cluster_by_trace.index.has_duplicates:
+            raise ValueError(f"{chip}: fiber phasing produced duplicate trace labels")
+
+        expected_traces = pd.MultiIndex.from_product(
+            [range(norder), fibers], names=["Order", "Fiber"]
+        )
+        return cluster_by_trace.reindex(expected_traces)
+
+    # ------------------------------------------------------------------
+    # Private helpers - trace measurement
+    # ------------------------------------------------------------------
 
     def _sample_columns(self, ncol, sample_count=65):
         """Return evenly spaced, unique detector columns including both edges."""
         return np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
 
-    def _column_profile(self, image, column, col_half_window=3):
+    def _column_profile(self, image, column, column_half_window=3):
         """Return a robust cross-dispersion profile around one detector column."""
-        c0 = max(0, int(column) - col_half_window)
-        c1 = min(image.shape[1], int(column) + col_half_window + 1)
-        profile = np.nanmedian(image[:, c0:c1], axis=1)
+        first_column = max(0, int(column) - column_half_window)
+        last_column = min(image.shape[1], int(column) + column_half_window + 1)
+        profile = np.nanmedian(image[:, first_column:last_column], axis=1)
         finite = np.isfinite(profile)
         if not finite.any():
             return np.zeros(image.shape[0], dtype=float)
         fill = np.nanmedian(profile[finite])
         return np.where(finite, profile, fill).astype(float, copy=False)
 
-    def _candidate_rows(
-        self,
-        image,
-        column,
-        background_smoothing_sigma=20.0,
-        profile_smoothing_sigma=1.0,
-        candidate_distance_pixels=5,
-        candidate_prominence_sigma=4.0,
-    ):
-        """Locate illuminated trace candidates in one median column strip."""
-        profile = self._column_profile(image, column)
-        background = gaussian_filter1d(
-            profile, sigma=background_smoothing_sigma, mode="nearest"
-        )
-        residual = profile - background
-        noise = mad_std(residual, ignore_nan=True)
-        if not np.isfinite(noise) or noise <= 0:
-            noise = np.nanstd(residual)
-        if not np.isfinite(noise) or noise <= 0:
-            noise = np.finfo(float).eps
-
-        smoothed = gaussian_filter1d(
-            np.clip(residual, 0.0, None),
-            sigma=profile_smoothing_sigma,
-            mode="nearest",
-        )
-        peaks, _ = find_peaks(
-            smoothed,
-            distance=candidate_distance_pixels,
-            prominence=candidate_prominence_sigma * noise,
-        )
-        return peaks.astype(float)
-
     def _local_peak_center(
         self,
         image,
         column,
         guess,
-        candidates,
         row_half_window=7,
         profile_smoothing_sigma=1.0,
         winsor_percentile=90.0,
@@ -229,17 +561,13 @@ class OrderTrace:
         if not np.isfinite(guess):
             return np.nan
 
-        nearby = candidates[np.abs(candidates - guess) <= row_half_window]
-        if nearby.size:
-            guess = nearby[np.argmin(np.abs(nearby - guess))]
-
-        r0 = max(0, int(np.floor(guess)) - row_half_window)
-        r1 = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
-        if r1 - r0 < 3:
+        first_row = max(0, int(np.floor(guess)) - row_half_window)
+        last_row = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
+        if last_row - first_row < 3:
             return np.nan
 
-        profile = self._column_profile(image, column)[r0:r1]
-        rows = np.arange(r0, r1, dtype=float)
+        profile = self._column_profile(image, column)[first_row:last_row]
+        rows = np.arange(first_row, last_row, dtype=float)
         background = np.nanpercentile(profile, 20.0)
         signal = np.clip(profile - background, 0.0, None)
         smoothed = gaussian_filter1d(
@@ -250,31 +578,31 @@ class OrderTrace:
         if not np.any(smoothed > 0):
             return np.nan
 
-        peak = int(np.argmax(smoothed))
-        lo = max(0, peak - 3)
-        hi = min(signal.size, peak + 4)
-        weights = signal[lo:hi]
+        peak_index = int(np.argmax(smoothed))
+        core_start = max(0, peak_index - 3)
+        core_stop = min(signal.size, peak_index + 4)
+        weights = signal[core_start:core_stop]
         if not np.isfinite(weights).all() or weights.sum() <= 0:
             return np.nan
-        limit = np.nanpercentile(weights, winsor_percentile)
-        weights = np.minimum(weights, limit)
+        winsor_limit = np.nanpercentile(weights, winsor_percentile)
+        weights = np.minimum(weights, winsor_limit)
         if weights.sum() <= 0:
             return np.nan
-        return float(np.average(rows[lo:hi], weights=weights))
+        return float(np.average(rows[core_start:core_stop], weights=weights))
 
     @staticmethod
-    def _threshold_crossing(rows, values, index, direction, threshold):
+    def _threshold_crossing(rows, signal, core_index, direction, threshold):
         """Interpolate one threshold crossing away from an illuminated core."""
-        current = int(index)
+        current = int(core_index)
         adjacent = current + int(direction)
-        while 0 <= adjacent < values.size and values[adjacent] >= threshold:
+        while 0 <= adjacent < signal.size and signal[adjacent] >= threshold:
             current = adjacent
             adjacent = current + int(direction)
-        if adjacent < 0 or adjacent >= values.size:
+        if adjacent < 0 or adjacent >= signal.size:
             return np.nan
 
-        value_inside = values[current]
-        value_outside = values[adjacent]
+        value_inside = signal[current]
+        value_outside = signal[adjacent]
         denominator = value_inside - value_outside
         if not np.isfinite(denominator) or denominator <= 0.0:
             return np.nan
@@ -297,9 +625,9 @@ class OrderTrace:
         if not np.isfinite(guess):
             return np.nan
 
-        r0 = max(0, int(np.floor(guess)) - row_half_window)
-        r1 = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
-        if r1 - r0 < 5:
+        first_row = max(0, int(np.floor(guess)) - row_half_window)
+        last_row = min(image.shape[0], int(np.ceil(guess)) + row_half_window + 1)
+        if last_row - first_row < 5:
             return np.nan
 
         full_profile = self._column_profile(image, column)
@@ -308,17 +636,17 @@ class OrderTrace:
             sigma=background_smoothing_sigma,
             mode="nearest",
         )
-        values = gaussian_filter1d(
-            full_profile[r0:r1] - background[r0:r1],
+        signal = gaussian_filter1d(
+            full_profile[first_row:last_row] - background[first_row:last_row],
             sigma=profile_smoothing_sigma,
             mode="nearest",
         )
-        rows = np.arange(r0, r1, dtype=float)
-        if not np.isfinite(values).all():
+        rows = np.arange(first_row, last_row, dtype=float)
+        if not np.isfinite(signal).all():
             return np.nan
 
-        baseline = np.nanpercentile(values, 20.0)
-        amplitude = np.nanpercentile(values, 90.0) - baseline
+        baseline = np.nanpercentile(signal, 20.0)
+        amplitude = np.nanpercentile(signal, 90.0) - baseline
         if not np.isfinite(amplitude) or amplitude <= 0.0:
             return np.nan
 
@@ -326,104 +654,89 @@ class OrderTrace:
         guess_index = int(np.argmin(np.abs(rows - guess)))
         for level in edge_levels:
             threshold = baseline + level * amplitude
-            illuminated = np.flatnonzero(values >= threshold)
+            illuminated = np.flatnonzero(signal >= threshold)
             if illuminated.size == 0:
                 continue
-            core = illuminated[np.argmin(np.abs(illuminated - guess_index))]
-            lower = self._threshold_crossing(rows, values, core, -1, threshold)
-            upper = self._threshold_crossing(rows, values, core, 1, threshold)
-            width = upper - lower
+            core_index = illuminated[np.argmin(np.abs(illuminated - guess_index))]
+            bottom = self._threshold_crossing(rows, signal, core_index, -1, threshold)
+            top = self._threshold_crossing(rows, signal, core_index, 1, threshold)
+            width = top - bottom
             if (
-                np.isfinite(lower)
-                and np.isfinite(upper)
+                np.isfinite(bottom)
+                and np.isfinite(top)
                 and width >= edge_min_width_pixels
             ):
-                centers.append((lower + upper) / 2.0)
+                centers.append((bottom + top) / 2.0)
 
-        minimum = max(2, int(np.ceil(len(edge_levels) / 2)))
-        if len(centers) < minimum:
+        min_levels = max(2, int(np.ceil(len(edge_levels) / 2)))
+        if len(centers) < min_levels:
             return np.nan
         centers = np.asarray(centers, dtype=float)
-        center = float(np.nanmedian(centers))
-        spread = mad_std(centers, ignore_nan=True)
-        if spread > edge_max_center_spread:
+        if mad_std(centers, ignore_nan=True) > edge_max_center_spread:
             return np.nan
-        return center
+        return float(np.nanmedian(centers))
 
-    def _local_center(self, image, column, guess, candidates, fiber):
-        """Dispatch to the profile estimator appropriate for one fiber."""
-        if fiber == "CAL":
-            return self._local_peak_center(image, column, guess, candidates)
-        return self._local_edge_center(image, column, guess)
+    def _trace_centers(self, image, cluster, sample_columns, fiber):
+        """Measure a subpixel center at every sample column of one cluster.
 
-    def _trace_centers(self, image, seed_coeffs, sample_x, candidate_rows, fiber):
-        """Follow one orderlet from the detector center toward both edges."""
-        seed_y = np.polynomial.polynomial.polyval(sample_x, seed_coeffs)
-        centers = np.full(sample_x.size, np.nan, dtype=float)
-        anchor = int(np.argmin(np.abs(sample_x - image.shape[1] // 2)))
-        centers[anchor] = self._local_center(
-            image,
-            sample_x[anchor],
-            seed_y[anchor],
-            candidate_rows[anchor],
-            fiber,
+        The CAL orderlet is peaked and centers well on its brightest pixels;
+        SKY and the science orderlets are flat-topped, with no meaningful peak,
+        and are centered from their two edges instead.
+        """
+        measure_center = (
+            self._local_peak_center if fiber == "CAL" else self._local_edge_center
         )
-
-        directions = (
-            range(anchor + 1, sample_x.size),
-            range(anchor - 1, -1, -1),
-        )
-        for indices in directions:
-            previous = anchor
-            for i in indices:
-                if np.isfinite(centers[previous]):
-                    guess = centers[previous] + seed_y[i] - seed_y[previous]
-                else:
-                    guess = seed_y[i]
-                measured = self._local_center(
-                    image, sample_x[i], guess, candidate_rows[i], fiber
-                )
-                centers[i] = measured
-                if np.isfinite(measured):
-                    previous = i
+        centers = np.full(sample_columns.size, np.nan, dtype=float)
+        for index, column in enumerate(sample_columns):
+            in_column = cluster["columns"] == column
+            if not in_column.any():
+                continue
+            guess = float(cluster["rows"][in_column].mean())
+            centers[index] = measure_center(image, column, guess)
         return centers
 
     def _robust_polynomial_fit(
         self,
-        x,
-        y,
+        columns,
+        centers,
         min_valid_fraction=0.5,
         fit_max_iterations=8,
         fit_sigma=4.0,
     ):
         """Fit a polynomial with iterative median/MAD residual rejection."""
         degree = int(self.poly_degree)
-        keep = np.isfinite(x) & np.isfinite(y)
-        minimum = max(degree + 1, int(np.ceil(x.size * min_valid_fraction)))
-        if keep.sum() < minimum:
+        kept = np.isfinite(columns) & np.isfinite(centers)
+        min_kept = max(degree + 1, int(np.ceil(columns.size * min_valid_fraction)))
+        if kept.sum() < min_kept:
             raise ValueError(
-                f"only {keep.sum()} of {x.size} trace centers are valid; "
-                f"at least {minimum} are required"
+                f"only {kept.sum()} of {columns.size} trace centers are valid; "
+                f"at least {min_kept} are required"
             )
 
         for _ in range(fit_max_iterations):
-            coeffs = np.polynomial.polynomial.polyfit(x[keep], y[keep], degree)
-            residual = y - np.polynomial.polynomial.polyval(x, coeffs)
-            center = np.nanmedian(residual[keep])
-            scale = mad_std(residual[keep], ignore_nan=True)
-            limit = max(0.25, fit_sigma * scale)
-            updated = np.isfinite(y) & (np.abs(residual - center) <= limit)
-            if updated.sum() < minimum:
+            coeffs = np.polynomial.polynomial.polyfit(
+                columns[kept], centers[kept], degree
+            )
+            residual = centers - np.polynomial.polynomial.polyval(columns, coeffs)
+            median_residual = np.nanmedian(residual[kept])
+            residual_scatter = mad_std(residual[kept], ignore_nan=True)
+            rejection_limit = max(0.25, fit_sigma * residual_scatter)
+            still_valid = np.isfinite(centers) & (
+                np.abs(residual - median_residual) <= rejection_limit
+            )
+            if still_valid.sum() < min_kept:
                 break
-            if np.array_equal(updated, keep):
-                keep = updated
+            if np.array_equal(still_valid, kept):
+                kept = still_valid
                 break
-            keep = updated
+            kept = still_valid
 
-        coeffs = np.polynomial.polynomial.polyfit(x[keep], y[keep], degree)
-        residual = y[keep] - np.polynomial.polynomial.polyval(x[keep], coeffs)
+        coeffs = np.polynomial.polynomial.polyfit(columns[kept], centers[kept], degree)
+        residual = centers[kept] - np.polynomial.polynomial.polyval(
+            columns[kept], coeffs
+        )
         rms = float(np.sqrt(np.mean(residual**2)))
-        return coeffs, keep, rms
+        return coeffs, kept, rms
 
     def _width_at_column(
         self,
@@ -434,14 +747,14 @@ class OrderTrace:
         winsor_percentile=90.0,
         width_sigma=2.8,
     ):
-        """Estimate lower and upper Gaussian widths at one trace sample."""
-        r0 = max(0, int(np.floor(center)) - width_half_window)
-        r1 = min(image.shape[0], int(np.ceil(center)) + width_half_window + 1)
-        if r1 - r0 < 5:
+        """Estimate the bottom and top Gaussian widths at one trace sample."""
+        first_row = max(0, int(np.floor(center)) - width_half_window)
+        last_row = min(image.shape[0], int(np.ceil(center)) + width_half_window + 1)
+        if last_row - first_row < 5:
             return np.nan, np.nan
 
-        profile = self._column_profile(image, column)[r0:r1]
-        rows = np.arange(r0, r1, dtype=float)
+        profile = self._column_profile(image, column)[first_row:last_row]
+        rows = np.arange(first_row, last_row, dtype=float)
         signal = np.clip(profile - np.nanpercentile(profile, 20.0), 0.0, None)
         if not np.any(signal > 0):
             return np.nan, np.nan
@@ -449,9 +762,9 @@ class OrderTrace:
         offsets = rows - center
 
         widths = []
-        for side in (offsets <= 0, offsets >= 0):
-            weights = signal[side]
-            distance = np.abs(offsets[side])
+        for half in (offsets <= 0, offsets >= 0):
+            weights = signal[half]
+            distance = np.abs(offsets[half])
             if weights.size < 2 or weights.sum() <= 0:
                 widths.append(np.nan)
                 continue
@@ -463,177 +776,189 @@ class OrderTrace:
         return tuple(widths)
 
     def _estimate_widths(
-        self, image, coeffs, x, keep, width_half_window=14, width_default=11.0
+        self, image, coeffs, columns, kept, width_half_window=14, width_default=11.0
     ):
-        """Return robust lower/upper aperture widths from accepted samples."""
-        lower = []
-        upper = []
-        kept_x = x[keep]
-        stride = max(1, kept_x.size // 24)
-        for column in kept_x[::stride]:
+        """Return robust bottom/top aperture widths from accepted samples."""
+        bottom_widths = []
+        top_widths = []
+        kept_columns = columns[kept]
+        stride = max(1, kept_columns.size // 24)
+        for column in kept_columns[::stride]:
             center = np.polynomial.polynomial.polyval(column, coeffs)
             bottom, top = self._width_at_column(image, int(column), center)
             if np.isfinite(bottom) and bottom > 0:
-                lower.append(bottom)
+                bottom_widths.append(bottom)
             if np.isfinite(top) and top > 0:
-                upper.append(top)
+                top_widths.append(top)
 
-        if len(lower) < 3 or len(upper) < 3:
+        if len(bottom_widths) < 3 or len(top_widths) < 3:
             raise ValueError(
                 "fewer than three valid samples for trace-width estimation"
             )
-        maximum = min(width_half_window, width_default)
-        bottom = float(np.clip(np.nanmedian(lower), 1.0, maximum))
-        top = float(np.clip(np.nanmedian(upper), 1.0, maximum))
+        width_ceiling = min(width_half_window, width_default)
+        bottom = float(np.clip(np.nanmedian(bottom_widths), 1.0, width_ceiling))
+        top = float(np.clip(np.nanmedian(top_widths), 1.0, width_ceiling))
         return bottom, top
 
-    def _constrain_neighbor_widths(self, rows, ncol, orderlet_gap_pixels=2.0):
+    def _constrain_neighbor_widths(self, records, ncol, orderlet_gap_pixels=2.0):
         """Keep adjacent apertures separated by the required orderlet gap."""
-        coefficient_columns = self._coefficient_columns()
-        x_mid = (ncol - 1) / 2.0
-        for lower, upper in zip(rows[:-1], rows[1:], strict=False):
-            lower_y = np.polynomial.polynomial.polyval(
-                x_mid, [lower[column] for column in coefficient_columns]
+        coefficient_fields = self._coefficient_fields()
+        middle_column = (ncol - 1) / 2.0
+        for below, above in zip(records[:-1], records[1:], strict=False):
+            below_center = np.polynomial.polynomial.polyval(
+                middle_column, [below[field] for field in coefficient_fields]
             )
-            upper_y = np.polynomial.polynomial.polyval(
-                x_mid, [upper[column] for column in coefficient_columns]
+            above_center = np.polynomial.polynomial.polyval(
+                middle_column, [above[field] for field in coefficient_fields]
             )
-            separation = upper_y - lower_y
-            available = separation - orderlet_gap_pixels
-            requested = lower["TopEdge"] + upper["BottomEdge"]
+            available = (above_center - below_center) - orderlet_gap_pixels
+            requested = below["TopEdge"] + above["BottomEdge"]
             if available <= 0:
                 raise ValueError(
                     "neighboring fitted traces cross or have no aperture gap"
                 )
             if requested > available:
-                scale = available / requested
-                lower["TopEdge"] *= scale
-                upper["BottomEdge"] *= scale
+                shrink = available / requested
+                below["TopEdge"] *= shrink
+                above["BottomEdge"] *= shrink
 
     def _validate_trace_table(self, chip, table, nrow, ncol, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
-        coefficient_columns = self._coefficient_columns()
-        trace_columns = (
-            coefficient_columns + _TRACE_GEOMETRY_COLUMNS + _TRACE_ID_COLUMNS
-        )
-        if list(table.columns) != trace_columns:
+        coefficient_fields = self._coefficient_fields()
+        if list(table.columns) != self._trace_fields():
             raise ValueError(f"{chip} output has incompatible columns")
-        if table.empty:
-            raise ValueError(f"{chip} produced no trace rows")
-        if table.duplicated(["Fiber", "Order"]).any():
-            raise ValueError(f"{chip} output has duplicate Fiber/Order rows")
 
-        numeric = table[coefficient_columns + _TRACE_GEOMETRY_COLUMNS].to_numpy(
+        expected_traces = pd.MultiIndex.from_product(
+            [range(self.norder[chip]), self.fibers], names=["Order", "Fiber"]
+        )
+        produced_traces = pd.MultiIndex.from_arrays([table["Order"], table["Fiber"]])
+        if len(table) != len(expected_traces) or set(produced_traces) != set(
+            expected_traces
+        ):
+            raise ValueError(
+                f"{chip} output does not contain exactly one row per expected trace"
+            )
+
+        measured = table[table["Status"] != "missing"]
+        if measured.empty:
+            raise ValueError(f"{chip} produced no measured traces")
+
+        geometry = measured[coefficient_fields + _TRACE_GEOMETRY_FIELDS].to_numpy(
             dtype=float
         )
-        if not np.isfinite(numeric).all():
-            raise ValueError(f"{chip} output contains non-finite geometry")
-        if not ((table["BottomEdge"] > 0) & (table["TopEdge"] > 0)).all():
+        if not np.isfinite(geometry).all():
+            raise ValueError(f"{chip} output contains non-finite measured geometry")
+        if not ((measured["BottomEdge"] > 0) & (measured["TopEdge"] > 0)).all():
             raise ValueError(f"{chip} output contains non-positive widths")
-        if not ((table["X1"] >= 0) & (table["X2"] < ncol)).all():
+        if not ((measured["X1"] >= 0) & (measured["X2"] < ncol)).all():
             raise ValueError(f"{chip} output contains out-of-range column bounds")
-        if not (table["X1"] <= table["X2"]).all():
+        if not (measured["X1"] <= measured["X2"]).all():
             raise ValueError(f"{chip} output contains reversed column bounds")
 
-        test_x = np.linspace(0, ncol - 1, 17)
-        coeffs = table[coefficient_columns].to_numpy(dtype=float)
+        test_columns = np.linspace(0, ncol - 1, 17)
+        coeffs = measured[coefficient_fields].to_numpy(dtype=float)
         centers = np.array(
-            [np.polynomial.polynomial.polyval(test_x, coeff) for coeff in coeffs]
+            [np.polynomial.polynomial.polyval(test_columns, coeff) for coeff in coeffs]
         )
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
-        covered = (centers >= -row_half_window) & (
+        on_detector = (centers >= -row_half_window) & (
             centers <= nrow - 1 + row_half_window
         )
-        if not covered.any(axis=1).all():
+        if not on_detector.any(axis=1).all():
             raise ValueError(f"{chip} output contains a wholly off-detector trace")
 
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def _trace_chip(self, chip, seed_table, row_half_window=7):
-        """Measure all seeded orderlets on one CCD and return the output table."""
-        image = self._master_flat.data[f"{chip}_IMG"]
-        nrow, ncol = image.shape
-        coefficient_columns = self._coefficient_columns()
-        sample_x = self._sample_columns(ncol)
-        candidate_rows = [self._candidate_rows(image, column) for column in sample_x]
+    def _detect_traces(self, chip, image):
+        """Detect, curate, and identify every trace on one CCD."""
+        mask = self._detect_illuminated_pixels(image)
+        clusters = self._label_clusters(mask)
+        logger.info("%s: %d illuminated clusters found", chip, len(clusters))
 
-        rows = []
+        clusters = self._reject_small_clusters(chip, clusters)
+        clusters = self._merge_fragmented_clusters(chip, clusters)
+        clusters = self._reject_unidentifiable_clusters(chip, clusters, image.shape[1])
+        logger.info("%s: %d clusters survive curation", chip, len(clusters))
+
+        return clusters, self._assign_trace_identity(chip, clusters, image)
+
+    def _measure_traces(
+        self, chip, clusters, identities, image, full_coverage_fraction=0.9
+    ):
+        """Fit every identified trace and assemble the output table for one CCD."""
+        nrow, ncol = image.shape
+        coefficient_fields = self._coefficient_fields()
+        sample_columns = self._sample_columns(ncol)
+
+        records = []
         rms_values = []
-        for seed in seed_table.itertuples(index=False):
-            seed_coeffs = np.array(
-                [getattr(seed, column) for column in _REFERENCE_COEFFICIENT_COLUMNS],
-                dtype=float,
-            )
-            predicted = np.polynomial.polynomial.polyval(sample_x, seed_coeffs)
-            if not np.any(
-                (predicted >= -row_half_window)
-                & (predicted <= nrow - 1 + row_half_window)
-            ):
+        for (order, fiber), cluster_index in identities.items():
+            record = dict.fromkeys(coefficient_fields + _TRACE_GEOMETRY_FIELDS, np.nan)
+            record.update({"Fiber": fiber, "Order": order, "Status": "missing"})
+
+            if pd.isna(cluster_index):
                 logger.warning(
-                    "%s %s order %d is wholly off detector; omitting trace",
-                    chip,
-                    seed.Fiber,
-                    seed.Order,
+                    "%s %s order %d: no cluster detected", chip, fiber, order
                 )
+                records.append(record)
                 continue
 
-            measured = self._trace_centers(
-                image, seed_coeffs, sample_x, candidate_rows, seed.Fiber
-            )
+            cluster = clusters[int(cluster_index)]
+            centers = self._trace_centers(image, cluster, sample_columns, fiber)
             try:
-                coeffs, keep, rms = self._robust_polynomial_fit(
-                    sample_x.astype(float), measured
+                coeffs, kept, rms = self._robust_polynomial_fit(
+                    sample_columns.astype(float), centers
                 )
-            except ValueError as e:
-                raise ValueError(f"{chip} {seed.Fiber} order {seed.Order}: {e}") from e
-
-            try:
                 bottom, top = self._estimate_widths(
-                    image, coeffs, sample_x.astype(float), keep
+                    image, coeffs, sample_columns.astype(float), kept
                 )
-            except ValueError as e:
-                raise ValueError(f"{chip} {seed.Fiber} order {seed.Order}: {e}") from e
+            except ValueError as error:
+                logger.warning("%s %s order %d: %s", chip, fiber, order, error)
+                records.append(record)
+                continue
 
-            kept_x = sample_x[keep]
-            rows.append(
+            kept_columns = sample_columns[kept]
+            coverage = (kept_columns.max() - kept_columns.min() + 1) / ncol
+            record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
+            record.update(
                 {
-                    **dict(zip(coefficient_columns, coeffs, strict=True)),
                     "BottomEdge": bottom,
                     "TopEdge": top,
-                    "X1": int(kept_x.min()),
-                    "X2": int(kept_x.max()),
-                    "Fiber": seed.Fiber,
-                    "Order": int(seed.Order),
+                    "X1": float(kept_columns.min()),
+                    "X2": float(kept_columns.max()),
+                    "Status": "full"
+                    if coverage >= full_coverage_fraction
+                    else "partial",
                 }
             )
+            records.append(record)
             rms_values.append(rms)
 
-        self._constrain_neighbor_widths(rows, ncol)
-        trace_columns = (
-            coefficient_columns + _TRACE_GEOMETRY_COLUMNS + _TRACE_ID_COLUMNS
-        )
-        table = pd.DataFrame(rows, columns=trace_columns)
+        measured = [record for record in records if record["Status"] != "missing"]
+        self._constrain_neighbor_widths(measured, ncol)
+
+        table = pd.DataFrame(records, columns=self._trace_fields())
         self._validate_trace_table(chip, table, nrow, ncol)
         self._fit_rms[chip] = np.asarray(rms_values, dtype=float)
         return table
 
-    def _write_results(self, results, output_dir, overwrite):
+    def _write_results(self, tables, output_dir, overwrite):
         """Stage and atomically install all requested CSV outputs."""
         os.makedirs(output_dir, exist_ok=True)
-        paths = {
+        final_paths = {
             chip: os.path.join(output_dir, f"order_trace_{chip.lower()}.csv")
-            for chip in results
+            for chip in tables
         }
-        existing = [path for path in paths.values() if os.path.exists(path)]
+        existing = [path for path in final_paths.values() if os.path.exists(path)]
         if existing and not overwrite:
             raise FileExistsError(f"Order-trace output already exists: {existing}")
 
-        temporary = {}
+        staged_paths = {}
         try:
-            for chip, table in results.items():
+            for chip, table in tables.items():
                 with tempfile.NamedTemporaryFile(
                     mode="w",
                     suffix=".csv.tmp",
@@ -641,18 +966,18 @@ class OrderTrace:
                     dir=output_dir,
                     delete=False,
                 ) as stream:
-                    temporary[chip] = stream.name
+                    staged_paths[chip] = stream.name
                     table.to_csv(stream, lineterminator="\n")
 
-            for chip, path in paths.items():
-                os.replace(temporary[chip], path)
-                temporary.pop(chip)
+            for chip, path in final_paths.items():
+                os.replace(staged_paths[chip], path)
+                staged_paths.pop(chip)
         finally:
-            for path in temporary.values():
+            for path in staged_paths.values():
                 if os.path.exists(path):
                     os.remove(path)
 
-        self._output_paths = paths
+        self._output_paths = final_paths
 
     # ------------------------------------------------------------------
     # Private helpers - module execution
@@ -660,25 +985,21 @@ class OrderTrace:
 
     def _track_info(self, chips):
         """Build and cache the interactive execution summary."""
-        era = (
-            "manual/unregistered"
-            if self._instrument_era is None
-            else self._instrument_era
-        )
         lines = [
             "OrderTrace",
             f"  master flat: {self.master_flat_filename}",
-            f"  INSTERA:  {era}",
             "",
-            f"  {'chip':<8s} {'traces':>7s} {'seed shift':>12s} "
+            f"  {'chip':<8s} {'full':>6s} {'partial':>8s} {'missing':>8s} "
             f"{'median RMS [pix]':>18s}  output",
-            "  " + "-" * 90,
+            "  " + "-" * 96,
         ]
         for chip in chips:
+            status = self._trace_tables[chip]["Status"]
             median_rms = np.nanmedian(self._fit_rms[chip])
             lines.append(
-                f"  {chip:<8s} {len(self._results[chip]):>7d} "
-                f"{self._anchor_shifts[chip]:>12.3f} "
+                f"  {chip:<8s} {(status == 'full').sum():>6d} "
+                f"{(status == 'partial').sum():>8d} "
+                f"{(status == 'missing').sum():>8d} "
                 f"{median_rms:>18.4f}  {self._output_paths[chip]}"
             )
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
@@ -687,9 +1008,7 @@ class OrderTrace:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master_order_trace(
-        self, chips=None, *, output_dir, cal_order3_y=None, overwrite=False
-    ):
+    def make_master_order_trace(self, chips=None, *, output_dir, overwrite=False):
         """
         Build order-trace calibrations from the requested master-flat CCDs.
 
@@ -699,11 +1018,6 @@ class OrderTrace:
             CCDs to trace. Defaults to configured GREEN and RED.
         output_dir : str or pathlib.Path
             Directory receiving ``order_trace_<chip>.csv``. Required.
-        cal_order3_y : dict, optional
-            Manual CAL/order-3 row at assembled detector column zero, keyed by
-            chip. Required for an observation outside every defined instrument
-            era; when supplied for a known era, explicitly overrides its seed
-            positions by vertically translating the reference geometry.
         overwrite : bool
             Replace existing output CSVs when True. Defaults to False.
 
@@ -711,46 +1025,61 @@ class OrderTrace:
         -------
         dict
             Mapping of uppercase chip name to the DataFrame written for it.
+            Each table holds one row per expected trace, ordered by order index
+            then by fiber.
 
         Raises
         ------
         FileNotFoundError
-            If the master flat, era table, or trace reference is absent.
+            If the master flat is absent.
         ValueError
-            If the era/anchor, detected geometry, or output table is invalid.
+            If no CAL orderlet can be identified, or if the assembled output
+            table is invalid.
         FileExistsError
             If a requested output exists and ``overwrite`` is False.
+
+        Notes
+        -----
+        Pipeline steps, repeated per CCD:
+        1. Threshold each detector column against its own smooth continuum,
+           giving a mask of illuminated pixels set by orderlet contrast rather
+           than by the absolute lamp level
+        2. Collect mask pixels that touch into clusters, taking all eight pixels
+           of the surrounding 3x3 neighborhood as adjacent (8-connectivity)
+        3. Reject clusters too small to be part of any trace
+        4. Rejoin clusters that are separated pieces of one trace
+        5. Reject clusters that cannot be identified at the detector center
+        6. Flag the CAL orderlet of each order, then count downward from each
+           CAL to label every cluster with its fiber and zero-based order index
+        7. Measure a subpixel center per sample column -- a winsorized centroid
+           for the peaked CAL profile, an edge midpoint for the flat-topped SKY
+           and science profiles -- and fit each trace with sigma-clipping
+        8. Estimate aperture edges and shrink them where neighboring apertures
+           would otherwise touch
+        9. Validate the assembled table and write ``order_trace_<chip>.csv``
+
+        Steps 1-6 are pure detection and identification: identity is fixed from
+        the illuminated-pixel mask and cluster brightness before step 7 fits
+        anything. The order *index* assigned in step 6 is a first-pass estimate;
+        it is correct whenever the detected orders fill the detector, and is
+        counted from the lowest complete fiber group otherwise.
         """
         if chips is None:
             chips = self.chips
-        anchors = self._validate_manual_anchors(chips, cal_order3_y)
 
         self._master_flat = self._load_master_flat()
-        timestamp = get_timestamp(self.master_flat_filename)
-        observation_time = kpf_timestamp_to_datetime(timestamp)
-        eras = pd.read_csv(_ERA_DEFINITIONS_PATH, skipinitialspace=True)
-        in_era = (pd.to_datetime(eras["UT_start_date"]) <= observation_time) & (
-            observation_time <= pd.to_datetime(eras["UT_end_date"])
-        )
-        era = eras.loc[in_era, "INSTERA"]
-        self._instrument_era = None if era.empty else float(era.iloc[0])
-        if self._instrument_era is None and anchors is None:
-            raise ValueError(
-                f"master timestamp {timestamp} is outside the defined instrument eras; "
-                "provide cal_order3_y for every requested chip"
-            )
 
-        results = {}
+        tables = {}
         for chip in chips:
-            manual_anchor = None if anchors is None else anchors[chip]
-            seed_table = self._load_seed_table(chip, manual_anchor)
-            results[chip] = self._trace_chip(chip, seed_table)
+            image = self._master_flat.data[f"{chip}_IMG"]
+            clusters, identities = self._detect_traces(chip, image)
+            tables[chip] = self._measure_traces(chip, clusters, identities, image)
 
-        self._results = results
-        self._write_results(results, output_dir, bool(overwrite))
+        self._trace_tables = tables
+        self._write_results(tables, output_dir, bool(overwrite))
         self._track_info(chips)
         logger.info("%s", self._info)
-        return results
+        return tables
 
     def info(self):
         """Print a summary of the module configuration and tracing results."""
