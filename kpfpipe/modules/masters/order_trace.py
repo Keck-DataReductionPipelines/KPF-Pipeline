@@ -34,6 +34,12 @@ So every trace centerline is ``row = f(column)``, and the ``X1``/``X2`` output
 fields are the first and last *pixel column* over which that fit was measured.
 "Column" always means a pixel column; the fields of an output table are called
 fields, never columns.
+
+A bare ``i`` is a single row index and a bare ``j`` a single column index, as
+in ``image[i, j]``. Plural ``rows``/``columns`` are arrays of such indices, and
+names like ``sample_columns`` or ``middle_column`` are column positions the
+polynomials are evaluated at. Reserving ``i``/``j`` for the scalars keeps a
+loop counter from ever being mistaken for the array it walks.
 """
 
 import logging
@@ -216,12 +222,12 @@ class OrderTrace:
         filled = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
         nrow, ncol = filled.shape
         mask = np.zeros((nrow, ncol), dtype=bool)
-        for column in range(ncol):
+        for j in range(ncol):
             # Subtracting the inter-order flux leaves the orderlet peaks
             # standing alone, so the threshold below is set by orderlet
             # contrast rather than by the absolute lamp level, which varies by
             # an order of magnitude across the detector.
-            column_pixels = filled[:, column]
+            column_pixels = filled[:, j]
             residual = column_pixels - self._single_column_inter_order_flux(
                 column_pixels, smoothing_weight
             )
@@ -229,7 +235,7 @@ class OrderTrace:
             threshold = 0.5 * np.quantile(
                 positive_residual, trace_ratio, method="lower"
             )
-            mask[:, column] = residual > threshold + 1.0
+            mask[:, j] = residual > threshold + 1.0
         return mask
 
     @staticmethod
@@ -241,15 +247,15 @@ class OrderTrace:
         last pixel column, matching the output fields of the same name, and
         ``row_at_x1``/``row_at_x2`` are where it sits across dispersion there.
         """
-        first_column, last_column = int(columns.min()), int(columns.max())
+        first_j, last_j = int(columns.min()), int(columns.max())
         return {
             "rows": rows,
             "columns": columns,
             "npixel": int(rows.size),
-            "x1": first_column,
-            "x2": last_column,
-            "row_at_x1": float(rows[columns == first_column].mean()),
-            "row_at_x2": float(rows[columns == last_column].mean()),
+            "x1": first_j,
+            "x2": last_j,
+            "row_at_x1": float(rows[columns == first_j].mean()),
+            "row_at_x2": float(rows[columns == last_j].mean()),
         }
 
     def _label_clusters(self, mask):
@@ -618,26 +624,47 @@ class OrderTrace:
         """
         return np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
 
-    def _column_profile(self, image, column, column_half_window=3):
-        """Return a robust cross-dispersion profile at one detector column.
+    def _sample_column_profiles(self, image, sample_columns, column_half_window=3):
+        """Return the cross-dispersion profile at each sample column, keyed by column.
 
-        A profile rather than raw pixels: neighboring columns are median
+        Profiles rather than raw pixels: neighboring columns are median
         combined, which suppresses noise without smearing, because a trace
         moves only slightly across dispersion over so short a run along it.
+
+        Every trace on the CCD is measured at these same few dozen columns, so
+        all the profiles are built once here instead of being recomputed by
+        each trace in turn.
+
+        A window overhanging a detector edge is padded with NaN, which
+        ``nanmedian`` then ignores, giving exactly the truncated median a
+        clamped per-column slice would.
         """
-        first_column = max(0, int(column) - column_half_window)
-        last_column = min(image.shape[1], int(column) + column_half_window + 1)
-        profile = np.nanmedian(image[:, first_column:last_column], axis=1)
-        finite = np.isfinite(profile)
-        if not finite.any():
-            return np.zeros(image.shape[0], dtype=float)
-        fill = np.nanmedian(profile[finite])
-        return np.where(finite, profile, fill).astype(float, copy=False)
+        nrow, ncol = image.shape
+        offsets = np.arange(-column_half_window, column_half_window + 1)
+        window_columns = sample_columns[:, None] + offsets[None, :]
+        on_detector = (window_columns >= 0) & (window_columns < ncol)
+
+        windows = np.full((nrow, *window_columns.shape), np.nan, dtype=image.dtype)
+        windows[:, on_detector] = image[:, window_columns[on_detector]]
+        profiles = np.nanmedian(windows, axis=2)
+
+        # Fill non-finite rows with the profile's own median, as a wholly
+        # unmeasurable column has no scale of its own to fall back on.
+        finite = np.isfinite(profiles)
+        fill = np.zeros(sample_columns.size)
+        measured = finite.any(axis=0)
+        fill[measured] = np.nanmedian(
+            np.where(finite, profiles, np.nan)[:, measured], axis=0
+        )
+        profiles = np.where(finite, profiles, fill[None, :]).astype(float, copy=False)
+
+        return dict(
+            zip(sample_columns.tolist(), np.ascontiguousarray(profiles.T), strict=True)
+        )
 
     def _local_peak_center(
         self,
-        image,
-        column,
+        column_profile,
         row_guess,
         row_half_window=7,
         signal_smoothing_sigma=1.0,
@@ -647,13 +674,13 @@ class OrderTrace:
         if not np.isfinite(row_guess):
             return np.nan
 
-        first_row = max(0, int(np.floor(row_guess)) - row_half_window)
-        last_row = min(image.shape[0], int(np.ceil(row_guess)) + row_half_window + 1)
-        if last_row - first_row < 3:
+        first_i = max(0, int(np.floor(row_guess)) - row_half_window)
+        last_i = min(column_profile.size, int(np.ceil(row_guess)) + row_half_window + 1)
+        if last_i - first_i < 3:
             return np.nan
 
-        profile = self._column_profile(image, column)[first_row:last_row]
-        rows = np.arange(first_row, last_row, dtype=float)
+        profile = column_profile[first_i:last_i]
+        rows = np.arange(first_i, last_i, dtype=float)
         background = np.nanpercentile(profile, 20.0)
         signal = np.clip(profile - background, 0.0, None)
         smoothed = gaussian_filter1d(
@@ -697,8 +724,7 @@ class OrderTrace:
 
     def _local_edge_center(
         self,
-        image,
-        column,
+        column_profile,
         row_guess,
         row_half_window=7,
         background_smoothing_sigma=20.0,
@@ -711,23 +737,22 @@ class OrderTrace:
         if not np.isfinite(row_guess):
             return np.nan
 
-        first_row = max(0, int(np.floor(row_guess)) - row_half_window)
-        last_row = min(image.shape[0], int(np.ceil(row_guess)) + row_half_window + 1)
-        if last_row - first_row < 5:
+        first_i = max(0, int(np.floor(row_guess)) - row_half_window)
+        last_i = min(column_profile.size, int(np.ceil(row_guess)) + row_half_window + 1)
+        if last_i - first_i < 5:
             return np.nan
 
-        full_profile = self._column_profile(image, column)
         background = gaussian_filter1d(
-            full_profile,
+            column_profile,
             sigma=background_smoothing_sigma,
             mode="nearest",
         )
         signal = gaussian_filter1d(
-            full_profile[first_row:last_row] - background[first_row:last_row],
+            column_profile[first_i:last_i] - background[first_i:last_i],
             sigma=signal_smoothing_sigma,
             mode="nearest",
         )
-        rows = np.arange(first_row, last_row, dtype=float)
+        rows = np.arange(first_i, last_i, dtype=float)
         if not np.isfinite(signal).all():
             return np.nan
 
@@ -762,7 +787,7 @@ class OrderTrace:
             return np.nan
         return float(np.nanmedian(centers))
 
-    def _trace_centers(self, image, cluster, sample_columns, fiber):
+    def _trace_centers(self, column_profiles, cluster, sample_columns, fiber):
         """Measure a subpixel row center at every sample column of one cluster.
 
         The cluster's own mask pixels at a column give the starting row, so no
@@ -775,12 +800,12 @@ class OrderTrace:
             self._local_peak_center if fiber == "CAL" else self._local_edge_center
         )
         centers = np.full(sample_columns.size, np.nan, dtype=float)
-        for index, column in enumerate(sample_columns):
-            in_column = cluster["columns"] == column
+        for sample, j in enumerate(sample_columns):
+            in_column = cluster["columns"] == j
             if not in_column.any():
                 continue
             row_guess = float(cluster["rows"][in_column].mean())
-            centers[index] = measure_center(image, column, row_guess)
+            centers[sample] = measure_center(column_profiles[int(j)], row_guess)
         return centers
 
     def _robust_polynomial_fit(
@@ -834,8 +859,7 @@ class OrderTrace:
 
     def _width_at_column(
         self,
-        image,
-        column,
+        column_profile,
         center,
         width_half_window=14,
         winsor_percentile=90.0,
@@ -846,13 +870,13 @@ class OrderTrace:
         Below and above are cross-dispersion, so the two widths become the
         ``BottomEdge`` and ``TopEdge`` output fields.
         """
-        first_row = max(0, int(np.floor(center)) - width_half_window)
-        last_row = min(image.shape[0], int(np.ceil(center)) + width_half_window + 1)
-        if last_row - first_row < 5:
+        first_i = max(0, int(np.floor(center)) - width_half_window)
+        last_i = min(column_profile.size, int(np.ceil(center)) + width_half_window + 1)
+        if last_i - first_i < 5:
             return np.nan, np.nan
 
-        profile = self._column_profile(image, column)[first_row:last_row]
-        rows = np.arange(first_row, last_row, dtype=float)
+        profile = column_profile[first_i:last_i]
+        rows = np.arange(first_i, last_i, dtype=float)
         signal = np.clip(profile - np.nanpercentile(profile, 20.0), 0.0, None)
         if not np.any(signal > 0):
             return np.nan, np.nan
@@ -875,7 +899,7 @@ class OrderTrace:
 
     def _estimate_widths(
         self,
-        image,
+        column_profiles,
         coeffs,
         sample_columns,
         kept,
@@ -887,9 +911,9 @@ class OrderTrace:
         top_widths = []
         kept_columns = sample_columns[kept]
         stride = max(1, kept_columns.size // 24)
-        for column in kept_columns[::stride]:
-            center = np.polynomial.polynomial.polyval(column, coeffs)
-            bottom, top = self._width_at_column(image, int(column), center)
+        for j in kept_columns[::stride]:
+            center = np.polynomial.polynomial.polyval(j, coeffs)
+            bottom, top = self._width_at_column(column_profiles[int(j)], center)
             if np.isfinite(bottom) and bottom > 0:
                 bottom_widths.append(bottom)
             if np.isfinite(top) and top > 0:
@@ -1007,6 +1031,7 @@ class OrderTrace:
         nrow, ncol = image.shape
         coefficient_fields = self._coefficient_fields()
         sample_columns = self._sample_columns(ncol)
+        column_profiles = self._sample_column_profiles(image, sample_columns)
 
         records = []
         rms_values = []
@@ -1022,13 +1047,15 @@ class OrderTrace:
                 continue
 
             cluster = clusters[int(cluster_index)]
-            centers = self._trace_centers(image, cluster, sample_columns, fiber)
+            centers = self._trace_centers(
+                column_profiles, cluster, sample_columns, fiber
+            )
             try:
                 coeffs, kept, rms = self._robust_polynomial_fit(
                     sample_columns.astype(float), centers
                 )
                 bottom, top = self._estimate_widths(
-                    image, coeffs, sample_columns.astype(float), kept
+                    column_profiles, coeffs, sample_columns.astype(float), kept
                 )
             except ValueError as error:
                 logger.warning("%s %s order %d: %s", chip, fiber, order, error)
