@@ -20,6 +20,7 @@ from astropy.table import Column, Table
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import _GAIA_UNITS, _SIMBAD_UNITS, AstroQuery
 from kpfpipe.utils.astro import compute_redshift
+from kpfpipe.utils.network import _RETRY_WAITS
 
 
 def _ra_str(deg):
@@ -601,12 +602,16 @@ class TestExternalQueries:
         assert "no usable GAIAID" in caplog.text
 
     def test_query_gaia_lookup_failure_returns_none(self, caplog):
+        # A dropped connection is transient, so the lookup is retried before it is
+        # given up on; sleep is patched so the backoff is not actually waited out.
         aq = AstroQuery(_l0_for_query(GAIAID="12345"))
         with (
-            _patch_gaia(ConnectionError("gaia down")),
+            _patch_gaia(ConnectionError("gaia down")) as launch_job,
+            patch("kpfpipe.utils.network.time.sleep"),
             caplog.at_level(logging.WARNING),
         ):
             assert aq.query_gaia() is None
+            assert launch_job.call_count == len(_RETRY_WAITS) + 1
         assert "Gaia query failed" in caplog.text
 
     def test_query_gaia_no_match_returns_none(self, caplog):
@@ -665,14 +670,17 @@ class TestExternalQueries:
         assert "no OBJECT name" in caplog.text
 
     def test_query_simbad_lookup_failure_returns_none(self, caplog):
+        # Retried like the Gaia failure above; see there for the sleep patch.
         aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
         inst = MagicMock()
         inst.query_object.side_effect = ConnectionError("simbad down")
         with (
             patch("kpfpipe.modules.astro_query.Simbad", return_value=inst),
+            patch("kpfpipe.utils.network.time.sleep"),
             caplog.at_level(logging.WARNING),
         ):
             assert aq.query_simbad() is None
+            assert inst.query_object.call_count == len(_RETRY_WAITS) + 1
         assert "SIMBAD query failed" in caplog.text
 
     def test_query_simbad_no_match_returns_none(self, caplog):

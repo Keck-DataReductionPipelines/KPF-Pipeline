@@ -30,6 +30,7 @@ from astroquery.simbad import Simbad
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.network import retry_request
 
 logger = logging.getLogger(__name__)
 
@@ -336,9 +337,10 @@ class AstroQuery:
         """Query Gaia DR3 for the target's ICRS astrometry, or None (fail-soft).
 
         Returns None (warned) when GAIAID yields no usable source_id, when the
-        lookup fails, or when the source is not found. Raises ValueError if the
-        result's column units differ from the assumed canonical schema (deg,
-        mas/yr, mas, km/s, epoch in Julian years, BP/RP magnitudes in mag; ICRS).
+        lookup fails (after the transient-failure retries in ``retry_request``), or
+        when the source is not found. Raises ValueError if the result's column units
+        differ from the assumed canonical schema (deg, mas/yr, mas, km/s, epoch in
+        Julian years, BP/RP magnitudes in mag; ICRS).
         Whether it runs at all is gated upstream in perform by ``do_gaia_query``.
         """
         gaia_id = self._gaia_source_id()
@@ -355,7 +357,9 @@ class AstroQuery:
         """
         logger.info("querying Gaia DR3 for source_id %s", gaia_id)
         try:
-            results = Gaia.launch_job(query).get_results()
+            results = retry_request(
+                lambda: Gaia.launch_job(query).get_results(), "Gaia DR3"
+            )
         except Exception as e:
             logger.warning(
                 "Gaia query failed (%s: %s); Gaia astrometry unavailable",
@@ -406,9 +410,10 @@ class AstroQuery:
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
-        Returns None when L0 has no OBJECT name, or when the lookup fails /
-        resolves nothing (warned, not raised). Raises ValueError if the result's
-        column units differ from the assumed schema. Column schema is the
+        Returns None when L0 has no OBJECT name, or when the lookup fails (after the
+        transient-failure retries in ``retry_request``) / resolves nothing (warned,
+        not raised). Raises ValueError if the result's column units differ from the
+        assumed schema. Column schema is the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value
         mas, rvz_radvel km/s); the Johnson B/V magnitude columns come back unlabeled
         (unit None) and form the B-V color. Whether it runs at all is gated upstream
@@ -426,7 +431,7 @@ class AstroQuery:
             simbad.add_votable_fields(
                 "pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V"
             )
-            result = simbad.query_object(name)
+            result = retry_request(lambda: simbad.query_object(name), "SIMBAD")
         except Exception as e:
             logger.warning(
                 "SIMBAD query failed (%s: %s); SIMBAD astrometry unavailable",
