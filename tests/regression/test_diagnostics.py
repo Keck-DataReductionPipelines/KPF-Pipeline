@@ -155,6 +155,9 @@ class TestEmptyLevels:
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
 
+# The flag-carrying sources; 'kpf-drp' is the merged row and has no flag.
+_CATALOG_SOURCES = ("wmko", "gaia", "simbad")
+
 
 def _record_at(coord, **overrides):
     """A canonical catalog record placed at ``coord`` (zero PM, finite plx), in the
@@ -179,10 +182,15 @@ def _record_at(coord, **overrides):
 
 def _set_catalog_record(l0, records):
     """Write l0's CATALOG_RECORD extension + presence flags from a
-    {source: record-dict-or-None} mapping, via AstroQuery's writer."""
+    {source: record-dict-or-None} mapping, the way perform does: the rows through
+    AstroQuery's writer, then every flag in one _set_headers pass. A source left out
+    of the mapping gets flag 0, exactly as a gated-off one does in production."""
     aq = AstroQuery(l0)
     for source, record in records.items():
         aq._write_catalog_record(source, record)
+        if source in _CATALOG_SOURCES:
+            setattr(aq, f"_{source}", record)
+    aq._set_headers(l0)
 
 
 def _make_l0_pointing():

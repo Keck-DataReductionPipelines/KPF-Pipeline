@@ -38,8 +38,9 @@ class DiagL0(Diagnostics):
         """The CATALOG_RECORD row for ``source``, or None with a WARNING.
 
         Returns None when AstroQuery has not run (no presence flag), the source's
-        record is absent (flag 0), or a present record lacks a position or epoch. The
-        flag is written with the row, so flag 1 guarantees exactly one matching row.
+        record is absent (flag 0), or a present record lacks a position or epoch.
+        AstroQuery writes every flag alongside the rows it wrote, so flag 1
+        guarantees exactly one matching row.
         """
         hdr = self.kpf_obj.headers["CATALOG_RECORD"]
         keyword = _CATALOG_FLAGS[source]

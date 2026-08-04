@@ -83,7 +83,7 @@ master calibrations that the science flow consumes.
 ### Science Pipeline
 
 ```
-L0 (raw CCD) → ImageAssembly → L1 → ImageProcessing
+L0 (raw CCD) → AstroQuery → ImageAssembly → L1 → ImageProcessing
 L1 (assembled FFI) → SpectralExtraction → L2 → WavelengthCalibration → BarycentricCorrection
 L2 (extracted spectra) → CrossCorrelation → L4 → RadialVelocity
 L4 (CCFs/RVs)
@@ -242,7 +242,8 @@ installed, importable packages; code shared across a layer's siblings goes **dow
 
 `kpfpipe/modules/` holds the scientist-facing processing primitives — each an importable
 building block a recipe composes, with no orchestration or logging setup of its own. The
-science modules run the *Science Pipeline* flow: `image_assembly` (L0 → assembled FFI),
+science modules run the *Science Pipeline* flow: `astro_query` (external-catalog
+astrometry onto L0), `image_assembly` (L0 → assembled FFI),
 `image_processing`, `spectral_extraction`, `wavelength_calibration`, `barycentric_correction`,
 and the radial-velocity pair `radial_velocity`/`cross_correlation`; `calibration_association`
 resolves which master calibrations a frame uses. The `masters/` submodule
@@ -331,7 +332,7 @@ prior wrote, driven by the recipe through a **single `CheckpointL{n}(obj).run()`
 
 The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags
 + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4
-products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED
+products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END
 timing-consistency flag, is an L0 check whose result rides forward this way).
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.

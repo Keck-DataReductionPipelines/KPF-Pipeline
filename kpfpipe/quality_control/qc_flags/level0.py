@@ -83,8 +83,7 @@ class QCL0(QC):
         Ports v2.12 ``L2_datetime``. At L0 the raw instrument times live on the
         WMKO-native PRIMARY (the header later snapshotted verbatim into
         INSTRUMENT_HEADER at to_kpf1); the 0/1 flag then propagates downstream
-        on QUALITY_CONTROL. ELAPSED consistency is validated in exptime_sane
-        (EXPTIMOK), so it is not repeated here.
+        on QUALITY_CONTROL.
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         beg, mid, end = (

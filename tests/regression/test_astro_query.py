@@ -9,6 +9,7 @@ result Tables, so query parsing, each fail-soft None+warning path, and the
 """
 
 import logging
+import re
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -313,13 +314,13 @@ class TestReadWmkoHeader:
             p[key] = value
         return l0
 
-    def test_good_targ_builds_row_and_flag(self):
+    def test_good_targ_builds_row(self):
         # Well-formed FK5 TARG* -> a wmko record rotated to ICRS (so all sources
-        # share one frame), sanitized to the EPRV C*# format; writing sets WMKOCR=1.
+        # share one frame), sanitized to the EPRV C*# format. The matching WMKOCR
+        # flag is a header, written later by _set_headers (see TestPerform).
         l0 = self._l0_targ(**self._GOOD_TARG)
         aq = AstroQuery(l0)
         aq.read_wmko_header()  # builds the wmko row and writes it in one go
-        assert l0.headers["CATALOG_RECORD"]["WMKOCR"] == 1
         table = l0.data["CATALOG_RECORD"]
         wmko = table[table["source"] == "wmko"][0]
         assert wmko["object"] == "testtarget"
@@ -566,8 +567,7 @@ class TestExternalQueries:
         assert rec["object"] == "12345"
         assert rec["color"] == pytest.approx(1.0)  # G_BP - G_RP
         assert rec["color_name"] == "Gaia BP-RP"
-        # Row + presence flag written to CATALOG_RECORD.
-        assert l0.headers["CATALOG_RECORD"]["GAIACR"] == 1
+        # Row written to CATALOG_RECORD; the GAIACR flag follows in _set_headers.
         assert "gaia" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
 
     def test_query_gaia_missing_rv_becomes_none(self):
@@ -650,7 +650,8 @@ class TestExternalQueries:
         assert rec["epoch"] == pytest.approx(2000.0)
         assert rec["color"] == pytest.approx(1.0)  # Johnson B - V
         assert rec["color_name"] == "B-V"
-        assert l0.headers["CATALOG_RECORD"]["SIMBADCR"] == 1
+        # Row written; the SIMBADCR flag follows in _set_headers.
+        assert "simbad" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
 
     def test_query_simbad_missing_photometry_leaves_color_none(self):
         # A color needs both magnitudes; one unmeasured -> no color.
@@ -703,3 +704,130 @@ class TestExternalQueries:
         ):
             with pytest.raises(ValueError, match="unexpected column units"):
                 aq.query_simbad()
+
+
+# ---------------------------------------------------------------------------
+# Request vs parse -- the fields asked for are the fields read back
+# ---------------------------------------------------------------------------
+
+
+def _adql_select_columns(query):
+    """The column names in an ADQL SELECT list, as a set."""
+    select = re.search(r"SELECT\s+(.*?)\s+FROM", query, re.DOTALL | re.IGNORECASE)
+    return {col.strip() for col in select.group(1).split(",")}
+
+
+class TestRequestMatchesParse:
+    """Each query asks for exactly the columns its parser reads.
+
+    The mocked result tables above are built from _GAIA_UNITS/_SIMBAD_UNITS -- the
+    same schema the parser consumes -- so they answer whatever was asked and a
+    request that drifts from the parse (asking SIMBAD for the deprecated 'plx'
+    while reading 'plx_value') leaves every other test green. These pin the
+    request side against that schema.
+    """
+
+    def test_gaia_select_list_matches_parsed_columns(self):
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
+            aq.query_gaia()
+        assert _adql_select_columns(launch_job.call_args.args[0]) == set(_GAIA_UNITS)
+
+    def test_gaia_queries_the_dr3_source_table(self):
+        # _gaia_source_id strips the release prefix off GAIAID, so the table this
+        # query names is the only thing tying the source_id to DR3.
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
+            aq.query_gaia()
+        assert "gaiadr3.gaia_source" in launch_job.call_args.args[0]
+
+    def test_simbad_votable_fields_match_parsed_columns(self):
+        # ra/dec arrive in SIMBAD's default basic set, so they are not requested.
+        aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
+        inst = _simbad_instance(_simbad_table())
+        with patch("kpfpipe.modules.astro_query.Simbad", return_value=inst):
+            aq.query_simbad()
+        requested = set(inst.add_votable_fields.call_args.args)
+        assert requested == set(_SIMBAD_UNITS) - {"ra", "dec"}
+
+
+# ---------------------------------------------------------------------------
+# perform() -- the real entry point, with both catalogs mocked (no network)
+# ---------------------------------------------------------------------------
+
+
+def _perform(**config):
+    """Run perform() on a science L0 with both catalogs mocked at distinct RAs.
+
+    Gaia answers at RA 10 deg, SIMBAD at RA 20 deg, so the merged row names which
+    query landed on which source attribute. Returns (AstroQuery, merged row).
+    """
+    l0 = _l0_for_query(GAIAID="12345", OBJECT="tau Cet")
+    aq = AstroQuery(l0, config or None)
+    with (
+        _patch_gaia(_gaia_job(_gaia_table({"ra": 10.0}))),
+        patch(
+            "kpfpipe.modules.astro_query.Simbad",
+            return_value=_simbad_instance(_simbad_table({"ra": 20.0})),
+        ),
+    ):
+        aq.perform()
+    return aq, aq.l0_obj.data["CATALOG_RECORD"]
+
+
+def _kpf_drp_row(record):
+    """The canonical merged row of a CATALOG_RECORD table."""
+    return record[record["source"] == "kpf-drp"][0]
+
+
+class TestPerform:
+    """perform() wires each query onto its own source attribute, then merges.
+
+    TestMergeCatalogRecords presets the source attributes by hand, so it cannot see
+    perform's own wiring; these tests drive the entry point end to end so a query
+    routed to the wrong attribute -- which would silently invert the gaia > simbad
+    precedence and mislabel provenance -- fails here.
+    """
+
+    def test_each_query_lands_on_its_own_attribute(self):
+        aq, _ = _perform()
+        assert aq._gaia["object"] == "12345"  # from GAIAID, via query_gaia
+        assert aq._simbad["object"] == "tau Cet"  # from OBJECT, via query_simbad
+        assert aq._gaia["ra"] == _ra_str(10.0)
+        assert aq._simbad["ra"] == _ra_str(20.0)
+
+    def test_merged_row_takes_gaia_over_simbad(self):
+        # Both catalogs resolve; the merge must land on the Gaia position and stamp
+        # the provenance to match.
+        _, record = _perform()
+        row = _kpf_drp_row(record)
+        assert row["ra"] == _ra_str(10.0)
+        assert row["radec_src"] == "gaia"
+        assert row["plx_src"] == "gaia"
+        assert row["rv_src"] == "gaia"
+        assert row["object"] == "12345"
+
+    def test_presence_flags_written_for_every_source(self):
+        # _set_headers is the module's sole header write: one flag per source, always
+        # all three, so an absent flag means AstroQuery never ran (what DiagL0 warns
+        # on). wmko is 0 here -- the L0 carries no TARG* pointing.
+        aq, _ = _perform()
+        hdr = aq.l0_obj.headers["CATALOG_RECORD"]
+        assert hdr["GAIACR"] == 1
+        assert hdr["SIMBADCR"] == 1
+        assert hdr["WMKOCR"] == 0
+
+    def test_gated_off_source_flagged_zero(self):
+        aq, _ = _perform(do_gaia_query=False)
+        assert aq.l0_obj.headers["CATALOG_RECORD"]["GAIACR"] == 0
+        assert aq.l0_obj.headers["CATALOG_RECORD"]["SIMBADCR"] == 1
+
+    def test_gaia_off_falls_through_to_simbad(self):
+        # The toggle gates the query, so the merge falls to the next source down --
+        # and the provenance follows it rather than staying stamped "gaia".
+        aq, record = _perform(do_gaia_query=False)
+        assert aq._gaia is None
+        row = _kpf_drp_row(record)
+        assert row["ra"] == _ra_str(20.0)
+        assert row["radec_src"] == "simbad"
+        assert row["object"] == "tau Cet"

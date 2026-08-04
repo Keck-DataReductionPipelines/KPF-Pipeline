@@ -279,15 +279,16 @@ class AstroQuery:
             )
 
     def _write_catalog_record(self, source, record):
-        """Upsert one source's row into the L0 CATALOG_RECORD extension, set its flag.
+        """Upsert one source's row into the L0 CATALOG_RECORD extension.
 
         The sole writer for CATALOG_RECORD (``wmko``/``gaia``/``simbad`` and the merged
         ``kpf-drp`` row). ``record`` is a canonical record dict or None; a None record
-        drops the source's row and clears its flag, otherwise the row is (re)written and
-        the flag set to 1. Provenance labels (``radec_src``/``plx_src``/``rv_src``)
-        default to ``source`` when the record omits them (a source row's values are its
-        own); the merged row supplies them explicitly. Other sources' rows are preserved
-        (upsert). ``kpf-drp`` writes no flag. Missing floats become NaN, strings "".
+        drops the source's row, otherwise the row is (re)written. Provenance labels
+        (``radec_src``/``plx_src``/``rv_src``) default to ``source`` when the record
+        omits them (a source row's values are its own); the merged row supplies them
+        explicitly. Other sources' rows are preserved (upsert). Missing floats become
+        NaN, strings "". The matching presence flags are headers, so ``_set_headers``
+        writes them once at the end of perform.
         """
         l0 = self.l0_obj
         table = l0.data["CATALOG_RECORD"]
@@ -325,9 +326,6 @@ class AstroQuery:
                 )
                 new_table[name].unit = _CATALOG_UNITS[name]
         l0.set_data("CATALOG_RECORD", new_table)
-        flag = _CATALOG_FLAGS.get(source)
-        if flag is not None:
-            l0.set_keyword(flag, 1 if record is not None else 0)
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -682,6 +680,22 @@ class AstroQuery:
         ]
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
+    def _set_headers(self, l0_obj):
+        """Sole place this module writes headers; reads instance attributes.
+
+        One presence flag per queryable source: 1 when that source resolved a record,
+        0 when it did not -- absent, gated off, or failed alike, since a consumer
+        cannot act on the difference. All three are always written, so a flag missing
+        from CATALOG_RECORD means AstroQuery never ran (what DiagL0 warns on). The
+        merged ``kpf-drp`` row has no flag; merge_catalog_records raises instead.
+        """
+        for source, record in (
+            ("wmko", self._wmko),
+            ("gaia", self._gaia),
+            ("simbad", self._simbad),
+        ):
+            l0_obj.set_keyword(_CATALOG_FLAGS[source], 1 if record is not None else 0)
+
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
@@ -720,6 +734,7 @@ class AstroQuery:
         # Merge the source rows into the canonical kpf-drp row; raises if no complete
         # position can be assembled.
         self.merge_catalog_records()
+        self._set_headers(self.l0_obj)
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")
 
