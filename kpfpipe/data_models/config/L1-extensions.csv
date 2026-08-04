@@ -12,3 +12,4 @@ HDU,Name,DataType,Required,Description
 10,DRP_CONFIG,BinTableHDU,False,Pipeline config as a 2-column table (key = value)
 11,INSTRUMENT_HEADER,ImageHDU,False,Verbatim raw instrument (L0) PRIMARY header
 12,QUALITY_CONTROL,BinTableHDU,True,Quality-control booleans and diagnostic metrics
+13,CATALOG_RECORD,BinTableHDU,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery

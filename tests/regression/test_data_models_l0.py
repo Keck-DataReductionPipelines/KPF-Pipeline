@@ -15,6 +15,8 @@ from astropy.table import Table
 
 from kpfpipe.data_models.level0 import KPF0
 
+from ._catalog import catalog_record_table
+
 # synthetic_l0_file and synthetic_l0_minimal fixtures live in tests/conftest.py
 
 
@@ -242,3 +244,44 @@ class TestKPF0CatalogRecord:
         assert "CATALOG_RECORD" in l0.extensions
         assert len(l0.data["CATALOG_RECORD"]) == 0
         assert "WMKOCR" not in l0.headers["CATALOG_RECORD"]
+
+
+class TestCatalogRecordMissingValues:
+    """A missing CATALOG_RECORD value survives a FITS round-trip as NaN.
+
+    Astropy's FITS reader returns a NaN float cell masked, and a masked cell is not
+    NaN (``np.isnan`` on one is falsy), so a missing-value check would read it as
+    present. ``KPFDataModel.from_fits`` fills those cells back to NaN for every
+    level; L0 is the vehicle here since it is where AstroQuery writes the table.
+    """
+
+    @staticmethod
+    def _l0_written_and_read(tmp_path, rv):
+        fn = str(tmp_path / "KP.20240405.00002.00.fits")
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["INSTRUME"] = "KPF"
+        l0.headers["PRIMARY"]["OFNAME"] = "KP.20240405.00002.00.fits"
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
+        l0.to_fits(fn)
+        return KPF0.from_fits(fn)
+
+    def test_missing_value_reads_back_as_nan_not_masked(self, tmp_path):
+        row = self._l0_written_and_read(tmp_path, rv=None).data["CATALOG_RECORD"][0]
+        assert row["rv"] is not np.ma.masked
+        assert np.isnan(row["rv"])
+
+    def test_present_value_reads_back_unchanged(self, tmp_path):
+        row = self._l0_written_and_read(tmp_path, rv=-16.6).data["CATALOG_RECORD"][0]
+        assert row["rv"] == pytest.approx(-16.6)
+
+    def test_missing_value_leaves_catalog_card_blank(self, tmp_path):
+        """The regression this normalization exists for: a masked cell defeats the
+        'skip missing' branch in KPF0._catalog_primary_cards, so the C*# card would
+        be written as the string 'nan' -- and the L1 write would then raise, since
+        FITS headers reject NaN."""
+        l0 = self._l0_written_and_read(tmp_path, rv=None)
+        l1 = l0.to_kpf1()
+        assert not l1.headers["PRIMARY"].get("CRV2")
+        assert l1.headers["PRIMARY"]["CRA2"] == "01:44:04.0000"
+        l1.to_fits(str(tmp_path / "kpf_L1_20240405T000000.fits"))

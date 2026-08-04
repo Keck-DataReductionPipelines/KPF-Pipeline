@@ -133,6 +133,7 @@ class KPF0(KPFDataModel):
                         )
                     self.create_extension(ext_name, fits_type)
 
+            # Payload decode, by name first (bespoke) then by type (generic).
             if ext_name == "PRIMARY":
                 pass
             elif ext_name == "RECEIPT":
@@ -145,11 +146,6 @@ class KPF0(KPFDataModel):
                     all_cols = df.columns.union(receipt_columns, sort=False)
                     df = df.reindex(columns=all_cols).fillna("")
                 self.receipt = df
-            elif ext_name == "CATALOG_RECORD":
-                # astropy reads NaN float cells back as masked; fill to NaN so
-                # consumers see one missing-value sentinel regardless of whether the
-                # table was just built by AstroQuery or round-tripped through FITS.
-                self.set_data(ext_name, Table.read(hdu).filled(np.nan))
             elif fits_type == "ImageHDU":
                 # np.array (not asarray) materializes the memmapped HDU into RAM
                 # before from_fits closes the file; a view would dangle afterward.
@@ -214,6 +210,7 @@ class KPF0(KPFDataModel):
         "EXPMETER_SKY",
         "TELEMETRY",
         "DRP_CONFIG",
+        "CATALOG_RECORD",
     ]
 
     def _map_header(self):
@@ -349,9 +346,10 @@ class KPF0(KPFDataModel):
         at read) and reaches L1 via the header forward below.
 
         Returns a KPF1 with EPRV PRIMARY, INSTRUMENT_HEADER, pass-through
-        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG), receipt, and
-        obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
-        empty -- the caller (image assembly) fills those in.
+        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG,
+        CATALOG_RECORD), receipt, and obs_id copied over. GREEN_CCD, GREEN_VAR,
+        RED_CCD, RED_VAR are created empty -- the caller (image assembly) fills
+        those in.
         """
         kpf1 = KPF1()
 

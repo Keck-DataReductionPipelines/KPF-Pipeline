@@ -22,13 +22,20 @@ from kpfpipe.data_models.base import KPFDataModel, keyword_registry
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.utils.io import kpf_filename
 
-# Make rvdata's RV2._read aware of KPF's QUALITY_CONTROL extension so an L2
-# written with it reads back (KPF2.__init__ creates the empty extension).
+# Make rvdata's RV2._read aware of KPF's QUALITY_CONTROL and CATALOG_RECORD
+# extensions so an L2 written with them reads back (KPF2.__init__ creates the empty
+# extensions).
 keyword_registry.register_rvdata_extension(
     LEVEL2_EXTENSIONS,
     "QUALITY_CONTROL",
     "BinTableHDU",
     "Quality-control booleans and diagnostic metrics",
+)
+keyword_registry.register_rvdata_extension(
+    LEVEL2_EXTENSIONS,
+    "CATALOG_RECORD",
+    "BinTableHDU",
+    "External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery",
 )
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
@@ -170,14 +177,15 @@ class KPF2(KPFDataModel, RV2):
         # ANCILLARY_SPECTRUM (Ca H&K) as an ImageHDU, but we keep it a BinTableHDU
         # placeholder for now -- Ca H&K extraction is WIP and existing L2/master
         # products encode it as BinTableHDU, so flipping the type breaks reading
-        # them back (a deliberate EPRV deviation). QUALITY_CONTROL is
-        # created here (L2 has no extensions CSV); RECEIPT and barycentric/RV#
-        # already exist via RV2.
+        # them back (a deliberate EPRV deviation). QUALITY_CONTROL and
+        # CATALOG_RECORD are created here (L2 has no extensions CSV); RECEIPT and
+        # barycentric/RV# already exist via RV2.
         for ext, ext_type in [
             ("ANCILLARY_SPECTRUM", "BinTableHDU"),
             ("EXPMETER", "BinTableHDU"),
             ("TELEMETRY", "BinTableHDU"),
             ("QUALITY_CONTROL", "BinTableHDU"),
+            ("CATALOG_RECORD", "BinTableHDU"),
         ]:
             if ext not in self.extensions:
                 self.create_extension(ext, ext_type)
@@ -238,19 +246,30 @@ class KPF2(KPFDataModel, RV2):
         """
         Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
 
-        Returns a KPF4 with PRIMARY header keywords forwarded from L2,
-        and the receipt chain preserved. RV and CCF data extensions are
-        created but empty -- the caller (RV computation) fills those in.
+        Returns a KPF4 with PRIMARY header keywords forwarded from L2, the
+        CATALOG_RECORD pass-through extension, and the receipt chain preserved. RV
+        and CCF data extensions are created but empty -- the caller (RV
+        computation) fills those in.
         """
         kpf4 = KPF4()
 
-        # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, and RECEIPT
-        # card-by-card, mirroring to_kpf2: PRIMARY overlays onto kpf4's EPRV seed
-        # (native wins), the rest are verbatim copies. The receipt *table*
-        # propagates separately via the copy below.
+        # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, CATALOG_RECORD, and
+        # RECEIPT card-by-card, mirroring to_kpf2: PRIMARY overlays onto kpf4's EPRV
+        # seed (native wins), the rest are verbatim copies. The receipt *table*
+        # propagates separately via the copy below; CATALOG_RECORD's table is copied
+        # with its header, since its rows (not just the presence flags) carry forward.
         self._forward_headers(
-            kpf4, ("PRIMARY", "INSTRUMENT_HEADER", "QUALITY_CONTROL", "RECEIPT")
+            kpf4,
+            (
+                "PRIMARY",
+                "INSTRUMENT_HEADER",
+                "QUALITY_CONTROL",
+                "CATALOG_RECORD",
+                "RECEIPT",
+            ),
         )
+        if self.data.get("CATALOG_RECORD") is not None:
+            kpf4.set_data("CATALOG_RECORD", self.data["CATALOG_RECORD"])
 
         if self.receipt is not None and not self.receipt.empty:
             kpf4.receipt = self.receipt.copy()

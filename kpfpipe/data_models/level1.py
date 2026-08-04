@@ -99,6 +99,7 @@ class KPF1(KPFDataModel):
                         )
                     self.create_extension(ext_name, fits_type)
 
+            # Payload decode, by name first (bespoke) then by type (generic).
             if ext_name == "PRIMARY":
                 pass
             elif ext_name == "RECEIPT":
@@ -176,6 +177,7 @@ class KPF1(KPFDataModel):
     _L1_TO_L2_PASSTHROUGH = {
         "TELEMETRY": "TELEMETRY",
         "EXPMETER_SCI": "EXPMETER",
+        "CATALOG_RECORD": "CATALOG_RECORD",
     }
 
     def to_kpf2(self):
@@ -184,9 +186,10 @@ class KPF1(KPFDataModel):
 
         The L1 PRIMARY is already EPRV-standard (converted in KPF0.to_kpf1), so
         the PRIMARY and INSTRUMENT_HEADER headers are a pure pass-through. Pass-
-        through extensions (TELEMETRY, EXPMETER_SCI->EXPMETER) and KPF-friendly
-        aliases (e.g. SCI2_FLUX -> TRACE3_FLUX) are handled below. Trace arrays
-        are created empty -- the caller (spectral extraction) fills those in.
+        through extensions (TELEMETRY, EXPMETER_SCI->EXPMETER, CATALOG_RECORD) and
+        KPF-friendly aliases (e.g. SCI2_FLUX -> TRACE3_FLUX) are handled below.
+        Trace arrays are created empty -- the caller (spectral extraction) fills
+        those in.
         """
         kpf2 = KPF2()
 

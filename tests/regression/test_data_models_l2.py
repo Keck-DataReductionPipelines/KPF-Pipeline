@@ -24,6 +24,7 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.data_models.masters.base import KPFMasterModel
 
+from ._catalog import SOURCES, catalog_record_table
 from ._dtype_policy import FLUX, WAVE, assert_dtype, assert_roundtrip_dtype
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
@@ -106,6 +107,54 @@ class TestKPF2QualityControlRoundTrip:
             back = KPF2.from_fits(fn)
         assert back.obs_id == "KP.20240101.00000.00"
         assert back.generate_standard_filename() == "kpf_SL2_20240101T000000.fits"
+
+
+class TestCatalogRecordPassthrough:
+    """CATALOG_RECORD rides L1 -> L2 and survives KPF2's RV2 read path.
+
+    Same mechanism as QUALITY_CONTROL above: register_rvdata_extension teaches
+    rvdata's definition-driven L2 reader about the KPF-only extension. (The L0 ->
+    L1 and L2 -> L4 hops have the same class in test_data_models_l{1,4}.py.)
+    """
+
+    @staticmethod
+    def _l1_with_catalog(rv=-16.6):
+        # KPF1 creates CATALOG_RECORD only on the L0 pass-through or a read (it is
+        # Required=False in L1-extensions.csv), so a bare L1 makes it explicitly.
+        l1 = KPF1()
+        l1.create_extension("CATALOG_RECORD", "BinTableHDU")
+        l1.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
+        l1.headers["CATALOG_RECORD"]["GAIACR"] = (1, "Catalog record present")
+        return l1
+
+    def test_rows_and_flags_reach_l2(self):
+        l2 = self._l1_with_catalog().to_kpf2()
+        assert [str(s) for s in l2.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert l2.headers["CATALOG_RECORD"]["GAIACR"] == 1
+
+    def test_catalog_record_roundtrip(self, tmp_path):
+        """The missing rv reads back NaN, not masked. L2 reads through rvdata's
+        RV2._read, so only the KPFDataModel.from_fits chokepoint can normalize it."""
+        l2 = self._l1_with_catalog(rv=None).to_kpf2()
+        fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            l2.to_fits(fn)
+            back = KPF2.from_fits(fn)
+        assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
+        rv = back.data["CATALOG_RECORD"][0]["rv"]
+        assert rv is not np.ma.masked and np.isnan(rv)
+
+    def test_empty_catalog_record_roundtrips(self, tmp_path):
+        """An L2 that never saw AstroQuery (empty table) still writes and reads."""
+        fn = str(tmp_path / "kpf_SL2_20240101T000001.fits")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            KPF2().to_fits(fn)
+            back = KPF2.from_fits(fn)
+        assert "CATALOG_RECORD" in back.extensions
+        assert len(back.data["CATALOG_RECORD"]) == 0
 
 
 class TestToKPF2:

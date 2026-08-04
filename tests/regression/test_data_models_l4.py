@@ -15,6 +15,8 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters import KPFMasterL4
 
+from ._catalog import SOURCES, catalog_record_table
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER = NORDER_GREEN + NORDER_RED
@@ -90,6 +92,40 @@ class TestToKPF4:
         back = KPF4.from_fits(str(path))
         assert "QUALITY_CONTROL" in back.extensions
         assert back.headers["QUALITY_CONTROL"].get("NANSCI1") == 7
+
+
+class TestCatalogRecordPassthrough:
+    """CATALOG_RECORD rides L2 -> L4 and survives KPF4's RV4 read path.
+
+    (The L0 -> L1 and L1 -> L2 hops have the same class in
+    test_data_models_l{1,2}.py.)
+    """
+
+    @staticmethod
+    def _l2_with_catalog():
+        kpf2 = KPF2()
+        kpf2.set_data("CATALOG_RECORD", catalog_record_table())
+        kpf2.headers["CATALOG_RECORD"]["GAIACR"] = (1, "Catalog record present")
+        return kpf2
+
+    def test_kpf4_has_catalog_record_extension(self):
+        # Like QUALITY_CONTROL: RV4 does not create it, so KPF4 must, giving
+        # to_kpf4's pass-through a destination.
+        assert "CATALOG_RECORD" in KPF4().extensions
+
+    def test_rows_and_flags_reach_l4(self):
+        """The catalog rows (not just the flags) are copied onto L4, so the resolved
+        astrometry stays with the RV product it fed."""
+        kpf4 = self._l2_with_catalog().to_kpf4()
+        assert [str(s) for s in kpf4.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert kpf4.headers["CATALOG_RECORD"]["GAIACR"] == 1
+
+    def test_catalog_record_roundtrip(self, tmp_path):
+        path = tmp_path / "rt_l4_catalog.fits"
+        self._l2_with_catalog().to_kpf4().to_fits(str(path))
+        back = KPF4.from_fits(str(path))
+        assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
 
 class TestKPF4:

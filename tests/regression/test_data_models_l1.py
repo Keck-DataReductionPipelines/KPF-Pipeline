@@ -22,6 +22,8 @@ from kpfpipe.data_models.masters.base import KPFMasterModel
 from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 
+from ._catalog import SOURCES, catalog_record_table
+
 # synthetic_l0_file, synthetic_l0_minimal, synthetic_l1_file fixtures live in
 # tests/conftest.py
 
@@ -516,6 +518,43 @@ class TestToKpf1:
         assert "GREEN_AMP1" not in l1.extensions
         assert "GREEN_AMP2" not in l1.extensions
         assert "RED_AMP1" not in l1.extensions
+
+
+class TestCatalogRecordPassthrough:
+    """AstroQuery's CATALOG_RECORD rows + presence flags ride L0 -> L1 unchanged.
+
+    (The L1 -> L2 and L2 -> L4 hops have the same class in
+    test_data_models_l{2,4}.py.)
+    """
+
+    @staticmethod
+    def _l0_with_catalog(rv=-16.6):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
+        l0.set_keyword("GAIACR", 1)
+        return l0
+
+    def test_rows_and_flags_reach_l1(self):
+        """Beyond the C*# overlay, the rows themselves ride forward: L1 keeps the
+        whole table (every source row, not just the merged one) and the presence
+        flags, so the resolved astrometry stays auditable downstream."""
+        l1 = self._l0_with_catalog().to_kpf1()
+        assert [str(s) for s in l1.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert l1.headers["CATALOG_RECORD"]["GAIACR"] == 1
+
+    def test_catalog_record_roundtrip(self, tmp_path):
+        """CATALOG_RECORD is registered in L1-extensions.csv, so an L1 carrying it
+        reads back (an unlisted extension raises 'Non-standard extension'). The
+        missing rv must read back NaN, not masked -- KPFDataModel.from_fits
+        normalizes at every level, not just L0."""
+        fn = str(tmp_path / "kpf_L1_20240405T000000.fits")
+        self._l0_with_catalog(rv=None).to_kpf1().to_fits(fn)
+        back = KPF1.from_fits(fn)
+        assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
+        rv = back.data["CATALOG_RECORD"][0]["rv"]
+        assert rv is not np.ma.masked and np.isnan(rv)
 
 
 class TestDrpStatus:

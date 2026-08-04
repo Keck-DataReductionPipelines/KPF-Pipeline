@@ -177,6 +177,8 @@ The architecture invariants:
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
   as an **append-only history**; only `ISGOOD` (the running QC aggregate — see *QC flags*)
   changes per level.
+- **`CATALOG_RECORD` (AstroQuery's resolved catalog rows + presence flags) also passes through
+  L0→L1→L2→L4**, and `to_kpf1` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
   structural card, else it raises.
