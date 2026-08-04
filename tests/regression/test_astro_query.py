@@ -512,16 +512,27 @@ class TestExternalQueries:
         assert AstroQuery._scalar(3.5) == 3.5
         assert AstroQuery._scalar("2.5") == 2.5
 
-    def test_gaia_source_id(self):
-        assert AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))._gaia_source_id() == (
-            "12345"
-        )
-        assert AstroQuery(_l0_for_query(GAIAID="12345"))._gaia_source_id() == "12345"
-        assert AstroQuery(_l0_for_query())._gaia_source_id() is None
-        assert (
-            AstroQuery(_l0_for_query(GAIAID="Gaia DR3 abc"))._gaia_source_id() is None
-        )
-        assert AstroQuery(_l0_for_query(GAIAID=""))._gaia_source_id() is None
+    @pytest.mark.parametrize(
+        ("gaiaid", "expected"),
+        [
+            ("Gaia DR3 12345", ("DR3", "12345")),
+            ("DR3 12345", ("DR3", "12345")),  # the form real L0 frames carry
+            ("DR2 12345", ("DR2", "12345")),
+            ("dr2 12345", ("DR2", "12345")),
+            ("12345", (None, "12345")),  # bare id -> release resolved against Gaia
+            (None, None),
+            ("", None),
+            ("Gaia DR3 abc", None),
+            # Real Gaia releases we cannot query: DR1 lacks RV/photometry, EDR3 is
+            # superseded by DR3, DR4 has not published yet.
+            ("DR1 12345", None),
+            ("EDR3 12345", None),
+            ("DR4 12345", None),
+        ],
+    )
+    def test_gaia_source(self, gaiaid, expected):
+        primary = {} if gaiaid is None else {"GAIAID": gaiaid}
+        assert AstroQuery(_l0_for_query(**primary))._gaia_source() == expected
 
     def test_simbad_resolvable_name(self):
         assert (
@@ -564,21 +575,21 @@ class TestExternalQueries:
         assert rec["epoch"] == pytest.approx(2016.0)
         assert rec["frame"] == "icrs"
         assert rec["equinox"] == pytest.approx(2000.0)
-        assert rec["object"] == "12345"
+        assert rec["object"] == "Gaia DR3 12345"  # full designation -> EPRV CID#
         assert rec["color"] == pytest.approx(1.0)  # G_BP - G_RP
         assert rec["color_name"] == "Gaia BP-RP"
         # Row written to CATALOG_RECORD; the GAIACR flag follows in _set_headers.
         assert "gaia" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
 
     def test_query_gaia_missing_rv_becomes_none(self):
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table({"radial_velocity": float("nan")}))):
             rec = aq.query_gaia()
         assert rec["rv"] is None
 
     def test_query_gaia_missing_photometry_leaves_color_none(self):
         # A color needs both magnitudes; one unmeasured (masked/NaN) -> no color.
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table({"phot_rp_mean_mag": float("nan")}))):
             rec = aq.query_gaia()
         assert rec["color"] is None and rec["color_name"] is None
@@ -604,7 +615,7 @@ class TestExternalQueries:
     def test_query_gaia_lookup_failure_returns_none(self, caplog):
         # A dropped connection is transient, so the lookup is retried before it is
         # given up on; sleep is patched so the backoff is not actually waited out.
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with (
             _patch_gaia(ConnectionError("gaia down")) as launch_job,
             patch("kpfpipe.utils.network.time.sleep"),
@@ -615,13 +626,13 @@ class TestExternalQueries:
         assert "Gaia query failed" in caplog.text
 
     def test_query_gaia_no_match_returns_none(self, caplog):
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with _patch_gaia(_gaia_job(Table())), caplog.at_level(logging.WARNING):
             assert aq.query_gaia() is None
         assert "no match" in caplog.text
 
     def test_query_gaia_unit_mismatch_raises(self):
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table(units={"parallax": u.arcsec}))):
             with pytest.raises(ValueError, match="unexpected column units"):
                 aq.query_gaia()
@@ -728,18 +739,30 @@ class TestRequestMatchesParse:
     """
 
     def test_gaia_select_list_matches_parsed_columns(self):
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
             aq.query_gaia()
         assert _adql_select_columns(launch_job.call_args.args[0]) == set(_GAIA_UNITS)
 
-    def test_gaia_queries_the_dr3_source_table(self):
-        # _gaia_source_id strips the release prefix off GAIAID, so the table this
-        # query names is the only thing tying the source_id to DR3.
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))
+    @pytest.mark.parametrize(
+        ("gaiaid", "table", "designation"),
+        [
+            ("DR3 12345", "gaiadr3.gaia_source", "Gaia DR3 12345"),
+            ("DR2 12345", "gaiadr2.gaia_source", "Gaia DR2 12345"),
+        ],
+    )
+    def test_gaia_release_selects_table_and_designation(
+        self, gaiaid, table, designation
+    ):
+        # A source_id denotes different stars in different releases, so querying the
+        # table GAIAID names is what keeps the astrometry attached to the right star.
+        aq = AstroQuery(_l0_for_query(GAIAID=gaiaid))
         with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
-            aq.query_gaia()
-        assert "gaiadr3.gaia_source" in launch_job.call_args.args[0]
+            rec = aq.query_gaia()
+        assert f"FROM {table}" in launch_job.call_args.args[0]
+        assert rec["object"] == designation
+        # A named release is taken at its word -- no probe queries.
+        assert launch_job.call_count == 1
 
     def test_simbad_votable_fields_match_parsed_columns(self):
         # ra/dec arrive in SIMBAD's default basic set, so they are not requested.
@@ -749,6 +772,73 @@ class TestRequestMatchesParse:
             aq.query_simbad()
         requested = set(inst.add_votable_fields.call_args.args)
         assert requested == set(_SIMBAD_UNITS) - {"ra", "dec"}
+
+
+def _release_aware_launch_job(present=(), unpublished=()):
+    """Gaia.launch_job stand-in keyed on the release its query names.
+
+    A release probe (``SELECT source_id ...``) answers one row for a release in
+    ``present`` and none otherwise; a release in ``unpublished`` raises the way a
+    missing archive table would. The full record query returns the standard one-row
+    table, so the resolved release is visible in its FROM clause.
+    """
+
+    def launch_job(query):
+        release = re.search(r"FROM gaia(dr\d)\.gaia_source", query).group(1).upper()
+        if release in unpublished:
+            raise ValueError(f"table gaia{release.lower()}.gaia_source not found")
+        if query.lstrip().startswith("SELECT source_id "):
+            ids = [12345] if release in present else []
+            return _gaia_job(Table({"source_id": ids}))
+        return _gaia_job(_gaia_table())
+
+    return launch_job
+
+
+class TestBareGaiaIdResolution:
+    """A GAIAID with no release prefix is verified against the archive, not assumed.
+
+    The same source_id denotes different stars in different releases, so guessing one
+    would silently attach another star's astrometry to the frame.
+    """
+
+    @staticmethod
+    def _query(**kwargs):
+        aq = AstroQuery(_l0_for_query(GAIAID="12345"))  # bare: no release prefix
+        with patch(
+            "kpfpipe.modules.astro_query.Gaia.launch_job",
+            side_effect=_release_aware_launch_job(**kwargs),
+        ):
+            return aq.query_gaia()
+
+    def test_newest_matching_release_wins(self, caplog):
+        # Present in both -> DR3, the most recent.
+        with caplog.at_level(logging.WARNING):
+            rec = self._query(present={"DR2", "DR3"})
+        assert rec["object"] == "Gaia DR3 12345"
+        assert "resolved bare GAIAID 12345 to Gaia DR3" in caplog.text
+
+    def test_older_release_used_when_newer_lacks_the_id(self):
+        rec = self._query(present={"DR2"})
+        assert rec["object"] == "Gaia DR2 12345"
+
+    def test_bare_id_always_warns(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            self._query(present={"DR3"})
+        assert "carries no data release" in caplog.text
+
+    def test_failed_probe_is_skipped_quietly(self, caplog):
+        # A probe that errors must not abort the search, nor add WARNING noise --
+        # the search moves on and the outcome is reported once.
+        with caplog.at_level(logging.WARNING):
+            rec = self._query(present={"DR2"}, unpublished={"DR3"})
+        assert rec["object"] == "Gaia DR2 12345"
+        assert "could not probe" not in caplog.text
+
+    def test_no_matching_release_raises(self):
+        # Fail loud: a bare id matching nothing must not fall back to a guess.
+        with pytest.raises(ValueError, match="no queryable Gaia release"):
+            self._query()
 
 
 # ---------------------------------------------------------------------------
@@ -762,7 +852,7 @@ def _perform(**config):
     Gaia answers at RA 10 deg, SIMBAD at RA 20 deg, so the merged row names which
     query landed on which source attribute. Returns (AstroQuery, merged row).
     """
-    l0 = _l0_for_query(GAIAID="12345", OBJECT="tau Cet")
+    l0 = _l0_for_query(GAIAID="DR3 12345", OBJECT="tau Cet")
     aq = AstroQuery(l0, config or None)
     with (
         _patch_gaia(_gaia_job(_gaia_table({"ra": 10.0}))),
@@ -791,7 +881,7 @@ class TestPerform:
 
     def test_each_query_lands_on_its_own_attribute(self):
         aq, _ = _perform()
-        assert aq._gaia["object"] == "12345"  # from GAIAID, via query_gaia
+        assert aq._gaia["object"] == "Gaia DR3 12345"  # from GAIAID, via query_gaia
         assert aq._simbad["object"] == "tau Cet"  # from OBJECT, via query_simbad
         assert aq._gaia["ra"] == _ra_str(10.0)
         assert aq._simbad["ra"] == _ra_str(20.0)
@@ -805,7 +895,7 @@ class TestPerform:
         assert row["radec_src"] == "gaia"
         assert row["plx_src"] == "gaia"
         assert row["rv_src"] == "gaia"
-        assert row["object"] == "12345"
+        assert row["object"] == "Gaia DR3 12345"
 
     def test_presence_flags_written_for_every_source(self):
         # _set_headers is the module's sole header write: one flag per source, always

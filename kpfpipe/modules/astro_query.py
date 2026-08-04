@@ -3,7 +3,8 @@ KPF AstroQuery module.
 
 Consolidates the pipeline's external astronomical-catalog lookups into a single
 L0-stage module. Given a raw L0 science frame, it resolves the target's astrometry
-from Gaia DR3 (by GAIAID) and SIMBAD (by OBJECT), builds the telescope-native
+from Gaia (by GAIAID, whose release prefix picks the data release queried) and
+SIMBAD (by OBJECT), builds the telescope-native
 ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry (no query), merges them into a
 canonical ``kpf-drp`` row, and writes all four rows to the L0 ``CATALOG_RECORD``
 extension with the ``WMKOCR``/``GAIACR``/``SIMBADCR`` presence flags. AstroQuery is
@@ -70,6 +71,14 @@ _SIMBAD_UNITS = {
     "V": None,
 }
 
+# Queryable Gaia release -> its gaia_source table, newest last. DR1 and EDR3 are
+# excluded (no radial_velocity or BP/RP photometry, and superseded, respectively). Add
+# DR4 and DR5 here once they publish; until then they are neither probed nor accepted.
+_GAIA_TABLES = {
+    "DR2": "gaiadr2.gaia_source",
+    "DR3": "gaiadr3.gaia_source",
+}
+
 # CATALOG_RECORD write schema (AstroQuery is the sole populator): one row per resolved
 # source (wmko/gaia/simbad) plus the merged 'kpf-drp' row. radec_src/plx_src/rv_src
 # name the source each value block came from -- its own for a source row, the winner
@@ -131,7 +140,7 @@ class AstroQuery:
     """
     Resolve target astrometry from external catalogs and write it to an L0.
 
-    Runs the two external catalog queries (Gaia DR3 by GAIAID, SIMBAD by OBJECT),
+    Runs the two external catalog queries (Gaia by GAIAID, SIMBAD by OBJECT),
     builds the native ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry, and writes
     all three rows to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV
     ``C*#`` catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). Only
@@ -182,17 +191,78 @@ class AstroQuery:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _gaia_source_id(self):
-        """Digit-only Gaia DR3 id from L0 GAIAID, or None if absent/malformed.
+    def _gaia_source(self):
+        """``(release, source_id)`` from L0 GAIAID, or None if absent/unusable.
 
-        GAIAID may arrive as a prefixed string (e.g. 'Gaia DR3 12345'); take the
-        trailing token and require it to be all digits.
+        GAIAID names the release its id belongs to (e.g. 'DR3 12345'), which selects
+        the queried table -- a source_id denotes different stars across releases, so
+        the prefix is honored rather than discarded. ``release`` is None for a bare id
+        with no prefix, which ``_resolve_gaia_release`` then identifies against the
+        archive. Returns None when GAIAID is absent or blank, the trailing token is not
+        all digits, or the release is one this module cannot query (``_GAIA_TABLES``).
         """
         raw = self.l0_obj.headers["PRIMARY"].get("GAIAID")
         if raw is None:
             return None
-        token = str(raw).strip().split()[-1] if str(raw).strip() else ""
-        return token if token.isdigit() else None
+        tokens = str(raw).strip().split()
+        if not tokens or not tokens[-1].isdigit():
+            return None
+        source_id = tokens[-1]
+        if len(tokens) == 1:
+            return None, source_id
+        release = tokens[-2].upper()
+        return (release, source_id) if release in _GAIA_TABLES else None
+
+    def _resolve_gaia_release(self, source_id):
+        """The newest Gaia release whose gaia_source contains ``source_id``.
+
+        For a bare GAIAID only: rather than assume a release, probe the archive and
+        take the newest one that holds the id, since the same source_id denotes
+        different stars in different releases. A probe that fails is skipped rather
+        than aborting the search, so an unresolvable id still raises rather than being
+        mistaken for a resolved one.
+
+        Parameters
+        ----------
+        source_id : str
+            Digit-only Gaia source_id, with no release prefix.
+
+        Returns
+        -------
+        str
+            The release key into ``_GAIA_TABLES``.
+
+        Raises
+        ------
+        ValueError
+            No queryable release contains ``source_id``.
+        """
+        for release in sorted(_GAIA_TABLES, reverse=True):
+            query = (
+                f"SELECT source_id FROM {_GAIA_TABLES[release]} "
+                f"WHERE source_id = {source_id}"
+            )
+            try:
+                found = retry_request(
+                    lambda q=query: Gaia.launch_job(q).get_results(), f"Gaia {release}"
+                )
+            except Exception as e:
+                logger.debug(
+                    "could not probe Gaia %s for source_id %s (%s: %s); skipping it",
+                    release,
+                    source_id,
+                    type(e).__name__,
+                    e,
+                )
+                continue
+            if len(found):
+                logger.warning("resolved bare GAIAID %s to Gaia %s", source_id, release)
+                return release
+        raise ValueError(
+            f"GAIAID {source_id} carries no data release and no queryable Gaia release "
+            f"({', '.join(sorted(_GAIA_TABLES))}) contains that source_id; refusing to "
+            "guess which release it belongs to."
+        )
 
     def _simbad_resolvable_name(self):
         """SIMBAD-resolvable name from L0 PRIMARY OBJECT, or None if absent.
@@ -332,31 +402,46 @@ class AstroQuery:
     # ------------------------------------------------------------------
 
     def query_gaia(self):
-        """Query Gaia DR3 for the target's ICRS astrometry, or None (fail-soft).
+        """Query Gaia for the target's ICRS astrometry, or None (fail-soft).
 
-        Returns None (warned) when GAIAID yields no usable source_id, when the
+        The release named in GAIAID selects the queried table (``_GAIA_TABLES``), so a
+        DR2 id is never looked up among DR3 source_ids; a bare id with no release is
+        warned about and identified against the archive by ``_resolve_gaia_release``.
+        Returns None (warned) when GAIAID yields no usable release/source_id, when the
         lookup fails (after the transient-failure retries in ``retry_request``), or
-        when the source is not found. Raises ValueError if the result's column units
-        differ from the assumed canonical schema (deg, mas/yr, mas, km/s, epoch in
-        Julian years, BP/RP magnitudes in mag; ICRS).
+        when the source is not found. Raises ValueError if a bare id matches no
+        queryable release, or if the result's column units differ from the assumed
+        canonical schema (deg, mas/yr, mas, km/s, epoch in Julian years, BP/RP
+        magnitudes in mag; ICRS) -- the schema is shared across the supported
+        releases, so a release that breaks it fails loudly.
         Whether it runs at all is gated upstream in perform by ``do_gaia_query``.
         """
-        gaia_id = self._gaia_source_id()
-        if gaia_id is None:
+        source = self._gaia_source()
+        if source is None:
             logger.warning(
-                "no usable GAIAID on L0 PRIMARY; Gaia astrometry unavailable"
+                "no usable GAIAID on L0 PRIMARY (%r); Gaia astrometry unavailable "
+                "(queryable releases: %s)",
+                self.l0_obj.headers["PRIMARY"].get("GAIAID"),
+                ", ".join(sorted(_GAIA_TABLES)),
             )
             return None
+        release, gaia_id = source
+        if release is None:
+            logger.warning(
+                "GAIAID %r carries no data release; querying Gaia to identify it",
+                self.l0_obj.headers["PRIMARY"].get("GAIAID"),
+            )
+            release = self._resolve_gaia_release(gaia_id)
         query = f"""
         SELECT ra, dec, pmra, pmdec, parallax, radial_velocity, ref_epoch,
                phot_bp_mean_mag, phot_rp_mean_mag
-        FROM gaiadr3.gaia_source
+        FROM {_GAIA_TABLES[release]}
         WHERE source_id = {gaia_id}
         """
-        logger.info("querying Gaia DR3 for source_id %s", gaia_id)
+        logger.info("querying Gaia %s for source_id %s", release, gaia_id)
         try:
             results = retry_request(
-                lambda: Gaia.launch_job(query).get_results(), "Gaia DR3"
+                lambda: Gaia.launch_job(query).get_results(), f"Gaia {release}"
             )
         except Exception as e:
             logger.warning(
@@ -367,11 +452,13 @@ class AstroQuery:
             return None
         if len(results) == 0:
             logger.warning(
-                "Gaia returned no match for source_id %s; Gaia astrometry unavailable",
+                "Gaia %s returned no match for source_id %s; Gaia astrometry "
+                "unavailable",
+                release,
                 gaia_id,
             )
             return None
-        self._verify_units(results, _GAIA_UNITS, "Gaia DR3")
+        self._verify_units(results, _GAIA_UNITS, f"Gaia {release}")
         row = results[0]
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
@@ -385,16 +472,16 @@ class AstroQuery:
             "Gaia BP-RP",
         )
         record = {
-            "object": gaia_id,
+            "object": f"Gaia {release} {gaia_id}",
             "ra": ra_str,
             "dec": dec_str,
             "pmra": None if pmra is None else pmra / 1e3,
             "pmdec": None if pmdec is None else pmdec / 1e3,
             "parallax": self._scalar(row["parallax"]),
             "rv": self._scalar(row["radial_velocity"]),
-            # frame/equinox are definitional, not queried: Gaia DR3 is ICRS (Gaia-CRF3)
-            # with no equinox -- 2000.0 is the J2000 convention EPRV's Required CEQNX#
-            # demands. Only epoch (ref_epoch, J2016.0 for DR3) is a real query output.
+            # frame/equinox are definitional, not queried: every Gaia release is ICRS
+            # (Gaia-CRF) with no equinox -- 2000.0 is the J2000 convention EPRV's
+            # Required CEQNX# demands. Only epoch (ref_epoch) is a real query output.
             "frame": "icrs",
             "epoch": self._scalar(row["ref_epoch"]),
             "equinox": 2000.0,
