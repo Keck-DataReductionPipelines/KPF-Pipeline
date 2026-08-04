@@ -95,11 +95,7 @@ class TestToKPF4:
 
 
 class TestCatalogRecordPassthrough:
-    """CATALOG_RECORD rides L2 -> L4 and survives KPF4's RV4 read path.
-
-    (The L0 -> L1 and L1 -> L2 hops have the same class in
-    test_data_models_l{1,2}.py.)
-    """
+    """CATALOG_RECORD rides L2 -> L4 and survives KPF4's RV4 read path."""
 
     @staticmethod
     def _l2_with_catalog():
@@ -114,8 +110,8 @@ class TestCatalogRecordPassthrough:
         assert "CATALOG_RECORD" in KPF4().extensions
 
     def test_rows_and_flags_reach_l4(self):
-        """The catalog rows (not just the flags) are copied onto L4, so the resolved
-        astrometry stays with the RV product it fed."""
+        """The rows, not just the flags, are copied onto L4, so the astrometry stays
+        with the RV product it fed."""
         kpf4 = self._l2_with_catalog().to_kpf4()
         assert [str(s) for s in kpf4.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert kpf4.headers["CATALOG_RECORD"]["GAIACR"] == 1

@@ -41,9 +41,8 @@ _T0 = "2024-01-01T"
 _WAVE_COLS = ["5000", "5100", "5200", "5300"]  # 100Å spacing → dispersion = 100Å
 _FLUX_VALUE = 100.0  # uniform ADU per reading
 
-# SCI2 catalog cards, as KPF0.to_kpf1 writes them from AstroQuery's canonical record:
-# ICRS, RA/Dec sexagesimal (RA hourangle, Dec deg), PM arcsec/yr, parallax mas, rv
-# km/s, epoch Julian years. RA 180 deg / Dec 0 / 100 pc.
+# SCI2 catalog cards as KPF0.to_kpf1 writes them: ICRS, RA/Dec sexagesimal (hourangle
+# / deg), PM arcsec/yr, parallax mas, epoch Julian years. RA 180 deg, Dec 0, 100 pc.
 _CATALOG_CARDS = {
     "CSRC3": "gaia",
     "CID3": "1234567890123456789",
@@ -81,8 +80,7 @@ def synthetic_kpf2():
     kpf2.headers["INSTRUMENT_HEADER"]["DATE-BEG"] = f"{_T0}00:00:00.000"
     kpf2.headers["INSTRUMENT_HEADER"]["DATE-END"] = f"{_T0}00:05:00.000"
 
-    # Target astrometry reaches L2 on the EPRV PRIMARY C*# cards (AstroQuery ->
-    # KPF0.to_kpf1 -> KPF1.to_kpf2); BarycentricCorrection issues no query.
+    # Target astrometry reaches L2 on the PRIMARY C*# cards; the module never queries.
     for key, value in _CATALOG_CARDS.items():
         kpf2.headers["PRIMARY"][key] = value
 
@@ -690,8 +688,7 @@ class TestFluxWeightedMidpointFormat:
 
 
 class TestGetAstrometry:
-    """Convert the C*# cards into barycorrpy's argument set and sanitize the
-    parallax."""
+    """Convert the C*# cards to barycorrpy's arguments and sanitize the parallax."""
 
     def test_converts_cards_to_barycorrpy_units(self, synthetic_kpf2):
         primary = synthetic_kpf2.headers["PRIMARY"]
@@ -724,8 +721,8 @@ class TestGetAstrometry:
     # an absent card (covered below) or a blank one, never as NaN.
     @pytest.mark.parametrize("parallax", [-0.4, 0.0, ""])
     def test_unusable_parallax_becomes_zero(self, caplog, synthetic_kpf2, parallax):
-        """A negative or zero catalog parallax (routine for faint Gaia sources)
-        degrades to px=0, not a negative distance."""
+        """A nonpositive parallax (routine for faint Gaia sources) degrades to px=0,
+        not a negative distance."""
         synthetic_kpf2.headers["PRIMARY"]["CPLX3"] = parallax
         bc = BarycentricCorrection(synthetic_kpf2)
         with caplog.at_level(logging.WARNING):
@@ -734,8 +731,7 @@ class TestGetAstrometry:
         assert "CPLX3" in caplog.text
 
     def test_missing_parallax_becomes_zero(self, caplog, synthetic_kpf2):
-        """CPLX# is Required=No in the EPRV standard and is skipped from PRIMARY
-        when the catalog measured none."""
+        """CPLX# is Required=No, so it is absent when the catalog measured none."""
         del synthetic_kpf2.headers["PRIMARY"]["CPLX3"]
         bc = BarycentricCorrection(synthetic_kpf2)
         with caplog.at_level(logging.WARNING):
@@ -745,7 +741,7 @@ class TestGetAstrometry:
 
     @pytest.mark.parametrize("card", ["CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3"])
     def test_missing_position_card_raises(self, synthetic_kpf2, card):
-        """The position block is all-or-nothing: AstroQuery's merge refuses to emit a
+        """The position block is all-or-nothing: AstroQuery's merge never emits a
         canonical row without it, so a gap means the pipeline is misordered."""
         del synthetic_kpf2.headers["PRIMARY"][card]
         bc = BarycentricCorrection(synthetic_kpf2)
@@ -986,7 +982,7 @@ def _user_skycoord(ra_deg=90.0):
 
 class TestSkycoordOverride:
     """A user-supplied SkyCoord bypasses the PRIMARY C*# cards, so an L2 in hand can
-    be re-corrected with different astrometry without re-reducing from L0."""
+    be re-corrected without re-reducing from L0."""
 
     @staticmethod
     def _capture(monkeypatch):
@@ -1025,8 +1021,8 @@ class TestSkycoordOverride:
         assert captured["ra"] == pytest.approx(90.0)
 
     def test_works_without_catalog_cards(self, synthetic_kpf2, monkeypatch):
-        """The whole point of the escape hatch: an L2 whose C*# cards are absent
-        (AstroQuery never ran) can still be corrected interactively."""
+        """An L2 whose C*# cards are absent (AstroQuery never ran) is still
+        correctable -- the point of the escape hatch."""
         for card in ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3"):
             del synthetic_kpf2.headers["PRIMARY"][card]
         captured = self._capture(monkeypatch)
@@ -1048,8 +1044,8 @@ class TestSkycoordOverride:
         assert bc._astrometry_source == "user SkyCoord"
 
     def test_override_is_not_cached(self, synthetic_kpf2, monkeypatch):
-        """The override must not poison _astrometry, or a later header-path call
-        would silently reuse the user's values."""
+        """The override must not poison the cache, or a later header-path call would
+        silently reuse the user's values."""
         captured = self._capture(monkeypatch)
         bc = BarycentricCorrection(synthetic_kpf2)
         bc.perform(skycoord=_user_skycoord())
@@ -1086,8 +1082,8 @@ class TestSkycoordOverride:
     def test_incomplete_skycoord_raises(
         self, synthetic_kpf2, monkeypatch, kwargs, error, match
     ):
-        """Deliberately unvalidated: astropy raises on its own for a SkyCoord built
-        without the components the correction needs."""
+        """Deliberately unvalidated: astropy raises on its own for a SkyCoord missing
+        components the correction needs."""
         self._capture(monkeypatch)
         incomplete = SkyCoord(
             ra=90.0 * u.deg,

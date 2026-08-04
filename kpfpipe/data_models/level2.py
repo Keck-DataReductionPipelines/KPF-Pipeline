@@ -256,8 +256,8 @@ class KPF2(KPFDataModel, RV2):
         # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, CATALOG_RECORD, and
         # RECEIPT card-by-card, mirroring to_kpf2: PRIMARY overlays onto kpf4's EPRV
         # seed (native wins), the rest are verbatim copies. The receipt *table*
-        # propagates separately via the copy below; CATALOG_RECORD's table is copied
-        # with its header, since its rows (not just the presence flags) carry forward.
+        # propagates separately via the copy below, as does CATALOG_RECORD's table --
+        # its rows, not just the presence flags, carry forward.
         self._forward_headers(
             kpf4,
             (

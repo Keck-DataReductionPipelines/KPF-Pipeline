@@ -1,9 +1,8 @@
 """Synthetic CATALOG_RECORD tables for the data-model tests.
 
-Built column by column rather than through ``AstroQuery._write_catalog_record``,
-so the data-model pass-through tests stay independent of the module that
-populates the extension (the AstroQuery-built variant lives in conftest, for the
-tests that need schema fidelity against the real writer).
+Built column by column rather than through ``AstroQuery._write_catalog_record``, so
+the pass-through tests stay independent of the module that populates the extension.
+The AstroQuery-built variant lives in conftest, for tests needing schema fidelity.
 """
 
 import numpy as np
@@ -35,10 +34,9 @@ def catalog_record_table(rv=-16.6):
     """A two-row CATALOG_RECORD table: a 'gaia' source row + the merged 'kpf-drp'.
 
     Carries the full write schema, since KPF0.to_kpf1 reads every canonical column
-    when overlaying the row onto the C*# cards. ``rv=None`` leaves the radial
-    velocity (and the redshift derived from it) missing -- NaN, the sentinel
-    astropy's FITS reader hands back masked and ``KPFDataModel.from_fits``
-    normalizes.
+    when overlaying the row onto the C*# cards. ``rv=None`` leaves rv (and the
+    redshift derived from it) NaN -- the sentinel astropy's FITS reader hands back
+    masked and ``KPFDataModel.from_fits`` normalizes.
     """
     table = Table()
     table["source"] = np.array(SOURCES, dtype=str)

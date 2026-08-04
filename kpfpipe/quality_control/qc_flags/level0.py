@@ -15,13 +15,11 @@ _AMPS_PER_CHIP = 4  # GREEN_AMP1..4 / RED_AMP1..4 (only a subset is read out)
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 _TIME_TOL_S = 0.1  # DATE-END - DATE-BEG vs ELAPSED tolerance (v2.12 quality_control.py)
 
-# Physical-range bounds for the canonical CATALOG_RECORD astrometry, ported from the
-# v2.12 quality_control.py good_TARG_headers L0 checks. The epoch/equinox window is
-# exclusive-low / inclusive-high (1950 < x <= 2050), matching legacy. Two are vNext
-# additions justified by our Gaia source (both feed the barycentric correction): the
-# parallax LOWER bound (a negative Gaia parallax is routine, and gives a negative
-# distance), and the proper-motion bound (canonical arcsec/yr here; highest real PM
-# is ~10.4"/yr).
+# Physical-range bounds for the canonical CATALOG_RECORD astrometry, ported from
+# v2.12 good_TARG_headers. The epoch/equinox window is exclusive-low, matching
+# legacy. The parallax lower bound and the PM bound are vNext additions for our Gaia
+# source: a negative Gaia parallax is routine and gives a negative distance, and the
+# highest real PM is ~10.4 arcsec/yr.
 _EPOCH_RANGE = (1950.0, 2050.0)
 _MAX_ABS_RV = 350.0  # km/s (Chubak et al. 2012, arXiv:1207.6212, Fig. 8)
 _PARALLAX_RANGE = (0.0, 1000.0)  # mas; 0 < plx < 1000 (> 0 and < 1 arcsec)
@@ -172,11 +170,10 @@ class QCL0(QC):
         row AstroQuery resolves (the astrometry feeding the barycentric correction),
         not the raw WMKO TARG* keywords. Each field is checked only when present:
         epoch/equinox in (1950, 2050] Julian years, |rv| <= 350 km/s, parallax in
-        (0, 1000) mas, |pmra|/|pmdec| <= 15 arcsec/yr. The parallax lower bound and
-        the PM bound are vNext additions (see the module bounds comment).
+        (0, 1000) mas, |pmra|/|pmdec| <= 15 arcsec/yr.
 
         Passes when there is no ``kpf-drp`` row: this is value sanity, not a presence
-        check -- a science frame's missing astrometry is caught upstream.
+        check.
         """
         table = self.kpf_obj.data["CATALOG_RECORD"]
         match = table[table["source"] == "kpf-drp"] if table.colnames else table

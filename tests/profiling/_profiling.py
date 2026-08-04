@@ -198,10 +198,9 @@ def extract_l2(config):
 
 
 # Synthetic SCI2 (trace 3) catalog C*# cards seeded onto the L2 PRIMARY. The
-# profiling builders skip AstroQuery (a live Gaia/SIMBAD query), so the C*# cards
-# KPF0.to_kpf1 would overlay from CATALOG_RECORD stay blank; BarycentricCorrection
-# and CrossCorrelation read trace-3 astrometry off PRIMARY and would otherwise
-# raise. Fixed stand-in values -- profiling measures timing, not RV accuracy.
+# profiling builders skip AstroQuery (a live Gaia/SIMBAD query), so the cards
+# BarycentricCorrection and CrossCorrelation read would otherwise be blank. Fixed
+# stand-in values -- profiling measures timing, not RV accuracy.
 _SYNTHETIC_CATALOG_CARDS = {
     "CSRC3": "gaia",
     "CRA3": "12:00:00.0000",  # ICRS RA, sexagesimal hourangle
@@ -217,9 +216,8 @@ _SYNTHETIC_CATALOG_CARDS = {
 def _seed_catalog_cards(l2):
     """Overlay the synthetic SCI2 C*# astrometry cards onto the L2 PRIMARY.
 
-    Stands in for AstroQuery's catalog overlay (which KPF0.to_kpf1 applies in the
-    real pipeline) so the barycentric/CCF/RV harnesses have the trace-3 cards they
-    read; see :data:`_SYNTHETIC_CATALOG_CARDS`.
+    Stands in for the AstroQuery-fed overlay KPF0.to_kpf1 applies in the real
+    pipeline, so the barycentric/CCF/RV harnesses have the trace-3 cards they read.
     """
     for card, value in _SYNTHETIC_CATALOG_CARDS.items():
         l2.headers["PRIMARY"][card] = value
@@ -449,9 +447,7 @@ def _astrometry_cumtime(stats):
     the barycentric IERS fetch. Sum the *outermost* astroquery frames (caller not
     itself astroquery) whose caller is an AstroQuery method, so the full per-query
     time is counted once while AstroQuery's own deterministic merge/sanitize/write
-    stays in the partition. DiagL0 no longer queries -- it reads the persisted
-    ``CATALOG_RECORD`` -- and BarycentricCorrection reads the PRIMARY ``C*#`` cards,
-    so neither issues a catalog query for this to double-count.
+    stays in the partition.
     """
     total = 0.0
     for func, (_cc, _nc, _tt, _ct, callers) in stats.stats.items():
@@ -579,9 +575,8 @@ def _quality_control_breakdown(stats):
     of a single shared base ``run`` -- so each level's cost is the cumtime its
     check methods contribute there, keyed ``DiagL{n}`` / ``QCL{n}``. ``checkpoints``
     is the remainder (the thin base-``run`` dispatch/keyword-routing plus the
-    checkpoint validation methods). Returns ``rows``
-    (``(label, seconds, fraction)``) and the QC ``total``; empty when no
-    checkpoints ran (masters).
+    checkpoint validation methods). Returns ``rows`` (``(label, seconds, fraction)``)
+    and the QC ``total``; empty when no checkpoints ran (masters).
     """
     ck_key = _qc_sublayer_run_key(stats, "quality_control/checkpoints/")
     if ck_key is None:

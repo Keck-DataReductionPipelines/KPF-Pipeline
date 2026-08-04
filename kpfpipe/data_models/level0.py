@@ -19,6 +19,7 @@ from rvdata.core.tools.headers import parse_value_to_datatype
 
 from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.keyword_registry import SCI_TRACES
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
@@ -28,13 +29,6 @@ logger = logging.getLogger(__name__)
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
 _KNOWN_L0_EXTENSIONS = set(_L0_EXTENSIONS["Name"].tolist())
-
-# Science-fiber trace indices; the fibers the catalog C*# overlay in to_kpf1
-# targets (SKY/CAL keep their header_map defaults).
-_TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
-_SCI_TRACES = tuple(
-    _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
-)
 
 # WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
 _L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
@@ -133,7 +127,6 @@ class KPF0(KPFDataModel):
                         )
                     self.create_extension(ext_name, fits_type)
 
-            # Payload decode, by name first (bespoke) then by type (generic).
             if ext_name == "PRIMARY":
                 pass
             elif ext_name == "RECEIPT":
@@ -282,17 +275,13 @@ class KPF0(KPFDataModel):
     def _catalog_primary_cards(self):
         """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
 
-        Returns ``{C-keyword: value}`` for every science fiber (SCI1-3, see
-        ``_SCI_TRACES``) -- a direct copy of the canonical row's already-EPRV-format
-        cells, skipping any card whose value is missing (NaN / "") so it stays blank
-        rather than carrying 'nan'. Warns when the canonical astrometry was assembled
-        from more than one catalog (position/parallax/rv from different sources), so
-        the C*# block is not internally single-source.
-
-        AstroQuery is the sole writer of CATALOG_RECORD, so an empty table means it has
-        not run: on a science frame (IMTYPE 'Object') this returns ``{}`` with a WARNING
-        (the blank cards then fail BarycentricCorrection/CrossCorrelation downstream);
-        on a calibration it returns ``{}`` silently.
+        Returns ``{C-keyword: value}`` for every science fiber (``SCI_TRACES``) -- a
+        direct copy of the canonical row's already-EPRV-format cells, skipping any
+        missing value (NaN / "") so the card stays blank rather than carrying 'nan'.
+        Warns when the canonical astrometry was assembled from more than one catalog,
+        and when an empty table on a science frame (IMTYPE 'Object') shows AstroQuery
+        never ran -- the blank cards then fail BarycentricCorrection and
+        CrossCorrelation downstream.
         """
         table = self.data["CATALOG_RECORD"]
         if not table.colnames:
@@ -332,7 +321,7 @@ class KPF0(KPFDataModel):
                 if np.isnan(value):
                     continue
                 value = float(value)
-            for i in _SCI_TRACES:
+            for i in SCI_TRACES:
                 cards[f"{base}{i}"] = value
         return cards
 
@@ -359,9 +348,8 @@ class KPF0(KPFDataModel):
             for key, value in self._map_header().items():
                 kpf1.headers["PRIMARY"][key] = value
 
-            # Overlay the merged canonical astrometry (CATALOG_RECORD 'kpf-drp' row)
-            # onto the SCI-fiber EPRV C*# cards -- their sole writer (the raw
-            # TARG*/GAIAID mapping is neutralized in the header_map).
+            # Overlay the canonical astrometry onto the SCI-fiber C*# cards -- their
+            # sole writer (the raw TARG*/GAIAID mapping is blanked in the header_map).
             for key, value in self._catalog_primary_cards().items():
                 kpf1.headers["PRIMARY"][key] = value
 

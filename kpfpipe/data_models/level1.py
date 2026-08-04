@@ -99,7 +99,6 @@ class KPF1(KPFDataModel):
                         )
                     self.create_extension(ext_name, fits_type)
 
-            # Payload decode, by name first (bespoke) then by type (generic).
             if ext_name == "PRIMARY":
                 pass
             elif ext_name == "RECEIPT":

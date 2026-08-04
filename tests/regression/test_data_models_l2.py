@@ -113,8 +113,7 @@ class TestCatalogRecordPassthrough:
     """CATALOG_RECORD rides L1 -> L2 and survives KPF2's RV2 read path.
 
     Same mechanism as QUALITY_CONTROL above: register_rvdata_extension teaches
-    rvdata's definition-driven L2 reader about the KPF-only extension. (The L0 ->
-    L1 and L2 -> L4 hops have the same class in test_data_models_l{1,4}.py.)
+    rvdata's definition-driven L2 reader about the KPF-only extension.
     """
 
     @staticmethod
@@ -133,8 +132,8 @@ class TestCatalogRecordPassthrough:
         assert l2.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
-        """The missing rv reads back NaN, not masked. L2 reads through rvdata's
-        RV2._read, so only the KPFDataModel.from_fits chokepoint can normalize it."""
+        """The missing rv reads back NaN, not masked -- L2 reads through rvdata's
+        RV2._read, so only the from_fits chokepoint can normalize it."""
         l2 = self._l1_with_catalog(rv=None).to_kpf2()
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
         with warnings.catch_warnings():

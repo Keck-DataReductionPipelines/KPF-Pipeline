@@ -223,13 +223,11 @@ class TestKPF0Provenance:
 
 
 class TestKPF0CatalogRecord:
-    """KPF0.read() creates the CATALOG_RECORD extension but no longer populates it --
-    AstroQuery is its sole populator (the native wmko row moved to
-    AstroQuery.read_wmko_header; see test_astro_query.py)."""
+    """KPF0.read() creates the CATALOG_RECORD extension but never populates it --
+    AstroQuery is its sole writer."""
 
     def test_read_leaves_catalog_record_empty(self, tmp_path):
-        """A raw L0 read (even with TARG* present) leaves CATALOG_RECORD empty and
-        unflagged until AstroQuery runs."""
+        """A raw L0 read, even with TARG* present, leaves it empty and unflagged."""
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -250,9 +248,8 @@ class TestCatalogRecordMissingValues:
     """A missing CATALOG_RECORD value survives a FITS round-trip as NaN.
 
     Astropy's FITS reader returns a NaN float cell masked, and a masked cell is not
-    NaN (``np.isnan`` on one is falsy), so a missing-value check would read it as
-    present. ``KPFDataModel.from_fits`` fills those cells back to NaN for every
-    level; L0 is the vehicle here since it is where AstroQuery writes the table.
+    NaN, so a missing-value check would read it as present; ``KPFDataModel.from_fits``
+    fills those cells back. L0 is the vehicle -- it is where AstroQuery writes.
     """
 
     @staticmethod
@@ -277,9 +274,8 @@ class TestCatalogRecordMissingValues:
 
     def test_missing_value_leaves_catalog_card_blank(self, tmp_path):
         """The regression this normalization exists for: a masked cell defeats the
-        'skip missing' branch in KPF0._catalog_primary_cards, so the C*# card would
-        be written as the string 'nan' -- and the L1 write would then raise, since
-        FITS headers reject NaN."""
+        'skip missing' branch in KPF0._catalog_primary_cards, so the C*# card is
+        written as 'nan' and the L1 write then raises."""
         l0 = self._l0_written_and_read(tmp_path, rv=None)
         l1 = l0.to_kpf1()
         assert not l1.headers["PRIMARY"].get("CRV2")

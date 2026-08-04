@@ -6,9 +6,8 @@ midpoint times and stores them on the L2 as BJD_TDB, BARYCORR_KMS, and
 BARYCORR_Z (per spectral order), plus per-CCD scalar summaries in the
 barycentric extension headers. Wavelength arrays are not modified.
 
-Target astrometry is read from the EPRV PRIMARY C*# catalog keywords, not queried:
-AstroQuery is the pipeline's sole external-catalog client, and KPF0.to_kpf1 overlays
-its merged canonical record onto those cards.
+Target astrometry is read from the PRIMARY C*# catalog cards, not queried --
+AstroQuery is the pipeline's sole external-catalog client.
 
 Follows the barycentric-correction approach of Wright & Eastman (2014,
 barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
@@ -36,9 +35,8 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = {**DEFAULTS}
 
 # The position block the correction cannot proceed without; an absent card means
-# AstroQuery never ran. The trailing 3 (here and on CPLX3/CSRC3/CRV3 below) selects
-# the SCI2 trace: the C*# cards are written identically to every science fiber
-# (SCI1-3 = traces 2-4), and SCI2 is the fiber this module uses for SCI2_WAVE/FLUX.
+# AstroQuery never ran. The trailing 3 (also CPLX3/CSRC3/CRV3) selects the SCI2
+# trace: the C*# cards are identical across science fibers (SCI1-3 = traces 2-4).
 _REQUIRED_CARDS = ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3")
 
 
@@ -57,10 +55,9 @@ class BarycentricCorrection:
     l2_obj : KPF2
         Extracted L2 frame. Must have EXPMETER_SCI populated and SCI2_WAVE
         populated by WavelengthCalibration. PRIMARY must carry the SCI2 catalog
-        cards (CRA3/CDEC3/CPMR3/CPMD3/CEPCH3, written by AstroQuery via
-        KPF0.to_kpf1), unless perform() is given a ``skycoord`` override.
-        INSTRUMENT_HEADER (the preserved L1 PRIMARY) must contain
-        DATE-BEG/DATE-END when extrapolating.
+        cards (CRA3/CDEC3/CPMR3/CPMD3/CEPCH3) unless perform() is given a
+        ``skycoord`` override. INSTRUMENT_HEADER (the preserved L1 PRIMARY) must
+        contain DATE-BEG/DATE-END when extrapolating.
     config : None | dict | ConfigHandler
         Module configuration. Recognizes no module-specific keys.
     """
@@ -319,10 +316,8 @@ class BarycentricCorrection:
         """
         Convert a caller-supplied SkyCoord into barycorrpy's argument set.
 
-        Backs ``perform(skycoord=...)``: same output as ``_get_astrometry``, sourced
-        from the object instead of the header. Unvalidated -- the SkyCoord is rotated to
-        ICRS and read, and astropy raises if it lacks the proper motion, distance, or
-        obstime the correction needs.
+        Backs ``perform(skycoord=...)``. Unvalidated -- the SkyCoord is rotated to
+        ICRS and read; astropy raises if it lacks proper motion, distance, or obstime.
         """
         icrs = skycoord.icrs
         return {
@@ -338,12 +333,10 @@ class BarycentricCorrection:
         """
         Read the target astrometry off the PRIMARY C*# cards (cached).
 
-        The cards carry AstroQuery's merged canonical record (see
-        ``KPF0._catalog_primary_cards``), already sanitized to one schema, so this is a
-        unit conversion into barycorrpy's argument set -- ra/dec [deg], pmra/pmdec
-        [mas/yr], px [mas], epoch [JD] -- and nothing else. The frame is ICRS: not
-        persisted as a card, but fixed by AstroQuery's construction, which rotates every
-        source into ICRS before writing.
+        The cards carry AstroQuery's merged canonical record, so this is only a unit
+        conversion into barycorrpy's argument set -- ra/dec [deg], pmra/pmdec [mas/yr],
+        px [mas], epoch [JD]. The frame is ICRS: not persisted as a card, but fixed by
+        AstroQuery, which rotates every source into ICRS before writing.
 
         AstroQuery persists catalog values faithfully, unphysical ones included, so the
         physical sanitation belongs here: a missing or non-positive parallax (routine
@@ -370,8 +363,7 @@ class BarycentricCorrection:
                     f"catalog record reaches the C*# cards"
                 )
 
-            # The parallax card is the catalog's own value; QC flags an unphysical one
-            # via CATLOGOK but does not repair it, so sanitize here.
+            # QC flags an unphysical parallax (CATLOGOK) but does not repair it.
             parallax = primary.get("CPLX3")
             try:
                 px = float(parallax)
@@ -610,8 +602,7 @@ class BarycentricCorrection:
             fix_outliers=fix_expmeter_outliers,
         )
         if skycoord:
-            # Caller-supplied astrometry: not cached onto self._astrometry, so a later
-            # call without skycoord still reads the header rather than this override.
+            # Not cached: a later call without skycoord still reads the header.
             astrometry = self._astrometry_from_skycoord(skycoord)
             self._astrometry_source = "user SkyCoord"
         else:
@@ -713,11 +704,10 @@ class BarycentricCorrection:
             ``interpolate`` / ``extrapolate`` / ``fix_outliers``. See that method
             for semantics.
         skycoord : False | SkyCoord, optional
-            Astrometry override for interactive use: when given, the correction uses
-            this SkyCoord instead of the PRIMARY C*# cards, which stay untouched --
-            lets a user retry with different astrometry on an L2 in hand without
-            re-running AstroQuery from L0. Used as-is: it must carry proper motion,
-            distance, and obstime, and astropy raises if it does not.
+            Astrometry override for interactive use: the correction uses this
+            SkyCoord instead of the PRIMARY C*# cards, which stay untouched. Used
+            as-is -- it must carry proper motion, distance, and obstime, and astropy
+            raises if it does not.
 
         Returns
         -------

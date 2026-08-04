@@ -160,8 +160,8 @@ _CATALOG_SOURCES = ("wmko", "gaia", "simbad")
 
 
 def _record_at(coord, **overrides):
-    """A canonical catalog record placed at ``coord`` (zero PM, finite plx), in the
-    EPRV C*# format: RA/Dec sexagesimal strings, PM arcsec/yr."""
+    """A catalog record at ``coord`` (zero PM, finite plx) in EPRV C*# format:
+    RA/Dec sexagesimal strings, PM arcsec/yr."""
     rec = {
         "object": "test",
         "ra": coord.ra.to_string(unit=u.hourangle, sep=":", pad=True, precision=4),
@@ -181,10 +181,9 @@ def _record_at(coord, **overrides):
 
 
 def _set_catalog_record(l0, records):
-    """Write l0's CATALOG_RECORD extension + presence flags from a
-    {source: record-dict-or-None} mapping, the way perform does: the rows through
-    AstroQuery's writer, then every flag in one _set_headers pass. A source left out
-    of the mapping gets flag 0, exactly as a gated-off one does in production."""
+    """Write l0's CATALOG_RECORD rows + presence flags from a
+    {source: record-dict-or-None} mapping, the way perform does. A source left out of
+    the mapping gets flag 0, exactly as a gated-off one does in production."""
     aq = AstroQuery(l0)
     for source, record in records.items():
         aq._write_catalog_record(source, record)
@@ -195,7 +194,7 @@ def _set_catalog_record(l0, records):
 
 def _make_l0_pointing():
     """A KPF0 with just an L0 PRIMARY pointing (RA/DEC/MJD-OBS), no catalog yet.
-    IMTYPE 'Object' so AstroQuery (the CATALOG_RECORD writer) accepts it."""
+    IMTYPE 'Object' so AstroQuery accepts it."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "Object"
     l0.headers["PRIMARY"]["RA"] = _PT_RA
@@ -271,9 +270,8 @@ class TestDiagL0Contingency:
         assert "no gaia astrometry in CATALOG_RECORD" in caplog.text
 
     def test_incomplete_record_emits_empty(self, caplog):
-        # A record present (flag 1) but missing a required field (epoch, the
-        # propagation baseline) -> unusable, offset empty. PM/parallax are not
-        # required (they fall back to zero); see the fall-back tests below.
+        # A record present (flag 1) but missing epoch, the propagation baseline ->
+        # unusable, offset empty. PM/parallax instead fall back to zero (below).
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -291,9 +289,8 @@ class TestDiagL0Contingency:
 
     @pytest.mark.parametrize("bad_plx", [None, 0.0, -5.0])
     def test_missing_or_nonpositive_parallax_falls_back(self, bad_plx, caplog):
-        # Gaia DR3 reports parallax <= 0 (or none) for faint sources; the offset
-        # falls back to parallax=0 (no distance) rather than emitting empty, so a
-        # frame with a Gaia position but no parallax still gets a finite offset.
+        # Gaia DR3 reports parallax <= 0 (or none) for faint sources; the offset falls
+        # back to parallax=0 rather than emitting empty, so it stays finite.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(

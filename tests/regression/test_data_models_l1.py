@@ -271,9 +271,8 @@ class TestHeaderMapFiberRealignment:
         assert self._source("EXSNR5")[0] == "SNRSC852"
 
     def test_sci_catalog_source_cells_blanked(self):
-        # The SCI-fiber (2,3,4) catalog C*# cards are populated by the CATALOG_RECORD
-        # overlay in to_kpf1, so their raw TARG*/GAIAID header_map source cells are
-        # blanked (INSTRUMENT and DEFAULT both NaN). SKY(1)/CAL(5) defaults are intact.
+        # The SCI-fiber (2,3,4) catalog C*# cards come from to_kpf1's CATALOG_RECORD
+        # overlay, so their raw header_map source cells are blanked; SKY(1)/CAL(5) not.
         hm = KPF1.keyword_registry.header_map
         for base in ("CID", "CSRC", "CRA", "CDEC", "CPMR", "CRV", "CZ", "CLSRC"):
             for i in (2, 3, 4):
@@ -319,8 +318,7 @@ class TestToKpf1:
 
     @staticmethod
     def _l0_with_catalog(record):
-        # A science KPF0 carrying a canonical 'kpf-drp' CATALOG_RECORD row (no
-        # network); to_kpf1 overlays it onto the SCI-fiber C*# cards.
+        # A science KPF0 carrying a canonical 'kpf-drp' CATALOG_RECORD row, no network.
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         AstroQuery(l0)._write_catalog_record("kpf-drp", record)
@@ -363,9 +361,8 @@ class TestToKpf1:
         assert p["CRA2"] == "12:00:00.0000"
 
     def test_science_frame_without_catalog_warns_and_leaves_blank(self, caplog):
-        # A science frame (IMTYPE Object) whose CATALOG_RECORD is empty means
-        # AstroQuery never ran. to_kpf1 succeeds with blank SCI C*# cards but warns
-        # that BarycentricCorrection and CrossCorrelation will fail downstream.
+        # An empty CATALOG_RECORD on a science frame means AstroQuery never ran:
+        # to_kpf1 succeeds with blank SCI C*# cards but warns about the downstream fail.
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         with caplog.at_level(logging.WARNING):
@@ -536,18 +533,16 @@ class TestCatalogRecordPassthrough:
         return l0
 
     def test_rows_and_flags_reach_l1(self):
-        """Beyond the C*# overlay, the rows themselves ride forward: L1 keeps the
-        whole table (every source row, not just the merged one) and the presence
-        flags, so the resolved astrometry stays auditable downstream."""
+        """Beyond the C*# overlay, L1 keeps the whole table (every source row, not
+        just the merged one) and the flags, so the astrometry stays auditable."""
         l1 = self._l0_with_catalog().to_kpf1()
         assert [str(s) for s in l1.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert l1.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
         """CATALOG_RECORD is registered in L1-extensions.csv, so an L1 carrying it
-        reads back (an unlisted extension raises 'Non-standard extension'). The
-        missing rv must read back NaN, not masked -- KPFDataModel.from_fits
-        normalizes at every level, not just L0."""
+        reads back (an unlisted extension raises 'Non-standard extension'), and the
+        missing rv reads back NaN, not masked."""
         fn = str(tmp_path / "kpf_L1_20240405T000000.fits")
         self._l0_with_catalog(rv=None).to_kpf1().to_fits(fn)
         back = KPF1.from_fits(fn)

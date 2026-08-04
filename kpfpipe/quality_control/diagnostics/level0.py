@@ -11,11 +11,9 @@ from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 logger = logging.getLogger(__name__)
 
-# Fields the pointing offset requires: RA/Dec (position) and epoch (the propagation
-# baseline). A record missing either is unusable, so its offset is emitted present-
-# but-empty. Proper motion and parallax are optional -- when absent they fall back to
-# zero for the offset only (see _record_skycoord), leaving CATALOG_RECORD untouched.
-# RA/Dec are sexagesimal strings, epoch a float.
+# Fields the pointing offset requires: position, and epoch as the propagation
+# baseline. A record missing either is unusable, so its offset is emitted present-
+# but-empty. Proper motion and parallax are optional (see _record_skycoord).
 _OFFSET_STR_FIELDS = ("ra", "dec")
 _OFFSET_REQUIRED_NUM_FIELDS = ("epoch",)
 
@@ -27,9 +25,9 @@ class DiagL0(Diagnostics):
     """Diagnostics for KPF Level 0 raw data products.
 
     The pointing-offset metrics compare the telescope pointing against the target
-    astrometry AstroQuery resolves into the L0 ``CATALOG_RECORD`` extension (Gaia /
-    SIMBAD / DCS, one canonical ICRS schema). An unavailable source yields a
-    present-but-empty offset and a WARNING -- error-raising is the checkpoint's job.
+    astrometry AstroQuery resolves into the L0 ``CATALOG_RECORD`` extension. An
+    unavailable source yields a present-but-empty offset and a WARNING --
+    error-raising is the checkpoint's job.
     """
 
     LEVEL = "L0"

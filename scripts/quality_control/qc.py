@@ -85,9 +85,8 @@ def main():
     obs_id = args.obs_id or getattr(data, "obs_id", None) or "unknown"
 
     # AstroQuery resolves the CATALOG_RECORD rows the L0 pointing-offset diagnostics
-    # consume, so run it before the checkpoint. Only science frames (IMTYPE 'Object')
-    # have a target to resolve; skip calibration frames. A failure is non-fatal -- the
-    # frame stays inspectable, the offsets just come out empty.
+    # consume, so run it before the checkpoint. Calibration frames have no target to
+    # resolve; a failure is non-fatal -- the offsets just come out empty.
     if args.level == "L0":
         imtype = str(data.headers["PRIMARY"].get("IMTYPE", "")).strip().lower()
         if imtype == "object":

@@ -43,7 +43,7 @@ class TestRetryRequest:
         assert func.call_count == 3
         assert sleep.call_count == 2
 
-    def test_exhausted_retries_raise_last_exception(self):
+    def test_exhausted_retries_raises_last_exception(self):
         func = MagicMock(side_effect=ConnectionError("still down"))
         with (
             _patch_sleep() as sleep,

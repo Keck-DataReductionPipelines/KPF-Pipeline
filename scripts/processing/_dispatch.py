@@ -78,8 +78,8 @@ _live_lock = threading.Lock()
 _interrupted = threading.Event()
 
 # Launch throttle: serializes fan-out launches >= _launch_interval apart. Two
-# callers, two reasons -- science paces the SIMBAD/Gaia catalog queries the per-frame
-# L0 pointing QC fires; masters desynchronizes the I/O-heavy stack read/assemble
+# callers, two reasons -- science paces the SIMBAD/Gaia catalog queries AstroQuery
+# fires per frame; masters desynchronizes the I/O-heavy stack read/assemble
 # phase so a lockstep wave doesn't saturate the disk. `_last_launch` is the monotonic
 # time of the last launch.
 _launch_lock = threading.Lock()

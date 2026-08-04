@@ -15,7 +15,7 @@ fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 [MODULE_ASTRO_QUERY]
 do_gaia_query = true
 do_simbad_query = true
-use_wmko_tcs = true
+astrometry_priority = ["gaia", "simbad"]  # can include gaia/simbad/wmko
 
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"

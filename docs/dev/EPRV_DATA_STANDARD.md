@@ -53,7 +53,7 @@ while `KPF2`/`KPF4` subclass the EPRV `RV2`/`RV4` and must satisfy everything be
 | SNR | per pixel | wavelength via `EXSNRW*` keyword |
 | Coordinates (RA/Dec) | Sexagesimal | |
 | Epoch | Native survey epoch | e.g. 2015.5 for Gaia DR2 |
-| Proper motion | mas/yr | |
+| Proper motion | arcsec/yr | `CPMR#`/`CPMD#` (§6); RA term includes cos Dec |
 | Color index | Gaia Bp − Rp | default unless specified |
 | Systemic velocity / CCF velocity / RV | km/s | |
 

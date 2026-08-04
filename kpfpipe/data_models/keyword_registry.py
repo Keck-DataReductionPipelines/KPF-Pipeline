@@ -67,11 +67,12 @@ _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
 _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 
 # Number of traces/orderlets (SKY, SCI1-3, CAL); the numbered per-orderlet
-# extensions CCF#/RV#/CCF_VAR# run 1.._NUMTRACES. _SCI_TRACES holds just the
-# science-fiber indices, the fibers the catalog C*# overlay targets.
+# extensions CCF#/RV#/CCF_VAR# run 1.._NUMTRACES. SCI_TRACES holds just the
+# science-fiber indices, the fibers the catalog C*# overlay targets -- the single
+# definition, imported by level0 rather than re-derived there.
 _TRACE_MAP = pd.read_csv(_kpf_pipe_cfg / "trace-map.csv")
 _NUMTRACES = len(_TRACE_MAP)
-_SCI_TRACES = tuple(
+SCI_TRACES = tuple(
     _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
 )
 
@@ -123,9 +124,8 @@ class KeywordRegistry:
     }
 
     # Per-fiber catalog C*# keyword bases. On the SCI fibers these come from the
-    # CATALOG_RECORD overlay in KPF0.to_kpf1, not the raw TARG*/GAIAID mapping --
-    # _load_header_map blanks those SCI source cells so the overlay is the sole
-    # writer. SKY(1)/CAL(5) keep their header_map defaults.
+    # CATALOG_RECORD overlay in KPF0.to_kpf1, not the raw TARG*/GAIAID mapping;
+    # SKY(1)/CAL(5) keep their header_map defaults.
     _CATALOG_BASES = (
         "CSRC",
         "CID",
@@ -303,11 +303,10 @@ class KeywordRegistry:
         )
         self.header_map = raw[keep].reset_index(drop=True)
 
-        # Blank the SCI-fiber catalog C*# INSTRUMENT/DEFAULT source cells so
-        # _map_header emits nothing and the CATALOG_RECORD overlay (KPF0.to_kpf1) is
-        # their sole writer; SKY(1)/CAL(5) keep their header_map defaults.
+        # Blank the SCI-fiber catalog source cells so _map_header emits nothing and
+        # the CATALOG_RECORD overlay is their sole writer.
         sci_catalog_keys = {
-            f"{base}{i}" for base in self._CATALOG_BASES for i in _SCI_TRACES
+            f"{base}{i}" for base in self._CATALOG_BASES for i in SCI_TRACES
         }
         overlay = (
             self.header_map["STANDARD"].astype(str).str.strip().isin(sci_catalog_keys)

@@ -86,11 +86,12 @@ def _write_astro_config(path):
     """A minimal config that disables AstroQuery's network lookups.
 
     qc.py runs AstroQuery for L0; disabling Gaia/SIMBAD keeps these smoke tests
-    offline while the header-native wmko record still yields TARGOFF. get_params
-    requires the three sections to exist (empty is fine)."""
+    offline, so wmko -- the header-native row, the only one left -- must also be
+    the permitted astrometric base for the merge to succeed and TARGOFF to exist."""
     path.write_text(
         "[DATA_DIRS]\n[TRACES]\n"
         "[MODULE_ASTRO_QUERY]\ndo_gaia_query = false\ndo_simbad_query = false\n"
+        'astrometry_priority = ["wmko"]\n'
     )
     return path
 

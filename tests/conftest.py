@@ -73,13 +73,11 @@ def pytest_collection_modifyitems(config, items):
 
 
 def _catalog_record_hdu():
-    """A CATALOG_RECORD BinTableHDU with the canonical 'kpf-drp' row (built via
-    AstroQuery's writer for schema fidelity). A science L0's to_kpf1 needs this
-    populated, so the fixture embeds it; single-source (gaia) so the overlay logs
-    no mixed-source warning."""
-    # Deferred: this root conftest is imported at collection for every session, and
-    # astro_query pulls in astroquery/astropy (~2 s). Only the sessions that build
-    # this fixture should pay for it. No import cycle is involved.
+    """A CATALOG_RECORD BinTableHDU with the canonical 'kpf-drp' row, built via
+    AstroQuery's writer for schema fidelity. A science L0's to_kpf1 needs this
+    populated; single-source (gaia) so the overlay logs no mixed-source warning."""
+    # Deferred, not for a cycle: this root conftest is imported at collection for
+    # every session, and astro_query pulls in astroquery/astropy (~2 s).
     from kpfpipe.data_models.level0 import KPF0
     from kpfpipe.modules.astro_query import AstroQuery
 

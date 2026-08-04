@@ -357,8 +357,8 @@ class TestQCBase:
 
     def test_hdr_float_absent_empty_none_corrupt_raises(self):
         # Absent and valueless cards degrade to None (checks skip/FAIL gracefully);
-        # a present-but-non-numeric card is malformed and raises (fail loud, so
-        # QC.run surfaces it) rather than being silently swallowed.
+        # a present-but-non-numeric card is malformed, so it raises rather than
+        # being silently swallowed.
         hdr = fits.Header()
         hdr["NUM"] = 3.5
         hdr["EMPTY"] = None  # present-but-empty (valueless) card
@@ -619,12 +619,11 @@ class TestQCL0:
         assert QCL0.__dict__["radec_consistent"]._qc_key == "RADECOK"
 
     # --- catalog_values_sane (CATLOGOK): physical range of the canonical
-    # CATALOG_RECORD astrometry, ported from v2.12 quality_control.py TARG* checks
-    # onto the merged kpf-drp row (rather than the raw WMKO TARG* keywords).
+    # CATALOG_RECORD astrometry, the v2.12 TARG* checks moved onto the merged row.
 
     def _make_kpf0_with_canonical(self, tmp_path, **overrides):
         """KPF0 whose CATALOG_RECORD holds a merged 'kpf-drp' row; overrides patch
-        individual fields (epoch/equinox/rv/parallax/...) of a physically-sane base."""
+        individual fields of a physically-sane base."""
         from kpfpipe.modules.astro_query import AstroQuery
 
         l0 = _make_kpf0(tmp_path)
@@ -656,8 +655,8 @@ class TestQCL0:
         assert QCL0(l0).catalog_values_sane() is True
 
     def test_catalog_values_sane_fail_epoch_zero(self, tmp_path):
-        # The review's headline case: a WMKO TARGEPOC=0.0 placeholder that the merge
-        # gate (is-not-None) would pass. 0 <= 1950 -> out of range -> fail.
+        # A WMKO TARGEPOC=0.0 placeholder passes the merge's is-not-None gate, so the
+        # range check is what catches it.
         l0 = self._make_kpf0_with_canonical(tmp_path, epoch=0.0)
         assert QCL0(l0).catalog_values_sane() is False
 
@@ -699,8 +698,8 @@ class TestQCL0:
         assert QCL0(l0).catalog_values_sane() is True
 
     def test_catalog_values_sane_fail_parallax_negative(self, tmp_path):
-        # vNext addition beyond the legacy upper-bound-only check: a negative Gaia
-        # parallax (routine for faint sources) is nonphysical and must fail.
+        # A negative Gaia parallax (routine for faint sources) is nonphysical; the
+        # legacy check bounded only the upper end.
         l0 = self._make_kpf0_with_canonical(tmp_path, parallax=-0.3)
         assert QCL0(l0).catalog_values_sane() is False
 
@@ -719,7 +718,7 @@ class TestQCL0:
         assert QCL0(l0).catalog_values_sane() is True
 
     def test_catalog_values_sane_fail_pmra_too_large(self, tmp_path):
-        # vNext addition: a corrupt PM would misplace the source at the obs epoch.
+        # A corrupt PM would misplace the source at the obs epoch.
         l0 = self._make_kpf0_with_canonical(tmp_path, pmra=25.0)
         assert QCL0(l0).catalog_values_sane() is False
 

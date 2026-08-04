@@ -168,8 +168,9 @@ The architecture invariants:
 - **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`.** `_map_header` carries only some natives to
   PRIMARY, mostly under renamed EPRV keys — so read a native from PRIMARY when it survives there under
   its own name (e.g. `DATE-OBS`, `OBJECT`), and from `INSTRUMENT_HEADER` when it never reaches PRIMARY or
-  when a coherent block of related natives (e.g. the WMKO astrometry/catalog block used in
-  `barycentric_correction`) reads more clearly together.
+  when a coherent block of related natives reads more clearly together (e.g. the raw `DATE-BEG`/`DATE-END`
+  pair `barycentric_correction` extrapolates the exposure meter against; its *target astrometry*, by
+  contrast, comes off the PRIMARY `C*#` cards, which `to_kpf1` fills from `CATALOG_RECORD`).
 - **DRP provenance is stamped at read** onto RECEIPT (`KPF0.from_fits` → `_stamp_wmko_tracking`, not
   `to_kpf1`): `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`. It rides RECEIPT forward, with `DRPSTATU`
   advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
@@ -196,8 +197,9 @@ keyword defs.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
-calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths), the
-**barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
+calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths),
+**CATALOG_RECORD** (the L0 `WMKOCR`/`GAIACR`/`SIMBADCR` presence flags), the **barycentric** L2
+extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
 *PRIMARY holds EPRV keywords only* is the L4 SCI-combined RV keywords `CCD{1,2}RV`/`CCD{1,2}ERV` —
 KPF-registered yet homed on PRIMARY, since they are the pipeline's final RV measurements and belong
 beside the EPRV `RV`/`RVERR`. Masters register their PRIMARY keywords in per-master-type registries and
@@ -289,8 +291,8 @@ independent of `--jobs`, cores, or RAM, because masters stacking degrades with t
 concurrent jobs (OS memory-mapping contention) rather than with compute or memory pressure — so do
 **not** swap in a cores- or RAM-derived cap. Both orchestrators also **stagger** their subprocess
 launches (`_LAUNCH_INTERVAL`): masters by 5.0 s to desync the I/O-heavy read phase each build opens,
-science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries the per-frame L0 pointing QC fires at
-startup (rationale in each module's comment). These caps and intervals were tuned empirically on
+science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries `AstroQuery` fires per frame at startup
+(rationale in each module's comment). These caps and intervals were tuned empirically on
 Caltech's shrek server — heuristics, not definitive values; re-confirm against a real run before
 changing them.
 
