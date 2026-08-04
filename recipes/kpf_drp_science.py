@@ -58,8 +58,8 @@ def main(config, args):
     l0 = KPF0.from_fits(kpf_filepath(obs_id, "L0", data_root=data_root_in))
 
     # Consolidate external-catalog lookups up front: resolve Gaia/SIMBAD astrometry
-    # into l0's CATALOG_RECORD extension (the native wmko row is already populated at
-    # read) for the L0 diagnostics (and, later, barycentric correction) to consume.
+    # (plus the native wmko row read off PRIMARY TARG*) into l0's CATALOG_RECORD
+    # extension for the L0 diagnostics and the barycentric correction to consume.
     logger.info("resolving catalog astrometry for %s", obs_id)
     astro_query = AstroQuery(l0, config)
     l0 = astro_query.perform()
