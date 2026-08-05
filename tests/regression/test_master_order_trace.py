@@ -100,12 +100,31 @@ def _synthetic_flat(norder=3, ncol=400, drop=(), seed=0):
     return image + rng.normal(0.0, 1.0, image.shape), truth
 
 
+@pytest.fixture
+def master_path(tmp_path, monkeypatch):
+    """A master-flat path whose load yields a minimal two-chip stub."""
+    path = tmp_path / "KP.20240405.00020.86_master_flat_L1.fits"
+    path.touch()
+    pixels = np.ones((8, 8), dtype=np.float32)
+    monkeypatch.setattr(
+        order_trace_module,
+        "KPFMasterL1",
+        _stub_master_class(StubMasterFlat({"GREEN": pixels, "RED": 2.0 * pixels})),
+    )
+    return path
+
+
 def _tracer(tmp_path, image, monkeypatch, norder=3, **config):
     """Return an OrderTrace wired to a synthetic single-chip master flat."""
     master_path = tmp_path / "KP.20240405.00020.86_master_flat_L1.fits"
     master_path.touch()
     nrow, ncol = image.shape
-    tracer = OrderTrace(
+    monkeypatch.setattr(
+        order_trace_module,
+        "KPFMasterL1",
+        _stub_master_class(StubMasterFlat({"GREEN": image})),
+    )
+    return OrderTrace(
         master_path,
         {
             "chips": ["GREEN"],
@@ -114,23 +133,14 @@ def _tracer(tmp_path, image, monkeypatch, norder=3, **config):
             **config,
         },
     )
-    monkeypatch.setattr(
-        order_trace_module,
-        "KPFMasterL1",
-        _stub_master_class(StubMasterFlat({"GREEN": image})),
-    )
-    # Load up front so the helpers below see the cached CCD images, as they do
-    # inside make_master.
-    tracer._master_flat = tracer._load_master_flat()
-    return tracer
 
 
 def _curated_clusters(tracer):
     """Run detection and curation exactly as the module's own chain does."""
-    clusters = tracer._label_clusters(tracer._detect_illuminated_pixels("GREEN"))
-    clusters = tracer._reject_small_clusters("GREEN", clusters)
-    clusters = tracer._merge_fragmented_clusters("GREEN", clusters)
-    return tracer._reject_unidentifiable_clusters("GREEN", clusters)
+    clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
+    clusters = tracer._reject_small_clusters(clusters)
+    clusters = tracer._merge_fragmented_clusters(clusters)
+    return tracer._reject_malformed_clusters(clusters)
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +157,8 @@ class TestDetection:
 
         assert len(curated) == len(truth)
         for cluster in curated:
-            assert cluster["x1"] == 0
-            assert cluster["x2"] == image.shape[1] - 1
+            assert cluster["col_indices"].min() == 0
+            assert cluster["col_indices"].max() == image.shape[1] - 1
 
     def test_rejects_specks_and_single_row_artifacts(self, tmp_path, monkeypatch):
         image, truth = _synthetic_flat()
@@ -167,16 +177,16 @@ class TestDetection:
         tracer = _tracer(tmp_path, image, monkeypatch)
 
         fragments = tracer._reject_small_clusters(
-            "GREEN", tracer._label_clusters(tracer._detect_illuminated_pixels("GREEN"))
+            tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
         )
-        merged = tracer._merge_fragmented_clusters("GREEN", fragments)
+        merged = tracer._merge_fragmented_clusters(fragments)
         curated = _curated_clusters(tracer)
 
         assert len(merged) == len(fragments) - 1
         assert len(curated) == len(truth)
         for cluster in curated:
-            assert cluster["x1"] == 0
-            assert cluster["x2"] == image.shape[1] - 1
+            assert cluster["col_indices"].min() == 0
+            assert cluster["col_indices"].max() == image.shape[1] - 1
 
 
 class TestCalIdentification:
@@ -226,7 +236,8 @@ class TestTraceIdentity:
         image, truth = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        clusters, identities = tracer._detect_traces("GREEN")
+        clusters = tracer.detect_traces("GREEN")
+        identities = tracer.assign_trace_identities("GREEN", clusters)
 
         assert list(identities.index) == _trace_labels(3)
         assert identities.notna().all()
@@ -244,7 +255,8 @@ class TestTraceIdentity:
         image, truth = _synthetic_flat(drop=dropped)
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        clusters, identities = tracer._detect_traces("GREEN")
+        clusters = tracer.detect_traces("GREEN")
+        identities = tracer.assign_trace_identities("GREEN", clusters)
 
         assert list(identities.index) == _trace_labels(3)
         assert set(identities[identities.isna()].index) == set(dropped)
@@ -255,6 +267,25 @@ class TestTraceIdentity:
                 truth[(order, fiber)][image.shape[1] // 2], abs=1.0
             )
 
+    def test_phases_an_off_top_order_by_spacing(self, master_path):
+        # One CAL-anchored order, then a partial order whose CAL lies off the
+        # top of the detector and whose SCI2 was never detected. Counting the
+        # trailing group by rank would label the surviving SCI3 as SCI2.
+        rows = [100.0, 119.0, 138.0, 157.0, 176.0, 191.0, 210.0, 248.0]
+        metrics = pd.DataFrame(
+            {
+                "cluster": range(len(rows)),
+                "row": rows,
+                "is_cal": [False] * 4 + [True] + [False] * 3,
+            }
+        )
+        tracer = OrderTrace(master_path)
+
+        phased = tracer._assign_fiber_positions("GREEN", metrics)
+
+        assert list(phased["Fiber"]) == _FIBERS + ["SKY", "SCI1", "SCI3"]
+        assert list(phased["group"]) == [0] * 5 + [1] * 3
+
     def test_discards_a_group_beyond_the_expected_order_count(
         self, tmp_path, monkeypatch, caplog
     ):
@@ -262,7 +293,9 @@ class TestTraceIdentity:
         tracer = _tracer(tmp_path, image, monkeypatch, norder=2)
 
         with caplog.at_level("WARNING"):
-            _, identities = tracer._detect_traces("GREEN")
+            identities = tracer.assign_trace_identities(
+                "GREEN", tracer.detect_traces("GREEN")
+            )
 
         assert list(identities.index) == _trace_labels(2)
         assert identities.notna().all()
@@ -353,9 +386,9 @@ class TestMakeMasterOrderTrace:
 
 
 class TestConfiguration:
-    def test_only_polynomial_degree_is_module_configurable(self):
+    def test_only_polynomial_degree_is_module_configurable(self, master_path):
         tracer = OrderTrace(
-            "KP.20240405.00020.86_master_flat_L1.fits",
+            master_path,
             {"poly_degree": 2, "cal_flux_ratio": 2.5, "sample_count": 3},
         )
 
@@ -363,32 +396,28 @@ class TestConfiguration:
         assert not hasattr(tracer, "cal_flux_ratio")
         assert not hasattr(tracer, "sample_count")
 
-    def test_config_does_not_require_data_directory_paths(self, tmp_path):
+    def test_config_does_not_require_data_directory_paths(self, tmp_path, master_path):
         config_path = tmp_path / "order_trace.toml"
         config_path.write_text(
             '[TRACES]\nchips = ["GREEN", "RED"]\n[ORDER_TRACE]\npoly_degree = 2\n'
         )
 
-        tracer = OrderTrace(
-            "KP.20240405.00020.86_master_flat_L1.fits", ConfigHandler(config_path)
-        )
+        tracer = OrderTrace(master_path, ConfigHandler(config_path))
 
         assert tracer.chips == ["GREEN", "RED"]
         assert tracer.poly_degree == 2
 
-    def test_rejects_an_unusable_config(self):
+    def test_rejects_an_unusable_config(self, master_path):
         with pytest.raises(TypeError, match="config must be"):
-            OrderTrace("KP.20240405.00020.86_master_flat_L1.fits", config=1)
+            OrderTrace(master_path, config=1)
 
-    def test_rejects_a_negative_polynomial_degree(self):
-        tracer = OrderTrace(
-            "KP.20240405.00020.86_master_flat_L1.fits", {"poly_degree": -1}
-        )
+    def test_rejects_a_negative_polynomial_degree(self, master_path):
+        tracer = OrderTrace(master_path, {"poly_degree": -1})
         with pytest.raises(ValueError, match="poly_degree must be non-negative"):
             tracer._trace_fields()
 
-    def test_rejects_an_unknown_field_selection(self):
-        tracer = OrderTrace("KP.20240405.00020.86_master_flat_L1.fits")
+    def test_rejects_an_unknown_field_selection(self, master_path):
+        tracer = OrderTrace(master_path)
         with pytest.raises(ValueError, match="which must be one of"):
             tracer._trace_fields(which="labels")
 
@@ -405,7 +434,7 @@ class TestMasterFlatLoading:
 
         tracer = OrderTrace(master_path)
 
-        assert tracer._load_master_flat() is master_flat
+        assert tracer._master_flat is master_flat
         assert set(tracer._image) == {"GREEN", "RED"}
         assert tracer._image["RED"] is master_flat.data["RED_IMG"]
 
@@ -420,16 +449,16 @@ class TestMasterFlatLoading:
             order_trace_module, "KPFMasterL1", _stub_master_class(dark_master)
         )
         with pytest.raises(ValueError, match="not a vNext flat master"):
-            OrderTrace(master_path)._load_master_flat()
+            OrderTrace(master_path)
 
     def test_reports_a_missing_master_flat(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="Master flat not found"):
-            OrderTrace(tmp_path / "absent_master_flat_L1.fits")._load_master_flat()
+            OrderTrace(tmp_path / "absent_master_flat_L1.fits")
 
 
 class TestCSVWriting:
-    def test_refuses_overwrite(self, tmp_path):
-        tracer = OrderTrace("KP.20240405.00020.86_master_flat_L1.fits")
+    def test_refuses_overwrite(self, tmp_path, master_path):
+        tracer = OrderTrace(master_path)
         table = pd.DataFrame(
             [
                 {
@@ -458,8 +487,8 @@ class TestCSVWriting:
             tracer.save_master(output, overwrite=False)
         tracer.save_master(output, overwrite=True)
 
-    def test_refuses_to_save_before_make_master(self, tmp_path):
-        tracer = OrderTrace("KP.20240405.00020.86_master_flat_L1.fits")
+    def test_refuses_to_save_before_make_master(self, tmp_path, master_path):
+        tracer = OrderTrace(master_path)
         with pytest.raises(RuntimeError, match="run make_master"):
             tracer.save_master(tmp_path / "traces.csv")
 
@@ -498,14 +527,14 @@ def _assert_apertures_disjoint(table, ncol):
 
 
 class TestApertureConstraint:
-    def _make_tracer(self, norder=1, ncol=400):
+    def _make_tracer(self, master_path, norder=1, ncol=400):
         return OrderTrace(
-            "KP.20240405.00020.86_master_flat_L1.fits",
+            master_path,
             {"ccd": {"nrow": 400, "ncol": ncol}, "norder": {"GREEN": norder}},
         )
 
-    def test_clamps_convergent_neighbours_and_keeps_roomy_ones(self):
-        tracer = self._make_tracer()
+    def test_clamps_convergent_neighbours_and_keeps_roomy_ones(self, master_path):
+        tracer = self._make_tracer(master_path)
         ncol = 400
         # `above` tilts down to sit 4 px over `below` at the right edge; `roomy`
         # stays a constant 30 px higher and is never contended.
@@ -523,15 +552,15 @@ class TestApertureConstraint:
         assert above["TopEdge"] == 6.0
         assert (roomy["BottomEdge"], roomy["TopEdge"]) == (6.0, 6.0)
 
-    def test_rejects_traces_too_close_for_the_gap(self):
-        tracer = self._make_tracer()
+    def test_rejects_traces_too_close_for_the_gap(self, master_path):
+        tracer = self._make_tracer(master_path)
         below = _straight_trace(100.0, 0.0, 6.0, 6.0)
         above = _straight_trace(101.0, 0.0, 6.0, 6.0)
         with pytest.raises(ValueError, match="orderlet gap"):
             tracer._constrain_neighbor_widths([below, above])
 
-    def test_validation_rejects_overlapping_apertures(self):
-        tracer = self._make_tracer(norder=1)
+    def test_validation_rejects_overlapping_apertures(self, master_path):
+        tracer = self._make_tracer(master_path, norder=1)
         centers = [100.0, 120.0, 140.0, 160.0, 180.0]
         edges = [(6.0, 6.0), (6.0, 6.0), (6.0, 25.0), (25.0, 6.0), (6.0, 6.0)]
         rows = [

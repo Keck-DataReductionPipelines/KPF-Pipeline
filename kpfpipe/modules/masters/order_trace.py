@@ -36,6 +36,7 @@ convention -- a KPF scientist's "row" is this module's column. Throughout:
 import logging
 import os
 import tempfile
+from itertools import permutations
 
 import numpy as np
 import pandas as pd
@@ -107,8 +108,11 @@ class OrderTrace:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
-        self._master_flat = None
-        self._image = {}
+        self._master_flat = self._load_master_flat()
+        self._image = {
+            chip: self._master_flat.data[f"{chip}_IMG"] for chip in self.chips
+        }
+
         self._fit_rms = {}
         self._trace_table = None
         self._output_path = None
@@ -117,6 +121,27 @@ class OrderTrace:
     # ------------------------------------------------------------------
     # Private helpers - input
     # ------------------------------------------------------------------
+
+    def _load_master_flat(self):
+        """Load and validate the vNext L1 master-flat product.
+
+        Caches each CCD image as ``self._image[chip]``, the one place trace
+        measurement reads detector pixels from.
+        """
+        if not os.path.isfile(self.master_flat_filename):
+            raise FileNotFoundError(
+                f"Master flat not found: {self.master_flat_filename}"
+            )
+
+        master_flat = KPFMasterL1.from_fits(self.master_flat_filename)
+        master_type = master_flat.headers["PRIMARY"].get("MASTYPE")
+        if str(master_type).lower() != "flat":
+            raise ValueError(
+                f"{self.master_flat_filename} is not a vNext flat master "
+                f"(MASTYPE={master_type!r})"
+            )
+
+        return master_flat
 
     def _trace_fields(self, which="all"):
         """Return output fields of one trace table, in their written order.
@@ -145,79 +170,40 @@ class OrderTrace:
                 f"which must be one of 'all', 'bounds', or 'coeffs'; got {which}"
             )
 
-    def _load_master_flat(self):
-        """Load and validate the vNext L1 master-flat product.
-
-        Caches each CCD image as ``self._image[chip]``, the one place trace
-        measurement reads detector pixels from.
-        """
-        if not os.path.isfile(self.master_flat_filename):
-            raise FileNotFoundError(
-                f"Master flat not found: {self.master_flat_filename}"
-            )
-
-        master_flat = KPFMasterL1.from_fits(self.master_flat_filename)
-        master_type = master_flat.headers["PRIMARY"].get("MASTYPE")
-        if str(master_type).lower() != "flat":
-            raise ValueError(
-                f"{self.master_flat_filename} is not a vNext flat master "
-                f"(MASTYPE={master_type!r})"
-            )
-
-        self._image = {chip: master_flat.data[f"{chip}_IMG"] for chip in self.chips}
-        return master_flat
-
     # ------------------------------------------------------------------
     # Private helpers - trace detection
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _single_column_inter_order_flux(pixels, smoothing_weight):
-        """Return the flux lying between the orders of one pixel column.
-
-        ``pixels`` are raw master-flat values, straight off the detector.
-
-        A Whittaker smoother: the result minimizes
-        ``sum (f - pixels)**2 + smoothing_weight * sum (df/drow)**2``. Its
-        normal equations are symmetric and tridiagonal -- each pixel couples
-        only to its two neighbors -- so ``solve_banded`` recovers f in O(nrow).
-        Subtracting it from ``pixels`` is the high-pass that isolates the
-        orderlet peaks.
-
-        The default weight rides over the orderlets (5-11 pixels thick, spaced
-        16-20) while still following the far broader order-to-order flux
-        envelope.
-        """
-        nrow = pixels.size
-        off_diagonal = np.full(nrow, -smoothing_weight)
-        diagonal = np.full(nrow, 1.0 + 2.0 * smoothing_weight)
-        diagonal[[0, -1]] = 1.0 + smoothing_weight
-
-        # solve_banded((1, 1), ...) declares one super- and one sub-diagonal.
-        # The matrix is symmetric, so one off-diagonal array serves both; its
-        # two out-of-matrix corner entries are zeroed here and never read.
-        bands = np.vstack([off_diagonal, diagonal, off_diagonal])
-        bands[0, 0] = bands[2, -1] = 0.0
-        return solve_banded((1, 1), bands, pixels)
-
     def _detect_illuminated_pixels(self, chip, smoothing_weight=20.0, trace_ratio=0.5):
         """Return a boolean mask of illuminated pixels, one column at a time.
 
-        Each pixel column is reduced independently: no information crosses
-        between columns, so the threshold is local along dispersion.
+        Each column is reduced independently, so the threshold is local along
+        dispersion. Subtracting the column's inter-order flux isolates the
+        orderlet peaks, setting the threshold by orderlet contrast rather than
+        by the absolute lamp level.
+
+        That flux is a Whittaker smoother -- the f minimizing
+        ``sum (f - pixels)**2 + smoothing_weight * sum (df/drow)**2`` -- whose
+        normal equations are symmetric and tridiagonal, so ``solve_banded``
+        recovers it in O(nrow) from one sub- and one super-diagonal. Symmetry
+        lets one off-diagonal array serve as both, its two out-of-matrix corner
+        entries zeroed and never read. The default weight rides over the
+        orderlets (5-11 pixels thick, spaced 16-20) while still following the
+        far broader order-to-order flux envelope.
         """
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         filled = np.nan_to_num(self._image[chip], nan=0.0, posinf=0.0, neginf=0.0)
+
+        off_diagonal = np.full(nrow, -smoothing_weight)
+        diagonal = np.full(nrow, 1.0 + 2.0 * smoothing_weight)
+        diagonal[[0, -1]] = 1.0 + smoothing_weight
+        bands = np.vstack([off_diagonal, diagonal, off_diagonal])
+        bands[0, 0] = bands[2, -1] = 0.0
+
         mask = np.zeros((nrow, ncol), dtype=bool)
         for j in range(ncol):
-            # Subtracting the inter-order flux leaves the orderlet peaks
-            # standing alone, so the threshold below is set by orderlet
-            # contrast rather than by the absolute lamp level, which varies by
-            # an order of magnitude across the detector.
             column_pixels = filled[:, j]
-            residual = column_pixels - self._single_column_inter_order_flux(
-                column_pixels, smoothing_weight
-            )
+            residual = column_pixels - solve_banded((1, 1), bands, column_pixels)
             positive_residual = np.clip(residual, 0.0, None)
             threshold = 0.5 * np.quantile(
                 positive_residual, trace_ratio, method="lower"
@@ -225,28 +211,7 @@ class OrderTrace:
             mask[:, j] = residual > threshold + 1.0
         return mask
 
-    @staticmethod
-    def _cluster_record(row_indices, col_indices):
-        """Bundle one cluster's pixels with the geometry used to curate it.
-
-        ``row_indices`` and ``col_indices`` are the cross-dispersion and
-        dispersion pixel indices of every pixel in the cluster. ``x1``/``x2``
-        are its first and last pixel column, matching the output fields of the
-        same name, and ``row_at_x1``/``row_at_x2`` are where it sits across
-        dispersion there.
-        """
-        first_j, last_j = int(col_indices.min()), int(col_indices.max())
-        return {
-            "row_indices": row_indices,
-            "col_indices": col_indices,
-            "npixel": int(row_indices.size),
-            "x1": first_j,
-            "x2": last_j,
-            "row_at_x1": float(row_indices[col_indices == first_j].mean()),
-            "row_at_x2": float(row_indices[col_indices == last_j].mean()),
-        }
-
-    def _label_clusters(self, mask):
+    def _detect_clusters(self, mask):
         """Collect touching illuminated pixels into clusters.
 
         The 3x3 structure treats all eight surrounding pixels as adjacent
@@ -263,43 +228,39 @@ class OrderTrace:
         # gives every cluster's slice without revisiting the label image.
         bounds = np.searchsorted(cluster_ids[ordering], np.arange(1, cluster_count + 2))
         return [
-            self._cluster_record(row_indices[start:stop], col_indices[start:stop])
+            {
+                "row_indices": row_indices[start:stop],
+                "col_indices": col_indices[start:stop],
+                "npixel": int(stop - start),
+            }
             for start, stop in zip(bounds[:-1], bounds[1:], strict=True)
         ]
 
-    def _center_column_band(self):
-        """Return the pixel columns over which trace identity is measured.
+    def _pixels_near_mid_dispersion(self, cluster, col_width=41):
+        """Return one cluster's pixel row and column indices at mid-dispersion.
 
-        A narrow band at mid-dispersion, where every order is on the detector
-        and the orderlets of an order are cleanly separated across dispersion.
+        Trace identity is measured over ``col_width`` columns centered on the
+        detector, where every order is on the detector and the orderlets of an
+        order are cleanly separated across dispersion.
         """
-        ncol = self.ccd["ncol"]
-        half_width = max(1, ncol // 200)
-        center = ncol // 2
-        return center - half_width, center + half_width + 1
+        center = self.ccd["ncol"] // 2
+        half_width = col_width // 2
+        near_center = np.abs(cluster["col_indices"] - center) <= half_width
+        return cluster["row_indices"][near_center], cluster["col_indices"][near_center]
 
     @staticmethod
-    def _band_pixels(cluster, band_start, band_stop):
-        """Return one cluster's pixel row and column indices inside a column band."""
-        in_band = (cluster["col_indices"] >= band_start) & (
-            cluster["col_indices"] < band_stop
-        )
-        return cluster["row_indices"][in_band], cluster["col_indices"][in_band]
-
-    @staticmethod
-    def _log_rejection(chip, cluster, reason):
+    def _log_rejection(cluster, reason):
         """Record one curated-away cluster and why it was discarded."""
         logger.debug(
-            "%s: rejecting cluster at rows %d-%d, columns %d-%d (%s)",
-            chip,
+            "rejecting cluster at rows %d-%d, columns %d-%d (%s)",
             cluster["row_indices"].min(),
             cluster["row_indices"].max(),
-            cluster["x1"],
-            cluster["x2"],
+            cluster["col_indices"].min(),
+            cluster["col_indices"].max(),
             reason,
         )
 
-    def _reject_small_clusters(self, chip, clusters, min_cluster_pixels=500):
+    def _reject_small_clusters(self, clusters, min_cluster_pixels=500):
         """Drop clusters too small to be any part of a trace.
 
         Runs before fragments are rejoined, so it tests only pixel count: a
@@ -308,39 +269,39 @@ class OrderTrace:
         kept = []
         for cluster in clusters:
             if cluster["npixel"] < min_cluster_pixels:
-                self._log_rejection(chip, cluster, f"only {cluster['npixel']} pixels")
+                self._log_rejection(cluster, f"only {cluster['npixel']} pixels")
             else:
                 kept.append(cluster)
         return kept
 
-    def _reject_unidentifiable_clusters(
-        self, chip, clusters, min_spanned_columns=200, min_thickness=3.0
+    def _reject_malformed_clusters(
+        self, clusters, min_spanned_columns=200, min_rows_per_column=3.0
     ):
-        """Drop rejoined clusters that cannot be identified as traces."""
-        band_start, band_stop = self._center_column_band()
+        """Drop rejoined clusters whose shape is not that of a trace.
+
+        A trace runs the length of dispersion and is several pixel rows thick
+        at mid-dispersion, where its shape is measured. A cluster falling short
+        of either, or missing from mid-dispersion altogether, is discarded
+        however trace-like its full-frame pixel count looks.
+        """
         kept = []
         for cluster in clusters:
-            spanned_columns = cluster["x2"] - cluster["x1"] + 1
-            row_indices, col_indices = self._band_pixels(cluster, band_start, band_stop)
-            # Cross-dispersion thickness: rows occupied per column, measured in
-            # the same band that later fixes trace identity. A detector-edge
-            # artifact running along a single row is therefore rejected even
-            # when its full-frame pixel count looks trace-like.
-            thickness = (
-                row_indices.size / np.unique(col_indices).size
-                if row_indices.size
-                else 0.0
+            spanned_columns = int(np.ptp(cluster["col_indices"])) + 1
+            peak_rows, peak_columns = self._pixels_near_mid_dispersion(cluster)
+            occupied_columns = np.unique(peak_columns).size
+            rows_per_column = (
+                peak_rows.size / occupied_columns if occupied_columns else 0.0
             )
             if spanned_columns < min_spanned_columns:
                 reason = f"spans only {spanned_columns} pixel columns"
-            elif row_indices.size == 0:
-                reason = "no pixels in the central column band"
-            elif thickness < min_thickness:
-                reason = f"only {thickness:.1f} pixel rows thick at mid-detector"
+            elif occupied_columns == 0:
+                reason = "no pixels at mid-dispersion"
+            elif rows_per_column < min_rows_per_column:
+                reason = f"only {rows_per_column:.1f} pixel rows thick at mid-detector"
             else:
                 kept.append(cluster)
                 continue
-            self._log_rejection(chip, cluster, reason)
+            self._log_rejection(cluster, reason)
         return kept
 
     @staticmethod
@@ -355,59 +316,62 @@ class OrderTrace:
         occupied = np.flatnonzero(pixel_count)
         return occupied.astype(float), row_total[occupied] / pixel_count[occupied]
 
-    def _bridges_gap(self, host, candidate, gap, max_residual):
-        """Test whether a candidate cluster continues a host across a column gap.
-
-        Compares one mean row per column rather than individual pixels, whose
-        scatter is the trace's cross-dispersion thickness and would swamp the
-        misalignment being measured. Only pixels within one gap width of either
-        side are used and the fit is linear: the test asks whether the pieces
-        line up locally, over which a trace's curvature is negligible.
-        """
-        host_near_gap = host["col_indices"] >= host["x2"] - gap
-        candidate_near_gap = candidate["col_indices"] <= candidate["x1"] + gap
-        if not host_near_gap.any() or not candidate_near_gap.any():
-            return False
-
-        host_columns, host_mean_rows = self._mean_row_per_column(
-            host["row_indices"][host_near_gap], host["col_indices"][host_near_gap]
-        )
-        candidate_columns, candidate_mean_rows = self._mean_row_per_column(
-            candidate["row_indices"][candidate_near_gap],
-            candidate["col_indices"][candidate_near_gap],
-        )
-        if host_columns.size < 2:
-            return False
-
-        coeffs = np.polynomial.polynomial.polyfit(host_columns, host_mean_rows, 1)
-        predicted = np.polynomial.polynomial.polyval(candidate_columns, coeffs)
-        residual = np.median(np.abs(candidate_mean_rows - predicted))
-        return residual <= max_residual
-
     def _find_mergeable_pair(
         self,
         clusters,
         max_gap_columns=512,
         max_row_offset=10.0,
-        # Cluster edges are quantized to whole pixels, which puts a floor of
-        # about one pixel on how well two fragments can be shown to line up.
-        # Rival traces are a whole orderlet spacing apart, so two pixels of
-        # slack stays far from ambiguous.
         max_residual_pixels=2.0,
     ):
-        """Return the indices of the first two clusters lying on one curve."""
-        for host_index, host in enumerate(clusters):
-            for candidate_index, candidate in enumerate(clusters):
-                gap = candidate["x1"] - host["x2"]
-                if not 0 < gap <= max_gap_columns:
-                    continue
-                if abs(candidate["row_at_x1"] - host["row_at_x2"]) > max_row_offset:
-                    continue
-                if self._bridges_gap(host, candidate, gap, max_residual_pixels):
-                    return host_index, candidate_index
+        """Return the indices of the first two clusters lying on one curve.
+
+        Fragments are compared as one mean row per column rather than as
+        individual pixels, whose scatter is the trace's cross-dispersion
+        thickness and would swamp the misalignment being measured. Only pixels
+        within one gap width of either side are used, and the fit is linear:
+        the test asks whether the pieces line up locally, over which a trace's
+        curvature is negligible.
+        """
+        rows = [cluster["row_indices"] for cluster in clusters]
+        columns = [cluster["col_indices"] for cluster in clusters]
+        first_column = [int(column.min()) for column in columns]
+        last_column = [int(column.max()) for column in columns]
+        row_at_first = [
+            row[column == edge].mean()
+            for row, column, edge in zip(rows, columns, first_column, strict=True)
+        ]
+        row_at_last = [
+            row[column == edge].mean()
+            for row, column, edge in zip(rows, columns, last_column, strict=True)
+        ]
+
+        for host, candidate in permutations(range(len(clusters)), 2):
+            gap = first_column[candidate] - last_column[host]
+            if not 0 < gap <= max_gap_columns:
+                continue
+            if abs(row_at_first[candidate] - row_at_last[host]) > max_row_offset:
+                continue
+
+            host_near_gap = columns[host] >= last_column[host] - gap
+            candidate_near_gap = columns[candidate] <= first_column[candidate] + gap
+            host_columns, host_centerline = self._mean_row_per_column(
+                rows[host][host_near_gap], columns[host][host_near_gap]
+            )
+            candidate_columns, candidate_centerline = self._mean_row_per_column(
+                rows[candidate][candidate_near_gap],
+                columns[candidate][candidate_near_gap],
+            )
+            if host_columns.size < 2 or candidate_columns.size == 0:
+                continue
+
+            coeffs = np.polynomial.polynomial.polyfit(host_columns, host_centerline, 1)
+            extrapolated = np.polynomial.polynomial.polyval(candidate_columns, coeffs)
+            residual = np.median(np.abs(candidate_centerline - extrapolated))
+            if residual <= max_residual_pixels:
+                return host, candidate
         return None
 
-    def _merge_fragmented_clusters(self, chip, clusters):
+    def _merge_fragmented_clusters(self, clusters):
         """Rejoin clusters that are separated pieces of a single trace."""
         clusters = list(clusters)
         while True:
@@ -416,17 +380,23 @@ class OrderTrace:
                 return clusters
             host, candidate = (clusters[index] for index in pair)
             logger.info(
-                "%s: merging cluster fragments spanning columns %d-%d and %d-%d",
-                chip,
-                host["x1"],
-                host["x2"],
-                candidate["x1"],
-                candidate["x2"],
+                "merging cluster fragments spanning columns %d-%d and %d-%d",
+                host["col_indices"].min(),
+                host["col_indices"].max(),
+                candidate["col_indices"].min(),
+                candidate["col_indices"].max(),
             )
-            combined = self._cluster_record(
-                np.concatenate([host["row_indices"], candidate["row_indices"]]),
-                np.concatenate([host["col_indices"], candidate["col_indices"]]),
+            row_indices = np.concatenate(
+                [host["row_indices"], candidate["row_indices"]]
             )
+            col_indices = np.concatenate(
+                [host["col_indices"], candidate["col_indices"]]
+            )
+            combined = {
+                "row_indices": row_indices,
+                "col_indices": col_indices,
+                "npixel": int(row_indices.size),
+            }
             clusters = [
                 cluster for index, cluster in enumerate(clusters) if index not in pair
             ]
@@ -443,10 +413,9 @@ class OrderTrace:
         the clusters are subsequently ordered by: sorting on it walks the
         orderlets of the detector in the order they physically appear.
         """
-        band_start, band_stop = self._center_column_band()
         records = []
         for index, cluster in enumerate(clusters):
-            row_indices, col_indices = self._band_pixels(cluster, band_start, band_stop)
+            row_indices, col_indices = self._pixels_near_mid_dispersion(cluster)
             records.append(
                 {
                     "cluster": index,
@@ -525,13 +494,19 @@ class OrderTrace:
                 groups[index] = group
                 row = cluster_rows[index]
 
-        # An order whose CAL lies off the detector keeps only its lower
-        # orderlets, which are then in rank order from SKY upward.
-        for position, index in enumerate(range(cal_indices[-1] + 1, len(metrics))):
+        # An order whose CAL lies off the detector has no anchor of its own, so
+        # its lowest surviving orderlet is taken as the SKY that opens it. The
+        # rest are counted up from there on the same spacing test as above, so
+        # an orderlet missing inside the group shifts none of the ones over it.
+        position = 0
+        for count, index in enumerate(range(cal_indices[-1] + 1, len(metrics))):
+            if count:
+                position += max(1, round((cluster_rows[index] - row) / spacing))
             if position > cal_position:
                 break
             positions[index] = position
             groups[index] = cal_indices.size
+            row = cluster_rows[index]
 
         for index in np.flatnonzero(positions < 0):
             logger.warning(
@@ -578,39 +553,6 @@ class OrderTrace:
         group_spacing = np.median(np.diff(group_rows))
         orders_below = int(max(0.0, group_rows[0]) // group_spacing)
         return min(orders_below, norder - group_rows.size)
-
-    def _assign_trace_identity(self, chip, clusters):
-        """Label every cluster with its fiber and order index."""
-        fibers = list(self.fibers)
-        norder = self.norder[chip]
-
-        metrics = self._cluster_center_metrics(chip, clusters)
-        metrics = self._flag_cal_clusters(metrics)
-        metrics = self._assign_fiber_positions(chip, metrics)
-        metrics = self._drop_edge_groups(chip, metrics, norder)
-
-        group_rows = metrics.groupby("group")["row"].mean().to_numpy()
-        lowest_order = self._lowest_order_index(group_rows, norder)
-        metrics["Order"] = metrics["group"] - metrics["group"].min() + lowest_order
-
-        beyond_last_order = metrics["Order"] >= norder
-        if beyond_last_order.any():
-            logger.warning(
-                "%s: discarding %d orderlets labelled beyond order %d",
-                chip,
-                int(beyond_last_order.sum()),
-                norder - 1,
-            )
-            metrics = metrics[~beyond_last_order]
-
-        cluster_by_trace = metrics.set_index(["Order", "Fiber"])["cluster"]
-        if cluster_by_trace.index.has_duplicates:
-            raise ValueError(f"{chip}: fiber phasing produced duplicate trace labels")
-
-        expected_traces = pd.MultiIndex.from_product(
-            [range(norder), fibers], names=["Order", "Fiber"]
-        )
-        return cluster_by_trace.reindex(expected_traces)
 
     # ------------------------------------------------------------------
     # Private helpers - trace measurement
@@ -862,7 +804,7 @@ class OrderTrace:
         self,
         column_profile,
         center,
-        width_half_window=14,
+        width_half_window=7,
         winsor_percentile=90.0,
         width_sigma=2.8,
     ):
@@ -904,8 +846,7 @@ class OrderTrace:
         coeffs,
         sample_columns,
         kept,
-        width_half_window=14,
-        width_default=11.0,
+        width_half_window=7,
     ):
         """Return robust bottom/top aperture widths from accepted samples."""
         bottom_widths = []
@@ -914,7 +855,11 @@ class OrderTrace:
         stride = max(1, kept_columns.size // 24)
         for j in kept_columns[::stride]:
             center = np.polynomial.polynomial.polyval(j, coeffs)
-            bottom, top = self._width_at_column(column_profiles[int(j)], center)
+            bottom, top = self._width_at_column(
+                column_profiles[int(j)],
+                center,
+                width_half_window,
+            )
             if np.isfinite(bottom) and bottom > 0:
                 bottom_widths.append(bottom)
             if np.isfinite(top) and top > 0:
@@ -924,9 +869,8 @@ class OrderTrace:
             raise ValueError(
                 "fewer than three valid samples for trace-width estimation"
             )
-        width_ceiling = min(width_half_window, width_default)
-        bottom = float(np.clip(np.nanmedian(bottom_widths), 1.0, width_ceiling))
-        top = float(np.clip(np.nanmedian(top_widths), 1.0, width_ceiling))
+        bottom = float(np.clip(np.nanmedian(bottom_widths), 1.0, 11.0))
+        top = float(np.clip(np.nanmedian(top_widths), 1.0, 11.0))
         return bottom, top
 
     def _constrain_neighbor_widths(self, records, orderlet_gap_pixels=2.0):
@@ -1022,20 +966,55 @@ class OrderTrace:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def _detect_traces(self, chip):
-        """Detect, curate, and identify every trace on one CCD."""
-        mask = self._detect_illuminated_pixels(chip)
-        clusters = self._label_clusters(mask)
+    def detect_traces(self, chip):
+        """Detect and curate every trace cluster on one CCD."""
+        illuminated = self._detect_illuminated_pixels(chip)
+        clusters = self._detect_clusters(illuminated)
         logger.info("%s: %d illuminated clusters found", chip, len(clusters))
 
-        clusters = self._reject_small_clusters(chip, clusters)
-        clusters = self._merge_fragmented_clusters(chip, clusters)
-        clusters = self._reject_unidentifiable_clusters(chip, clusters)
+        clusters = self._reject_small_clusters(clusters)
+        clusters = self._merge_fragmented_clusters(clusters)
+        clusters = self._reject_malformed_clusters(clusters)
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
-        return clusters, self._assign_trace_identity(chip, clusters)
+        return clusters
 
-    def _measure_traces(self, chip, clusters, identities, full_coverage_fraction=0.9):
+    def assign_trace_identities(self, chip, clusters):
+        """Label every cluster with its fiber and order index."""
+        fibers = list(self.fibers)
+        norder = self.norder[chip]
+
+        metrics = self._cluster_center_metrics(chip, clusters)
+        metrics = self._flag_cal_clusters(metrics)
+        metrics = self._assign_fiber_positions(chip, metrics)
+        metrics = self._drop_edge_groups(chip, metrics, norder)
+
+        group_rows = metrics.groupby("group")["row"].mean().to_numpy()
+        lowest_order = self._lowest_order_index(group_rows, norder)
+        metrics["Order"] = metrics["group"] - metrics["group"].min() + lowest_order
+
+        beyond_last_order = metrics["Order"] >= norder
+        if beyond_last_order.any():
+            logger.warning(
+                "%s: discarding %d orderlets labelled beyond order %d",
+                chip,
+                int(beyond_last_order.sum()),
+                norder - 1,
+            )
+            metrics = metrics[~beyond_last_order]
+
+        cluster_by_trace = metrics.set_index(["Order", "Fiber"])["cluster"]
+        if cluster_by_trace.index.has_duplicates:
+            raise ValueError(f"{chip}: fiber phasing produced duplicate trace labels")
+
+        expected_traces = pd.MultiIndex.from_product(
+            [range(norder), fibers], names=["Order", "Fiber"]
+        )
+        return cluster_by_trace.reindex(expected_traces)
+
+    def fit_trace_polynomials(
+        self, chip, clusters, identities, full_coverage_fraction=0.9
+    ):
         """Fit every identified trace and assemble the output table for one CCD.
 
         Coverage is the fraction of the dispersion direction a trace was
@@ -1244,12 +1223,11 @@ class OrderTrace:
         if chips is None:
             chips = self.chips
 
-        self._master_flat = self._load_master_flat()
-
         tables = []
         for chip in chips:
-            clusters, identities = self._detect_traces(chip)
-            tables.append(self._measure_traces(chip, clusters, identities))
+            clusters = self.detect_traces(chip)
+            identities = self.assign_trace_identities(chip, clusters)
+            tables.append(self.fit_trace_polynomials(chip, clusters, identities))
 
         self._trace_table = pd.concat(tables, ignore_index=True)
         if output_dir is not None:
