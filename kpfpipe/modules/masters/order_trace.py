@@ -565,16 +565,13 @@ class OrderTrace:
     # Private helpers - trace measurement
     # ------------------------------------------------------------------
 
-    def _sample_columns(self, sample_count=65):
-        """Return the pixel columns each trace is measured at, both edges included.
+    def _sample_profiles(self, chip, sample_count=65, col_half_window=3):
+        """Return the pixel columns each trace is measured at and their profiles.
 
-        A centerline is fitted through one measurement per sample column, so
-        these are the dispersion positions the polynomial is constrained at.
-        """
-        return np.unique(np.linspace(0, self.ccd["ncol"] - 1, sample_count, dtype=int))
-
-    def _sample_column_profiles(self, chip, sample_columns, column_half_window=3):
-        """Return the cross-dispersion profile at each sample column, keyed by column.
+        The columns span the detector, both edges included: a centerline is
+        fitted through one measurement per sampled column, so these are the
+        dispersion positions the polynomial is constrained at. Their profiles
+        are returned keyed by column.
 
         Profiles rather than raw pixels: neighboring columns are median
         combined, which suppresses noise without smearing, because a trace
@@ -588,28 +585,31 @@ class OrderTrace:
         ``nanmedian`` then ignores, giving exactly the truncated median a
         clamped per-column slice would.
         """
-        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         image = self._image[chip]
-        offsets = np.arange(-column_half_window, column_half_window + 1)
-        window_columns = sample_columns[:, None] + offsets[None, :]
-        on_detector = (window_columns >= 0) & (window_columns < ncol)
+        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
 
-        windows = np.full((nrow, *window_columns.shape), np.nan, dtype=image.dtype)
-        windows[:, on_detector] = image[:, window_columns[on_detector]]
-        profiles = np.nanmedian(windows, axis=2)
+        # Determine spatial profile over median of several columns to reduce noise
+        columns = np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
+        offsets = np.arange(-col_half_window, col_half_window + 1)
+        cols_in_window = columns[:, None] + offsets[None, :]
+        on_detector = (cols_in_window >= 0) & (cols_in_window < ncol)
+
+        pixels = np.full((nrow, *cols_in_window.shape), np.nan, dtype=image.dtype)
+        pixels[:, on_detector] = image[:, cols_in_window[on_detector]]
+        profiles = np.nanmedian(pixels, axis=2)
 
         # Fill non-finite rows with the profile's own median, as a wholly
         # unmeasurable column has no scale of its own to fall back on.
         finite = np.isfinite(profiles)
-        fill = np.zeros(sample_columns.size)
+        fill = np.zeros(columns.size)
         measured = finite.any(axis=0)
         fill[measured] = np.nanmedian(
             np.where(finite, profiles, np.nan)[:, measured], axis=0
         )
         profiles = np.where(finite, profiles, fill[None, :]).astype(float, copy=False)
 
-        return dict(
-            zip(sample_columns.tolist(), np.ascontiguousarray(profiles.T), strict=True)
+        return columns, dict(
+            zip(columns.tolist(), np.ascontiguousarray(profiles.T), strict=True)
         )
 
     def _local_peak_center(
@@ -737,8 +737,8 @@ class OrderTrace:
             return np.nan
         return float(np.nanmedian(centers))
 
-    def _trace_centers(self, column_profiles, cluster, sample_columns, fiber):
-        """Measure a subpixel row center at every sample column of one cluster.
+    def _trace_centers(self, profiles, cluster, columns, fiber):
+        """Measure a subpixel row center at every sampled column of one cluster.
 
         The cluster's own mask pixels at a column give the starting row, so no
         prior trace geometry is needed. The CAL orderlet is peaked and centers
@@ -749,18 +749,18 @@ class OrderTrace:
         measure_center = (
             self._local_peak_center if fiber == "CAL" else self._local_edge_center
         )
-        centers = np.full(sample_columns.size, np.nan, dtype=float)
-        for sample, j in enumerate(sample_columns):
+        centers = np.full(columns.size, np.nan, dtype=float)
+        for sample, j in enumerate(columns):
             in_column = cluster["col_indices"] == j
             if not in_column.any():
                 continue
             row_guess = float(cluster["row_indices"][in_column].mean())
-            centers[sample] = measure_center(column_profiles[int(j)], row_guess)
+            centers[sample] = measure_center(profiles[int(j)], row_guess)
         return centers
 
     def _robust_polynomial_fit(
         self,
-        sample_columns,
+        columns,
         centers,
         min_valid_fraction=0.5,
         fit_max_iterations=8,
@@ -768,23 +768,19 @@ class OrderTrace:
     ):
         """Fit row center against pixel column, rejecting outliers by median/MAD."""
         degree = int(self.poly_degree)
-        kept = np.isfinite(sample_columns) & np.isfinite(centers)
-        min_kept = max(
-            degree + 1, int(np.ceil(sample_columns.size * min_valid_fraction))
-        )
+        kept = np.isfinite(columns) & np.isfinite(centers)
+        min_kept = max(degree + 1, int(np.ceil(columns.size * min_valid_fraction)))
         if kept.sum() < min_kept:
             raise ValueError(
-                f"only {kept.sum()} of {sample_columns.size} trace centers are "
+                f"only {kept.sum()} of {columns.size} trace centers are "
                 f"valid; at least {min_kept} are required"
             )
 
         for _ in range(fit_max_iterations):
             coeffs = np.polynomial.polynomial.polyfit(
-                sample_columns[kept], centers[kept], degree
+                columns[kept], centers[kept], degree
             )
-            residual = centers - np.polynomial.polynomial.polyval(
-                sample_columns, coeffs
-            )
+            residual = centers - np.polynomial.polynomial.polyval(columns, coeffs)
             median_residual = np.nanmedian(residual[kept])
             residual_scatter = mad_std(residual[kept], ignore_nan=True)
             rejection_limit = max(0.25, fit_sigma * residual_scatter)
@@ -798,11 +794,9 @@ class OrderTrace:
                 break
             kept = still_valid
 
-        coeffs = np.polynomial.polynomial.polyfit(
-            sample_columns[kept], centers[kept], degree
-        )
+        coeffs = np.polynomial.polynomial.polyfit(columns[kept], centers[kept], degree)
         residual = centers[kept] - np.polynomial.polynomial.polyval(
-            sample_columns[kept], coeffs
+            columns[kept], coeffs
         )
         rms = float(np.sqrt(np.mean(residual**2)))
         return coeffs, kept, rms
@@ -849,21 +843,21 @@ class OrderTrace:
 
     def _estimate_widths(
         self,
-        column_profiles,
+        profiles,
         coeffs,
-        sample_columns,
+        columns,
         kept,
         width_half_window=7,
     ):
         """Return robust bottom/top aperture widths from accepted samples."""
         bottom_widths = []
         top_widths = []
-        kept_columns = sample_columns[kept]
+        kept_columns = columns[kept]
         stride = max(1, kept_columns.size // 24)
         for j in kept_columns[::stride]:
             center = np.polynomial.polynomial.polyval(j, coeffs)
             bottom, top = self._width_at_column(
-                column_profiles[int(j)],
+                profiles[int(j)],
                 center,
                 width_half_window,
             )
@@ -1026,8 +1020,7 @@ class OrderTrace:
         """
         ncol = self.ccd["ncol"]
         coefficient_fields = self._trace_fields(which="coeffs")
-        sample_columns = self._sample_columns()
-        column_profiles = self._sample_column_profiles(chip, sample_columns)
+        columns, profiles = self._sample_profiles(chip)
 
         records = []
         rms_values = []
@@ -1048,22 +1041,20 @@ class OrderTrace:
                 continue
 
             cluster = self._clusters[chip][int(cluster_index)]
-            centers = self._trace_centers(
-                column_profiles, cluster, sample_columns, fiber
-            )
+            centers = self._trace_centers(profiles, cluster, columns, fiber)
             try:
                 coeffs, kept, rms = self._robust_polynomial_fit(
-                    sample_columns.astype(float), centers
+                    columns.astype(float), centers
                 )
                 bottom, top = self._estimate_widths(
-                    column_profiles, coeffs, sample_columns.astype(float), kept
+                    profiles, coeffs, columns.astype(float), kept
                 )
             except ValueError as error:
                 logger.warning("%s %s order %d: %s", chip, fiber, order, error)
                 records.append(record)
                 continue
 
-            kept_columns = sample_columns[kept]
+            kept_columns = columns[kept]
             coverage = (kept_columns.max() - kept_columns.min() + 1) / ncol
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
             record.update(
