@@ -1079,16 +1079,6 @@ class OrderTrace:
         self._fit_rms[chip] = np.asarray(rms_values, dtype=float)
         return table
 
-    def _master_filename(self):
-        """Return the output CSV name, inherited from the master flat's obs id.
-
-        The master flat is ``{obs_id}_master_flat_L1.fits`` (WMKO DRP-RUN-05),
-        so the order-trace product it builds is the sibling
-        ``{obs_id}_master_order_trace.csv``.
-        """
-        obs_id = os.path.basename(self.master_flat_filename).split("_master_flat")[0]
-        return f"{obs_id}_master_order_trace.csv"
-
     def save_master(self, path, *, overwrite=False):
         """Stage and atomically install the cached order-trace CSV at ``path``.
 
@@ -1227,8 +1217,13 @@ class OrderTrace:
 
         self._trace_table = pd.concat(tables, ignore_index=True)
         if output_dir is not None:
+            # The master flat is {obs_id}_master_flat_L1.fits (WMKO DRP-RUN-05),
+            # so the master order-trace is {obs_id}_master_order_trace.csv.
+            flat_name = os.path.basename(self.master_flat_filename)
+            obs_id = flat_name.split("_master_flat")[0]
             self.save_master(
-                os.path.join(output_dir, self._master_filename()), overwrite=True
+                os.path.join(output_dir, f"{obs_id}_master_order_trace.csv"),
+                overwrite=True,
             )
         self._track_info(chips)
         logger.info("%s", self._info)
