@@ -385,7 +385,12 @@ class TestConfiguration:
             "KP.20240405.00020.86_master_flat_L1.fits", {"poly_degree": -1}
         )
         with pytest.raises(ValueError, match="poly_degree must be non-negative"):
-            tracer._coefficient_fields()
+            tracer._trace_fields()
+
+    def test_rejects_an_unknown_field_selection(self):
+        tracer = OrderTrace("KP.20240405.00020.86_master_flat_L1.fits")
+        with pytest.raises(ValueError, match="which must be one of"):
+            tracer._trace_fields(which="labels")
 
 
 class TestMasterFlatLoading:

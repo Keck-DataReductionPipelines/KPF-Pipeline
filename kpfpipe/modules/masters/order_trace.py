@@ -31,16 +31,6 @@ convention -- a KPF scientist's "row" is this module's column. Throughout:
 - ``column`` (axis 1, ``ncol``, ``x``) is **dispersion**: a trace runs the
   length of it, and the fitted polynomial takes a column as its argument.
 
-So every trace centerline is ``row = f(column)``, and the ``X1``/``X2`` output
-fields are the first and last *pixel column* over which that fit was measured.
-"Column" always means a pixel column; the fields of an output table are called
-fields, never columns.
-
-A bare ``i`` is a single row index and a bare ``j`` a single column index, as
-in ``image[i, j]``. Plural ``rows``/``columns`` are arrays of such indices, and
-names like ``sample_columns`` or ``middle_column`` are column positions the
-polynomials are evaluated at. Reserving ``i``/``j`` for the scalars keeps a
-loop counter from ever being mistaken for the array it walks.
 """
 
 import logging
@@ -59,17 +49,6 @@ from kpfpipe.utils.config import ConfigHandler
 
 logger = logging.getLogger(__name__)
 
-_TRACE_LABEL_FIELDS = [
-    "Chip",
-    "Fiber",
-    "Order",
-]
-_TRACE_GEOMETRY_FIELDS = [
-    "BottomEdge",
-    "TopEdge",
-    "X1",
-    "X2",
-]
 
 _DEFAULTS = {
     **DEFAULTS,
@@ -139,21 +118,32 @@ class OrderTrace:
     # Private helpers - input
     # ------------------------------------------------------------------
 
-    def _coefficient_fields(self):
-        """Return output coefficient fields for the configured fit degree."""
+    def _trace_fields(self, which="all"):
+        """Return output fields of one trace table, in their written order.
+
+        ``which`` selects the whole schema ('all'), the aperture and column
+        bounds ('bounds'), or the polynomial coefficients ('coeffs'), whose
+        count follows the configured fit degree.
+        """
         degree = int(self.poly_degree)
         if degree < 0:
             raise ValueError(f"poly_degree must be non-negative, got {degree!r}")
-        return [f"Coeff{i}" for i in range(degree + 1)]
 
-    def _trace_fields(self):
-        """Return the full output field order for one trace table."""
-        return (
-            _TRACE_LABEL_FIELDS
-            + self._coefficient_fields()
-            + _TRACE_GEOMETRY_FIELDS
-            + ["Status"]
-        )
+        _LABELS = ["Chip", "Fiber", "Order"]
+        _BOUNDS = ["BottomEdge", "TopEdge", "X1", "X2"]
+        _COEFFS = [f"Coeff{i}" for i in range(degree + 1)]
+        _STATUS = ["Status"]
+
+        if which == "all":
+            return _LABELS + _COEFFS + _BOUNDS + _STATUS
+        if which == "bounds":
+            return _BOUNDS
+        elif which == "coeffs":
+            return _COEFFS
+        else:
+            raise ValueError(
+                f"which must be one of 'all', 'bounds', or 'coeffs'; got {which}"
+            )
 
     def _load_master_flat(self):
         """Load and validate the vNext L1 master-flat product.
@@ -949,7 +939,7 @@ class OrderTrace:
         measured where the two centerlines run closest, so the apertures stay
         disjoint across the whole detector, not only at mid-dispersion.
         """
-        coefficient_fields = self._coefficient_fields()
+        coefficient_fields = self._trace_fields(which="coeffs")
         columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
         centers = [
             np.polynomial.polynomial.polyval(
@@ -973,7 +963,7 @@ class OrderTrace:
     def _validate_trace_table(self, chip, table, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
-        coefficient_fields = self._coefficient_fields()
+        coefficient_fields = self._trace_fields(which="coeffs")
         if list(table.columns) != self._trace_fields():
             raise ValueError(f"{chip} output has incompatible fields")
 
@@ -992,9 +982,9 @@ class OrderTrace:
         if measured.empty:
             raise ValueError(f"{chip} produced no measured traces")
 
-        geometry = measured[coefficient_fields + _TRACE_GEOMETRY_FIELDS].to_numpy(
-            dtype=float
-        )
+        geometry = measured[
+            coefficient_fields + self._trace_fields(which="bounds")
+        ].to_numpy(dtype=float)
         if not np.isfinite(geometry).all():
             raise ValueError(f"{chip} output contains non-finite measured geometry")
         if not ((measured["BottomEdge"] > 0) & (measured["TopEdge"] > 0)).all():
@@ -1052,14 +1042,16 @@ class OrderTrace:
         successfully measured over, and is what separates 'full' from 'partial'.
         """
         ncol = self.ccd["ncol"]
-        coefficient_fields = self._coefficient_fields()
+        coefficient_fields = self._trace_fields(which="coeffs")
         sample_columns = self._sample_columns()
         column_profiles = self._sample_column_profiles(chip, sample_columns)
 
         records = []
         rms_values = []
         for (order, fiber), cluster_index in identities.items():
-            record = dict.fromkeys(coefficient_fields + _TRACE_GEOMETRY_FIELDS, np.nan)
+            record = dict.fromkeys(
+                coefficient_fields + self._trace_fields(which="bounds"), np.nan
+            )
             record.update(
                 {"Chip": chip, "Fiber": fiber, "Order": order, "Status": "missing"}
             )
