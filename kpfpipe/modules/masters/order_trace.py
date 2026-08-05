@@ -12,11 +12,11 @@ exists to determine. Trace identity is established before any polynomial is
 fitted: the CAL orderlet is both narrower and several times brighter than the
 SKY and science orderlets, which fixes the phase of the repeating
 SKY-SCI1-SCI2-SCI3-CAL group, and each CAL closes one echelle order. Because
-each order is anchored on its own CAL, a trace missing anywhere in the frame
-shifts no other trace's label.
+each order is anchored on its own CAL, an order truncated by a detector edge
+shifts no other trace's label; any other departure from the pattern is an error.
 
-Only the within-order orderlet spacing is treated as regular. The spacing
-*between* orders varies several-fold across a detector and is never assumed.
+No orderlet spacing is treated as regular. Spacing between orders varies
+several-fold across a detector, and identity rests on the fiber pattern alone.
 
 OrderTrace applies no calibrations of its own; it consumes the master flat as
 delivered by the Flat module.
@@ -406,7 +406,7 @@ class OrderTrace:
     # Private helpers - trace identity
     # ------------------------------------------------------------------
 
-    def _cluster_center_metrics(self, chip, clusters):
+    def _track_cluster_metadata(self, chip, clusters):
         """Measure row, mask thickness, and flux for each cluster at mid-detector.
 
         The row is the cluster's cross-dispersion position there, and is what
@@ -426,10 +426,10 @@ class OrderTrace:
                     ),
                 }
             )
-        metrics = pd.DataFrame(records)
-        return metrics.sort_values("row").reset_index(drop=True)
+        metadata = pd.DataFrame(records)
+        return metadata.sort_values("row").reset_index(drop=True)
 
-    def _flag_cal_clusters(self, metrics, max_thickness=6.0, min_flux_ratio=1.8):
+    def _flag_cal_clusters(self, metadata, max_thickness=6.0, min_flux_ratio=1.8):
         """Add the boolean ``is_cal`` column, flagging each order's CAL orderlet.
 
         A CAL is thinner and brighter than the orderlets around it. Brightness
@@ -437,122 +437,127 @@ class OrderTrace:
         candidate. Lamp flux varies by an order of magnitude across the
         detector, and bracketing cancels that gradient where a running median
         of the neighborhood does not.
+
+        One CAL closes each order, so the flagged count is checked against the
+        cluster count. An order lying partly off the detector contributes
+        orderlets without its CAL, or a CAL whose order is otherwise
+        incomplete, which moves the count by one either way.
         """
-        flux = metrics["flux"].to_numpy()
+        flux = metadata["flux"].to_numpy()
         flux_below = np.concatenate([flux[1:2], flux[:-1]])
         flux_above = np.concatenate([flux[1:], flux[-2:-1]])
-        metrics = metrics.copy()
-        metrics["is_cal"] = (metrics["thickness"].to_numpy() <= max_thickness) & (
+        metadata = metadata.copy()
+        metadata["is_cal"] = (metadata["thickness"].to_numpy() <= max_thickness) & (
             flux / ((flux_below + flux_above) / 2.0) > min_flux_ratio
         )
-        return metrics
 
-    def _orderlet_spacing(self, metrics):
-        """Return the median cross-dispersion step between orderlets of an order."""
-        row_steps = np.diff(metrics["row"].to_numpy())
-        if row_steps.size == 0:
-            raise ValueError("a single cluster cannot fix the orderlet spacing")
-
-        # A step that starts on a CAL crosses into the next order.
-        is_cal = metrics["is_cal"].to_numpy()
-        within_order = row_steps[~is_cal[:-1]]
-        if within_order.size:
-            return float(np.median(within_order))
-        return float(np.median(row_steps))
-
-    def _assign_fiber_positions(self, chip, metrics):
-        """Give every cluster its position in the fiber pattern and its order group.
-
-        Each CAL closes an order, so positions are counted downward from a CAL
-        rather than propagated across the whole frame. Only the within-order
-        orderlet spacing is used to decide whether the next cluster down is the
-        adjacent orderlet or whether one was missed; the spacing *between*
-        orders varies several-fold across the detector and is never assumed.
-        """
-        cluster_rows = metrics["row"].to_numpy()
-        cal_position = len(self.fibers) - 1
-        spacing = self._orderlet_spacing(metrics)
-        cal_indices = np.flatnonzero(metrics["is_cal"].to_numpy())
-        if cal_indices.size == 0:
+        cal_count = int(metadata["is_cal"].sum())
+        expected_cal_count = len(metadata) // len(self.fibers)
+        if abs(cal_count - expected_cal_count) > 1:
             raise ValueError(
-                f"{chip}: no CAL orderlet identified; cannot phase the fiber pattern"
+                f"{cal_count} CAL orderlets identified among {len(metadata)} "
+                f"clusters, expected {expected_cal_count}; cannot phase the "
+                "fiber pattern"
             )
+        return metadata
 
-        positions = np.full(len(metrics), -1)
-        groups = np.zeros(len(metrics), dtype=int)
-        for group, cal_index in enumerate(cal_indices):
-            positions[cal_index] = cal_position
-            groups[cal_index] = group
+    def _assign_fiber_identities(self, chip, metadata):
+        """Give every cluster its fiber name, phasing the pattern on the CALs.
 
-            position, row = cal_position, cluster_rows[cal_index]
-            previous_cal = cal_indices[group - 1] + 1 if group else 0
-            for index in range(cal_index - 1, previous_cal - 1, -1):
-                position -= max(1, round((row - cluster_rows[index]) / spacing))
-                if position < 0:
-                    break
-                positions[index] = position
-                groups[index] = group
-                row = cluster_rows[index]
-
-        # An order whose CAL lies off the detector has no anchor of its own, so
-        # its lowest surviving orderlet is taken as the SKY that opens it. The
-        # rest are counted up from there on the same spacing test as above, so
-        # an orderlet missing inside the group shifts none of the ones over it.
-        position = 0
-        for count, index in enumerate(range(cal_indices[-1] + 1, len(metrics))):
-            if count:
-                position += max(1, round((cluster_rows[index] - row) / spacing))
-            if position > cal_position:
-                break
-            positions[index] = position
-            groups[index] = cal_indices.size
-            row = cluster_rows[index]
-
-        for index in np.flatnonzero(positions < 0):
-            logger.warning(
-                "%s: discarding a cluster at row %.0f that fits no orderlet of the "
-                "fiber pattern",
-                chip,
-                cluster_rows[index],
-            )
-
-        metrics = metrics.copy()
-        metrics["Fiber"] = [self.fibers[max(p, 0)] for p in positions]
-        metrics["group"] = groups
-        return metrics[positions >= 0]
-
-    def _drop_edge_groups(self, chip, metrics, norder):
-        """Discard partial fiber groups beyond the expected number of orders.
-
-        An order lying mostly off the detector still shows its innermost
-        orderlets, which phase correctly but belong to no expected order. Such a
-        group is short, and always at one edge or the other.
+        Every order is four non-CAL orderlets closed by a CAL, so a cluster's
+        fiber is fixed by its rank relative to the CAL of its own order and no
+        orderlet spacing need be assumed. Only the orders at the detector edges
+        may depart from the pattern: the lowest can lose the orderlets that open
+        it and the highest those that close it, and either edge can clip one
+        orderlet of the order beyond, leaving it too faint to be recognized as
+        the CAL it usually is. That clipped orderlet is left unnamed, and so
+        drops out with the rest of the order it belongs to. Any other departure
+        means the clusters cannot be trusted to be one orderlet each.
         """
-        group_sizes = metrics["group"].value_counts().sort_index()
-        while group_sizes.size > norder:
-            edge_groups = [group_sizes.index[0], group_sizes.index[-1]]
-            discarded = min(edge_groups, key=lambda group: group_sizes[group])
-            logger.warning(
-                "%s: %d fiber groups detected but %d orders expected; discarding a "
-                "group of %d orderlets at row %.0f",
-                chip,
-                group_sizes.size,
-                norder,
-                group_sizes[discarded],
-                metrics.loc[metrics["group"] == discarded, "row"].mean(),
-            )
-            metrics = metrics[metrics["group"] != discarded]
-            group_sizes = group_sizes.drop(discarded)
-        return metrics
+        metadata = self._flag_cal_clusters(metadata)
+        cluster_rows = metadata["row"].to_numpy()
+        cal_position = len(self.fibers) - 1
+        cal_indices = np.flatnonzero(metadata["is_cal"].to_numpy())
 
-    @staticmethod
-    def _lowest_order_index(group_rows, norder):
-        """Best-guess count of whole orders falling below the lowest group."""
-        if group_rows.size >= norder:
-            return 0
-        group_spacing = np.median(np.diff(group_rows))
-        orders_below = int(max(0.0, group_rows[0]) // group_spacing)
-        return min(orders_below, norder - group_rows.size)
+        fiber_names = np.empty(len(metadata), dtype=object)
+        previous_cal = -1
+        for group, cal_index in enumerate(cal_indices):
+            orderlets_below = cal_index - previous_cal - 1
+            if orderlets_below != cal_position and (
+                group or orderlets_below > cal_position + 1
+            ):
+                raise ValueError(
+                    f"{chip}: {orderlets_below} orderlets below the CAL at row "
+                    f"{cluster_rows[cal_index]:.0f}, expected {cal_position}"
+                )
+            for offset in range(min(orderlets_below, cal_position) + 1):
+                fiber_names[cal_index - offset] = self.fibers[cal_position - offset]
+            previous_cal = cal_index
+
+        last_cal = cal_indices[-1]
+        orderlets_above = len(metadata) - last_cal - 1
+        if orderlets_above > cal_position + 1:
+            raise ValueError(
+                f"{chip}: {orderlets_above} orderlets above the CAL at row "
+                f"{cluster_rows[last_cal]:.0f}, expected at most {cal_position}"
+            )
+        for position in range(min(orderlets_above, cal_position)):
+            fiber_names[last_cal + 1 + position] = self.fibers[position]
+
+        metadata = metadata.copy()
+        metadata["Fiber"] = fiber_names
+        for row in metadata.loc[metadata["Fiber"].isna(), "row"]:
+            logger.warning(
+                "%s: discarding an orderlet at row %.0f, clipped by the detector "
+                "edge and belonging to no expected order",
+                chip,
+                row,
+            )
+        return metadata
+
+    def _assign_order_indexes(self, chip, metadata):
+        """Number the orders and return one row per expected trace of the CCD.
+
+        Orders are counted off the CALs, bottom to top, and given their 0-based
+        ``Index`` on the CCD. An order lying mostly off the detector shows a
+        single orderlet beyond the expected count, which is discarded -- the
+        shorter of the two edge orders goes, counting only the orderlets that
+        were named. A trace that was never detected leaves an empty row, so the
+        result always holds one row per fiber of every expected order.
+        """
+        norder = self.norder[chip]
+        is_cal = metadata["is_cal"].to_numpy()
+        index = np.cumsum(is_cal) - is_cal
+
+        named = metadata["Fiber"].notna().to_numpy()
+        order_sizes = np.bincount(index, weights=named).astype(int)
+        if order_sizes.size > norder:
+            discarded = 0 if order_sizes[0] <= order_sizes[-1] else index.max()
+            kept = index != discarded
+            logger.warning(
+                "%s: %d orders detected but %d expected; discarding %d orderlets at "
+                "row %.0f",
+                chip,
+                order_sizes.size,
+                norder,
+                order_sizes[discarded],
+                metadata["row"].to_numpy()[~kept].mean(),
+            )
+            metadata = metadata[kept]
+            index = index[kept] - (1 if discarded == 0 else 0)
+
+        traces = pd.MultiIndex.from_product(
+            [range(norder), self.fibers], names=["Index", "Fiber"]
+        ).to_frame(index=False)
+
+        detected = pd.DataFrame(
+            {
+                "Index": index,
+                "Fiber": metadata["Fiber"].to_numpy(),
+                "cluster": metadata["cluster"].to_numpy(),
+            }
+        )
+        return traces.merge(detected, on=["Index", "Fiber"], how="left")
 
     # ------------------------------------------------------------------
     # Private helpers - trace measurement
@@ -967,7 +972,13 @@ class OrderTrace:
     # ------------------------------------------------------------------
 
     def detect_traces(self, chip):
-        """Detect and curate every trace cluster on one CCD."""
+        """Detect and curate every trace cluster on one CCD.
+
+        The CCD carries one trace per fiber of every order. Only the outermost
+        order may lie partly off the detector, which leaves one trace missing or
+        one orderlet of the next order in view, so the count is allowed to be
+        off by one either way.
+        """
         illuminated = self._detect_illuminated_pixels(chip)
         clusters = self._detect_clusters(illuminated)
         logger.info("%s: %d illuminated clusters found", chip, len(clusters))
@@ -977,40 +988,20 @@ class OrderTrace:
         clusters = self._reject_malformed_clusters(clusters)
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
+        expected = len(self.fibers) * self.norder[chip]
+        if abs(len(clusters) - expected) > 1:
+            raise ValueError(
+                f"{chip}: {len(clusters)} traces detected, expected {expected}"
+            )
+
         return clusters
 
     def assign_trace_identities(self, chip, clusters):
         """Label every cluster with its fiber and order index."""
-        fibers = list(self.fibers)
-        norder = self.norder[chip]
-
-        metrics = self._cluster_center_metrics(chip, clusters)
-        metrics = self._flag_cal_clusters(metrics)
-        metrics = self._assign_fiber_positions(chip, metrics)
-        metrics = self._drop_edge_groups(chip, metrics, norder)
-
-        group_rows = metrics.groupby("group")["row"].mean().to_numpy()
-        lowest_order = self._lowest_order_index(group_rows, norder)
-        metrics["Order"] = metrics["group"] - metrics["group"].min() + lowest_order
-
-        beyond_last_order = metrics["Order"] >= norder
-        if beyond_last_order.any():
-            logger.warning(
-                "%s: discarding %d orderlets labelled beyond order %d",
-                chip,
-                int(beyond_last_order.sum()),
-                norder - 1,
-            )
-            metrics = metrics[~beyond_last_order]
-
-        cluster_by_trace = metrics.set_index(["Order", "Fiber"])["cluster"]
-        if cluster_by_trace.index.has_duplicates:
-            raise ValueError(f"{chip}: fiber phasing produced duplicate trace labels")
-
-        expected_traces = pd.MultiIndex.from_product(
-            [range(norder), fibers], names=["Order", "Fiber"]
-        )
-        return cluster_by_trace.reindex(expected_traces)
+        metadata = self._track_cluster_metadata(chip, clusters)
+        metadata = self._assign_fiber_identities(chip, metadata)
+        metadata = self._assign_order_indexes(chip, metadata)
+        return metadata
 
     def fit_trace_polynomials(
         self, chip, clusters, identities, full_coverage_fraction=0.9
@@ -1027,7 +1018,8 @@ class OrderTrace:
 
         records = []
         rms_values = []
-        for (order, fiber), cluster_index in identities.items():
+        for trace in identities.itertuples(index=False):
+            order, fiber, cluster_index = trace.Index, trace.Fiber, trace.cluster
             record = dict.fromkeys(
                 coefficient_fields + self._trace_fields(which="bounds"), np.nan
             )

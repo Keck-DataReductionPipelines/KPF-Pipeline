@@ -78,6 +78,11 @@ def _trace_labels(norder):
     return [(order, fiber) for order in range(norder) for fiber in _FIBERS]
 
 
+def _labels(identities):
+    """Return the (order index, fiber) label of every identified trace."""
+    return list(zip(identities["Index"], identities["Fiber"], strict=True))
+
+
 def _synthetic_flat(norder=3, ncol=400, drop=(), seed=0):
     """Return a synthetic master-flat image and its exact trace centers."""
     rng = np.random.default_rng(seed)
@@ -135,6 +140,23 @@ def _tracer(tmp_path, image, monkeypatch, norder=3, **config):
     )
 
 
+def _fiber_metadata(rows, cal_indices):
+    """Return the cluster metadata that fiber phasing reads, bottom to top.
+
+    Clusters named as CAL are given the thin, bright profile that identifies
+    one; the rest are wide and dim.
+    """
+    is_cal = [index in cal_indices for index in range(len(rows))]
+    return pd.DataFrame(
+        {
+            "cluster": range(len(rows)),
+            "row": [float(row) for row in rows],
+            "thickness": [2.0 if cal else 8.0 for cal in is_cal],
+            "flux": [1000.0 if cal else 100.0 for cal in is_cal],
+        }
+    )
+
+
 def _curated_clusters(tracer):
     """Run detection and curation exactly as the module's own chain does."""
     clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
@@ -188,6 +210,19 @@ class TestDetection:
             assert cluster["col_indices"].min() == 0
             assert cluster["col_indices"].max() == image.shape[1] - 1
 
+    def test_tolerates_one_trace_off_the_detector(self, tmp_path, monkeypatch):
+        image, truth = _synthetic_flat(drop=[(2, "CAL")])
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
+        assert len(tracer.detect_traces("GREEN")) == len(truth) - 1
+
+    def test_reports_an_unexpected_trace_count(self, tmp_path, monkeypatch):
+        image, _ = _synthetic_flat(norder=3)
+        tracer = _tracer(tmp_path, image, monkeypatch, norder=2)
+
+        with pytest.raises(ValueError, match="15 traces detected, expected 10"):
+            tracer.detect_traces("GREEN")
+
 
 class TestCalIdentification:
     def test_flags_every_cal_orderlet(self, tmp_path, monkeypatch):
@@ -195,8 +230,8 @@ class TestCalIdentification:
         tracer = _tracer(tmp_path, image, monkeypatch, norder=4)
         clusters = _curated_clusters(tracer)
 
-        metrics = tracer._cluster_center_metrics("GREEN", clusters)
-        flagged = np.flatnonzero(tracer._flag_cal_clusters(metrics)["is_cal"])
+        metadata = tracer._track_cluster_metadata("GREEN", clusters)
+        flagged = np.flatnonzero(tracer._flag_cal_clusters(metadata)["is_cal"])
 
         assert flagged.size == 4
         assert np.all(np.diff(flagged) == len(_FIBERS))
@@ -208,10 +243,10 @@ class TestCalIdentification:
         tracer = _tracer(tmp_path, image, monkeypatch)
         clusters = _curated_clusters(tracer)
 
-        metrics = tracer._cluster_center_metrics("GREEN", clusters)
-        metrics = tracer._flag_cal_clusters(metrics)
-        cal = metrics[metrics["is_cal"]]
-        other = metrics[~metrics["is_cal"]]
+        metadata = tracer._track_cluster_metadata("GREEN", clusters)
+        metadata = tracer._flag_cal_clusters(metadata)
+        cal = metadata[metadata["is_cal"]]
+        other = metadata[~metadata["is_cal"]]
 
         assert cal["thickness"].max() < other["thickness"].min()
         assert cal["flux"].min() > other["flux"].max()
@@ -219,11 +254,26 @@ class TestCalIdentification:
     def test_reports_a_flat_with_no_identifiable_cal(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
-        metrics = tracer._cluster_center_metrics("GREEN", _curated_clusters(tracer))
+        metadata = tracer._track_cluster_metadata("GREEN", _curated_clusters(tracer))
 
-        metrics["is_cal"] = np.zeros(len(metrics), dtype=bool)
-        with pytest.raises(ValueError, match="no CAL orderlet identified"):
-            tracer._assign_fiber_positions("GREEN", metrics)
+        # A flat whose orderlets are all equally bright flags no CAL at all.
+        metadata["flux"] = 100.0
+        with pytest.raises(ValueError, match="cannot phase the fiber pattern"):
+            tracer._flag_cal_clusters(metadata)
+
+    def test_reports_too_few_cal_orderlets_for_the_cluster_count(
+        self, tmp_path, monkeypatch
+    ):
+        image, _ = _synthetic_flat(norder=4)
+        tracer = _tracer(tmp_path, image, monkeypatch, norder=4)
+        metadata = tracer._track_cluster_metadata("GREEN", _curated_clusters(tracer))
+
+        # Two of the four CALs are dimmed to their neighbours' brightness, so
+        # only half the orders end up anchored.
+        cal_rows = metadata.index[metadata["thickness"] < 6.0][:2]
+        metadata.loc[cal_rows, "flux"] = metadata["flux"].min()
+        with pytest.raises(ValueError, match="2 CAL orderlets identified among 20"):
+            tracer._flag_cal_clusters(metadata)
 
 
 # ---------------------------------------------------------------------------
@@ -239,13 +289,13 @@ class TestTraceIdentity:
         clusters = tracer.detect_traces("GREEN")
         identities = tracer.assign_trace_identities("GREEN", clusters)
 
-        assert list(identities.index) == _trace_labels(3)
-        assert identities.notna().all()
-        for (order, fiber), index in identities.items():
-            cluster = clusters[int(index)]
+        assert _labels(identities) == _trace_labels(3)
+        assert identities["cluster"].notna().all()
+        for trace in identities.itertuples(index=False):
+            cluster = clusters[int(trace.cluster)]
             middle = cluster["col_indices"] == image.shape[1] // 2
             assert cluster["row_indices"][middle].mean() == pytest.approx(
-                truth[(order, fiber)][image.shape[1] // 2], abs=1.0
+                truth[(trace.Index, trace.Fiber)][image.shape[1] // 2], abs=1.0
             )
 
     def test_labels_are_unshifted_when_edge_traces_are_absent(
@@ -255,51 +305,103 @@ class TestTraceIdentity:
         image, truth = _synthetic_flat(drop=dropped)
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        clusters = tracer.detect_traces("GREEN")
+        # Two absent traces are more than detect_traces tolerates, so identity
+        # is exercised on the curated clusters directly.
+        clusters = _curated_clusters(tracer)
         identities = tracer.assign_trace_identities("GREEN", clusters)
 
-        assert list(identities.index) == _trace_labels(3)
-        assert set(identities[identities.isna()].index) == set(dropped)
-        for (order, fiber), index in identities[identities.notna()].items():
-            cluster = clusters[int(index)]
+        assert _labels(identities) == _trace_labels(3)
+        assert _labels(identities[identities["cluster"].isna()]) == dropped
+        for trace in identities.dropna().itertuples(index=False):
+            cluster = clusters[int(trace.cluster)]
             middle = cluster["col_indices"] == image.shape[1] // 2
             assert cluster["row_indices"][middle].mean() == pytest.approx(
-                truth[(order, fiber)][image.shape[1] // 2], abs=1.0
+                truth[(trace.Index, trace.Fiber)][image.shape[1] // 2], abs=1.0
             )
 
-    def test_phases_an_off_top_order_by_spacing(self, master_path):
-        # One CAL-anchored order, then a partial order whose CAL lies off the
-        # top of the detector and whose SCI2 was never detected. Counting the
-        # trailing group by rank would label the surviving SCI3 as SCI2.
-        rows = [100.0, 119.0, 138.0, 157.0, 176.0, 191.0, 210.0, 248.0]
-        metrics = pd.DataFrame(
-            {
-                "cluster": range(len(rows)),
-                "row": rows,
-                "is_cal": [False] * 4 + [True] + [False] * 3,
-            }
-        )
+    def test_phases_a_partial_order_at_the_bottom(self, master_path):
+        # An order opening below the detector shows only its upper orderlets:
+        # one trace fewer than expected, which detect_traces admits.
+        rows = [119, 138, 157, 176, 191, 210, 229, 248, 267]
+        metadata = _fiber_metadata(rows, cal_indices={3, 8})
         tracer = OrderTrace(master_path)
 
-        phased = tracer._assign_fiber_positions("GREEN", metrics)
+        phased = tracer._assign_fiber_identities("GREEN", metadata)
 
-        assert list(phased["Fiber"]) == _FIBERS + ["SKY", "SCI1", "SCI3"]
-        assert list(phased["group"]) == [0] * 5 + [1] * 3
+        assert list(phased["Fiber"]) == _FIBERS[1:] + _FIBERS
 
-    def test_discards_a_group_beyond_the_expected_order_count(
-        self, tmp_path, monkeypatch, caplog
-    ):
-        image, _ = _synthetic_flat(norder=3)
-        tracer = _tracer(tmp_path, image, monkeypatch, norder=2)
+    def test_phases_a_partial_order_at_the_top(self, master_path):
+        # Two complete orders and the SKY of a third whose other orderlets lie
+        # off the top of the detector: one trace more than expected.
+        rows = [100, 119, 138, 157, 176, 191, 210, 229, 248, 267, 282]
+        metadata = _fiber_metadata(rows, cal_indices={4, 9})
+        tracer = OrderTrace(master_path)
+
+        phased = tracer._assign_fiber_identities("GREEN", metadata)
+
+        assert list(phased["Fiber"]) == _FIBERS * 2 + ["SKY"]
+
+    def test_reports_an_order_short_of_the_fiber_pattern(self, master_path):
+        # An orderlet missing between two CALs leaves an order of four, which
+        # cannot be told apart from an order whose fibers are mislabelled.
+        rows = [100, 119, 138, 157, 176, 191, 210, 229]
+        metadata = _fiber_metadata(rows, cal_indices={4, 7})
+        tracer = OrderTrace(master_path)
+
+        with pytest.raises(ValueError, match="2 orderlets below the CAL at row 229"):
+            tracer._assign_fiber_identities("GREEN", metadata)
+
+    def test_reports_an_order_beyond_the_fiber_pattern(self, master_path):
+        # Seven clusters below the only CAL: more than a clipped edge explains.
+        rows = [62, 81, 100, 119, 138, 157, 176]
+        metadata = _fiber_metadata(rows, cal_indices={6})
+        tracer = OrderTrace(master_path)
+
+        with pytest.raises(ValueError, match="6 orderlets below the CAL at row 176"):
+            tracer._assign_fiber_identities("GREEN", metadata)
+
+    def test_discards_an_orderlet_clipped_by_the_bottom_edge(self, master_path, caplog):
+        # The order below opens off the detector, leaving only its CAL in view,
+        # too clipped to be recognized as one.
+        rows = [8, 19, 40, 59, 79, 96]
+        metadata = _fiber_metadata(rows, cal_indices={5})
+        tracer = OrderTrace(master_path)
 
         with caplog.at_level("WARNING"):
-            identities = tracer.assign_trace_identities(
-                "GREEN", tracer.detect_traces("GREEN")
-            )
+            phased = tracer._assign_fiber_identities("GREEN", metadata)
 
-        assert list(identities.index) == _trace_labels(2)
-        assert identities.notna().all()
-        assert "3 fiber groups detected but 2 orders expected" in caplog.text
+        assert list(phased["Fiber"].fillna("clipped")) == ["clipped"] + _FIBERS
+        assert "discarding an orderlet at row 8" in caplog.text
+
+    def test_discards_an_orderlet_clipped_by_the_top_edge(self, master_path, caplog):
+        # The mirror case: the order above closes off the detector, leaving its
+        # CAL clipped at the top.
+        rows = [100, 119, 138, 157, 176, 191, 210, 229, 248, 262]
+        metadata = _fiber_metadata(rows, cal_indices={4})
+        tracer = OrderTrace(master_path)
+
+        with caplog.at_level("WARNING"):
+            phased = tracer._assign_fiber_identities("GREEN", metadata)
+
+        assert list(phased["Fiber"].fillna("clipped")) == (
+            _FIBERS + _FIBERS[:-1] + ["clipped"]
+        )
+        assert "discarding an orderlet at row 262" in caplog.text
+
+    def test_discards_a_lone_orderlet_beyond_the_expected_orders(
+        self, master_path, caplog
+    ):
+        rows = [100, 119, 138, 157, 176, 191, 210, 229, 248, 267, 282]
+        metadata = _fiber_metadata(rows, cal_indices={4, 9})
+        tracer = OrderTrace(master_path, {"norder": {"GREEN": 2}})
+        metadata = tracer._assign_fiber_identities("GREEN", metadata)
+
+        with caplog.at_level("WARNING"):
+            identities = tracer._assign_order_indexes("GREEN", metadata)
+
+        assert _labels(identities) == _trace_labels(2)
+        assert identities["cluster"].notna().all()
+        assert "3 orders detected but 2 expected" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +449,7 @@ class TestMakeMasterOrderTrace:
         assert "(not written)" in tracer._info
 
     def test_missing_trace_keeps_its_row(self, tmp_path, monkeypatch):
-        image, truth = _synthetic_flat(drop=[(1, "SCI2")])
+        image, truth = _synthetic_flat(drop=[(0, "SKY")])
         tracer = _tracer(tmp_path, image, monkeypatch)
 
         table = tracer.make_master(output_dir=tmp_path / "out")
@@ -355,7 +457,7 @@ class TestMakeMasterOrderTrace:
 
         assert len(table) == len(truth)
         labels = list(zip(missing["Order"], missing["Fiber"], strict=True))
-        assert labels == [(1, "SCI2")]
+        assert labels == [(0, "SKY")]
         assert missing[["Coeff0", "BottomEdge", "X1"]].isna().all(axis=None)
         assert (table[table["Status"] != "missing"]["Status"] == "full").all()
 
