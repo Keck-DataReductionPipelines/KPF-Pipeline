@@ -6,19 +6,20 @@ midpoint times and stores them on the L2 as BJD_TDB, BARYCORR_KMS, and
 BARYCORR_Z (per spectral order), plus per-CCD scalar summaries in the
 barycentric extension headers. Wavelength arrays are not modified.
 
+Target astrometry is read from the PRIMARY C*# catalog cards, not queried --
+AstroQuery is the pipeline's sole external-catalog client.
+
 Follows the barycentric-correction approach of Wright & Eastman (2014,
 barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
 """
 
 import logging
-import re
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import EarthLocation, SkyCoord
+from astropy.coordinates import Angle, EarthLocation
 from astropy.stats import mad_std
 from astropy.time import Time
-from astroquery.gaia import Gaia
 from barycorrpy import get_BC_vel, utc_tdb
 from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter, median_filter
@@ -31,11 +32,12 @@ from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
-    "use_gaia_astrometry": True,
-    "use_wmko_fallback": False,
-}
+_DEFAULTS = {**DEFAULTS}
+
+# The position block the correction cannot proceed without; an absent card means
+# AstroQuery never ran. The trailing 3 (also CPLX3/CSRC3/CRV3) selects the SCI2
+# trace: the C*# cards are identical across science fibers (SCI1-3 = traces 2-4).
+_REQUIRED_CARDS = ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3")
 
 
 class BarycentricCorrection:
@@ -44,19 +46,20 @@ class BarycentricCorrection:
 
     Derives the flux-weighted midpoint time per expmeter channel (EXPMETER_SCI),
     averages it over the channels within each spectral order's wavelength range
-    (SCI2_WAVE), resolves the target's astrometry (Gaia DR3, with a WMKO header
-    fallback), and calls barycorrpy to populate BJD_TDB / BARYCORR_KMS /
+    (SCI2_WAVE), reads the target's astrometry from the PRIMARY C*# catalog
+    keywords, and calls barycorrpy to populate BJD_TDB / BARYCORR_KMS /
     BARYCORR_Z. WAVE arrays are not modified.
 
     Parameters
     ----------
     l2_obj : KPF2
         Extracted L2 frame. Must have EXPMETER_SCI populated and SCI2_WAVE
-        populated by WavelengthCalibration. INSTRUMENT_HEADER (the preserved
-        L1 PRIMARY) must contain GAIAID, and DATE-BEG/DATE-END when extrapolating.
+        populated by WavelengthCalibration. PRIMARY must carry the SCI2 catalog
+        cards (CRA3/CDEC3/CPMR3/CPMD3/CEPCH3) unless perform() is given a
+        ``skycoord`` override. INSTRUMENT_HEADER (the preserved L1 PRIMARY) must
+        contain DATE-BEG/DATE-END when extrapolating.
     config : None | dict | ConfigHandler
-        Module configuration. Recognized keys: use_gaia_astrometry,
-        use_wmko_fallback.
+        Module configuration. Recognizes no module-specific keys.
     """
 
     # WMKO site coordinates
@@ -88,10 +91,8 @@ class BarycentricCorrection:
         self._ccd_kms = None
         self._ccd_z = None
         self._exposure_meter = None  # (toggle_key, w_em, t_em)
-        self._skycoord = None  # cached Gaia DR3 SkyCoord
-        self._astrometry_source = (
-            None  # 'Gaia DR3' | 'WMKO header', set by _get_skycoord
-        )
+        self._astrometry = None  # cached barycorrpy kwargs, set by _get_astrometry
+        self._astrometry_source = None  # CSRC3 ('gaia'|'simbad'|'wmko'), same setter
 
     # ------------------------------------------------------------------
     # Private helpers -- exposure-meter handling
@@ -247,20 +248,20 @@ class BarycentricCorrection:
         return t_ext, f_ext
 
     def _compute_per_channel_flux_weighted_midpoint_time(
-        self, interpolate=True, extrapolate=True, fix_expmeter_outliers=True
+        self, interpolate=True, extrapolate=True, fix_outliers=True
     ):
         """
         Flux-weighted midpoint time per expmeter channel -> (w_em [Å], t_em [JD-UTC]).
 
         Optionally fills gaps between readings (``interpolate``), before/after the
         shutter window (``extrapolate``, using DATE-BEG/DATE-END), and replaces
-        outlier readings (``fix_expmeter_outliers``) before collapsing the time
-        axis to a flux-weighted mean per channel.
+        outlier readings (``fix_outliers``) before collapsing the time axis to a
+        flux-weighted mean per channel.
         """
         t_beg, t_mid, t_end = self._get_timestamps()
         w_em, f = self._get_normalized_flux()
 
-        if fix_expmeter_outliers:
+        if fix_outliers:
             f = self._fix_expmeter_outliers(f)
 
         # Cache boundary readings; f[0] and f[-1] get clobbered by later vstacks.
@@ -310,119 +311,92 @@ class BarycentricCorrection:
     # Private helpers -- barycorr handoffs
     # ------------------------------------------------------------------
 
-    def _gaia_astrometry(self):
+    @staticmethod
+    def _astrometry_from_skycoord(skycoord):
         """
-        Query Gaia DR3 for the target's ICRS astrometry (cached SkyCoord).
+        Convert a caller-supplied SkyCoord into barycorrpy's argument set.
 
-        source_id comes from GAIAID in INSTRUMENT_HEADER. Returns a SkyCoord
-        with proper motion and distance (from parallax) at the Gaia ref_epoch;
-        the network query runs once and is reused (one target per frame).
+        Backs ``perform(skycoord=...)``. Unvalidated -- the SkyCoord is rotated to
+        ICRS and read; astropy raises if it lacks proper motion, distance, or obstime.
         """
-        if self._skycoord is None:
-            gaia_id_raw = self.l2_obj.headers["INSTRUMENT_HEADER"]["GAIAID"]
-            gaia_id = re.split(r"\s+", str(gaia_id_raw).strip())[-1]
-            if not gaia_id.isdigit():
-                raise ValueError(f"Gaia source_id must be all digits; got {gaia_id!r}")
-            query = f"""
-            SELECT ra, dec, pmra, pmdec, parallax, ref_epoch
-            FROM gaiadr3.gaia_source
-            WHERE source_id = {gaia_id}
-            """
-            logger.info("querying Gaia DR3 for source_id %s", gaia_id)
-            job = Gaia.launch_job(query)
-            result = job.get_results()[0]
+        icrs = skycoord.icrs
+        return {
+            "ra": icrs.ra.to_value(u.deg),
+            "dec": icrs.dec.to_value(u.deg),
+            "pmra": icrs.pm_ra_cosdec.to_value(u.mas / u.yr),
+            "pmdec": icrs.pm_dec.to_value(u.mas / u.yr),
+            "px": 1e3 / icrs.distance.to_value(u.pc),
+            "epoch": icrs.obstime.jd,
+        }
 
-            self._skycoord = SkyCoord(
-                ra=result["ra"] * u.deg,
-                dec=result["dec"] * u.deg,
-                pm_ra_cosdec=result["pmra"] * u.mas / u.yr,
-                pm_dec=result["pmdec"] * u.mas / u.yr,
-                distance=(1e3 / result["parallax"]) * u.pc,
-                obstime=Time(result["ref_epoch"], format="jyear"),
-                frame="icrs",
-            )
-        return self._skycoord
-
-    def _wmko_astrometry(self):
+    def _get_astrometry(self):
         """
-        Build a SkyCoord from WMKO/DCS astrometry in INSTRUMENT_HEADER (fallback).
+        Read the target astrometry off the PRIMARY C*# cards (cached).
 
-        Unit gotchas: TARGPMRA is time-seconds/yr (-> mas/yr via x15 cos(dec));
-        TARGPLAX is mas (-> distance via 1e3/plax), matching the Gaia path.
-        """
-        inst = self.l2_obj.headers["INSTRUMENT_HEADER"]
-        pos = SkyCoord(inst["TARGRA"], inst["TARGDEC"], unit=(u.hourangle, u.deg))
-        pm_ra_cosdec = float(inst["TARGPMRA"]) * 15.0 * np.cos(pos.dec.rad) * 1e3
-        return SkyCoord(
-            ra=pos.ra,
-            dec=pos.dec,
-            pm_ra_cosdec=pm_ra_cosdec * u.mas / u.yr,
-            pm_dec=float(inst["TARGPMDC"]) * 1e3 * u.mas / u.yr,
-            distance=(1e3 / float(inst["TARGPLAX"])) * u.pc,
-            frame=str(inst["TARGFRAM"]).lower(),
-            obstime=Time(float(inst["TARGEPOC"]), format="jyear"),
-        )
+        The cards carry AstroQuery's merged canonical record, so this is only a unit
+        conversion into barycorrpy's argument set -- ra/dec [deg], pmra/pmdec [mas/yr],
+        px [mas], epoch [JD]. The frame is ICRS: not persisted as a card, but fixed by
+        AstroQuery, which rotates every source into ICRS before writing.
 
-    def _get_skycoord(self):
-        """
-        Resolve target astrometry: Gaia DR3 first, then WMKO header fallback.
+        AstroQuery persists catalog values faithfully, unphysical ones included, so the
+        physical sanitation belongs here: a missing or non-positive parallax (routine
+        for faint Gaia sources) becomes ``px=0``, barycorrpy's own no-parallax value.
 
-        Each source is tried only if its config toggle is set. If neither
-        yields a SkyCoord, raises and surfaces the captured Gaia error so an
-        our-side vs Gaia-server-side failure stays distinguishable.
+        Raises
+        ------
+        ValueError
+            If any of ``_REQUIRED_CARDS`` is absent or blank -- without a position
+            there is nothing to correct.
         """
-        gaia_error = None
-        if self.use_gaia_astrometry:
-            try:
-                skycoord = self._gaia_astrometry()
-                self._astrometry_source = "Gaia DR3"
-                return skycoord
-            except Exception as e:
-                gaia_error = e
-        if self.use_wmko_fallback:
-            if gaia_error is not None:
-                logger.warning(
-                    "Gaia astrometry unavailable (%s: %s); "
-                    "using WMKO header astrometry",
-                    type(gaia_error).__name__,
-                    gaia_error,
+        if self._astrometry is None:
+            primary = self.l2_obj.headers["PRIMARY"]
+            cards = {name: primary.get(name) for name in _REQUIRED_CARDS}
+            missing = [
+                name
+                for name, value in cards.items()
+                if value is None or str(value).strip() == ""
+            ]
+            if missing:
+                raise ValueError(
+                    f"no target astrometry on PRIMARY: {', '.join(missing)} "
+                    f"missing or blank; run AstroQuery on the L0 so the canonical "
+                    f"catalog record reaches the C*# cards"
                 )
-            self._astrometry_source = "WMKO header"
-            return self._wmko_astrometry()
-        raise ValueError(
-            "no target astrometry: Gaia "
-            + (
-                f"failed ({type(gaia_error).__name__}: {gaia_error})"
-                if gaia_error
-                else "disabled"
-            )
-            + ", WMKO fallback disabled"
-        )
+
+            # QC flags an unphysical parallax (CATLOGOK) but does not repair it.
+            parallax = primary.get("CPLX3")
+            try:
+                px = float(parallax)
+            except (TypeError, ValueError):
+                px = np.nan
+            if not np.isfinite(px) or px <= 0:
+                logger.warning(
+                    "CPLX3=%s is missing or unusable; using px=0 (no parallax)",
+                    parallax,
+                )
+                px = 0.0
+
+            self._astrometry = {
+                "ra": Angle(cards["CRA3"], unit=u.hourangle).deg,
+                "dec": Angle(cards["CDEC3"], unit=u.deg).deg,
+                # C*# proper motion is arcsec/yr (RA incl. cos Dec); barycorrpy mas/yr.
+                "pmra": float(cards["CPMR3"]) * 1e3,
+                "pmdec": float(cards["CPMD3"]) * 1e3,
+                "px": px,
+                "epoch": Time(float(cards["CEPCH3"]), format="jyear").jd,
+            }
+            self._astrometry_source = primary.get("CSRC3") or "unknown"
+        return self._astrometry
 
     @staticmethod
-    def _compute_barycorr(skycoord, obs_times, location, rv_mps=0.0):
+    def _compute_barycorr(astrometry, obs_times, location, rv_mps=0.0):
         """
         barycorrpy handoff -> (bc_vel_mps, bjd_tdb), each shape (n,).
 
-        ``rv_mps`` is the target's systemic RV so the BJD_TDB light-travel
-        correction accounts for stellar motion.
+        ``astrometry`` is the ICRS argument set from ``_get_astrometry``. ``rv_mps``
+        is the target's systemic RV so the BJD_TDB light-travel correction accounts
+        for stellar motion.
         """
-        icrs = skycoord.icrs
-        ra = icrs.ra.to(u.deg).value
-        dec = icrs.dec.to(u.deg).value
-        pmra = (
-            icrs.pm_ra_cosdec.to(u.mas / u.yr).value
-            if icrs.pm_ra_cosdec is not None
-            else 0.0
-        )
-        pmdec = icrs.pm_dec.to(u.mas / u.yr).value if icrs.pm_dec is not None else 0.0
-        px = (
-            (1 / icrs.distance.to(u.pc).value * 1e3)
-            if icrs.distance is not None
-            else 0.0
-        )
-        epoch = icrs.obstime.jd
-
         lat = location.lat.to(u.deg).value
         lon = location.lon.to(u.deg).value
         alt = location.height.to(u.m).value
@@ -431,29 +405,19 @@ class BarycentricCorrection:
 
         bc_vel, *_ = get_BC_vel(
             JDUTC=JDUTC,
-            ra=ra,
-            dec=dec,
             lat=lat,
             longi=lon,
             alt=alt,
-            pmra=pmra,
-            pmdec=pmdec,
-            px=px,
-            epoch=epoch,
             rv=rv_mps,
+            **astrometry,
         )
         bjd_tdb, *_ = utc_tdb.JDUTC_to_BJDTDB(
             JDUTC=JDUTC,
-            ra=ra,
-            dec=dec,
             lat=lat,
             longi=lon,
             alt=alt,
-            pmra=pmra,
-            pmdec=pmdec,
-            px=px,
-            epoch=epoch,
             rv=rv_mps,
+            **astrometry,
         )
         return np.asarray(bc_vel), np.asarray(bjd_tdb)
 
@@ -466,7 +430,7 @@ class BarycentricCorrection:
         output="orders",
         interpolate=True,
         extrapolate=True,
-        fix_expmeter_outliers=True,
+        fix_outliers=True,
         weight_percentile=90,
     ):
         """
@@ -491,7 +455,7 @@ class BarycentricCorrection:
             If True, estimate flux during gaps before the first or after the
             last expmeter reading, using DATE-BEG / DATE-END from
             INSTRUMENT_HEADER.
-        fix_expmeter_outliers : bool, optional
+        fix_outliers : bool, optional
             If True (default), detect and replace outlier expmeter readings.
         weight_percentile : float, optional
             Per-order SCI2 brightness percentile used to weight orders for the
@@ -521,12 +485,12 @@ class BarycentricCorrection:
 
         # Reuse the cached integration when the toggles match (perform() asks
         # for 'orders' then 'ccds').
-        key = (interpolate, extrapolate, fix_expmeter_outliers)
+        key = (interpolate, extrapolate, fix_outliers)
         if self._exposure_meter is None or self._exposure_meter[0] != key:
             w_em, t_em = self._compute_per_channel_flux_weighted_midpoint_time(
                 interpolate=interpolate,
                 extrapolate=extrapolate,
-                fix_expmeter_outliers=fix_expmeter_outliers,
+                fix_outliers=fix_outliers,
             )
             self._exposure_meter = (key, w_em, t_em)
         _, w_em, t_em = self._exposure_meter
@@ -597,16 +561,17 @@ class BarycentricCorrection:
     def compute_barycentric_correction(
         self,
         output="orders",
-        interpolate=True,
-        extrapolate=True,
+        interpolate_expmeter_flux=True,
+        extrapolate_expmeter_flux=True,
         fix_expmeter_outliers=True,
+        skycoord=False,
     ):
         """
         Compute the barycentric correction at the flux-weighted photon-midpoint
         time for each output bin.
 
         Mirrors compute_flux_weighted_midpoint_times: ``output`` selects the
-        binning. The per-channel integration and the Gaia astrometry are both
+        binning. The per-channel integration and the resolved astrometry are both
         cached, so calling this for 'orders' then 'ccds' does the heavy work
         once.
 
@@ -614,8 +579,12 @@ class BarycentricCorrection:
         ----------
         output : {'expmeter', 'orders', 'ccds'}
             Binning level; forwarded to compute_flux_weighted_midpoint_times().
-        interpolate, extrapolate, fix_expmeter_outliers : bool, optional
-            Forwarded to compute_flux_weighted_midpoint_times().
+        interpolate_expmeter_flux, extrapolate_expmeter_flux, fix_expmeter_outliers
+                : bool, optional
+            Forwarded to compute_flux_weighted_midpoint_times() as its
+            ``interpolate`` / ``extrapolate`` / ``fix_outliers``.
+        skycoord : False | SkyCoord, optional
+            Use this astrometry instead of the PRIMARY C*# cards. See perform().
 
         Returns
         -------
@@ -628,18 +597,34 @@ class BarycentricCorrection:
         """
         _, t_fwm = self.compute_flux_weighted_midpoint_times(
             output=output,
-            interpolate=interpolate,
-            extrapolate=extrapolate,
-            fix_expmeter_outliers=fix_expmeter_outliers,
+            interpolate=interpolate_expmeter_flux,
+            extrapolate=extrapolate_expmeter_flux,
+            fix_outliers=fix_expmeter_outliers,
         )
-        skycoord = self._get_skycoord()
+        if skycoord:
+            # Not cached: a later call without skycoord still reads the header.
+            astrometry = self._astrometry_from_skycoord(skycoord)
+            self._astrometry_source = "user SkyCoord"
+        else:
+            astrometry = self._get_astrometry()
 
-        # TARGRADV is in km/s; barycorrpy expects rv in m/s. Missing → 0.
-        inst = self.l2_obj.headers["INSTRUMENT_HEADER"]
-        rv_mps = float(inst.get("TARGRADV", 0.0) or 0.0) * 1000.0
+        # CRV3 (SCI2 trace) is in km/s; barycorrpy expects rv in m/s.
+        primary = self.l2_obj.headers["PRIMARY"]
+        systemic_rv = primary.get("CRV3")
+        try:
+            rv_kms = float(systemic_rv)
+        except (TypeError, ValueError):
+            rv_kms = np.nan
+        if not np.isfinite(rv_kms):
+            logger.warning(
+                "CRV3=%s is missing or unusable; using rv=0 (no systemic RV)",
+                systemic_rv,
+            )
+            rv_kms = 0.0
+        rv_mps = rv_kms * 1000.0
 
         bc_vel_mps, bjd_tdb = self._compute_barycorr(
-            skycoord,
+            astrometry,
             t_fwm,
             self.KECK_LOCATION,
             rv_mps=rv_mps,
@@ -680,9 +665,8 @@ class BarycentricCorrection:
     def _set_headers(self, l2_obj):
         """Write the per-CCD summary keywords.
 
-        Reads self._ccd_bjd/_ccd_kms/_ccd_z and self._astrometry_source
-        (populated by perform()); set_keyword routes each to its registry home.
-        CCD1=GREEN, CCD2=RED.
+        Reads self._ccd_bjd/_ccd_kms/_ccd_z (populated by perform()); set_keyword
+        routes each to its registry home. CCD1=GREEN, CCD2=RED.
         """
         l2_obj.set_keyword("CCD1BJD", float(self._ccd_bjd[0]))
         l2_obj.set_keyword("CCD1BKMS", float(self._ccd_kms[0]))
@@ -690,7 +674,6 @@ class BarycentricCorrection:
         l2_obj.set_keyword("CCD2BJD", float(self._ccd_bjd[1]))
         l2_obj.set_keyword("CCD2BKMS", float(self._ccd_kms[1]))
         l2_obj.set_keyword("CCD2BZ", float(self._ccd_z[1]))
-        l2_obj.set_keyword("ASTRSRC", self._astrometry_source)
         # CTYPE1 names the single (spectral-order) axis of these 1-D per-order
         # arrays -- registered content, multi-homed across the three barycorr
         # extensions, so stamped directly (set_keyword can't route a multi-home
@@ -705,40 +688,39 @@ class BarycentricCorrection:
     def perform(
         self,
         *,
-        use_gaia_astrometry=None,
-        use_wmko_fallback=None,
-        interpolate=True,
-        extrapolate=True,
+        interpolate_expmeter_flux=True,
+        extrapolate_expmeter_flux=True,
         fix_expmeter_outliers=True,
+        skycoord=False,
     ):
         """
         Compute per-order barycentric correction and store it on the KPF2.
 
         Parameters
         ----------
-        use_gaia_astrometry, use_wmko_fallback : bool, optional
-            Override the configured astrometry-source toggles for this call.
-        interpolate, extrapolate, fix_expmeter_outliers : bool, optional
-            Forwarded to compute_flux_weighted_midpoint_times(). See that
-            method for semantics.
+        interpolate_expmeter_flux, extrapolate_expmeter_flux, fix_expmeter_outliers
+                : bool, optional
+            Forwarded to compute_flux_weighted_midpoint_times() as its
+            ``interpolate`` / ``extrapolate`` / ``fix_outliers``. See that method
+            for semantics.
+        skycoord : False | SkyCoord, optional
+            Astrometry override for interactive use: the correction uses this
+            SkyCoord instead of the PRIMARY C*# cards, which stay untouched. Used
+            as-is -- it must carry proper motion, distance, and obstime, and astropy
+            raises if it does not.
 
         Returns
         -------
         l2_obj : KPF2
             Input KPF2 with BJD_TDB / BARYCORR_KMS / BARYCORR_Z populated, the
             per-CCD CCD{1,2}BJD/BKMS/BZ summaries written to those same bary
-            extension headers, the astrometry source (ASTRSRC) written to
-            RECEIPT, and a 'barycentric_correction' receipt entry.
+            extension headers, and a 'barycentric_correction' receipt entry.
         """
-        if use_gaia_astrometry is not None:
-            self.use_gaia_astrometry = use_gaia_astrometry
-        if use_wmko_fallback is not None:
-            self.use_wmko_fallback = use_wmko_fallback
-
         kwargs = dict(
-            interpolate=interpolate,
-            extrapolate=extrapolate,
+            interpolate_expmeter_flux=interpolate_expmeter_flux,
+            extrapolate_expmeter_flux=extrapolate_expmeter_flux,
             fix_expmeter_outliers=fix_expmeter_outliers,
+            skycoord=skycoord,
         )
         bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(
             output="orders", **kwargs

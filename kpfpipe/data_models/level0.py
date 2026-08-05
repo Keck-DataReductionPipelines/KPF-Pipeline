@@ -19,6 +19,7 @@ from rvdata.core.tools.headers import parse_value_to_datatype
 
 from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.keyword_registry import SCI_TRACES
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
@@ -202,6 +203,7 @@ class KPF0(KPFDataModel):
         "EXPMETER_SKY",
         "TELEMETRY",
         "DRP_CONFIG",
+        "CATALOG_RECORD",
     ]
 
     def _map_header(self):
@@ -252,6 +254,77 @@ class KPF0(KPFDataModel):
             )
         return out
 
+    # CATALOG_RECORD canonical column -> EPRV C*# keyword base. The row is stored in
+    # EPRV C*# format already, so the overlay is a direct copy (no conversion).
+    _CATALOG_CARD_BASES = {
+        "object": "CID",
+        "radec_src": "CSRC",
+        "ra": "CRA",
+        "dec": "CDEC",
+        "pmra": "CPMR",
+        "pmdec": "CPMD",
+        "parallax": "CPLX",
+        "rv": "CRV",
+        "z": "CZ",
+        "epoch": "CEPCH",
+        "equinox": "CEQNX",
+        "color": "CCLR",
+        "color_name": "CCLRN",
+    }
+
+    def _catalog_primary_cards(self):
+        """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
+
+        Returns ``{C-keyword: value}`` for every science fiber (``SCI_TRACES``) -- a
+        direct copy of the canonical row's already-EPRV-format cells, skipping any
+        missing value (NaN / "") so the card stays blank rather than carrying 'nan'.
+        Warns when the canonical astrometry was assembled from more than one catalog,
+        and when an empty table on a science frame (IMTYPE 'Object') shows AstroQuery
+        never ran -- the blank cards then fail BarycentricCorrection and
+        CrossCorrelation downstream.
+        """
+        table = self.data["CATALOG_RECORD"]
+        if not table.colnames:
+            imtype = self.headers["PRIMARY"].get("IMTYPE")
+            if str(imtype).strip().lower() == "object":
+                logger.warning(
+                    "CATALOG_RECORD is empty for a science frame; AstroQuery has not "
+                    "run, so the SCI C*# astrometry cards are left blank -- "
+                    "BarycentricCorrection and CrossCorrelation will fail downstream"
+                )
+            return {}
+
+        row = table[table["source"] == "kpf-drp"][0]
+
+        provenance = {
+            str(row[col]).strip()
+            for col in ("radec_src", "plx_src", "rv_src")
+            if str(row[col]).strip()
+        }
+        if len(provenance) > 1:
+            logger.warning(
+                "PRIMARY catalog keywords assembled from mixed sources "
+                "(radec=%s, parallax=%s, rv=%s); C*# astrometry is not "
+                "internally single-source",
+                row["radec_src"],
+                str(row["plx_src"]) or '""',
+                str(row["rv_src"]) or '""',
+            )
+
+        cards = {}
+        for col, base in self._CATALOG_CARD_BASES.items():
+            value = row[col]
+            if isinstance(value, str):
+                if value.strip() == "":
+                    continue
+            else:
+                if np.isnan(value):
+                    continue
+                value = float(value)
+            for i in SCI_TRACES:
+                cards[f"{base}{i}"] = value
+        return cards
+
     def to_kpf1(self):
         """Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
@@ -262,9 +335,10 @@ class KPF0(KPFDataModel):
         at read) and reaches L1 via the header forward below.
 
         Returns a KPF1 with EPRV PRIMARY, INSTRUMENT_HEADER, pass-through
-        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG), receipt, and
-        obs_id copied over. GREEN_CCD, GREEN_VAR, RED_CCD, RED_VAR are created
-        empty -- the caller (image assembly) fills those in.
+        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG,
+        CATALOG_RECORD), receipt, and obs_id copied over. GREEN_CCD, GREEN_VAR,
+        RED_CCD, RED_VAR are created empty -- the caller (image assembly) fills
+        those in.
         """
         kpf1 = KPF1()
 
@@ -272,6 +346,11 @@ class KPF0(KPFDataModel):
         # L0 PRIMARY verbatim into the immutable INSTRUMENT_HEADER.
         if "PRIMARY" in self.headers:
             for key, value in self._map_header().items():
+                kpf1.headers["PRIMARY"][key] = value
+
+            # Overlay the canonical astrometry onto the SCI-fiber C*# cards -- their
+            # sole writer (the raw TARG*/GAIAID mapping is blanked in the header_map).
+            for key, value in self._catalog_primary_cards().items():
                 kpf1.headers["PRIMARY"][key] = value
 
             if "INSTRUMENT_HEADER" not in kpf1.extensions:

@@ -22,13 +22,20 @@ from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.base import KPFDataModel, keyword_registry
 from kpfpipe.utils.io import kpf_filename
 
-# Make rvdata's RV4._read aware of KPF's QUALITY_CONTROL extension so an L4
-# written with it reads back (QCL4 is planned; this keeps the read forward-safe).
+# Make rvdata's RV4._read aware of KPF's QUALITY_CONTROL and CATALOG_RECORD
+# extensions so an L4 written with them reads back (QCL4 is planned; this keeps the
+# read forward-safe).
 keyword_registry.register_rvdata_extension(
     LEVEL4_EXTENSIONS,
     "QUALITY_CONTROL",
     "BinTableHDU",
     "Quality-control booleans and diagnostic metrics",
+)
+keyword_registry.register_rvdata_extension(
+    LEVEL4_EXTENSIONS,
+    "CATALOG_RECORD",
+    "BinTableHDU",
+    "External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery",
 )
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
@@ -177,9 +184,11 @@ class KPF4(KPFDataModel, RV4):
         # QUALITY_CONTROL holds the accumulated QC booleans + diagnostics metrics
         # propagated from L0/L1/L2 (RV4 does not create it; registered into
         # rvdata's LEVEL4_EXTENSIONS above so a written L4 reads back). Mirrors
-        # KPF2.__init__; to_kpf4 forwards the L2 header onto it.
-        if "QUALITY_CONTROL" not in self.extensions:
-            self.create_extension("QUALITY_CONTROL", "BinTableHDU")
+        # KPF2.__init__; to_kpf4 forwards the L2 header onto it. CATALOG_RECORD is
+        # the same story: created empty here, filled by to_kpf4's pass-through.
+        for ext in ("QUALITY_CONTROL", "CATALOG_RECORD"):
+            if ext not in self.extensions:
+                self.create_extension(ext, "BinTableHDU")
 
         # Replace plain OrderedDicts with alias-aware versions
         self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)

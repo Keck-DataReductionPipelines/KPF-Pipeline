@@ -47,6 +47,7 @@ import importlib.resources
 import logging
 from types import MappingProxyType
 
+import numpy as np
 import pandas as pd
 from rvdata.core.models.definitions import (
     LEVEL2_PRIMARY_KEYWORDS,
@@ -66,8 +67,14 @@ _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
 _NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
 
 # Number of traces/orderlets (SKY, SCI1-3, CAL); the numbered per-orderlet
-# extensions CCF#/RV#/CCF_VAR# run 1.._NUMTRACES.
-_NUMTRACES = len(pd.read_csv(_kpf_pipe_cfg / "trace-map.csv"))
+# extensions CCF#/RV#/CCF_VAR# run 1.._NUMTRACES. SCI_TRACES holds just the
+# science-fiber indices, the fibers the catalog C*# overlay targets -- the single
+# definition, imported by level0 rather than re-derived there.
+_TRACE_MAP = pd.read_csv(_kpf_pipe_cfg / "trace-map.csv")
+_NUMTRACES = len(_TRACE_MAP)
+SCI_TRACES = tuple(
+    _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
+)
 
 # EPRV-standard compliance is pinned to the installed rv-data-standard release
 # (environment.yml pins it exactly): EPRVTAG is its version ("v0.4.0"), VOCLASS
@@ -116,13 +123,10 @@ class KeywordRegistry:
         "JD_UTC": None,
     }
 
-    # rvdata's header_map numbers per-trace keywords CAL-first (trace 1=CAL .. 5=SKY),
-    # the stale translator convention; KPF is SKY-first (1=SKY .. 5=CAL, per the
-    # EPRV frame; see trace-map.csv). These are the fiber-indexed families
-    # whose STANDARD index _load_header_map realigns 1<->5. NOT here (also end in 1/5
-    # but not fiber-indexed): EXSNR/EXSNRW (wavelength band 452/852nm), DQLVL, T*.
-    _FIBER_INDEXED_BASES = (
-        "TRACE",
+    # Per-fiber catalog C*# keyword bases. On the SCI fibers these come from the
+    # CATALOG_RECORD overlay in KPF0.to_kpf1, not the raw TARG*/GAIAID mapping;
+    # SKY(1)/CAL(5) keep their header_map defaults.
+    _CATALOG_BASES = (
         "CSRC",
         "CID",
         "CRA",
@@ -137,6 +141,14 @@ class KeywordRegistry:
         "CCLR",
         "CLSRC",
     )
+
+    # rvdata's header_map numbers per-trace keywords CAL-first (trace 1=CAL .. 5=SKY),
+    # the stale translator convention; KPF is SKY-first (1=SKY .. 5=CAL, per the
+    # EPRV frame; see trace-map.csv). These are the fiber-indexed families (TRACE plus
+    # the catalog bases) whose STANDARD index _load_header_map realigns 1<->5. NOT here
+    # (also end in 1/5 but not fiber-indexed): EXSNR/EXSNRW (wavelength band
+    # 452/852nm), DQLVL, T*.
+    _FIBER_INDEXED_BASES = ("TRACE", *_CATALOG_BASES)
 
     # STANDARD keys rvdata's header_map.csv maps but KPF deliberately does not
     # register (parallactic angle, not carried on KPF products). Dropped silently;
@@ -290,6 +302,16 @@ class KeywordRegistry:
             self._DEFAULT_OVERRIDES.keys()
         )
         self.header_map = raw[keep].reset_index(drop=True)
+
+        # Blank the SCI-fiber catalog source cells so _map_header emits nothing and
+        # the CATALOG_RECORD overlay is their sole writer.
+        sci_catalog_keys = {
+            f"{base}{i}" for base in self._CATALOG_BASES for i in SCI_TRACES
+        }
+        overlay = (
+            self.header_map["STANDARD"].astype(str).str.strip().isin(sci_catalog_keys)
+        )
+        self.header_map.loc[overlay, ["INSTRUMENT", "DEFAULT"]] = np.nan
 
     def is_structural(self, key):
         """True for a FITS structural / bookkeeping card (never a registered keyword).

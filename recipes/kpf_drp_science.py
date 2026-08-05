@@ -14,6 +14,7 @@ import logging
 import time
 
 from kpfpipe.data_models import KPF0
+from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.cross_correlation import CrossCorrelation
@@ -55,6 +56,12 @@ def main(config, args):
     data_root_science = data_dirs["KPF_SCIENCE_OUTPUT"]
 
     l0 = KPF0.from_fits(kpf_filepath(obs_id, "L0", data_root=data_root_in))
+
+    # Resolve Gaia/SIMBAD astrometry (plus the native wmko row off PRIMARY TARG*) into
+    # l0's CATALOG_RECORD, for the L0 diagnostics and barycentric correction to consume.
+    logger.info("resolving catalog astrometry for %s", obs_id)
+    astro_query = AstroQuery(l0, config)
+    l0 = astro_query.perform()
 
     # Generate L0 quicklook plots
     logger.info("generating L0 quicklook plots for %s", obs_id)

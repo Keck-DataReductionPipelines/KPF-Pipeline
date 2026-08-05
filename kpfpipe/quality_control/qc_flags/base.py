@@ -28,9 +28,15 @@ class QC:
 
     @staticmethod
     def _hdr_float(hdr, key):
-        """Return float value for a header key, or None if absent."""
-        val = hdr.get(key)
-        return None if val is None else float(val)
+        """Return float value for a header key, or None if the card is absent/empty.
+
+        A present-but-non-numeric value is malformed, so its ValueError propagates
+        for ``QC.run`` to surface (fail loud).
+        """
+        try:
+            return float(hdr.get(key))
+        except TypeError:
+            return None
 
     @staticmethod
     def _hdr_bool(hdr, key):

@@ -83,7 +83,7 @@ master calibrations that the science flow consumes.
 ### Science Pipeline
 
 ```
-L0 (raw CCD) → ImageAssembly → L1 → ImageProcessing
+L0 (raw CCD) → AstroQuery → ImageAssembly → L1 → ImageProcessing
 L1 (assembled FFI) → SpectralExtraction → L2 → WavelengthCalibration → BarycentricCorrection
 L2 (extracted spectra) → CrossCorrelation → L4 → RadialVelocity
 L4 (CCFs/RVs)
@@ -168,8 +168,9 @@ The architecture invariants:
 - **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`.** `_map_header` carries only some natives to
   PRIMARY, mostly under renamed EPRV keys — so read a native from PRIMARY when it survives there under
   its own name (e.g. `DATE-OBS`, `OBJECT`), and from `INSTRUMENT_HEADER` when it never reaches PRIMARY or
-  when a coherent block of related natives (e.g. the WMKO astrometry/catalog block used in
-  `barycentric_correction`) reads more clearly together.
+  when a coherent block of related natives reads more clearly together (e.g. the raw `DATE-BEG`/`DATE-END`
+  pair `barycentric_correction` extrapolates the exposure meter against; its *target astrometry*, by
+  contrast, comes off the PRIMARY `C*#` cards, which `to_kpf1` fills from `CATALOG_RECORD`).
 - **DRP provenance is stamped at read** onto RECEIPT (`KPF0.from_fits` → `_stamp_wmko_tracking`, not
   `to_kpf1`): `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`. It rides RECEIPT forward, with `DRPSTATU`
   advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
@@ -177,6 +178,8 @@ The architecture invariants:
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
   as an **append-only history**; only `ISGOOD` (the running QC aggregate — see *QC flags*)
   changes per level.
+- **`CATALOG_RECORD` (AstroQuery's resolved catalog rows + presence flags) also passes through
+  L0→L1→L2→L4**, and `to_kpf1` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
   structural card, else it raises.
@@ -194,8 +197,9 @@ keyword defs.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
-calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths), the
-**barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
+calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths),
+**CATALOG_RECORD** (the L0 `WMKOCR`/`GAIACR`/`SIMBADCR` presence flags), the **barycentric** L2
+extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
 *PRIMARY holds EPRV keywords only* is the L4 SCI-combined RV keywords `CCD{1,2}RV`/`CCD{1,2}ERV` —
 KPF-registered yet homed on PRIMARY, since they are the pipeline's final RV measurements and belong
 beside the EPRV `RV`/`RVERR`. Masters register their PRIMARY keywords in per-master-type registries and
@@ -240,7 +244,8 @@ installed, importable packages; code shared across a layer's siblings goes **dow
 
 `kpfpipe/modules/` holds the scientist-facing processing primitives — each an importable
 building block a recipe composes, with no orchestration or logging setup of its own. The
-science modules run the *Science Pipeline* flow: `image_assembly` (L0 → assembled FFI),
+science modules run the *Science Pipeline* flow: `astro_query` (external-catalog
+astrometry onto L0), `image_assembly` (L0 → assembled FFI),
 `image_processing`, `spectral_extraction`, `wavelength_calibration`, `barycentric_correction`,
 and the radial-velocity pair `radial_velocity`/`cross_correlation`; `calibration_association`
 resolves which master calibrations a frame uses. The `masters/` submodule
@@ -286,8 +291,8 @@ independent of `--jobs`, cores, or RAM, because masters stacking degrades with t
 concurrent jobs (OS memory-mapping contention) rather than with compute or memory pressure — so do
 **not** swap in a cores- or RAM-derived cap. Both orchestrators also **stagger** their subprocess
 launches (`_LAUNCH_INTERVAL`): masters by 5.0 s to desync the I/O-heavy read phase each build opens,
-science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries the per-frame L0 pointing QC fires at
-startup (rationale in each module's comment). These caps and intervals were tuned empirically on
+science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries `AstroQuery` fires per frame at startup
+(rationale in each module's comment). These caps and intervals were tuned empirically on
 Caltech's shrek server — heuristics, not definitive values; re-confirm against a real run before
 changing them.
 
@@ -329,7 +334,7 @@ prior wrote, driven by the recipe through a **single `CheckpointL{n}(obj).run()`
 
 The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags
 + `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4
-products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END/ELAPSED
+products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END
 timing-consistency flag, is an L0 check whose result rides forward this way).
 
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.

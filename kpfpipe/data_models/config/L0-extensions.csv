@@ -18,3 +18,4 @@ HDU,Name,DataType,Required,Description
 16,RECEIPT,BinTableHDU,True,Processing history
 17,DRP_CONFIG,BinTableHDU,False,Pipeline config as a 2-column table (key = value)
 18,QUALITY_CONTROL,BinTableHDU,True,Quality-control booleans and diagnostic metrics
+19,CATALOG_RECORD,BinTableHDU,True,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery

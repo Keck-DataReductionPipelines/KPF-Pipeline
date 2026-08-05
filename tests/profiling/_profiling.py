@@ -75,11 +75,11 @@ NETWORK_MARKERS = (
     "certifi",
 )
 
-# DiagL0 resolves each frame's pointing against Gaia DR3 and SIMBAD (astroquery)
-# -- network catalog round-trips as nondeterministic as the barycentric IERS
-# fetch, so they are likewise quarantined from the QC slice of the recipe summary
-# (reported separately, never in the denominator). Matched on the astroquery
-# package path; see _astrometry_cumtime.
+# AstroQuery (modules/astro_query.py) resolves each frame against Gaia DR3 and
+# SIMBAD (astroquery) as its own recipe step -- network catalog round-trips as
+# nondeterministic as the barycentric IERS fetch, so they are quarantined from the
+# AstroQuery stage slice of the recipe summary (reported separately, never in the
+# denominator). Matched on the astroquery package path; see _astrometry_cumtime.
 ASTROQUERY_MARKER = "/astroquery/"
 
 # The masters I/O-vs-compute split measures disk I/O at the data-model
@@ -197,10 +197,38 @@ def extract_l2(config):
     return SpectralExtraction(process_l1(config), config).perform()
 
 
+# Synthetic SCI2 (trace 3) catalog C*# cards seeded onto the L2 PRIMARY. The
+# profiling builders skip AstroQuery (a live Gaia/SIMBAD query), so the cards
+# BarycentricCorrection and CrossCorrelation read would otherwise be blank. Fixed
+# stand-in values -- profiling measures timing, not RV accuracy.
+_SYNTHETIC_CATALOG_CARDS = {
+    "CSRC3": "gaia",
+    "CRA3": "12:00:00.0000",  # ICRS RA, sexagesimal hourangle
+    "CDEC3": "+00:00:00.000",  # ICRS Dec, sexagesimal deg
+    "CPMR3": 0.0,  # proper motion RA*cosDec, arcsec/yr
+    "CPMD3": 0.0,  # proper motion Dec, arcsec/yr
+    "CPLX3": 10.0,  # parallax, mas (= 100 pc)
+    "CRV3": 0.0,  # systemic RV, km/s
+    "CEPCH3": 2016.0,  # epoch, Julian year
+}
+
+
+def _seed_catalog_cards(l2):
+    """Overlay the synthetic SCI2 C*# astrometry cards onto the L2 PRIMARY.
+
+    Stands in for the AstroQuery-fed overlay KPF0.to_kpf1 applies in the real
+    pipeline, so the barycentric/CCF/RV harnesses have the trace-3 cards they read.
+    """
+    for card, value in _SYNTHETIC_CATALOG_CARDS.items():
+        l2.headers["PRIMARY"][card] = value
+    return l2
+
+
 def wls_l2(config):
     from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 
-    return WavelengthCalibration(extract_l2(config), config).perform()
+    l2 = WavelengthCalibration(extract_l2(config), config).perform()
+    return _seed_catalog_cards(l2)
 
 
 def bary_l2(config):
@@ -401,7 +429,7 @@ def _network_own(rows):
     """Total own time of network calls (SSL/socket), for the separate report line.
 
     Network is a nondeterministic IERS download during barycentric correction plus
-    the DiagL0 Gaia/SIMBAD pointing lookups, so it is quarantined from the recipe's
+    AstroQuery's Gaia/SIMBAD catalog lookups, so it is quarantined from the recipe's
     High-level summary.
     """
     return sum(
@@ -412,14 +440,14 @@ def _network_own(rows):
 
 
 def _astrometry_cumtime(stats):
-    """Cumulative time of DiagL0's nondeterministic astrometry catalog queries.
+    """Cumulative time of AstroQuery's nondeterministic catalog queries.
 
-    DiagL0 resolves each frame's pointing against Gaia DR3 and SIMBAD (astroquery)
-    -- network round-trips as nondeterministic as the barycentric IERS fetch. Sum
-    the *outermost* astroquery frames (caller not itself astroquery) whose caller
-    is a ``diagnostics/`` method, so the full per-query time is counted once and
-    the identical Gaia query inside BarycentricCorrection -- already excluded with
-    that whole quarantined stage -- is not double-counted here.
+    AstroQuery (``modules/astro_query.py``) resolves each science frame against
+    Gaia DR3 and SIMBAD (astroquery) -- network round-trips as nondeterministic as
+    the barycentric IERS fetch. Sum the *outermost* astroquery frames (caller not
+    itself astroquery) whose caller is an AstroQuery method, so the full per-query
+    time is counted once while AstroQuery's own deterministic merge/sanitize/write
+    stays in the partition.
     """
     total = 0.0
     for func, (_cc, _nc, _tt, _ct, callers) in stats.stats.items():
@@ -429,10 +457,8 @@ def _astrometry_cumtime(stats):
             cfn = caller[0]
             if ASTROQUERY_MARKER in cfn:
                 continue  # nested astroquery frame; its time is in the outer one
-            if _is_kpf_module(cfn) and _module_label(cfn).startswith(
-                "quality_control/diagnostics/"
-            ):
-                total += cvals[3]  # per-caller cumtime; outermost DiagL0 query only
+            if _is_kpf_module(cfn) and _module_label(cfn) == "modules/astro_query.py":
+                total += cvals[3]  # per-caller cumtime; outermost AstroQuery query only
     return total
 
 
@@ -549,11 +575,8 @@ def _quality_control_breakdown(stats):
     of a single shared base ``run`` -- so each level's cost is the cumtime its
     check methods contribute there, keyed ``DiagL{n}`` / ``QCL{n}``. ``checkpoints``
     is the remainder (the thin base-``run`` dispatch/keyword-routing plus the
-    checkpoint validation methods). DiagL0's nondeterministic Gaia/SIMBAD pointing
-    lookups are carved out of its row (and the total), matching the recipe
-    summary, which reports them as a separate quarantined slice. Returns ``rows``
-    (``(label, seconds, fraction)``) and the QC ``total``; empty when no
-    checkpoints ran (masters).
+    checkpoint validation methods). Returns ``rows`` (``(label, seconds, fraction)``)
+    and the QC ``total``; empty when no checkpoints ran (masters).
     """
     ck_key = _qc_sublayer_run_key(stats, "quality_control/checkpoints/")
     if ck_key is None:
@@ -584,13 +607,6 @@ def _quality_control_breakdown(stats):
             if label.startswith(subdir) and run_key in callers:
                 lvl = _qc_level_label(filename)
                 agg[lvl] = agg.get(lvl, 0.0) + callers[run_key][3]
-
-    # Quarantine DiagL0's Gaia/SIMBAD lookups from its row and the total, matching
-    # the recipe summary (which reports them separately as a nondeterministic slice).
-    astrometry = _astrometry_cumtime(stats)
-    if "DiagL0" in agg:
-        agg["DiagL0"] = max(agg["DiagL0"] - astrometry, 0.0)
-    total = max(total - astrometry, 0.0)
 
     # Everything not charged to a level's checks is the checkpoint wrapper (the
     # base-run dispatch + keyword routing + validation); max() guards float noise.
@@ -670,9 +686,9 @@ def _recipe_summary(stats, call, network_own):
     ``calibration_association`` (it lands in that stage, never double-counted).
 
     Barycentric correction is quarantined (nondeterministic IERS fetch): its
-    slice is reported separately and excluded from the denominator. The DiagL0
-    Gaia/SIMBAD pointing lookups are quarantined the same way -- carved out of the
-    QC slice, since they nest inside it rather than being a top-level stage.
+    slice is reported separately and excluded from the denominator. AstroQuery's
+    Gaia/SIMBAD catalog lookups are quarantined the same way -- carved out of the
+    AstroQuery stage slice, keeping that stage's deterministic merge/write compute.
     Returns the sorted ``rows`` (``(label, seconds, fraction, kind)``), the
     ``denominator`` (wall-clock minus those quarantined slices), ``bary_seconds``,
     ``astrometry_seconds``, and ``network_seconds``.
@@ -697,12 +713,12 @@ def _recipe_summary(stats, call, network_own):
         buckets[OVERHEAD_LABEL] = buckets.get(OVERHEAD_LABEL, 0.0) + main_own
         kinds[OVERHEAD_LABEL] = "overhead"
 
-    # Carve DiagL0's nondeterministic astrometry lookups out of the QC slice, the
-    # same quarantine the barycentric stage gets (reported separately below).
+    # Carve AstroQuery's nondeterministic catalog lookups out of its stage slice,
+    # the same quarantine the barycentric stage gets (reported separately below).
     astrometry_seconds = _astrometry_cumtime(stats)
-    if astrometry_seconds and QC_LABEL in buckets:
-        astrometry_seconds = min(astrometry_seconds, buckets[QC_LABEL])
-        buckets[QC_LABEL] -= astrometry_seconds
+    if astrometry_seconds and "astro_query" in buckets:
+        astrometry_seconds = min(astrometry_seconds, buckets["astro_query"])
+        buckets["astro_query"] -= astrometry_seconds
     else:
         astrometry_seconds = 0.0
 
@@ -948,7 +964,7 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
     if has_bary:
         items.append("the barycentric-correction stage")
     if has_astro:
-        items.append("the DiagL0 astrometry lookups")
+        items.append("the AstroQuery catalog lookups")
     items.append("network time")
     if len(items) > 1:
         joined = ", ".join(items[:-1]) + ", and " + items[-1]
@@ -986,7 +1002,7 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
         )
     if has_astro:
         excluded.append(
-            f"- **Astrometry lookups** (Gaia DR3 + SIMBAD, in DiagL0) — "
+            f"- **Astrometry lookups** (Gaia DR3 + SIMBAD, in AstroQuery) — "
             f"{summary['astrometry_seconds']:.3f} s cumulative (excluded; "
             "nondeterministic catalog network queries)."
         )
@@ -994,7 +1010,7 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
         if not has_bary:
             whence = "not disk I/O"
         elif has_astro:
-            whence = "inside barycentric + the DiagL0 lookups"
+            whence = "inside barycentric + the AstroQuery lookups"
         else:
             whence = "mostly inside barycentric"
         excluded.append(
@@ -1056,9 +1072,7 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
             f"({quality['total']:.3f} s total; % of that). The recipe runs all QC "
             "through `CheckpointL{n}.run()`, which folds in each level's "
             "diagnostics (`DiagL{n}`) then QC flags (`QCL{n}`); `checkpoints` is "
-            "the thin dispatch/keyword-routing plus header/flag validation. "
-            "DiagL0's nondeterministic Gaia/SIMBAD pointing lookups are excluded "
-            "here (reported with the quarantined slices above)."
+            "the thin dispatch/keyword-routing plus header/flag validation."
         )
         w("")
         w("| level | % | s |")

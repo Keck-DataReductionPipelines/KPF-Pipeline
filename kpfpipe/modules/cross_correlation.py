@@ -13,7 +13,7 @@ its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
   +--------+-------------------------------------+----------+---------------------+
   | source | mask                                | barycorr | grid center         |
   +========+=====================================+==========+=====================+
-  | target | TARGTEFF-lookup                     | yes      | TARGRADV (systemic) |
+  | target | TARGTEFF-lookup                     | yes      | CRV3 (systemic)     |
   +--------+-------------------------------------+----------+---------------------+
   | sky    | G2_espresso (solar)                 | yes      | 0                   |
   +--------+-------------------------------------+----------+---------------------+
@@ -210,16 +210,23 @@ class CrossCorrelation:
         return row["DEFAULT_MASK"].iloc[0]
 
     def _get_systemic_rv(self):
-        """Target systemic RV (TARGRADV) [km/s] -- the stellar CCF grid center."""
-        inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
+        """Target systemic RV (PRIMARY CRV3) [km/s] -- the stellar CCF grid center.
+
+        CRV3 is the canonical catalog rv, so the CCF grid centers on the same
+        systemic velocity the barycentric correction used. Raises rather than
+        defaulting to 0: a grid centered on the wrong velocity misses the star.
+        """
+        # The C*# cards are written identically to all science fibers (traces 2-4).
+        primary = self.l2_obj.headers.get("PRIMARY", {})
         try:
-            star_rv = float(inst.get("TARGRADV"))
+            star_rv = float(primary.get("CRV3"))
         except (TypeError, ValueError):
             star_rv = None
         if star_rv is None or not np.isfinite(star_rv):
             raise ValueError(
-                "target radial velocity (TARGRADV) not available in "
-                "INSTRUMENT_HEADER; cannot center the CCF velocity grid"
+                "target radial velocity (CRV3) not available on PRIMARY; cannot "
+                "center the CCF velocity grid. Run AstroQuery on the L0 so the "
+                "canonical catalog record reaches the C*# cards."
             )
         return star_rv
 
@@ -447,7 +454,7 @@ class CrossCorrelation:
         ValueError
             For a range of malformed or unusable inputs: an unrecognized or
             missing illumination keyword; a missing target effective temperature
-            (``TARGTEFF``) or radial velocity (``TARGRADV``) for a stellar fiber;
+            (``TARGTEFF``) or radial velocity (``CRV3``) for a stellar fiber;
             a required but unpopulated ``BARYCORR_Z``; a descending ``WAVE``
             array; or a ``clip_edge_pixels`` that removes every pixel of the order.
         RuntimeError

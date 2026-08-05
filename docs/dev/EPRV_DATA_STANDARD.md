@@ -53,7 +53,7 @@ while `KPF2`/`KPF4` subclass the EPRV `RV2`/`RV4` and must satisfy everything be
 | SNR | per pixel | wavelength via `EXSNRW*` keyword |
 | Coordinates (RA/Dec) | Sexagesimal | |
 | Epoch | Native survey epoch | e.g. 2015.5 for Gaia DR2 |
-| Proper motion | mas/yr | |
+| Proper motion | arcsec/yr | `CPMR#`/`CPMD#` (§6); RA term includes cos Dec |
 | Color index | Gaia Bp − Rp | default unless specified |
 | Systemic velocity / CCF velocity / RV | km/s | |
 
@@ -180,8 +180,11 @@ L2/L4 products and the barycentric/RV path depend on:
 | `CRA#`,`CDEC#` | Catalog RA / Dec | sexagesimal | Yes |
 | `CEQNX#`,`CEPCH#` | Catalog equinox / epoch | yr | Yes |
 | `CRV#` | Catalog systemic RV | km/s | Yes |
+| `CZ#` | Catalog redshift z (derived from `CRV#`) | | No |
 | `CPLX#` | Catalog parallax | mas | No |
 | `CPMR#`,`CPMD#` | Catalog proper motion RA / Dec | arcsec/yr | No |
+| `CCLR#` | Catalog color (color 1 − color 2) | mag | No |
+| `CCLRN#` | Catalog color name (e.g. `Gaia BP-RP`) | | No |
 | `OBSERVAT`,`TELESCOP` | Observatory / telescope | | Yes |
 | `OBSLON/LAT/ALT` | Observatory location | deg/deg/m | Yes |
 | `OBSGEO-X/Y/Z` | Cartesian site coordinates | m | No |

@@ -15,6 +15,8 @@ from astropy.table import Table
 
 from kpfpipe.data_models.level0 import KPF0
 
+from ._catalog import catalog_record_table
+
 # synthetic_l0_file and synthetic_l0_minimal fixtures live in tests/conftest.py
 
 
@@ -36,12 +38,13 @@ class TestKPF0:
         assert l0.level == 0
         assert l0.obs_id == "KP.20240113.00001.00"
         assert "PRIMARY" in l0.extensions
-        # Real KPF0 objects always carry QUALITY_CONTROL and RECEIPT extensions
-        # (RECEIPT is the registry home of the DRP-RUN provenance cards, stamped
-        # at read).
+        # Real KPF0 objects always carry QUALITY_CONTROL, RECEIPT, and CATALOG_RECORD
+        # extensions (RECEIPT is the registry home of the DRP-RUN provenance cards,
+        # stamped at read; CATALOG_RECORD holds AstroQuery's astrometry).
         assert "QUALITY_CONTROL" in l0.extensions
         assert "RECEIPT" in l0.extensions
-        assert len(l0.extensions) == 3
+        assert "CATALOG_RECORD" in l0.extensions
+        assert len(l0.extensions) == 4
 
     def test_round_trip(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -217,3 +220,64 @@ class TestKPF0Provenance:
         fits.HDUList([primary]).writeto(fn, overwrite=True)
         with pytest.raises(ValueError, match="OFNAME absent"):
             KPF0.from_fits(fn)
+
+
+class TestKPF0CatalogRecord:
+    """KPF0.read() creates the CATALOG_RECORD extension but never populates it --
+    AstroQuery is its sole writer."""
+
+    def test_read_leaves_catalog_record_empty(self, tmp_path):
+        """A raw L0 read, even with TARG* present, leaves it empty and unflagged."""
+        fn = str(tmp_path / "KP.20240405.00001.00.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["INSTRUME"] = "KPF"
+        primary.header["OFNAME"] = "KP.20240405.00001.00.fits"
+        primary.header["OBJECT"] = "testtarget"
+        primary.header["IMTYPE"] = "Object"
+        primary.header["TARGRA"] = "12:00:00.00"
+        primary.header["TARGDEC"] = "+40:00:00.0"
+        fits.HDUList([primary]).writeto(fn, overwrite=True)
+
+        l0 = KPF0.from_fits(fn)
+        assert "CATALOG_RECORD" in l0.extensions
+        assert len(l0.data["CATALOG_RECORD"]) == 0
+        assert "WMKOCR" not in l0.headers["CATALOG_RECORD"]
+
+
+class TestCatalogRecordMissingValues:
+    """A missing CATALOG_RECORD value survives a FITS round-trip as NaN.
+
+    Astropy's FITS reader returns a NaN float cell masked, and a masked cell is not
+    NaN, so a missing-value check would read it as present; ``KPFDataModel.from_fits``
+    fills those cells back. L0 is the vehicle -- it is where AstroQuery writes.
+    """
+
+    @staticmethod
+    def _l0_written_and_read(tmp_path, rv):
+        fn = str(tmp_path / "KP.20240405.00002.00.fits")
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["INSTRUME"] = "KPF"
+        l0.headers["PRIMARY"]["OFNAME"] = "KP.20240405.00002.00.fits"
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
+        l0.to_fits(fn)
+        return KPF0.from_fits(fn)
+
+    def test_missing_value_reads_back_as_nan_not_masked(self, tmp_path):
+        row = self._l0_written_and_read(tmp_path, rv=None).data["CATALOG_RECORD"][0]
+        assert row["rv"] is not np.ma.masked
+        assert np.isnan(row["rv"])
+
+    def test_present_value_reads_back_unchanged(self, tmp_path):
+        row = self._l0_written_and_read(tmp_path, rv=-16.6).data["CATALOG_RECORD"][0]
+        assert row["rv"] == pytest.approx(-16.6)
+
+    def test_missing_value_leaves_catalog_card_blank(self, tmp_path):
+        """The regression this normalization exists for: a masked cell defeats the
+        'skip missing' branch in KPF0._catalog_primary_cards, so the C*# card is
+        written as 'nan' and the L1 write then raises."""
+        l0 = self._l0_written_and_read(tmp_path, rv=None)
+        l1 = l0.to_kpf1()
+        assert not l1.headers["PRIMARY"].get("CRV2")
+        assert l1.headers["PRIMARY"]["CRA2"] == "01:44:04.0000"
+        l1.to_fits(str(tmp_path / "kpf_L1_20240405T000000.fits"))

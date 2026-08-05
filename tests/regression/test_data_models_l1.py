@@ -9,7 +9,9 @@ import importlib.metadata
 import logging
 import re
 
+import astropy.units as u
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 
@@ -17,6 +19,10 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.data_models.masters.base import KPFMasterModel
+from kpfpipe.modules.astro_query import AstroQuery
+from kpfpipe.utils.astro import compute_redshift
+
+from ._catalog import SOURCES, catalog_record_table
 
 # synthetic_l0_file, synthetic_l0_minimal, synthetic_l1_file fixtures live in
 # tests/conftest.py
@@ -264,6 +270,18 @@ class TestHeaderMapFiberRealignment:
         assert self._source("EXSNR1")[0] == "SNRSC452"
         assert self._source("EXSNR5")[0] == "SNRSC852"
 
+    def test_sci_catalog_source_cells_blanked(self):
+        # The SCI-fiber (2,3,4) catalog C*# cards come from to_kpf1's CATALOG_RECORD
+        # overlay, so their raw header_map source cells are blanked; SKY(1)/CAL(5) not.
+        hm = KPF1.keyword_registry.header_map
+        for base in ("CID", "CSRC", "CRA", "CDEC", "CPMR", "CRV", "CZ", "CLSRC"):
+            for i in (2, 3, 4):
+                r = hm[hm["STANDARD"].astype(str).str.strip() == f"{base}{i}"].iloc[0]
+                assert pd.isna(r["INSTRUMENT"]) and pd.isna(r["DEFAULT"])
+        assert self._source("CSRC1")[1] == "sky"  # SKY default intact
+        assert self._source("CRV5")[1] == "0"  # CAL default intact
+        assert self._source("CLSRC5")[0] == "CAL-OBJ"  # CAL native card intact
+
 
 class TestToKpf1:
     def test_to_kpf1_creates_kpf1(self, synthetic_l0_file):
@@ -278,6 +296,103 @@ class TestToKpf1:
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
         assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
+
+    # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.
+    _KPF_DRP = {
+        "object": "Gaia123",
+        "radec_src": "gaia",
+        "plx_src": "gaia",
+        "rv_src": "gaia",
+        "ra": "12:00:00.0000",
+        "dec": "+40:00:00.000",
+        "pmra": 0.5,
+        "pmdec": -0.3,
+        "parallax": 50.0,
+        "rv": 10.0,
+        "frame": "icrs",
+        "epoch": 2016.0,
+        "equinox": 2000.0,
+        "color": 1.23,
+        "color_name": "Gaia BP-RP",
+    }
+
+    @staticmethod
+    def _l0_with_catalog(record):
+        # A science KPF0 carrying a canonical 'kpf-drp' CATALOG_RECORD row, no network.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        AstroQuery(l0)._write_catalog_record("kpf-drp", record)
+        return l0
+
+    def test_catalog_overlay_populates_sci_cards(self):
+        # Direct copy of the canonical row onto every SCI fiber (2,3,4), no conversion.
+        p = self._l0_with_catalog(dict(self._KPF_DRP)).to_kpf1().headers["PRIMARY"]
+        for i in (2, 3, 4):
+            assert p[f"CID{i}"] == "Gaia123"
+            assert p[f"CSRC{i}"] == "gaia"
+            assert p[f"CRA{i}"] == "12:00:00.0000"
+            assert p[f"CDEC{i}"] == "+40:00:00.000"
+            assert p[f"CPMR{i}"] == 0.5
+            assert p[f"CPMD{i}"] == -0.3
+            assert p[f"CPLX{i}"] == 50.0
+            assert p[f"CRV{i}"] == 10.0
+            assert p[f"CZ{i}"] == pytest.approx(compute_redshift(10.0 * u.km / u.s))
+            assert p[f"CEPCH{i}"] == 2016.0
+            assert p[f"CEQNX{i}"] == 2000.0
+            assert p[f"CCLR{i}"] == 1.23
+            assert p[f"CCLRN{i}"] == "Gaia BP-RP"
+
+    def test_catalog_overlay_skips_missing_optional(self):
+        # parallax/rv absent from the canonical row -> those cards stay blank; the
+        # coherent position block is still written.
+        record = {
+            **self._KPF_DRP,
+            "parallax": None,
+            "rv": None,
+            "color": None,
+            "color_name": None,
+        }
+        p = self._l0_with_catalog(record).to_kpf1().headers["PRIMARY"]
+        assert not p.get("CPLX2")
+        assert not p.get("CRV2")
+        assert not p.get("CZ2")  # z derives from rv, so it is blank when rv is absent
+        assert not p.get("CCLR2")
+        assert not p.get("CCLRN2")
+        assert p["CRA2"] == "12:00:00.0000"
+
+    def test_science_frame_without_catalog_warns_and_leaves_blank(self, caplog):
+        # An empty CATALOG_RECORD on a science frame means AstroQuery never ran:
+        # to_kpf1 succeeds with blank SCI C*# cards but warns about the downstream fail.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        with caplog.at_level(logging.WARNING):
+            p = l0.to_kpf1().headers["PRIMARY"]
+        assert "CATALOG_RECORD is empty" in caplog.text
+        assert "will fail downstream" in caplog.text
+        for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
+            assert not p.get(kw)
+
+    def test_calibration_frame_without_catalog_leaves_sci_cards_blank(self):
+        # A calibration frame carries no target astrometry, so an empty
+        # CATALOG_RECORD is expected: to_kpf1 succeeds with blank SCI C*# cards.
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        p = l0.to_kpf1().headers["PRIMARY"]
+        for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
+            assert not p.get(kw)
+
+    def test_catalog_overlay_warns_on_mixed_sources(self, caplog):
+        # rv from a different catalog than the position -> WARNING at PRIMARY commit.
+        record = {**self._KPF_DRP, "rv_src": "simbad"}
+        with caplog.at_level(logging.WARNING):
+            self._l0_with_catalog(record).to_kpf1()
+        assert "mixed sources" in caplog.text
+
+    def test_catalog_overlay_single_source_no_warning(self, caplog):
+        # All provenance labels agree (gaia) -> no mixed-source warning.
+        with caplog.at_level(logging.WARNING):
+            self._l0_with_catalog(dict(self._KPF_DRP)).to_kpf1()
+        assert "mixed sources" not in caplog.text
 
     def test_to_kpf1_converts_native_to_eprv(self, synthetic_l0_file):
         """to_kpf1 renames WMKO natives to their EPRV PRIMARY counterparts."""
@@ -400,6 +515,41 @@ class TestToKpf1:
         assert "GREEN_AMP1" not in l1.extensions
         assert "GREEN_AMP2" not in l1.extensions
         assert "RED_AMP1" not in l1.extensions
+
+
+class TestCatalogRecordPassthrough:
+    """AstroQuery's CATALOG_RECORD rows + presence flags ride L0 -> L1 unchanged.
+
+    (The L1 -> L2 and L2 -> L4 hops have the same class in
+    test_data_models_l{2,4}.py.)
+    """
+
+    @staticmethod
+    def _l0_with_catalog(rv=-16.6):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
+        l0.set_keyword("GAIACR", 1)
+        return l0
+
+    def test_rows_and_flags_reach_l1(self):
+        """Beyond the C*# overlay, L1 keeps the whole table (every source row, not
+        just the merged one) and the flags, so the astrometry stays auditable."""
+        l1 = self._l0_with_catalog().to_kpf1()
+        assert [str(s) for s in l1.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert l1.headers["CATALOG_RECORD"]["GAIACR"] == 1
+
+    def test_catalog_record_roundtrip(self, tmp_path):
+        """CATALOG_RECORD is registered in L1-extensions.csv, so an L1 carrying it
+        reads back (an unlisted extension raises 'Non-standard extension'), and the
+        missing rv reads back NaN, not masked."""
+        fn = str(tmp_path / "kpf_L1_20240405T000000.fits")
+        self._l0_with_catalog(rv=None).to_kpf1().to_fits(fn)
+        back = KPF1.from_fits(fn)
+        assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
+        assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
+        rv = back.data["CATALOG_RECORD"][0]["rv"]
+        assert rv is not np.ma.masked and np.isnan(rv)
 
 
 class TestDrpStatus:

@@ -78,11 +78,20 @@ class KPFDataModel(RVDataModel):
         obs_id from the ORIGID provenance card instead (see ``_obs_id_from_receipt``).
         The ``to_kpfN`` converters set ``obs_id`` directly, so this only fills the
         from_fits path.
+
+        CATALOG_RECORD is normalized here for every level: astropy's FITS reader
+        returns a missing (NaN) cell masked, and a masked cell is not NaN
+        (``np.isnan`` on one is falsy), so a missing-value check would read it as
+        present. This sits at the chokepoint rather than in each ``_read`` because
+        L2/L4 read through rvdata's readers.
         """
         logger.info("reading %s from %s", cls.__name__, fn)
         obj = super().from_fits(fn, instrument=instrument, **kwargs)
         if getattr(obj, "obs_id", None) is None:
             obj.obs_id = obj._obs_id_from_receipt()
+        table = obj.data.get("CATALOG_RECORD")
+        if table is not None and getattr(table, "has_masked_values", False):
+            obj.set_data("CATALOG_RECORD", table.filled(np.nan))
         return obj
 
     def _obs_id_from_receipt(self):

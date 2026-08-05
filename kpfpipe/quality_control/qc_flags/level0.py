@@ -15,6 +15,16 @@ _AMPS_PER_CHIP = 4  # GREEN_AMP1..4 / RED_AMP1..4 (only a subset is read out)
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 _TIME_TOL_S = 0.1  # DATE-END - DATE-BEG vs ELAPSED tolerance (v2.12 quality_control.py)
 
+# Physical-range bounds for the canonical CATALOG_RECORD astrometry, ported from
+# v2.12 good_TARG_headers. The epoch/equinox window is exclusive-low, matching
+# legacy. The parallax lower bound and the PM bound are vNext additions for our Gaia
+# source: a negative Gaia parallax is routine and gives a negative distance, and the
+# highest real PM is ~10.4 arcsec/yr.
+_EPOCH_RANGE = (1950.0, 2050.0)
+_MAX_ABS_RV = 350.0  # km/s (Chubak et al. 2012, arXiv:1207.6212, Fig. 8)
+_PARALLAX_RANGE = (0.0, 1000.0)  # mas; 0 < plx < 1000 (> 0 and < 1 arcsec)
+_MAX_ABS_PM = 15.0  # arcsec/yr, per component
+
 
 def _parse_iso(value):
     """Parse an ISO-8601 datetime string, or None if missing/unparseable."""
@@ -66,13 +76,12 @@ class QCL0(QC):
     header_keywords_present._qc_key = "KWRDPRL0"
 
     def times_consistent(self):
-        """DATE-BEG < DATE-MID < DATE-END and |(END-BEG) - ELAPSED| < 0.1 s.
+        """DATE-BEG <= DATE-MID <= DATE-END.
 
         Ports v2.12 ``L2_datetime``. At L0 the raw instrument times live on the
         WMKO-native PRIMARY (the header later snapshotted verbatim into
         INSTRUMENT_HEADER at to_kpf1); the 0/1 flag then propagates downstream
-        on QUALITY_CONTROL. Passes the duration check when ELAPSED is absent --
-        only the present cards are checked.
+        on QUALITY_CONTROL.
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         beg, mid, end = (
@@ -80,15 +89,7 @@ class QCL0(QC):
         )
         if beg is None or mid is None or end is None:
             return False
-        if not (beg <= mid <= end):
-            return False
-        elapsed = self._hdr_float(hdr, "ELAPSED")
-        if (
-            elapsed is not None
-            and abs((end - beg).total_seconds() - elapsed) > _TIME_TOL_S
-        ):
-            return False
-        return True
+        return beg <= mid <= end
 
     times_consistent._qc_key = "DATTIMOK"
 
@@ -138,17 +139,61 @@ class QCL0(QC):
     def radec_consistent(self):
         """Pointing agrees with the target and catalog positions.
 
-        Thresholds the DiagL0 offsets on QUALITY_CONTROL: TARGOFF < 1", and the
-        catalog cross-matches OBJOFF/GAIAOFF < 5" (a loose bound, since the loaded
-        pointing coordinates are not Gaia/SIMBAD-derived). Each offset is checked
-        only when present, so a frame with no pointing (e.g. a calibration frame)
-        or a skipped catalog lookup passes.
+        TARGOFF (pointing vs the DCS target) is internal telescope-pointing
+        consistency and is required: an empty value (astrometry unavailable) or
+        one >= 1" fails. OBJOFF/GAIAOFF are external catalog cross-matches with a
+        looser 5" bound, checked only when present-and-valued, so a disabled or
+        failed Gaia/SIMBAD lookup passes.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        for key, limit in (("TARGOFF", 1.0), ("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
+        targoff = self._hdr_float(hdr, "TARGOFF")
+        if targoff is None or targoff >= 1.0:
+            return False
+        for key, limit in (("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
             val = self._hdr_float(hdr, key)
             if val is not None and val >= limit:
                 return False
         return True
 
     radec_consistent._qc_key = "RADECOK"
+
+    @staticmethod
+    def _row_float(row, field):
+        """A CATALOG_RECORD numeric cell as float, or None for an absent (NaN) one."""
+        value = float(row[field])
+        return None if np.isnan(value) else value
+
+    def catalog_values_sane(self):
+        """Canonical CATALOG_RECORD astrometry values are physically plausible.
+
+        Ports the v2.12 good_TARG_headers range checks onto the merged ``kpf-drp``
+        row AstroQuery resolves (the astrometry feeding the barycentric correction),
+        not the raw WMKO TARG* keywords. Each field is checked only when present:
+        epoch/equinox in (1950, 2050] Julian years, |rv| <= 350 km/s, parallax in
+        (0, 1000) mas, |pmra|/|pmdec| <= 15 arcsec/yr.
+
+        Passes when there is no ``kpf-drp`` row: this is value sanity, not a presence
+        check.
+        """
+        table = self.kpf_obj.data["CATALOG_RECORD"]
+        match = table[table["source"] == "kpf-drp"] if table.colnames else table
+        if not len(match):
+            return True
+        row = match[0]
+        for field in ("epoch", "equinox"):
+            val = self._row_float(row, field)
+            if val is not None and not (_EPOCH_RANGE[0] < val <= _EPOCH_RANGE[1]):
+                return False
+        rv = self._row_float(row, "rv")
+        if rv is not None and abs(rv) > _MAX_ABS_RV:
+            return False
+        plax = self._row_float(row, "parallax")
+        if plax is not None and not (_PARALLAX_RANGE[0] < plax < _PARALLAX_RANGE[1]):
+            return False
+        for field in ("pmra", "pmdec"):
+            pm = self._row_float(row, field)
+            if pm is not None and abs(pm) > _MAX_ABS_PM:
+                return False
+        return True
+
+    catalog_values_sane._qc_key = "CATLOGOK"

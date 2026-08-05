@@ -87,7 +87,7 @@ def _make_l4(
     """
     kpf2 = KPF2()
     kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 5772.0
-    kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = 0.0
+    kpf2.headers["PRIMARY"]["CRV3"] = 0.0
     kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
     kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = sky_obj
     kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = cal_obj

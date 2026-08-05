@@ -66,12 +66,6 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-### 5. Communicate Clearly
-
-- Be extremely concise. Sacrifice grammar for conciseness.
-- Do not over-explain. Do not get lost in irrelevant details.
-- Choose your words carefully. A single clear explanation is better than several overlapping verbose explanations.
-
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 ## Project Overview
@@ -178,22 +172,6 @@ Layout: architecture *Tests → Regression*; conventions: style guide §C.8.
 Revise tests as needed when production code changes. Code design should drive test design, not the
 other way around. Do not contort production code to match pre-existing tests.
 
-## Reading Files
-
-Reading a file loads its full text into context, so locate before you load — the target
-span, not the whole file:
-
-- **Repo code** — Grep for the symbol/definition, then Read a bounded window
-  (`offset`/`limit`) around the hit. Read a file whole only when it's short or you're about
-  to edit much of it. For "where is X?" across many files, hand the search to an Explore
-  subagent — it reads the dumps, you keep the conclusion.
-- **Governing docs** (262–622 lines each) — grep the doc's headers
-  (`grep -nE '^#+ ' docs/dev/<doc>.md`) or the keyword, then Read only that section. Read one
-  end-to-end only for a comprehensive review, not a spot-check.
-- **Large command output** (full logs, `--durations`, wide greps) — redirect to the
-  scratchpad and inspect with `grep`/`head`/`wc` rather than letting it flood context:
-  `cmd > $SCRATCH/out.txt 2>&1; grep … $SCRATCH/out.txt`.
-
 ## Design Decisions
 
 Before a non-trivial design or structural change, verify against the governing docs
@@ -207,6 +185,8 @@ Before a non-trivial design or structural change, verify against the governing d
    (architecture reference).
 4. **Change gate** — preserves deterministic behavior, runs on the truth dataset, and
    documents RV-metric impact (charter §6); measure against §3 Definition of Success.
+
+**Reading the docs** (262–622 lines each) — grep the doc's headers (`grep -nE '^#+ ' docs/dev/<doc>.md`) or the keyword, then Read only that section. Read one end-to-end only for a comprehensive review, not a spot-check.
 
 The governing docs are the single source of truth — read them, don't restate them here
 (past inline copies drifted). Intent & principles: [`KPF_VNEXT_CHARTER.md`](docs/dev/KPF_VNEXT_CHARTER.md). Structure (data model, aliases, layering, masters,

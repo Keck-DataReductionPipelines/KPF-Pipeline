@@ -355,6 +355,20 @@ class TestQCBase:
         # A passing flag never warns.
         assert not any("CHKOK" in r.getMessage() for r in warnings)
 
+    def test_hdr_float_absent_empty_none_corrupt_raises(self):
+        # Absent and valueless cards degrade to None (checks skip/FAIL gracefully);
+        # a present-but-non-numeric card is malformed, so it raises rather than
+        # being silently swallowed.
+        hdr = fits.Header()
+        hdr["NUM"] = 3.5
+        hdr["EMPTY"] = None  # present-but-empty (valueless) card
+        hdr["STR"] = "not-a-number"
+        assert QC._hdr_float(hdr, "NUM") == 3.5
+        assert QC._hdr_float(hdr, "MISSING") is None  # absent
+        assert QC._hdr_float(hdr, "EMPTY") is None  # valueless
+        with pytest.raises(ValueError):
+            QC._hdr_float(hdr, "STR")  # corrupt -> surfaces
+
 
 # ---------------------------------------------------------------------------
 # Task 3: QCL0 checks
@@ -435,9 +449,11 @@ class TestQCL0:
         bad = dict(_GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
 
-    def test_times_duration_mismatch_fails(self, tmp_path):
+    def test_times_ignores_elapsed(self, tmp_path):
+        # DATTIMOK checks only DATE ordering now; a mismatched ELAPSED (validated by
+        # EXPTIMOK instead) no longer affects it.
         bad = dict(_GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
-        assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
+        assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is True
 
     def test_times_missing_keys_fail(self, tmp_path):
         # Raw L0 PRIMARY without DATE-BEG/MID/END -> cannot verify -> fail.
@@ -580,16 +596,138 @@ class TestQCL0:
 
     def test_radec_objoff_fail(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
+        l0.set_keyword("TARGOFF", 0.02)  # internal pointing OK
         l0.set_keyword("OBJOFF", 6.0)  # > 5" pointing-vs-OBJECT
         assert QCL0(l0).radec_consistent() is False
 
-    def test_radec_absent_offsets_pass(self, tmp_path):
-        # A calibration-like frame writes no offsets -> nothing to check -> pass.
+    def test_radec_targoff_required_empty_fails(self, tmp_path):
+        # TARGOFF is internal pointing consistency: absent or present-but-empty fails.
         l0 = _make_kpf0(tmp_path)
+        assert QCL0(l0).radec_consistent() is False
+        l0.set_keyword("TARGOFF", None)  # present-but-empty (astrometry unavailable)
+        assert QCL0(l0).radec_consistent() is False
+
+    def test_radec_external_offsets_optional(self, tmp_path):
+        # TARGOFF within budget; GAIAOFF/OBJOFF unavailable (empty) -> still pass.
+        l0 = _make_kpf0(tmp_path)
+        l0.set_keyword("TARGOFF", 0.02)
+        l0.set_keyword("GAIAOFF", None)
+        l0.set_keyword("OBJOFF", None)
         assert QCL0(l0).radec_consistent() is True
 
     def test_radecok_key_present(self):
         assert QCL0.__dict__["radec_consistent"]._qc_key == "RADECOK"
+
+    # --- catalog_values_sane (CATLOGOK): physical range of the canonical
+    # CATALOG_RECORD astrometry, the v2.12 TARG* checks moved onto the merged row.
+
+    def _make_kpf0_with_canonical(self, tmp_path, **overrides):
+        """KPF0 whose CATALOG_RECORD holds a merged 'kpf-drp' row; overrides patch
+        individual fields of a physically-sane base."""
+        from kpfpipe.modules.astro_query import AstroQuery
+
+        l0 = _make_kpf0(tmp_path)
+        record = {
+            "object": "test",
+            "ra": "01:44:04.08",
+            "dec": "-15:56:14.9",
+            "pmra": 0.1,
+            "pmdec": -0.2,
+            "parallax": 100.0,
+            "rv": 10.0,
+            "frame": "icrs",
+            "epoch": 2016.0,
+            "equinox": 2000.0,
+        }
+        record.update(overrides)
+        AstroQuery(l0)._write_catalog_record("kpf-drp", record)
+        return l0
+
+    def test_catalog_values_sane_pass(self, tmp_path):
+        l0 = self._make_kpf0_with_canonical(tmp_path)
+        assert QCL0(l0).catalog_values_sane() is True
+
+    def test_catalog_values_sane_no_record_passes(self, tmp_path):
+        # Calibration/fresh L0: CATALOG_RECORD empty (AstroQuery never ran). Value
+        # sanity is N/A -> passes (presence is enforced elsewhere, not here).
+        l0 = _make_kpf0(tmp_path)
+        assert not l0.data["CATALOG_RECORD"].colnames
+        assert QCL0(l0).catalog_values_sane() is True
+
+    def test_catalog_values_sane_fail_epoch_zero(self, tmp_path):
+        # A WMKO TARGEPOC=0.0 placeholder passes the merge's is-not-None gate, so the
+        # range check is what catches it.
+        l0 = self._make_kpf0_with_canonical(tmp_path, epoch=0.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_fail_epoch_high(self, tmp_path):
+        l0 = self._make_kpf0_with_canonical(tmp_path, epoch=2100.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_epoch_boundaries(self, tmp_path):
+        # Window is (1950, 2050]: 1950 fails (exclusive low), 2050 passes (inclusive).
+        assert (
+            QCL0(
+                self._make_kpf0_with_canonical(tmp_path, epoch=1950.0)
+            ).catalog_values_sane()
+            is False
+        )
+        assert (
+            QCL0(
+                self._make_kpf0_with_canonical(tmp_path, epoch=2050.0)
+            ).catalog_values_sane()
+            is True
+        )
+
+    def test_catalog_values_sane_fail_equinox_out_of_range(self, tmp_path):
+        l0 = self._make_kpf0_with_canonical(tmp_path, equinox=1900.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_rv_high_but_in_bound_passes(self, tmp_path):
+        # A fast star: |rv| = 150 is well within the 350 km/s bound (Chubak 2012).
+        l0 = self._make_kpf0_with_canonical(tmp_path, rv=150.0)
+        assert QCL0(l0).catalog_values_sane() is True
+
+    def test_catalog_values_sane_fail_rv_too_large(self, tmp_path):
+        l0 = self._make_kpf0_with_canonical(tmp_path, rv=400.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_rv_absent_passes(self, tmp_path):
+        # No catalog rv (NaN cell) -> the rv bound is skipped (check-when-present).
+        l0 = self._make_kpf0_with_canonical(tmp_path, rv=None)
+        assert QCL0(l0).catalog_values_sane() is True
+
+    def test_catalog_values_sane_fail_parallax_negative(self, tmp_path):
+        # A negative Gaia parallax (routine for faint sources) is nonphysical; the
+        # legacy check bounded only the upper end.
+        l0 = self._make_kpf0_with_canonical(tmp_path, parallax=-0.3)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_fail_parallax_zero(self, tmp_path):
+        l0 = self._make_kpf0_with_canonical(tmp_path, parallax=0.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_fail_parallax_too_large(self, tmp_path):
+        # >= 1000 mas (< 1 pc) is unphysically close -- the legacy upper bound.
+        l0 = self._make_kpf0_with_canonical(tmp_path, parallax=1000.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_high_pm_in_bound_passes(self, tmp_path):
+        # Barnard's Star (~10.4"/yr, the highest real PM) is within the 15"/yr bound.
+        l0 = self._make_kpf0_with_canonical(tmp_path, pmra=10.4, pmdec=-8.0)
+        assert QCL0(l0).catalog_values_sane() is True
+
+    def test_catalog_values_sane_fail_pmra_too_large(self, tmp_path):
+        # A corrupt PM would misplace the source at the obs epoch.
+        l0 = self._make_kpf0_with_canonical(tmp_path, pmra=25.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catalog_values_sane_fail_pmdec_too_large(self, tmp_path):
+        l0 = self._make_kpf0_with_canonical(tmp_path, pmdec=-30.0)
+        assert QCL0(l0).catalog_values_sane() is False
+
+    def test_catlogok_key_present(self):
+        assert QCL0.__dict__["catalog_values_sane"]._qc_key == "CATLOGOK"
 
     def test_dataprl0_key_and_comment(self):
         fn = QCL0.__dict__["data_l0_red_green"]

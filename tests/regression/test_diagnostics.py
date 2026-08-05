@@ -1,7 +1,6 @@
 """Tests for the Diagnostics framework and per-level subclasses."""
 
 import logging
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -14,6 +13,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.quality_control.diagnostics import (
     DiagL0,
     DiagL1,
@@ -142,18 +142,6 @@ class TestDiagnosticsBase:
 
 
 class TestEmptyLevels:
-    def _make_obj(self):
-        class _FakeObj:
-            headers = {"PRIMARY": {}}
-            data = {}
-
-        return _FakeObj()
-
-    def test_diag_l0_runs_cleanly(self):
-        # No RA/DEC/GAIAID -> GAIAOFF/TARGOFF both skip (fail-soft), no crash.
-        results = DiagL0(self._make_obj()).run()
-        assert results == {}
-
     def test_diag_l1_runs_cleanly(self):
         # DATE-OBS present (required) but no RECEIPT cal paths -> calibration_ages
         # returns {} (no crash). DATE-OBS itself is now a required read.
@@ -162,180 +150,204 @@ class TestEmptyLevels:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 -- pointing / identity offsets (GAIAOFF, TARGOFF)
+# DiagL0 -- pointing offsets from CATALOG_RECORD (GAIAOFF, TARGOFF, OBJOFF)
 # ---------------------------------------------------------------------------
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
 
+# The flag-carrying sources; 'kpf-drp' is the merged row and has no flag.
+_CATALOG_SOURCES = ("wmko", "gaia", "simbad")
 
-def _make_l0_pointing(**overrides):
-    """A KPF0 with L0 PRIMARY pointing + DCS target + GAIAID natives.
 
-    Pass ``KEY=None`` to omit a native (used to exercise the skip paths).
-    """
-    prim = {
-        "RA": _PT_RA,
-        "DEC": _PT_DEC,
-        "MJD-OBS": 60540.6,
-        "GAIAID": "DR3 12345",
-        "TARGRA": _PT_RA,
-        "TARGDEC": _PT_DEC,
-        "TARGPMRA": 0.0,
-        "TARGPMDC": 0.0,
-        "TARGPLAX": 100.0,
-        "TARGFRAM": "FK5",
-        "TARGEPOC": 2000.0,
+def _record_at(coord, **overrides):
+    """A catalog record at ``coord`` (zero PM, finite plx) in EPRV C*# format:
+    RA/Dec sexagesimal strings, PM arcsec/yr."""
+    rec = {
+        "object": "test",
+        "ra": coord.ra.to_string(unit=u.hourangle, sep=":", pad=True, precision=4),
+        "dec": coord.dec.to_string(
+            unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
+        ),
+        "pmra": 0.0,
+        "pmdec": 0.0,
+        "parallax": 100.0,
+        "rv": 0.0,
+        "frame": "icrs",
+        "epoch": 2016.0,
+        "equinox": 2000.0,
     }
-    prim.update(overrides)
+    rec.update(overrides)
+    return rec
+
+
+def _set_catalog_record(l0, records):
+    """Write l0's CATALOG_RECORD rows + presence flags from a
+    {source: record-dict-or-None} mapping, the way perform does. A source left out of
+    the mapping gets flag 0, exactly as a gated-off one does in production."""
+    aq = AstroQuery(l0)
+    for source, record in records.items():
+        aq._write_catalog_record(source, record)
+        if source in _CATALOG_SOURCES:
+            setattr(aq, f"_{source}", record)
+    aq._set_headers(l0)
+
+
+def _make_l0_pointing():
+    """A KPF0 with just an L0 PRIMARY pointing (RA/DEC/MJD-OBS), no catalog yet.
+    IMTYPE 'Object' so AstroQuery accepts it."""
     l0 = KPF0()
-    for k, v in prim.items():
-        if v is not None:
-            l0.headers["PRIMARY"][k] = v
+    l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+    l0.headers["PRIMARY"]["RA"] = _PT_RA
+    l0.headers["PRIMARY"]["DEC"] = _PT_DEC
+    l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
     return l0
 
 
-def _fake_gaia_job(ra_deg, dec_deg):
-    """Stand-in for Gaia.launch_job: a one-row results Table, no network.
-
-    Zero proper motion so ``apply_space_motion`` leaves the position at
-    (ra_deg, dec_deg).
-    """
-    tbl = Table(
-        {
-            "ra": [ra_deg],
-            "dec": [dec_deg],
-            "pmra": [0.0],
-            "pmdec": [0.0],
-            "parallax": [100.0],
-            "ref_epoch": [2016.0],
-        }
-    )
-
-    class _Job:
-        def get_results(self):
-            return tbl
-
-    return _Job()
+def _make_l0_with_catalog():
+    """A KPF0 with L0 PRIMARY pointing and a fully-populated CATALOG_RECORD whose
+    gaia/simbad/wmko records all sit at the pointing (all three offsets ~ 0)."""
+    l0 = _make_l0_pointing()
+    pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+    _set_catalog_record(l0, {src: _record_at(pt) for src in ("gaia", "simbad", "wmko")})
+    return l0
 
 
-class TestDiagL0Pointing:
-    def _gaia_at_pointing(self):
-        # Gaia source placed exactly at the pointing -> GAIAOFF ~ 0.
-        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
-        return _fake_gaia_job(pt.ra.deg, pt.dec.deg)
-
+class TestDiagL0Offsets:
     def test_offsets_written_to_quality_control(self):
-        l0 = _make_l0_pointing()
-        with patch(
-            "kpfpipe.quality_control.diagnostics.level0.Gaia.launch_job",
-            return_value=self._gaia_at_pointing(),
-        ):
-            results = DiagL0(l0).run()
-        # Pointing == target == Gaia position, so both offsets are ~0 (TARGOFF
-        # carries the ~23 mas ICRS<->FK5 frame bias); well under the 1" budget.
-        assert results["GAIAOFF"][0] < 0.1
-        assert results["TARGOFF"][0] < 0.1
-        # set_keyword routed both to QUALITY_CONTROL.
-        assert l0.headers["QUALITY_CONTROL"]["GAIAOFF"] == results["GAIAOFF"][0]
-        assert l0.headers["QUALITY_CONTROL"]["TARGOFF"] == results["TARGOFF"][0]
-
-    def test_skip_when_no_pointing(self):
-        # A calibration-like frame with no RA/DEC/target -> both metrics N/A.
-        l0 = _make_l0_pointing(RA=None, DEC=None, TARGRA=None, GAIAID=None)
+        # All three sources sit at the pointing -> every offset ~0, routed to QC.
+        l0 = _make_l0_with_catalog()
         results = DiagL0(l0).run()
-        assert "GAIAOFF" not in results
-        assert "TARGOFF" not in results
+        for key in ("GAIAOFF", "TARGOFF", "OBJOFF"):
+            assert results[key][0] < 0.1
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
-    def test_skip_gaiaoff_when_no_gaiaid(self, caplog):
-        # Pointing + target present, GAIAID absent -> TARGOFF only, no warning.
-        l0 = _make_l0_pointing(GAIAID=None)
+    def test_offset_reflects_catalog_separation(self):
+        # Move the Gaia record 10" north of the pointing -> GAIAOFF ~ 10", while
+        # the still-at-pointing wmko record keeps TARGOFF ~ 0.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt.directional_offset_by(0 * u.deg, 10 * u.arcsec)),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt),
+            },
+        )
+        results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] == pytest.approx(10.0, abs=0.1)
+        assert results["TARGOFF"][0] < 0.1
+
+
+class TestDiagL0Contingency:
+    """Unavailable astrometry -> present-but-empty offset + WARNING, no crash."""
+
+    _KEYS = ("GAIAOFF", "TARGOFF", "OBJOFF")
+
+    def test_no_catalog_record_all_empty(self, caplog):
+        # AstroQuery not run: CATALOG_RECORD auto-created but no presence flags.
+        l0 = _make_l0_pointing()
+        with caplog.at_level(logging.WARNING):
+            DiagL0(l0).run()
+        qc = l0.headers["QUALITY_CONTROL"]
+        # All three present (registered) but valueless (read back as None).
+        for key in self._KEYS:
+            assert key in qc and qc[key] is None
+        assert caplog.text.count("no CATALOG_RECORD flags on L0") == 3
+
+    def test_source_none_emits_empty_for_that_source(self, caplog):
+        # Gaia lookup disabled/failed -> GAIACR=0 -> GAIAOFF empty; others compute.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0, {"gaia": None, "simbad": _record_at(pt), "wmko": _record_at(pt)}
+        )
         with caplog.at_level(logging.WARNING):
             results = DiagL0(l0).run()
-        assert "GAIAOFF" not in results
-        assert "TARGOFF" in results
-        assert "GAIAOFF skipped" not in caplog.text
-
-    def test_gaia_failure_warns_and_skips(self, caplog):
-        # Gaia unreachable -> GAIAOFF warns and skips; the network-free TARGOFF
-        # still computes (fail-soft, so the L0 checkpoint does not fail).
-        l0 = _make_l0_pointing()
-        with (
-            patch(
-                "kpfpipe.quality_control.diagnostics.level0.Gaia.launch_job",
-                side_effect=ConnectionError("gaia down"),
-            ),
-            caplog.at_level(logging.WARNING),
-        ):
-            results = DiagL0(l0).run()
-        assert "GAIAOFF skipped" in caplog.text
-        assert "GAIAOFF" not in results
-        assert "TARGOFF" in results
-
-
-# ---------------------------------------------------------------------------
-# DiagL0 -- OBJECT-name offset via SIMBAD (OBJOFF)
-# ---------------------------------------------------------------------------
-
-
-def _fake_simbad(ra_deg=None, dec_deg=None, no_match=False):
-    """Stand-in for the Simbad class: Simbad() -> instance whose query_object
-    returns a one-row Table (astroquery 0.4.11 schema), or None for no match."""
-    instance = MagicMock()
-    if no_match:
-        instance.query_object.return_value = None
-    else:
-        instance.query_object.return_value = Table(
-            {
-                "ra": [ra_deg],
-                "dec": [dec_deg],
-                "pmra": [0.0],
-                "pmdec": [0.0],
-                "plx_value": [100.0],
-            }
-        )
-    return instance
-
-
-class TestDiagL0Object:
-    def test_object_offset_routed_to_quality_control(self):
-        # GAIAID absent -> GAIAOFF skips silently (no Gaia network); OBJECT set,
-        # SIMBAD placed at the pointing -> OBJOFF ~ 0, routed to QUALITY_CONTROL.
-        l0 = _make_l0_pointing(GAIAID=None)
-        l0.headers["PRIMARY"]["OBJECT"] = "10700"
-        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
-        with patch(
-            "kpfpipe.quality_control.diagnostics.level0.Simbad",
-            return_value=_fake_simbad(pt.ra.deg, pt.dec.deg),
-        ):
-            results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] is None
+        assert results["TARGOFF"][0] < 0.1
         assert results["OBJOFF"][0] < 0.1
-        assert l0.headers["QUALITY_CONTROL"]["OBJOFF"] == results["OBJOFF"][0]
+        assert "no gaia astrometry in CATALOG_RECORD" in caplog.text
 
-    def test_object_name_hd_prefix(self):
-        # Bare-numeric OBJECT gets an 'HD ' prefix; named targets pass through.
+    def test_incomplete_record_emits_empty(self, caplog):
+        # A record present (flag 1) but missing epoch, the propagation baseline ->
+        # unusable, offset empty. PM/parallax instead fall back to zero (below).
         l0 = _make_l0_pointing()
-        l0.headers["PRIMARY"]["OBJECT"] = "10700"
-        assert DiagL0(l0)._object_name() == "HD 10700"
-        l0.headers["PRIMARY"]["OBJECT"] = "tau Cet"
-        assert DiagL0(l0)._object_name() == "tau Cet"
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt, epoch=None),
+            },
+        )
+        with caplog.at_level(logging.WARNING):
+            results = DiagL0(l0).run()
+        assert results["TARGOFF"][0] is None
+        assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
 
-    def test_skip_when_no_object(self):
-        # No OBJECT native -> metric N/A, skip silently (no SIMBAD call).
-        l0 = _make_l0_pointing()  # helper sets no OBJECT
-        assert DiagL0(l0).object_ra_dec_offset() == {}
-
-    def test_simbad_no_match_warns_and_skips(self, caplog):
+    @pytest.mark.parametrize("bad_plx", [None, 0.0, -5.0])
+    def test_missing_or_nonpositive_parallax_falls_back(self, bad_plx, caplog):
+        # Gaia DR3 reports parallax <= 0 (or none) for faint sources; the offset falls
+        # back to parallax=0 rather than emitting empty, so it stays finite.
         l0 = _make_l0_pointing()
-        l0.headers["PRIMARY"]["OBJECT"] = "NotARealStar"
-        with (
-            patch(
-                "kpfpipe.quality_control.diagnostics.level0.Simbad",
-                return_value=_fake_simbad(no_match=True),
-            ),
-            caplog.at_level(logging.WARNING),
-        ):
-            assert DiagL0(l0).object_ra_dec_offset() == {}
-        assert "OBJOFF skipped" in caplog.text
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt, parallax=bad_plx),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt),
+            },
+        )
+        with caplog.at_level(logging.DEBUG):
+            results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] < 0.1  # at the pointing -> ~0, not empty
+        assert "using PM=0, parallax=0" in caplog.text
+        # The fall-back is offset-local: CATALOG_RECORD keeps the original value.
+        tbl = l0.data["CATALOG_RECORD"]
+        stored = float(tbl[tbl["source"] == "gaia"]["parallax"][0])
+        if bad_plx is None:
+            assert np.isnan(stored)
+        else:
+            assert stored == pytest.approx(bad_plx)
+
+    def test_missing_pm_falls_back(self, caplog):
+        # A record with position + epoch but no proper motion still yields a finite
+        # offset (PM falls back to zero), not an empty one.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt, pmra=None, pmdec=None),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt),
+            },
+        )
+        with caplog.at_level(logging.DEBUG):
+            results = DiagL0(l0).run()
+        assert results["GAIAOFF"][0] < 0.1
+        assert "using PM=0, parallax=0" in caplog.text
+
+    def test_malformed_astrometry_emits_empty(self, caplog):
+        # A record that passes the completeness check but is malformed (unparseable
+        # RA) is caught by _offset's backstop -> empty offset, not a raised frame.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0,
+            {
+                "gaia": _record_at(pt),
+                "simbad": _record_at(pt),
+                "wmko": _record_at(pt, ra="garbage"),
+            },
+        )
+        with caplog.at_level(logging.WARNING):
+            results = DiagL0(l0).run()  # must not raise
+        assert results["TARGOFF"][0] is None
+        assert "could not compute wmko pointing offset" in caplog.text
 
 
 # ---------------------------------------------------------------------------

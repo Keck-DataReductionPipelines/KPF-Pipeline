@@ -30,23 +30,41 @@ _GOOD_DATES = {
 }
 
 
-def _write_l0_fixture(path, *, passing=True):
+def _write_l0_fixture(path, *, passing=True, imtype="Object"):
     """Write a minimal L0 FITS fixture at path.
 
     passing=True  → all QCL0 checks pass (valid header keywords, EXPTIME finite
                     and consistent with ELAPSED, amps present).
     passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
+    imtype        → PRIMARY IMTYPE; a non-'Object' (calibration) frame carries no
+                    pointing/DCS target block, so qc.py skips AstroQuery for it.
     """
     primary = fits.PrimaryHDU()
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
+    primary.header["MJD-OBS"] = 60405.04
     # Requested EXPTIME within tolerance of the elapsed time (_GOOD_DATES
     # ELAPSED = 12.07) so EXPTIMOK's ELAPSED-consistency check passes.
     primary.header["EXPTIME"] = 12.0 if passing else -1.0
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = os.path.basename(path)
-    primary.header["IMTYPE"] = "Object"
+    primary.header["IMTYPE"] = imtype
     for k, v in _GOOD_DATES.items():
         primary.header[k] = v
+
+    if imtype == "Object":
+        # Pointing + DCS target (identical -> TARGOFF ~ 0) so AstroQuery resolves the
+        # wmko record and DiagL0's required TARGOFF is available offline; the external
+        # Gaia/SIMBAD lookups are disabled via config (see _write_astro_config).
+        primary.header["RA"] = "12:00:00.00"
+        primary.header["DEC"] = "+40:00:00.0"
+        primary.header["TARGRA"] = "12:00:00.00"
+        primary.header["TARGDEC"] = "+40:00:00.0"
+        primary.header["TARGFRAM"] = "FK5"
+        primary.header["TARGEQUI"] = 2000.0
+        primary.header["TARGPMRA"] = 0.0
+        primary.header["TARGPMDC"] = 0.0
+        primary.header["TARGPLAX"] = 100.0
+        primary.header["TARGEPOC"] = 2000.0
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -62,6 +80,20 @@ def _write_config(path, data_dirs):
     lines = ["[DATA_DIRS]"]
     lines += [f'{key} = "{value}"' for key, value in data_dirs.items()]
     path.write_text("\n".join(lines) + "\n")
+
+
+def _write_astro_config(path):
+    """A minimal config that disables AstroQuery's network lookups.
+
+    qc.py runs AstroQuery for L0; disabling Gaia/SIMBAD keeps these smoke tests
+    offline, so wmko -- the header-native row, the only one left -- must also be
+    the permitted astrometric base for the merge to succeed and TARGOFF to exist."""
+    path.write_text(
+        "[DATA_DIRS]\n[TRACES]\n"
+        "[MODULE_ASTRO_QUERY]\ndo_gaia_query = false\ndo_simbad_query = false\n"
+        'astrometry_priority = ["wmko"]\n'
+    )
+    return path
 
 
 def _run_qc_script(fixture_path, level="L0", extra_args=None):
@@ -87,8 +119,9 @@ class TestQCScript:
         """All-good L0 → exit code 0, stdout contains 'ISGOOD: PASS'."""
         fixture = tmp_path / "KP.20240405.00001.00.fits"
         _write_l0_fixture(str(fixture), passing=True)
+        cfg = _write_astro_config(tmp_path / "astro.toml")
 
-        result = _run_qc_script(fixture, level="L0")
+        result = _run_qc_script(fixture, level="L0", extra_args=["--config", str(cfg)])
 
         assert result.returncode == 0, (
             f"Expected exit 0, got {result.returncode}\n"
@@ -102,8 +135,9 @@ class TestQCScript:
         """L0 with negative EXPTIME → exit code 1, stdout contains 'ISGOOD: FAIL'."""
         fixture = tmp_path / "KP.20240405.00002.00.fits"
         _write_l0_fixture(str(fixture), passing=False)
+        cfg = _write_astro_config(tmp_path / "astro.toml")
 
-        result = _run_qc_script(fixture, level="L0")
+        result = _run_qc_script(fixture, level="L0", extra_args=["--config", str(cfg)])
 
         assert result.returncode == 1, (
             f"Expected exit 1, got {result.returncode}\n"
@@ -111,6 +145,23 @@ class TestQCScript:
         )
         assert "ISGOOD: FAIL" in result.stdout, (
             f"Expected 'ISGOOD: FAIL' in stdout:\n{result.stdout}"
+        )
+
+    def test_calibration_frame_skips_astroquery_no_exit_2(self, tmp_path):
+        """A calibration L0 (IMTYPE != 'Object') stays inspectable: qc.py skips
+        AstroQuery rather than erroring, so it never exits 2 on a cal frame."""
+        fixture = tmp_path / "KP.20240405.00005.00.fits"
+        _write_l0_fixture(str(fixture), passing=True, imtype="Bias")
+        cfg = _write_astro_config(tmp_path / "astro.toml")
+
+        result = _run_qc_script(fixture, level="L0", extra_args=["--config", str(cfg)])
+
+        assert result.returncode != 2, (
+            f"Calibration L0 should not exit 2\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        assert "Skipping AstroQuery" in result.stdout, (
+            f"Expected AstroQuery-skip note in stdout:\n{result.stdout}"
         )
 
     def test_missing_file_exit_2(self, tmp_path):
