@@ -113,6 +113,8 @@ class OrderTrace:
             chip: self._master_flat.data[f"{chip}_IMG"] for chip in self.chips
         }
 
+        self._clusters = {}
+        self._metadata = {}
         self._fit_rms = {}
         self._trace_table = None
         self._output_path = None
@@ -406,7 +408,7 @@ class OrderTrace:
     # Private helpers - trace identity
     # ------------------------------------------------------------------
 
-    def _track_cluster_metadata(self, chip, clusters):
+    def _track_cluster_metadata(self, chip):
         """Measure row, mask thickness, and flux for each cluster at mid-detector.
 
         The row is the cluster's cross-dispersion position there, and is what
@@ -414,7 +416,7 @@ class OrderTrace:
         orderlets of the detector in the order they physically appear.
         """
         records = []
-        for index, cluster in enumerate(clusters):
+        for index, cluster in enumerate(self._clusters[chip]):
             row_indices, col_indices = self._pixels_near_mid_dispersion(cluster)
             records.append(
                 {
@@ -519,7 +521,7 @@ class OrderTrace:
         """Number the orders and return one row per expected trace of the CCD.
 
         Orders are counted off the CALs, bottom to top, and given their 0-based
-        ``Index`` on the CCD. An order lying mostly off the detector shows a
+        ``Order`` index on the CCD. An order lying mostly off the detector shows a
         single orderlet beyond the expected count, which is discarded -- the
         shorter of the two edge orders goes, counting only the orderlets that
         were named. A trace that was never detected leaves an empty row, so the
@@ -547,17 +549,17 @@ class OrderTrace:
             index = index[kept] - (1 if discarded == 0 else 0)
 
         traces = pd.MultiIndex.from_product(
-            [range(norder), self.fibers], names=["Index", "Fiber"]
+            [range(norder), self.fibers], names=["Order", "Fiber"]
         ).to_frame(index=False)
 
         detected = pd.DataFrame(
             {
-                "Index": index,
+                "Order": index,
                 "Fiber": metadata["Fiber"].to_numpy(),
                 "cluster": metadata["cluster"].to_numpy(),
             }
         )
-        return traces.merge(detected, on=["Index", "Fiber"], how="left")
+        return traces.merge(detected, on=["Order", "Fiber"], how="left")
 
     # ------------------------------------------------------------------
     # Private helpers - trace measurement
@@ -978,6 +980,12 @@ class OrderTrace:
         order may lie partly off the detector, which leaves one trace missing or
         one orderlet of the next order in view, so the count is allowed to be
         off by one either way.
+
+        The surviving clusters are cached as ``self._clusters[chip]``, which is
+        where the identity and fitting steps read them from; they are returned
+        as well so the step can be driven on its own. Any identities already
+        assigned are discarded with the clusters they were assigned to, whose
+        list positions this rebuild invalidates.
         """
         illuminated = self._detect_illuminated_pixels(chip)
         clusters = self._detect_clusters(illuminated)
@@ -994,18 +1002,23 @@ class OrderTrace:
                 f"{chip}: {len(clusters)} traces detected, expected {expected}"
             )
 
+        self._clusters[chip] = clusters
+        self._metadata.pop(chip, None)
         return clusters
 
-    def assign_trace_identities(self, chip, clusters):
-        """Label every cluster with its fiber and order index."""
-        metadata = self._track_cluster_metadata(chip, clusters)
-        metadata = self._assign_fiber_identities(chip, metadata)
-        metadata = self._assign_order_indexes(chip, metadata)
-        return metadata
+    def assign_trace_identities(self, chip):
+        """Label every cluster with its fiber and order index.
 
-    def fit_trace_polynomials(
-        self, chip, clusters, identities, full_coverage_fraction=0.9
-    ):
+        The labelled traces are cached as ``self._metadata[chip]``, which is
+        where the fitting step reads them from; they are returned as well so the
+        step can be driven on its own.
+        """
+        metadata = self._track_cluster_metadata(chip)
+        metadata = self._assign_fiber_identities(chip, metadata)
+        self._metadata[chip] = self._assign_order_indexes(chip, metadata)
+        return self._metadata[chip]
+
+    def fit_trace_polynomials(self, chip, full_coverage_fraction=0.9):
         """Fit every identified trace and assemble the output table for one CCD.
 
         Coverage is the fraction of the dispersion direction a trace was
@@ -1018,8 +1031,8 @@ class OrderTrace:
 
         records = []
         rms_values = []
-        for trace in identities.itertuples(index=False):
-            order, fiber, cluster_index = trace.Index, trace.Fiber, trace.cluster
+        for trace in self._metadata[chip].itertuples(index=False):
+            order, fiber, cluster_index = trace.Order, trace.Fiber, trace.cluster
             record = dict.fromkeys(
                 coefficient_fields + self._trace_fields(which="bounds"), np.nan
             )
@@ -1034,7 +1047,7 @@ class OrderTrace:
                 records.append(record)
                 continue
 
-            cluster = clusters[int(cluster_index)]
+            cluster = self._clusters[chip][int(cluster_index)]
             centers = self._trace_centers(
                 column_profiles, cluster, sample_columns, fiber
             )
@@ -1217,9 +1230,9 @@ class OrderTrace:
 
         tables = []
         for chip in chips:
-            clusters = self.detect_traces(chip)
-            identities = self.assign_trace_identities(chip, clusters)
-            tables.append(self.fit_trace_polynomials(chip, clusters, identities))
+            self.detect_traces(chip)
+            self.assign_trace_identities(chip)
+            tables.append(self.fit_trace_polynomials(chip))
 
         self._trace_table = pd.concat(tables, ignore_index=True)
         if output_dir is not None:

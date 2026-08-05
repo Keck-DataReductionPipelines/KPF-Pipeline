@@ -80,7 +80,7 @@ def _trace_labels(norder):
 
 def _labels(identities):
     """Return the (order index, fiber) label of every identified trace."""
-    return list(zip(identities["Index"], identities["Fiber"], strict=True))
+    return list(zip(identities["Order"], identities["Fiber"], strict=True))
 
 
 def _synthetic_flat(norder=3, ncol=400, drop=(), seed=0):
@@ -158,11 +158,17 @@ def _fiber_metadata(rows, cal_indices):
 
 
 def _curated_clusters(tracer):
-    """Run detection and curation exactly as the module's own chain does."""
+    """Run detection and curation exactly as the module's own chain does.
+
+    The clusters are cached where the later steps read them from, as
+    detect_traces does, so identity can be exercised on cluster counts
+    detection itself would refuse.
+    """
     clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
     clusters = tracer._reject_small_clusters(clusters)
     clusters = tracer._merge_fragmented_clusters(clusters)
-    return tracer._reject_malformed_clusters(clusters)
+    tracer._clusters["GREEN"] = tracer._reject_malformed_clusters(clusters)
+    return tracer._clusters["GREEN"]
 
 
 # ---------------------------------------------------------------------------
@@ -228,9 +234,9 @@ class TestCalIdentification:
     def test_flags_every_cal_orderlet(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=4)
         tracer = _tracer(tmp_path, image, monkeypatch, norder=4)
-        clusters = _curated_clusters(tracer)
+        _curated_clusters(tracer)
 
-        metadata = tracer._track_cluster_metadata("GREEN", clusters)
+        metadata = tracer._track_cluster_metadata("GREEN")
         flagged = np.flatnonzero(tracer._flag_cal_clusters(metadata)["is_cal"])
 
         assert flagged.size == 4
@@ -241,9 +247,9 @@ class TestCalIdentification:
     ):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
-        clusters = _curated_clusters(tracer)
+        _curated_clusters(tracer)
 
-        metadata = tracer._track_cluster_metadata("GREEN", clusters)
+        metadata = tracer._track_cluster_metadata("GREEN")
         metadata = tracer._flag_cal_clusters(metadata)
         cal = metadata[metadata["is_cal"]]
         other = metadata[~metadata["is_cal"]]
@@ -254,7 +260,8 @@ class TestCalIdentification:
     def test_reports_a_flat_with_no_identifiable_cal(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
-        metadata = tracer._track_cluster_metadata("GREEN", _curated_clusters(tracer))
+        _curated_clusters(tracer)
+        metadata = tracer._track_cluster_metadata("GREEN")
 
         # A flat whose orderlets are all equally bright flags no CAL at all.
         metadata["flux"] = 100.0
@@ -266,7 +273,8 @@ class TestCalIdentification:
     ):
         image, _ = _synthetic_flat(norder=4)
         tracer = _tracer(tmp_path, image, monkeypatch, norder=4)
-        metadata = tracer._track_cluster_metadata("GREEN", _curated_clusters(tracer))
+        _curated_clusters(tracer)
+        metadata = tracer._track_cluster_metadata("GREEN")
 
         # Two of the four CALs are dimmed to their neighbours' brightness, so
         # only half the orders end up anchored.
@@ -287,7 +295,7 @@ class TestTraceIdentity:
         tracer = _tracer(tmp_path, image, monkeypatch)
 
         clusters = tracer.detect_traces("GREEN")
-        identities = tracer.assign_trace_identities("GREEN", clusters)
+        identities = tracer.assign_trace_identities("GREEN")
 
         assert _labels(identities) == _trace_labels(3)
         assert identities["cluster"].notna().all()
@@ -295,7 +303,7 @@ class TestTraceIdentity:
             cluster = clusters[int(trace.cluster)]
             middle = cluster["col_indices"] == image.shape[1] // 2
             assert cluster["row_indices"][middle].mean() == pytest.approx(
-                truth[(trace.Index, trace.Fiber)][image.shape[1] // 2], abs=1.0
+                truth[(trace.Order, trace.Fiber)][image.shape[1] // 2], abs=1.0
             )
 
     def test_labels_are_unshifted_when_edge_traces_are_absent(
@@ -308,7 +316,7 @@ class TestTraceIdentity:
         # Two absent traces are more than detect_traces tolerates, so identity
         # is exercised on the curated clusters directly.
         clusters = _curated_clusters(tracer)
-        identities = tracer.assign_trace_identities("GREEN", clusters)
+        identities = tracer.assign_trace_identities("GREEN")
 
         assert _labels(identities) == _trace_labels(3)
         assert _labels(identities[identities["cluster"].isna()]) == dropped
@@ -316,7 +324,7 @@ class TestTraceIdentity:
             cluster = clusters[int(trace.cluster)]
             middle = cluster["col_indices"] == image.shape[1] // 2
             assert cluster["row_indices"][middle].mean() == pytest.approx(
-                truth[(trace.Index, trace.Fiber)][image.shape[1] // 2], abs=1.0
+                truth[(trace.Order, trace.Fiber)][image.shape[1] // 2], abs=1.0
             )
 
     def test_phases_a_partial_order_at_the_bottom(self, master_path):
