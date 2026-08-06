@@ -83,8 +83,15 @@ def _labels(identities):
     return list(zip(identities["Order"], identities["Fiber"], strict=True))
 
 
-def _synthetic_flat(norder=3, ncol=400, drop=(), seed=0):
-    """Return a synthetic master-flat image and its exact trace centers."""
+def _synthetic_flat(norder=3, ncol=400, drop=(), seed=0, converge=0.0):
+    """Return a synthetic master-flat image and its exact trace centers.
+
+    ``converge`` tilts each trace toward the one below it, closing every gap by
+    that many pixels between the left and right edges. The traces then run
+    closest at one end of the detector instead of everywhere, which is what
+    separates a neighbor constraint measured at closest approach from one
+    measured at mid-dispersion.
+    """
     rng = np.random.default_rng(seed)
     order_height = 4 * _ORDERLET_SPACING + _ORDER_GAP
     nrow = int(24 + norder * order_height + 24)
@@ -94,10 +101,17 @@ def _synthetic_flat(norder=3, ncol=400, drop=(), seed=0):
 
     truth = {}
     first_row = 24.0
+    tilt = 0.0
     for order, fiber in _trace_labels(norder):
-        centers = first_row - 0.004 * columns - 1e-6 * columns**2
+        centers = (
+            first_row
+            - 0.004 * columns
+            - 1e-6 * columns**2
+            - tilt * columns / (ncol - 1)
+        )
         truth[(order, fiber)] = centers
         first_row += _ORDER_GAP if fiber == "CAL" else _ORDERLET_SPACING
+        tilt += converge
         if (order, fiber) in drop:
             continue
         image += _orderlet_profile(rows - centers[None, :], fiber)
@@ -636,6 +650,16 @@ def _assert_apertures_disjoint(table, ncol):
     assert np.all(lower[1:] > upper[:-1])
 
 
+def _fitted_tracer(tmp_path, monkeypatch, **kwargs):
+    """Return a tracer over a one-order synthetic flat, fitted but unapertured."""
+    image, _ = _synthetic_flat(norder=1)
+    tracer = _tracer(tmp_path, image, monkeypatch, norder=1, **kwargs)
+    tracer.detect_traces("GREEN")
+    tracer.assign_trace_identities("GREEN")
+    tracer.fit_trace_polynomials("GREEN")
+    return tracer
+
+
 class TestApertureConstraint:
     def _make_tracer(self, master_path, norder=1, ncol=400):
         return OrderTrace(
@@ -643,31 +667,106 @@ class TestApertureConstraint:
             {"ccd": {"nrow": 400, "ncol": ncol}, "norder": {"GREEN": norder}},
         )
 
-    def test_clamps_convergent_neighbours_and_keeps_roomy_ones(self, master_path):
-        tracer = self._make_tracer(master_path)
-        ncol = 400
-        # `above` tilts down to sit 4 px over `below` at the right edge; `roomy`
-        # stays a constant 30 px higher and is never contended.
-        below = _straight_trace(100.0, 0.0, 6.0, 6.0)
-        above = _straight_trace(130.0, (104.0 - 130.0) / (ncol - 1), 6.0, 6.0)
-        roomy = _straight_trace(160.0, 0.0, 6.0, 6.0)
+    def test_clamps_contended_neighbours_and_keeps_roomy_ones(
+        self, tmp_path, monkeypatch
+    ):
+        roomy = _fitted_tracer(tmp_path, monkeypatch).estimate_trace_apertures("GREEN")
+        # A guard band this wide leaves the neighbours 4 px of their
+        # _ORDERLET_SPACING to share, so every interior edge is contended.
+        clamped = _fitted_tracer(tmp_path, monkeypatch).estimate_trace_apertures(
+            "GREEN", orderlet_gap_pixels=_ORDERLET_SPACING - 4.0
+        )
 
-        tracer._constrain_neighbor_widths([below, above, roomy])
+        below, above = clamped["TopEdge"][:-1], clamped["BottomEdge"][1:]
+        assert np.allclose(below.to_numpy(), 2.0, atol=0.1)
+        assert np.allclose(below.to_numpy(), above.to_numpy())
+        assert (below.to_numpy() < roomy["TopEdge"][:-1].to_numpy()).all()
+        # The outermost edges are uncontended and keep their profile width.
+        assert clamped["BottomEdge"].iloc[0] == roomy["BottomEdge"].iloc[0]
+        assert clamped["TopEdge"].iloc[-1] == roomy["TopEdge"].iloc[-1]
 
-        # 4 px apart less a 2 px gap leaves 1 px each side of the shared midline.
-        assert below["TopEdge"] == pytest.approx(1.0)
-        assert above["BottomEdge"] == pytest.approx(1.0)
-        # Uncontended edges keep their measured profile width.
-        assert below["BottomEdge"] == 6.0
-        assert above["TopEdge"] == 6.0
-        assert (roomy["BottomEdge"], roomy["TopEdge"]) == (6.0, 6.0)
+    def test_clamps_convergent_neighbours_at_their_closest_approach(
+        self, tmp_path, monkeypatch
+    ):
+        image, truth = _synthetic_flat(norder=1, converge=4.0)
+        tracer = _tracer(tmp_path, image, monkeypatch, norder=1)
+        table = tracer.make_master()
+        roomy = _fitted_tracer(tmp_path, monkeypatch).estimate_trace_apertures("GREEN")
 
-    def test_rejects_traces_too_close_for_the_gap(self, master_path):
-        tracer = self._make_tracer(master_path)
-        below = _straight_trace(100.0, 0.0, 6.0, 6.0)
-        above = _straight_trace(101.0, 0.0, 6.0, 6.0)
+        centers = np.array([truth[label] for label in _trace_labels(1)])
+        separation = np.diff(centers, axis=0)
+        mid_dispersion = separation[:, image.shape[1] // 2]
+        assert (separation.min(axis=1) < mid_dispersion - 1.0).all()
+
+        # Each contended edge is half the closest approach less the default 2 px
+        # guard band; the rest keep the width their profile was measured at.
+        half_space = (separation.min(axis=1) - 2.0) / 2.0
+        below, above = table["TopEdge"][:-1], table["BottomEdge"][1:]
+        assert np.allclose(
+            below.to_numpy(), np.minimum(roomy["TopEdge"][:-1], half_space), atol=0.1
+        )
+        assert np.allclose(
+            above.to_numpy(), np.minimum(roomy["BottomEdge"][1:], half_space), atol=0.1
+        )
+        # Measuring at mid-dispersion instead would have left them wider.
+        assert (below.to_numpy() < (mid_dispersion - 2.0) / 2.0).all()
+        _assert_apertures_disjoint(table, image.shape[1])
+
+    def test_rejects_neighbours_whose_centerlines_cross(self, tmp_path, monkeypatch):
+        tracer = _fitted_tracer(tmp_path, monkeypatch)
+        # Tilt SCI1 down through SKY so the two touch and then cross. Detection
+        # cannot deliver such a pair -- they would be one cluster -- but a fit
+        # running away over part of the detector can.
+        fitted = tracer._trace_table
+        crossing = fitted.index[fitted["Fiber"] == "SCI1"][0]
+        fitted.loc[crossing, "Coeff1"] -= (
+            2 * _ORDERLET_SPACING / (tracer.ccd["ncol"] - 1)
+        )
+
         with pytest.raises(ValueError, match="orderlet gap"):
-            tracer._constrain_neighbor_widths([below, above])
+            tracer.estimate_trace_apertures("GREEN")
+
+    def test_rejects_traces_too_close_for_the_gap(self, tmp_path, monkeypatch):
+        tracer = _fitted_tracer(tmp_path, monkeypatch)
+        with pytest.raises(ValueError, match="orderlet gap"):
+            tracer.estimate_trace_apertures(
+                "GREEN", orderlet_gap_pixels=_ORDERLET_SPACING + 1.0
+            )
+
+    def test_fitting_leaves_the_apertures_to_the_aperture_step(
+        self, tmp_path, monkeypatch
+    ):
+        tracer = _fitted_tracer(tmp_path, monkeypatch)
+
+        fitted = tracer._trace_table
+        assert list(fitted.columns) == _TRACE_FIELDS + ["kept", "rms"]
+        assert fitted[["BottomEdge", "TopEdge"]].isna().all(axis=None)
+        assert fitted[["Coeff0", "X1", "X2", "rms"]].notna().all(axis=None)
+
+        table = tracer.estimate_trace_apertures("GREEN")
+        assert list(table.columns) == _TRACE_FIELDS
+        assert (table[["BottomEdge", "TopEdge"]] > 0).all(axis=None)
+
+    def test_demotes_a_trace_whose_widths_cannot_be_measured(
+        self, tmp_path, monkeypatch
+    ):
+        tracer = _fitted_tracer(tmp_path, monkeypatch)
+        measure = tracer._estimate_widths
+        failures = []
+
+        def fail_once(*args, **kwargs):
+            if not failures:
+                failures.append(1)
+                raise ValueError("fewer than three valid samples")
+            return measure(*args, **kwargs)
+
+        monkeypatch.setattr(tracer, "_estimate_widths", fail_once)
+        table = tracer.estimate_trace_apertures("GREEN")
+
+        demoted = table[table["Status"] == "missing"]
+        assert list(demoted["Fiber"]) == ["SKY"]
+        assert demoted[["Coeff0", "BottomEdge", "X1"]].isna().all(axis=None)
+        assert len(tracer._fit_rms["GREEN"]) == len(table) - 1
 
     def test_validation_rejects_overlapping_apertures(self, master_path):
         tracer = self._make_tracer(master_path, norder=1)

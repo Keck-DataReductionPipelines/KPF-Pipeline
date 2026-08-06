@@ -115,6 +115,7 @@ class OrderTrace:
 
         self._clusters = {}
         self._metadata = {}
+        self._profiles = {}
         self._fit_rms = {}
         self._trace_table = None
         self._output_path = None
@@ -584,7 +585,15 @@ class OrderTrace:
         A window overhanging a detector edge is padded with NaN, which
         ``nanmedian`` then ignores, giving exactly the truncated median a
         clamped per-column slice would.
+
+        The result is cached as ``self._profiles[chip]`` so that the fitting and
+        aperture steps, which both measure at these columns, sample the detector
+        once between them. The cache is keyed by CCD alone, so the sampling
+        arguments are the defaults every caller uses.
         """
+        if chip in self._profiles:
+            return self._profiles[chip]
+
         image = self._image[chip]
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
 
@@ -608,9 +617,11 @@ class OrderTrace:
         )
         profiles = np.where(finite, profiles, fill[None, :]).astype(float, copy=False)
 
-        return columns, dict(
-            zip(columns.tolist(), np.ascontiguousarray(profiles.T), strict=True)
+        self._profiles[chip] = (
+            columns,
+            dict(zip(columns.tolist(), np.ascontiguousarray(profiles.T), strict=True)),
         )
+        return self._profiles[chip]
 
     def _local_peak_center(
         self,
@@ -652,25 +663,6 @@ class OrderTrace:
         if weights.sum() <= 0:
             return np.nan
         return float(np.average(rows[core_start:core_stop], weights=weights))
-
-    @staticmethod
-    def _threshold_crossing(rows, signal, core_index, direction, threshold):
-        """Interpolate one threshold crossing away from an illuminated core."""
-        current = int(core_index)
-        adjacent = current + int(direction)
-        while 0 <= adjacent < signal.size and signal[adjacent] >= threshold:
-            current = adjacent
-            adjacent = current + int(direction)
-        if adjacent < 0 or adjacent >= signal.size:
-            return np.nan
-
-        value_inside = signal[current]
-        value_outside = signal[adjacent]
-        denominator = value_inside - value_outside
-        if not np.isfinite(denominator) or denominator <= 0.0:
-            return np.nan
-        fraction = (value_inside - threshold) / denominator
-        return float(rows[current] + fraction * (rows[adjacent] - rows[current]))
 
     def _local_edge_center(
         self,
@@ -719,13 +711,33 @@ class OrderTrace:
             if illuminated.size == 0:
                 continue
             core_index = illuminated[np.argmin(np.abs(illuminated - row_guess_index))]
-            bottom = self._threshold_crossing(rows, signal, core_index, -1, threshold)
-            top = self._threshold_crossing(rows, signal, core_index, 1, threshold)
-            width = top - bottom
+
+            # Walk out of the illuminated core to either side and interpolate
+            # the row the signal falls back through the threshold at.
+            crossings = []
+            for direction in (-1, 1):
+                current = int(core_index)
+                adjacent = current + direction
+                while 0 <= adjacent < signal.size and signal[adjacent] >= threshold:
+                    current = adjacent
+                    adjacent = current + direction
+                if not 0 <= adjacent < signal.size:
+                    crossings.append(np.nan)
+                    continue
+                fall = signal[current] - signal[adjacent]
+                if not np.isfinite(fall) or fall <= 0.0:
+                    crossings.append(np.nan)
+                    continue
+                fraction = (signal[current] - threshold) / fall
+                crossings.append(
+                    float(rows[current] + fraction * (rows[adjacent] - rows[current]))
+                )
+
+            bottom, top = crossings
             if (
                 np.isfinite(bottom)
                 and np.isfinite(top)
-                and width >= edge_min_width_pixels
+                and top - bottom >= edge_min_width_pixels
             ):
                 centers.append((bottom + top) / 2.0)
 
@@ -801,46 +813,6 @@ class OrderTrace:
         rms = float(np.sqrt(np.mean(residual**2)))
         return coeffs, kept, rms
 
-    def _width_at_column(
-        self,
-        column_profile,
-        center,
-        width_half_window=7,
-        winsor_percentile=90.0,
-        width_sigma=2.8,
-    ):
-        """Estimate the aperture's half-widths below and above one trace sample.
-
-        Below and above are cross-dispersion, so the two widths become the
-        ``BottomEdge`` and ``TopEdge`` output fields.
-        """
-        first_i = max(0, int(np.floor(center)) - width_half_window)
-        last_i = min(column_profile.size, int(np.ceil(center)) + width_half_window + 1)
-        if last_i - first_i < 5:
-            return np.nan, np.nan
-
-        profile = column_profile[first_i:last_i]
-        rows = np.arange(first_i, last_i, dtype=float)
-        signal = np.clip(profile - np.nanpercentile(profile, 20.0), 0.0, None)
-        if not np.any(signal > 0):
-            return np.nan, np.nan
-        signal = np.minimum(signal, np.nanpercentile(signal, winsor_percentile))
-        offsets = rows - center
-
-        widths = []
-        for half in (offsets <= 0, offsets >= 0):
-            weights = signal[half]
-            distance = np.abs(offsets[half])
-            if weights.size < 2 or weights.sum() <= 0:
-                widths.append(np.nan)
-                continue
-            # A Gaussian's second moment is sigma. Estimating it on each half
-            # preserves aperture asymmetry without the unstable unconstrained
-            # half-Gaussian fits used by the legacy implementation.
-            sigma = np.sqrt(np.sum(weights * distance**2) / np.sum(weights))
-            widths.append(width_sigma * sigma)
-        return tuple(widths)
-
     def _estimate_widths(
         self,
         profiles,
@@ -848,62 +820,61 @@ class OrderTrace:
         columns,
         kept,
         width_half_window=7,
+        winsor_percentile=90.0,
+        width_sigma=2.8,
     ):
-        """Return robust bottom/top aperture widths from accepted samples."""
+        """Return robust bottom/top aperture widths from accepted samples.
+
+        Below and above are cross-dispersion, so the two widths become the
+        ``BottomEdge`` and ``TopEdge`` output fields. Each sampled column
+        contributes the second moment of the flux on one side of the centerline,
+        which is a Gaussian's sigma; estimating the two halves separately
+        preserves aperture asymmetry without the unstable unconstrained
+        half-Gaussian fits used by the legacy implementation.
+        """
         bottom_widths = []
         top_widths = []
         kept_columns = columns[kept]
         stride = max(1, kept_columns.size // 24)
         for j in kept_columns[::stride]:
             center = np.polynomial.polynomial.polyval(j, coeffs)
-            bottom, top = self._width_at_column(
-                profiles[int(j)],
-                center,
-                width_half_window,
+            column_profile = profiles[int(j)]
+            first_i = max(0, int(np.floor(center)) - width_half_window)
+            last_i = min(
+                column_profile.size, int(np.ceil(center)) + width_half_window + 1
             )
-            if np.isfinite(bottom) and bottom > 0:
-                bottom_widths.append(bottom)
-            if np.isfinite(top) and top > 0:
-                top_widths.append(top)
+            if last_i - first_i < 5:
+                continue
+
+            profile = column_profile[first_i:last_i]
+            rows = np.arange(first_i, last_i, dtype=float)
+            signal = np.clip(profile - np.nanpercentile(profile, 20.0), 0.0, None)
+            if not np.any(signal > 0):
+                continue
+            signal = np.minimum(signal, np.nanpercentile(signal, winsor_percentile))
+            offsets = rows - center
+
+            for half, sampled in (
+                (offsets <= 0, bottom_widths),
+                (offsets >= 0, top_widths),
+            ):
+                weights = signal[half]
+                distance = np.abs(offsets[half])
+                if weights.size < 2 or weights.sum() <= 0:
+                    continue
+                sigma = np.sqrt(np.sum(weights * distance**2) / np.sum(weights))
+                width = width_sigma * sigma
+                if np.isfinite(width) and width > 0:
+                    sampled.append(width)
 
         if len(bottom_widths) < 3 or len(top_widths) < 3:
             raise ValueError(
                 "fewer than three valid samples for trace-width estimation"
             )
-        bottom = float(np.clip(np.nanmedian(bottom_widths), 1.0, 11.0))
-        top = float(np.clip(np.nanmedian(top_widths), 1.0, 11.0))
-        return bottom, top
-
-    def _constrain_neighbor_widths(self, records, orderlet_gap_pixels=2.0):
-        """Clamp each aperture edge at the midline it shares with its neighbor.
-
-        ``records`` arrive ascending in row (order then fiber), so consecutive
-        records are the neighbors that must not overlap. Each keeps its profile
-        width where there is room; where two would meet, both clamp to half the
-        space between their centerlines less a guard band. That space is
-        measured where the two centerlines run closest, so the apertures stay
-        disjoint across the whole detector, not only at mid-dispersion.
-        """
-        coefficient_fields = self._trace_fields(which="coeffs")
-        columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
-        centers = [
-            np.polynomial.polynomial.polyval(
-                columns, [record[field] for field in coefficient_fields]
-            )
-            for record in records
-        ]
-        for index, (below, above) in enumerate(
-            zip(records[:-1], records[1:], strict=False)
-        ):
-            closest_approach = float(np.min(centers[index + 1] - centers[index]))
-            half_space = (closest_approach - orderlet_gap_pixels) / 2.0
-            if half_space <= 0:
-                raise ValueError(
-                    "neighboring fitted traces cross or leave no room for the "
-                    "orderlet gap"
-                )
-            below["TopEdge"] = min(below["TopEdge"], half_space)
-            above["BottomEdge"] = min(above["BottomEdge"], half_space)
+        return (
+            float(np.clip(np.nanmedian(bottom_widths), 1.0, 11.0)),
+            float(np.clip(np.nanmedian(top_widths), 1.0, 11.0)),
+        )
 
     def _validate_trace_table(self, chip, table, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
@@ -1013,31 +984,43 @@ class OrderTrace:
         return self._metadata[chip]
 
     def fit_trace_polynomials(self, chip, full_coverage_fraction=0.9):
-        """Fit every identified trace and assemble the output table for one CCD.
+        """Fit a centerline through every identified trace of one CCD.
 
         Coverage is the fraction of the dispersion direction a trace was
         successfully measured over, and is what separates 'full' from 'partial'.
+
+        The fitted traces are appended to ``self._trace_table``, replacing any
+        rows this CCD already has there, with their aperture edges left
+        unmeasured; the aperture step fills those in and drops the ``kept`` and
+        ``rms`` columns carried here for it. The CCD's rows are returned as well
+        so the step can be driven on its own.
         """
         ncol = self.ccd["ncol"]
         coefficient_fields = self._trace_fields(which="coeffs")
         columns, profiles = self._sample_profiles(chip)
 
         records = []
-        rms_values = []
         for trace in self._metadata[chip].itertuples(index=False):
             order, fiber, cluster_index = trace.Order, trace.Fiber, trace.cluster
             record = dict.fromkeys(
                 coefficient_fields + self._trace_fields(which="bounds"), np.nan
             )
             record.update(
-                {"Chip": chip, "Fiber": fiber, "Order": order, "Status": "missing"}
+                {
+                    "Chip": chip,
+                    "Fiber": fiber,
+                    "Order": order,
+                    "Status": "missing",
+                    "kept": None,
+                    "rms": np.nan,
+                }
             )
+            records.append(record)
 
             if pd.isna(cluster_index):
                 logger.warning(
                     "%s %s order %d: no cluster detected", chip, fiber, order
                 )
-                records.append(record)
                 continue
 
             cluster = self._clusters[chip][int(cluster_index)]
@@ -1046,12 +1029,8 @@ class OrderTrace:
                 coeffs, kept, rms = self._robust_polynomial_fit(
                     columns.astype(float), centers
                 )
-                bottom, top = self._estimate_widths(
-                    profiles, coeffs, columns.astype(float), kept
-                )
             except ValueError as error:
                 logger.warning("%s %s order %d: %s", chip, fiber, order, error)
-                records.append(record)
                 continue
 
             kept_columns = columns[kept]
@@ -1059,24 +1038,101 @@ class OrderTrace:
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
             record.update(
                 {
-                    "BottomEdge": bottom,
-                    "TopEdge": top,
                     "X1": float(kept_columns.min()),
                     "X2": float(kept_columns.max()),
                     "Status": "full"
                     if coverage >= full_coverage_fraction
                     else "partial",
+                    "kept": kept,
+                    "rms": rms,
                 }
             )
-            records.append(record)
-            rms_values.append(rms)
 
-        measured = [record for record in records if record["Status"] != "missing"]
-        self._constrain_neighbor_widths(measured)
+        table = pd.DataFrame(records, columns=self._trace_fields() + ["kept", "rms"])
+        if self._trace_table is not None:
+            other_chips = self._trace_table[self._trace_table["Chip"] != chip]
+            table = pd.concat([other_chips, table], ignore_index=True)
+        self._trace_table = table
+        return table[table["Chip"] == chip]
 
-        table = pd.DataFrame(records, columns=self._trace_fields())
+    def estimate_trace_apertures(self, chip, orderlet_gap_pixels=2.0):
+        """Measure every fitted trace's aperture and validate the CCD's table.
+
+        The aperture is the band of rows an extraction takes as belonging to a
+        trace: the flux widths below and above its centerline, clamped where a
+        neighbor's aperture would otherwise be reached. A trace whose widths
+        cannot be measured is demoted to 'missing' and keeps no geometry at all,
+        as a centerline with no aperture cannot be extracted from.
+
+        The measured edges are written into ``self._trace_table`` and the
+        columns the fitting step carried for this one are dropped, leaving the
+        CCD's rows in the form they are written out in; they are returned as
+        well so the step can be driven on its own.
+        """
+        columns, profiles = self._sample_profiles(chip)
+        coefficient_fields = self._trace_fields(which="coeffs")
+
+        edges = {}
+        for trace_index in self._trace_table.index[self._trace_table["Chip"] == chip]:
+            trace = self._trace_table.loc[trace_index]
+            if trace["Status"] == "missing":
+                continue
+            try:
+                bottom, top = self._estimate_widths(
+                    profiles,
+                    trace[coefficient_fields].to_numpy(dtype=float),
+                    columns.astype(float),
+                    trace["kept"],
+                )
+            except ValueError as error:
+                logger.warning(
+                    "%s %s order %d: %s", chip, trace["Fiber"], trace["Order"], error
+                )
+                fields = coefficient_fields + ["X1", "X2", "rms"]
+                self._trace_table.loc[trace_index, fields] = np.nan
+                self._trace_table.loc[trace_index, "Status"] = "missing"
+                continue
+            edges[trace_index] = [bottom, top]
+
+        # Measured traces run ascending in row, so consecutive ones are the
+        # neighbors that must not overlap. Each keeps its profile width where
+        # there is room; where two would meet, both clamp to half the space
+        # between their centerlines less a guard band. That space is measured
+        # where the two centerlines run closest, so the apertures stay disjoint
+        # across the whole detector, not only at mid-dispersion.
+        measured = list(edges)
+        test_columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
+        centers = [
+            np.polynomial.polynomial.polyval(
+                test_columns,
+                self._trace_table.loc[trace_index, coefficient_fields].to_numpy(
+                    dtype=float
+                ),
+            )
+            for trace_index in measured
+        ]
+        for index, (below, above) in enumerate(
+            zip(measured[:-1], measured[1:], strict=False)
+        ):
+            closest_approach = float(np.min(centers[index + 1] - centers[index]))
+            half_space = (closest_approach - orderlet_gap_pixels) / 2.0
+            if half_space <= 0:
+                raise ValueError(
+                    "neighboring fitted traces cross or leave no room for the "
+                    "orderlet gap"
+                )
+            edges[below][1] = min(edges[below][1], half_space)
+            edges[above][0] = min(edges[above][0], half_space)
+
+        for trace_index, (bottom, top) in edges.items():
+            self._trace_table.loc[trace_index, ["BottomEdge", "TopEdge"]] = bottom, top
+
+        self._fit_rms[chip] = self._trace_table.loc[measured, "rms"].to_numpy(
+            dtype=float
+        )
+        self._trace_table = self._trace_table.drop(columns=["kept", "rms"])
+        table = self._trace_table[self._trace_table["Chip"] == chip]
         self._validate_trace_table(chip, table)
-        self._fit_rms[chip] = np.asarray(rms_values, dtype=float)
         return table
 
     def save_master(self, path, *, overwrite=False):
@@ -1209,13 +1265,12 @@ class OrderTrace:
         if chips is None:
             chips = self.chips
 
-        tables = []
         for chip in chips:
             self.detect_traces(chip)
             self.assign_trace_identities(chip)
-            tables.append(self.fit_trace_polynomials(chip))
+            self.fit_trace_polynomials(chip)
+            self.estimate_trace_apertures(chip)
 
-        self._trace_table = pd.concat(tables, ignore_index=True)
         if output_dir is not None:
             # The master flat is {obs_id}_master_flat_L1.fits (WMKO DRP-RUN-05),
             # so the master order-trace is {obs_id}_master_order_trace.csv.
