@@ -30,6 +30,7 @@ _TRACE_FIELDS = [
     "TopEdge",
     "X1",
     "X2",
+    "PolyfitRMS",
     "Status",
 ]
 
@@ -739,9 +740,16 @@ class TestApertureConstraint:
         tracer = _fitted_tracer(tmp_path, monkeypatch)
 
         fitted = tracer._trace_table
-        assert list(fitted.columns) == _TRACE_FIELDS + ["kept", "rms"]
+        assert list(fitted.columns) == _TRACE_FIELDS
         assert fitted[["BottomEdge", "TopEdge"]].isna().all(axis=None)
-        assert fitted[["Coeff0", "X1", "X2", "rms"]].notna().all(axis=None)
+        assert fitted[["Coeff0", "X1", "X2", "PolyfitRMS"]].notna().all(axis=None)
+
+        # What the fit measured at the sampled columns stays with them.
+        sampled = tracer._profiles["GREEN"]
+        shape = (len(fitted), sampled["columns"].size)
+        assert sampled["centers"].shape == shape
+        assert sampled["kept"].shape == shape
+        assert sampled["kept"].any(axis=1).all()
 
         table = tracer.estimate_trace_apertures("GREEN")
         assert list(table.columns) == _TRACE_FIELDS
@@ -763,10 +771,26 @@ class TestApertureConstraint:
         monkeypatch.setattr(tracer, "_estimate_widths", fail_once)
         table = tracer.estimate_trace_apertures("GREEN")
 
-        demoted = table[table["Status"] == "missing"]
-        assert list(demoted["Fiber"]) == ["SKY"]
-        assert demoted[["Coeff0", "BottomEdge", "X1"]].isna().all(axis=None)
-        assert len(tracer._fit_rms["GREEN"]) == len(table) - 1
+        demoted = table["Status"] == "missing"
+        assert list(table[demoted]["Fiber"]) == ["SKY"]
+        assert table[demoted][["Coeff0", "BottomEdge", "X1"]].isna().all(axis=None)
+        assert table[demoted]["PolyfitRMS"].isna().all()
+        assert table[~demoted]["PolyfitRMS"].notna().all()
+        # The accepted samples go with the geometry they no longer support.
+        assert not tracer._profiles["GREEN"]["kept"][demoted.to_numpy()].any()
+
+    def test_redetection_discards_what_was_measured_per_trace(
+        self, tmp_path, monkeypatch
+    ):
+        tracer = _fitted_tracer(tmp_path, monkeypatch)
+        profiles = tracer._profiles["GREEN"]["profiles"]
+
+        tracer.detect_traces("GREEN")
+
+        sampled = tracer._profiles["GREEN"]
+        assert sampled["centers"] is None and sampled["kept"] is None
+        # The profiles are a property of the image, so they survive.
+        assert sampled["profiles"] is profiles
 
     def test_validation_rejects_overlapping_apertures(self, master_path):
         tracer = self._make_tracer(master_path, norder=1)
@@ -821,9 +845,9 @@ class TestRealData:
         assert (tmp_path / f"{obs_id}_master_order_trace.csv").is_file()
 
         for chip in ("GREEN", "RED"):
-            assert np.nanmedian(tracer._fit_rms[chip]) < 1.0
+            assert np.nanmedian(tables[chip]["PolyfitRMS"]) < 1.0
             _assert_apertures_disjoint(tables[chip], tracer.ccd["ncol"])
-            assert np.nanmax(tracer._fit_rms[chip]) < 2.0
+            assert np.nanmax(tables[chip]["PolyfitRMS"]) < 2.0
 
             # The reference tables are 1-based in Order and predate this module;
             # they are used only as independent truth for position and labelling.

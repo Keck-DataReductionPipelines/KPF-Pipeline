@@ -116,7 +116,6 @@ class OrderTrace:
         self._clusters = {}
         self._metadata = {}
         self._profiles = {}
-        self._fit_rms = {}
         self._trace_table = None
         self._output_path = None
         self._info = None
@@ -150,27 +149,31 @@ class OrderTrace:
         """Return output fields of one trace table, in their written order.
 
         ``which`` selects the whole schema ('all'), the aperture and column
-        bounds ('bounds'), or the polynomial coefficients ('coeffs'), whose
-        count follows the configured fit degree.
+        bounds ('bounds'), the polynomial coefficients ('coeffs'), whose count
+        follows the configured fit degree, or both of the last two together
+        ('geometry'), which is every field a measured trace fills in.
         """
         degree = int(self.poly_degree)
         if degree < 0:
             raise ValueError(f"poly_degree must be non-negative, got {degree!r}")
 
         _LABELS = ["Chip", "Fiber", "Order"]
-        _BOUNDS = ["BottomEdge", "TopEdge", "X1", "X2"]
         _COEFFS = [f"Coeff{i}" for i in range(degree + 1)]
-        _STATUS = ["Status"]
+        _BOUNDS = ["BottomEdge", "TopEdge", "X1", "X2"]
+        _QUALITY = ["PolyfitRMS", "Status"]
 
         if which == "all":
-            return _LABELS + _COEFFS + _BOUNDS + _STATUS
+            return _LABELS + _COEFFS + _BOUNDS + _QUALITY
         if which == "bounds":
             return _BOUNDS
         elif which == "coeffs":
             return _COEFFS
+        elif which == "geometry":
+            return _COEFFS + _BOUNDS
         else:
             raise ValueError(
-                f"which must be one of 'all', 'bounds', or 'coeffs'; got {which}"
+                "which must be one of 'all', 'coeffs', 'bounds', or "
+                f"'geometry'; got {which}"
             )
 
     # ------------------------------------------------------------------
@@ -567,12 +570,13 @@ class OrderTrace:
     # ------------------------------------------------------------------
 
     def _sample_profiles(self, chip, sample_count=65, col_half_window=3):
-        """Return the pixel columns each trace is measured at and their profiles.
+        """Return everything one CCD is measured at its sampled columns.
 
         The columns span the detector, both edges included: a centerline is
         fitted through one measurement per sampled column, so these are the
         dispersion positions the polynomial is constrained at. Their profiles
-        are returned keyed by column.
+        follow, one row of the whole cross-dispersion each, sampled column for
+        sampled column with ``columns`` itself.
 
         Profiles rather than raw pixels: neighboring columns are median
         combined, which suppresses noise without smearing, because a trace
@@ -586,10 +590,12 @@ class OrderTrace:
         ``nanmedian`` then ignores, giving exactly the truncated median a
         clamped per-column slice would.
 
-        The result is cached as ``self._profiles[chip]`` so that the fitting and
-        aperture steps, which both measure at these columns, sample the detector
-        once between them. The cache is keyed by CCD alone, so the sampling
-        arguments are the defaults every caller uses.
+        The result is cached as ``self._profiles[chip]``, the one place the CCD's
+        measurements at these columns are kept: ``columns`` and ``profiles``
+        here, and the ``centers`` measured per trace with the ``kept`` mask of
+        the samples its fit accepted, both filled in by the fitting step and
+        left None until it runs. The cache is keyed by CCD alone, so the
+        sampling arguments are the defaults every caller uses.
         """
         if chip in self._profiles:
             return self._profiles[chip]
@@ -617,10 +623,12 @@ class OrderTrace:
         )
         profiles = np.where(finite, profiles, fill[None, :]).astype(float, copy=False)
 
-        self._profiles[chip] = (
-            columns,
-            dict(zip(columns.tolist(), np.ascontiguousarray(profiles.T), strict=True)),
-        )
+        self._profiles[chip] = {
+            "columns": columns,
+            "profiles": profiles.T,
+            "centers": None,
+            "kept": None,
+        }
         return self._profiles[chip]
 
     def _local_peak_center(
@@ -767,7 +775,7 @@ class OrderTrace:
             if not in_column.any():
                 continue
             row_guess = float(cluster["row_indices"][in_column].mean())
-            centers[sample] = measure_center(profiles[int(j)], row_guess)
+            centers[sample] = measure_center(profiles[sample], row_guess)
         return centers
 
     def _robust_polynomial_fit(
@@ -834,11 +842,11 @@ class OrderTrace:
         """
         bottom_widths = []
         top_widths = []
-        kept_columns = columns[kept]
-        stride = max(1, kept_columns.size // 24)
-        for j in kept_columns[::stride]:
-            center = np.polynomial.polynomial.polyval(j, coeffs)
-            column_profile = profiles[int(j)]
+        samples = np.flatnonzero(kept)
+        stride = max(1, samples.size // 24)
+        for sample in samples[::stride]:
+            center = np.polynomial.polynomial.polyval(columns[sample], coeffs)
+            column_profile = profiles[sample]
             first_i = max(0, int(np.floor(center)) - width_half_window)
             last_i = min(
                 column_profile.size, int(np.ceil(center)) + width_half_window + 1
@@ -898,9 +906,7 @@ class OrderTrace:
         if measured.empty:
             raise ValueError(f"{chip} produced no measured traces")
 
-        geometry = measured[
-            coefficient_fields + self._trace_fields(which="bounds")
-        ].to_numpy(dtype=float)
+        geometry = measured[self._trace_fields(which="geometry")].to_numpy(dtype=float)
         if not np.isfinite(geometry).all():
             raise ValueError(f"{chip} output contains non-finite measured geometry")
         if not ((measured["BottomEdge"] > 0) & (measured["TopEdge"] > 0)).all():
@@ -950,7 +956,9 @@ class OrderTrace:
         where the identity and fitting steps read them from; they are returned
         as well so the step can be driven on its own. Any identities already
         assigned are discarded with the clusters they were assigned to, whose
-        list positions this rebuild invalidates.
+        list positions this rebuild invalidates, as are the centers and accepted
+        samples of the traces they were measured for. The sampled profiles
+        survive: they are a property of the image, not of the clusters.
         """
         illuminated = self._detect_illuminated_pixels(chip)
         clusters = self._detect_clusters(illuminated)
@@ -969,6 +977,8 @@ class OrderTrace:
 
         self._clusters[chip] = clusters
         self._metadata.pop(chip, None)
+        if chip in self._profiles:
+            self._profiles[chip].update(centers=None, kept=None)
         return clusters
 
     def assign_trace_identities(self, chip):
@@ -990,32 +1000,32 @@ class OrderTrace:
         successfully measured over, and is what separates 'full' from 'partial'.
 
         The fitted traces are appended to ``self._trace_table``, replacing any
-        rows this CCD already has there, with their aperture edges left
-        unmeasured; the aperture step fills those in and drops the ``kept`` and
-        ``rms`` columns carried here for it. The CCD's rows are returned as well
+        rows this CCD already has there, with only their aperture edges left
+        unmeasured for the aperture step to fill in. What each trace was
+        measured at the sampled columns -- its row centers and the mask of the
+        samples this fit accepted -- is recorded on ``self._profiles[chip]``,
+        row for row with the CCD's table rows. Those rows are returned as well
         so the step can be driven on its own.
         """
         ncol = self.ccd["ncol"]
         coefficient_fields = self._trace_fields(which="coeffs")
-        columns, profiles = self._sample_profiles(chip)
+        sampled = self._sample_profiles(chip)
+        columns, profiles = sampled["columns"], sampled["profiles"]
 
         records = []
+        trace_centers = []
+        accepted = []
         for trace in self._metadata[chip].itertuples(index=False):
             order, fiber, cluster_index = trace.Order, trace.Fiber, trace.cluster
             record = dict.fromkeys(
-                coefficient_fields + self._trace_fields(which="bounds"), np.nan
+                self._trace_fields(which="geometry") + ["PolyfitRMS"], np.nan
             )
             record.update(
-                {
-                    "Chip": chip,
-                    "Fiber": fiber,
-                    "Order": order,
-                    "Status": "missing",
-                    "kept": None,
-                    "rms": np.nan,
-                }
+                {"Chip": chip, "Fiber": fiber, "Order": order, "Status": "missing"}
             )
             records.append(record)
+            trace_centers.append(np.full(columns.size, np.nan))
+            accepted.append(np.zeros(columns.size, dtype=bool))
 
             if pd.isna(cluster_index):
                 logger.warning(
@@ -1025,6 +1035,7 @@ class OrderTrace:
 
             cluster = self._clusters[chip][int(cluster_index)]
             centers = self._trace_centers(profiles, cluster, columns, fiber)
+            trace_centers[-1] = centers
             try:
                 coeffs, kept, rms = self._robust_polynomial_fit(
                     columns.astype(float), centers
@@ -1032,6 +1043,7 @@ class OrderTrace:
             except ValueError as error:
                 logger.warning("%s %s order %d: %s", chip, fiber, order, error)
                 continue
+            accepted[-1] = kept
 
             kept_columns = columns[kept]
             coverage = (kept_columns.max() - kept_columns.min() + 1) / ncol
@@ -1040,15 +1052,17 @@ class OrderTrace:
                 {
                     "X1": float(kept_columns.min()),
                     "X2": float(kept_columns.max()),
+                    "PolyfitRMS": rms,
                     "Status": "full"
                     if coverage >= full_coverage_fraction
                     else "partial",
-                    "kept": kept,
-                    "rms": rms,
                 }
             )
 
-        table = pd.DataFrame(records, columns=self._trace_fields() + ["kept", "rms"])
+        sampled["centers"] = np.array(trace_centers)
+        sampled["kept"] = np.array(accepted)
+
+        table = pd.DataFrame(records, columns=self._trace_fields())
         if self._trace_table is not None:
             other_chips = self._trace_table[self._trace_table["Chip"] != chip]
             table = pd.concat([other_chips, table], ignore_index=True)
@@ -1064,16 +1078,22 @@ class OrderTrace:
         cannot be measured is demoted to 'missing' and keeps no geometry at all,
         as a centerline with no aperture cannot be extracted from.
 
-        The measured edges are written into ``self._trace_table`` and the
-        columns the fitting step carried for this one are dropped, leaving the
-        CCD's rows in the form they are written out in; they are returned as
-        well so the step can be driven on its own.
+        The measured edges are written into ``self._trace_table``, completing
+        the CCD's rows; they are returned as well so the step can be driven on
+        its own. The samples each fit accepted are read from
+        ``self._profiles[chip]``, so the fitting step must have run.
         """
-        columns, profiles = self._sample_profiles(chip)
+        sampled = self._profiles[chip]
+        columns, profiles, kept = (
+            sampled["columns"],
+            sampled["profiles"],
+            sampled["kept"],
+        )
         coefficient_fields = self._trace_fields(which="coeffs")
 
         edges = {}
-        for trace_index in self._trace_table.index[self._trace_table["Chip"] == chip]:
+        rows = self._trace_table.index[self._trace_table["Chip"] == chip]
+        for position, trace_index in enumerate(rows):
             trace = self._trace_table.loc[trace_index]
             if trace["Status"] == "missing":
                 continue
@@ -1082,15 +1102,16 @@ class OrderTrace:
                     profiles,
                     trace[coefficient_fields].to_numpy(dtype=float),
                     columns.astype(float),
-                    trace["kept"],
+                    kept[position],
                 )
             except ValueError as error:
                 logger.warning(
                     "%s %s order %d: %s", chip, trace["Fiber"], trace["Order"], error
                 )
-                fields = coefficient_fields + ["X1", "X2", "rms"]
+                fields = self._trace_fields(which="geometry") + ["PolyfitRMS"]
                 self._trace_table.loc[trace_index, fields] = np.nan
                 self._trace_table.loc[trace_index, "Status"] = "missing"
+                kept[position] = False
                 continue
             edges[trace_index] = [bottom, top]
 
@@ -1127,10 +1148,6 @@ class OrderTrace:
         for trace_index, (bottom, top) in edges.items():
             self._trace_table.loc[trace_index, ["BottomEdge", "TopEdge"]] = bottom, top
 
-        self._fit_rms[chip] = self._trace_table.loc[measured, "rms"].to_numpy(
-            dtype=float
-        )
-        self._trace_table = self._trace_table.drop(columns=["kept", "rms"])
         table = self._trace_table[self._trace_table["Chip"] == chip]
         self._validate_trace_table(chip, table)
         return table
@@ -1185,8 +1202,9 @@ class OrderTrace:
             "  " + "-" * 60,
         ]
         for chip in chips:
-            status = self._trace_table.loc[self._trace_table["Chip"] == chip, "Status"]
-            median_rms = np.nanmedian(self._fit_rms[chip])
+            traced = self._trace_table[self._trace_table["Chip"] == chip]
+            status = traced["Status"]
+            median_rms = np.nanmedian(traced["PolyfitRMS"])
             lines.append(
                 f"  {chip:<8s} {(status == 'full').sum():>6d} "
                 f"{(status == 'partial').sum():>8d} "
@@ -1223,7 +1241,7 @@ class OrderTrace:
             One row per expected trace across every requested CCD, ordered by
             chip then order index then fiber, with fields ``Chip``, ``Fiber``,
             ``Order``, ``Coeff0..N``, ``BottomEdge``, ``TopEdge``, ``X1``,
-            ``X2``, ``Status``.
+            ``X2``, ``PolyfitRMS``, ``Status``.
 
         Raises
         ------
