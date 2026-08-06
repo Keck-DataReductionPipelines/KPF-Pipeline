@@ -773,29 +773,41 @@ class TestApertureConstraint:
         assert list(table.columns) == _TRACE_FIELDS
         assert (table[["BottomEdge", "TopEdge"]] > 0).all(axis=None)
 
-    def test_demotes_a_trace_whose_widths_cannot_be_measured(
+    def test_reports_a_trace_whose_widths_cannot_be_measured(
         self, tmp_path, monkeypatch
     ):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
-        measure = tracer._estimate_widths
-        failures = []
 
-        def fail_once(*args, **kwargs):
-            if not failures:
-                failures.append(1)
-                raise ValueError("fewer than three valid samples")
-            return measure(*args, **kwargs)
+        def fail(*args, **kwargs):
+            raise ValueError("fewer than three valid samples")
 
-        monkeypatch.setattr(tracer, "_estimate_widths", fail_once)
-        table = tracer.estimate_trace_apertures("GREEN")
+        monkeypatch.setattr(tracer, "_estimate_widths", fail)
 
-        demoted = table["Status"] == "missing"
-        assert list(table[demoted]["Fiber"]) == ["SKY"]
-        assert table[demoted][["Coeff0", "BottomEdge", "X1"]].isna().all(axis=None)
-        assert table[demoted]["PolyfitRMS"].isna().all()
-        assert table[~demoted]["PolyfitRMS"].notna().all()
-        # The accepted samples go with the geometry they no longer support.
-        assert not tracer._profiles["GREEN"]["kept"][demoted.to_numpy()].any()
+        with pytest.raises(
+            ValueError, match="GREEN SKY order 0: fewer than three valid samples"
+        ):
+            tracer.estimate_trace_apertures("GREEN")
+
+        # The fit stands as it was left; nothing is blanked on the way out.
+        fitted = tracer._trace_tables["GREEN"]
+        assert (fitted["Status"] == "full").all()
+        assert fitted["PolyfitRMS"].notna().all()
+
+    def test_reports_a_trace_that_cannot_be_fitted(self, tmp_path, monkeypatch):
+        image, _ = _synthetic_flat(norder=1)
+        tracer = _tracer(tmp_path, image, monkeypatch, norder=1)
+        tracer.detect_traces("GREEN")
+        tracer.assign_trace_identities("GREEN")
+
+        def fail(*args, **kwargs):
+            raise ValueError("only 2 of 65 trace centers are valid")
+
+        monkeypatch.setattr(tracer, "_robust_polynomial_fit", fail)
+
+        with pytest.raises(
+            ValueError, match="GREEN SKY order 0: only 2 of 65 trace centers"
+        ):
+            tracer.fit_trace_polynomials("GREEN")
 
     def test_redetection_discards_what_was_measured_per_trace(
         self, tmp_path, monkeypatch

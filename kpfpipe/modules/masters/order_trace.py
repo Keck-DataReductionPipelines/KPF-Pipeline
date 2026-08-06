@@ -72,12 +72,13 @@ class OrderTrace:
 
     Output always contains one row per expected trace of every CCD (``norder``
     x five fibers per chip), ordered by chip then order index then fiber, each
-    row keyed by a leading ``Chip`` field. A trace that was not detected, or
-    whose fit failed, is written with NaN geometry and a ``Status`` of
-    'missing'; one measured over only part of the detector is written
-    'partial'; one spanning essentially the whole detector is written 'full'.
-    A trace that cannot be measured is therefore reported, never silently
-    dropped, and the row count is fixed regardless of what was found.
+    row keyed by a leading ``Chip`` field. A trace no cluster was detected for
+    -- the one an echelle order lying partly off the detector can cost -- is
+    written with NaN geometry and a ``Status`` of 'missing', so it is reported
+    rather than silently dropped. Every detected trace is measured or the run
+    fails: one measured over only part of the detector is written 'partial',
+    one spanning essentially the whole detector 'full', and a trace that cannot
+    be fitted or given an aperture raises rather than reaching the CSV.
 
     Standalone rather than a ``BaseMasterModule`` subclass because it consumes
     one completed L1 master instead of stacking L0 exposures.
@@ -900,9 +901,6 @@ class OrderTrace:
             )
 
         measured = table[table["Status"] != "missing"]
-        if measured.empty:
-            raise ValueError(f"{chip} produced no measured traces")
-
         geometry = measured[self._trace_fields(which="geometry")].to_numpy(dtype=float)
         if not np.isfinite(geometry).all():
             raise ValueError(f"{chip} output contains non-finite measured geometry")
@@ -1005,6 +1003,8 @@ class OrderTrace:
 
         Coverage is the fraction of the dispersion direction a trace was
         successfully measured over, and is what separates 'full' from 'partial'.
+        A trace no cluster was detected for is left 'missing'; a trace that has
+        a cluster must fit, and raises if it cannot.
 
         The fitted traces become the CCD's ``self._trace_tables`` entry, with
         only their aperture edges left unmeasured for the aperture step to fill
@@ -1026,30 +1026,28 @@ class OrderTrace:
             record = dict.fromkeys(
                 self._trace_fields(which="geometry") + ["PolyfitRMS"], np.nan
             )
-            record.update(
-                {"Chip": chip, "Fiber": fiber, "Order": order, "Status": "missing"}
-            )
+            record.update({"Chip": chip, "Fiber": fiber, "Order": order})
             records.append(record)
-            trace_centers.append(np.full(columns.size, np.nan))
-            accepted.append(np.zeros(columns.size, dtype=bool))
 
             if pd.isna(cluster_index):
                 logger.warning(
                     "%s %s order %d: no cluster detected", chip, fiber, order
                 )
+                record["Status"] = "missing"
+                trace_centers.append(np.full(columns.size, np.nan))
+                accepted.append(np.zeros(columns.size, dtype=bool))
                 continue
 
             cluster = self._clusters[chip][int(cluster_index)]
             centers = self._trace_centers(profiles, cluster, columns, fiber)
-            trace_centers[-1] = centers
             try:
                 coeffs, kept, rms = self._robust_polynomial_fit(
                     columns.astype(float), centers
                 )
             except ValueError as error:
-                logger.warning("%s %s order %d: %s", chip, fiber, order, error)
-                continue
-            accepted[-1] = kept
+                raise ValueError(f"{chip} {fiber} order {order}: {error}") from error
+            trace_centers.append(centers)
+            accepted.append(kept)
 
             kept_columns = columns[kept]
             coverage = (kept_columns.max() - kept_columns.min() + 1) / ncol
@@ -1076,13 +1074,13 @@ class OrderTrace:
 
         The aperture is the band of rows an extraction takes as belonging to a
         trace: the flux widths below and above its centerline, clamped where a
-        neighbor's aperture would otherwise be reached. A trace whose widths
-        cannot be measured is demoted to 'missing' and keeps no geometry at all,
-        as a centerline with no aperture cannot be extracted from.
+        neighbor's aperture would otherwise be reached. Every fitted trace must
+        yield one; a width that cannot be measured raises, as a centerline with
+        no aperture cannot be extracted from.
 
-        The measured edges are written into ``self._trace_table``, completing
-        the CCD's rows; they are returned as well so the step can be driven on
-        its own. The samples each fit accepted are read from
+        The measured edges are written into ``self._trace_tables[chip]``,
+        completing the CCD's rows; they are returned as well so the step can be
+        driven on its own. The samples each fit accepted are read from
         ``self._profiles[chip]``, so the fitting step must have run.
         """
         sampled = self._profiles[chip]
@@ -1106,14 +1104,9 @@ class OrderTrace:
                     kept[position],
                 )
             except ValueError as error:
-                logger.warning(
-                    "%s %s order %d: %s", chip, trace.Fiber, trace.Order, error
-                )
-                fields = self._trace_fields(which="geometry") + ["PolyfitRMS"]
-                table.loc[trace.Index, fields] = np.nan
-                table.loc[trace.Index, "Status"] = "missing"
-                kept[position] = False
-                continue
+                raise ValueError(
+                    f"{chip} {trace.Fiber} order {trace.Order}: {error}"
+                ) from error
             edges[trace.Index] = [bottom, top]
 
         # Measured traces run ascending in row, so consecutive ones are the
