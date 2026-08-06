@@ -35,12 +35,12 @@ convention -- a KPF scientist's "row" is this module's column. Throughout:
 
 import logging
 import os
-import tempfile
 from itertools import permutations
 
 import numpy as np
 import pandas as pd
 from astropy.stats import mad_std
+from numpy.polynomial import polynomial
 from scipy.linalg import solve_banded
 from scipy.ndimage import gaussian_filter1d, label
 
@@ -116,7 +116,8 @@ class OrderTrace:
         self._clusters = {}
         self._metadata = {}
         self._profiles = {}
-        self._trace_table = None
+        self._trace_tables = {}
+        self._output_table = None
         self._output_path = None
         self._info = None
 
@@ -370,8 +371,8 @@ class OrderTrace:
             if host_columns.size < 2 or candidate_columns.size == 0:
                 continue
 
-            coeffs = np.polynomial.polynomial.polyfit(host_columns, host_centerline, 1)
-            extrapolated = np.polynomial.polynomial.polyval(candidate_columns, coeffs)
+            coeffs = polynomial.polyfit(host_columns, host_centerline, 1)
+            extrapolated = polynomial.polyval(candidate_columns, coeffs)
             residual = np.median(np.abs(candidate_centerline - extrapolated))
             if residual <= max_residual_pixels:
                 return host, candidate
@@ -797,10 +798,8 @@ class OrderTrace:
             )
 
         for _ in range(fit_max_iterations):
-            coeffs = np.polynomial.polynomial.polyfit(
-                columns[kept], centers[kept], degree
-            )
-            residual = centers - np.polynomial.polynomial.polyval(columns, coeffs)
+            coeffs = polynomial.polyfit(columns[kept], centers[kept], degree)
+            residual = centers - polynomial.polyval(columns, coeffs)
             median_residual = np.nanmedian(residual[kept])
             residual_scatter = mad_std(residual[kept], ignore_nan=True)
             rejection_limit = max(0.25, fit_sigma * residual_scatter)
@@ -814,10 +813,8 @@ class OrderTrace:
                 break
             kept = still_valid
 
-        coeffs = np.polynomial.polynomial.polyfit(columns[kept], centers[kept], degree)
-        residual = centers[kept] - np.polynomial.polynomial.polyval(
-            columns[kept], coeffs
-        )
+        coeffs = polynomial.polyfit(columns[kept], centers[kept], degree)
+        residual = centers[kept] - polynomial.polyval(columns[kept], coeffs)
         rms = float(np.sqrt(np.mean(residual**2)))
         return coeffs, kept, rms
 
@@ -845,7 +842,7 @@ class OrderTrace:
         samples = np.flatnonzero(kept)
         stride = max(1, samples.size // 24)
         for sample in samples[::stride]:
-            center = np.polynomial.polynomial.polyval(columns[sample], coeffs)
+            center = polynomial.polyval(columns[sample], coeffs)
             column_profile = profiles[sample]
             first_i = max(0, int(np.floor(center)) - width_half_window)
             last_i = min(
@@ -922,7 +919,7 @@ class OrderTrace:
         test_columns = np.linspace(0, ncol - 1, 17)
         coeffs = measured[coefficient_fields].to_numpy(dtype=float)
         centers = np.array(
-            [np.polynomial.polynomial.polyval(test_columns, coeff) for coeff in coeffs]
+            [polynomial.polyval(test_columns, coeff) for coeff in coeffs]
         )
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
@@ -954,11 +951,12 @@ class OrderTrace:
 
         The surviving clusters are cached as ``self._clusters[chip]``, which is
         where the identity and fitting steps read them from; they are returned
-        as well so the step can be driven on its own. Any identities already
-        assigned are discarded with the clusters they were assigned to, whose
-        list positions this rebuild invalidates, as are the centers and accepted
-        samples of the traces they were measured for. The sampled profiles
-        survive: they are a property of the image, not of the clusters.
+        as well so the step can be driven on its own. Everything already
+        measured for the CCD is discarded with the clusters it was measured
+        from, whose list positions this rebuild invalidates: the assigned
+        identities, the fitted trace table, and the centers and accepted samples
+        of each trace. The sampled profiles survive: they are a property of the
+        image, not of the clusters.
         """
         illuminated = self._detect_illuminated_pixels(chip)
         clusters = self._detect_clusters(illuminated)
@@ -974,9 +972,18 @@ class OrderTrace:
             raise ValueError(
                 f"{chip}: {len(clusters)} traces detected, expected {expected}"
             )
+        if len(clusters) != expected:
+            logger.warning(
+                "%s: %d traces detected, expected %d; the fiber names of the "
+                "order at the clipped edge rest on it being clipped",
+                chip,
+                len(clusters),
+                expected,
+            )
 
         self._clusters[chip] = clusters
         self._metadata.pop(chip, None)
+        self._trace_tables.pop(chip, None)
         if chip in self._profiles:
             self._profiles[chip].update(centers=None, kept=None)
         return clusters
@@ -999,13 +1006,12 @@ class OrderTrace:
         Coverage is the fraction of the dispersion direction a trace was
         successfully measured over, and is what separates 'full' from 'partial'.
 
-        The fitted traces are appended to ``self._trace_table``, replacing any
-        rows this CCD already has there, with only their aperture edges left
-        unmeasured for the aperture step to fill in. What each trace was
-        measured at the sampled columns -- its row centers and the mask of the
-        samples this fit accepted -- is recorded on ``self._profiles[chip]``,
-        row for row with the CCD's table rows. Those rows are returned as well
-        so the step can be driven on its own.
+        The fitted traces become the CCD's ``self._trace_tables`` entry, with
+        only their aperture edges left unmeasured for the aperture step to fill
+        in. What each trace was measured at the sampled columns -- its row
+        centers and the mask of the samples this fit accepted -- is recorded on
+        ``self._profiles[chip]``, row for row with the CCD's table rows. Those
+        rows are returned as well so the step can be driven on its own.
         """
         ncol = self.ccd["ncol"]
         coefficient_fields = self._trace_fields(which="coeffs")
@@ -1062,12 +1068,8 @@ class OrderTrace:
         sampled["centers"] = np.array(trace_centers)
         sampled["kept"] = np.array(accepted)
 
-        table = pd.DataFrame(records, columns=self._trace_fields())
-        if self._trace_table is not None:
-            other_chips = self._trace_table[self._trace_table["Chip"] != chip]
-            table = pd.concat([other_chips, table], ignore_index=True)
-        self._trace_table = table
-        return table[table["Chip"] == chip]
+        self._trace_tables[chip] = pd.DataFrame(records, columns=self._trace_fields())
+        return self._trace_tables[chip]
 
     def estimate_trace_apertures(self, chip, orderlet_gap_pixels=2.0):
         """Measure every fitted trace's aperture and validate the CCD's table.
@@ -1091,29 +1093,28 @@ class OrderTrace:
         )
         coefficient_fields = self._trace_fields(which="coeffs")
 
+        table = self._trace_tables[chip]
         edges = {}
-        rows = self._trace_table.index[self._trace_table["Chip"] == chip]
-        for position, trace_index in enumerate(rows):
-            trace = self._trace_table.loc[trace_index]
-            if trace["Status"] == "missing":
+        for position, trace in enumerate(table.itertuples()):
+            if trace.Status == "missing":
                 continue
             try:
                 bottom, top = self._estimate_widths(
                     profiles,
-                    trace[coefficient_fields].to_numpy(dtype=float),
+                    table.loc[trace.Index, coefficient_fields].to_numpy(dtype=float),
                     columns.astype(float),
                     kept[position],
                 )
             except ValueError as error:
                 logger.warning(
-                    "%s %s order %d: %s", chip, trace["Fiber"], trace["Order"], error
+                    "%s %s order %d: %s", chip, trace.Fiber, trace.Order, error
                 )
                 fields = self._trace_fields(which="geometry") + ["PolyfitRMS"]
-                self._trace_table.loc[trace_index, fields] = np.nan
-                self._trace_table.loc[trace_index, "Status"] = "missing"
+                table.loc[trace.Index, fields] = np.nan
+                table.loc[trace.Index, "Status"] = "missing"
                 kept[position] = False
                 continue
-            edges[trace_index] = [bottom, top]
+            edges[trace.Index] = [bottom, top]
 
         # Measured traces run ascending in row, so consecutive ones are the
         # neighbors that must not overlap. Each keeps its profile width where
@@ -1124,11 +1125,9 @@ class OrderTrace:
         measured = list(edges)
         test_columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
         centers = [
-            np.polynomial.polynomial.polyval(
+            polynomial.polyval(
                 test_columns,
-                self._trace_table.loc[trace_index, coefficient_fields].to_numpy(
-                    dtype=float
-                ),
+                table.loc[trace_index, coefficient_fields].to_numpy(dtype=float),
             )
             for trace_index in measured
         ]
@@ -1146,44 +1145,26 @@ class OrderTrace:
             edges[above][0] = min(edges[above][0], half_space)
 
         for trace_index, (bottom, top) in edges.items():
-            self._trace_table.loc[trace_index, ["BottomEdge", "TopEdge"]] = bottom, top
+            table.loc[trace_index, ["BottomEdge", "TopEdge"]] = bottom, top
 
-        table = self._trace_table[self._trace_table["Chip"] == chip]
         self._validate_trace_table(chip, table)
         return table
 
     def save_master(self, path, *, overwrite=False):
-        """Stage and atomically install the cached order-trace CSV at ``path``.
+        """Write the assembled order-trace CSV to ``path``.
 
-        Writes ``self._trace_table``, cached by ``make_master``, which must have
-        run first.
+        Writes ``self._output_table``, assembled by ``make_master``, which must
+        have run first. Parent directories are created as needed.
         """
-        if self._trace_table is None:
+        if self._output_table is None:
             raise RuntimeError("No traces available; run make_master() first")
         if not overwrite and os.path.exists(path):
             raise FileExistsError(
                 f"{path} already exists; pass overwrite=True to replace it"
             )
 
-        output_dir = os.path.dirname(path) or "."
-        os.makedirs(output_dir, exist_ok=True)
-        staged = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                suffix=".csv.tmp",
-                prefix="order_trace_",
-                dir=output_dir,
-                delete=False,
-            ) as stream:
-                staged = stream.name
-                self._trace_table.to_csv(stream, index=False, lineterminator="\n")
-            os.replace(staged, path)
-            staged = None
-        finally:
-            if staged and os.path.exists(staged):
-                os.remove(staged)
-
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        self._output_table.to_csv(path, index=False, lineterminator="\n")
         self._output_path = path
 
     # ------------------------------------------------------------------
@@ -1202,7 +1183,7 @@ class OrderTrace:
             "  " + "-" * 60,
         ]
         for chip in chips:
-            traced = self._trace_table[self._trace_table["Chip"] == chip]
+            traced = self._trace_tables[chip]
             status = traced["Status"]
             median_rms = np.nanmedian(traced["PolyfitRMS"])
             lines.append(
@@ -1238,10 +1219,10 @@ class OrderTrace:
         Returns
         -------
         pandas.DataFrame
-            One row per expected trace across every requested CCD, ordered by
-            chip then order index then fiber, with fields ``Chip``, ``Fiber``,
-            ``Order``, ``Coeff0..N``, ``BottomEdge``, ``TopEdge``, ``X1``,
-            ``X2``, ``PolyfitRMS``, ``Status``.
+            Every requested CCD's table, assembled in the order the CCDs were
+            measured. One row per expected trace, with fields ``Chip``,
+            ``Fiber``, ``Order``, ``Coeff0..N``, ``BottomEdge``, ``TopEdge``,
+            ``X1``, ``X2``, ``PolyfitRMS``, ``Status``.
 
         Raises
         ------
@@ -1289,6 +1270,10 @@ class OrderTrace:
             self.fit_trace_polynomials(chip)
             self.estimate_trace_apertures(chip)
 
+        self._output_table = pd.concat(
+            [self._trace_tables[chip] for chip in chips], ignore_index=True
+        )
+
         if output_dir is not None:
             # The master flat is {obs_id}_master_flat_L1.fits (WMKO DRP-RUN-05),
             # so the master order-trace is {obs_id}_master_order_trace.csv.
@@ -1300,7 +1285,7 @@ class OrderTrace:
             )
         self._track_info(chips)
         logger.info("%s", self._info)
-        return self._trace_table
+        return self._output_table
 
     def info(self):
         """Print a summary of the module configuration and tracing results."""

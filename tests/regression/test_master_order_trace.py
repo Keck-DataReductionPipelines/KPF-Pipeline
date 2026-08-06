@@ -35,8 +35,10 @@ _TRACE_FIELDS = [
 ]
 
 # Rows between orderlets inside one order, and between one order's CAL and the
-# next order's SKY. As on the real detector the inter-order gap is the smaller
-# of the two, so spacing alone cannot phase the fiber pattern.
+# next order's SKY. The real inter-order gap is the wider of the two for all but
+# a few orders at one end of a detector, where it narrows past the orderlet
+# spacing; the narrow case is the one spacing cannot phase the fiber pattern
+# from, so it is the one every synthetic order is built with.
 _ORDERLET_SPACING = 19.0
 _ORDER_GAP = 15.0
 
@@ -231,11 +233,27 @@ class TestDetection:
             assert cluster["col_indices"].min() == 0
             assert cluster["col_indices"].max() == image.shape[1] - 1
 
-    def test_tolerates_one_trace_off_the_detector(self, tmp_path, monkeypatch):
+    def test_tolerates_one_trace_off_the_detector(self, tmp_path, monkeypatch, caplog):
         image, truth = _synthetic_flat(drop=[(2, "CAL")])
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        assert len(tracer.detect_traces("GREEN")) == len(truth) - 1
+        with caplog.at_level("WARNING"):
+            clusters = tracer.detect_traces("GREEN")
+
+        assert len(clusters) == len(truth) - 1
+        assert "14 traces detected, expected 15" in caplog.text
+
+    def test_says_nothing_when_every_trace_is_detected(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        image, truth = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
+        with caplog.at_level("WARNING"):
+            clusters = tracer.detect_traces("GREEN")
+
+        assert len(clusters) == len(truth)
+        assert caplog.text == ""
 
     def test_reports_an_unexpected_trace_count(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=3)
@@ -603,7 +621,7 @@ class TestCSVWriting:
             ],
             columns=_TRACE_FIELDS,
         )
-        tracer._trace_table = table
+        tracer._output_table = table
         output = tmp_path / "traces.csv"
 
         tracer.save_master(output, overwrite=False)
@@ -718,7 +736,7 @@ class TestApertureConstraint:
         # Tilt SCI1 down through SKY so the two touch and then cross. Detection
         # cannot deliver such a pair -- they would be one cluster -- but a fit
         # running away over part of the detector can.
-        fitted = tracer._trace_table
+        fitted = tracer._trace_tables["GREEN"]
         crossing = fitted.index[fitted["Fiber"] == "SCI1"][0]
         fitted.loc[crossing, "Coeff1"] -= (
             2 * _ORDERLET_SPACING / (tracer.ccd["ncol"] - 1)
@@ -739,7 +757,7 @@ class TestApertureConstraint:
     ):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
 
-        fitted = tracer._trace_table
+        fitted = tracer._trace_tables["GREEN"]
         assert list(fitted.columns) == _TRACE_FIELDS
         assert fitted[["BottomEdge", "TopEdge"]].isna().all(axis=None)
         assert fitted[["Coeff0", "X1", "X2", "PolyfitRMS"]].notna().all(axis=None)
@@ -784,11 +802,15 @@ class TestApertureConstraint:
     ):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
         profiles = tracer._profiles["GREEN"]["profiles"]
+        assert "GREEN" in tracer._trace_tables
 
         tracer.detect_traces("GREEN")
 
         sampled = tracer._profiles["GREEN"]
         assert sampled["centers"] is None and sampled["kept"] is None
+        # The fitted rows named clusters this rebuild has renumbered.
+        assert "GREEN" not in tracer._trace_tables
+        assert "GREEN" not in tracer._metadata
         # The profiles are a property of the image, so they survive.
         assert sampled["profiles"] is profiles
 
