@@ -511,6 +511,17 @@ class TestMakeMasterOrderTrace:
         coeff_fields = [field for field in table.columns if field.startswith("Coeff")]
         assert coeff_fields == [f"Coeff{i}" for i in range(6)]
 
+    def test_poly_degree_argument_overrides_the_configured_degree(
+        self, tmp_path, monkeypatch
+    ):
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch, poly_degree=5)
+
+        table = tracer.make_master(poly_degree=2, output_dir=tmp_path / "out")
+
+        coeff_fields = [field for field in table.columns if field.startswith("Coeff")]
+        assert coeff_fields == ["Coeff0", "Coeff1", "Coeff2"]
+
     def test_reports_progress_only_after_running(self, tmp_path, monkeypatch, capsys):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
@@ -692,7 +703,10 @@ class TestApertureConstraint:
         roomy = _fitted_tracer(tmp_path, monkeypatch).estimate_trace_apertures("GREEN")
         # A guard band this wide leaves the neighbours 4 px of their
         # _ORDERLET_SPACING to share, so every interior edge is contended.
-        clamped = _fitted_tracer(tmp_path, monkeypatch).estimate_trace_apertures(
+        # Re-clamping only ever narrows, so the wider band decides every edge.
+        tracer = _fitted_tracer(tmp_path, monkeypatch)
+        clamped = tracer.estimate_trace_apertures("GREEN")
+        tracer._clamp_neighboring_apertures(
             "GREEN", orderlet_gap_pixels=_ORDERLET_SPACING - 4.0
         )
 
@@ -748,7 +762,7 @@ class TestApertureConstraint:
     def test_rejects_traces_too_close_for_the_gap(self, tmp_path, monkeypatch):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
         with pytest.raises(ValueError, match="orderlet gap"):
-            tracer.estimate_trace_apertures(
+            tracer._clamp_neighboring_apertures(
                 "GREEN", orderlet_gap_pixels=_ORDERLET_SPACING + 1.0
             )
 
@@ -761,6 +775,7 @@ class TestApertureConstraint:
         assert list(fitted.columns) == _TRACE_FIELDS
         assert fitted[["BottomEdge", "TopEdge"]].isna().all(axis=None)
         assert fitted[["Coeff0", "X1", "X2", "PolyfitRMS"]].notna().all(axis=None)
+        assert (fitted["Status"] == "unknown").all()
 
         # What the fit measured at the sampled columns stays with them.
         sampled = tracer._profiles["GREEN"]
@@ -790,7 +805,7 @@ class TestApertureConstraint:
 
         # The fit stands as it was left; nothing is blanked on the way out.
         fitted = tracer._trace_tables["GREEN"]
-        assert (fitted["Status"] == "full").all()
+        assert (fitted["Status"] == "unknown").all()
         assert fitted["PolyfitRMS"].notna().all()
 
     def test_reports_a_trace_that_cannot_be_fitted(self, tmp_path, monkeypatch):

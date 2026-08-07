@@ -867,8 +867,53 @@ class OrderTrace:
             float(np.clip(np.nanmedian(top_widths), 1.0, 11.0)),
         )
 
-    def _validate_trace_table(self, chip, row_half_window=7):
-        """Validate output schema, geometry, labels, and detector coverage."""
+    def _clamp_neighboring_apertures(self, chip, orderlet_gap_pixels=2.0):
+        """Shrink the apertures of traces that would otherwise touch.
+
+        Measured traces run ascending in row, so consecutive ones are the
+        neighbors that must not overlap. Each keeps its profile width where
+        there is room; where two would meet, both clamp to half the space
+        between their centerlines less a guard band. That space is measured
+        where the two centerlines run closest, so the apertures stay disjoint
+        across the whole detector, not only at mid-dispersion.
+
+        The clamped edges are written back into ``self._trace_tables[chip]``.
+        """
+        coefficient_fields = self._trace_fields(which="coeffs")
+        table = self._trace_tables[chip]
+
+        measured = table.index[table["Status"] != "missing"]
+        test_columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
+        centers = [
+            polynomial.polyval(
+                test_columns,
+                table.loc[trace_index, coefficient_fields].to_numpy(dtype=float),
+            )
+            for trace_index in measured
+        ]
+        for index, (below, above) in enumerate(
+            zip(measured[:-1], measured[1:], strict=False)
+        ):
+            closest_approach = float(np.min(centers[index + 1] - centers[index]))
+            half_space = (closest_approach - orderlet_gap_pixels) / 2.0
+            if half_space <= 0:
+                raise ValueError(
+                    "neighboring fitted traces cross or leave no room for the "
+                    "orderlet gap"
+                )
+            table.loc[below, "TopEdge"] = min(table.loc[below, "TopEdge"], half_space)
+            table.loc[above, "BottomEdge"] = min(
+                table.loc[above, "BottomEdge"], half_space
+            )
+
+    def _validate_trace_table(
+        self, chip, row_half_window=7, full_coverage_fraction=0.9
+    ):
+        """Validate output schema, geometry, labels, and detector coverage.
+
+        Settles each measured trace's 'unknown' ``Status`` from the dispersion
+        span X1-X2; no 'unknown' may survive.
+        """
         table = self._trace_tables[chip]
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         coefficient_fields = self._trace_fields(which="coeffs")
@@ -896,6 +941,13 @@ class OrderTrace:
             raise ValueError(f"{chip} output contains out-of-range pixel columns")
         if not (measured["X1"] <= measured["X2"]).all():
             raise ValueError(f"{chip} output contains reversed pixel columns")
+
+        coverage = (measured["X2"] - measured["X1"] + 1) / ncol
+        table.loc[measured.index, "Status"] = np.where(
+            coverage >= full_coverage_fraction, "full", "partial"
+        )
+        if (table["Status"] == "unknown").any():
+            raise ValueError(f"{chip} output contains an unclassified trace")
 
         # Traces are written in ascending row, so evaluating every centerline
         # at the same columns must give rows that strictly increase down each
@@ -984,13 +1036,15 @@ class OrderTrace:
         self._metadata[chip] = self._assign_order_indexes(chip, metadata)
         return self._metadata[chip]
 
-    def fit_trace_polynomials(self, chip, full_coverage_fraction=0.9):
+    def fit_trace_polynomials(self, chip, poly_degree=None):
         """Fit a centerline through every identified trace of one CCD.
 
-        Coverage is the fraction of the dispersion direction a trace was
-        successfully measured over, and is what separates 'full' from 'partial'.
-        A trace no cluster was detected for is left 'missing'; a trace that has
-        a cluster must fit, and raises if it cannot.
+        ``poly_degree`` overrides the configured fit degree for this tracer,
+        which the output's ``Coeff`` field count follows.
+
+        A trace no cluster was detected for is marked 'missing'; a trace that
+        has a cluster must fit, and raises if it cannot. A fitted trace is left
+        'unknown' for validation to classify from its dispersion span.
 
         The fitted traces become the CCD's ``self._trace_tables`` entry, with
         only their aperture edges left unmeasured for the aperture step to fill
@@ -999,7 +1053,9 @@ class OrderTrace:
         ``self._profiles[chip]``, row for row with the CCD's table rows. Those
         rows are returned as well so the step can be driven on its own.
         """
-        ncol = self.ccd["ncol"]
+        if poly_degree is not None:
+            self.poly_degree = poly_degree
+
         coefficient_fields = self._trace_fields(which="coeffs")
         sampled = self._sample_profiles(chip)
         columns = sampled["columns"]
@@ -1014,7 +1070,9 @@ class OrderTrace:
             record = dict.fromkeys(
                 self._trace_fields(which="geometry") + ["PolyfitRMS"], np.nan
             )
-            record.update({"Chip": chip, "Fiber": fiber, "Order": order})
+            record.update(
+                {"Chip": chip, "Fiber": fiber, "Order": order, "Status": "unknown"}
+            )
             records.append(record)
 
             if pd.isna(cluster_index):
@@ -1034,23 +1092,19 @@ class OrderTrace:
             sampled["good"][position] = good
 
             good_columns = columns[good]
-            coverage = (good_columns.max() - good_columns.min() + 1) / ncol
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
             record.update(
                 {
                     "X1": float(good_columns.min()),
                     "X2": float(good_columns.max()),
                     "PolyfitRMS": rms,
-                    "Status": "full"
-                    if coverage >= full_coverage_fraction
-                    else "partial",
                 }
             )
 
         self._trace_tables[chip] = pd.DataFrame(records, columns=self._trace_fields())
         return self._trace_tables[chip]
 
-    def estimate_trace_apertures(self, chip, orderlet_gap_pixels=2.0):
+    def estimate_trace_apertures(self, chip):
         """Measure every fitted trace's aperture and validate the CCD's table.
 
         The aperture is the band of rows an extraction takes as belonging to a
@@ -1063,7 +1117,6 @@ class OrderTrace:
         measured, completing the CCD's rows; the table is returned as well so
         the step can be driven on its own.
         """
-        coefficient_fields = self._trace_fields(which="coeffs")
         table = self._trace_tables[chip]
 
         for trace in table.itertuples():
@@ -1077,36 +1130,7 @@ class OrderTrace:
                 ) from error
             table.loc[trace.Index, ["BottomEdge", "TopEdge"]] = widths
 
-        # Measured traces run ascending in row, so consecutive ones are the
-        # neighbors that must not overlap. Each keeps its profile width where
-        # there is room; where two would meet, both clamp to half the space
-        # between their centerlines less a guard band. That space is measured
-        # where the two centerlines run closest, so the apertures stay disjoint
-        # across the whole detector, not only at mid-dispersion.
-        measured = table.index[table["Status"] != "missing"]
-        test_columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
-        centers = [
-            polynomial.polyval(
-                test_columns,
-                table.loc[trace_index, coefficient_fields].to_numpy(dtype=float),
-            )
-            for trace_index in measured
-        ]
-        for index, (below, above) in enumerate(
-            zip(measured[:-1], measured[1:], strict=False)
-        ):
-            closest_approach = float(np.min(centers[index + 1] - centers[index]))
-            half_space = (closest_approach - orderlet_gap_pixels) / 2.0
-            if half_space <= 0:
-                raise ValueError(
-                    "neighboring fitted traces cross or leave no room for the "
-                    "orderlet gap"
-                )
-            table.loc[below, "TopEdge"] = min(table.loc[below, "TopEdge"], half_space)
-            table.loc[above, "BottomEdge"] = min(
-                table.loc[above, "BottomEdge"], half_space
-            )
-
+        self._clamp_neighboring_apertures(chip)
         self._validate_trace_table(chip)
         return table
 
@@ -1158,7 +1182,7 @@ class OrderTrace:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def make_master(self, chips=None, *, output_dir=None):
+    def make_master(self, chips=None, *, poly_degree=None, output_dir=None):
         """
         Build order-trace calibrations from the requested master-flat CCDs.
 
@@ -1171,6 +1195,9 @@ class OrderTrace:
         ----------
         chips : list of str, optional
             CCDs to trace. Defaults to configured GREEN and RED.
+        poly_degree : int, optional
+            Degree of the fitted centerline, which the output's ``Coeff`` field
+            count follows. Defaults to the configured degree.
         output_dir : str or pathlib.Path, optional
             If provided, write ``{obs_id}_master_order_trace.csv`` into this
             directory, replacing any existing file. When omitted, the table is
@@ -1227,7 +1254,7 @@ class OrderTrace:
         for chip in chips:
             self.detect_traces(chip)
             self.assign_trace_identities(chip)
-            self.fit_trace_polynomials(chip)
+            self.fit_trace_polynomials(chip, poly_degree)
             self.estimate_trace_apertures(chip)
 
         self._output_table = pd.concat(
