@@ -759,8 +759,12 @@ class OrderTrace:
             return np.nan
         return float(np.nanmedian(centers))
 
-    def _trace_centers(self, profiles, cluster, columns, fiber):
-        """Measure a subpixel row center at every sampled column of one cluster.
+    def _trace_centers(self, chip, fiber, order):
+        """Measure a subpixel row center at every sampled column of one trace.
+
+        The trace's cluster and the CCD's sampled columns and profiles are read
+        from the caches, and the measured row is written into
+        ``self._profiles[chip]["centers"]``, which the fitting step preallocates.
 
         The cluster's own mask pixels at a column give the starting row, so no
         prior trace geometry is needed. The CAL orderlet is peaked and centers
@@ -768,10 +772,17 @@ class OrderTrace:
         flat-topped, with no meaningful peak, and are centered from their two
         cross-dispersion edges instead.
         """
+        position = order * len(self.fibers) + self.fibers.index(fiber)
+        sampled = self._profiles[chip]
+        columns, profiles = sampled["columns"], sampled["profiles"]
+        cluster = self._clusters[chip][
+            int(self._metadata[chip]["cluster"].iloc[position])
+        ]
+
         measure_center = (
             self._local_peak_center if fiber == "CAL" else self._local_edge_center
         )
-        centers = np.full(columns.size, np.nan, dtype=float)
+        centers = sampled["centers"][position]
         for sample, j in enumerate(columns):
             in_column = cluster["col_indices"] == j
             if not in_column.any():
@@ -882,8 +893,9 @@ class OrderTrace:
             float(np.clip(np.nanmedian(top_widths), 1.0, 11.0)),
         )
 
-    def _validate_trace_table(self, chip, table, row_half_window=7):
+    def _validate_trace_table(self, chip, row_half_window=7):
         """Validate output schema, geometry, labels, and detector coverage."""
+        table = self._trace_tables[chip]
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         coefficient_fields = self._trace_fields(which="coeffs")
         if list(table.columns) != self._trace_fields():
@@ -1016,12 +1028,14 @@ class OrderTrace:
         ncol = self.ccd["ncol"]
         coefficient_fields = self._trace_fields(which="coeffs")
         sampled = self._sample_profiles(chip)
-        columns, profiles = sampled["columns"], sampled["profiles"]
+        columns = sampled["columns"]
+
+        traces = self._metadata[chip]
+        sampled["centers"] = np.full((len(traces), columns.size), np.nan)
+        sampled["kept"] = np.zeros((len(traces), columns.size), dtype=bool)
 
         records = []
-        trace_centers = []
-        accepted = []
-        for trace in self._metadata[chip].itertuples(index=False):
+        for position, trace in enumerate(traces.itertuples(index=False)):
             order, fiber, cluster_index = trace.Order, trace.Fiber, trace.cluster
             record = dict.fromkeys(
                 self._trace_fields(which="geometry") + ["PolyfitRMS"], np.nan
@@ -1034,20 +1048,16 @@ class OrderTrace:
                     "%s %s order %d: no cluster detected", chip, fiber, order
                 )
                 record["Status"] = "missing"
-                trace_centers.append(np.full(columns.size, np.nan))
-                accepted.append(np.zeros(columns.size, dtype=bool))
                 continue
 
-            cluster = self._clusters[chip][int(cluster_index)]
-            centers = self._trace_centers(profiles, cluster, columns, fiber)
+            centers = self._trace_centers(chip, fiber, order)
             try:
                 coeffs, kept, rms = self._robust_polynomial_fit(
                     columns.astype(float), centers
                 )
             except ValueError as error:
                 raise ValueError(f"{chip} {fiber} order {order}: {error}") from error
-            trace_centers.append(centers)
-            accepted.append(kept)
+            sampled["kept"][position] = kept
 
             kept_columns = columns[kept]
             coverage = (kept_columns.max() - kept_columns.min() + 1) / ncol
@@ -1062,9 +1072,6 @@ class OrderTrace:
                     else "partial",
                 }
             )
-
-        sampled["centers"] = np.array(trace_centers)
-        sampled["kept"] = np.array(accepted)
 
         self._trace_tables[chip] = pd.DataFrame(records, columns=self._trace_fields())
         return self._trace_tables[chip]
@@ -1140,7 +1147,7 @@ class OrderTrace:
         for trace_index, (bottom, top) in edges.items():
             table.loc[trace_index, ["BottomEdge", "TopEdge"]] = bottom, top
 
-        self._validate_trace_table(chip, table)
+        self._validate_trace_table(chip)
         return table
 
     def save_master(self, path, *, overwrite=False):

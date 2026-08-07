@@ -844,11 +844,11 @@ class TestApertureConstraint:
                 _FIBERS, centers, edges, strict=True
             )
         ]
-        table = pd.DataFrame(rows, columns=_TRACE_FIELDS)
+        tracer._trace_tables["GREEN"] = pd.DataFrame(rows, columns=_TRACE_FIELDS)
 
         # Centerlines stay ordered, but the SCI2 and SCI3 apertures overlap.
         with pytest.raises(ValueError, match="apertures overlap"):
-            tracer._validate_trace_table("GREEN", table)
+            tracer._validate_trace_table("GREEN")
 
 
 # ---------------------------------------------------------------------------
