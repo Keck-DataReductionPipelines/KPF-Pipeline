@@ -773,8 +773,8 @@ class TestApertureConstraint:
 
         fitted = tracer._trace_tables["GREEN"]
         assert list(fitted.columns) == _TRACE_FIELDS
-        assert fitted[["BottomEdge", "TopEdge"]].isna().all(axis=None)
-        assert fitted[["Coeff0", "X1", "X2", "PolyfitRMS"]].notna().all(axis=None)
+        assert fitted[["BottomEdge", "TopEdge", "X1", "X2"]].isna().all(axis=None)
+        assert fitted[["Coeff0", "PolyfitRMS"]].notna().all(axis=None)
         assert (fitted["Status"] == "unknown").all()
 
         # What the fit measured at the sampled columns stays with them.
@@ -787,6 +787,7 @@ class TestApertureConstraint:
         table = tracer.estimate_trace_apertures("GREEN")
         assert list(table.columns) == _TRACE_FIELDS
         assert (table[["BottomEdge", "TopEdge"]] > 0).all(axis=None)
+        assert (table["X1"] <= table["X2"]).all()
 
     def test_reports_a_trace_whose_widths_cannot_be_measured(
         self, tmp_path, monkeypatch

@@ -245,15 +245,15 @@ class OrderTrace:
             for start, stop in zip(bounds[:-1], bounds[1:], strict=True)
         ]
 
-    def _pixels_near_mid_dispersion(self, cluster, col_width=41):
+    def _pixels_near_mid_dispersion(self, cluster, width=41):
         """Return one cluster's pixel row and column indices at mid-dispersion.
 
-        Trace identity is measured over ``col_width`` columns centered on the
+        Trace identity is measured over ``width`` columns centered on the
         detector, where every order is on the detector and the orderlets of an
         order are cleanly separated across dispersion.
         """
         center = self.ccd["ncol"] // 2
-        half_width = col_width // 2
+        half_width = width // 2
         near_center = np.abs(cluster["col_indices"] - center) <= half_width
         return cluster["row_indices"][near_center], cluster["col_indices"][near_center]
 
@@ -906,13 +906,12 @@ class OrderTrace:
                 table.loc[above, "BottomEdge"], half_space
             )
 
-    def _validate_trace_table(
-        self, chip, row_half_window=7, full_coverage_fraction=0.9
-    ):
+    def _validate_trace_table(self, chip, full_coverage_fraction=0.9):
         """Validate output schema, geometry, labels, and detector coverage.
 
-        Settles each measured trace's 'unknown' ``Status`` from the dispersion
-        span X1-X2; no 'unknown' may survive.
+        Settles each measured trace's ``X1``-``X2`` as the columns over which
+        its whole aperture lands on the detector, then its 'unknown' ``Status``
+        from that span; no 'unknown' may survive.
         """
         table = self._trace_tables[chip]
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
@@ -932,30 +931,21 @@ class OrderTrace:
             )
 
         measured = table[table["Status"] != "missing"]
-        geometry = measured[self._trace_fields(which="geometry")].to_numpy(dtype=float)
+        geometry = measured[coefficient_fields + ["BottomEdge", "TopEdge"]].to_numpy(
+            dtype=float
+        )
         if not np.isfinite(geometry).all():
             raise ValueError(f"{chip} output contains non-finite measured geometry")
         if not ((measured["BottomEdge"] > 0) & (measured["TopEdge"] > 0)).all():
             raise ValueError(f"{chip} output contains non-positive widths")
-        if not ((measured["X1"] >= 0) & (measured["X2"] < ncol)).all():
-            raise ValueError(f"{chip} output contains out-of-range pixel columns")
-        if not (measured["X1"] <= measured["X2"]).all():
-            raise ValueError(f"{chip} output contains reversed pixel columns")
-
-        coverage = (measured["X2"] - measured["X1"] + 1) / ncol
-        table.loc[measured.index, "Status"] = np.where(
-            coverage >= full_coverage_fraction, "full", "partial"
-        )
-        if (table["Status"] == "unknown").any():
-            raise ValueError(f"{chip} output contains an unclassified trace")
 
         # Traces are written in ascending row, so evaluating every centerline
         # at the same columns must give rows that strictly increase down each
         # column; anything else means two traces cross or are mislabelled.
-        test_columns = np.linspace(0, ncol - 1, 17)
+        detector_columns = np.arange(ncol, dtype=float)
         coeffs = measured[coefficient_fields].to_numpy(dtype=float)
         centers = np.array(
-            [polynomial.polyval(test_columns, coeff) for coeff in coeffs]
+            [polynomial.polyval(detector_columns, coeff) for coeff in coeffs]
         )
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
@@ -967,11 +957,22 @@ class OrderTrace:
         if np.any(lower[1:] <= upper[:-1]):
             raise ValueError(f"{chip} fitted apertures overlap")
 
-        on_detector = (centers >= -row_half_window) & (
-            centers <= nrow - 1 + row_half_window
-        )
+        # A trace is usable only where its whole aperture lands on the
+        # detector; X1-X2 is the column span over which that holds.
+        on_detector = (lower >= 0) & (upper <= nrow - 1)
         if not on_detector.any(axis=1).all():
             raise ValueError(f"{chip} output contains a wholly off-detector trace")
+        first = on_detector.argmax(axis=1)
+        last = ncol - 1 - on_detector[:, ::-1].argmax(axis=1)
+        table.loc[measured.index, "X1"] = detector_columns[first]
+        table.loc[measured.index, "X2"] = detector_columns[last]
+
+        coverage = (last - first + 1) / ncol
+        table.loc[measured.index, "Status"] = np.where(
+            coverage >= full_coverage_fraction, "full", "partial"
+        )
+        if (table["Status"] == "unknown").any():
+            raise ValueError(f"{chip} output contains an unclassified trace")
 
     # ------------------------------------------------------------------
     # Algorithm steps
@@ -1047,8 +1048,8 @@ class OrderTrace:
         'unknown' for validation to classify from its dispersion span.
 
         The fitted traces become the CCD's ``self._trace_tables`` entry, with
-        only their aperture edges left unmeasured for the aperture step to fill
-        in. What each trace was measured at the sampled columns -- its row
+        their aperture edges and column bounds left unmeasured for the aperture
+        step to fill in. What each trace was measured at the sampled columns -- its row
         centers and the mask of the samples this fit accepted -- is recorded on
         ``self._profiles[chip]``, row for row with the CCD's table rows. Those
         rows are returned as well so the step can be driven on its own.
@@ -1091,15 +1092,8 @@ class OrderTrace:
                 raise ValueError(f"{chip} {fiber} order {order}: {error}") from error
             sampled["good"][position] = good
 
-            good_columns = columns[good]
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
-            record.update(
-                {
-                    "X1": float(good_columns.min()),
-                    "X2": float(good_columns.max()),
-                    "PolyfitRMS": rms,
-                }
-            )
+            record["PolyfitRMS"] = rms
 
         self._trace_tables[chip] = pd.DataFrame(records, columns=self._trace_fields())
         return self._trace_tables[chip]
