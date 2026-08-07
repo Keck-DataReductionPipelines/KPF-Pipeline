@@ -806,6 +806,8 @@ class OrderTrace:
         width_half_window=7,
         winsor_percentile=90.0,
         width_sigma=2.8,
+        min_width_pixels=1.0,
+        max_width_pixels=11.0,
     ):
         """Return one trace's robust bottom/top widths from its accepted samples.
 
@@ -851,7 +853,7 @@ class OrderTrace:
             signal = np.minimum(signal, np.nanpercentile(signal, winsor_percentile))
             offsets = rows - center
 
-            for half, sampled in (
+            for half, edge_widths in (
                 (offsets <= 0, bottom_widths),
                 (offsets >= 0, top_widths),
             ):
@@ -862,16 +864,28 @@ class OrderTrace:
                 sigma = np.sqrt(np.sum(weights * distance**2) / np.sum(weights))
                 width = width_sigma * sigma
                 if np.isfinite(width) and width > 0:
-                    sampled.append(width)
+                    edge_widths.append(width)
 
         if len(bottom_widths) < 3 or len(top_widths) < 3:
             raise ValueError(
                 "fewer than three valid samples for trace-width estimation"
             )
-        return (
-            float(np.clip(np.nanmedian(bottom_widths), 1.0, 11.0)),
-            float(np.clip(np.nanmedian(top_widths), 1.0, 11.0)),
-        )
+        widths = []
+        for edge, measured in (("bottom", bottom_widths), ("top", top_widths)):
+            width = float(np.nanmedian(measured))
+            clipped = float(np.clip(width, min_width_pixels, max_width_pixels))
+            if clipped != width:
+                logger.debug(
+                    "%s %s order %d: %s width %.2f clipped to %.2f",
+                    chip,
+                    fiber,
+                    order,
+                    edge,
+                    width,
+                    clipped,
+                )
+            widths.append(clipped)
+        return tuple(widths)
 
     def _clamp_neighboring_apertures(self, chip, orderlet_gap_pixels=2.0):
         """Shrink the apertures of traces that would otherwise touch.
