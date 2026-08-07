@@ -47,6 +47,7 @@ from scipy.ndimage import gaussian_filter1d, label
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.stats import robust_polyfit
 
 logger = logging.getLogger(__name__)
 
@@ -594,7 +595,7 @@ class OrderTrace:
 
         The result is cached as ``self._profiles[chip]``, the one place the CCD's
         measurements at these columns are kept: ``columns`` and ``profiles``
-        here, and the ``centers`` measured per trace with the ``kept`` mask of
+        here, and the ``centers`` measured per trace with the ``good`` mask of
         the samples its fit accepted, both filled in by the fitting step and
         left None until it runs. The cache is keyed by CCD alone, so the
         sampling arguments are the defaults every caller uses.
@@ -629,7 +630,7 @@ class OrderTrace:
             "columns": columns,
             "profiles": profiles.T,
             "centers": None,
-            "kept": None,
+            "good": None,
         }
         return self._profiles[chip]
 
@@ -791,51 +792,12 @@ class OrderTrace:
             centers[sample] = measure_center(profiles[sample], row_guess)
         return centers
 
-    def _robust_polynomial_fit(
-        self,
-        columns,
-        centers,
-        min_valid_fraction=0.5,
-        fit_max_iterations=8,
-        fit_sigma=4.0,
-    ):
-        """Fit row center against pixel column, rejecting outliers by median/MAD."""
-        degree = int(self.poly_degree)
-        kept = np.isfinite(columns) & np.isfinite(centers)
-        min_kept = max(degree + 1, int(np.ceil(columns.size * min_valid_fraction)))
-        if kept.sum() < min_kept:
-            raise ValueError(
-                f"only {kept.sum()} of {columns.size} trace centers are "
-                f"valid; at least {min_kept} are required"
-            )
-
-        for _ in range(fit_max_iterations):
-            coeffs = polynomial.polyfit(columns[kept], centers[kept], degree)
-            residual = centers - polynomial.polyval(columns, coeffs)
-            median_residual = np.nanmedian(residual[kept])
-            residual_scatter = mad_std(residual[kept], ignore_nan=True)
-            rejection_limit = max(0.25, fit_sigma * residual_scatter)
-            still_valid = np.isfinite(centers) & (
-                np.abs(residual - median_residual) <= rejection_limit
-            )
-            if still_valid.sum() < min_kept:
-                break
-            if np.array_equal(still_valid, kept):
-                kept = still_valid
-                break
-            kept = still_valid
-
-        coeffs = polynomial.polyfit(columns[kept], centers[kept], degree)
-        residual = centers[kept] - polynomial.polyval(columns[kept], coeffs)
-        rms = float(np.sqrt(np.mean(residual**2)))
-        return coeffs, kept, rms
-
     def _estimate_widths(
         self,
         profiles,
         coeffs,
         columns,
-        kept,
+        good,
         width_half_window=7,
         winsor_percentile=90.0,
         width_sigma=2.8,
@@ -851,7 +813,7 @@ class OrderTrace:
         """
         bottom_widths = []
         top_widths = []
-        samples = np.flatnonzero(kept)
+        samples = np.flatnonzero(good)
         stride = max(1, samples.size // 24)
         for sample in samples[::stride]:
             center = polynomial.polyval(columns[sample], coeffs)
@@ -995,7 +957,7 @@ class OrderTrace:
         self._metadata.pop(chip, None)
         self._trace_tables.pop(chip, None)
         if chip in self._profiles:
-            self._profiles[chip].update(centers=None, kept=None)
+            self._profiles[chip].update(centers=None, good=None)
         return clusters
 
     def assign_trace_identities(self, chip):
@@ -1032,7 +994,7 @@ class OrderTrace:
 
         traces = self._metadata[chip]
         sampled["centers"] = np.full((len(traces), columns.size), np.nan)
-        sampled["kept"] = np.zeros((len(traces), columns.size), dtype=bool)
+        sampled["good"] = np.zeros((len(traces), columns.size), dtype=bool)
 
         records = []
         for position, trace in enumerate(traces.itertuples(index=False)):
@@ -1052,20 +1014,20 @@ class OrderTrace:
 
             centers = self._trace_centers(chip, fiber, order)
             try:
-                coeffs, kept, rms = self._robust_polynomial_fit(
-                    columns.astype(float), centers
+                coeffs, good, rms = robust_polyfit(
+                    columns.astype(float), centers, int(self.poly_degree), full=True
                 )
             except ValueError as error:
                 raise ValueError(f"{chip} {fiber} order {order}: {error}") from error
-            sampled["kept"][position] = kept
+            sampled["good"][position] = good
 
-            kept_columns = columns[kept]
-            coverage = (kept_columns.max() - kept_columns.min() + 1) / ncol
+            good_columns = columns[good]
+            coverage = (good_columns.max() - good_columns.min() + 1) / ncol
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
             record.update(
                 {
-                    "X1": float(kept_columns.min()),
-                    "X2": float(kept_columns.max()),
+                    "X1": float(good_columns.min()),
+                    "X2": float(good_columns.max()),
                     "PolyfitRMS": rms,
                     "Status": "full"
                     if coverage >= full_coverage_fraction
@@ -1091,10 +1053,10 @@ class OrderTrace:
         ``self._profiles[chip]``, so the fitting step must have run.
         """
         sampled = self._profiles[chip]
-        columns, profiles, kept = (
+        columns, profiles, good = (
             sampled["columns"],
             sampled["profiles"],
-            sampled["kept"],
+            sampled["good"],
         )
         coefficient_fields = self._trace_fields(which="coeffs")
 
@@ -1108,7 +1070,7 @@ class OrderTrace:
                     profiles,
                     table.loc[trace.Index, coefficient_fields].to_numpy(dtype=float),
                     columns.astype(float),
-                    kept[position],
+                    good[position],
                 )
             except ValueError as error:
                 raise ValueError(

@@ -9,6 +9,7 @@ from kpfpipe.utils.stats import (
     flag_outliers,
     interpolate_bad_pixels,
     optimize_lsq,
+    robust_polyfit,
     strictly_increasing,
 )
 
@@ -119,6 +120,53 @@ class TestFlagOutliers:
     def test_unsupported_method_raises(self):
         with pytest.raises(ValueError, match="method must be 'median' or 'trend'"):
             flag_outliers(np.arange(10.0), sigma=5.0, method="bogus")
+
+
+class TestRobustPolyfit:
+    def _quadratic(self, n=40):
+        x = np.linspace(0.0, 10.0, n)
+        return x, 1.0 - 2.0 * x + 0.5 * x**2
+
+    def test_matches_polyfit_on_clean_data(self):
+        x, y = self._quadratic()
+        expected = np.polynomial.polynomial.polyfit(x, y, 2)
+        assert np.allclose(robust_polyfit(x, y, 2), expected)
+
+    def test_rejects_an_outlier_that_would_bias_polyfit(self):
+        x, y = self._quadratic()
+        truth = robust_polyfit(x, y, 2)
+        y[7] += 500.0
+
+        coeffs, good, rms = robust_polyfit(x, y, 2, full=True)
+        assert not good[7] and good.sum() == x.size - 1
+        assert np.allclose(coeffs, truth)
+        assert rms < 1e-8
+        # Plain polyfit has no defence against it.
+        assert not np.allclose(np.polynomial.polynomial.polyfit(x, y, 2), truth)
+
+    def test_ignores_non_finite_samples(self):
+        x, y = self._quadratic()
+        truth = robust_polyfit(x, y, 2)
+        y[3], y[9] = np.nan, np.inf
+
+        coeffs, good, _ = robust_polyfit(x, y, 2, full=True)
+        assert not good[[3, 9]].any()
+        assert np.allclose(coeffs, truth)
+
+    def test_raises_when_too_few_samples_are_finite(self):
+        x, y = self._quadratic(n=10)
+        y[4:] = np.nan
+        with pytest.raises(ValueError, match="only 4 of 10 samples are valid"):
+            robust_polyfit(x, y, 2)
+
+    def test_keeps_the_fit_it_cannot_afford_to_trim(self):
+        # Scatter this heavy would reject past min_valid_fraction; the fit stops
+        # rejecting rather than fitting a handful of samples.
+        x = np.linspace(0.0, 10.0, 40)
+        y = np.where(np.arange(40) % 2, 0.0, 10.0)
+
+        _, good, _ = robust_polyfit(x, y, 1, sigma=0.1, full=True)
+        assert good.sum() >= 20
 
 
 class TestStrictlyIncreasing:

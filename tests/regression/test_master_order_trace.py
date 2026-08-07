@@ -766,8 +766,8 @@ class TestApertureConstraint:
         sampled = tracer._profiles["GREEN"]
         shape = (len(fitted), sampled["columns"].size)
         assert sampled["centers"].shape == shape
-        assert sampled["kept"].shape == shape
-        assert sampled["kept"].any(axis=1).all()
+        assert sampled["good"].shape == shape
+        assert sampled["good"].any(axis=1).all()
 
         table = tracer.estimate_trace_apertures("GREEN")
         assert list(table.columns) == _TRACE_FIELDS
@@ -800,12 +800,12 @@ class TestApertureConstraint:
         tracer.assign_trace_identities("GREEN")
 
         def fail(*args, **kwargs):
-            raise ValueError("only 2 of 65 trace centers are valid")
+            raise ValueError("only 2 of 65 samples are valid")
 
-        monkeypatch.setattr(tracer, "_robust_polynomial_fit", fail)
+        monkeypatch.setattr(order_trace_module, "robust_polyfit", fail)
 
         with pytest.raises(
-            ValueError, match="GREEN SKY order 0: only 2 of 65 trace centers"
+            ValueError, match="GREEN SKY order 0: only 2 of 65 samples are valid"
         ):
             tracer.fit_trace_polynomials("GREEN")
 
@@ -819,7 +819,7 @@ class TestApertureConstraint:
         tracer.detect_traces("GREEN")
 
         sampled = tracer._profiles["GREEN"]
-        assert sampled["centers"] is None and sampled["kept"] is None
+        assert sampled["centers"] is None and sampled["good"] is None
         # The fitted rows named clusters this rebuild has renumbered.
         assert "GREEN" not in tracer._trace_tables
         assert "GREEN" not in tracer._metadata
