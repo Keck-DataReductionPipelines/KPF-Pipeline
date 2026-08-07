@@ -781,7 +781,7 @@ class TestApertureConstraint:
         def fail(*args, **kwargs):
             raise ValueError("fewer than three valid samples")
 
-        monkeypatch.setattr(tracer, "_estimate_widths", fail)
+        monkeypatch.setattr(tracer, "_trace_width", fail)
 
         with pytest.raises(
             ValueError, match="GREEN SKY order 0: fewer than three valid samples"

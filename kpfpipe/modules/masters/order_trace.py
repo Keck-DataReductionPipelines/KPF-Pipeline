@@ -792,17 +792,20 @@ class OrderTrace:
             centers[sample] = measure_center(profiles[sample], row_guess)
         return centers
 
-    def _estimate_widths(
+    def _trace_width(
         self,
-        profiles,
-        coeffs,
-        columns,
-        good,
+        chip,
+        fiber,
+        order,
         width_half_window=7,
         winsor_percentile=90.0,
         width_sigma=2.8,
     ):
-        """Return robust bottom/top aperture widths from accepted samples.
+        """Return one trace's robust bottom/top widths from its accepted samples.
+
+        The trace's fitted centerline is read from ``self._trace_tables[chip]``
+        and its sampled columns, profiles, and accepted samples from
+        ``self._profiles[chip]``, so the fitting step must have run.
 
         Below and above are cross-dispersion, so the two widths become the
         ``BottomEdge`` and ``TopEdge`` output fields. Each sampled column
@@ -811,9 +814,18 @@ class OrderTrace:
         preserves aperture asymmetry without the unstable unconstrained
         half-Gaussian fits used by the legacy implementation.
         """
+        position = order * len(self.fibers) + self.fibers.index(fiber)
+        sampled = self._profiles[chip]
+        columns, profiles = sampled["columns"], sampled["profiles"]
+        coeffs = (
+            self._trace_tables[chip]
+            .loc[position, self._trace_fields(which="coeffs")]
+            .to_numpy(dtype=float)
+        )
+
         bottom_widths = []
         top_widths = []
-        samples = np.flatnonzero(good)
+        samples = np.flatnonzero(sampled["good"][position])
         stride = max(1, samples.size // 24)
         for sample in samples[::stride]:
             center = polynomial.polyval(columns[sample], coeffs)
@@ -1047,36 +1059,23 @@ class OrderTrace:
         yield one; a width that cannot be measured raises, as a centerline with
         no aperture cannot be extracted from.
 
-        The measured edges are written into ``self._trace_tables[chip]``,
-        completing the CCD's rows; they are returned as well so the step can be
-        driven on its own. The samples each fit accepted are read from
-        ``self._profiles[chip]``, so the fitting step must have run.
+        Each width is written into ``self._trace_tables[chip]`` as it is
+        measured, completing the CCD's rows; the table is returned as well so
+        the step can be driven on its own.
         """
-        sampled = self._profiles[chip]
-        columns, profiles, good = (
-            sampled["columns"],
-            sampled["profiles"],
-            sampled["good"],
-        )
         coefficient_fields = self._trace_fields(which="coeffs")
-
         table = self._trace_tables[chip]
-        edges = {}
-        for position, trace in enumerate(table.itertuples()):
+
+        for trace in table.itertuples():
             if trace.Status == "missing":
                 continue
             try:
-                bottom, top = self._estimate_widths(
-                    profiles,
-                    table.loc[trace.Index, coefficient_fields].to_numpy(dtype=float),
-                    columns.astype(float),
-                    good[position],
-                )
+                widths = self._trace_width(chip, trace.Fiber, trace.Order)
             except ValueError as error:
                 raise ValueError(
                     f"{chip} {trace.Fiber} order {trace.Order}: {error}"
                 ) from error
-            edges[trace.Index] = [bottom, top]
+            table.loc[trace.Index, ["BottomEdge", "TopEdge"]] = widths
 
         # Measured traces run ascending in row, so consecutive ones are the
         # neighbors that must not overlap. Each keeps its profile width where
@@ -1084,7 +1083,7 @@ class OrderTrace:
         # between their centerlines less a guard band. That space is measured
         # where the two centerlines run closest, so the apertures stay disjoint
         # across the whole detector, not only at mid-dispersion.
-        measured = list(edges)
+        measured = table.index[table["Status"] != "missing"]
         test_columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
         centers = [
             polynomial.polyval(
@@ -1103,11 +1102,10 @@ class OrderTrace:
                     "neighboring fitted traces cross or leave no room for the "
                     "orderlet gap"
                 )
-            edges[below][1] = min(edges[below][1], half_space)
-            edges[above][0] = min(edges[above][0], half_space)
-
-        for trace_index, (bottom, top) in edges.items():
-            table.loc[trace_index, ["BottomEdge", "TopEdge"]] = bottom, top
+            table.loc[below, "TopEdge"] = min(table.loc[below, "TopEdge"], half_space)
+            table.loc[above, "BottomEdge"] = min(
+                table.loc[above, "BottomEdge"], half_space
+            )
 
         self._validate_trace_table(chip)
         return table
