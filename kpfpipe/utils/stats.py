@@ -2,7 +2,7 @@
 
 import numpy as np
 from astropy.stats import mad_std
-from numpy.polynomial import polynomial
+from numpy.polynomial import legendre, polynomial
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import (
     convolve,
@@ -152,6 +152,11 @@ def robust_polyfit(x, y, deg, sigma=4.0, maxiter=8, min_valid_fraction=0.5, full
     deviations from the median residual, until the accepted set stops changing.
     Non-finite samples are never accepted.
 
+    Each fit is solved in the Legendre basis over the sample span, whose
+    design matrix stays well conditioned where the power basis' Vandermonde
+    matrix does not, and the result is converted back to power-basis
+    coefficients.
+
     Parameters
     ----------
     x : array_like
@@ -198,9 +203,13 @@ def robust_polyfit(x, y, deg, sigma=4.0, maxiter=8, min_valid_fraction=0.5, full
             f"at least {min_good} are required"
         )
 
+    # Hold the domain fixed across iterations so rejecting a sample near an end
+    # cannot rescale the basis and perturb the coefficients on its own.
+    domain = [x[good].min(), x[good].max()]
+
     for _ in range(maxiter):
-        coeffs = polynomial.polyfit(x[good], y[good], deg)
-        residual = y - polynomial.polyval(x, coeffs)
+        series = legendre.Legendre.fit(x[good], y[good], deg, domain=domain)
+        residual = y - series(x)
         median_residual = np.nanmedian(residual[good])
         residual_scatter = mad_std(residual[good], ignore_nan=True)
         rejection_limit = max(0.25, sigma * residual_scatter)
@@ -214,10 +223,15 @@ def robust_polyfit(x, y, deg, sigma=4.0, maxiter=8, min_valid_fraction=0.5, full
             break
         good = still_valid
 
-    coeffs = polynomial.polyfit(x[good], y[good], deg)
+    series = legendre.Legendre.fit(x[good], y[good], deg, domain=domain)
+    # The conversion trims trailing zero coefficients; ``polyfit`` always
+    # returns deg + 1 of them, and callers index by order.
+    coeffs = np.zeros(deg + 1)
+    converted = series.convert(kind=polynomial.Polynomial).coef
+    coeffs[: converted.size] = converted
     if not full:
         return coeffs
-    residual = y[good] - polynomial.polyval(x[good], coeffs)
+    residual = y[good] - series(x[good])
     return coeffs, good, float(np.sqrt(np.mean(residual**2)))
 
 
