@@ -777,11 +777,9 @@ class TestApertureConstraint:
         assert fitted[["Coeff0", "PolyfitRMS"]].notna().all(axis=None)
         assert (fitted["Status"] == "unknown").all()
 
-        # What the fit measured at the sampled columns stays with them.
+        # What the fit accepted at the sampled columns stays with them.
         sampled = tracer._profiles["GREEN"]
-        shape = (len(fitted), sampled["columns"].size)
-        assert sampled["centers"].shape == shape
-        assert sampled["good"].shape == shape
+        assert sampled["good"].shape == (len(fitted), sampled["columns"].size)
         assert sampled["good"].any(axis=1).all()
 
         table = tracer.estimate_trace_apertures("GREEN")
@@ -835,7 +833,7 @@ class TestApertureConstraint:
         tracer.detect_traces("GREEN")
 
         sampled = tracer._profiles["GREEN"]
-        assert sampled["centers"] is None and sampled["good"] is None
+        assert sampled["good"] is None
         # The fitted rows named clusters this rebuild has renumbered.
         assert "GREEN" not in tracer._trace_tables
         assert "GREEN" not in tracer._metadata

@@ -6,20 +6,13 @@ illuminated pixels lie on each detector -- and writes a low-order polynomial
 describing every trace centerline, plus its aperture edges, to a single CSV
 covering all CCDs.
 
-Trace geometry is measured from the master flat alone. No pre-existing
-order-trace table is consulted, so the module never inherits the geometry it
-exists to determine. Trace identity is established before any polynomial is
-fitted: the CAL orderlet is both narrower and several times brighter than the
-SKY and science orderlets, which fixes the phase of the repeating
-SKY-SCI1-SCI2-SCI3-CAL group, and each CAL closes one echelle order. Because
-each order is anchored on its own CAL, an order truncated by a detector edge
-shifts no other trace's label; any other departure from the pattern is an error.
-
-No orderlet spacing is treated as regular. Spacing between orders varies
-several-fold across a detector, and identity rests on the fiber pattern alone.
-
-OrderTrace applies no calibrations of its own; it consumes the master flat as
-delivered by the Flat module.
+Trace geometry is measured from the master flat alone: no pre-existing
+order-trace table is consulted, and OrderTrace applies no calibrations of its
+own. Identity is established before any polynomial is fitted. The CAL orderlet
+is both narrower and several times brighter than the SKY and science orderlets,
+which fixes the phase of the repeating SKY-SCI1-SCI2-SCI3-CAL group, and each
+CAL closes one echelle order. Identity rests on that pattern alone; orderlet
+spacing varies several-fold across a detector and is never assumed regular.
 
 Axis convention
 ---------------
@@ -63,13 +56,11 @@ class OrderTrace:
     Measure spectral traces from one vNext KPF master flat and write one trace
     CSV covering all CCDs.
 
-    Operations include:
-      - reducing each detector column to a mask of illuminated pixels
-      - collecting touching mask pixels into clusters (8-connectivity)
-      - curating clusters (rejecting artifacts, rejoining split traces)
-      - identifying each cluster's fiber and echelle order index
-      - fitting a polynomial centerline, row against column, to each trace
-      - estimating aperture edges and enforcing the gap between neighbors
+    Each CCD is traced in four steps: detect and curate the pixel clusters
+    (``detect_traces``), label each with its fiber and order index
+    (``assign_trace_identities``), fit a polynomial centerline through each
+    (``fit_trace_polynomials``), and measure and validate the aperture edges
+    (``estimate_trace_apertures``).
 
     Output always contains one row per expected trace of every CCD (``norder``
     x five fibers per chip), ordered by chip then order index then fiber, each
@@ -77,9 +68,10 @@ class OrderTrace:
     -- the one an echelle order lying partly off the detector can cost -- is
     written with NaN geometry and a ``Status`` of 'missing', so it is reported
     rather than silently dropped. Every detected trace is measured or the run
-    fails: one measured over only part of the detector is written 'partial',
-    one spanning essentially the whole detector 'full', and a trace that cannot
-    be fitted or given an aperture raises rather than reaching the CSV.
+    fails: one whose aperture stays on the detector over essentially the whole
+    dispersion is written 'full', one leaving it partway 'partial', and a trace
+    that cannot be fitted or given an aperture raises rather than reaching the
+    CSV.
 
     Standalone rather than a ``BaseMasterModule`` subclass because it consumes
     one completed L1 master instead of stacking L0 exposures.
@@ -151,10 +143,9 @@ class OrderTrace:
     def _trace_fields(self, which="all"):
         """Return output fields of one trace table, in their written order.
 
-        ``which`` selects the whole schema ('all'), the aperture and column
-        bounds ('bounds'), the polynomial coefficients ('coeffs'), whose count
-        follows the configured fit degree, or both of the last two together
-        ('geometry'), which is every field a measured trace fills in.
+        ``which`` selects the whole schema ('all'), the polynomial coefficients
+        ('coeffs'), whose count follows the configured fit degree, or
+        'geometry', every field a measured trace fills in.
         """
         degree = int(self.poly_degree)
         if degree < 0:
@@ -167,17 +158,13 @@ class OrderTrace:
 
         if which == "all":
             return _LABELS + _COEFFS + _BOUNDS + _QUALITY
-        if which == "bounds":
-            return _BOUNDS
-        elif which == "coeffs":
+        if which == "coeffs":
             return _COEFFS
-        elif which == "geometry":
+        if which == "geometry":
             return _COEFFS + _BOUNDS
-        else:
-            raise ValueError(
-                "which must be one of 'all', 'coeffs', 'bounds', or "
-                f"'geometry'; got {which}"
-            )
+        raise ValueError(
+            f"which must be one of 'all', 'coeffs', or 'geometry'; got {which}"
+        )
 
     # ------------------------------------------------------------------
     # Private helpers - trace detection
@@ -194,11 +181,10 @@ class OrderTrace:
         That flux is a Whittaker smoother -- the f minimizing
         ``sum (f - pixels)**2 + smoothing_weight * sum (df/drow)**2`` -- whose
         normal equations are symmetric and tridiagonal, so ``solve_banded``
-        recovers it in O(nrow) from one sub- and one super-diagonal. Symmetry
-        lets one off-diagonal array serve as both, its two out-of-matrix corner
-        entries zeroed and never read. The default weight rides over the
-        orderlets (5-11 pixels thick, spaced 16-20) while still following the
-        far broader order-to-order flux envelope.
+        recovers it in O(nrow) from one sub- and one super-diagonal, which
+        symmetry lets a single off-diagonal array serve as both. The default
+        weight rides over the orderlets (5-11 pixels thick, spaced 16-20) while
+        still following the far broader order-to-order flux envelope.
         """
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         filled = np.nan_to_num(self._image[chip], nan=0.0, posinf=0.0, neginf=0.0)
@@ -207,7 +193,6 @@ class OrderTrace:
         diagonal = np.full(nrow, 1.0 + 2.0 * smoothing_weight)
         diagonal[[0, -1]] = 1.0 + smoothing_weight
         bands = np.vstack([off_diagonal, diagonal, off_diagonal])
-        bands[0, 0] = bands[2, -1] = 0.0
 
         illuminated = np.zeros((nrow, ncol), dtype=bool)
         for j in range(ncol):
@@ -233,8 +218,8 @@ class OrderTrace:
 
         ordering = np.argsort(cluster_ids, kind="stable")
         row_indices, col_indices = row_indices[ordering], col_indices[ordering]
-        # One contiguous run of pixels per cluster id, so a single searchsorted
-        # gives every cluster's slice without revisiting the label image.
+        # Sorted ids leave one contiguous run per cluster, so a single
+        # searchsorted gives every cluster's slice.
         bounds = np.searchsorted(cluster_ids[ordering], np.arange(1, cluster_count + 2))
         return [
             {
@@ -272,7 +257,7 @@ class OrderTrace:
     def _reject_small_clusters(self, clusters, min_cluster_pixels=500):
         """Drop clusters too small to be any part of a trace.
 
-        Runs before fragments are rejoined, so it tests only pixel count: a
+        Runs before fragments are rejoined, so it tests pixel count alone: a
         genuine fragment is short and may sit anywhere on the detector.
         """
         kept = []
@@ -290,8 +275,8 @@ class OrderTrace:
 
         A trace runs the length of dispersion and is several pixel rows thick
         at mid-dispersion, where its shape is measured. A cluster falling short
-        of either, or missing from mid-dispersion altogether, is discarded
-        however trace-like its full-frame pixel count looks.
+        of either, or absent from mid-dispersion, is discarded however
+        trace-like its full-frame pixel count looks.
         """
         kept = []
         for cluster in clusters:
@@ -338,8 +323,8 @@ class OrderTrace:
         individual pixels, whose scatter is the trace's cross-dispersion
         thickness and would swamp the misalignment being measured. Only pixels
         within one gap width of either side are used, and the fit is linear:
-        the test asks whether the pieces line up locally, over which a trace's
-        curvature is negligible.
+        the test asks whether the pieces line up locally, over a run short
+        enough that a trace's curvature is negligible.
         """
         rows = [cluster["row_indices"] for cluster in clusters]
         columns = [cluster["col_indices"] for cluster in clusters]
@@ -418,9 +403,8 @@ class OrderTrace:
     def _track_cluster_metadata(self, chip):
         """Measure row, mask thickness, and flux for each cluster at mid-detector.
 
-        The row is the cluster's cross-dispersion position there, and is what
-        the clusters are subsequently ordered by: sorting on it walks the
-        orderlets of the detector in the order they physically appear.
+        Sorted on row, the result walks the orderlets of the detector in the
+        order they physically appear.
         """
         records = []
         for index, cluster in enumerate(self._clusters[chip]):
@@ -443,14 +427,12 @@ class OrderTrace:
 
         A CAL is thinner and brighter than the orderlets around it. Brightness
         is judged against the mean of the two clusters bracketing each
-        candidate. Lamp flux varies by an order of magnitude across the
-        detector, and bracketing cancels that gradient where a running median
-        of the neighborhood does not.
+        candidate, which cancels the order-of-magnitude lamp gradient across
+        the detector where a running median of the neighborhood does not.
 
         One CAL closes each order, so the flagged count is checked against the
-        cluster count. An order lying partly off the detector contributes
-        orderlets without its CAL, or a CAL whose order is otherwise
-        incomplete, which moves the count by one either way.
+        cluster count. An order lying partly off the detector moves that count
+        by one either way.
         """
         flux = metadata["flux"].to_numpy()
         flux_below = np.concatenate([flux[1:2], flux[:-1]])
@@ -474,14 +456,14 @@ class OrderTrace:
         """Give every cluster its fiber name, phasing the pattern on the CALs.
 
         Every order is four non-CAL orderlets closed by a CAL, so a cluster's
-        fiber is fixed by its rank relative to the CAL of its own order and no
-        orderlet spacing need be assumed. Only the orders at the detector edges
-        may depart from the pattern: the lowest can lose the orderlets that open
-        it and the highest those that close it, and either edge can clip one
-        orderlet of the order beyond, leaving it too faint to be recognized as
-        the CAL it usually is. That clipped orderlet is left unnamed, and so
-        drops out with the rest of the order it belongs to. Any other departure
-        means the clusters cannot be trusted to be one orderlet each.
+        fiber is fixed by its rank relative to the CAL of its own order. Only
+        the orders at the detector edges may depart from the pattern: the
+        lowest can lose the orderlets that open it and the highest those that
+        close it, and either edge can clip one orderlet of the order beyond,
+        leaving it too faint to be recognized as the CAL it usually is. That
+        clipped orderlet is left unnamed and drops out with the rest of its
+        order. Any other departure means the clusters cannot be trusted to be
+        one orderlet each.
         """
         metadata = self._flag_cal_clusters(metadata)
         cluster_rows = metadata["row"].to_numpy()
@@ -577,33 +559,20 @@ class OrderTrace:
     ):
         """Return everything one CCD is measured at its sampled columns.
 
-        The columns span the detector, both edges included: a centerline is
-        fitted through one measurement per sampled column, so these are the
-        dispersion positions the polynomial is constrained at. Their profiles
-        follow, one row of the whole cross-dispersion each, sampled column for
-        sampled column with ``columns`` itself.
+        The columns span the detector, both edges included, and are the
+        dispersion positions every centerline is constrained at. Each carries a
+        ``profiles`` row of the whole cross-dispersion, median combined over
+        neighboring columns to suppress noise without smearing, and a heavily
+        smoothed ``backgrounds`` row that edge centering subtracts. A window
+        overhanging a detector edge is padded with NaN, which ``nanmedian``
+        ignores, giving the truncated median a clamped slice would.
 
-        Profiles rather than raw pixels: neighboring columns are median
-        combined, which suppresses noise without smearing, because a trace
-        moves only slightly across dispersion over so short a run along it.
+        All of it depends on the column alone, so every trace of the CCD shares
+        one set built here rather than recomputing its own.
 
-        Every trace on the CCD is measured at these same few dozen columns, so
-        all the profiles are built once here instead of being recomputed by
-        each trace in turn.
-
-        A window overhanging a detector edge is padded with NaN, which
-        ``nanmedian`` then ignores, giving exactly the truncated median a
-        clamped per-column slice would.
-
-        Each profile's heavily smoothed ``backgrounds`` counterpart is built
-        here for the same reason: edge centering subtracts it, and it depends on
-        the column alone, not on which trace is being measured in it.
-
-        The result is cached as ``self._profiles[chip]``, the one place the CCD's
-        measurements at these columns are kept: ``columns``, ``profiles`` and
-        ``backgrounds`` here, and the ``centers`` measured per trace with the
-        ``good`` mask of the samples its fit accepted, both filled in by the
-        fitting step and left None until it runs. The cache is keyed by CCD
+        The result is cached as ``self._profiles[chip]``, alongside the ``good``
+        mask of the samples each trace's fit accepted, which the fitting step
+        fills in and which is None until it runs. The cache is keyed by CCD
         alone, so the sampling arguments are the defaults every caller uses.
         """
         if chip in self._profiles:
@@ -612,7 +581,6 @@ class OrderTrace:
         image = self._image[chip]
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
 
-        # Determine spatial profile over median of several columns to reduce noise
         columns = np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
         offsets = np.arange(-col_half_window, col_half_window + 1)
         cols_in_window = columns[:, None] + offsets[None, :]
@@ -622,8 +590,8 @@ class OrderTrace:
         pixels[:, on_detector] = image[:, cols_in_window[on_detector]]
         profiles = np.nanmedian(pixels, axis=2)
 
-        # Fill non-finite rows with the profile's own median, as a wholly
-        # unmeasurable column has no scale of its own to fall back on.
+        # A wholly unmeasurable column has no scale of its own, so fill it with
+        # the profile's median rather than its own.
         finite = np.isfinite(profiles)
         fill = np.zeros(columns.size)
         measured = finite.any(axis=0)
@@ -638,7 +606,6 @@ class OrderTrace:
             "backgrounds": gaussian_filter1d(
                 profiles, sigma=background_smoothing_sigma, mode="nearest", axis=1
             ),
-            "centers": None,
             "good": None,
         }
         return self._profiles[chip]
@@ -680,8 +647,6 @@ class OrderTrace:
             return np.nan
         winsor_limit = np.nanpercentile(weights, winsor_percentile)
         weights = np.minimum(weights, winsor_limit)
-        if weights.sum() <= 0:
-            return np.nan
         return float(np.average(rows[core_start:core_stop], weights=weights))
 
     def _local_edge_center(
@@ -727,8 +692,8 @@ class OrderTrace:
                 continue
             core_index = bright[np.argmin(np.abs(bright - row_guess_index))]
 
-            # Walk out of the illuminated core to either side and interpolate
-            # the row the signal falls back through the threshold at.
+            # Walk out of the core to either side and interpolate the row the
+            # signal falls back through the threshold at.
             crossings = []
             for direction in (-1, 1):
                 current = int(core_index)
@@ -768,14 +733,12 @@ class OrderTrace:
         """Measure a subpixel row center at every sampled column of one trace.
 
         The trace's cluster and the CCD's sampled columns and profiles are read
-        from the caches, and the measured row is written into
-        ``self._profiles[chip]["centers"]``, which the fitting step preallocates.
-
-        The cluster's own mask pixels at a column give the starting row, so no
-        prior trace geometry is needed. The CAL orderlet is peaked and centers
-        well on its brightest pixels; SKY and the science orderlets are
-        flat-topped, with no meaningful peak, and are centered from their two
-        cross-dispersion edges instead.
+        from the caches. The cluster's own mask pixels at a column give the
+        starting row, so no prior trace geometry is needed. The CAL orderlet is
+        peaked and centers well on its brightest pixels; SKY and the science
+        orderlets are flat-topped, with no meaningful peak, and are centered
+        from their two cross-dispersion edges instead. A column the cluster does
+        not reach is left NaN.
         """
         position = order * len(self.fibers) + self.fibers.index(fiber)
         sampled = self._profiles[chip]
@@ -784,7 +747,7 @@ class OrderTrace:
             int(self._metadata[chip]["cluster"].iloc[position])
         ]
 
-        centers = sampled["centers"][position]
+        centers = np.full(columns.size, np.nan)
         for sample, j in enumerate(columns):
             in_column = cluster["col_indices"] == j
             if not in_column.any():
@@ -817,10 +780,9 @@ class OrderTrace:
 
         Below and above are cross-dispersion, so the two widths become the
         ``BottomEdge`` and ``TopEdge`` output fields. Each sampled column
-        contributes the second moment of the flux on one side of the centerline,
-        which is a Gaussian's sigma; estimating the two halves separately
-        preserves aperture asymmetry without the unstable unconstrained
-        half-Gaussian fits used by the legacy implementation.
+        contributes the second moment of the flux on one side of the
+        centerline, which is a Gaussian's sigma; estimating the two halves
+        separately preserves aperture asymmetry.
         """
         position = order * len(self.fibers) + self.fibers.index(fiber)
         sampled = self._profiles[chip]
@@ -970,15 +932,12 @@ class OrderTrace:
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
 
-        # The apertures themselves, not just the centerlines, must stay disjoint:
-        # every trace's upper edge below the next trace's lower edge everywhere.
+        # The apertures themselves must stay disjoint, not just the centerlines.
         upper = centers + measured["TopEdge"].to_numpy(dtype=float)[:, None]
         lower = centers - measured["BottomEdge"].to_numpy(dtype=float)[:, None]
         if np.any(lower[1:] <= upper[:-1]):
             raise ValueError(f"{chip} fitted apertures overlap")
 
-        # A trace is usable only where its whole aperture lands on the
-        # detector; X1-X2 is the column span over which that holds.
         on_detector = (lower >= 0) & (upper <= nrow - 1)
         if not on_detector.any(axis=1).all():
             raise ValueError(f"{chip} output contains a wholly off-detector trace")
@@ -1006,14 +965,12 @@ class OrderTrace:
         one orderlet of the next order in view, so the count is allowed to be
         off by one either way.
 
-        The surviving clusters are cached as ``self._clusters[chip]``, which is
-        where the identity and fitting steps read them from; they are returned
-        as well so the step can be driven on its own. Everything already
-        measured for the CCD is discarded with the clusters it was measured
-        from, whose list positions this rebuild invalidates: the assigned
-        identities, the fitted trace table, and the centers and accepted samples
-        of each trace. The sampled profiles survive: they are a property of the
-        image, not of the clusters.
+        The surviving clusters are cached as ``self._clusters[chip]`` and
+        returned. This rebuild invalidates the old clusters' list positions, so
+        everything measured from them -- the assigned identities, the fitted
+        trace table, the accepted samples -- is discarded with them. The sampled
+        profiles survive, being a property of the image rather than the
+        clusters.
         """
         illuminated = self._detect_illuminated_pixels(chip)
         clusters = self._detect_clusters(illuminated)
@@ -1042,15 +999,14 @@ class OrderTrace:
         self._metadata.pop(chip, None)
         self._trace_tables.pop(chip, None)
         if chip in self._profiles:
-            self._profiles[chip].update(centers=None, good=None)
+            self._profiles[chip].update(good=None)
         return clusters
 
     def assign_trace_identities(self, chip):
         """Label every cluster with its fiber and order index.
 
-        The labelled traces are cached as ``self._metadata[chip]``, which is
-        where the fitting step reads them from; they are returned as well so the
-        step can be driven on its own.
+        The labelled traces are cached as ``self._metadata[chip]``, which the
+        fitting step reads, and returned.
         """
         metadata = self._track_cluster_metadata(chip)
         metadata = self._assign_fiber_identities(chip, metadata)
@@ -1067,12 +1023,11 @@ class OrderTrace:
         has a cluster must fit, and raises if it cannot. A fitted trace is left
         'unknown' for validation to classify from its dispersion span.
 
-        The fitted traces become the CCD's ``self._trace_tables`` entry, with
-        their aperture edges and column bounds left unmeasured for the aperture
-        step to fill in. What each trace was measured at the sampled columns -- its row
-        centers and the mask of the samples this fit accepted -- is recorded on
-        ``self._profiles[chip]``, row for row with the CCD's table rows. Those
-        rows are returned as well so the step can be driven on its own.
+        The fitted traces become the CCD's ``self._trace_tables`` entry and are
+        returned, with their aperture edges and column bounds left unmeasured
+        for the aperture step to fill in. The mask of the samples each fit
+        accepted is recorded on ``self._profiles[chip]``, row for row with the
+        CCD's table rows.
         """
         if poly_degree is not None:
             self.poly_degree = poly_degree
@@ -1082,7 +1037,6 @@ class OrderTrace:
         columns = sampled["columns"]
 
         traces = self._metadata[chip]
-        sampled["centers"] = np.full((len(traces), columns.size), np.nan)
         sampled["good"] = np.zeros((len(traces), columns.size), dtype=bool)
 
         records = []
@@ -1128,8 +1082,7 @@ class OrderTrace:
         no aperture cannot be extracted from.
 
         Each width is written into ``self._trace_tables[chip]`` as it is
-        measured, completing the CCD's rows; the table is returned as well so
-        the step can be driven on its own.
+        measured, completing the CCD's rows; the table is returned.
         """
         table = self._trace_tables[chip]
 
@@ -1236,31 +1189,28 @@ class OrderTrace:
         Notes
         -----
         Pipeline steps, repeated per CCD:
-        1. Threshold each detector column against its own inter-order flux,
-           giving a mask of illuminated pixels set by orderlet contrast rather
-           than by the absolute lamp level
-        2. Collect mask pixels that touch into clusters, taking all eight pixels
-           of the surrounding 3x3 neighborhood as adjacent (8-connectivity)
-        3. Reject clusters too small to be part of any trace
-        4. Rejoin clusters that are separated pieces of one trace
-        5. Reject clusters that cannot be identified at the detector center
-        6. Flag the CAL orderlet of each order, then count downward in row from
-           each CAL to label every cluster with its fiber and zero-based order
-           index
-        7. Measure a subpixel row center per sample column -- a winsorized
-           centroid for the peaked CAL profile, an edge midpoint for the
-           flat-topped SKY and science profiles -- and fit each trace's row
-           against column with sigma-clipping
-        8. Estimate aperture edges above and below each centerline, shrinking
-           them where neighboring apertures would otherwise touch
-        9. Validate each CCD's table, then write every CCD's traces to one
-           ``{obs_id}_master_order_trace.csv``
 
-        Steps 1-6 are pure detection and identification: identity is fixed from
-        the illuminated-pixel mask and cluster brightness before step 7 fits
-        anything. The order *index* assigned in step 6 is a first-pass estimate;
-        it is correct whenever the detected orders fill the detector, and is
-        counted from the lowest complete fiber group otherwise.
+        1. ``detect_traces`` -- threshold each detector column against its own
+           inter-order flux, collect the illuminated pixels that touch into
+           clusters, and curate those clusters
+        2. ``assign_trace_identities`` -- flag the CAL orderlet of each order,
+           then count downward in row from each CAL to label every cluster with
+           its fiber and zero-based order index
+        3. ``fit_trace_polynomials`` -- measure a subpixel row center per
+           sampled column and fit each trace's row against column with
+           sigma-clipping
+        4. ``estimate_trace_apertures`` -- measure aperture edges above and
+           below each centerline, shrink them where neighboring apertures would
+           otherwise touch, and validate the CCD's table
+
+        Every CCD's table is then concatenated and written to one
+        ``{obs_id}_master_order_trace.csv``.
+
+        Steps 1-2 are pure detection and identification: identity is fixed from
+        the illuminated-pixel mask and cluster brightness before step 3 fits
+        anything. The order *index* assigned in step 2 is correct whenever the
+        detected orders fill the detector, and is counted from the lowest
+        complete fiber group otherwise.
         """
         if chips is None:
             chips = self.chips
