@@ -103,7 +103,11 @@ class SpectralExtraction:
             )
 
         # Evaluate the polynomial trace so each column gets its own row center.
-        coeffs = np.array(trace[[f"Coeff{i}" for i in range(4)]], dtype=np.float32)
+        coefficient_columns = sorted(
+            (column for column in trace.index if column.startswith("Coeff")),
+            key=lambda column: int(column.removeprefix("Coeff")),
+        )
+        coeffs = np.array(trace[coefficient_columns], dtype=np.float32)
 
         trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
         trace_top = (trace_center + trace.TopEdge).astype(np.float32)

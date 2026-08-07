@@ -1,6 +1,8 @@
 """Statistical helpers, in the style of ``scipy`` & ``numpy``."""
 
 import numpy as np
+from astropy.stats import mad_std
+from numpy.polynomial import legendre, polynomial
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import (
     convolve,
@@ -140,6 +142,97 @@ def optimize_lsq(x, y, linemodel):
     theta, rms = untransform(sol), np.std(info["fvec"])
 
     return theta, rms
+
+
+def robust_polyfit(x, y, deg, sigma=4.0, maxiter=8, min_valid_fraction=0.5, full=False):
+    """Least-squares polynomial fit that rejects outliers by median/MAD.
+
+    A drop-in replacement for ``numpy.polynomial.polynomial.polyfit`` that
+    refits, dropping samples whose residual lies more than ``sigma`` robust
+    deviations from the median residual, until the accepted set stops changing.
+    Non-finite samples are never accepted.
+
+    Each fit is solved in the Legendre basis over the sample span, whose
+    design matrix stays well conditioned where the power basis' Vandermonde
+    matrix does not, and the result is converted back to power-basis
+    coefficients.
+
+    Parameters
+    ----------
+    x : array_like
+        Sample positions.
+    y : array_like
+        Sample values, same shape as ``x``.
+    deg : int
+        Degree of the fitted polynomial.
+    sigma : float, default 4.0
+        Rejection threshold, in robust deviations (``astropy.stats.mad_std``) of
+        the accepted residuals. The threshold is floored at 0.25 in the units of
+        ``y``, so a fit whose scatter is near zero does not reject samples that
+        are, in absolute terms, on the curve.
+    maxiter : int, default 8
+        Maximum number of rejection iterations.
+    min_valid_fraction : float, default 0.5
+        Fraction of the samples that must stay accepted. A rejection that would
+        fall below it is not taken; failing it at the outset raises.
+    full : bool, default False
+        If True, also return the accepted-sample mask and the residual RMS.
+
+    Returns
+    -------
+    coeffs : ndarray
+        Fitted coefficients, lowest order first, as ``polyfit`` returns them.
+    good : ndarray
+        Boolean mask of the samples the final fit accepted. Returned only if
+        ``full`` is True.
+    rms : float
+        RMS of the accepted samples' residuals. Returned only if ``full`` is
+        True.
+
+    Raises
+    ------
+    ValueError
+        If fewer samples are finite than the fit requires.
+    """
+    x, y = np.asarray(x), np.asarray(y)
+    good = np.isfinite(x) & np.isfinite(y)
+    min_good = max(deg + 1, int(np.ceil(x.size * min_valid_fraction)))
+    if good.sum() < min_good:
+        raise ValueError(
+            f"only {good.sum()} of {x.size} samples are valid; "
+            f"at least {min_good} are required"
+        )
+
+    # Hold the domain fixed across iterations so rejecting a sample near an end
+    # cannot rescale the basis and perturb the coefficients on its own.
+    domain = [x[good].min(), x[good].max()]
+
+    for _ in range(maxiter):
+        series = legendre.Legendre.fit(x[good], y[good], deg, domain=domain)
+        residual = y - series(x)
+        median_residual = np.nanmedian(residual[good])
+        residual_scatter = mad_std(residual[good], ignore_nan=True)
+        rejection_limit = max(0.25, sigma * residual_scatter)
+        still_valid = np.isfinite(y) & (
+            np.abs(residual - median_residual) <= rejection_limit
+        )
+        if still_valid.sum() < min_good:
+            break
+        if np.array_equal(still_valid, good):
+            good = still_valid
+            break
+        good = still_valid
+
+    series = legendre.Legendre.fit(x[good], y[good], deg, domain=domain)
+    # The conversion trims trailing zero coefficients; ``polyfit`` always
+    # returns deg + 1 of them, and callers index by order.
+    coeffs = np.zeros(deg + 1)
+    converted = series.convert(kind=polynomial.Polynomial).coef
+    coeffs[: converted.size] = converted
+    if not full:
+        return coeffs
+    residual = y[good] - series(x[good])
+    return coeffs, good, float(np.sqrt(np.mean(residual**2)))
 
 
 def _smooth_filter(x, size=None, *, axes=None):

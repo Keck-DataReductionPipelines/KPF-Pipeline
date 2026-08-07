@@ -318,6 +318,48 @@ class TestSpectralExtractionRealData:
 
 
 # ---------------------------------------------------------------------------
+# TestPolynomialOrderTrace
+# ---------------------------------------------------------------------------
+
+
+class TestPolynomialOrderTrace:
+    def test_uses_all_available_polynomial_coefficients(self):
+        class StubL1:
+            data = {
+                "GREEN_CCD": np.zeros((100, 100), dtype=np.float32),
+                "GREEN_VAR": np.ones((100, 100), dtype=np.float32),
+            }
+
+        trace = pd.DataFrame(
+            [
+                {
+                    "Fiber": "SCI1",
+                    "Order": 1,
+                    "TopEdge": 5.0,
+                    "BottomEdge": 5.0,
+                    "Coeff0": 20.0,
+                    "Coeff1": 0.0,
+                    "Coeff2": 0.0,
+                    "Coeff3": 0.0,
+                    "Coeff4": 1.0e-7,
+                }
+            ]
+        ).set_index(["Fiber", "Order"])
+        extraction = SpectralExtraction(StubL1())
+        extraction.order_trace = {"GREEN": trace}
+        extraction.order_trace_path = {"GREEN": "<stub>"}
+
+        _, _, _, row_min, row_max = extraction._get_orderlet_pixels(
+            "GREEN", "SCI1", 1, return_coords=True
+        )
+
+        x = np.arange(100, dtype=np.float32)
+        center = np.polynomial.polynomial.polyval(x, [20.0, 0.0, 0.0, 0.0, 1.0e-7])
+        assert row_min == int(np.floor((center - 5.0).min()))
+        assert row_max == int(np.ceil((center + 5.0).max()))
+
+
+# ---------------------------------------------------------------------------
 # TestOrderTraceErrors
 # ---------------------------------------------------------------------------
 

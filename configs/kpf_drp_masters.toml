@@ -47,5 +47,8 @@ bias = true
 dark = true
 flat = false
 
+[ORDER_TRACE]
+poly_degree = 3
+
 [MODULE_SPECTRAL_EXTRACTION]
 extraction_method = "box"
