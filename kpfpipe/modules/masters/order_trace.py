@@ -572,7 +572,9 @@ class OrderTrace:
     # Private helpers - trace measurement
     # ------------------------------------------------------------------
 
-    def _sample_profiles(self, chip, sample_count=65, col_half_window=3):
+    def _sample_profiles(
+        self, chip, sample_count=65, col_half_window=3, background_smoothing_sigma=20.0
+    ):
         """Return everything one CCD is measured at its sampled columns.
 
         The columns span the detector, both edges included: a centerline is
@@ -593,12 +595,16 @@ class OrderTrace:
         ``nanmedian`` then ignores, giving exactly the truncated median a
         clamped per-column slice would.
 
+        Each profile's heavily smoothed ``backgrounds`` counterpart is built
+        here for the same reason: edge centering subtracts it, and it depends on
+        the column alone, not on which trace is being measured in it.
+
         The result is cached as ``self._profiles[chip]``, the one place the CCD's
-        measurements at these columns are kept: ``columns`` and ``profiles``
-        here, and the ``centers`` measured per trace with the ``good`` mask of
-        the samples its fit accepted, both filled in by the fitting step and
-        left None until it runs. The cache is keyed by CCD alone, so the
-        sampling arguments are the defaults every caller uses.
+        measurements at these columns are kept: ``columns``, ``profiles`` and
+        ``backgrounds`` here, and the ``centers`` measured per trace with the
+        ``good`` mask of the samples its fit accepted, both filled in by the
+        fitting step and left None until it runs. The cache is keyed by CCD
+        alone, so the sampling arguments are the defaults every caller uses.
         """
         if chip in self._profiles:
             return self._profiles[chip]
@@ -624,11 +630,14 @@ class OrderTrace:
         fill[measured] = np.nanmedian(
             np.where(finite, profiles, np.nan)[:, measured], axis=0
         )
-        profiles = np.where(finite, profiles, fill[None, :]).astype(float, copy=False)
+        profiles = np.where(finite, profiles, fill[None, :]).astype(float, copy=False).T
 
         self._profiles[chip] = {
             "columns": columns,
-            "profiles": profiles.T,
+            "profiles": profiles,
+            "backgrounds": gaussian_filter1d(
+                profiles, sigma=background_smoothing_sigma, mode="nearest", axis=1
+            ),
             "centers": None,
             "good": None,
         }
@@ -678,9 +687,9 @@ class OrderTrace:
     def _local_edge_center(
         self,
         column_profile,
+        column_background,
         row_guess,
         row_half_window=7,
-        background_smoothing_sigma=20.0,
         signal_smoothing_sigma=1.0,
         edge_levels=(0.25, 0.40, 0.55, 0.70),
         edge_min_width_pixels=3.0,
@@ -695,13 +704,8 @@ class OrderTrace:
         if last_i - first_i < 5:
             return np.nan
 
-        background = gaussian_filter1d(
-            column_profile,
-            sigma=background_smoothing_sigma,
-            mode="nearest",
-        )
         signal = gaussian_filter1d(
-            column_profile[first_i:last_i] - background[first_i:last_i],
+            column_profile[first_i:last_i] - column_background[first_i:last_i],
             sigma=signal_smoothing_sigma,
             mode="nearest",
         )
@@ -780,16 +784,18 @@ class OrderTrace:
             int(self._metadata[chip]["cluster"].iloc[position])
         ]
 
-        measure_center = (
-            self._local_peak_center if fiber == "CAL" else self._local_edge_center
-        )
         centers = sampled["centers"][position]
         for sample, j in enumerate(columns):
             in_column = cluster["col_indices"] == j
             if not in_column.any():
                 continue
             row_guess = float(cluster["row_indices"][in_column].mean())
-            centers[sample] = measure_center(profiles[sample], row_guess)
+            if fiber == "CAL":
+                centers[sample] = self._local_peak_center(profiles[sample], row_guess)
+            else:
+                centers[sample] = self._local_edge_center(
+                    profiles[sample], sampled["backgrounds"][sample], row_guess
+                )
         return centers
 
     def _trace_width(
