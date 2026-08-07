@@ -209,7 +209,7 @@ class OrderTrace:
         bands = np.vstack([off_diagonal, diagonal, off_diagonal])
         bands[0, 0] = bands[2, -1] = 0.0
 
-        mask = np.zeros((nrow, ncol), dtype=bool)
+        illuminated = np.zeros((nrow, ncol), dtype=bool)
         for j in range(ncol):
             column_pixels = filled[:, j]
             residual = column_pixels - solve_banded((1, 1), bands, column_pixels)
@@ -217,17 +217,17 @@ class OrderTrace:
             threshold = 0.5 * np.quantile(
                 positive_residual, trace_ratio, method="lower"
             )
-            mask[:, j] = residual > threshold + 1.0
-        return mask
+            illuminated[:, j] = residual > threshold + 1.0
+        return illuminated
 
-    def _detect_clusters(self, mask):
+    def _detect_clusters(self, illuminated):
         """Collect touching illuminated pixels into clusters.
 
         The 3x3 structure treats all eight surrounding pixels as adjacent
         (8-connectivity), so pixels meeting only at a corner still join one
         cluster.
         """
-        labels, cluster_count = label(mask, structure=np.ones((3, 3), dtype=int))
+        labels, cluster_count = label(illuminated, structure=np.ones((3, 3), dtype=int))
         row_indices, col_indices = np.nonzero(labels)
         cluster_ids = labels[row_indices, col_indices]
 
@@ -718,10 +718,10 @@ class OrderTrace:
         row_guess_index = int(np.argmin(np.abs(rows - row_guess)))
         for level in edge_levels:
             threshold = baseline + level * amplitude
-            illuminated = np.flatnonzero(signal >= threshold)
-            if illuminated.size == 0:
+            bright = np.flatnonzero(signal >= threshold)
+            if bright.size == 0:
                 continue
-            core_index = illuminated[np.argmin(np.abs(illuminated - row_guess_index))]
+            core_index = bright[np.argmin(np.abs(bright - row_guess_index))]
 
             # Walk out of the illuminated core to either side and interpolate
             # the row the signal falls back through the threshold at.
