@@ -422,7 +422,9 @@ class OrderTrace:
         metadata = pd.DataFrame(records)
         return metadata.sort_values("row").reset_index(drop=True)
 
-    def _flag_cal_clusters(self, metadata, max_thickness=6.0, min_flux_ratio=1.8):
+    def _flag_cal_clusters(
+        self, metadata, max_thickness=6.0, min_flux_ratio=1.8, max_cal_count_deviation=1
+    ):
         """Add the boolean ``is_cal`` column, flagging each order's CAL orderlet.
 
         A CAL is thinner and brighter than the orderlets around it. Brightness
@@ -431,8 +433,9 @@ class OrderTrace:
         the detector where a running median of the neighborhood does not.
 
         One CAL closes each order, so the flagged count is checked against the
-        cluster count. An order lying partly off the detector moves that count
-        by one either way.
+        cluster count. However many orderlets a clipped edge order costs or
+        gains, it is one order, so the two counts stay within
+        ``max_cal_count_deviation`` of each other.
         """
         flux = metadata["flux"].to_numpy()
         flux_below = np.concatenate([flux[1:2], flux[:-1]])
@@ -444,7 +447,7 @@ class OrderTrace:
 
         cal_count = int(metadata["is_cal"].sum())
         expected_cal_count = len(metadata) // len(self.fibers)
-        if abs(cal_count - expected_cal_count) > 1:
+        if abs(cal_count - expected_cal_count) > max_cal_count_deviation:
             raise ValueError(
                 f"{cal_count} CAL orderlets identified among {len(metadata)} "
                 f"clusters, expected {expected_cal_count}; cannot phase the "
@@ -499,8 +502,8 @@ class OrderTrace:
         metadata["Fiber"] = fiber_names
         for row in metadata.loc[metadata["Fiber"].isna(), "row"]:
             logger.warning(
-                "%s: discarding an orderlet at row %.0f, clipped by the detector "
-                "edge and belonging to no expected order",
+                "%s: discarding an unidentifiable edge-clipped orderlet at "
+                "detector row %.0f",
                 chip,
                 row,
             )
@@ -510,11 +513,12 @@ class OrderTrace:
         """Number the orders and return one row per expected trace of the CCD.
 
         Orders are counted off the CALs, bottom to top, and given their 0-based
-        ``Order`` index on the CCD. An order lying mostly off the detector shows a
-        single orderlet beyond the expected count, which is discarded -- the
+        ``Order`` index on the CCD. An order lying mostly off the detector shows
+        a few orderlets beyond the expected count, which are discarded -- the
         shorter of the two edge orders goes, counting only the orderlets that
-        were named. A trace that was never detected leaves an empty row, so the
-        result always holds one row per fiber of every expected order.
+        were named, and either edge may go. A trace that was never detected
+        leaves an empty row, so the result always holds one row per fiber of
+        every expected order.
         """
         norder = self.norder[chip]
         is_cal = metadata["is_cal"].to_numpy()
@@ -522,12 +526,12 @@ class OrderTrace:
 
         named = metadata["Fiber"].notna().to_numpy()
         order_sizes = np.bincount(index, weights=named).astype(int)
-        if order_sizes.size > norder:
-            discarded = 0 if order_sizes[0] <= order_sizes[-1] else index.max()
+        while order_sizes.size > norder:
+            discarded = 0 if order_sizes[0] <= order_sizes[-1] else order_sizes.size - 1
             kept = index != discarded
             logger.warning(
                 "%s: %d orders detected but %d expected; discarding %d orderlets at "
-                "row %.0f",
+                "detector row %.0f",
                 chip,
                 order_sizes.size,
                 norder,
@@ -535,7 +539,9 @@ class OrderTrace:
                 metadata["row"].to_numpy()[~kept].mean(),
             )
             metadata = metadata[kept]
+            named = named[kept]
             index = index[kept] - (1 if discarded == 0 else 0)
+            order_sizes = np.bincount(index, weights=named).astype(int)
 
         traces = pd.MultiIndex.from_product(
             [range(norder), self.fibers], names=["Order", "Fiber"]
@@ -957,13 +963,15 @@ class OrderTrace:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def detect_traces(self, chip):
+    def detect_traces(self, chip, max_count_deviation=4):
         """Detect and curate every trace cluster on one CCD.
 
-        The CCD carries one trace per fiber of every order. Only the outermost
-        order may lie partly off the detector, which leaves one trace missing or
-        one orderlet of the next order in view, so the count is allowed to be
-        off by one either way.
+        The CCD carries one trace per fiber of every order. An order at either
+        end of the detector may lie partly off it, which costs that order some
+        of its orderlets or brings part of the order beyond into view, so the
+        count is allowed to depart from the expected one by
+        ``max_count_deviation`` either way -- fewer than the five orderlets of a
+        whole order, so no order can be gained or lost outright.
 
         The surviving clusters are cached as ``self._clusters[chip]`` and
         returned. This rebuild invalidates the old clusters' list positions, so
@@ -982,7 +990,7 @@ class OrderTrace:
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
         expected = len(self.fibers) * self.norder[chip]
-        if abs(len(clusters) - expected) > 1:
+        if abs(len(clusters) - expected) > max_count_deviation:
             raise ValueError(
                 f"{chip}: {len(clusters)} traces detected, expected {expected}"
             )

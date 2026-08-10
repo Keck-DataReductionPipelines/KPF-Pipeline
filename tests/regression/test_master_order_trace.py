@@ -346,9 +346,7 @@ class TestTraceIdentity:
         image, truth = _synthetic_flat(drop=dropped)
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        # Two absent traces are more than detect_traces tolerates, so identity
-        # is exercised on the curated clusters directly.
-        clusters = _curated_clusters(tracer)
+        clusters = tracer.detect_traces("GREEN")
         identities = tracer.assign_trace_identities("GREEN")
 
         assert _labels(identities) == _trace_labels(3)
@@ -412,7 +410,7 @@ class TestTraceIdentity:
             phased = tracer._assign_fiber_identities("GREEN", metadata)
 
         assert list(phased["Fiber"].fillna("clipped")) == ["clipped"] + _FIBERS
-        assert "discarding an orderlet at row 8" in caplog.text
+        assert "edge-clipped orderlet at detector row 8" in caplog.text
 
     def test_discards_an_orderlet_clipped_by_the_top_edge(self, master_path, caplog):
         # The mirror case: the order above closes off the detector, leaving its
@@ -427,7 +425,7 @@ class TestTraceIdentity:
         assert list(phased["Fiber"].fillna("clipped")) == (
             _FIBERS + _FIBERS[:-1] + ["clipped"]
         )
-        assert "discarding an orderlet at row 262" in caplog.text
+        assert "edge-clipped orderlet at detector row 262" in caplog.text
 
     def test_discards_a_lone_orderlet_beyond_the_expected_orders(
         self, master_path, caplog
