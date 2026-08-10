@@ -877,8 +877,9 @@ class TestRealData:
         masters = sorted(testdata.glob("**/KP.20240405.*_master_flat_L1.fits"))
         if not masters:
             pytest.skip("a 20240405 vNext master flat is not installed")
+        if not (testdata / "reference" / "order_trace_green.csv").is_file():
+            pytest.skip("the previous DRP's order trace references are not installed")
 
-        repo_root = Path(__file__).parent.parent.parent
         tracer = OrderTrace(masters[0])
         combined = tracer.make_master(output_dir=tmp_path)
         tables = {chip: combined[combined["Chip"] == chip] for chip in ("GREEN", "RED")}
@@ -898,7 +899,7 @@ class TestRealData:
             # The reference tables are 1-based in Order and predate this module;
             # they are used only as independent truth for position and labelling.
             reference = pd.read_csv(
-                repo_root / "reference" / f"order_trace_{chip.lower()}.csv",
+                testdata / "reference" / f"order_trace_{chip.lower()}.csv",
                 index_col=0,
             )
             reference["Order"] -= 1

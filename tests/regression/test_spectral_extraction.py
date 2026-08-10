@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 from astropy.io import fits
 
+import kpfpipe.modules.spectral_extraction as se_module
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
@@ -346,8 +347,8 @@ class TestPolynomialOrderTrace:
             ]
         ).set_index(["Fiber", "Order"])
         extraction = SpectralExtraction(StubL1())
-        extraction.order_trace = {"GREEN": trace}
-        extraction.order_trace_path = {"GREEN": "<stub>"}
+        extraction._order_trace = {"GREEN": trace}
+        extraction._order_trace_path = "<stub>"
 
         _, _, _, row_min, row_max = extraction._get_orderlet_pixels(
             "GREEN", "SCI1", 1, return_coords=True
@@ -381,8 +382,8 @@ class TestOrderTraceErrors:
 
         df = pd.DataFrame(rows).set_index(["Fiber", "Order"]).sort_index()
         se = SpectralExtraction(StubL1())
-        se.order_trace = {"GREEN": df}
-        se.order_trace_path = {"GREEN": "<stub>"}
+        se._order_trace = {"GREEN": df}
+        se._order_trace_path = "<stub>"
         return se
 
     def test_missing_trace_raises_lookup_error(self):
@@ -430,3 +431,98 @@ class TestOrderTraceErrors:
         se = self._make_se(rows)
         with pytest.raises(ValueError, match="Expected exactly one row"):
             se.extract_orderlet("GREEN", "SCI1", 1)
+
+
+# ---------------------------------------------------------------------------
+# TestOrderTraceSelection
+# ---------------------------------------------------------------------------
+
+
+_STUB_ERAS = """INSTERA,UT_start_date,UT_end_date,Comments
+1.0,2022-11-09 00:00:01,2024-02-03 00:00:00,First science era
+2.0,2024-02-23 12:00:01,2024-11-01 00:00:00,Second science era
+2.5,2024-11-01 12:00:01,2025-01-01 00:00:00,Service Mission #2 (engineering)
+"""
+
+_STUB_TRACE = (
+    "Chip,Fiber,Order,Coeff0,Coeff1,Coeff2,Coeff3,BottomEdge,TopEdge,X1,X2,"
+    "PolyfitRMS,Status\n"
+    "GREEN,SCI1,0,20.0,0.0,0.0,0.0,5.0,5.0,0,99,0.1,full\n"
+    "GREEN,SCI1,1,,,,,,,,,,missing\n"
+    "RED,SCI1,0,30.0,0.0,0.0,0.0,5.0,5.0,0,99,0.1,full\n"
+)
+
+
+def _stub_reference_tree(tmp_path, monkeypatch):
+    """Stub the repo reference tree: three instrument eras, three traces."""
+    traces = tmp_path / "reference" / "order_traces"
+    traces.mkdir(parents=True)
+    (tmp_path / "reference" / "kpf_instrument_eras.csv").write_text(_STUB_ERAS)
+    for datecode in ("20231101", "20240301", "20240501"):
+        (traces / f"order_trace_{datecode}.csv").write_text(_STUB_TRACE)
+    monkeypatch.setattr(se_module, "REPO_ROOT", str(tmp_path))
+    return traces
+
+
+class _StubL1:
+    def __init__(self, date_obs):
+        self.data = {
+            "GREEN_CCD": np.zeros((100, 100), dtype=np.float32),
+            "GREEN_VAR": np.ones((100, 100), dtype=np.float32),
+        }
+        self.headers = {"PRIMARY": {"DATE-OBS": date_obs}}
+
+
+class TestOrderTraceSelection:
+    def test_selects_the_most_recent_trace_of_the_frames_era(
+        self, tmp_path, monkeypatch
+    ):
+        traces = _stub_reference_tree(tmp_path, monkeypatch)
+        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33"))
+
+        se._read_order_trace_reference()
+
+        assert se._order_trace_path == str(traces / "order_trace_20240501.csv")
+
+    def test_ignores_a_trace_measured_after_the_frame(self, tmp_path, monkeypatch):
+        traces = _stub_reference_tree(tmp_path, monkeypatch)
+        se = SpectralExtraction(_StubL1("2024-04-01T11:08:33"))
+
+        se._read_order_trace_reference()
+
+        assert se._order_trace_path == str(traces / "order_trace_20240301.csv")
+
+    def test_does_not_reach_into_a_neighbouring_era(self, tmp_path, monkeypatch):
+        # The frame is in era 2.5, whose traces are all in eras 1.0 and 2.0.
+        _stub_reference_tree(tmp_path, monkeypatch)
+        se = SpectralExtraction(_StubL1("2024-12-01T11:08:33"))
+
+        with pytest.raises(FileNotFoundError, match="instrument era 2.5"):
+            se._read_order_trace_reference()
+
+    def test_drops_missing_traces_and_keys_them_by_fiber_and_order(
+        self, tmp_path, monkeypatch
+    ):
+        _stub_reference_tree(tmp_path, monkeypatch)
+        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33"))
+
+        se._read_order_trace_reference()
+
+        assert set(se._order_trace) == {"GREEN", "RED"}
+        assert se._order_trace["GREEN"].index.tolist() == [("SCI1", 0)]
+
+    def test_writes_the_trace_path_to_the_l2_receipt(
+        self, minimal_l1, tmp_path, monkeypatch
+    ):
+        traces = _stub_reference_tree(tmp_path, monkeypatch)
+
+        def extract(self, chip, fibers, extraction_method, **kwargs):
+            self._read_order_trace_reference()
+            return {}
+
+        monkeypatch.setattr(SpectralExtraction, "extract_ffi", extract)
+        l2 = SpectralExtraction(minimal_l1).perform(fibers=[])
+
+        assert l2.headers["RECEIPT"]["TRACFILE"] == str(
+            traces / "order_trace_20231101.csv"
+        )
