@@ -27,13 +27,16 @@ min_stack_size = 5
 max_stack_size = 20
 stack_sigma = 5.0
 
+[ORDER_TRACE]
+poly_degree = 3
+
 [WLS]
 min_stack_size = 5   # min frames passing line-fit QC per chip, else the master is withheld
 max_stack_size = 20
 lineprofile = "gaussian"
-polyorder_x = 6
-polyorder_m = 6
-polyorder_f = 2
+poly_degree_x = 6
+poly_degree_m = 6
+poly_degree_f = 2
 
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
@@ -46,9 +49,6 @@ masters_search_window_days = [-1, 0]
 bias = true
 dark = true
 flat = false
-
-[ORDER_TRACE]
-poly_degree = 3
 
 [MODULE_SPECTRAL_EXTRACTION]
 extraction_method = "box"

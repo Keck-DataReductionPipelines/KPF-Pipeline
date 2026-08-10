@@ -42,7 +42,7 @@ class WLS(BaseMasterModule):
         Sorted list of L0 FITS file paths to process.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: linelist, lineprofile,
-        polyorder_x, polyorder_m, polyorder_f, chips, fibers,
+        poly_degree_x, poly_degree_m, poly_degree_f, chips, fibers,
         min_stack_size (per-chip line-fit-QC survivor gate), KPF_MASTERS_OUTPUT.
     """
 
@@ -50,9 +50,9 @@ class WLS(BaseMasterModule):
         **BaseMasterModule._DEFAULTS,
         "linelist": f"{REPO_ROOT}/reference/thar_line_list.csv",
         "lineprofile": "gaussian",
-        "polyorder_x": 6,
-        "polyorder_m": 6,
-        "polyorder_f": 2,
+        "poly_degree_x": 6,
+        "poly_degree_m": 6,
+        "poly_degree_f": 2,
     }
 
     # Bias+dark subtraction is standard for WLS; ``_process_frame`` (run before
@@ -403,9 +403,9 @@ class WLS(BaseMasterModule):
         self,
         lines,
         orders,
-        polyorder_x=None,
-        polyorder_m=None,
-        polyorder_f=None,
+        poly_degree_x=None,
+        poly_degree_m=None,
+        poly_degree_f=None,
     ):
         """
         Fit a multivariate Legendre wavelength solution to fitted line positions.
@@ -414,17 +414,17 @@ class WLS(BaseMasterModule):
         smooth function of pixel (x), order (m), and optionally fiber (f); all
         variables are rescaled to [-1, 1] before fitting. Only lines with
         ``lines['isgood']`` set are used. Returns the Legendre coefficient array,
-        shape (polyorder_x+1, polyorder_m+1) for a single-fiber fit or with a
-        trailing (polyorder_f+1) axis for a multi-fiber fit. Raises for a fiber
+        shape (poly_degree_x+1, poly_degree_m+1) for a single-fiber fit or with a
+        trailing (poly_degree_f+1) axis for a multi-fiber fit. Raises for a fiber
         set other than 1, the 3 SCI fibers, or all 5 fibers, or when the fit is
         underconstrained.
         """
-        if polyorder_x is None:
-            polyorder_x = self.polyorder_x
-        if polyorder_m is None:
-            polyorder_m = self.polyorder_m
-        if polyorder_f is None:
-            polyorder_f = self.polyorder_f
+        if poly_degree_x is None:
+            poly_degree_x = self.poly_degree_x
+        if poly_degree_m is None:
+            poly_degree_m = self.poly_degree_m
+        if poly_degree_f is None:
+            poly_degree_f = self.poly_degree_f
 
         good = lines["isgood"]
         wav = lines["wav"][good]
@@ -449,15 +449,15 @@ class WLS(BaseMasterModule):
             raise ValueError(f"unexpected fibers input: {fibers}")
 
         # guard against degenerate / underconstrained fits
-        n_params = (polyorder_x + 1) * (polyorder_m + 1)
+        n_params = (poly_degree_x + 1) * (poly_degree_m + 1)
         if len(fibers) != 1:
-            n_params *= polyorder_f + 1
+            n_params *= poly_degree_f + 1
         if len(wav) < n_params:
             raise ValueError(
                 f"WLS fit underconstrained: {len(wav)} good lines < "
                 f"{n_params} free parameters "
-                f"(polyorder_x={polyorder_x}, polyorder_m={polyorder_m}, "
-                f"polyorder_f={polyorder_f}, fibers={sorted(fibers)})"
+                f"(poly_degree_x={poly_degree_x}, poly_degree_m={poly_degree_m}, "
+                f"poly_degree_f={poly_degree_f}, fibers={sorted(fibers)})"
             )
 
         ncol = self.ccd["ncol"]
@@ -478,18 +478,20 @@ class WLS(BaseMasterModule):
             f = 2 * f / (len(canonical) - 1) - 1
 
         if len(fibers) == 1:
-            V = legendre.legvander2d(x, m, deg=[polyorder_x, polyorder_m])
+            V = legendre.legvander2d(x, m, deg=[poly_degree_x, poly_degree_m])
 
             coeffs, *_ = np.linalg.lstsq(V, mlambda, rcond=None)
-            coeffs = coeffs.reshape(polyorder_x + 1, polyorder_m + 1)
+            coeffs = coeffs.reshape(poly_degree_x + 1, poly_degree_m + 1)
 
         else:
             V = legendre.legvander3d(
-                x, m, f, deg=[polyorder_x, polyorder_m, polyorder_f]
+                x, m, f, deg=[poly_degree_x, poly_degree_m, poly_degree_f]
             )
 
             coeffs, *_ = np.linalg.lstsq(V, mlambda, rcond=None)
-            coeffs = coeffs.reshape(polyorder_x + 1, polyorder_m + 1, polyorder_f + 1)
+            coeffs = coeffs.reshape(
+                poly_degree_x + 1, poly_degree_m + 1, poly_degree_f + 1
+            )
 
         return coeffs
 
@@ -531,9 +533,9 @@ class WLS(BaseMasterModule):
         fibers,
         linelist=None,
         lineprofile=None,
-        polyorder_x=None,
-        polyorder_m=None,
-        polyorder_f=None,
+        poly_degree_x=None,
+        poly_degree_m=None,
+        poly_degree_f=None,
         window=5,
         max_bad_frac=0.05,
     ):
@@ -554,12 +556,12 @@ class WLS(BaseMasterModule):
         self._load_linelist(linelist)
         if lineprofile is None:
             lineprofile = self.lineprofile
-        if polyorder_x is None:
-            polyorder_x = self.polyorder_x
-        if polyorder_m is None:
-            polyorder_m = self.polyorder_m
-        if polyorder_f is None:
-            polyorder_f = self.polyorder_f
+        if poly_degree_x is None:
+            poly_degree_x = self.poly_degree_x
+        if poly_degree_m is None:
+            poly_degree_m = self.poly_degree_m
+        if poly_degree_f is None:
+            poly_degree_f = self.poly_degree_f
 
         if not self._l2_obj_cache:
             raise ValueError("No L2 objects found; please run _process_stack_l0_to_l2")
@@ -609,9 +611,9 @@ class WLS(BaseMasterModule):
                 coeffs = self._calculate_wls_coeffs(
                     lines,
                     self._echelle_orders[chip],
-                    polyorder_x=polyorder_x,
-                    polyorder_m=polyorder_m,
-                    polyorder_f=polyorder_f,
+                    poly_degree_x=poly_degree_x,
+                    poly_degree_m=poly_degree_m,
+                    poly_degree_f=poly_degree_f,
                 )
             except ValueError as exc:
                 frame["rejected"] = True
@@ -676,9 +678,9 @@ class WLS(BaseMasterModule):
         *,
         linelist=None,
         lineprofile=None,
-        polyorder_x=None,
-        polyorder_m=None,
-        polyorder_f=None,
+        poly_degree_x=None,
+        poly_degree_m=None,
+        poly_degree_f=None,
         bias=None,
         dark=None,
         flat=None,
@@ -707,13 +709,13 @@ class WLS(BaseMasterModule):
             is updated. Defaults to ``self.linelist`` (no reload).
         lineprofile : str, optional
             Line profile model name. Defaults to self.lineprofile.
-        polyorder_x : int, optional
-            Polynomial degree along the pixel axis. Defaults to self.polyorder_x.
-        polyorder_m : int, optional
-            Polynomial degree along the order axis. Defaults to self.polyorder_m.
-        polyorder_f : int, optional
+        poly_degree_x : int, optional
+            Polynomial degree along the pixel axis. Defaults to self.poly_degree_x.
+        poly_degree_m : int, optional
+            Polynomial degree along the order axis. Defaults to self.poly_degree_m.
+        poly_degree_f : int, optional
             Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
-            Defaults to self.polyorder_f.
+            Defaults to self.poly_degree_f.
         bias, dark, flat : bool | str | KPFMasterL1, optional
             Per-call calibration overrides (same forms as ImageProcessing.perform:
             bool, a master filepath, or a KPFMasterL1 object), clamped by the WLS
@@ -749,12 +751,12 @@ class WLS(BaseMasterModule):
             l0_file_list = self.l0_file_list
         if lineprofile is None:
             lineprofile = self.lineprofile
-        if polyorder_x is None:
-            polyorder_x = self.polyorder_x
-        if polyorder_m is None:
-            polyorder_m = self.polyorder_m
-        if polyorder_f is None:
-            polyorder_f = self.polyorder_f
+        if poly_degree_x is None:
+            poly_degree_x = self.poly_degree_x
+        if poly_degree_m is None:
+            poly_degree_m = self.poly_degree_m
+        if poly_degree_f is None:
+            poly_degree_f = self.poly_degree_f
 
         self._active_calibrations = self._resolve_calibrations(
             bias=bias, dark=dark, flat=flat
@@ -772,9 +774,9 @@ class WLS(BaseMasterModule):
                 chip=chip,
                 fibers=self.fibers,
                 lineprofile=lineprofile,
-                polyorder_x=polyorder_x,
-                polyorder_m=polyorder_m,
-                polyorder_f=polyorder_f,
+                poly_degree_x=poly_degree_x,
+                poly_degree_m=poly_degree_m,
+                poly_degree_f=poly_degree_f,
             )
             self._frame_diagnostics[chip] = frames
 
@@ -833,9 +835,9 @@ class WLS(BaseMasterModule):
         self.ml2_obj.set_keyword("ROUGHWLS", self.rough_wls_file)
         self.ml2_obj.set_keyword("LINELIST", self.linelist)
         self.ml2_obj.set_keyword("LINEPROF", lineprofile)
-        self.ml2_obj.set_keyword("POLYORDX", polyorder_x)
-        self.ml2_obj.set_keyword("POLYORDM", polyorder_m)
-        self.ml2_obj.set_keyword("POLYORDF", polyorder_f)
+        self.ml2_obj.set_keyword("POLYDEGX", poly_degree_x)
+        self.ml2_obj.set_keyword("POLYDEGM", poly_degree_m)
+        self.ml2_obj.set_keyword("POLYDEGF", poly_degree_f)
 
         self.ml2_obj.receipt_add_entry("master_wls", "", "PASS")
 
@@ -976,8 +978,8 @@ class WLS(BaseMasterModule):
         lines.append(f"  rough_wls_file:  {self.rough_wls_file}")
         lines.append(f"  lineprofile:     {self.lineprofile}")
         lines.append(
-            f"  polyorder:       x={self.polyorder_x}, m={self.polyorder_m}, "
-            f"f={self.polyorder_f}"
+            f"  poly_degree:     x={self.poly_degree_x}, m={self.poly_degree_m}, "
+            f"f={self.poly_degree_f}"
         )
         lines.append(f"  min_stack_size:  {self.min_stack_size}")
         lines.append(f"\n  {'chip':<8s} {'frames survived':<18s} {'n lines fit/total'}")
