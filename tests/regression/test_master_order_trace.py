@@ -632,7 +632,7 @@ class TestCSVWriting:
             ],
             columns=_TRACE_FIELDS,
         )
-        tracer._output_table = table
+        tracer.output_table = table
         output = tmp_path / "traces.csv"
 
         tracer.save_master(output, overwrite=False)

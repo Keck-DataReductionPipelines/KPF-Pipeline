@@ -12,8 +12,8 @@ import logging
 import os
 import time
 
-from kpfpipe.modules.masters import WLS, Bias, Dark, Flat
-from kpfpipe.utils.io import FileHandler, kpf_filepath
+from kpfpipe.modules.masters import WLS, Bias, Dark, Flat, OrderTrace
+from kpfpipe.utils.io import FileHandler, kpf_directory, kpf_filepath
 from kpfpipe.utils.kpf import get_obs_id
 from recipes._logging import masters_run_summary
 
@@ -99,6 +99,18 @@ def main(config, args):
         flat = Flat(files, config)
         flat.make_master_l1(master_path=flat_path)
         built.append(("flat", flat_path, len(files)))
+
+    # Trace the orderlets on each master flat. Runs after the flats, whose
+    # geometry is the only input, and writes one CSV covering all CCDs beside
+    # the flat it was measured from.
+    masters_dir = kpf_directory(
+        kind="masters", data_root=data_root_masters, datecode=datecode
+    )
+    for flat_path in [entry[1] for entry in built if entry[0] == "flat"]:
+        logger.info("building order trace from master flat %s", flat_path)
+        order_trace = OrderTrace(flat_path, config)
+        order_trace.make_master(output_dir=masters_dir)
+        built.append(("order_trace", order_trace.output_path, 1))
 
     # Stack the ThAr exposures into a master wavelength solution, since the
     # emission-line spectrum anchors the per-order wavelength calibration.

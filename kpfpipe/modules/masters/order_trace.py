@@ -111,8 +111,8 @@ class OrderTrace:
         self._metadata = {}
         self._profiles = {}
         self._trace_tables = {}
-        self._output_table = None
-        self._output_path = None
+        self.output_table = None
+        self.output_path = None
         self._info = None
 
     # ------------------------------------------------------------------
@@ -1104,10 +1104,10 @@ class OrderTrace:
     def save_master(self, path, *, overwrite=False):
         """Write the assembled order-trace CSV to ``path``.
 
-        Writes ``self._output_table``, assembled by ``make_master``, which must
+        Writes ``self.output_table``, assembled by ``make_master``, which must
         have run first. Parent directories are created as needed.
         """
-        if self._output_table is None:
+        if self.output_table is None:
             raise RuntimeError("No traces available; run make_master() first")
         if not overwrite and os.path.exists(path):
             raise FileExistsError(
@@ -1115,8 +1115,8 @@ class OrderTrace:
             )
 
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        self._output_table.to_csv(path, index=False, lineterminator="\n")
-        self._output_path = path
+        self.output_table.to_csv(path, index=False, lineterminator="\n")
+        self.output_path = path
 
     # ------------------------------------------------------------------
     # Private helpers - module execution
@@ -1127,7 +1127,7 @@ class OrderTrace:
         lines = [
             "OrderTrace",
             f"  master flat: {self.master_flat_filename}",
-            f"  output:      {self._output_path or '(not written)'}",
+            f"  output:      {self.output_path or '(not written)'}",
             "",
             f"  {'chip':<8s} {'full':>6s} {'partial':>8s} {'missing':>8s} "
             f"{'median RMS [pix]':>18s}",
@@ -1221,7 +1221,7 @@ class OrderTrace:
             self.fit_trace_polynomials(chip, poly_degree)
             self.estimate_trace_apertures(chip)
 
-        self._output_table = pd.concat(
+        self.output_table = pd.concat(
             [self._trace_tables[chip] for chip in chips], ignore_index=True
         )
 
@@ -1236,7 +1236,7 @@ class OrderTrace:
             )
         self._track_info(chips)
         logger.info("%s", self._info)
-        return self._output_table
+        return self.output_table
 
     def info(self):
         """Print a summary of the module configuration and tracing results."""
