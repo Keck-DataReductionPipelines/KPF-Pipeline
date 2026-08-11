@@ -44,6 +44,8 @@ def minimal_l1(tmp_path):
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
     primary.header["DATE-OBS"] = "2024-01-01T00:00:00"
+    primary.header["JD_UTC"] = 2460310.5
+    primary.header["INSTERA"] = "1.0"
     green_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_CCD")
     green_var = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="GREEN_VAR")
     red_ccd = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="RED_CCD")
@@ -465,12 +467,20 @@ def _stub_reference_tree(tmp_path, monkeypatch):
 
 
 class _StubL1:
-    def __init__(self, date_obs):
+    def __init__(self, date_obs, instera):
         self.data = {
             "GREEN_CCD": np.zeros((100, 100), dtype=np.float32),
             "GREEN_VAR": np.ones((100, 100), dtype=np.float32),
         }
-        self.headers = {"PRIMARY": {"DATE-OBS": date_obs}}
+        self.headers = {
+            "PRIMARY": {
+                "JD_UTC": pd.Timestamp(date_obs).to_julian_date(),
+                "INSTERA": instera,
+            }
+        }
+
+    def set_keyword(self, key, value, ext=None):
+        self.headers["PRIMARY"][key] = value
 
 
 class TestOrderTraceSelection:
@@ -478,7 +488,7 @@ class TestOrderTraceSelection:
         self, tmp_path, monkeypatch
     ):
         traces = _stub_reference_tree(tmp_path, monkeypatch)
-        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33"))
+        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33", "2.0"))
 
         se._read_order_trace_reference()
 
@@ -486,7 +496,7 @@ class TestOrderTraceSelection:
 
     def test_ignores_a_trace_measured_after_the_frame(self, tmp_path, monkeypatch):
         traces = _stub_reference_tree(tmp_path, monkeypatch)
-        se = SpectralExtraction(_StubL1("2024-04-01T11:08:33"))
+        se = SpectralExtraction(_StubL1("2024-04-01T11:08:33", "2.0"))
 
         se._read_order_trace_reference()
 
@@ -495,16 +505,40 @@ class TestOrderTraceSelection:
     def test_does_not_reach_into_a_neighbouring_era(self, tmp_path, monkeypatch):
         # The frame is in era 2.5, whose traces are all in eras 1.0 and 2.0.
         _stub_reference_tree(tmp_path, monkeypatch)
-        se = SpectralExtraction(_StubL1("2024-12-01T11:08:33"))
+        se = SpectralExtraction(_StubL1("2024-12-01T11:08:33", "2.5"))
 
         with pytest.raises(FileNotFoundError, match="instrument era 2.5"):
             se._read_order_trace_reference()
+
+    def test_restamps_an_instera_that_disagrees_with_jd_utc(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        traces = _stub_reference_tree(tmp_path, monkeypatch)
+        l1 = _StubL1("2024-06-01T11:08:33", "1.0")
+        se = SpectralExtraction(l1)
+
+        with caplog.at_level("WARNING"):
+            se._read_order_trace_reference()
+
+        assert "disagrees with instrument era 2.0" in caplog.text
+        assert l1.headers["PRIMARY"]["INSTERA"] == "2.0"
+        # The era from JD_UTC, not the stamped one, picks the trace.
+        assert se._order_trace_path == str(traces / "order_trace_20240501.csv")
+
+    def test_restamps_an_unset_instera_without_failing(self, tmp_path, monkeypatch):
+        _stub_reference_tree(tmp_path, monkeypatch)
+        l1 = _StubL1("2024-06-01T11:08:33", "UNKNOWN")
+        se = SpectralExtraction(l1)
+
+        se._read_order_trace_reference()
+
+        assert l1.headers["PRIMARY"]["INSTERA"] == "2.0"
 
     def test_drops_missing_traces_and_keys_them_by_fiber_and_order(
         self, tmp_path, monkeypatch
     ):
         _stub_reference_tree(tmp_path, monkeypatch)
-        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33"))
+        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33", "2.0"))
 
         se._read_order_trace_reference()
 
@@ -526,3 +560,20 @@ class TestOrderTraceSelection:
         assert l2.headers["RECEIPT"]["TRACFILE"] == str(
             traces / "order_trace_20231101.csv"
         )
+
+    def test_writes_the_corrected_instera_to_the_l2(
+        self, minimal_l1, tmp_path, monkeypatch
+    ):
+        # to_kpf2() copies the L1 PRIMARY before the era is inferred, so the L2
+        # only carries the correction because _set_headers restamps it.
+        _stub_reference_tree(tmp_path, monkeypatch)
+        minimal_l1.headers["PRIMARY"]["INSTERA"] = "2.0"
+
+        def extract(self, chip, fibers, extraction_method, **kwargs):
+            self._read_order_trace_reference()
+            return {}
+
+        monkeypatch.setattr(SpectralExtraction, "extract_ffi", extract)
+        l2 = SpectralExtraction(minimal_l1).perform(fibers=[])
+
+        assert l2.headers["PRIMARY"]["INSTERA"] == "1.0"

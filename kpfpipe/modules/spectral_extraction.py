@@ -53,11 +53,42 @@ class SpectralExtraction:
 
         self._order_trace = None
         self._order_trace_path = None
+        self._instera = None
         self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _infer_instrument_era(self):
+        """Infer this frame's instrument era from ``JD_UTC``, caching its tag in
+        ``self._instera`` and returning its ``kpf_instrument_eras`` row with the
+        frame's observation time.
+
+        A frame whose ``INSTERA`` disagrees is warned about and restamped -- the
+        timestamp wins, since references are keyed to it."""
+        primary = self.l1_obj.headers["PRIMARY"]
+        obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/kpf_instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        era = eras[
+            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
+        ].iloc[0]
+        self._instera = str(era["INSTERA"])
+
+        if str(primary.get("INSTERA")) != self._instera:
+            logger.warning(
+                "header INSTERA %s disagrees with instrument era %s inferred from "
+                "JD_UTC; restamping INSTERA as %s",
+                primary.get("INSTERA"),
+                self._instera,
+                self._instera,
+            )
+            self.l1_obj.set_keyword("INSTERA", self._instera)
+
+        return era, obs_time
 
     def _read_order_trace_reference(self):
         """Load the vetted order trace for this frame, caching the per-chip
@@ -65,18 +96,11 @@ class SpectralExtraction:
 
         The reference is the most recent one measured before the frame within
         the frame's instrument era, read from ``reference/order_traces``."""
-        date_obs = pd.Timestamp(self.l1_obj.headers["PRIMARY"]["DATE-OBS"])
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/kpf_instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
-        era = eras[
-            (eras["UT_start_date"] <= date_obs) & (date_obs <= eras["UT_end_date"])
-        ].iloc[0]
+        era, obs_time = self._infer_instrument_era()
 
         # Trace geometry moves whenever the instrument is opened, so only a
         # reference measured earlier in this era describes this frame.
-        latest = min(era["UT_end_date"], date_obs)
+        latest = min(era["UT_end_date"], obs_time)
         in_era = {}
         for path in glob.glob(f"{REPO_ROOT}/reference/order_traces/order_trace_*.csv"):
             datecode = os.path.basename(path)[len("order_trace_") : -len(".csv")]
@@ -85,8 +109,8 @@ class SpectralExtraction:
                 in_era[measured] = path
         if not in_era:
             raise FileNotFoundError(
-                f"No order trace measured before {date_obs} within KPF instrument "
-                f"era {era['INSTERA']}"
+                f"No order trace measured before {obs_time} within KPF instrument "
+                f"era {self._instera}"
             )
 
         filepath = in_era[max(in_era)]
@@ -401,9 +425,12 @@ class SpectralExtraction:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
-        """Write the path of the order trace the spectra were extracted with."""
+        """Write the order trace the spectra were extracted with and the era it
+        was chosen for (inferred after ``to_kpf2`` copied the L1 PRIMARY)."""
         if self._order_trace_path is not None:
             l2_obj.set_keyword("TRACFILE", self._order_trace_path)
+        if self._instera is not None:
+            l2_obj.set_keyword("INSTERA", self._instera)
 
     # ------------------------------------------------------------------
     # Public entry point
