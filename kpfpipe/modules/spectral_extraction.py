@@ -62,7 +62,7 @@ class SpectralExtraction:
 
     def _infer_instrument_era(self):
         """Infer this frame's instrument era from ``JD_UTC``, caching its tag in
-        ``self._instera`` and returning its ``kpf_instrument_eras`` row with the
+        ``self._instera`` and returning its ``instrument_eras`` row with the
         frame's observation time.
 
         A frame whose ``INSTERA`` disagrees is warned about and restamped -- the
@@ -81,7 +81,7 @@ class SpectralExtraction:
             )
 
         eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/kpf_instrument_eras.csv",
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
             parse_dates=["UT_start_date", "UT_end_date"],
         )
         in_era = eras[
@@ -90,7 +90,7 @@ class SpectralExtraction:
         if in_era.empty:
             raise ValueError(
                 f"No KPF instrument era covers {obs_time}; the eras of "
-                f"reference/kpf_instrument_eras.csv do not span it"
+                f"reference/instrument_eras.csv do not span it"
             )
 
         era = in_era.iloc[0]

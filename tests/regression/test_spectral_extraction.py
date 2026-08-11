@@ -545,7 +545,7 @@ def _stub_reference_tree(tmp_path, monkeypatch):
     """Stub the repo reference tree: three instrument eras, three traces."""
     traces = tmp_path / "reference" / "order_traces"
     traces.mkdir(parents=True)
-    (tmp_path / "reference" / "kpf_instrument_eras.csv").write_text(_STUB_ERAS)
+    (tmp_path / "reference" / "instrument_eras.csv").write_text(_STUB_ERAS)
     for datecode in ("20231101", "20240301", "20240501"):
         (traces / f"order_trace_{datecode}.csv").write_text(_STUB_TRACE)
     monkeypatch.setattr(se_module, "REPO_ROOT", str(tmp_path))
