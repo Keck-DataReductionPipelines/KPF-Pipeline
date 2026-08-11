@@ -330,9 +330,14 @@ class TestSpectralExtractionRealData:
         assert np.nanmedian(l2.data["RED_SCI2_FLUX"]) > 0
 
     def test_variance_positive(self, l2_from_flat):
+        """Variance is non-negative wherever it exists; a column outside its
+        trace's valid span is NaN by design, not negative."""
         l2, _ = l2_from_flat
-        assert np.all(l2.data["GREEN_SCI2_VAR"] >= 0)
-        assert np.all(l2.data["RED_SCI2_VAR"] >= 0)
+        for key in ("GREEN_SCI2_VAR", "RED_SCI2_VAR"):
+            var = l2.data[key]
+            measured = var[np.isfinite(var)]
+            assert measured.size > 0
+            assert np.all(measured >= 0)
 
     def test_receipt_chain(self, l2_from_flat):
         l2, _ = l2_from_flat
@@ -361,6 +366,8 @@ class TestPolynomialOrderTrace:
                     "Order": 1,
                     "TopEdge": 5.0,
                     "BottomEdge": 5.0,
+                    "X1": 0.0,
+                    "X2": 99.0,
                     "Coeff0": 20.0,
                     "Coeff1": 0.0,
                     "Coeff2": 0.0,
@@ -391,8 +398,6 @@ class TestPolynomialOrderTrace:
 class TestOrderTraceErrors:
     """Errors raised from _get_orderlet_pixels via extract_orderlet."""
 
-    _TRACE_COLS = ["TopEdge", "BottomEdge", "Coeff0", "Coeff1", "Coeff2", "Coeff3"]
-
     def _make_se(self, rows):
         """Build a SpectralExtraction with a pre-populated order_trace cache."""
 
@@ -403,6 +408,7 @@ class TestOrderTraceErrors:
             }
             headers = {"PRIMARY": {}}
 
+        rows = [{"X1": 0.0, "X2": 99.0, **row} for row in rows]
         df = pd.DataFrame(rows).set_index(["Fiber", "Order"]).sort_index()
         se = SpectralExtraction(StubL1())
         se._order_trace = {"GREEN": df}
@@ -454,6 +460,65 @@ class TestOrderTraceErrors:
         se = self._make_se(rows)
         with pytest.raises(ValueError, match="Expected exactly one row"):
             se.extract_orderlet("GREEN", "SCI1", 1)
+
+
+# ---------------------------------------------------------------------------
+# TestValidColumnSpan
+# ---------------------------------------------------------------------------
+
+
+class TestValidColumnSpan:
+    """Only X1..X2 carries flux, whichever detector edge the trace ran off."""
+
+    def _make_se(self, center, x1, x2):
+        class StubL1:
+            data = {
+                "GREEN_CCD": np.full((100, 100), 1234.0, dtype=np.float32),
+                "GREEN_VAR": np.ones((100, 100), dtype=np.float32),
+            }
+            headers = {"PRIMARY": {}}
+
+        trace = pd.DataFrame(
+            [
+                {
+                    "Fiber": "SCI1",
+                    "Order": 0,
+                    "TopEdge": 5.0,
+                    "BottomEdge": 5.0,
+                    "X1": x1,
+                    "X2": x2,
+                    "Coeff0": center,
+                    "Coeff1": 0.0,
+                    "Coeff2": 0.0,
+                    "Coeff3": 0.0,
+                }
+            ]
+        ).set_index(["Fiber", "Order"])
+        se = SpectralExtraction(StubL1())
+        se._order_trace = {"GREEN": trace}
+        se._order_trace_path = "<stub>"
+        return se
+
+    @pytest.mark.parametrize("center", [3.0, 96.0])
+    def test_columns_beyond_the_span_are_nan(self, center):
+        """A trace clipped at either edge NaNs its extrapolated columns.
+
+        The bottom edge is the one that used to leak: a clamped aperture still
+        lands inside the box and would carry detector row 0 off as flux."""
+        se = self._make_se(center, x1=0.0, x2=59.0)
+
+        flux_1d, var_1d = se.extract_orderlet("GREEN", "SCI1", 0)
+
+        assert np.all(np.isfinite(flux_1d[:60]))
+        assert np.all(np.isnan(flux_1d[60:]))
+        assert np.all(np.isnan(var_1d[60:]))
+
+    def test_a_span_covering_the_detector_nans_nothing(self):
+        se = self._make_se(50.0, x1=0.0, x2=99.0)
+
+        flux_1d, _ = se.extract_orderlet("GREEN", "SCI1", 0)
+
+        assert np.all(np.isfinite(flux_1d))
 
 
 # ---------------------------------------------------------------------------

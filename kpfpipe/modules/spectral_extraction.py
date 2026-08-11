@@ -147,8 +147,8 @@ class SpectralExtraction:
         for a single orderlet, optionally with its detector row bounds.
 
         The box encloses the traced orderlet; order tilt/curvature can pull in
-        adjacent-order pixels. ``W`` is 1 inside, 0 outside, and fractional at
-        the top/bottom trace edges."""
+        adjacent-order pixels. ``W`` is 1 inside, 0 outside, fractional at the
+        top/bottom trace edges, and 0 beyond the trace's ``X1``..``X2`` span."""
         chip = chip.upper()
         fiber = fiber.upper()
 
@@ -230,6 +230,9 @@ class SpectralExtraction:
             (1 - (_trace_bottom - box_zeropt - _edge_pixel_bottom)), (box_height, 1)
         )
         W[mask_bot] = frac_bot[mask_bot]
+
+        detector_columns = np.arange(ncol)
+        W[:, (detector_columns < trace.X1) | (detector_columns > trace.X2)] = 0
 
         if return_coords:
             return D, V, W, box_zeropt, box_zeropt + box_height
