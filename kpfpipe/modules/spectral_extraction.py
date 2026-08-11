@@ -66,16 +66,34 @@ class SpectralExtraction:
         frame's observation time.
 
         A frame whose ``INSTERA`` disagrees is warned about and restamped -- the
-        timestamp wins, since references are keyed to it."""
+        timestamp wins, since references are keyed to it.
+
+        Raises ``ValueError`` when the frame cannot be dated or falls outside
+        every era. Deliberately not a ``LookupError``: ``extract_ffi`` catches
+        that to fill an absent orderlet with NaN, and would bury this."""
         primary = self.l1_obj.headers["PRIMARY"]
-        obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
+        jd_utc = primary.get("JD_UTC")
+        obs_time = pd.to_datetime(jd_utc, unit="D", origin="julian")
+        if pd.isna(obs_time):
+            raise ValueError(
+                f"Cannot infer the instrument era of {self.l1_obj.obs_id}: its "
+                f"JD_UTC is {jd_utc!r}"
+            )
+
         eras = pd.read_csv(
             f"{REPO_ROOT}/reference/kpf_instrument_eras.csv",
             parse_dates=["UT_start_date", "UT_end_date"],
         )
-        era = eras[
+        in_era = eras[
             (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
-        ].iloc[0]
+        ]
+        if in_era.empty:
+            raise ValueError(
+                f"No KPF instrument era covers {obs_time}; the eras of "
+                f"reference/kpf_instrument_eras.csv do not span it"
+            )
+
+        era = in_era.iloc[0]
         self._instera = str(era["INSTERA"])
 
         if str(primary.get("INSTERA")) != self._instera:

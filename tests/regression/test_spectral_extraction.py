@@ -468,13 +468,15 @@ def _stub_reference_tree(tmp_path, monkeypatch):
 
 class _StubL1:
     def __init__(self, date_obs, instera):
+        self.obs_id = "KP.20240601.40113.00"
         self.data = {
             "GREEN_CCD": np.zeros((100, 100), dtype=np.float32),
             "GREEN_VAR": np.ones((100, 100), dtype=np.float32),
         }
         self.headers = {
             "PRIMARY": {
-                "JD_UTC": pd.Timestamp(date_obs).to_julian_date(),
+                # date_obs None stands for a frame the L0 could not date.
+                "JD_UTC": pd.Timestamp(date_obs).to_julian_date() if date_obs else None,
                 "INSTERA": instera,
             }
         }
@@ -509,6 +511,34 @@ class TestOrderTraceSelection:
 
         with pytest.raises(FileNotFoundError, match="instrument era 2.5"):
             se._read_order_trace_reference()
+
+    def test_a_frame_between_eras_fails_loudly(self, tmp_path, monkeypatch):
+        # 2024-02-03 -> 2024-02-23 is uncovered by the era table.
+        _stub_reference_tree(tmp_path, monkeypatch)
+        se = SpectralExtraction(_StubL1("2024-02-10T11:08:33", "1.0"))
+
+        with pytest.raises(ValueError, match="No KPF instrument era covers"):
+            se._read_order_trace_reference()
+
+    def test_an_undated_frame_fails_loudly(self, tmp_path, monkeypatch):
+        # MJD-OBS absent at L0 leaves JD_UTC seeded but unset.
+        _stub_reference_tree(tmp_path, monkeypatch)
+        se = SpectralExtraction(_StubL1(None, "2.0"))
+
+        with pytest.raises(ValueError, match="JD_UTC is None"):
+            se._read_order_trace_reference()
+
+    def test_an_undatable_frame_is_not_swallowed_as_a_missing_orderlet(
+        self, tmp_path, monkeypatch
+    ):
+        # extract_ffi catches LookupError to NaN-fill an absent orderlet. An era
+        # that cannot be inferred must not arrive disguised as one -- and must
+        # abort on the first orderlet rather than be retried 175 times.
+        _stub_reference_tree(tmp_path, monkeypatch)
+        se = SpectralExtraction(_StubL1(None, "2.0"))
+
+        with pytest.raises(ValueError):
+            se.extract_ffi("GREEN", ["SCI1"])
 
     def test_restamps_an_instera_that_disagrees_with_jd_utc(
         self, tmp_path, monkeypatch, caplog
