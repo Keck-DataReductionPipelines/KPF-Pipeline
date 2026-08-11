@@ -5,9 +5,9 @@ and curate them into clusters, phase the fiber pattern on the CAL orderlets, fit
 every centerline, and measure the apertures. Consumes one completed L1 master
 rather than a stack of L0 frames, so the time is trace measurement, not I/O.
 
-Run with ``make profile-order_trace`` or
-``python tests/profiling/profile_order_trace.py``. Requires real frames in
-``tests/testdata`` (skips cleanly otherwise).
+Run with ``make profile-master_order_trace`` or
+``python tests/profiling/profile_master_order_trace.py``. Requires real frames
+in ``tests/testdata`` (skips cleanly otherwise).
 """
 
 try:  # importable via `-m tests.profiling.profile_*` or runnable as a script
@@ -24,7 +24,7 @@ def run():
 
     P.run_profile(
         title="Order trace (OrderTrace.make_master)",
-        report_name="order_trace",
+        report_name="master_order_trace",
         setup=setup,
         call=lambda mod: mod.make_master(),
         candidate_modules=[m_order_trace],

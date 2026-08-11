@@ -260,7 +260,14 @@ def masters_flat_file():
     """The bundled master flat of ``MASTERS_DATECODE``, the OrderTrace input."""
     from kpfpipe.utils.io import FileHandler
 
-    return FileHandler(MASTERS_CONFIG).find_masters("flat", "L1", MASTERS_DATECODE)[0]
+    masters = FileHandler(MASTERS_CONFIG).find_masters("flat", "L1", MASTERS_DATECODE)
+    if not masters:
+        print(
+            f"[skip] no {MASTERS_DATECODE} master flat under {TESTDATA_DIR} — "
+            "build one first with `make profile-masters`; nothing to do."
+        )
+        raise SystemExit(0)
+    return masters[0]
 
 
 def masters_l0_files(imtype):

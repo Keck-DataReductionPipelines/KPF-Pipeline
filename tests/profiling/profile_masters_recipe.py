@@ -5,8 +5,8 @@ and flat L1, the order traces measured from each master flat, then the master WL
 L2 from ThAr) under cProfile and ranks functions across all master modules, so the
 report shows which stage dominates the masters run. Optimized independently of the
 science recipe. Per-module line detail is in ``profile_master_bias.py`` /
-``profile_master_dark.py`` / ``profile_order_trace.py`` / ``profile_master_wls.py``,
-so the second line-profiler pass is disabled here.
+``profile_master_dark.py`` / ``profile_master_order_trace.py`` /
+``profile_master_wls.py``, so the second line-profiler pass is disabled here.
 
 The bundled darks span two default-gap clusters, so the recipe's
 ``build_calibration_stacks`` is wrapped to widen ``cluster_gap_seconds`` (the same

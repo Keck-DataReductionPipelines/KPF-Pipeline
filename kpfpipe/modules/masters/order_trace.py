@@ -422,9 +422,7 @@ class OrderTrace:
         metadata = pd.DataFrame(records)
         return metadata.sort_values("row").reset_index(drop=True)
 
-    def _flag_cal_clusters(
-        self, metadata, max_thickness=6.0, min_flux_ratio=1.8, max_cal_count_deviation=1
-    ):
+    def _flag_cal_clusters(self, metadata, max_thickness=6.0, min_flux_ratio=1.8):
         """Add the boolean ``is_cal`` column, flagging each order's CAL orderlet.
 
         A CAL is thinner and brighter than the orderlets around it. Brightness
@@ -434,8 +432,7 @@ class OrderTrace:
 
         One CAL closes each order, so the flagged count is checked against the
         cluster count. However many orderlets a clipped edge order costs or
-        gains, it is one order, so the two counts stay within
-        ``max_cal_count_deviation`` of each other.
+        gains, it is one order, so the two counts stay within one of each other.
         """
         flux = metadata["flux"].to_numpy()
         flux_below = np.concatenate([flux[1:2], flux[:-1]])
@@ -447,7 +444,7 @@ class OrderTrace:
 
         cal_count = int(metadata["is_cal"].sum())
         expected_cal_count = len(metadata) // len(self.fibers)
-        if abs(cal_count - expected_cal_count) > max_cal_count_deviation:
+        if abs(cal_count - expected_cal_count) > 1:
             raise ValueError(
                 f"{cal_count} CAL orderlets identified among {len(metadata)} "
                 f"clusters, expected {expected_cal_count}; cannot phase the "
@@ -963,15 +960,14 @@ class OrderTrace:
     # Algorithm steps
     # ------------------------------------------------------------------
 
-    def detect_traces(self, chip, max_count_deviation=4):
+    def detect_traces(self, chip):
         """Detect and curate every trace cluster on one CCD.
 
         The CCD carries one trace per fiber of every order. An order at either
         end of the detector may lie partly off it, which costs that order some
         of its orderlets or brings part of the order beyond into view, so the
-        count is allowed to depart from the expected one by
-        ``max_count_deviation`` either way -- fewer than the five orderlets of a
-        whole order, so no order can be gained or lost outright.
+        count is allowed to depart from the expected one by len(fibers) - 1
+        either way, so no order can be gained or lost outright.
 
         The surviving clusters are cached as ``self._clusters[chip]`` and
         returned. This rebuild invalidates the old clusters' list positions, so
@@ -990,7 +986,7 @@ class OrderTrace:
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
         expected = len(self.fibers) * self.norder[chip]
-        if abs(len(clusters) - expected) > max_count_deviation:
+        if abs(len(clusters) - expected) > len(self.fibers) - 1:
             raise ValueError(
                 f"{chip}: {len(clusters)} traces detected, expected {expected}"
             )
