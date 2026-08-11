@@ -442,6 +442,22 @@ class TestTraceIdentity:
         assert identities["cluster"].notna().all()
         assert "3 orders detected but 2 expected" in caplog.text
 
+    def test_discards_a_lone_orderlet_at_each_edge(self, master_path, caplog):
+        # Both edge orders open off the detector, leaving a lone CAL apiece. One
+        # discard cannot settle this: the count has to be walked down twice.
+        rows = [85, 100, 119, 138, 157, 176, 191, 210, 229, 248, 267, 282]
+        metadata = _fiber_metadata(rows, cal_indices={0, 5, 10, 11})
+        tracer = OrderTrace(master_path, {"norder": {"GREEN": 2}})
+        metadata = tracer._assign_fiber_identities("GREEN", metadata)
+
+        with caplog.at_level("WARNING"):
+            identities = tracer._assign_order_indexes("GREEN", metadata)
+
+        assert _labels(identities) == _trace_labels(2)
+        assert identities["cluster"].notna().all()
+        assert "4 orders detected but 2 expected" in caplog.text
+        assert "3 orders detected but 2 expected" in caplog.text
+
 
 # ---------------------------------------------------------------------------
 # End-to-end tracing
@@ -872,13 +888,23 @@ class TestRealData:
     @pytest.mark.slow
     @pytest.mark.requires_testdata
     def test_real_20240405_master_flat(self, tmp_path):
-        """Trace a real vNext master flat and check it against the references."""
+        """Trace a real vNext master flat and check it reproduces the reference.
+
+        The comparison is against the vetted reference the pipeline ships for
+        this era, which was measured from this flat -- so it pins the shipped
+        artifact to what the module produces today, rather than standing as
+        independent truth."""
         testdata = Path(__file__).parent.parent / "testdata"
         masters = sorted(testdata.glob("**/KP.20240405.*_master_flat_L1.fits"))
         if not masters:
             pytest.skip("a 20240405 vNext master flat is not installed")
-        if not (testdata / "reference" / "order_trace_green.csv").is_file():
-            pytest.skip("the previous DRP's order trace references are not installed")
+
+        vetted = pd.read_csv(
+            Path(__file__).parents[2]
+            / "reference"
+            / "order_traces"
+            / "order_trace_20240405.csv"
+        )
 
         tracer = OrderTrace(masters[0])
         combined = tracer.make_master(output_dir=tmp_path)
@@ -896,13 +922,9 @@ class TestRealData:
             _assert_apertures_disjoint(tables[chip], tracer.ccd["ncol"])
             assert np.nanmax(tables[chip]["PolyfitRMS"]) < 2.0
 
-            # The reference tables are 1-based in Order and predate this module;
-            # they are used only as independent truth for position and labelling.
-            reference = pd.read_csv(
-                testdata / "reference" / f"order_trace_{chip.lower()}.csv",
-                index_col=0,
-            )
-            reference["Order"] -= 1
+            reference = vetted[
+                (vetted["Chip"] == chip) & (vetted["Status"] != "missing")
+            ]
             merged = tables[chip].merge(
                 reference, on=["Order", "Fiber"], suffixes=("", "_ref")
             )

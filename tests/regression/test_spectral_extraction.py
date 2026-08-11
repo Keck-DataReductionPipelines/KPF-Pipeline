@@ -256,6 +256,27 @@ class TestPerformShapes:
         np.testing.assert_array_equal(l2.data["GREEN_SCI2_FLUX"], 1.0)
         np.testing.assert_array_equal(l2.data["RED_SCI2_FLUX"], 2.0)
 
+    def test_each_order_lands_on_its_own_row(self, monkeypatch):
+        """Order n occupies row n of the L2 array.
+
+        The reference numbers its orders from zero, so the loop index is the row
+        index. Shape alone cannot see a rebase: every row stays populated while
+        the spectra rotate."""
+
+        def mock_orderlet(self, chip, fiber, order, extraction_method=None):
+            spectrum = np.full(100, order, dtype=np.float32)
+            return spectrum, spectrum
+
+        monkeypatch.setattr(SpectralExtraction, "extract_orderlet", mock_orderlet)
+
+        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33", "2.0"))
+        l2_arrays = se.extract_ffi("GREEN", ["SCI1"])
+
+        for order in range(NORDER_GREEN):
+            np.testing.assert_array_equal(
+                l2_arrays["GREEN_SCI1_FLUX"][order], float(order)
+            )
+
     def test_receipt_chain(self, minimal_l1, mock_ffi_arrays, monkeypatch):
         monkeypatch.setattr(
             SpectralExtraction,
