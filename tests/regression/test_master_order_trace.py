@@ -184,7 +184,8 @@ def _curated_clusters(tracer):
     clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
     clusters = tracer._reject_small_clusters(clusters)
     clusters = tracer._merge_fragmented_clusters(clusters)
-    tracer._clusters["GREEN"] = tracer._reject_malformed_clusters(clusters)
+    clusters = tracer._reject_malformed_clusters(clusters)
+    tracer._clusters["GREEN"] = tracer._reject_faint_clusters("GREEN", clusters)
     return tracer._clusters["GREEN"]
 
 
@@ -254,6 +255,36 @@ class TestDetection:
 
         assert len(clusters) == len(truth)
         assert caplog.text == ""
+
+    def test_rejects_only_clusters_far_dimmer_than_the_traces(
+        self, tmp_path, monkeypatch
+    ):
+        # Eleven trace-shaped clusters differing in nothing but flux: one at a
+        # hundredth of the median, which is the junk, and one at a twentieth,
+        # which is as dim as a real edge order gets.
+        image = np.zeros((60, 400), dtype=np.float32)
+        clusters = []
+        for level, row in zip(
+            [10.0, 50.0] + [1000.0] * 9, range(4, 59, 5), strict=True
+        ):
+            image[row : row + 3, :] = level
+            rows, columns = np.mgrid[row : row + 3, 0:400]
+            clusters.append(
+                {
+                    "row_indices": rows.ravel(),
+                    "col_indices": columns.ravel(),
+                    "npixel": rows.size,
+                }
+            )
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
+        kept = tracer._reject_faint_clusters("GREEN", clusters)
+
+        levels_kept = {
+            float(np.median(image[c["row_indices"], c["col_indices"]])) for c in kept
+        }
+        assert len(kept) == len(clusters) - 1
+        assert levels_kept == {50.0, 1000.0}
 
     def test_reports_an_unexpected_trace_count(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=3)

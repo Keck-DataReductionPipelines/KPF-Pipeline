@@ -298,6 +298,37 @@ class OrderTrace:
             self._log_rejection(cluster, reason)
         return kept
 
+    def _reject_faint_clusters(self, chip, clusters, min_flux_fraction=0.025):
+        """Drop clusters far too dim to be a trace.
+
+        A few faint features pass for trace-shaped -- long, thick, and big
+        enough -- while carrying a hundredth of a trace's flux. Against the
+        median cluster, which so few cannot shift, they sit an order of
+        magnitude below the dimmest real trace whatever the lamp level. Size
+        cannot make this cut: a faint cluster may hold more pixels than a
+        trace does.
+        """
+        image = self._image[chip]
+        flux = np.array(
+            [
+                np.median(image[cluster["row_indices"], cluster["col_indices"]])
+                for cluster in clusters
+            ]
+        )
+        reference = np.median(flux)
+
+        kept = []
+        for cluster, cluster_flux in zip(clusters, flux, strict=True):
+            if cluster_flux < min_flux_fraction * reference:
+                self._log_rejection(
+                    cluster,
+                    f"median flux {cluster_flux:.0f} is "
+                    f"{cluster_flux / reference:.1%} of the frame's clusters",
+                )
+            else:
+                kept.append(cluster)
+        return kept
+
     @staticmethod
     def _mean_row_per_column(rows, columns):
         """Collapse cluster pixels to one mean row per occupied pixel column.
@@ -981,6 +1012,7 @@ class OrderTrace:
         clusters = self._reject_small_clusters(clusters)
         clusters = self._merge_fragmented_clusters(clusters)
         clusters = self._reject_malformed_clusters(clusters)
+        clusters = self._reject_faint_clusters(chip, clusters)
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
         expected = len(self.fibers) * self.norder[chip]
