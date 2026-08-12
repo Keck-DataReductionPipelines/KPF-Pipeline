@@ -465,7 +465,10 @@ class OrderTrace:
         order. Any other departure means the clusters cannot be trusted to be
         one orderlet each.
         """
-        metadata = self._flag_cal_clusters(metadata)
+        try:
+            metadata = self._flag_cal_clusters(metadata)
+        except ValueError as error:
+            raise ValueError(f"{chip}: {error}") from error
         cluster_rows = metadata["row"].to_numpy()
         cal_position = len(self.fibers) - 1
         cal_indices = np.flatnonzero(metadata["is_cal"].to_numpy())
@@ -883,8 +886,8 @@ class OrderTrace:
             half_space = (closest_approach - orderlet_gap_pixels) / 2.0
             if half_space <= 0:
                 raise ValueError(
-                    "neighboring fitted traces cross or leave no room for the "
-                    "orderlet gap"
+                    f"{chip}: neighboring fitted traces cross or leave no room "
+                    "for the orderlet gap"
                 )
             table.loc[below, "TopEdge"] = min(table.loc[below, "TopEdge"], half_space)
             table.loc[above, "BottomEdge"] = min(

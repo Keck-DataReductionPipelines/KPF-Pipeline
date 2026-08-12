@@ -380,6 +380,17 @@ class TestTraceIdentity:
 
         assert list(phased["Fiber"]) == _FIBERS * 2 + ["SKY"]
 
+    def test_names_the_ccd_when_no_cal_can_be_phased(self, master_path):
+        # _flag_cal_clusters knows nothing of the CCD it was handed, so the
+        # caller that does names it; two CCDs fail this way for different
+        # reasons and the message has to say which one is being read.
+        rows = [100, 119, 138, 157, 176, 191, 210, 229, 248, 267]
+        metadata = _fiber_metadata(rows, cal_indices=set())
+        tracer = OrderTrace(master_path)
+
+        with pytest.raises(ValueError, match="^RED: 0 CAL orderlets identified"):
+            tracer._assign_fiber_identities("RED", metadata)
+
     def test_reports_an_order_short_of_the_fiber_pattern(self, master_path):
         # An orderlet missing between two CALs leaves an order of four, which
         # cannot be told apart from an order whose fibers are mislabelled.
@@ -775,7 +786,7 @@ class TestApertureConstraint:
 
     def test_rejects_traces_too_close_for_the_gap(self, tmp_path, monkeypatch):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
-        with pytest.raises(ValueError, match="orderlet gap"):
+        with pytest.raises(ValueError, match="^GREEN: neighboring fitted traces"):
             tracer._clamp_neighboring_apertures(
                 "GREEN", orderlet_gap_pixels=_ORDERLET_SPACING + 1.0
             )
