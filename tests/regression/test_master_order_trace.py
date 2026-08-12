@@ -2,8 +2,8 @@
 
 Numerical tests use synthetic master images and require no real data. The
 synthetic flat reproduces the morphology the algorithm depends on: science and
-sky orderlets are wide and flat-topped, and the CAL orderlet is narrow and
-several times brighter. The real master-flat test uses gitignored
+sky orderlets are wide and flat-topped, and the CAL orderlet is narrow, which
+is the difference identity rests on. The real master-flat test uses gitignored
 ``tests/testdata`` and is skipped when the vNext product is unavailable.
 """
 
@@ -275,9 +275,7 @@ class TestCalIdentification:
         assert flagged.size == 4
         assert np.all(np.diff(flagged) == len(_FIBERS))
 
-    def test_cal_is_thinner_and_brighter_than_its_neighbours(
-        self, tmp_path, monkeypatch
-    ):
+    def test_cal_is_thinner_than_its_neighbours(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
         _curated_clusters(tracer)
@@ -288,7 +286,18 @@ class TestCalIdentification:
         other = metadata[~metadata["is_cal"]]
 
         assert cal["thickness"].max() < other["thickness"].min()
-        assert cal["flux"].min() > other["flux"].max()
+
+    def test_cal_is_flagged_however_bright_it_is(self, tmp_path, monkeypatch):
+        # Brightness is not tested, so a CAL no brighter than the orderlets it
+        # closes -- which is what one instrument era looks like -- still flags.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        _curated_clusters(tracer)
+        metadata = tracer._track_cluster_metadata("GREEN")
+
+        metadata["flux"] = 100.0
+
+        assert tracer._flag_cal_clusters(metadata)["is_cal"].sum() == 3
 
     def test_reports_a_flat_with_no_identifiable_cal(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
@@ -296,8 +305,8 @@ class TestCalIdentification:
         _curated_clusters(tracer)
         metadata = tracer._track_cluster_metadata("GREEN")
 
-        # A flat whose orderlets are all equally bright flags no CAL at all.
-        metadata["flux"] = 100.0
+        # A flat whose orderlets are all equally wide flags no CAL at all.
+        metadata["thickness"] = 9.0
         with pytest.raises(ValueError, match="cannot phase the fiber pattern"):
             tracer._flag_cal_clusters(metadata)
 
@@ -309,10 +318,10 @@ class TestCalIdentification:
         _curated_clusters(tracer)
         metadata = tracer._track_cluster_metadata("GREEN")
 
-        # Two of the four CALs are dimmed to their neighbours' brightness, so
+        # Two of the four CALs are widened to their neighbours' thickness, so
         # only half the orders end up anchored.
-        cal_rows = metadata.index[metadata["thickness"] < 6.0][:2]
-        metadata.loc[cal_rows, "flux"] = metadata["flux"].min()
+        cal_rows = metadata.index[metadata["thickness"] < 6.2][:2]
+        metadata.loc[cal_rows, "thickness"] = 9.0
         with pytest.raises(ValueError, match="2 CAL orderlets identified among 20"):
             tracer._flag_cal_clusters(metadata)
 
@@ -456,10 +465,14 @@ class TestTraceIdentity:
     def test_discards_a_lone_orderlet_at_each_edge(self, master_path, caplog):
         # Both edge orders open off the detector, leaving a lone CAL apiece. One
         # discard cannot settle this: the count has to be walked down twice.
+        # Phasing is fed rather than run: two lone CALs put the CAL count two
+        # clear of one fifth of the clusters, which _flag_cal_clusters refuses.
         rows = [85, 100, 119, 138, 157, 176, 191, 210, 229, 248, 267, 282]
-        metadata = _fiber_metadata(rows, cal_indices={0, 5, 10, 11})
+        cal_indices = {0, 5, 10, 11}
+        metadata = _fiber_metadata(rows, cal_indices=cal_indices)
+        metadata["is_cal"] = [index in cal_indices for index in range(len(rows))]
+        metadata["Fiber"] = ["CAL"] + _FIBERS * 2 + ["CAL"]
         tracer = OrderTrace(master_path, {"norder": {"GREEN": 2}})
-        metadata = tracer._assign_fiber_identities("GREEN", metadata)
 
         with caplog.at_level("WARNING"):
             identities = tracer._assign_order_indexes("GREEN", metadata)

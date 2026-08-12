@@ -9,10 +9,10 @@ covering all CCDs.
 Trace geometry is measured from the master flat alone: no pre-existing
 order-trace table is consulted, and OrderTrace applies no calibrations of its
 own. Identity is established before any polynomial is fitted. The CAL orderlet
-is both narrower and several times brighter than the SKY and science orderlets,
-which fixes the phase of the repeating SKY-SCI1-SCI2-SCI3-CAL group, and each
-CAL closes one echelle order. Identity rests on that pattern alone; orderlet
-spacing varies several-fold across a detector and is never assumed regular.
+is narrower than the SKY and science orderlets, which fixes the phase of the
+repeating SKY-SCI1-SCI2-SCI3-CAL group, and each CAL closes one echelle order.
+Identity rests on that pattern alone; orderlet spacing varies several-fold
+across a detector and is never assumed regular.
 
 Axis convention
 ---------------
@@ -422,25 +422,20 @@ class OrderTrace:
         metadata = pd.DataFrame(records)
         return metadata.sort_values("row").reset_index(drop=True)
 
-    def _flag_cal_clusters(self, metadata, max_thickness=6.0, min_flux_ratio=1.8):
+    def _flag_cal_clusters(self, metadata, max_thickness=6.2):
         """Add the boolean ``is_cal`` column, flagging each order's CAL orderlet.
 
-        A CAL is thinner and brighter than the orderlets around it. Brightness
-        is judged against the mean of the two clusters bracketing each
-        candidate, which cancels the order-of-magnitude lamp gradient across
-        the detector where a running median of the neighborhood does not.
+        A CAL is narrower than the orderlets around it -- some 5 pixels thick
+        against 8 or more -- and width alone identifies it. Brightness is not
+        tested: the CAL outshines its neighbors on some instrument eras and
+        not on others, so no flux threshold spans them.
 
         One CAL closes each order, so the flagged count is checked against the
         cluster count. However many orderlets a clipped edge order costs or
         gains, it is one order, so the two counts stay within one of each other.
         """
-        flux = metadata["flux"].to_numpy()
-        flux_below = np.concatenate([flux[1:2], flux[:-1]])
-        flux_above = np.concatenate([flux[1:], flux[-2:-1]])
         metadata = metadata.copy()
-        metadata["is_cal"] = (metadata["thickness"].to_numpy() <= max_thickness) & (
-            flux / ((flux_below + flux_above) / 2.0) > min_flux_ratio
-        )
+        metadata["is_cal"] = metadata["thickness"].to_numpy() <= max_thickness
 
         cal_count = int(metadata["is_cal"].sum())
         expected_cal_count = len(metadata) // len(self.fibers)
@@ -1214,7 +1209,7 @@ class OrderTrace:
         ``{obs_id}_master_order_trace.csv``.
 
         Steps 1-2 are pure detection and identification: identity is fixed from
-        the illuminated-pixel mask and cluster brightness before step 3 fits
+        the illuminated-pixel mask and cluster width before step 3 fits
         anything. The order *index* assigned in step 2 is correct whenever the
         detected orders fill the detector, and is counted from the lowest
         complete fiber group otherwise.
