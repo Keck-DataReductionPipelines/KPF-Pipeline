@@ -830,10 +830,77 @@ class TestApertureConstraint:
 
     def test_rejects_traces_too_close_for_the_gap(self, tmp_path, monkeypatch):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
+        # The clamp reads the widths to see where an aperture is on the
+        # detector, which the aperture step would have measured by now.
+        tracer._trace_tables["GREEN"][["BottomEdge", "TopEdge"]] = 5.0
         with pytest.raises(ValueError, match="^GREEN: neighboring fitted traces"):
             tracer._clamp_neighboring_apertures(
                 "GREEN", orderlet_gap_pixels=_ORDERLET_SPACING + 1.0
             )
+
+    def test_fits_only_the_columns_the_orderlet_can_be_centered_at(
+        self, tmp_path, monkeypatch
+    ):
+        # A column where the cluster reaches a detector edge cannot yield a
+        # center, so an order running off the detector is judged on its own
+        # span rather than on the whole dispersion.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        tracer.detect_traces("GREEN")
+        tracer.assign_trace_identities("GREEN")
+        columns = tracer._sample_profiles("GREEN")["columns"]
+
+        cluster = tracer._clusters["GREEN"][
+            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+        ]
+        half = image.shape[1] // 2
+        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+        cluster["row_indices"] = np.concatenate(
+            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+        )
+        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+
+        offered = []
+        fit_polynomial = order_trace_module.robust_polyfit
+
+        def spy(x, y, deg, **kwargs):
+            offered.append(np.asarray(x))
+            return fit_polynomial(x, y, deg, **kwargs)
+
+        monkeypatch.setattr(order_trace_module, "robust_polyfit", spy)
+        tracer.fit_trace_polynomials("GREEN")
+
+        assert list(offered[0]) == list(columns[columns < half])
+        assert all(x.size == columns.size for x in offered[1:])
+
+    def test_a_partial_trace_is_bounded_by_the_columns_it_was_fitted_over(
+        self, tmp_path, monkeypatch
+    ):
+        # A cubic extrapolated beyond its fitted span can curl back over the
+        # detector and read as carried, so X1-X2 must stay inside that span.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        tracer.detect_traces("GREEN")
+        tracer.assign_trace_identities("GREEN")
+
+        cluster = tracer._clusters["GREEN"][
+            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+        ]
+        half = image.shape[1] // 2
+        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+        cluster["row_indices"] = np.concatenate(
+            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+        )
+        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+
+        fitted = tracer.fit_trace_polynomials("GREEN")
+        assert fitted[["X1", "X2"]].iloc[0].tolist() == [0.0, half - 1.0]
+        assert (fitted["X2"].iloc[1:] == image.shape[1] - 1).all()
+
+        table = tracer.estimate_trace_apertures("GREEN")
+        assert table["X1"].iloc[0] == 0.0 and table["X2"].iloc[0] <= half - 1
+        assert table["Status"].iloc[0] == "partial"
+        assert (table["Status"].iloc[1:] == "full").all()
 
     def test_fitting_leaves_the_apertures_to_the_aperture_step(
         self, tmp_path, monkeypatch
@@ -842,9 +909,12 @@ class TestApertureConstraint:
 
         fitted = tracer._trace_tables["GREEN"]
         assert list(fitted.columns) == _TRACE_FIELDS
-        assert fitted[["BottomEdge", "TopEdge", "X1", "X2"]].isna().all(axis=None)
+        assert fitted[["BottomEdge", "TopEdge"]].isna().all(axis=None)
         assert fitted[["Coeff0", "PolyfitRMS"]].notna().all(axis=None)
         assert (fitted["Status"] == "unknown").all()
+        # X1-X2 arrives as the span the fit was constrained over.
+        assert (fitted["X1"] == 0).all()
+        assert (fitted["X2"] == tracer.ccd["ncol"] - 1).all()
 
         # What the fit accepted at the sampled columns stays with them.
         sampled = tracer._profiles["GREEN"]
@@ -932,6 +1002,56 @@ class TestApertureConstraint:
         # Centerlines stay ordered, but the SCI2 and SCI3 apertures overlap.
         with pytest.raises(ValueError, match="apertures overlap"):
             tracer._validate_trace_table("GREEN")
+
+    def test_validation_rejects_a_trace_that_leaves_and_returns(self, master_path):
+        tracer = self._make_tracer(master_path, norder=1)
+        rows = [
+            {
+                **_straight_trace(100.0 + 20.0 * position, 0.0, 6.0, 6.0),
+                "Chip": "GREEN",
+                "X1": 0.0,
+                "X2": 399.0,
+                "Fiber": fiber,
+                "Order": 0,
+                "Status": "full",
+            }
+            for position, fiber in enumerate(_FIBERS)
+        ]
+        # Sink SKY below the detector at mid-dispersion and bring it back;
+        # X1-X2 is one span, so both ends cannot be carried.
+        rows[0].update(Coeff0=100.0, Coeff1=-2.0, Coeff2=0.005)
+        tracer._trace_tables["GREEN"] = pd.DataFrame(rows, columns=_TRACE_FIELDS)
+
+        with pytest.raises(ValueError, match="SKY order 0 leaves the detector"):
+            tracer._validate_trace_table("GREEN")
+
+    def test_neighbours_sharing_no_fitted_column_are_left_unclamped(
+        self, master_path, caplog
+    ):
+        tracer = self._make_tracer(master_path, norder=1)
+        rows = [
+            {
+                **_straight_trace(100.0 + 20.0 * position, 0.0, 6.0, 6.0),
+                "Chip": "GREEN",
+                "X1": 0.0,
+                "X2": 399.0,
+                "Fiber": fiber,
+                "Order": 0,
+                "Status": "full",
+            }
+            for position, fiber in enumerate(_FIBERS)
+        ]
+        # SKY was fitted over one end of the dispersion and SCI1 the other, so
+        # their spacing could be measured nowhere.
+        rows[0]["X2"], rows[1]["X1"] = 150.0, 250.0
+        tracer._trace_tables["GREEN"] = pd.DataFrame(rows, columns=_TRACE_FIELDS)
+
+        with caplog.at_level("WARNING"):
+            tracer._clamp_neighboring_apertures("GREEN")
+
+        assert "fitted over no common column" in caplog.text
+        # Every other pair is still clamped against its neighbour.
+        assert (tracer._trace_tables["GREEN"]["TopEdge"] == 6.0).all()
 
 
 # ---------------------------------------------------------------------------

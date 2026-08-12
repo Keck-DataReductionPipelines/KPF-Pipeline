@@ -6,6 +6,7 @@ import pytest
 from kpfpipe.utils.stats import (
     _gaussian_dist,
     _gaussian_jac,
+    bounded_polyval,
     flag_outliers,
     interpolate_bad_pixels,
     optimize_lsq,
@@ -167,6 +168,48 @@ class TestRobustPolyfit:
 
         _, good, _ = robust_polyfit(x, y, 1, sigma=0.1, full=True)
         assert good.sum() >= 20
+
+
+class TestBoundedPolyval:
+    """Coefficients fitted over part of an axis mean nothing beyond it, so what
+    lies outside the bounds is reported as unmeasured rather than extrapolated."""
+
+    _COEFFS = [1.0, -2.0, 0.5]
+
+    def test_matches_polyval_inside_the_bounds(self):
+        x = np.linspace(0.0, 10.0, 21)
+        values = bounded_polyval(x, self._COEFFS, 0.0, 10.0)
+        assert np.array_equal(values, np.polynomial.polynomial.polyval(x, self._COEFFS))
+
+    def test_nans_outside_the_bounds(self):
+        x = np.arange(11.0)
+        values = bounded_polyval(x, self._COEFFS, 3.0, 7.0)
+
+        assert np.isnan(values[x < 3.0]).all() and np.isnan(values[x > 7.0]).all()
+        # The bounds are inclusive.
+        assert np.isfinite(values[(x >= 3.0) & (x <= 7.0)]).all()
+
+    def test_a_scalar_position_stays_a_scalar(self):
+        assert bounded_polyval(4.0, self._COEFFS, 0.0, 10.0).ndim == 0
+        assert np.isnan(bounded_polyval(40.0, self._COEFFS, 0.0, 10.0))
+
+    def test_evaluates_a_table_of_polynomials_against_its_own_bounds(self):
+        x = np.arange(11.0)
+        coeffs = np.array([[0.0, 1.0], [100.0, 1.0]]).T
+        lower, upper = np.array([[0.0], [5.0]]), np.array([[4.0], [10.0]])
+
+        values = bounded_polyval(x, coeffs, lower, upper)
+
+        assert values.shape == (2, x.size)
+        assert np.array_equal(np.isfinite(values[0]), x <= 4.0)
+        assert np.array_equal(np.isfinite(values[1]), x >= 5.0)
+        assert values[1][10] == 110.0
+
+    def test_a_float32_caller_is_not_upcast(self):
+        # Spectral extraction works in float32 throughout.
+        x = np.arange(11.0, dtype=np.float32)
+        coeffs = np.array(self._COEFFS, dtype=np.float32)
+        assert bounded_polyval(x, coeffs, 0.0, 10.0).dtype == np.float32
 
 
 class TestStrictlyIncreasing:

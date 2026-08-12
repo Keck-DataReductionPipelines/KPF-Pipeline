@@ -40,7 +40,7 @@ from scipy.ndimage import gaussian_filter1d, label
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.stats import robust_polyfit
+from kpfpipe.utils.stats import bounded_polyval, robust_polyfit
 
 logger = logging.getLogger(__name__)
 
@@ -881,6 +881,18 @@ class OrderTrace:
             widths.append(clipped)
         return tuple(widths)
 
+    def _fitted_centerlines(self, chip):
+        """Return every measured trace's row at every detector column, NaN
+        outside the ``X1``-``X2`` its fit was constrained over.
+        """
+        measured = self._trace_tables[chip].query("Status != 'missing'")
+        return bounded_polyval(
+            np.arange(self.ccd["ncol"], dtype=float),
+            measured[self._trace_fields(which="coeffs")].to_numpy(dtype=float).T,
+            measured["X1"].to_numpy(dtype=float)[:, None],
+            measured["X2"].to_numpy(dtype=float)[:, None],
+        )
+
     def _clamp_neighboring_apertures(self, chip, orderlet_gap_pixels=2.0):
         """Shrink the apertures of traces that would otherwise touch.
 
@@ -888,28 +900,31 @@ class OrderTrace:
         neighbors that must not overlap. Each keeps its profile width where
         there is room; where two would meet, both clamp to half the space
         between their centerlines less a guard band. That space is measured
-        where the two centerlines run closest, so the apertures stay disjoint
-        across the whole detector, not only at mid-dispersion.
+        where the two run closest and both were fitted, so a partial trace is
+        not judged on a tail it was never fitted over.
 
         The clamped edges are written back into ``self._trace_tables[chip]``.
         """
-        coefficient_fields = self._trace_fields(which="coeffs")
         table = self._trace_tables[chip]
-
         measured = table.index[table["Status"] != "missing"]
-        test_columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
-        centers = [
-            polynomial.polyval(
-                test_columns,
-                table.loc[trace_index, coefficient_fields].to_numpy(dtype=float),
-            )
-            for trace_index in measured
-        ]
+        centers = self._fitted_centerlines(chip)
+
         for index, (below, above) in enumerate(
             zip(measured[:-1], measured[1:], strict=False)
         ):
-            closest_approach = float(np.min(centers[index + 1] - centers[index]))
-            half_space = (closest_approach - orderlet_gap_pixels) / 2.0
+            # Dropped, not nan-reduced: a NaN half_space passes the check below.
+            gap = centers[index + 1] - centers[index]
+            gap = gap[np.isfinite(gap)]
+            if gap.size == 0:
+                logger.warning(
+                    "%s: traces %d and %d were fitted over no common column; "
+                    "neither is clamped against the other",
+                    chip,
+                    below,
+                    above,
+                )
+                continue
+            half_space = (float(gap.min()) - orderlet_gap_pixels) / 2.0
             if half_space <= 0:
                 raise ValueError(
                     f"{chip}: neighboring fitted traces cross or leave no room "
@@ -923,13 +938,12 @@ class OrderTrace:
     def _validate_trace_table(self, chip, full_coverage_fraction=0.9):
         """Validate output schema, geometry, labels, and detector coverage.
 
-        Settles each measured trace's ``X1``-``X2`` as the columns over which
-        its whole aperture lands on the detector, then its 'unknown' ``Status``
-        from that span; no 'unknown' may survive.
+        Narrows each measured trace's ``X1``-``X2`` from the span it was fitted
+        over to the columns it is carried on, then settles its 'unknown'
+        ``Status`` from that span; no 'unknown' may survive.
         """
         table = self._trace_tables[chip]
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
-        coefficient_fields = self._trace_fields(which="coeffs")
         if list(table.columns) != self._trace_fields():
             raise ValueError(f"{chip} output has incompatible fields")
 
@@ -945,9 +959,7 @@ class OrderTrace:
             )
 
         measured = table[table["Status"] != "missing"]
-        geometry = measured[coefficient_fields + ["BottomEdge", "TopEdge"]].to_numpy(
-            dtype=float
-        )
+        geometry = measured[self._trace_fields(which="geometry")].to_numpy(dtype=float)
         if not np.isfinite(geometry).all():
             raise ValueError(f"{chip} output contains non-finite measured geometry")
         if not ((measured["BottomEdge"] > 0) & (measured["TopEdge"] > 0)).all():
@@ -956,11 +968,7 @@ class OrderTrace:
         # Traces are written in ascending row, so evaluating every centerline
         # at the same columns must give rows that strictly increase down each
         # column; anything else means two traces cross or are mislabelled.
-        detector_columns = np.arange(ncol, dtype=float)
-        coeffs = measured[coefficient_fields].to_numpy(dtype=float)
-        centers = np.array(
-            [polynomial.polyval(detector_columns, coeff) for coeff in coeffs]
-        )
+        centers = self._fitted_centerlines(chip)
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
 
@@ -975,8 +983,15 @@ class OrderTrace:
             raise ValueError(f"{chip} output contains a wholly off-detector trace")
         first = on_detector.argmax(axis=1)
         last = ncol - 1 - on_detector[:, ::-1].argmax(axis=1)
-        table.loc[measured.index, "X1"] = detector_columns[first]
-        table.loc[measured.index, "X2"] = detector_columns[last]
+        broken = on_detector.sum(axis=1) != last - first + 1
+        if broken.any():
+            trace = measured.iloc[np.flatnonzero(broken)[0]]
+            raise ValueError(
+                f"{chip} {trace.Fiber} order {trace.Order} leaves the detector "
+                "and returns to it"
+            )
+        table.loc[measured.index, "X1"] = first.astype(float)
+        table.loc[measured.index, "X2"] = last.astype(float)
 
         coverage = (last - first + 1) / ncol
         table.loc[measured.index, "Status"] = np.where(
@@ -1058,10 +1073,10 @@ class OrderTrace:
         'unknown' for validation to classify from its dispersion span.
 
         The fitted traces become the CCD's ``self._trace_tables`` entry and are
-        returned, with their aperture edges and column bounds left unmeasured
-        for the aperture step to fill in. The mask of the samples each fit
-        accepted is recorded on ``self._profiles[chip]``, row for row with the
-        CCD's table rows.
+        returned, with their aperture edges left unmeasured for the aperture step
+        and their ``X1``-``X2`` holding the span each fit was constrained over.
+        The mask of the samples each fit accepted is recorded on
+        ``self._profiles[chip]``, row for row with the CCD's table rows.
         """
         if poly_degree is not None:
             self.poly_degree = poly_degree
@@ -1092,16 +1107,28 @@ class OrderTrace:
                 continue
 
             centers = self._trace_centers(chip, fiber, order)
+            # A column where the cluster reaches a detector edge is missing one
+            # of the two orderlet edges a center comes from, so it cannot yield
+            # one; the rest are what the fit is offered and constrained over.
+            cluster = self._clusters[chip][int(cluster_index)]
+            rows, cols = cluster["row_indices"], cluster["col_indices"]
+            clipped = cols[(rows == 0) | (rows == self.ccd["nrow"] - 1)]
+            usable = np.setdiff1d(cols, clipped)
+            on_chip = np.isin(columns, usable)
             try:
                 coeffs, good, rms = robust_polyfit(
-                    columns.astype(float), centers, int(self.poly_degree), full=True
+                    columns[on_chip].astype(float),
+                    centers[on_chip],
+                    int(self.poly_degree),
+                    full=True,
                 )
             except ValueError as error:
                 raise ValueError(f"{chip} {fiber} order {order}: {error}") from error
-            sampled["good"][position] = good
+            sampled["good"][position][on_chip] = good
 
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
             record["PolyfitRMS"] = rms
+            record["X1"], record["X2"] = float(usable.min()), float(usable.max())
 
         self._trace_tables[chip] = pd.DataFrame(records, columns=self._trace_fields())
         return self._trace_tables[chip]

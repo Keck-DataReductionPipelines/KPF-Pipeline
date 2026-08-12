@@ -470,7 +470,7 @@ class TestOrderTraceErrors:
 class TestValidColumnSpan:
     """Only X1..X2 carries flux, whichever detector edge the trace ran off."""
 
-    def _make_se(self, center, x1, x2):
+    def _make_se(self, center, x1, x2, slope=0.0):
         class StubL1:
             data = {
                 "GREEN_CCD": np.full((100, 100), 1234.0, dtype=np.float32),
@@ -488,7 +488,7 @@ class TestValidColumnSpan:
                     "X1": x1,
                     "X2": x2,
                     "Coeff0": center,
-                    "Coeff1": 0.0,
+                    "Coeff1": slope,
                     "Coeff2": 0.0,
                     "Coeff3": 0.0,
                 }
@@ -519,6 +519,21 @@ class TestValidColumnSpan:
         flux_1d, _ = se.extract_orderlet("GREEN", "SCI1", 0)
 
         assert np.all(np.isfinite(flux_1d))
+
+    def test_the_box_is_sized_from_the_carried_columns_alone(self):
+        # This trace climbs a row per column, so past X2 its extrapolation runs
+        # off the top of the detector and would size a box of rows the orderlet
+        # never carries flux in.
+        se = self._make_se(10.0, x1=0.0, x2=39.0, slope=1.0)
+
+        _, _, W, row_min, row_max = se._get_orderlet_pixels(
+            "GREEN", "SCI1", 0, return_coords=True
+        )
+
+        # Rows 10-49 are traced over columns 0-39, plus the 5 px aperture.
+        assert (row_min, row_max) == (5, 54)
+        assert W[:, :40].any(axis=0).all()
+        assert not W[:, 40:].any()
 
 
 # ---------------------------------------------------------------------------

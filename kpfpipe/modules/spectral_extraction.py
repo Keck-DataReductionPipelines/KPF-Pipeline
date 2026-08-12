@@ -11,10 +11,10 @@ import os
 
 import numpy as np
 import pandas as pd
-from numpy.polynomial import polynomial
 
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.stats import bounded_polyval
 
 logger = logging.getLogger(__name__)
 
@@ -180,10 +180,14 @@ class SpectralExtraction:
         )
         coeffs = np.array(trace[coefficient_columns], dtype=np.float32)
 
-        trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
+        detector_columns = np.arange(ncol, dtype=np.float32)
+        trace_center = bounded_polyval(detector_columns, coeffs, trace.X1, trace.X2)
         trace_top = (trace_center + trace.TopEdge).astype(np.float32)
         trace_bottom = (trace_center - trace.BottomEdge).astype(np.float32)
 
+        # NaN beyond X1..X2, so the box below is sized from the columns the
+        # trace is carried on rather than from an extrapolated tail.
+        carried = np.isfinite(trace_center)
         off_detector = (trace_top > nrow - 1) | (trace_bottom < 0)
 
         if np.any(off_detector):
@@ -199,9 +203,13 @@ class SpectralExtraction:
             trace_center[off_detector] = np.maximum(trace_center, 0)[off_detector]
             trace_bottom[off_detector] = np.maximum(trace_bottom, 0)[off_detector]
 
-        box_zeropt = int(np.floor(trace_bottom.min()))
-        box_height = int(np.ceil(trace_top.max())) - box_zeropt
+        box_zeropt = int(np.floor(np.nanmin(trace_bottom)))
+        box_height = int(np.ceil(np.nanmax(trace_top))) - box_zeropt
 
+        # An uncarried column has no edge to floor to an integer row; park it on
+        # the box floor, its weights being zeroed once they are built.
+        trace_top = np.where(carried, trace_top, box_zeropt)
+        trace_bottom = np.where(carried, trace_bottom, box_zeropt)
         edge_pixel_top = np.array(np.floor(trace_top - box_zeropt), dtype=int)
         edge_pixel_bottom = np.array(np.floor(trace_bottom - box_zeropt), dtype=int)
 
@@ -231,8 +239,7 @@ class SpectralExtraction:
         )
         W[mask_bot] = frac_bot[mask_bot]
 
-        detector_columns = np.arange(ncol)
-        W[:, (detector_columns < trace.X1) | (detector_columns > trace.X2)] = 0
+        W[:, ~carried] = 0
 
         if return_coords:
             return D, V, W, box_zeropt, box_zeropt + box_height
