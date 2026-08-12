@@ -316,6 +316,11 @@ class OrderTrace:
             ]
         )
         reference = np.median(flux)
+        if reference < 0:
+            raise ValueError(
+                f"{chip}: the median cluster's flux is negative "
+                f"({reference:.1f}); check the input master flat"
+            )
 
         kept = []
         for cluster, cluster_flux in zip(clusters, flux, strict=True):

@@ -286,6 +286,26 @@ class TestDetection:
         assert len(kept) == len(clusters) - 1
         assert levels_kept == {50.0, 1000.0}
 
+    def test_refuses_a_frame_whose_median_cluster_is_negative(
+        self, tmp_path, monkeypatch
+    ):
+        image = np.zeros((60, 400), dtype=np.float32)
+        clusters = []
+        for level, row in zip([1000.0] + [-500.0] * 10, range(4, 59, 5), strict=True):
+            image[row : row + 3, :] = level
+            rows, columns = np.mgrid[row : row + 3, 0:400]
+            clusters.append(
+                {
+                    "row_indices": rows.ravel(),
+                    "col_indices": columns.ravel(),
+                    "npixel": rows.size,
+                }
+            )
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
+        with pytest.raises(ValueError, match="median cluster's flux is negative"):
+            tracer._reject_faint_clusters("GREEN", clusters)
+
     def test_reports_an_unexpected_trace_count(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=3)
         tracer = _tracer(tmp_path, image, monkeypatch, norder=2)
