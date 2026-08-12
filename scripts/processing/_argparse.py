@@ -134,7 +134,7 @@ def pool_parser(jobs_help):
     ``--jobs`` help differs per command (masters cites its fixed cap, science its
     cores-based default), so the caller passes it in; ``--job_timeout`` is
     identical across masters and science and lives here so it is written once. Both
-    default to ``None``/``600`` and are validated + resolved post-parse by each
+    default to ``None``/``1200`` and are validated + resolved post-parse by each
     command's ``parse_args``.
     """
     p = argparse.ArgumentParser(add_help=False)
@@ -142,10 +142,10 @@ def pool_parser(jobs_help):
     p.add_argument(
         "--job_timeout",
         type=int,
-        default=600,
+        default=1200,
         help="per-job wall-clock limit (seconds) for each fanned-out recipe "
-        "subprocess (default: %(default)s). A recipe normally runs in ~2 min, so a "
-        "job exceeding this is treated as wedged: its process group is killed and "
-        "the job counts as a failure rather than hanging the whole batch",
+        "subprocess (default: %(default)s). A job exceeding this is treated as "
+        "wedged: its process group is killed and the job counts as a failure "
+        "rather than hanging the whole batch",
     )
     return p

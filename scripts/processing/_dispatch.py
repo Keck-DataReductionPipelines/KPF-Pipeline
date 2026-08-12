@@ -208,7 +208,7 @@ def run_stage(
     tasks,
     jobs,
     log_dir,
-    job_timeout=600,
+    job_timeout=1200,
     canary_timeout=1800,
     abort_on_failure=True,
     launch_interval=0.0,

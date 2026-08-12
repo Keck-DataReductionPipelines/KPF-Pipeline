@@ -151,7 +151,7 @@ class TestPoolParser:
 
     def test_defaults(self):
         ns = _parse([_argparse.pool_parser(jobs_help="how many")], [])
-        assert ns.jobs is None and ns.job_timeout == 600
+        assert ns.jobs is None and ns.job_timeout == 1200
 
     def test_jobs_help_is_passed_through(self):
         parser = argparse.ArgumentParser(

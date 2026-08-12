@@ -135,7 +135,7 @@ class TestParseArgs:
         assert ts.parse_args(_BASE_ARGS).jobs is None
 
     def test_job_timeout_default_and_override(self, ts):
-        assert ts.parse_args(_BASE_ARGS).job_timeout == 600
+        assert ts.parse_args(_BASE_ARGS).job_timeout == 1200
         assert ts.parse_args(_BASE_ARGS + ["--job_timeout", "120"]).job_timeout == 120
 
     @pytest.mark.parametrize(
