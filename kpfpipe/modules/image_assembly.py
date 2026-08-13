@@ -462,18 +462,18 @@ class ImageAssembly:
                 f"detected {self.namp[chip]} on {chip} CCD"
             )
 
-        ccd_ffi = self.orient_ffi(ccd_ffi, chip)
-        var_ffi = self.orient_ffi(var_ffi, chip)
+        ccd_ffi = self.orient_ffi(ccd_ffi, chip, self.namp[chip])
+        var_ffi = self.orient_ffi(var_ffi, chip, self.namp[chip])
 
         return ccd_ffi, var_ffi
 
     @staticmethod
-    def orient_ffi(image, chip):
+    def orient_ffi(image, chip, namp):
         """
         Flip an assembled image into the standard FFI orientation.
         """
         image = np.flip(image, axis=1)
-        if chip.upper() == "GREEN":
+        if chip.upper() == "GREEN" and namp == 2:
             image = np.flip(image, axis=0)
         return image
 
