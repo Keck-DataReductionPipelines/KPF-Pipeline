@@ -268,6 +268,71 @@ class OrderTrace:
                 kept.append(cluster)
         return kept
 
+    def _split_fused_clusters(self, clusters, max_thickness_ratio=1.5):
+        """Part a cluster holding two traces back into the two it holds.
+
+        Two orderlets touching at a single corner are one cluster, 8-connected
+        labelling counting a corner as an edge. The pair fails no other test of
+        a trace, so thickness is the tell: it carries both orderlets' pixels and
+        runs to about twice the frame's median, which the CAL fiber being the
+        narrowest of the five cannot pull down. Relabelling for 4-connectivity,
+        which a corner does not survive, parts the two. A cluster that will not
+        part, or parts no thinner, is thick for another reason and is dropped.
+        """
+        thickness = []
+        for cluster in clusters:
+            rows, columns = self._pixels_near_mid_dispersion(cluster)
+            occupied_columns = np.unique(columns).size
+            thickness.append(rows.size / occupied_columns if occupied_columns else 0.0)
+        max_rows_per_column = max_thickness_ratio * np.median(thickness)
+
+        kept = []
+        for cluster, rows_per_column in zip(clusters, thickness, strict=True):
+            if rows_per_column <= max_rows_per_column:
+                kept.append(cluster)
+                continue
+            too_thick = (
+                f"{rows_per_column:.1f} pixel rows thick at mid-detector, past "
+                f"the {max_rows_per_column:.1f} of one trace"
+            )
+
+            rows, columns = cluster["row_indices"], cluster["col_indices"]
+            first_row, first_column = rows.min(), columns.min()
+            mask = np.zeros(
+                (int(np.ptp(rows)) + 1, int(np.ptp(columns)) + 1), dtype=bool
+            )
+            mask[rows - first_row, columns - first_column] = True
+            # No structure argument is 4-connectivity, which is the point.
+            labels, piece_count = label(mask)
+            if piece_count < 2:
+                self._log_rejection(cluster, f"{too_thick}, and does not part")
+                continue
+
+            sizes = np.bincount(labels.ravel())[1:]
+            pieces = []
+            for piece_label in np.argsort(sizes)[::-1][:2] + 1:
+                piece_rows, piece_columns = np.nonzero(labels == piece_label)
+                pieces.append(
+                    {
+                        "row_indices": piece_rows + first_row,
+                        "col_indices": piece_columns + first_column,
+                        "npixel": int(piece_rows.size),
+                    }
+                )
+
+            parted = []
+            for piece in pieces:
+                rows, columns = self._pixels_near_mid_dispersion(piece)
+                occupied_columns = np.unique(columns).size
+                parted.append(rows.size / occupied_columns if occupied_columns else 0.0)
+            if max(parted) > max_rows_per_column:
+                self._log_rejection(cluster, f"{too_thick}, and parts no thinner")
+                continue
+
+            logger.info("splitting a cluster %s into two traces", too_thick)
+            kept.extend(pieces)
+        return kept
+
     def _reject_malformed_clusters(
         self, clusters, min_spanned_columns=200, min_rows_per_column=3.0
     ):
@@ -1031,6 +1096,7 @@ class OrderTrace:
 
         clusters = self._reject_small_clusters(clusters)
         clusters = self._merge_fragmented_clusters(clusters)
+        clusters = self._split_fused_clusters(clusters)
         clusters = self._reject_malformed_clusters(clusters)
         clusters = self._reject_faint_clusters(chip, clusters)
         logger.info("%s: %d clusters survive curation", chip, len(clusters))

@@ -174,6 +174,16 @@ def _fiber_metadata(rows, cal_indices):
     )
 
 
+def _band_cluster(rows, columns):
+    """Return a rectangular cluster covering `rows` at every one of `columns`."""
+    grid_rows, grid_columns = np.meshgrid(rows, columns, indexing="ij")
+    return {
+        "row_indices": grid_rows.ravel(),
+        "col_indices": grid_columns.ravel(),
+        "npixel": int(grid_rows.size),
+    }
+
+
 def _curated_clusters(tracer):
     """Run detection and curation exactly as the module's own chain does.
 
@@ -184,6 +194,7 @@ def _curated_clusters(tracer):
     clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
     clusters = tracer._reject_small_clusters(clusters)
     clusters = tracer._merge_fragmented_clusters(clusters)
+    clusters = tracer._split_fused_clusters(clusters)
     clusters = tracer._reject_malformed_clusters(clusters)
     tracer._clusters["GREEN"] = tracer._reject_faint_clusters("GREEN", clusters)
     return tracer._clusters["GREEN"]
@@ -305,6 +316,59 @@ class TestDetection:
 
         with pytest.raises(ValueError, match="median cluster's flux is negative"):
             tracer._reject_faint_clusters("GREEN", clusters)
+
+    def test_parts_a_cluster_holding_two_corner_joined_traces(
+        self, tmp_path, monkeypatch
+    ):
+        image = np.zeros((60, 400), dtype=np.float32)
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        columns = np.arange(400)
+        ordinary = [
+            _band_cluster(np.arange(row, row + 3), columns) for row in range(4, 34, 3)
+        ]
+        # Two ordinary traces meeting at one corner, as 8-connected labelling
+        # hands them over: the lower reaches up one pixel at column 200 and the
+        # upper is missing the pixel directly above it, so the two touch at a
+        # corner and share no edge.
+        lower = _band_cluster(np.arange(40, 43), columns)
+        upper = _band_cluster(np.arange(44, 47), columns)
+        above_corner = (upper["row_indices"] == 44) & (upper["col_indices"] == 200)
+        upper = {
+            "row_indices": upper["row_indices"][~above_corner],
+            "col_indices": upper["col_indices"][~above_corner],
+            "npixel": upper["npixel"] - 1,
+        }
+        fused = {
+            "row_indices": np.concatenate(
+                [lower["row_indices"], [43], upper["row_indices"]]
+            ),
+            "col_indices": np.concatenate(
+                [lower["col_indices"], [200], upper["col_indices"]]
+            ),
+            "npixel": lower["npixel"] + 1 + upper["npixel"],
+        }
+
+        kept = tracer._split_fused_clusters([*ordinary, fused])
+
+        assert len(kept) == len(ordinary) + 2
+        assert sorted(c["npixel"] for c in kept[-2:]) == [
+            upper["npixel"],
+            lower["npixel"] + 1,
+        ]
+
+    def test_drops_an_overthick_cluster_that_will_not_part(self, tmp_path, monkeypatch):
+        image = np.zeros((60, 400), dtype=np.float32)
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        columns = np.arange(400)
+        ordinary = [
+            _band_cluster(np.arange(row, row + 3), columns) for row in range(4, 34, 3)
+        ]
+        solid = _band_cluster(np.arange(40, 48), columns)
+
+        kept = tracer._split_fused_clusters([*ordinary, solid])
+
+        assert len(kept) == len(ordinary)
+        assert all(cluster["npixel"] == 3 * columns.size for cluster in kept)
 
     def test_reports_an_unexpected_trace_count(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=3)
