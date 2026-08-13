@@ -11,19 +11,7 @@ from kpfpipe.utils.io import load_junk_obs_ids
 _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 
 _CHIPS = ("GREEN", "RED")
-_AMPS_PER_CHIP = 4  # GREEN_AMP1..4 / RED_AMP1..4 (only a subset is read out)
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
-_TIME_TOL_S = 0.1  # DATE-END - DATE-BEG vs ELAPSED tolerance (v2.12 quality_control.py)
-
-# Physical-range bounds for the canonical CATALOG_RECORD astrometry, ported from
-# v2.12 good_TARG_headers. The epoch/equinox window is exclusive-low, matching
-# legacy. The parallax lower bound and the PM bound are vNext additions for our Gaia
-# source: a negative Gaia parallax is routine and gives a negative distance, and the
-# highest real PM is ~10.4 arcsec/yr.
-_EPOCH_RANGE = (1950.0, 2050.0)
-_MAX_ABS_RV = 350.0  # km/s (Chubak et al. 2012, arXiv:1207.6212, Fig. 8)
-_PARALLAX_RANGE = (0.0, 1000.0)  # mas; 0 < plx < 1000 (> 0 and < 1 arcsec)
-_MAX_ABS_PM = 15.0  # arcsec/yr, per component
 
 
 def _parse_iso(value):
@@ -52,7 +40,7 @@ class QCL0(QC):
         """
         for chip in _CHIPS:
             namp = 0
-            for i in range(1, _AMPS_PER_CHIP + 1):
+            for i in range(1, 5):  # GREEN_AMP1..4 / RED_AMP1..4
                 arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
                 # KPF0 stores None-data as array(None, dtype=object); skip absent.
                 if (
@@ -99,8 +87,8 @@ class QCL0(QC):
         Bias frames legitimately have EXPTIME=0, so we don't require strictly
         positive. When the raw ELAPSED readout time is present, it must not fall
         short of the requested EXPTIME (premature readout) or exceed it by more
-        than ``_TIME_TOL_S`` (the elapsed-vs-requested check formerly done in the
-        masters frame loader); an absent ELAPSED skips only that comparison.
+        than 0.1 s (the elapsed-vs-requested check formerly done in the masters
+        frame loader); an absent ELAPSED skips only that comparison.
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         if "EXPTIME" not in hdr:
@@ -113,7 +101,7 @@ class QCL0(QC):
             return False
 
         elapsed = self._hdr_float(hdr, "ELAPSED")
-        if elapsed is not None and not (0 <= elapsed - exptime <= _TIME_TOL_S):
+        if elapsed is not None and not (0 <= elapsed - exptime <= 0.1):
             return False
         return True
 
@@ -182,18 +170,100 @@ class QCL0(QC):
         row = match[0]
         for field in ("epoch", "equinox"):
             val = self._row_float(row, field)
-            if val is not None and not (_EPOCH_RANGE[0] < val <= _EPOCH_RANGE[1]):
+            if val is not None and not (1950.0 < val <= 2050.0):
                 return False
+        # |rv| bound from Chubak et al. 2012 (arXiv:1207.6212, Fig. 8).
         rv = self._row_float(row, "rv")
-        if rv is not None and abs(rv) > _MAX_ABS_RV:
+        if rv is not None and abs(rv) > 350.0:
             return False
         plax = self._row_float(row, "parallax")
-        if plax is not None and not (_PARALLAX_RANGE[0] < plax < _PARALLAX_RANGE[1]):
+        if plax is not None and not (0.0 < plax < 1000.0):
             return False
         for field in ("pmra", "pmdec"):
             pm = self._row_float(row, field)
-            if pm is not None and abs(pm) > _MAX_ABS_PM:
+            if pm is not None and abs(pm) > 15.0:
                 return False
         return True
 
     catalog_values_sane._qc_key = "CATLOGOK"
+
+    def _em_table(self, ext):
+        """The exposure-meter table for ``ext``, or None when the frame has none.
+
+        Only science frames carry EM extensions; on a calibration ``data.get``
+        yields None.
+        """
+        table = self.kpf_obj.data.get(ext)
+        return table if table is not None and len(table) else None
+
+    def expmeter_times_consistent(self):
+        """EXPMETER_SCI brackets the shutter window to within 1 second.
+
+        Ports the exposure-meter half of v2.12 ``L0_datetime``; the header-date
+        half is DATTIMOK/EXPTIMOK. The first Date-Beg and last Date-End of the EM
+        table must match PRIMARY DATE-BEG/DATE-END, preferring the corrected
+        columns as BarycentricCorrection does. The 1 s tolerance absorbs EM dead
+        time and catches only gross errors: the flux-weighted midpoint feeds the
+        barycentric correction, where a 2.6 s timing error costs 10 cm/s.
+
+        Frames without EM data pass; a frame with EM data but no shutter window
+        to compare against fails.
+        """
+        table = self._em_table("EXPMETER_SCI")
+        if table is None:
+            return True
+        hdr = self.kpf_obj.headers["PRIMARY"]
+        beg, end = (_parse_iso(hdr.get(k)) for k in ("DATE-BEG", "DATE-END"))
+        if beg is None or end is None:
+            return False
+        suffix = "-Corr" if "Date-Beg-Corr" in table.colnames else ""
+        em_beg = _parse_iso(str(table[f"Date-Beg{suffix}"][0]))
+        em_end = _parse_iso(str(table[f"Date-End{suffix}"][-1]))
+        if em_beg is None or em_end is None:
+            return False
+        return (
+            abs((em_beg - beg).total_seconds()) <= 1.0
+            and abs((em_end - end).total_seconds()) <= 1.0
+        )
+
+    expmeter_times_consistent._qc_key = "EMTIMEOK"
+
+    def expmeter_flux_sane(self):
+        """EXPMETER_SCI/SKY flux is neither saturated nor significantly negative.
+
+        Merges v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, applied to
+        each fiber present. Saturation: more than 1.5 channels per reading above
+        90% of the 1.93e6 reduced-spectrum saturation level, with the first and
+        last readings dropped when there are 3+ (they are partial). Negative flux:
+        20 consecutive channels whose time-summed flux is negative, the signature
+        of bias over-subtraction in the raw EM images.
+
+        Frames without EM data pass; an EM table with no wavelength channel fails.
+        """
+        for ext in ("EXPMETER_SCI", "EXPMETER_SKY"):
+            table = self._em_table(ext)
+            if table is None:
+                continue
+            # Numeric column labels are the wavelength channels; Date* are not.
+            channels = []
+            for name in table.colnames:
+                try:
+                    float(name)
+                except ValueError:
+                    continue
+                channels.append(np.asarray(table[name], dtype=float))
+            if not channels:
+                return False
+            flux = np.column_stack(channels)
+
+            readings = flux[1:-1] if len(flux) >= 3 else flux
+            saturated = np.count_nonzero(readings > 0.9 * 1.93e6)
+            if saturated > 1.5 * len(readings):
+                return False
+
+            negative = (flux.sum(axis=0) < 0).astype(int)
+            if np.any(np.convolve(negative, np.ones(20, dtype=int), "valid") == 20):
+                return False
+        return True
+
+    expmeter_flux_sane._qc_key = "EMFLUXOK"

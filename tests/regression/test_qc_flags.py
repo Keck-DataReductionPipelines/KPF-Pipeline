@@ -43,12 +43,20 @@ _NCOLS = 10  # small column count for fast tests
 
 
 def _make_kpf0(
-    tmp_path, *, with_amps=True, exptime=60.0, obs_id="KP.20240405.00001.00", dates=None
+    tmp_path,
+    *,
+    with_amps=True,
+    exptime=60.0,
+    obs_id="KP.20240405.00001.00",
+    dates=None,
+    expmeter=None,
 ):
     """Minimal 4-amp KPF0 object with required headers.
 
     ``dates`` optionally seeds raw DATE-BEG/MID/END/ELAPSED cards on PRIMARY for
-    the DATTIMOK timing check.
+    the DATTIMOK timing check. ``expmeter`` optionally maps an EXPMETER_SCI/SKY
+    extension name to its table, for the EMTIMEOK/EMFLUXOK checks; without it the
+    frame has no EM data at all, like a calibration.
     """
     fn = str(tmp_path / f"{obs_id}.fits")
     primary = fits.PrimaryHDU()
@@ -67,6 +75,8 @@ def _make_kpf0(
             for amp in range(1, 5):
                 data = np.ones((10, 10), dtype=np.float32)
                 hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
+    for name, table in (expmeter or {}).items():
+        hdus.append(fits.BinTableHDU(table, name=name))
 
     fits.HDUList(hdus).writeto(fn, overwrite=True)
     return KPF0.from_fits(fn)
@@ -79,6 +89,11 @@ _GOOD_DATES = {
     "DATE-END": "2024-09-23T09:12:21.554",
     "ELAPSED": 12.07,
 }
+
+
+# Clean exposure-meter flux for the EMFLUXOK tests: 4 readings x 25 wavelength
+# channels (more than the 20-channel negative run the check looks for).
+_EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
 
 
 def _seed_required_primary(kpf, qc_cls):
@@ -734,6 +749,140 @@ class TestQCL0:
         assert fn._qc_key == "DATAPRL0"
         # The comment now lives in the registry Description (not on the method).
         assert "GREEN" in KPF0.keyword_registry.routing["DATAPRL0"][1]
+
+    # --- expmeter_times_consistent (EMTIMEOK) and expmeter_flux_sane (EMFLUXOK):
+    # the exposure-meter checks ported from v2.12 L0_datetime / EM_not_saturated /
+    # EM_flux_not_negative. Four readings tile the _GOOD_DATES shutter window.
+
+    _EM_BEGS = [
+        "2024-09-23T09:12:09.484",
+        "2024-09-23T09:12:12.484",
+        "2024-09-23T09:12:15.484",
+        "2024-09-23T09:12:18.484",
+    ]
+    _EM_ENDS = [
+        "2024-09-23T09:12:12.484",
+        "2024-09-23T09:12:15.484",
+        "2024-09-23T09:12:18.484",
+        "2024-09-23T09:12:21.554",
+    ]
+
+    def _make_kpf0_with_expmeter(
+        self,
+        tmp_path,
+        *,
+        begs=None,
+        ends=None,
+        flux=None,
+        sky_flux=None,
+        corrected=False,
+    ):
+        """KPF0 carrying an EXPMETER_SCI table (plus EXPMETER_SKY when ``sky_flux``
+        is given), built from per-reading timestamps and an (nreading, nchannel)
+        flux array with numeric (wavelength) column labels."""
+        suffix = "-Corr" if corrected else ""
+
+        def table(values):
+            columns = {
+                f"Date-Beg{suffix}": begs or self._EM_BEGS,
+                f"Date-End{suffix}": ends or self._EM_ENDS,
+            }
+            for i in range(values.shape[1]):
+                columns[str(5000.0 + i)] = values[:, i]
+            return Table(columns)
+
+        extensions = {"EXPMETER_SCI": table(_EM_CLEAN_FLUX if flux is None else flux)}
+        if sky_flux is not None:
+            extensions["EXPMETER_SKY"] = table(sky_flux)
+        return _make_kpf0(tmp_path, dates=_GOOD_DATES, expmeter=extensions)
+
+    def test_expmeter_times_consistent_pass(self, tmp_path):
+        l0 = self._make_kpf0_with_expmeter(tmp_path)
+        assert QCL0(l0).expmeter_times_consistent() is True
+
+    def test_expmeter_times_no_em_data_passes(self, tmp_path):
+        # Calibration frames carry no EM extension; there is nothing to check.
+        l0 = _make_kpf0(tmp_path, dates=_GOOD_DATES)
+        assert l0.data.get("EXPMETER_SCI") is None
+        assert QCL0(l0).expmeter_times_consistent() is True
+
+    def test_expmeter_times_within_tolerance_passes(self, tmp_path):
+        # Sub-second EM dead time is routine and must not trip the check.
+        begs = ["2024-09-23T09:12:09.984"] + self._EM_BEGS[1:]
+        l0 = self._make_kpf0_with_expmeter(tmp_path, begs=begs)
+        assert QCL0(l0).expmeter_times_consistent() is True
+
+    def test_expmeter_times_late_start_fails(self, tmp_path):
+        begs = ["2024-09-23T09:12:14.484"] + self._EM_BEGS[1:]  # 5 s after DATE-BEG
+        l0 = self._make_kpf0_with_expmeter(tmp_path, begs=begs)
+        assert QCL0(l0).expmeter_times_consistent() is False
+
+    def test_expmeter_times_early_end_fails(self, tmp_path):
+        ends = self._EM_ENDS[:-1] + ["2024-09-23T09:12:16.554"]  # 5 s before DATE-END
+        l0 = self._make_kpf0_with_expmeter(tmp_path, ends=ends)
+        assert QCL0(l0).expmeter_times_consistent() is False
+
+    def test_expmeter_times_prefers_corrected_columns(self, tmp_path):
+        # Corrected columns bracket the window; only reading them passes.
+        l0 = self._make_kpf0_with_expmeter(tmp_path, corrected=True)
+        assert "Date-Beg-Corr" in l0.data["EXPMETER_SCI"].colnames
+        assert QCL0(l0).expmeter_times_consistent() is True
+
+    def test_expmeter_times_missing_shutter_window_fails(self, tmp_path):
+        # EM data present but no DATE-BEG/DATE-END to compare against.
+        l0 = self._make_kpf0_with_expmeter(tmp_path)
+        del l0.headers["PRIMARY"]["DATE-BEG"]
+        assert QCL0(l0).expmeter_times_consistent() is False
+
+    def test_emtimeok_key_present(self):
+        assert QCL0.__dict__["expmeter_times_consistent"]._qc_key == "EMTIMEOK"
+
+    def test_expmeter_flux_sane_pass(self, tmp_path):
+        l0 = self._make_kpf0_with_expmeter(tmp_path, sky_flux=_EM_CLEAN_FLUX)
+        assert QCL0(l0).expmeter_flux_sane() is True
+
+    def test_expmeter_flux_no_em_data_passes(self, tmp_path):
+        l0 = _make_kpf0(tmp_path, dates=_GOOD_DATES)
+        assert QCL0(l0).expmeter_flux_sane() is True
+
+    def test_expmeter_flux_saturated_fails(self, tmp_path):
+        # 2 channels saturated in each of the 2 interior readings -> 4 elements,
+        # over the 1.5-per-reading allowance.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[1:3, :2] = 0.95 * 1.93e6
+        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
+        assert QCL0(l0).expmeter_flux_sane() is False
+
+    def test_expmeter_flux_saturated_edge_readings_pass(self, tmp_path):
+        # The first and last readings are partial, so saturation there is dropped.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[[0, -1], :] = 0.95 * 1.93e6
+        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
+        assert QCL0(l0).expmeter_flux_sane() is True
+
+    def test_expmeter_flux_negative_run_fails(self, tmp_path):
+        # 20 consecutive channels summing negative: bias over-subtraction.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 5:25] = -1000.0
+        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
+        assert QCL0(l0).expmeter_flux_sane() is False
+
+    def test_expmeter_flux_short_negative_run_passes(self, tmp_path):
+        # 19 consecutive is under the run length; isolated negatives are noise.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 5:24] = -1000.0
+        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
+        assert QCL0(l0).expmeter_flux_sane() is True
+
+    def test_expmeter_flux_checks_sky_fiber(self, tmp_path):
+        # The SKY fiber is checked too, so a bad SKY fails an otherwise clean frame.
+        sky_flux = _EM_CLEAN_FLUX.copy()
+        sky_flux[:, 5:25] = -1000.0
+        l0 = self._make_kpf0_with_expmeter(tmp_path, sky_flux=sky_flux)
+        assert QCL0(l0).expmeter_flux_sane() is False
+
+    def test_emfluxok_key_present(self):
+        assert QCL0.__dict__["expmeter_flux_sane"]._qc_key == "EMFLUXOK"
 
 
 # ---------------------------------------------------------------------------
