@@ -13,6 +13,8 @@ EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",QUALITY_CONTROL,int,QCL0
 DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END),QUALITY_CONTROL,int,QCL0
 RADECOK,QC: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,int,QCL0
 CATLOGOK,QC: catalog epoch/equinox/rv/parallax/PM in physical range,QUALITY_CONTROL,int,QCL0
+EMTIMEOK,QC: exposure meter times consistent with shutter window,QUALITY_CONTROL,int,QCL0
+EMFLUXOK,QC: exposure meter flux not saturated or negative,QUALITY_CONTROL,int,QCL0
 TARGOFF,Pointing offset from DCS target (arcsec),QUALITY_CONTROL,float,DiagL0
 OBJOFF,Pointing offset from OBJECT (SIMBAD) position (arcsec),QUALITY_CONTROL,float,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),QUALITY_CONTROL,float,DiagL0
