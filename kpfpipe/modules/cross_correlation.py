@@ -213,8 +213,10 @@ class CrossCorrelation:
         """Target systemic RV (PRIMARY CRV3) [km/s] -- the stellar CCF grid center.
 
         CRV3 is the canonical catalog rv, so the CCF grid centers on the same
-        systemic velocity the barycentric correction used. Raises rather than
-        defaulting to 0: a grid centered on the wrong velocity misses the star.
+        systemic velocity the barycentric correction used. Many targets legitimately
+        have no catalog rv (Gaia commonly lacks radial_velocity); the grid then
+        centers on 0 with a warning, matching BarycentricCorrection, since a fast
+        star can fall outside a zero-centered window.
         """
         # The C*# cards are written identically to all science fibers (traces 2-4).
         primary = self.l2_obj.headers.get("PRIMARY", {})
@@ -223,11 +225,14 @@ class CrossCorrelation:
         except (TypeError, ValueError):
             star_rv = None
         if star_rv is None or not np.isfinite(star_rv):
-            raise ValueError(
-                "target radial velocity (CRV3) not available on PRIMARY; cannot "
-                "center the CCF velocity grid. Run AstroQuery on the L0 so the "
-                "canonical catalog record reaches the C*# cards."
+            logger.warning(
+                "CRV3=%s is missing or unusable; centering the CCF velocity grid "
+                "on 0 (no systemic RV). A target whose systemic RV lies outside "
+                "the CCF window %s km/s will not be recovered.",
+                primary.get("CRV3"),
+                self.ccf_window,
             )
+            return 0.0
         return star_rv
 
     def _build_line_mask(self, chip, fiber, mask_width=None):
@@ -454,9 +459,9 @@ class CrossCorrelation:
         ValueError
             For a range of malformed or unusable inputs: an unrecognized or
             missing illumination keyword; a missing target effective temperature
-            (``TARGTEFF``) or radial velocity (``CRV3``) for a stellar fiber;
-            a required but unpopulated ``BARYCORR_Z``; a descending ``WAVE``
-            array; or a ``clip_edge_pixels`` that removes every pixel of the order.
+            (``TARGTEFF``) for a stellar fiber; a required but unpopulated
+            ``BARYCORR_Z``; a descending ``WAVE`` array; or a
+            ``clip_edge_pixels`` that removes every pixel of the order.
         RuntimeError
             If the CCF is identically zero across all orders (no usable signal).
         """

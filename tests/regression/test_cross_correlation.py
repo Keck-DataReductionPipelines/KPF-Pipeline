@@ -293,11 +293,12 @@ class TestStellarMaskName:
         with pytest.raises(ValueError, match="TARGTEFF"):
             CrossCorrelation(header_kpf2)._resolve_stellar_mask()
 
-    def test_missing_crv_raises(self, header_kpf2):
-        """No default to 0: a grid centered on the wrong velocity misses the star."""
+    def test_missing_crv_warns_and_centers_on_zero(self, header_kpf2, caplog):
+        """Many targets have no catalog rv; center on 0, but say so."""
         del header_kpf2.headers["PRIMARY"]["CRV3"]
-        with pytest.raises(ValueError, match="CRV3"):
-            CrossCorrelation(header_kpf2)._get_systemic_rv()
+        with caplog.at_level(logging.WARNING):
+            assert CrossCorrelation(header_kpf2)._get_systemic_rv() == 0.0
+        assert "CRV3" in caplog.text
 
     def test_ignores_instrument_header_targradv(self, header_kpf2):
         """The canonical catalog rv wins; the raw DCS value is no longer consulted."""
