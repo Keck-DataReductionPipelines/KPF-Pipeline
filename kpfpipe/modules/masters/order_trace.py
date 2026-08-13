@@ -1141,7 +1141,9 @@ class OrderTrace:
 
         A trace no cluster was detected for is marked 'missing'; a trace that
         has a cluster must fit, and raises if it cannot. A fitted trace is left
-        'unknown' for validation to classify from its dispersion span.
+        'unknown' for validation to classify from its dispersion span. One
+        fitted over part of the dispersion is refitted at degree 2, warning,
+        if its centerline leaves the detector and returns within that span.
 
         The fitted traces become the CCD's ``self._trace_tables`` entry and are
         returned, with their aperture edges left unmeasured for the aperture step
@@ -1178,9 +1180,6 @@ class OrderTrace:
                 continue
 
             centers = self._trace_centers(chip, fiber, order)
-            # A column where the cluster reaches a detector edge is missing one
-            # of the two orderlet edges a center comes from, so it cannot yield
-            # one; the rest are what the fit is offered and constrained over.
             cluster = self._clusters[chip][int(cluster_index)]
             rows, cols = cluster["row_indices"], cluster["col_indices"]
             clipped = cols[(rows == 0) | (rows == self.ccd["nrow"] - 1)]
@@ -1195,6 +1194,31 @@ class OrderTrace:
                 )
             except ValueError as error:
                 raise ValueError(f"{chip} {fiber} order {order}: {error}") from error
+
+            # Check for partial traces that curl back on themselves and refit
+            # using degree 2 polynomials
+            if np.ptp(usable) + 1 < self.ccd["ncol"] and int(self.poly_degree) > 2:
+                turns = polynomial.polyroots(polynomial.polyder(coeffs))
+                turns = turns[np.isreal(turns)].real
+                if np.any((turns > usable.min()) & (turns < usable.max())):
+                    logger.warning(
+                        "%s %s order %d: the degree %d centerline turns back "
+                        "inside the span it was fitted over; refitting the "
+                        "partial trace at degree 2",
+                        chip,
+                        fiber,
+                        order,
+                        int(self.poly_degree),
+                    )
+                    coeffs, good, rms = robust_polyfit(
+                        columns[on_chip].astype(float),
+                        centers[on_chip],
+                        2,
+                        full=True,
+                    )
+                    coeffs = np.append(
+                        coeffs, np.zeros(len(coefficient_fields) - coeffs.size)
+                    )
             sampled["good"][position][on_chip] = good
 
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))

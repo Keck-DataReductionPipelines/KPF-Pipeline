@@ -986,6 +986,49 @@ class TestApertureConstraint:
         assert table["Status"].iloc[0] == "partial"
         assert (table["Status"].iloc[1:] == "full").all()
 
+    def test_refits_a_partial_trace_whose_fit_turns_back_within_its_span(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        # Over the columns a partial trace was not fitted at, a cubic is free
+        # to turn back and carry the aperture off the detector and onto it
+        # again, so such a fit is redone as a parabola.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        tracer.detect_traces("GREEN")
+        tracer.assign_trace_identities("GREEN")
+
+        cluster = tracer._clusters["GREEN"][
+            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+        ]
+        half = image.shape[1] // 2
+        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+        cluster["row_indices"] = np.concatenate(
+            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+        )
+        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+
+        degrees = []
+        fit_polynomial = order_trace_module.robust_polyfit
+        turn = half / 2.0
+
+        def spy(x, y, deg, **kwargs):
+            degrees.append(deg)
+            coeffs, good, rms = fit_polynomial(x, y, deg, **kwargs)
+            if len(degrees) == 1:
+                # (x - turn)**3, whose only turning point is inside the span.
+                coeffs = np.array([-(turn**3), 3 * turn**2, -3 * turn, 1.0])
+            return coeffs, good, rms
+
+        monkeypatch.setattr(order_trace_module, "robust_polyfit", spy)
+        with caplog.at_level("WARNING"):
+            fitted = tracer.fit_trace_polynomials("GREEN")
+
+        assert degrees[:2] == [3, 2]
+        assert set(degrees[2:]) == {3}
+        assert fitted["Coeff3"].iloc[0] == 0.0
+        assert (fitted["Coeff3"].iloc[1:] != 0.0).all()
+        assert "turns back inside the span" in caplog.text
+
     def test_fitting_leaves_the_apertures_to_the_aperture_step(
         self, tmp_path, monkeypatch
     ):
