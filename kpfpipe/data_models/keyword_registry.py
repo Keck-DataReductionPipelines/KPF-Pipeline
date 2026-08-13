@@ -139,6 +139,7 @@ class KeywordRegistry:
         "CRV",
         "CZ",
         "CCLR",
+        "CCLRN",
         "CLSRC",
     )
 
