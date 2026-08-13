@@ -126,6 +126,11 @@ class BarycentricCorrection:
                 np.array(expmeter["Date-End"]).astype(str), format="isot", scale="utc"
             )
 
+            logger.warning(
+                "Exposure meter has no corrected Beg/End dates; "
+                "falling back to uncorrected dates"
+            )
+
         if not strictly_increasing(t_beg.jd):
             raise ValueError(
                 "EXPMETER_SCI Date-Beg timestamps are not strictly increasing"
