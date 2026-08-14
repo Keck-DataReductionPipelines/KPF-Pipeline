@@ -151,7 +151,7 @@ class QCL0(QC):
         value = float(row[field])
         return None if np.isnan(value) else value
 
-    def catalog_values_sane(self):
+    def catalog_astrometry_sane(self):
         """Canonical CATALOG_RECORD astrometry values are physically plausible.
 
         Ports the v2.12 good_TARG_headers range checks onto the merged ``kpf-drp``
@@ -185,7 +185,40 @@ class QCL0(QC):
                 return False
         return True
 
-    catalog_values_sane._qc_key = "CATLOGOK"
+    catalog_astrometry_sane._qc_key = "ASTROMOK"
+
+    def catalog_color_sane(self):
+        """The canonical CATALOG_RECORD color is present and on the stellar sequence.
+
+        CrossCorrelation picks the stellar line mask by turning this color into an
+        effective temperature, so an absent, unlabeled, or off-sequence color is
+        caught here rather than at L4. Both ``color`` and ``color_name`` must be
+        present, the label must be one AstroQuery emits, and the value must lie in
+        the range that index spans across the Pecaut & Mamajek (2013) dwarf sequence
+        -- O3V through Y4V, so a color outside it is not a stellar color.
+
+        Passes when there is no ``kpf-drp`` row, as ``catalog_astrometry_sane`` does:
+        a calibration frame has no target to have a color.
+        """
+        # (bluest, reddest) [mag] each index spans across the sequence, keyed by the
+        # labels AstroQuery writes to color_name.
+        limits = {
+            "B-V": (-0.33, 2.17),
+            "Gaia BP-RP": (-0.12, 5.10),
+            "G-J": (-0.36, 5.36),
+        }
+        table = self.kpf_obj.data["CATALOG_RECORD"]
+        match = table[table["source"] == "kpf-drp"] if table.colnames else table
+        if not len(match):
+            return True
+        row = match[0]
+        color = self._row_float(row, "color")
+        bounds = limits.get(str(row["color_name"]))
+        if color is None or bounds is None:
+            return False
+        return bounds[0] <= color <= bounds[1]
+
+    catalog_color_sane._qc_key = "COLOROK"
 
     def _em_table(self, ext):
         """The exposure-meter table for ``ext``, or None when the frame has none.
