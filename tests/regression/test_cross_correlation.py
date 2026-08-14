@@ -166,7 +166,8 @@ class TestComputeCCF:
 def header_kpf2():
     """KPF2 with only the header keywords the build/dispatch helpers need."""
     kpf2 = KPF2()
-    kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 5772.0
+    kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
+    kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
     kpf2.headers["PRIMARY"]["CRV3"] = 0.0
     kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "Target"
     kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = "Sky"
@@ -276,22 +277,40 @@ class TestDispatch:
 
 
 class TestStellarMaskName:
-    def test_targteff_selects_mask(self, header_kpf2):
-        cc = CrossCorrelation(header_kpf2)
-        assert cc._resolve_stellar_mask() == "G2_espresso"  # 5772 K -> G2
+    @pytest.mark.parametrize(
+        ("color", "color_name", "mask"),
+        [
+            (0.823, "Gaia BP-RP", "G2_espresso"),  # G2V, 5770 K
+            (0.650, "B-V", "G2_espresso"),  # the same star, SIMBAD's colour
+            (1.035, "G-J", "G2_espresso"),  # and WMKO's
+            (1.75, "Gaia BP-RP", "K6_espresso"),  # ~4000 K
+        ],
+    )
+    def test_color_selects_mask(self, header_kpf2, color, color_name, mask):
+        header_kpf2.headers["PRIMARY"]["CCLR3"] = color
+        header_kpf2.headers["PRIMARY"]["CCLRN3"] = color_name
+        assert CrossCorrelation(header_kpf2)._resolve_stellar_mask() == mask
+
+    @pytest.mark.parametrize("card", ["CCLR3", "CCLRN3"])
+    def test_missing_color_card_raises(self, header_kpf2, card):
+        del header_kpf2.headers["PRIMARY"][card]
+        with pytest.raises(ValueError, match="CCLR3/CCLRN3"):
+            CrossCorrelation(header_kpf2)._resolve_stellar_mask()
+
+    def test_blank_color_name_raises(self, header_kpf2):
+        header_kpf2.headers["PRIMARY"]["CCLRN3"] = "   "
+        with pytest.raises(ValueError, match="CCLR3/CCLRN3"):
+            CrossCorrelation(header_kpf2)._resolve_stellar_mask()
+
+    def test_unrecognized_color_name_raises(self, header_kpf2):
+        header_kpf2.headers["PRIMARY"]["CCLRN3"] = "V-Ks"
+        with pytest.raises(ValueError, match="unrecognized colour index"):
+            CrossCorrelation(header_kpf2)._resolve_stellar_mask()
+
+    def test_ignores_instrument_header_targteff(self, header_kpf2):
+        """The catalog colour wins; the raw DCS temperature is no longer consulted."""
         header_kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 4000.0
-        assert CrossCorrelation(header_kpf2)._resolve_stellar_mask() == "K6_espresso"
-
-    @pytest.mark.parametrize("teff", [0.0, -100.0, "nan"])
-    def test_invalid_targteff_raises(self, header_kpf2, teff):
-        header_kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = teff
-        with pytest.raises(ValueError, match="TARGTEFF"):
-            CrossCorrelation(header_kpf2)._resolve_stellar_mask()
-
-    def test_missing_targteff_raises(self, header_kpf2):
-        del header_kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"]
-        with pytest.raises(ValueError, match="TARGTEFF"):
-            CrossCorrelation(header_kpf2)._resolve_stellar_mask()
+        assert CrossCorrelation(header_kpf2)._resolve_stellar_mask() == "G2_espresso"
 
     def test_missing_crv_warns_and_centers_on_zero(self, header_kpf2, caplog):
         """Many targets have no catalog rv; center on 0, but say so."""
@@ -370,7 +389,8 @@ def _build_cc_kpf2():
     """KPF2 with identical per-order synthetic spectra (absorption at _MASK_CENTERS
     shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
     kpf2 = KPF2()
-    kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 5772.0
+    kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
+    kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
     kpf2.headers["PRIMARY"]["CRV3"] = 0.0
     # Illumination sources: SCI on a star, SKY on sky, CAL dark (skipped).
     kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "Target"
@@ -609,7 +629,7 @@ class TestPerform:
         assert ccf_hdr["VELNSTEP"] == _NVEL
         assert ccf_hdr["VELSTEP"] == pytest.approx(0.25)
         assert ccf_hdr["VELSTART"] == pytest.approx(_RANGE_KMS[0])  # center 0
-        assert ccf_hdr["CCFMASK"] == "G2_espresso"  # 5772 K -> G2
+        assert ccf_hdr["CCFMASK"] == "G2_espresso"  # BP-RP 0.823 -> 5770 K -> G2
         assert ccf_hdr["VELMASK"] == pytest.approx(cc_module.ccf_mask_width)
         rv_hdr = l4.headers["SCI2_RV"]
         assert rv_hdr["CTYPE1"] == "Columns"

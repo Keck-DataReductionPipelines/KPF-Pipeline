@@ -13,7 +13,7 @@ its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
   +--------+-------------------------------------+----------+---------------------+
   | source | mask                                | barycorr | grid center         |
   +========+=====================================+==========+=====================+
-  | target | TARGTEFF-lookup                     | yes      | CRV3 (systemic)     |
+  | target | CCLR3 colour-lookup                 | yes      | CRV3 (systemic)     |
   +--------+-------------------------------------+----------+---------------------+
   | sky    | G2_espresso (solar)                 | yes      | 0                   |
   +--------+-------------------------------------+----------+---------------------+
@@ -37,7 +37,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import DEFAULTS, REPO_ROOT
-from kpfpipe.utils.astro import compute_redshift
+from kpfpipe.utils.astro import color_to_teff, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
 
@@ -194,20 +194,29 @@ class CrossCorrelation:
         return source
 
     def _resolve_stellar_mask(self):
-        """Select the stellar line-mask name from TARGTEFF via line_mask_lookup.csv."""
-        inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
-        try:
-            teff = float(inst.get("TARGTEFF"))
-        except (TypeError, ValueError):
-            teff = None
-        if teff is None or not np.isfinite(teff) or teff <= 0:
+        """Select the stellar line-mask name from the catalog colour.
+
+        The colour and its name come from the canonical catalog record AstroQuery
+        resolved (PRIMARY CCLR3/CCLRN3); ``color_to_teff`` turns them into an
+        effective temperature, which line_mask_lookup.csv bins into a mask.
+        """
+        primary = self.l2_obj.headers.get("PRIMARY", {})
+        color, color_name = primary.get("CCLR3"), primary.get("CCLRN3")
+        if color is None or not str(color_name or "").strip():
             raise ValueError(
-                "target effective temperature (TARGTEFF) not available in "
-                "INSTRUMENT_HEADER; cannot select a stellar line mask"
+                "target colour (CCLR3/CCLRN3) not available on PRIMARY; cannot "
+                "select a stellar line mask. Run AstroQuery on the L0 so the "
+                "canonical catalog record reaches the C*# cards."
             )
+        teff = color_to_teff(color, color_name)
+
         line_map = pd.read_csv(f"{REPO_ROOT}/reference/line_masks/line_mask_lookup.csv")
         row = line_map[(line_map["TEFF_MIN"] <= teff) & (teff < line_map["TEFF_MAX"])]
-        return row["DEFAULT_MASK"].iloc[0]
+        mask_name = row["DEFAULT_MASK"].iloc[0]
+        logger.info(
+            "%s = %s -> Teff = %.0f K -> %s mask", color_name, color, teff, mask_name
+        )
+        return mask_name
 
     def _get_systemic_rv(self):
         """Target systemic RV (PRIMARY CRV3) [km/s] -- the stellar CCF grid center.
@@ -458,8 +467,8 @@ class CrossCorrelation:
         ------
         ValueError
             For a range of malformed or unusable inputs: an unrecognized or
-            missing illumination keyword; a missing target effective temperature
-            (``TARGTEFF``) for a stellar fiber; a required but unpopulated
+            missing illumination keyword; a missing or unusable target colour
+            (``CCLR3``/``CCLRN3``) for a stellar fiber; a required but unpopulated
             ``BARYCORR_Z``; a descending ``WAVE`` array; or a
             ``clip_edge_pixels`` that removes every pixel of the order.
         RuntimeError

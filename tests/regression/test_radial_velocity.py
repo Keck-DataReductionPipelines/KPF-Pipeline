@@ -86,7 +86,8 @@ def _make_l4(
     _V_INJECT) and run CrossCorrelation (mask stubbed, narrow grid) to a KPF4.
     """
     kpf2 = KPF2()
-    kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 5772.0
+    kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
+    kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
     kpf2.headers["PRIMARY"]["CRV3"] = 0.0
     kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
     kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = sky_obj
