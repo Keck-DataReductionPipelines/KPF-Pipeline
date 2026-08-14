@@ -65,6 +65,9 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object"):
         primary.header["TARGPMDC"] = 0.0
         primary.header["TARGPLAX"] = 100.0
         primary.header["TARGEPOC"] = 2000.0
+        # The wmko record's colour is G-J, so COLOROK needs both magnitudes.
+        primary.header["GAIAMAG"] = 6.0
+        primary.header["2MASSMAG"] = 5.0
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:

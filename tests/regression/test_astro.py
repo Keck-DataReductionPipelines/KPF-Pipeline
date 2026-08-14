@@ -140,6 +140,6 @@ class TestColorToTeff:
             color_to_teff(color, "B-V")
 
     def test_non_physical_extrapolation_raises(self):
-        # The red end of B-V falls ~9500 K/mag, so an absurd colour runs past 0 K.
+        # The red end of B-V falls ~4000 K/mag, so an absurd colour runs past 0 K.
         with pytest.raises(ValueError, match="non-physical"):
             color_to_teff(3.0, "B-V")
