@@ -210,6 +210,8 @@ _SYNTHETIC_CATALOG_CARDS = {
     "CPLX3": 10.0,  # parallax, mas (= 100 pc)
     "CRV3": 0.0,  # systemic RV, km/s
     "CEPCH3": 2016.0,  # epoch, Julian year
+    "CCLR3": 0.823,  # colour index, mag (G2V -> 5770 K)
+    "CCLRN3": "Gaia BP-RP",  # which colour index CCLR3 is
 }
 
 

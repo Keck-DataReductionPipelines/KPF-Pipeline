@@ -368,7 +368,7 @@ class BarycentricCorrection:
                     f"catalog record reaches the C*# cards"
                 )
 
-            # QC flags an unphysical parallax (CATLOGOK) but does not repair it.
+            # QC flags an unphysical parallax (ASTROMOK) but does not repair it.
             parallax = primary.get("CPLX3")
             try:
                 px = float(parallax)

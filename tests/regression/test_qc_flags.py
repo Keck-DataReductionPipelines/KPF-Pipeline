@@ -633,7 +633,7 @@ class TestQCL0:
     def test_radecok_key_present(self):
         assert QCL0.__dict__["radec_consistent"]._qc_key == "RADECOK"
 
-    # --- catalog_values_sane (CATLOGOK): physical range of the canonical
+    # --- catalog_astrometry_sane (ASTROMOK): physical range of the canonical
     # CATALOG_RECORD astrometry, the v2.12 TARG* checks moved onto the merged row.
 
     def _make_kpf0_with_canonical(self, tmp_path, **overrides):
@@ -653,96 +653,150 @@ class TestQCL0:
             "frame": "icrs",
             "epoch": 2016.0,
             "equinox": 2000.0,
+            "color": 0.823,  # solar Gaia BP-RP
+            "color_name": "Gaia BP-RP",
         }
         record.update(overrides)
         AstroQuery(l0)._write_catalog_record("kpf-drp", record)
         return l0
 
-    def test_catalog_values_sane_pass(self, tmp_path):
+    def test_catalog_astrometry_sane_pass(self, tmp_path):
         l0 = self._make_kpf0_with_canonical(tmp_path)
-        assert QCL0(l0).catalog_values_sane() is True
+        assert QCL0(l0).catalog_astrometry_sane() is True
 
-    def test_catalog_values_sane_no_record_passes(self, tmp_path):
+    def test_catalog_astrometry_sane_no_record_passes(self, tmp_path):
         # Calibration/fresh L0: CATALOG_RECORD empty (AstroQuery never ran). Value
         # sanity is N/A -> passes (presence is enforced elsewhere, not here).
         l0 = _make_kpf0(tmp_path)
         assert not l0.data["CATALOG_RECORD"].colnames
-        assert QCL0(l0).catalog_values_sane() is True
+        assert QCL0(l0).catalog_astrometry_sane() is True
 
-    def test_catalog_values_sane_fail_epoch_zero(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_epoch_zero(self, tmp_path):
         # A WMKO TARGEPOC=0.0 placeholder passes the merge's is-not-None gate, so the
         # range check is what catches it.
         l0 = self._make_kpf0_with_canonical(tmp_path, epoch=0.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_fail_epoch_high(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_epoch_high(self, tmp_path):
         l0 = self._make_kpf0_with_canonical(tmp_path, epoch=2100.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_epoch_boundaries(self, tmp_path):
+    def test_catalog_astrometry_sane_epoch_boundaries(self, tmp_path):
         # Window is (1950, 2050]: 1950 fails (exclusive low), 2050 passes (inclusive).
         assert (
             QCL0(
                 self._make_kpf0_with_canonical(tmp_path, epoch=1950.0)
-            ).catalog_values_sane()
+            ).catalog_astrometry_sane()
             is False
         )
         assert (
             QCL0(
                 self._make_kpf0_with_canonical(tmp_path, epoch=2050.0)
-            ).catalog_values_sane()
+            ).catalog_astrometry_sane()
             is True
         )
 
-    def test_catalog_values_sane_fail_equinox_out_of_range(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_equinox_out_of_range(self, tmp_path):
         l0 = self._make_kpf0_with_canonical(tmp_path, equinox=1900.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_rv_high_but_in_bound_passes(self, tmp_path):
+    def test_catalog_astrometry_sane_rv_high_but_in_bound_passes(self, tmp_path):
         # A fast star: |rv| = 150 is well within the 350 km/s bound (Chubak 2012).
         l0 = self._make_kpf0_with_canonical(tmp_path, rv=150.0)
-        assert QCL0(l0).catalog_values_sane() is True
+        assert QCL0(l0).catalog_astrometry_sane() is True
 
-    def test_catalog_values_sane_fail_rv_too_large(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_rv_too_large(self, tmp_path):
         l0 = self._make_kpf0_with_canonical(tmp_path, rv=400.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_rv_absent_passes(self, tmp_path):
+    def test_catalog_astrometry_sane_rv_absent_passes(self, tmp_path):
         # No catalog rv (NaN cell) -> the rv bound is skipped (check-when-present).
         l0 = self._make_kpf0_with_canonical(tmp_path, rv=None)
-        assert QCL0(l0).catalog_values_sane() is True
+        assert QCL0(l0).catalog_astrometry_sane() is True
 
-    def test_catalog_values_sane_fail_parallax_negative(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_parallax_negative(self, tmp_path):
         # A negative Gaia parallax (routine for faint sources) is nonphysical; the
         # legacy check bounded only the upper end.
         l0 = self._make_kpf0_with_canonical(tmp_path, parallax=-0.3)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_fail_parallax_zero(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_parallax_zero(self, tmp_path):
         l0 = self._make_kpf0_with_canonical(tmp_path, parallax=0.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_fail_parallax_too_large(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_parallax_too_large(self, tmp_path):
         # >= 1000 mas (< 1 pc) is unphysically close -- the legacy upper bound.
         l0 = self._make_kpf0_with_canonical(tmp_path, parallax=1000.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_high_pm_in_bound_passes(self, tmp_path):
+    def test_catalog_astrometry_sane_high_pm_in_bound_passes(self, tmp_path):
         # Barnard's Star (~10.4"/yr, the highest real PM) is within the 15"/yr bound.
         l0 = self._make_kpf0_with_canonical(tmp_path, pmra=10.4, pmdec=-8.0)
-        assert QCL0(l0).catalog_values_sane() is True
+        assert QCL0(l0).catalog_astrometry_sane() is True
 
-    def test_catalog_values_sane_fail_pmra_too_large(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_pmra_too_large(self, tmp_path):
         # A corrupt PM would misplace the source at the obs epoch.
         l0 = self._make_kpf0_with_canonical(tmp_path, pmra=25.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catalog_values_sane_fail_pmdec_too_large(self, tmp_path):
+    def test_catalog_astrometry_sane_fail_pmdec_too_large(self, tmp_path):
         l0 = self._make_kpf0_with_canonical(tmp_path, pmdec=-30.0)
-        assert QCL0(l0).catalog_values_sane() is False
+        assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_catlogok_key_present(self):
-        assert QCL0.__dict__["catalog_values_sane"]._qc_key == "CATLOGOK"
+    def test_astromok_key_present(self):
+        assert QCL0.__dict__["catalog_astrometry_sane"]._qc_key == "ASTROMOK"
+
+    # --- catalog_color_sane (COLOROK): the canonical color is present, labeled, and
+    # on the dwarf sequence, so CrossCorrelation can turn it into a line-mask Teff.
+
+    @pytest.mark.parametrize(
+        ("color", "color_name"),
+        [(0.823, "Gaia BP-RP"), (0.650, "B-V"), (1.035, "G-J")],
+    )
+    def test_catalog_color_sane_pass(self, tmp_path, color, color_name):
+        l0 = self._make_kpf0_with_canonical(
+            tmp_path, color=color, color_name=color_name
+        )
+        assert QCL0(l0).catalog_color_sane() is True
+
+    def test_catalog_color_sane_no_record_passes(self, tmp_path):
+        # Calibration frame: no target, so no color to check.
+        l0 = _make_kpf0(tmp_path)
+        assert not l0.data["CATALOG_RECORD"].colnames
+        assert QCL0(l0).catalog_color_sane() is True
+
+    def test_catalog_color_sane_fail_color_absent(self, tmp_path):
+        # All three catalogs lacked a usable magnitude pair -> NaN cell.
+        l0 = self._make_kpf0_with_canonical(tmp_path, color=None, color_name=None)
+        assert QCL0(l0).catalog_color_sane() is False
+
+    def test_catalog_color_sane_fail_unlabeled_color(self, tmp_path):
+        # A color with no label cannot be placed on any sequence.
+        l0 = self._make_kpf0_with_canonical(tmp_path, color_name=None)
+        assert QCL0(l0).catalog_color_sane() is False
+
+    def test_catalog_color_sane_fail_unrecognized_name(self, tmp_path):
+        l0 = self._make_kpf0_with_canonical(tmp_path, color=1.0, color_name="V-Ks")
+        assert QCL0(l0).catalog_color_sane() is False
+
+    @pytest.mark.parametrize(
+        ("color", "color_name"),
+        [(-1.0, "B-V"), (3.0, "B-V"), (5.5, "Gaia BP-RP"), (-0.5, "G-J")],
+    )
+    def test_catalog_color_sane_fail_out_of_range(self, tmp_path, color, color_name):
+        l0 = self._make_kpf0_with_canonical(
+            tmp_path, color=color, color_name=color_name
+        )
+        assert QCL0(l0).catalog_color_sane() is False
+
+    def test_catalog_color_sane_bounds_are_inclusive(self, tmp_path):
+        # The endpoints are real tabulated stars (O3V, M9V), so they must pass.
+        for color in (-0.33, 2.17):
+            l0 = self._make_kpf0_with_canonical(tmp_path, color=color, color_name="B-V")
+            assert QCL0(l0).catalog_color_sane() is True
+
+    def test_colorok_key_present(self):
+        assert QCL0.__dict__["catalog_color_sane"]._qc_key == "COLOROK"
 
     def test_dataprl0_key_and_comment(self):
         fn = QCL0.__dict__["data_l0_red_green"]

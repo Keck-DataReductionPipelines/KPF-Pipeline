@@ -20,8 +20,12 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # reference/ holds externally-sourced data (line masks, line lists, the EEM
+      # colour/Teff table) that must not be reformatted.
       - id: trailing-whitespace
+        exclude: '^reference/'
       - id: end-of-file-fixer
+        exclude: '^reference/'
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
