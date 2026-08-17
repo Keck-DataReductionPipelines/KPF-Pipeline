@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.ndimage import label
 
 import kpfpipe.modules.masters.order_trace as order_trace_module
 from kpfpipe.modules.masters import OrderTrace
@@ -224,6 +225,25 @@ class TestDetection:
         tracer = _tracer(tmp_path, image, monkeypatch)
 
         assert len(_curated_clusters(tracer)) == len(truth)
+
+    def test_despeckles_specks_bridging_two_traces(self, tmp_path, monkeypatch):
+        # A chain of noise specks across the gap corner-joins the traces either
+        # side of it, and _detect_clusters would label the pair one cluster no
+        # later step recovers whole. The mask has to come back already parted,
+        # with both traces still whole.
+        image = np.full((60, 400), 20.0, dtype=np.float32)
+        image[20:23, :] = 1000.0
+        image[30:33, :] = 1000.0
+        specks = np.arange(23, 30)
+        image[specks, 200 + specks - 23] = 1000.0
+        tracer = _tracer(tmp_path, image, monkeypatch, norder=1)
+
+        illuminated = tracer._detect_illuminated_pixels("GREEN")
+
+        _, joined = label(illuminated, structure=np.ones((3, 3), dtype=int))
+        assert joined == 2
+        assert illuminated[20:23].all()
+        assert illuminated[30:33].all()
 
     def test_merges_a_fragmented_trace(self, tmp_path, monkeypatch):
         image, truth = _synthetic_flat()

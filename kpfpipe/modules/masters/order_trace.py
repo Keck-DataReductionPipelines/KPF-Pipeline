@@ -170,7 +170,9 @@ class OrderTrace:
     # Private helpers - trace detection
     # ------------------------------------------------------------------
 
-    def _detect_illuminated_pixels(self, chip, smoothing_weight=20.0, trace_ratio=0.5):
+    def _detect_illuminated_pixels(
+        self, chip, smoothing_weight=20.0, trace_ratio=0.5, min_speckle_pixels=100
+    ):
         """Return a boolean mask of illuminated pixels, one column at a time.
 
         Each column is reduced independently, so the threshold is local along
@@ -185,6 +187,12 @@ class OrderTrace:
         symmetry lets a single off-diagonal array serve as both. The default
         weight rides over the orderlets (5-11 pixels thick, spaced 16-20) while
         still following the far broader order-to-order flux envelope.
+
+        The mask is then despeckled. A noise speck clearing the threshold joins
+        an orderlet it touches at a corner once ``_detect_clusters`` labels
+        8-connected, and a chain of them fuses neighboring orderlets. Labelling
+        4-connected here, which a corner does not survive, leaves each speck its
+        own component to drop on size; traces come through untouched.
         """
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         filled = np.nan_to_num(self._image[chip], nan=0.0, posinf=0.0, neginf=0.0)
@@ -203,7 +211,11 @@ class OrderTrace:
                 positive_residual, trace_ratio, method="lower"
             )
             illuminated[:, j] = residual > threshold + 1.0
-        return illuminated
+
+        labels, _ = label(illuminated)
+        sizes = np.bincount(labels.ravel())
+        sizes[0] = 0  # background
+        return (sizes >= min_speckle_pixels)[labels]
 
     def _detect_clusters(self, illuminated):
         """Collect touching illuminated pixels into clusters.
