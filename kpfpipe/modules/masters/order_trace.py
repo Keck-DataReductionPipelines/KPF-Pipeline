@@ -280,7 +280,7 @@ class OrderTrace:
                 kept.append(cluster)
         return kept
 
-    def _split_fused_clusters(self, clusters, max_thickness_ratio=1.5):
+    def _split_fused_clusters(self, clusters, max_thickness_ratio=1.35):
         """Part a cluster holding two traces back into the two it holds.
 
         Two orderlets touching at a single corner are one cluster, 8-connected
@@ -535,7 +535,7 @@ class OrderTrace:
         metadata = pd.DataFrame(records)
         return metadata.sort_values("row").reset_index(drop=True)
 
-    def _flag_cal_clusters(self, metadata, max_thickness=6.2):
+    def _flag_cal_clusters(self, metadata, max_thickness=6.4):
         """Add the boolean ``is_cal`` column, flagging each order's CAL orderlet.
 
         A CAL is narrower than the orderlets around it -- some 5 pixels thick
