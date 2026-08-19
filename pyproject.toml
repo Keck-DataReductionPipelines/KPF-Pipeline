@@ -3,14 +3,13 @@ name = "kpfpipe"
 version = "3.0.0"
 description = "KPF Data Reduction Pipeline"
 authors = [
-    { name = "Greg Gilbert", email = "gjgilbert@caltech.edu" },
+    { name = "Greg Gilbert", email = "ggilbert@caltech.edu" },
     { name = "B.J. Fulton", email = "bjfulton@ipac.caltech.edu" },
     { name = "Andrew Howard", email = "ahoward@caltech.edu" }
 ]
 license = {text = "BSD-3-Clause"}
 requires-python = "==3.14.3"
 
-# Main dependencies
 dependencies = [
     "astropy==7.2.0",
     "astroquery==0.4.11",
@@ -25,7 +24,6 @@ dependencies = [
     "rv-data-standard==0.4.0"
 ]
 
-# Optional dependencies for development (linting, testing, formatting)
 [project.optional-dependencies]
 dev = [
     "ipykernel==7.2.0",
@@ -53,39 +51,33 @@ include = ["kpfpipe*", "tools*", "scripts*", "recipes*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Quiet output to economize on token/log footprint: -q collapses the progress
-# line, --no-header drops the platform/plugins banner, --tb=short trims failure
-# tracebacks to the assertion + one frame. Re-run a single failure with
-# --tb=long when you need the full frame context.
+# Quiet output; re-run a single failure with --tb=long for full frame context.
 addopts = "-q --no-header --tb=short"
+# Exempt only warnings that are expected *and* handled, and prefer
+# @pytest.mark.filterwarnings on the one test over widening this list.
 filterwarnings = [
-    # astropy truncates over-long FITS card comments; the masters INPUT_FILES
-    # round-trip deliberately writes long paths, so this is expected, not a bug.
+    "error",
+    # masters INPUT_FILES deliberately round-trips long paths.
     "ignore:Card is too long, comment will be truncated:astropy.io.fits.verify.VerifyWarning",
 ]
-# The `requires_testdata` marker is registered in tests/conftest.py
-# (pytest_configure), which also skips those tests when tests/testdata is absent.
+# Markers are registered in tests/conftest.py (pytest_configure).
 
-# Ruff is the unified formatter + linter (replaces black/isort/flake8).
-# Enforced via the pre-commit hook; see .pre-commit-config.yaml.
+# Ruff is the unified formatter + linter; enforced via .pre-commit-config.yaml.
 [tool.ruff]
 line-length = 88
-# Pinned below the runtime (3.14.3) on purpose: Pylance/Pyright doesn't yet parse
-# PEP 758's unparenthesized `except A, B:`, and at py314 `ruff format` strips the
-# parens to that form. py313 keeps the formatter on `except (A, B):` — valid under
-# every tool.
+# Pinned below the runtime (3.14.3): at py314 `ruff format` rewrites
+# `except (A, B):` to PEP 758's unparenthesized form, which Pylance can't parse.
 target-version = "py313"
-extend-exclude = ["legacy", "gjgilbert_notebooks"]
+extend-exclude = ["legacy"]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I import-sorting, B bugbear, UP pyupgrade,
-# G logging-format (lazy %-formatting in log calls), LOG logging (named
-# loggers only, no root-logger convenience calls).
+# G logging-format, LOG logging.
 select = ["E", "F", "W", "I", "B", "UP", "G", "LOG"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["kpfpipe"]
 
 [tool.ruff.lint.per-file-ignores]
-# Package __init__.py files re-export names; unused-import (F401) is expected.
+# __init__.py re-exports names.
 "__init__.py" = ["F401"]

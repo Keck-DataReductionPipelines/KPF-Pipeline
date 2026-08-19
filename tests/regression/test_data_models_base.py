@@ -20,8 +20,6 @@ PRIMARY-header validation no longer lives on the data models (it moved to the
 checkpoints layer, ``quality_control/checkpoints/base.py``).
 """
 
-import warnings
-
 import pytest
 from astropy.io import fits
 
@@ -346,10 +344,8 @@ class TestQualityControlPropagation:
         l1.set_keyword("OSCANSUB", 1)
         l1.set_keyword("BIASFILE", "/m/bias_L1.fits")
         fn = str(tmp_path / "kpf_L1_20240101T000000.fits")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            l1.to_fits(fn)
-            back = KPF1.from_fits(fn)
+        l1.to_fits(fn)
+        back = KPF1.from_fits(fn)
         assert back.headers["QUALITY_CONTROL"]["RNGREEN1"] == 4.2
         assert back.headers["QUALITY_CONTROL"].comments["RNGREEN1"] == (
             "Read noise GREEN amp 1 [e-]"

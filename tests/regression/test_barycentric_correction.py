@@ -609,6 +609,9 @@ class TestFluxWeightedMidpointCcds:
         )
         assert t_ccds.jd[0] < unweighted_green
 
+    # The all-NaN order under test makes nanpercentile warn; the weighting handles
+    # it one line later (nan_to_num -> zero weight), which is what this asserts.
+    @pytest.mark.filterwarnings("ignore:All-NaN slice encountered:RuntimeWarning")
     def test_nan_flux_order_gets_zero_weight(self, synthetic_kpf2):
         """A failed-extraction order (all-NaN SCI2 flux) gets zero weight rather
         than poisoning its chip summary, so the ccds time stays finite."""

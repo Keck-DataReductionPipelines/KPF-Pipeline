@@ -287,6 +287,10 @@ class TestDiagL0Contingency:
         assert results["TARGOFF"][0] is None
         assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
 
+    # No usable parallax means no distance on the SkyCoord, and ERFA warns that it
+    # overrode the distance while propagating -- the documented consequence of the
+    # PM=0/parallax=0 fallback under test, not a fault.
+    @pytest.mark.filterwarnings('ignore:ERFA function "pmsafe":erfa.ErfaWarning')
     @pytest.mark.parametrize("bad_plx", [None, 0.0, -5.0])
     def test_missing_or_nonpositive_parallax_falls_back(self, bad_plx, caplog):
         # Gaia DR3 reports parallax <= 0 (or none) for faint sources; the offset falls

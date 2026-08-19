@@ -7,7 +7,6 @@ Uses synthetic FITS fixtures — no real KPF data needed.
 """
 
 import logging
-import warnings
 from collections import OrderedDict
 
 import numpy as np
@@ -86,10 +85,8 @@ class TestKPF2QualityControlRoundTrip:
         l2.set_keyword("NANSCI1", 7)
         l2.set_keyword("CCD1BKMS", -3.21)
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            l2.to_fits(fn)
-            back = KPF2.from_fits(fn)
+        l2.to_fits(fn)
+        back = KPF2.from_fits(fn)
         assert back.headers["QUALITY_CONTROL"]["NANSCI1"] == 7
         assert back.headers["BARYCORR_KMS"]["CCD1BKMS"] == -3.21
 
@@ -101,10 +98,8 @@ class TestKPF2QualityControlRoundTrip:
         l2 = KPF2()
         l2.set_keyword("ORIGID", "KP.20240101.00000.00")  # 0 s of day = 00:00:00
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            l2.to_fits(fn)
-            back = KPF2.from_fits(fn)
+        l2.to_fits(fn)
+        back = KPF2.from_fits(fn)
         assert back.obs_id == "KP.20240101.00000.00"
         assert back.generate_standard_filename() == "kpf_SL2_20240101T000000.fits"
 
@@ -136,10 +131,8 @@ class TestCatalogRecordPassthrough:
         RV2._read, so only the from_fits chokepoint can normalize it."""
         l2 = self._l1_with_catalog(rv=None).to_kpf2()
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            l2.to_fits(fn)
-            back = KPF2.from_fits(fn)
+        l2.to_fits(fn)
+        back = KPF2.from_fits(fn)
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
         rv = back.data["CATALOG_RECORD"][0]["rv"]
@@ -148,10 +141,8 @@ class TestCatalogRecordPassthrough:
     def test_empty_catalog_record_roundtrips(self, tmp_path):
         """An L2 that never saw AstroQuery (empty table) still writes and reads."""
         fn = str(tmp_path / "kpf_SL2_20240101T000001.fits")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            KPF2().to_fits(fn)
-            back = KPF2.from_fits(fn)
+        KPF2().to_fits(fn)
+        back = KPF2.from_fits(fn)
         assert "CATALOG_RECORD" in back.extensions
         assert len(back.data["CATALOG_RECORD"]) == 0
 
