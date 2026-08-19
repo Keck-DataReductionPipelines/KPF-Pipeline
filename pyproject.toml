@@ -62,11 +62,6 @@ filterwarnings = [
     # astropy truncates over-long FITS card comments; the masters INPUT_FILES
     # round-trip deliberately writes long paths, so this is expected, not a bug.
     "ignore:Card is too long, comment will be truncated:astropy.io.fits.verify.VerifyWarning",
-    # rvdata nudges when a written/read filename is off-convention. Round-trip and
-    # unit tests use throwaway tmp_path names (master.fits, rt_l4.fits, ...); the
-    # naming rules themselves are enforced by check_filename_convention and
-    # TestFilenameConsistency, so this is test-only noise (scoped to the suite).
-    "ignore:Filename .* does not follow the EPRV naming convention:UserWarning",
 ]
 # The `requires_testdata` marker is registered in tests/conftest.py
 # (pytest_configure), which also skips those tests when tests/testdata is absent.

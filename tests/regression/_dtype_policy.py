@@ -64,14 +64,13 @@ def assert_roundtrip_dtype(
     ``expected`` is the in-memory dtype after re-read; ``expected_disk`` is the
     on-disk dtype (BITPIX), defaulting to ``expected``. They differ for MASK,
     which is bool in memory but uint8 (8-bit) on disk.
-    """
-    import warnings
 
+    ``name`` defaults to a throwaway; L2/L4 callers should pass a conventional
+    EPRV name, since those levels warn (via rvdata) on an off-convention write.
+    """
     expected_disk = expected if expected_disk is None else expected_disk
     out = str(tmp_path / name)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Filename .* does not follow")
-        obj.to_fits(out)
+    obj.to_fits(out)
 
     from astropy.io import fits
 

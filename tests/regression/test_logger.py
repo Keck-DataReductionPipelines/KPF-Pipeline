@@ -252,7 +252,7 @@ class TestIOChokepoints:
     def test_to_fits_and_from_fits_log_records(self, tmp_path, caplog):
         from kpfpipe.data_models.level4 import KPF4
 
-        path = str(tmp_path / "rt_l4.fits")
+        path = str(tmp_path / "kpf_SL4_20240101T000000.fits")
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             KPF4().to_fits(path)
             KPF4.from_fits(path)

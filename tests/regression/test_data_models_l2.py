@@ -446,8 +446,9 @@ class TestDtypeProvenance:
 
     def test_roundtrip_preserves_precision(self, tmp_path):
         kpf2 = self._populated()
-        assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path)
-        assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path)
+        name = "kpf_SL2_20240101T000000.fits"
+        assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path, name=name)
+        assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path, name=name)
 
     def test_chip_prefix_wave_write_enforces_min_bit_depth(self, caplog):
         """A float32 WAVE written via a chip-prefix key (which bypasses rvdata's

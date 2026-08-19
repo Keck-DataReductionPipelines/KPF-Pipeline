@@ -215,7 +215,9 @@ class TestPerform:
         l2 = _make_science_l2(wls_path=master_wls_path)
         WavelengthCalibration(l2).perform()
         assert_dtype(l2.data["TRACE3_WAVE"], WAVE, "L2 TRACE3_WAVE")
-        assert_roundtrip_dtype(KPF2, l2, "TRACE3_WAVE", WAVE, tmp_path)
+        assert_roundtrip_dtype(
+            KPF2, l2, "TRACE3_WAVE", WAVE, tmp_path, name="kpf_SL2_20240101T000000.fits"
+        )
 
     def test_subset_chips_and_fibers(self, master_wls_path):
         # Only the requested (chip, fiber) blocks are copied; everything

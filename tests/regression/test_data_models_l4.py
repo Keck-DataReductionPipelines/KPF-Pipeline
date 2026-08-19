@@ -87,7 +87,7 @@ class TestToKPF4:
         kpf2 = KPF2()
         kpf2.set_keyword("NANSCI1", 7)
         kpf4 = kpf2.to_kpf4()
-        path = tmp_path / "rt_l4.fits"
+        path = tmp_path / "kpf_SL4_20240101T000000.fits"
         kpf4.to_fits(str(path))
         back = KPF4.from_fits(str(path))
         assert "QUALITY_CONTROL" in back.extensions
@@ -117,7 +117,7 @@ class TestCatalogRecordPassthrough:
         assert kpf4.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
-        path = tmp_path / "rt_l4_catalog.fits"
+        path = tmp_path / "kpf_SL4_20240101T000001.fits"
         self._l2_with_catalog().to_kpf4().to_fits(str(path))
         back = KPF4.from_fits(str(path))
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
@@ -179,7 +179,7 @@ class TestKPF4:
         var = ccf + 0.5
         kpf4.set_data("SCI2_CCF", ccf)
         kpf4.set_data("SCI2_CCF_VAR", var)
-        path = tmp_path / "rt_ccf_var.fits"
+        path = tmp_path / "kpf_SL4_20240101T000002.fits"
         kpf4.to_fits(str(path))
         back = KPF4.from_fits(str(path))
         assert "CCF_VAR3" in back.extensions
