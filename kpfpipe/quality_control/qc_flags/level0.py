@@ -10,7 +10,7 @@ from kpfpipe.utils.io import load_junk_obs_ids
 
 _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 
-_CHIPS = ("GREEN", "RED")
+_CHIPS = ["GREEN", "RED"]
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 
 
