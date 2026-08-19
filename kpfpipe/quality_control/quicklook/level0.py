@@ -85,7 +85,7 @@ class PlotL0(Plot):
             top = np.concatenate((panels[3], panels[4]), axis=1)
             image = np.concatenate((bot, top), axis=0)
 
-        return ImageAssembly.orient_ffi(image, chip)
+        return ImageAssembly.orient_ffi(image, chip, namp)
 
     def stitched_image(self, chip, *, full_res=None):
         """Plot the stitched raw detector image for one CCD.

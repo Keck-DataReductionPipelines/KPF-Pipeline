@@ -235,6 +235,36 @@ def robust_polyfit(x, y, deg, sigma=4.0, maxiter=8, min_valid_fraction=0.5, full
     return coeffs, good, float(np.sqrt(np.mean(residual**2)))
 
 
+def bounded_polyval(x, c, lower, upper):
+    """``numpy.polynomial.polynomial.polyval``, NaN outside ``[lower, upper]``.
+
+    A polynomial fitted over part of an axis is meaningful only there; beyond it
+    the value is extrapolation, which for a cubic can curl back into range and
+    read as physical. NaN says "not measured here", which makes every downstream
+    comparison False rather than plausibly wrong.
+
+    Parameters
+    ----------
+    x : array_like
+        Positions to evaluate at.
+    c : array_like
+        Coefficients, lowest order first, as ``polyfit`` returns them.
+    lower, upper : float or array_like
+        Inclusive bounds of the interval the coefficients were fitted over.
+        Scalars, or shaped to broadcast against the result: a table of ``n``
+        polynomials (``c`` shaped ``(deg + 1, n)``, ``x`` shaped ``(m,)``)
+        evaluates in one call against bounds shaped ``(n, 1)``.
+
+    Returns
+    -------
+    ndarray
+        ``c`` evaluated at ``x``, NaN where ``x`` falls outside the bounds.
+    """
+    x = np.asarray(x)
+    values = np.where((x >= lower) & (x <= upper), polynomial.polyval(x, c), np.nan)
+    return values if values.ndim else values[()]
+
+
 def _smooth_filter(x, size=None, *, axes=None):
     """Median- then Gaussian-smooth ``x`` (chains scipy's ``median_filter`` and
     ``gaussian_filter``).

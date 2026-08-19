@@ -132,7 +132,7 @@ class TestParseArgs:
         assert m.parse_args(["--dates", "20240405", "--jobs", "3"]).jobs == 3
 
     def test_job_timeout_default_and_override(self, m):
-        assert m.parse_args(["--dates", "20240405"]).job_timeout == 600
+        assert m.parse_args(["--dates", "20240405"]).job_timeout == 1200
         assert (
             m.parse_args(["--dates", "20240405", "--job_timeout", "120"]).job_timeout
             == 120

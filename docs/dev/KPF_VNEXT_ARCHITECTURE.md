@@ -220,7 +220,7 @@ the science keyword conventions where possible:
   (`"wls"` carries `TRACE*_WAVE` + `*_WLS_COEFFS`; `"flat"` carries `TRACE*_FLUX`/`VAR`/`BLAZE`).
   Edit the CSV(s) to change a master's schema.
 - **PRIMARY keywords are registered like the science models.** `MASTYPE` (every master file) and
-  the WLS metadata (`ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYORD{X,M,F}`, WLS only) are registered in
+  the WLS metadata (`ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYDEG{X,M,F}`, WLS only) are registered in
   the **per-master-type** `config/{ML1,ML2-flat,ML2-wls}-headers.csv` registries and unioned into
   the global registry table (`keyword_registry._masters_rows`); `set_keyword` routes them as usual
   (see *Keyword registry*). `BUNIT` (on each `{chip}_IMG`) is structural, not registered.

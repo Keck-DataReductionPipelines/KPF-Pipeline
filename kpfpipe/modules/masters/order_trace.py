@@ -9,10 +9,10 @@ covering all CCDs.
 Trace geometry is measured from the master flat alone: no pre-existing
 order-trace table is consulted, and OrderTrace applies no calibrations of its
 own. Identity is established before any polynomial is fitted. The CAL orderlet
-is both narrower and several times brighter than the SKY and science orderlets,
-which fixes the phase of the repeating SKY-SCI1-SCI2-SCI3-CAL group, and each
-CAL closes one echelle order. Identity rests on that pattern alone; orderlet
-spacing varies several-fold across a detector and is never assumed regular.
+is narrower than the SKY and science orderlets, which fixes the phase of the
+repeating SKY-SCI1-SCI2-SCI3-CAL group, and each CAL closes one echelle order.
+Identity rests on that pattern alone; orderlet spacing varies several-fold
+across a detector and is never assumed regular.
 
 Axis convention
 ---------------
@@ -40,7 +40,7 @@ from scipy.ndimage import gaussian_filter1d, label
 from kpfpipe import DEFAULTS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.stats import robust_polyfit
+from kpfpipe.utils.stats import bounded_polyval, robust_polyfit
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +111,8 @@ class OrderTrace:
         self._metadata = {}
         self._profiles = {}
         self._trace_tables = {}
-        self._output_table = None
-        self._output_path = None
+        self.output_table = None
+        self.output_path = None
         self._info = None
 
     # ------------------------------------------------------------------
@@ -170,7 +170,9 @@ class OrderTrace:
     # Private helpers - trace detection
     # ------------------------------------------------------------------
 
-    def _detect_illuminated_pixels(self, chip, smoothing_weight=20.0, trace_ratio=0.5):
+    def _detect_illuminated_pixels(
+        self, chip, smoothing_weight=20.0, trace_ratio=0.5, min_speckle_pixels=100
+    ):
         """Return a boolean mask of illuminated pixels, one column at a time.
 
         Each column is reduced independently, so the threshold is local along
@@ -185,6 +187,12 @@ class OrderTrace:
         symmetry lets a single off-diagonal array serve as both. The default
         weight rides over the orderlets (5-11 pixels thick, spaced 16-20) while
         still following the far broader order-to-order flux envelope.
+
+        The mask is then despeckled. A noise speck clearing the threshold joins
+        an orderlet it touches at a corner once ``_detect_clusters`` labels
+        8-connected, and a chain of them fuses neighboring orderlets. Labelling
+        4-connected here, which a corner does not survive, leaves each speck its
+        own component to drop on size; traces come through untouched.
         """
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
         filled = np.nan_to_num(self._image[chip], nan=0.0, posinf=0.0, neginf=0.0)
@@ -203,7 +211,11 @@ class OrderTrace:
                 positive_residual, trace_ratio, method="lower"
             )
             illuminated[:, j] = residual > threshold + 1.0
-        return illuminated
+
+        labels, _ = label(illuminated)
+        sizes = np.bincount(labels.ravel())
+        sizes[0] = 0  # background
+        return (sizes >= min_speckle_pixels)[labels]
 
     def _detect_clusters(self, illuminated):
         """Collect touching illuminated pixels into clusters.
@@ -268,6 +280,71 @@ class OrderTrace:
                 kept.append(cluster)
         return kept
 
+    def _split_fused_clusters(self, clusters, max_thickness_ratio=1.35):
+        """Part a cluster holding two traces back into the two it holds.
+
+        Two orderlets touching at a single corner are one cluster, 8-connected
+        labelling counting a corner as an edge. The pair fails no other test of
+        a trace, so thickness is the tell: it carries both orderlets' pixels and
+        runs to about twice the frame's median, which the CAL fiber being the
+        narrowest of the five cannot pull down. Relabelling for 4-connectivity,
+        which a corner does not survive, parts the two. A cluster that will not
+        part, or parts no thinner, is thick for another reason and is dropped.
+        """
+        thickness = []
+        for cluster in clusters:
+            rows, columns = self._pixels_near_mid_dispersion(cluster)
+            occupied_columns = np.unique(columns).size
+            thickness.append(rows.size / occupied_columns if occupied_columns else 0.0)
+        max_rows_per_column = max_thickness_ratio * np.median(thickness)
+
+        kept = []
+        for cluster, rows_per_column in zip(clusters, thickness, strict=True):
+            if rows_per_column <= max_rows_per_column:
+                kept.append(cluster)
+                continue
+            too_thick = (
+                f"{rows_per_column:.1f} pixel rows thick at mid-detector, past "
+                f"the {max_rows_per_column:.1f} of one trace"
+            )
+
+            rows, columns = cluster["row_indices"], cluster["col_indices"]
+            first_row, first_column = rows.min(), columns.min()
+            mask = np.zeros(
+                (int(np.ptp(rows)) + 1, int(np.ptp(columns)) + 1), dtype=bool
+            )
+            mask[rows - first_row, columns - first_column] = True
+            # No structure argument is 4-connectivity, which is the point.
+            labels, piece_count = label(mask)
+            if piece_count < 2:
+                self._log_rejection(cluster, f"{too_thick}, and does not part")
+                continue
+
+            sizes = np.bincount(labels.ravel())[1:]
+            pieces = []
+            for piece_label in np.argsort(sizes)[::-1][:2] + 1:
+                piece_rows, piece_columns = np.nonzero(labels == piece_label)
+                pieces.append(
+                    {
+                        "row_indices": piece_rows + first_row,
+                        "col_indices": piece_columns + first_column,
+                        "npixel": int(piece_rows.size),
+                    }
+                )
+
+            parted = []
+            for piece in pieces:
+                rows, columns = self._pixels_near_mid_dispersion(piece)
+                occupied_columns = np.unique(columns).size
+                parted.append(rows.size / occupied_columns if occupied_columns else 0.0)
+            if max(parted) > max_rows_per_column:
+                self._log_rejection(cluster, f"{too_thick}, and parts no thinner")
+                continue
+
+            logger.info("splitting a cluster %s into two traces", too_thick)
+            kept.extend(pieces)
+        return kept
+
     def _reject_malformed_clusters(
         self, clusters, min_spanned_columns=200, min_rows_per_column=3.0
     ):
@@ -296,6 +373,42 @@ class OrderTrace:
                 kept.append(cluster)
                 continue
             self._log_rejection(cluster, reason)
+        return kept
+
+    def _reject_faint_clusters(self, chip, clusters, min_flux_fraction=0.025):
+        """Drop clusters far too dim to be a trace.
+
+        A few faint features pass for trace-shaped -- long, thick, and big
+        enough -- while carrying a hundredth of a trace's flux. Against the
+        median cluster, which so few cannot shift, they sit an order of
+        magnitude below the dimmest real trace whatever the lamp level. Size
+        cannot make this cut: a faint cluster may hold more pixels than a
+        trace does.
+        """
+        image = self._image[chip]
+        flux = np.array(
+            [
+                np.median(image[cluster["row_indices"], cluster["col_indices"]])
+                for cluster in clusters
+            ]
+        )
+        reference = np.median(flux)
+        if reference < 0:
+            raise ValueError(
+                f"{chip}: the median cluster's flux is negative "
+                f"({reference:.1f}); check the input master flat"
+            )
+
+        kept = []
+        for cluster, cluster_flux in zip(clusters, flux, strict=True):
+            if cluster_flux < min_flux_fraction * reference:
+                self._log_rejection(
+                    cluster,
+                    f"median flux {cluster_flux:.0f} is "
+                    f"{cluster_flux / reference:.1%} of the frame's clusters",
+                )
+            else:
+                kept.append(cluster)
         return kept
 
     @staticmethod
@@ -422,25 +535,20 @@ class OrderTrace:
         metadata = pd.DataFrame(records)
         return metadata.sort_values("row").reset_index(drop=True)
 
-    def _flag_cal_clusters(self, metadata, max_thickness=6.0, min_flux_ratio=1.8):
+    def _flag_cal_clusters(self, metadata, max_thickness=6.4):
         """Add the boolean ``is_cal`` column, flagging each order's CAL orderlet.
 
-        A CAL is thinner and brighter than the orderlets around it. Brightness
-        is judged against the mean of the two clusters bracketing each
-        candidate, which cancels the order-of-magnitude lamp gradient across
-        the detector where a running median of the neighborhood does not.
+        A CAL is narrower than the orderlets around it -- some 5 pixels thick
+        against 8 or more -- and width alone identifies it. Brightness is not
+        tested: the CAL outshines its neighbors on some instrument eras and
+        not on others, so no flux threshold spans them.
 
         One CAL closes each order, so the flagged count is checked against the
-        cluster count. An order lying partly off the detector moves that count
-        by one either way.
+        cluster count. However many orderlets a clipped edge order costs or
+        gains, it is one order, so the two counts stay within one of each other.
         """
-        flux = metadata["flux"].to_numpy()
-        flux_below = np.concatenate([flux[1:2], flux[:-1]])
-        flux_above = np.concatenate([flux[1:], flux[-2:-1]])
         metadata = metadata.copy()
-        metadata["is_cal"] = (metadata["thickness"].to_numpy() <= max_thickness) & (
-            flux / ((flux_below + flux_above) / 2.0) > min_flux_ratio
-        )
+        metadata["is_cal"] = metadata["thickness"].to_numpy() <= max_thickness
 
         cal_count = int(metadata["is_cal"].sum())
         expected_cal_count = len(metadata) // len(self.fibers)
@@ -465,7 +573,10 @@ class OrderTrace:
         order. Any other departure means the clusters cannot be trusted to be
         one orderlet each.
         """
-        metadata = self._flag_cal_clusters(metadata)
+        try:
+            metadata = self._flag_cal_clusters(metadata)
+        except ValueError as error:
+            raise ValueError(f"{chip}: {error}") from error
         cluster_rows = metadata["row"].to_numpy()
         cal_position = len(self.fibers) - 1
         cal_indices = np.flatnonzero(metadata["is_cal"].to_numpy())
@@ -499,8 +610,8 @@ class OrderTrace:
         metadata["Fiber"] = fiber_names
         for row in metadata.loc[metadata["Fiber"].isna(), "row"]:
             logger.warning(
-                "%s: discarding an orderlet at row %.0f, clipped by the detector "
-                "edge and belonging to no expected order",
+                "%s: discarding an unidentifiable edge-clipped orderlet at "
+                "detector row %.0f",
                 chip,
                 row,
             )
@@ -510,11 +621,12 @@ class OrderTrace:
         """Number the orders and return one row per expected trace of the CCD.
 
         Orders are counted off the CALs, bottom to top, and given their 0-based
-        ``Order`` index on the CCD. An order lying mostly off the detector shows a
-        single orderlet beyond the expected count, which is discarded -- the
+        ``Order`` index on the CCD. An order lying mostly off the detector shows
+        a few orderlets beyond the expected count, which are discarded -- the
         shorter of the two edge orders goes, counting only the orderlets that
-        were named. A trace that was never detected leaves an empty row, so the
-        result always holds one row per fiber of every expected order.
+        were named, and either edge may go. A trace that was never detected
+        leaves an empty row, so the result always holds one row per fiber of
+        every expected order.
         """
         norder = self.norder[chip]
         is_cal = metadata["is_cal"].to_numpy()
@@ -522,12 +634,12 @@ class OrderTrace:
 
         named = metadata["Fiber"].notna().to_numpy()
         order_sizes = np.bincount(index, weights=named).astype(int)
-        if order_sizes.size > norder:
-            discarded = 0 if order_sizes[0] <= order_sizes[-1] else index.max()
+        while order_sizes.size > norder:
+            discarded = 0 if order_sizes[0] <= order_sizes[-1] else order_sizes.size - 1
             kept = index != discarded
             logger.warning(
                 "%s: %d orders detected but %d expected; discarding %d orderlets at "
-                "row %.0f",
+                "detector row %.0f",
                 chip,
                 order_sizes.size,
                 norder,
@@ -535,7 +647,9 @@ class OrderTrace:
                 metadata["row"].to_numpy()[~kept].mean(),
             )
             metadata = metadata[kept]
+            named = named[kept]
             index = index[kept] - (1 if discarded == 0 else 0)
+            order_sizes = np.bincount(index, weights=named).astype(int)
 
         traces = pd.MultiIndex.from_product(
             [range(norder), self.fibers], names=["Order", "Fiber"]
@@ -849,6 +963,18 @@ class OrderTrace:
             widths.append(clipped)
         return tuple(widths)
 
+    def _fitted_centerlines(self, chip):
+        """Return every measured trace's row at every detector column, NaN
+        outside the ``X1``-``X2`` its fit was constrained over.
+        """
+        measured = self._trace_tables[chip].query("Status != 'missing'")
+        return bounded_polyval(
+            np.arange(self.ccd["ncol"], dtype=float),
+            measured[self._trace_fields(which="coeffs")].to_numpy(dtype=float).T,
+            measured["X1"].to_numpy(dtype=float)[:, None],
+            measured["X2"].to_numpy(dtype=float)[:, None],
+        )
+
     def _clamp_neighboring_apertures(self, chip, orderlet_gap_pixels=2.0):
         """Shrink the apertures of traces that would otherwise touch.
 
@@ -856,32 +982,35 @@ class OrderTrace:
         neighbors that must not overlap. Each keeps its profile width where
         there is room; where two would meet, both clamp to half the space
         between their centerlines less a guard band. That space is measured
-        where the two centerlines run closest, so the apertures stay disjoint
-        across the whole detector, not only at mid-dispersion.
+        where the two run closest and both were fitted, so a partial trace is
+        not judged on a tail it was never fitted over.
 
         The clamped edges are written back into ``self._trace_tables[chip]``.
         """
-        coefficient_fields = self._trace_fields(which="coeffs")
         table = self._trace_tables[chip]
-
         measured = table.index[table["Status"] != "missing"]
-        test_columns = np.linspace(0, self.ccd["ncol"] - 1, 101)
-        centers = [
-            polynomial.polyval(
-                test_columns,
-                table.loc[trace_index, coefficient_fields].to_numpy(dtype=float),
-            )
-            for trace_index in measured
-        ]
+        centers = self._fitted_centerlines(chip)
+
         for index, (below, above) in enumerate(
             zip(measured[:-1], measured[1:], strict=False)
         ):
-            closest_approach = float(np.min(centers[index + 1] - centers[index]))
-            half_space = (closest_approach - orderlet_gap_pixels) / 2.0
+            # Dropped, not nan-reduced: a NaN half_space passes the check below.
+            gap = centers[index + 1] - centers[index]
+            gap = gap[np.isfinite(gap)]
+            if gap.size == 0:
+                logger.warning(
+                    "%s: traces %d and %d were fitted over no common column; "
+                    "neither is clamped against the other",
+                    chip,
+                    below,
+                    above,
+                )
+                continue
+            half_space = (float(gap.min()) - orderlet_gap_pixels) / 2.0
             if half_space <= 0:
                 raise ValueError(
-                    "neighboring fitted traces cross or leave no room for the "
-                    "orderlet gap"
+                    f"{chip}: neighboring fitted traces cross or leave no room "
+                    "for the orderlet gap"
                 )
             table.loc[below, "TopEdge"] = min(table.loc[below, "TopEdge"], half_space)
             table.loc[above, "BottomEdge"] = min(
@@ -891,13 +1020,12 @@ class OrderTrace:
     def _validate_trace_table(self, chip, full_coverage_fraction=0.9):
         """Validate output schema, geometry, labels, and detector coverage.
 
-        Settles each measured trace's ``X1``-``X2`` as the columns over which
-        its whole aperture lands on the detector, then its 'unknown' ``Status``
-        from that span; no 'unknown' may survive.
+        Narrows each measured trace's ``X1``-``X2`` from the span it was fitted
+        over to the columns it is carried on, then settles its 'unknown'
+        ``Status`` from that span; no 'unknown' may survive.
         """
         table = self._trace_tables[chip]
         nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
-        coefficient_fields = self._trace_fields(which="coeffs")
         if list(table.columns) != self._trace_fields():
             raise ValueError(f"{chip} output has incompatible fields")
 
@@ -913,9 +1041,7 @@ class OrderTrace:
             )
 
         measured = table[table["Status"] != "missing"]
-        geometry = measured[coefficient_fields + ["BottomEdge", "TopEdge"]].to_numpy(
-            dtype=float
-        )
+        geometry = measured[self._trace_fields(which="geometry")].to_numpy(dtype=float)
         if not np.isfinite(geometry).all():
             raise ValueError(f"{chip} output contains non-finite measured geometry")
         if not ((measured["BottomEdge"] > 0) & (measured["TopEdge"] > 0)).all():
@@ -924,11 +1050,7 @@ class OrderTrace:
         # Traces are written in ascending row, so evaluating every centerline
         # at the same columns must give rows that strictly increase down each
         # column; anything else means two traces cross or are mislabelled.
-        detector_columns = np.arange(ncol, dtype=float)
-        coeffs = measured[coefficient_fields].to_numpy(dtype=float)
-        centers = np.array(
-            [polynomial.polyval(detector_columns, coeff) for coeff in coeffs]
-        )
+        centers = self._fitted_centerlines(chip)
         if np.any(np.diff(centers, axis=0) <= 0):
             raise ValueError(f"{chip} fitted traces cross or are out of detector order")
 
@@ -943,8 +1065,15 @@ class OrderTrace:
             raise ValueError(f"{chip} output contains a wholly off-detector trace")
         first = on_detector.argmax(axis=1)
         last = ncol - 1 - on_detector[:, ::-1].argmax(axis=1)
-        table.loc[measured.index, "X1"] = detector_columns[first]
-        table.loc[measured.index, "X2"] = detector_columns[last]
+        broken = on_detector.sum(axis=1) != last - first + 1
+        if broken.any():
+            trace = measured.iloc[np.flatnonzero(broken)[0]]
+            raise ValueError(
+                f"{chip} {trace.Fiber} order {trace.Order} leaves the detector "
+                "and returns to it"
+            )
+        table.loc[measured.index, "X1"] = first.astype(float)
+        table.loc[measured.index, "X2"] = last.astype(float)
 
         coverage = (last - first + 1) / ncol
         table.loc[measured.index, "Status"] = np.where(
@@ -960,10 +1089,11 @@ class OrderTrace:
     def detect_traces(self, chip):
         """Detect and curate every trace cluster on one CCD.
 
-        The CCD carries one trace per fiber of every order. Only the outermost
-        order may lie partly off the detector, which leaves one trace missing or
-        one orderlet of the next order in view, so the count is allowed to be
-        off by one either way.
+        The CCD carries one trace per fiber of every order. An order at either
+        end of the detector may lie partly off it, which costs that order some
+        of its orderlets or brings part of the order beyond into view, so the
+        count is allowed to depart from the expected one by len(fibers) - 1
+        either way, so no order can be gained or lost outright.
 
         The surviving clusters are cached as ``self._clusters[chip]`` and
         returned. This rebuild invalidates the old clusters' list positions, so
@@ -978,11 +1108,13 @@ class OrderTrace:
 
         clusters = self._reject_small_clusters(clusters)
         clusters = self._merge_fragmented_clusters(clusters)
+        clusters = self._split_fused_clusters(clusters)
         clusters = self._reject_malformed_clusters(clusters)
+        clusters = self._reject_faint_clusters(chip, clusters)
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
         expected = len(self.fibers) * self.norder[chip]
-        if abs(len(clusters) - expected) > 1:
+        if abs(len(clusters) - expected) > len(self.fibers) - 1:
             raise ValueError(
                 f"{chip}: {len(clusters)} traces detected, expected {expected}"
             )
@@ -1021,13 +1153,15 @@ class OrderTrace:
 
         A trace no cluster was detected for is marked 'missing'; a trace that
         has a cluster must fit, and raises if it cannot. A fitted trace is left
-        'unknown' for validation to classify from its dispersion span.
+        'unknown' for validation to classify from its dispersion span. One
+        fitted over part of the dispersion is refitted at degree 2, warning,
+        if its centerline leaves the detector and returns within that span.
 
         The fitted traces become the CCD's ``self._trace_tables`` entry and are
-        returned, with their aperture edges and column bounds left unmeasured
-        for the aperture step to fill in. The mask of the samples each fit
-        accepted is recorded on ``self._profiles[chip]``, row for row with the
-        CCD's table rows.
+        returned, with their aperture edges left unmeasured for the aperture step
+        and their ``X1``-``X2`` holding the span each fit was constrained over.
+        The mask of the samples each fit accepted is recorded on
+        ``self._profiles[chip]``, row for row with the CCD's table rows.
         """
         if poly_degree is not None:
             self.poly_degree = poly_degree
@@ -1058,16 +1192,50 @@ class OrderTrace:
                 continue
 
             centers = self._trace_centers(chip, fiber, order)
+            cluster = self._clusters[chip][int(cluster_index)]
+            rows, cols = cluster["row_indices"], cluster["col_indices"]
+            clipped = cols[(rows == 0) | (rows == self.ccd["nrow"] - 1)]
+            usable = np.setdiff1d(cols, clipped)
+            on_chip = np.isin(columns, usable)
             try:
                 coeffs, good, rms = robust_polyfit(
-                    columns.astype(float), centers, int(self.poly_degree), full=True
+                    columns[on_chip].astype(float),
+                    centers[on_chip],
+                    int(self.poly_degree),
+                    full=True,
                 )
             except ValueError as error:
                 raise ValueError(f"{chip} {fiber} order {order}: {error}") from error
-            sampled["good"][position] = good
+
+            # Check for partial traces that curl back on themselves and refit
+            # using degree 2 polynomials
+            if np.ptp(usable) + 1 < self.ccd["ncol"] and int(self.poly_degree) > 2:
+                turns = polynomial.polyroots(polynomial.polyder(coeffs))
+                turns = turns[np.isreal(turns)].real
+                if np.any((turns > usable.min()) & (turns < usable.max())):
+                    logger.warning(
+                        "%s %s order %d: the degree %d centerline turns back "
+                        "inside the span it was fitted over; refitting the "
+                        "partial trace at degree 2",
+                        chip,
+                        fiber,
+                        order,
+                        int(self.poly_degree),
+                    )
+                    coeffs, good, rms = robust_polyfit(
+                        columns[on_chip].astype(float),
+                        centers[on_chip],
+                        2,
+                        full=True,
+                    )
+                    coeffs = np.append(
+                        coeffs, np.zeros(len(coefficient_fields) - coeffs.size)
+                    )
+            sampled["good"][position][on_chip] = good
 
             record.update(dict(zip(coefficient_fields, coeffs, strict=True)))
             record["PolyfitRMS"] = rms
+            record["X1"], record["X2"] = float(usable.min()), float(usable.max())
 
         self._trace_tables[chip] = pd.DataFrame(records, columns=self._trace_fields())
         return self._trace_tables[chip]
@@ -1104,10 +1272,10 @@ class OrderTrace:
     def save_master(self, path, *, overwrite=False):
         """Write the assembled order-trace CSV to ``path``.
 
-        Writes ``self._output_table``, assembled by ``make_master``, which must
+        Writes ``self.output_table``, assembled by ``make_master``, which must
         have run first. Parent directories are created as needed.
         """
-        if self._output_table is None:
+        if self.output_table is None:
             raise RuntimeError("No traces available; run make_master() first")
         if not overwrite and os.path.exists(path):
             raise FileExistsError(
@@ -1115,8 +1283,8 @@ class OrderTrace:
             )
 
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        self._output_table.to_csv(path, index=False, lineterminator="\n")
-        self._output_path = path
+        self.output_table.to_csv(path, index=False, lineterminator="\n")
+        self.output_path = path
 
     # ------------------------------------------------------------------
     # Private helpers - module execution
@@ -1127,7 +1295,7 @@ class OrderTrace:
         lines = [
             "OrderTrace",
             f"  master flat: {self.master_flat_filename}",
-            f"  output:      {self._output_path or '(not written)'}",
+            f"  output:      {self.output_path or '(not written)'}",
             "",
             f"  {'chip':<8s} {'full':>6s} {'partial':>8s} {'missing':>8s} "
             f"{'median RMS [pix]':>18s}",
@@ -1207,7 +1375,7 @@ class OrderTrace:
         ``{obs_id}_master_order_trace.csv``.
 
         Steps 1-2 are pure detection and identification: identity is fixed from
-        the illuminated-pixel mask and cluster brightness before step 3 fits
+        the illuminated-pixel mask and cluster width before step 3 fits
         anything. The order *index* assigned in step 2 is correct whenever the
         detected orders fill the detector, and is counted from the lowest
         complete fiber group otherwise.
@@ -1221,7 +1389,7 @@ class OrderTrace:
             self.fit_trace_polynomials(chip, poly_degree)
             self.estimate_trace_apertures(chip)
 
-        self._output_table = pd.concat(
+        self.output_table = pd.concat(
             [self._trace_tables[chip] for chip in chips], ignore_index=True
         )
 
@@ -1236,7 +1404,7 @@ class OrderTrace:
             )
         self._track_info(chips)
         logger.info("%s", self._info)
-        return self._output_table
+        return self.output_table
 
     def info(self):
         """Print a summary of the module configuration and tracing results."""

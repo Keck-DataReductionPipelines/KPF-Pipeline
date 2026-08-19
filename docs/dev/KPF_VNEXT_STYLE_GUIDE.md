@@ -289,9 +289,10 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
 #### Keywords
 
 - **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`); encode the level
-  where needed for uniqueness (`DATAPRL0`). **Before coining a new keyword, grep
-  `reference/legacy_data_format.rst` and reuse the legacy spelling where the science meaning
-  matches** (`WLSFILE`, `BIASFILE`), so downstream/archival tools keep reading v3 products.
+  where needed for uniqueness (`DATAPRL0`). **Before coining a new keyword, reuse the legacy
+  spelling where the science meaning matches** (`WLSFILE`, `BIASFILE`), so downstream/archival
+  tools keep reading v3 products; `reference/legacy_data_format.rst` is no longer vendored, so
+  read it out of git history.
 - **Register every KPF keyword in `L{0,1,2,4}-headers.csv`** (`Keyword,Description,Extension,
   DataType,PopulatedBy`) — `Extension` is its home and `Description` becomes the FITS comment (both
   defined once, here). Flags are stored as `int` 0/1 (never Python bool): QC keys get a `QC: …`

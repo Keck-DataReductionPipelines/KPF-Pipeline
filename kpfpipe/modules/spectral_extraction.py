@@ -5,14 +5,16 @@ Extracts per-order 1D spectra from an assembled L1 frame into a KPF2 (L2),
 populating the per-fiber FLUX and VAR arrays.
 """
 
+import glob
 import logging
+import os
 
 import numpy as np
 import pandas as pd
-from numpy.polynomial import polynomial
 
 from kpfpipe import DEFAULTS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.stats import bounded_polyval
 
 logger = logging.getLogger(__name__)
 
@@ -49,35 +51,104 @@ class SpectralExtraction:
         for k, v in _DEFAULTS.items():
             setattr(self, k, params.get(k, v))
 
+        self._order_trace = None
+        self._order_trace_path = None
+        self._instera = None
         self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _read_order_trace_reference(self, chip):
-        """Load the ``chip`` order trace table, caching in ``self.order_trace``
-        to avoid repeated I/O."""
-        if not hasattr(self, "order_trace"):
-            self.order_trace = {}
-        if not hasattr(self, "order_trace_path"):
-            self.order_trace_path = {}
+    def _infer_instrument_era(self):
+        """Infer this frame's instrument era from ``JD_UTC``, caching its tag in
+        ``self._instera`` and returning its ``instrument_eras`` row with the
+        frame's observation time.
 
-        filepath = f"{REPO_ROOT}/reference/order_trace_{chip.lower()}.csv"
-        logger.info("reading %s order trace from %s", chip, filepath)
-        with open(filepath) as f:
-            self.order_trace[chip.upper()] = (
-                pd.read_csv(f, index_col=0).set_index(["Fiber", "Order"]).sort_index()
+        A frame whose ``INSTERA`` disagrees is warned about and restamped -- the
+        timestamp wins, since references are keyed to it.
+
+        Raises ``ValueError`` when the frame cannot be dated or falls outside
+        every era. Deliberately not a ``LookupError``: ``extract_ffi`` catches
+        that to fill an absent orderlet with NaN, and would bury this."""
+        primary = self.l1_obj.headers["PRIMARY"]
+        jd_utc = primary.get("JD_UTC")
+        obs_time = pd.to_datetime(jd_utc, unit="D", origin="julian")
+        if pd.isna(obs_time):
+            raise ValueError(
+                f"Cannot infer the instrument era of {self.l1_obj.obs_id}: its "
+                f"JD_UTC is {jd_utc!r}"
             )
-        self.order_trace_path[chip.upper()] = filepath
+
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        in_era = eras[
+            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
+        ]
+        if in_era.empty:
+            raise ValueError(
+                f"No KPF instrument era covers {obs_time}; the eras of "
+                f"reference/instrument_eras.csv do not span it"
+            )
+
+        era = in_era.iloc[0]
+        self._instera = str(era["INSTERA"])
+
+        if str(primary.get("INSTERA")) != self._instera:
+            logger.warning(
+                "header INSTERA %s disagrees with instrument era %s inferred from "
+                "JD_UTC; restamping INSTERA as %s",
+                primary.get("INSTERA"),
+                self._instera,
+                self._instera,
+            )
+            self.l1_obj.set_keyword("INSTERA", self._instera)
+
+        return era, obs_time
+
+    def _read_order_trace_reference(self):
+        """Load the vetted order trace for this frame, caching the per-chip
+        tables in ``self._order_trace`` and the file in ``self._order_trace_path``.
+
+        The reference is the most recent one measured before the frame within
+        the frame's instrument era, read from ``reference/order_traces``."""
+        era, obs_time = self._infer_instrument_era()
+
+        # Trace geometry moves whenever the instrument is opened, so only a
+        # reference measured earlier in this era describes this frame.
+        latest = min(era["UT_end_date"], obs_time)
+        in_era = {}
+        for path in glob.glob(f"{REPO_ROOT}/reference/order_traces/order_trace_*.csv"):
+            datecode = os.path.basename(path)[len("order_trace_") : -len(".csv")]
+            measured = pd.Timestamp(datecode)
+            if era["UT_start_date"] <= measured <= latest:
+                in_era[measured] = path
+        if not in_era:
+            raise FileNotFoundError(
+                f"No order trace measured before {obs_time} within KPF instrument "
+                f"era {self._instera}"
+            )
+
+        filepath = in_era[max(in_era)]
+        logger.info("reading order trace from %s", filepath)
+
+        table = pd.read_csv(filepath)
+        table = table[table["Status"] != "missing"]
+        self._order_trace = {
+            chip: rows.set_index(["Fiber", "Order"]).sort_index()
+            for chip, rows in table.groupby("Chip")
+        }
+        self._order_trace_path = filepath
 
     def _get_orderlet_pixels(self, chip, fiber, order, return_coords=False):
         """Slice the 2D bounding box (data ``D``, variance ``V``, weights ``W``)
         for a single orderlet, optionally with its detector row bounds.
 
         The box encloses the traced orderlet; order tilt/curvature can pull in
-        adjacent-order pixels. ``W`` is 1 inside, 0 outside, and fractional at
-        the top/bottom trace edges."""
+        adjacent-order pixels. ``W`` is 1 inside, 0 outside, fractional at the
+        top/bottom trace edges, and 0 beyond the trace's ``X1``..``X2`` span."""
         chip = chip.upper()
         fiber = fiber.upper()
 
@@ -85,11 +156,11 @@ class SpectralExtraction:
         var_image = self.l1_obj.data[f"{chip}_VAR"]
         nrow, ncol = data_image.shape
 
-        if not hasattr(self, "order_trace") or chip not in self.order_trace:
-            self._read_order_trace_reference(chip)
+        if self._order_trace is None:
+            self._read_order_trace_reference()
 
         try:
-            trace = self.order_trace[chip].loc[(fiber, order)]
+            trace = self._order_trace[chip].loc[(fiber, order)]
         except KeyError:
             raise LookupError(
                 f"No trace found for {chip} {fiber} Order {order}"
@@ -109,10 +180,14 @@ class SpectralExtraction:
         )
         coeffs = np.array(trace[coefficient_columns], dtype=np.float32)
 
-        trace_center = polynomial.polyval(np.arange(ncol, dtype=np.float32), coeffs)
+        detector_columns = np.arange(ncol, dtype=np.float32)
+        trace_center = bounded_polyval(detector_columns, coeffs, trace.X1, trace.X2)
         trace_top = (trace_center + trace.TopEdge).astype(np.float32)
         trace_bottom = (trace_center - trace.BottomEdge).astype(np.float32)
 
+        # NaN beyond X1..X2, so the box below is sized from the columns the
+        # trace is carried on rather than from an extrapolated tail.
+        carried = np.isfinite(trace_center)
         off_detector = (trace_top > nrow - 1) | (trace_bottom < 0)
 
         if np.any(off_detector):
@@ -128,9 +203,13 @@ class SpectralExtraction:
             trace_center[off_detector] = np.maximum(trace_center, 0)[off_detector]
             trace_bottom[off_detector] = np.maximum(trace_bottom, 0)[off_detector]
 
-        box_zeropt = int(np.floor(trace_bottom.min()))
-        box_height = int(np.ceil(trace_top.max())) - box_zeropt
+        box_zeropt = int(np.floor(np.nanmin(trace_bottom)))
+        box_height = int(np.ceil(np.nanmax(trace_top))) - box_zeropt
 
+        # An uncarried column has no edge to floor to an integer row; park it on
+        # the box floor, its weights being zeroed once they are built.
+        trace_top = np.where(carried, trace_top, box_zeropt)
+        trace_bottom = np.where(carried, trace_bottom, box_zeropt)
         edge_pixel_top = np.array(np.floor(trace_top - box_zeropt), dtype=int)
         edge_pixel_bottom = np.array(np.floor(trace_bottom - box_zeropt), dtype=int)
 
@@ -159,6 +238,8 @@ class SpectralExtraction:
             (1 - (_trace_bottom - box_zeropt - _edge_pixel_bottom)), (box_height, 1)
         )
         W[mask_bot] = frac_bot[mask_bot]
+
+        W[:, ~carried] = 0
 
         if return_coords:
             return D, V, W, box_zeropt, box_zeropt + box_height
@@ -250,7 +331,16 @@ class SpectralExtraction:
             chip, fiber, order, return_coords=True
         )
 
-        flux_1d, var_1d = extraction_fxn(D, V, W=W)
+        # A column whose whole aperture has left the detector carries no flux.
+        on_detector = W.sum(axis=0) > 0
+        if on_detector.all():
+            flux_1d, var_1d = extraction_fxn(D, V, W=W)
+        else:
+            flux_1d = np.full(W.shape[1], np.nan, dtype=np.float32)
+            var_1d = np.full(W.shape[1], np.nan, dtype=np.float32)
+            flux_1d[on_detector], var_1d[on_detector] = extraction_fxn(
+                D[:, on_detector], V[:, on_detector], W=W[:, on_detector]
+            )
 
         for arr, name in ((flux_1d, "flux_1d"), (var_1d, "var_1d")):
             n_bad = int(np.sum(~np.isfinite(arr)))
@@ -314,7 +404,7 @@ class SpectralExtraction:
             )
 
         failure = 0
-        for order in range(1, norder + 1):
+        for order in range(norder):
             for fiber in fibers:
                 try:
                     flux_1d, var_1d = self.extract_orderlet(
@@ -325,8 +415,8 @@ class SpectralExtraction:
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
                     var_1d = np.full(ncol, np.nan, dtype=np.float32)
 
-                l2_arrays[f"{chip}_{fiber}_FLUX"][order - 1] = flux_1d
-                l2_arrays[f"{chip}_{fiber}_VAR"][order - 1] = var_1d
+                l2_arrays[f"{chip}_{fiber}_FLUX"][order] = flux_1d
+                l2_arrays[f"{chip}_{fiber}_VAR"][order] = var_1d
 
         # During some KPF eras one of the traces does not fall on the detector.
         # In this case a single failure is expected from this method. Allowing
@@ -353,6 +443,7 @@ class SpectralExtraction:
             "SpectralExtraction",
             f"  obs_id:            {self.l1_obj.obs_id}",
             f"  extraction_method: {self.extraction_method}",
+            f"  order trace:       {self._order_trace_path}",
             f"\n  {'CHIP':<8s} {'FIBERS':<30s} {'NORDER'}",
             "  " + "-" * 46,
         ]
@@ -362,7 +453,12 @@ class SpectralExtraction:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
-        """Reserved header-consolidation hook; writes no PRIMARY metadata yet."""
+        """Write the order trace the spectra were extracted with and the era it
+        was chosen for (inferred after ``to_kpf2`` copied the L1 PRIMARY)."""
+        if self._order_trace_path is not None:
+            l2_obj.set_keyword("TRACFILE", self._order_trace_path)
+        if self._instera is not None:
+            l2_obj.set_keyword("INSTERA", self._instera)
 
     # ------------------------------------------------------------------
     # Public entry point

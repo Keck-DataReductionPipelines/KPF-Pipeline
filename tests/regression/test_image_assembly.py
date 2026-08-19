@@ -296,46 +296,51 @@ class TestOrientFFI:
 
     def test_red_flips_columns_only(self):
         """RED: dispersion columns blue->red means a left-right flip only."""
-        out = ImageAssembly.orient_ffi(self.BASE, "RED")
+        out = ImageAssembly.orient_ffi(self.BASE, "RED", 2)
         expected = np.array([[3, 2, 1], [6, 5, 4]], dtype=np.float32)
         np.testing.assert_array_equal(out, expected)
 
     def test_green_flips_both_axes(self):
         """GREEN: raw image is inverted vs RED, so rows flip as well."""
-        out = ImageAssembly.orient_ffi(self.BASE, "GREEN")
+        out = ImageAssembly.orient_ffi(self.BASE, "GREEN", 2)
         expected = np.array([[6, 5, 4], [3, 2, 1]], dtype=np.float32)
         np.testing.assert_array_equal(out, expected)
 
+    def test_green_read_out_on_four_amps_flips_columns_only(self):
+        """4-amp GREEN arrives with its rows already running bottom-up."""
+        out = ImageAssembly.orient_ffi(self.BASE, "GREEN", 4)
+        np.testing.assert_array_equal(out, np.flip(self.BASE, axis=1))
+
     def test_green_is_red_plus_row_flip(self):
         """GREEN orientation is exactly the RED orientation flipped in rows."""
-        red = ImageAssembly.orient_ffi(self.BASE, "RED")
-        green = ImageAssembly.orient_ffi(self.BASE, "GREEN")
+        red = ImageAssembly.orient_ffi(self.BASE, "RED", 2)
+        green = ImageAssembly.orient_ffi(self.BASE, "GREEN", 2)
         np.testing.assert_array_equal(green, np.flip(red, axis=0))
 
     def test_chip_name_is_case_insensitive(self):
         """Lowercase / mixed-case chip names orient identically to uppercase."""
         for name in ("green", "Green", "GREEN"):
             np.testing.assert_array_equal(
-                ImageAssembly.orient_ffi(self.BASE, name),
-                ImageAssembly.orient_ffi(self.BASE, "GREEN"),
+                ImageAssembly.orient_ffi(self.BASE, name, 2),
+                ImageAssembly.orient_ffi(self.BASE, "GREEN", 2),
             )
         for name in ("red", "Red", "RED"):
             np.testing.assert_array_equal(
-                ImageAssembly.orient_ffi(self.BASE, name),
-                ImageAssembly.orient_ffi(self.BASE, "RED"),
+                ImageAssembly.orient_ffi(self.BASE, name, 2),
+                ImageAssembly.orient_ffi(self.BASE, "RED", 2),
             )
 
     def test_does_not_mutate_input(self):
         """orient_ffi must not modify the caller's array in place."""
         original = self.BASE.copy()
-        ImageAssembly.orient_ffi(self.BASE, "GREEN")
+        ImageAssembly.orient_ffi(self.BASE, "GREEN", 2)
         np.testing.assert_array_equal(self.BASE, original)
 
     def test_double_application_is_identity(self):
         """Flips are involutions: orienting twice returns the original."""
         for chip in ("GREEN", "RED"):
-            once = ImageAssembly.orient_ffi(self.BASE, chip)
-            twice = ImageAssembly.orient_ffi(once, chip)
+            once = ImageAssembly.orient_ffi(self.BASE, chip, 2)
+            twice = ImageAssembly.orient_ffi(once, chip, 2)
             np.testing.assert_array_equal(twice, self.BASE)
 
     def test_flux_and_wave_are_co_oriented(self):
@@ -348,9 +353,9 @@ class TestOrientFFI:
         cols = np.broadcast_to(np.arange(4)[None, :], (3, 4)).astype(np.float32)
 
         for chip in ("GREEN", "RED"):
-            f = ImageAssembly.orient_ffi(flux, chip)
-            r = ImageAssembly.orient_ffi(rows, chip)
-            c = ImageAssembly.orient_ffi(cols, chip)
+            f = ImageAssembly.orient_ffi(flux, chip, 2)
+            r = ImageAssembly.orient_ffi(rows, chip, 2)
+            c = ImageAssembly.orient_ffi(cols, chip, 2)
             # For every output pixel, the flux value matches the flux that
             # originally lived at the (row, col) the markers report.
             for i in range(3):
@@ -360,7 +365,7 @@ class TestOrientFFI:
 
     def test_unknown_chip_treated_as_non_green(self):
         """Any non-GREEN chip (incl. unexpected names) flips columns only."""
-        out = ImageAssembly.orient_ffi(self.BASE, "BLUE")
+        out = ImageAssembly.orient_ffi(self.BASE, "BLUE", 2)
         expected = np.flip(self.BASE, axis=1)
         np.testing.assert_array_equal(out, expected)
 

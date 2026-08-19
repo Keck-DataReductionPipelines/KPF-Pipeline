@@ -2,8 +2,8 @@
 
 Numerical tests use synthetic master images and require no real data. The
 synthetic flat reproduces the morphology the algorithm depends on: science and
-sky orderlets are wide and flat-topped, and the CAL orderlet is narrow and
-several times brighter. The real master-flat test uses gitignored
+sky orderlets are wide and flat-topped, and the CAL orderlet is narrow, which
+is the difference identity rests on. The real master-flat test uses gitignored
 ``tests/testdata`` and is skipped when the vNext product is unavailable.
 """
 
@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.ndimage import label
 
 import kpfpipe.modules.masters.order_trace as order_trace_module
 from kpfpipe.modules.masters import OrderTrace
@@ -174,6 +175,16 @@ def _fiber_metadata(rows, cal_indices):
     )
 
 
+def _band_cluster(rows, columns):
+    """Return a rectangular cluster covering `rows` at every one of `columns`."""
+    grid_rows, grid_columns = np.meshgrid(rows, columns, indexing="ij")
+    return {
+        "row_indices": grid_rows.ravel(),
+        "col_indices": grid_columns.ravel(),
+        "npixel": int(grid_rows.size),
+    }
+
+
 def _curated_clusters(tracer):
     """Run detection and curation exactly as the module's own chain does.
 
@@ -184,7 +195,9 @@ def _curated_clusters(tracer):
     clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
     clusters = tracer._reject_small_clusters(clusters)
     clusters = tracer._merge_fragmented_clusters(clusters)
-    tracer._clusters["GREEN"] = tracer._reject_malformed_clusters(clusters)
+    clusters = tracer._split_fused_clusters(clusters)
+    clusters = tracer._reject_malformed_clusters(clusters)
+    tracer._clusters["GREEN"] = tracer._reject_faint_clusters("GREEN", clusters)
     return tracer._clusters["GREEN"]
 
 
@@ -212,6 +225,25 @@ class TestDetection:
         tracer = _tracer(tmp_path, image, monkeypatch)
 
         assert len(_curated_clusters(tracer)) == len(truth)
+
+    def test_despeckles_specks_bridging_two_traces(self, tmp_path, monkeypatch):
+        # A chain of noise specks across the gap corner-joins the traces either
+        # side of it, and _detect_clusters would label the pair one cluster no
+        # later step recovers whole. The mask has to come back already parted,
+        # with both traces still whole.
+        image = np.full((60, 400), 20.0, dtype=np.float32)
+        image[20:23, :] = 1000.0
+        image[30:33, :] = 1000.0
+        specks = np.arange(23, 30)
+        image[specks, 200 + specks - 23] = 1000.0
+        tracer = _tracer(tmp_path, image, monkeypatch, norder=1)
+
+        illuminated = tracer._detect_illuminated_pixels("GREEN")
+
+        _, joined = label(illuminated, structure=np.ones((3, 3), dtype=int))
+        assert joined == 2
+        assert illuminated[20:23].all()
+        assert illuminated[30:33].all()
 
     def test_merges_a_fragmented_trace(self, tmp_path, monkeypatch):
         image, truth = _synthetic_flat()
@@ -255,6 +287,109 @@ class TestDetection:
         assert len(clusters) == len(truth)
         assert caplog.text == ""
 
+    def test_rejects_only_clusters_far_dimmer_than_the_traces(
+        self, tmp_path, monkeypatch
+    ):
+        # Eleven trace-shaped clusters differing in nothing but flux: one at a
+        # hundredth of the median, which is the junk, and one at a twentieth,
+        # which is as dim as a real edge order gets.
+        image = np.zeros((60, 400), dtype=np.float32)
+        clusters = []
+        for level, row in zip(
+            [10.0, 50.0] + [1000.0] * 9, range(4, 59, 5), strict=True
+        ):
+            image[row : row + 3, :] = level
+            rows, columns = np.mgrid[row : row + 3, 0:400]
+            clusters.append(
+                {
+                    "row_indices": rows.ravel(),
+                    "col_indices": columns.ravel(),
+                    "npixel": rows.size,
+                }
+            )
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
+        kept = tracer._reject_faint_clusters("GREEN", clusters)
+
+        levels_kept = {
+            float(np.median(image[c["row_indices"], c["col_indices"]])) for c in kept
+        }
+        assert len(kept) == len(clusters) - 1
+        assert levels_kept == {50.0, 1000.0}
+
+    def test_refuses_a_frame_whose_median_cluster_is_negative(
+        self, tmp_path, monkeypatch
+    ):
+        image = np.zeros((60, 400), dtype=np.float32)
+        clusters = []
+        for level, row in zip([1000.0] + [-500.0] * 10, range(4, 59, 5), strict=True):
+            image[row : row + 3, :] = level
+            rows, columns = np.mgrid[row : row + 3, 0:400]
+            clusters.append(
+                {
+                    "row_indices": rows.ravel(),
+                    "col_indices": columns.ravel(),
+                    "npixel": rows.size,
+                }
+            )
+        tracer = _tracer(tmp_path, image, monkeypatch)
+
+        with pytest.raises(ValueError, match="median cluster's flux is negative"):
+            tracer._reject_faint_clusters("GREEN", clusters)
+
+    def test_parts_a_cluster_holding_two_corner_joined_traces(
+        self, tmp_path, monkeypatch
+    ):
+        image = np.zeros((60, 400), dtype=np.float32)
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        columns = np.arange(400)
+        ordinary = [
+            _band_cluster(np.arange(row, row + 3), columns) for row in range(4, 34, 3)
+        ]
+        # Two ordinary traces meeting at one corner, as 8-connected labelling
+        # hands them over: the lower reaches up one pixel at column 200 and the
+        # upper is missing the pixel directly above it, so the two touch at a
+        # corner and share no edge.
+        lower = _band_cluster(np.arange(40, 43), columns)
+        upper = _band_cluster(np.arange(44, 47), columns)
+        above_corner = (upper["row_indices"] == 44) & (upper["col_indices"] == 200)
+        upper = {
+            "row_indices": upper["row_indices"][~above_corner],
+            "col_indices": upper["col_indices"][~above_corner],
+            "npixel": upper["npixel"] - 1,
+        }
+        fused = {
+            "row_indices": np.concatenate(
+                [lower["row_indices"], [43], upper["row_indices"]]
+            ),
+            "col_indices": np.concatenate(
+                [lower["col_indices"], [200], upper["col_indices"]]
+            ),
+            "npixel": lower["npixel"] + 1 + upper["npixel"],
+        }
+
+        kept = tracer._split_fused_clusters([*ordinary, fused])
+
+        assert len(kept) == len(ordinary) + 2
+        assert sorted(c["npixel"] for c in kept[-2:]) == [
+            upper["npixel"],
+            lower["npixel"] + 1,
+        ]
+
+    def test_drops_an_overthick_cluster_that_will_not_part(self, tmp_path, monkeypatch):
+        image = np.zeros((60, 400), dtype=np.float32)
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        columns = np.arange(400)
+        ordinary = [
+            _band_cluster(np.arange(row, row + 3), columns) for row in range(4, 34, 3)
+        ]
+        solid = _band_cluster(np.arange(40, 48), columns)
+
+        kept = tracer._split_fused_clusters([*ordinary, solid])
+
+        assert len(kept) == len(ordinary)
+        assert all(cluster["npixel"] == 3 * columns.size for cluster in kept)
+
     def test_reports_an_unexpected_trace_count(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=3)
         tracer = _tracer(tmp_path, image, monkeypatch, norder=2)
@@ -275,9 +410,7 @@ class TestCalIdentification:
         assert flagged.size == 4
         assert np.all(np.diff(flagged) == len(_FIBERS))
 
-    def test_cal_is_thinner_and_brighter_than_its_neighbours(
-        self, tmp_path, monkeypatch
-    ):
+    def test_cal_is_thinner_than_its_neighbours(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
         _curated_clusters(tracer)
@@ -288,7 +421,18 @@ class TestCalIdentification:
         other = metadata[~metadata["is_cal"]]
 
         assert cal["thickness"].max() < other["thickness"].min()
-        assert cal["flux"].min() > other["flux"].max()
+
+    def test_cal_is_flagged_however_bright_it_is(self, tmp_path, monkeypatch):
+        # Brightness is not tested, so a CAL no brighter than the orderlets it
+        # closes -- which is what one instrument era looks like -- still flags.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        _curated_clusters(tracer)
+        metadata = tracer._track_cluster_metadata("GREEN")
+
+        metadata["flux"] = 100.0
+
+        assert tracer._flag_cal_clusters(metadata)["is_cal"].sum() == 3
 
     def test_reports_a_flat_with_no_identifiable_cal(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
@@ -296,8 +440,8 @@ class TestCalIdentification:
         _curated_clusters(tracer)
         metadata = tracer._track_cluster_metadata("GREEN")
 
-        # A flat whose orderlets are all equally bright flags no CAL at all.
-        metadata["flux"] = 100.0
+        # A flat whose orderlets are all equally wide flags no CAL at all.
+        metadata["thickness"] = 9.0
         with pytest.raises(ValueError, match="cannot phase the fiber pattern"):
             tracer._flag_cal_clusters(metadata)
 
@@ -309,10 +453,10 @@ class TestCalIdentification:
         _curated_clusters(tracer)
         metadata = tracer._track_cluster_metadata("GREEN")
 
-        # Two of the four CALs are dimmed to their neighbours' brightness, so
+        # Two of the four CALs are widened to their neighbours' thickness, so
         # only half the orders end up anchored.
-        cal_rows = metadata.index[metadata["thickness"] < 6.0][:2]
-        metadata.loc[cal_rows, "flux"] = metadata["flux"].min()
+        cal_rows = metadata.index[metadata["thickness"] < 6.2][:2]
+        metadata.loc[cal_rows, "thickness"] = 9.0
         with pytest.raises(ValueError, match="2 CAL orderlets identified among 20"):
             tracer._flag_cal_clusters(metadata)
 
@@ -346,9 +490,7 @@ class TestTraceIdentity:
         image, truth = _synthetic_flat(drop=dropped)
         tracer = _tracer(tmp_path, image, monkeypatch)
 
-        # Two absent traces are more than detect_traces tolerates, so identity
-        # is exercised on the curated clusters directly.
-        clusters = _curated_clusters(tracer)
+        clusters = tracer.detect_traces("GREEN")
         identities = tracer.assign_trace_identities("GREEN")
 
         assert _labels(identities) == _trace_labels(3)
@@ -382,6 +524,17 @@ class TestTraceIdentity:
 
         assert list(phased["Fiber"]) == _FIBERS * 2 + ["SKY"]
 
+    def test_names_the_ccd_when_no_cal_can_be_phased(self, master_path):
+        # _flag_cal_clusters knows nothing of the CCD it was handed, so the
+        # caller that does names it; two CCDs fail this way for different
+        # reasons and the message has to say which one is being read.
+        rows = [100, 119, 138, 157, 176, 191, 210, 229, 248, 267]
+        metadata = _fiber_metadata(rows, cal_indices=set())
+        tracer = OrderTrace(master_path)
+
+        with pytest.raises(ValueError, match="^RED: 0 CAL orderlets identified"):
+            tracer._assign_fiber_identities("RED", metadata)
+
     def test_reports_an_order_short_of_the_fiber_pattern(self, master_path):
         # An orderlet missing between two CALs leaves an order of four, which
         # cannot be told apart from an order whose fibers are mislabelled.
@@ -412,7 +565,7 @@ class TestTraceIdentity:
             phased = tracer._assign_fiber_identities("GREEN", metadata)
 
         assert list(phased["Fiber"].fillna("clipped")) == ["clipped"] + _FIBERS
-        assert "discarding an orderlet at row 8" in caplog.text
+        assert "edge-clipped orderlet at detector row 8" in caplog.text
 
     def test_discards_an_orderlet_clipped_by_the_top_edge(self, master_path, caplog):
         # The mirror case: the order above closes off the detector, leaving its
@@ -427,7 +580,7 @@ class TestTraceIdentity:
         assert list(phased["Fiber"].fillna("clipped")) == (
             _FIBERS + _FIBERS[:-1] + ["clipped"]
         )
-        assert "discarding an orderlet at row 262" in caplog.text
+        assert "edge-clipped orderlet at detector row 262" in caplog.text
 
     def test_discards_a_lone_orderlet_beyond_the_expected_orders(
         self, master_path, caplog
@@ -442,6 +595,26 @@ class TestTraceIdentity:
 
         assert _labels(identities) == _trace_labels(2)
         assert identities["cluster"].notna().all()
+        assert "3 orders detected but 2 expected" in caplog.text
+
+    def test_discards_a_lone_orderlet_at_each_edge(self, master_path, caplog):
+        # Both edge orders open off the detector, leaving a lone CAL apiece. One
+        # discard cannot settle this: the count has to be walked down twice.
+        # Phasing is fed rather than run: two lone CALs put the CAL count two
+        # clear of one fifth of the clusters, which _flag_cal_clusters refuses.
+        rows = [85, 100, 119, 138, 157, 176, 191, 210, 229, 248, 267, 282]
+        cal_indices = {0, 5, 10, 11}
+        metadata = _fiber_metadata(rows, cal_indices=cal_indices)
+        metadata["is_cal"] = [index in cal_indices for index in range(len(rows))]
+        metadata["Fiber"] = ["CAL"] + _FIBERS * 2 + ["CAL"]
+        tracer = OrderTrace(master_path, {"norder": {"GREEN": 2}})
+
+        with caplog.at_level("WARNING"):
+            identities = tracer._assign_order_indexes("GREEN", metadata)
+
+        assert _labels(identities) == _trace_labels(2)
+        assert identities["cluster"].notna().all()
+        assert "4 orders detected but 2 expected" in caplog.text
         assert "3 orders detected but 2 expected" in caplog.text
 
 
@@ -632,7 +805,7 @@ class TestCSVWriting:
             ],
             columns=_TRACE_FIELDS,
         )
-        tracer._output_table = table
+        tracer.output_table = table
         output = tmp_path / "traces.csv"
 
         tracer.save_master(output, overwrite=False)
@@ -761,10 +934,120 @@ class TestApertureConstraint:
 
     def test_rejects_traces_too_close_for_the_gap(self, tmp_path, monkeypatch):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
-        with pytest.raises(ValueError, match="orderlet gap"):
+        # The clamp reads the widths to see where an aperture is on the
+        # detector, which the aperture step would have measured by now.
+        tracer._trace_tables["GREEN"][["BottomEdge", "TopEdge"]] = 5.0
+        with pytest.raises(ValueError, match="^GREEN: neighboring fitted traces"):
             tracer._clamp_neighboring_apertures(
                 "GREEN", orderlet_gap_pixels=_ORDERLET_SPACING + 1.0
             )
+
+    def test_fits_only_the_columns_the_orderlet_can_be_centered_at(
+        self, tmp_path, monkeypatch
+    ):
+        # A column where the cluster reaches a detector edge cannot yield a
+        # center, so an order running off the detector is judged on its own
+        # span rather than on the whole dispersion.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        tracer.detect_traces("GREEN")
+        tracer.assign_trace_identities("GREEN")
+        columns = tracer._sample_profiles("GREEN")["columns"]
+
+        cluster = tracer._clusters["GREEN"][
+            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+        ]
+        half = image.shape[1] // 2
+        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+        cluster["row_indices"] = np.concatenate(
+            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+        )
+        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+
+        offered = []
+        fit_polynomial = order_trace_module.robust_polyfit
+
+        def spy(x, y, deg, **kwargs):
+            offered.append(np.asarray(x))
+            return fit_polynomial(x, y, deg, **kwargs)
+
+        monkeypatch.setattr(order_trace_module, "robust_polyfit", spy)
+        tracer.fit_trace_polynomials("GREEN")
+
+        assert list(offered[0]) == list(columns[columns < half])
+        assert all(x.size == columns.size for x in offered[1:])
+
+    def test_a_partial_trace_is_bounded_by_the_columns_it_was_fitted_over(
+        self, tmp_path, monkeypatch
+    ):
+        # A cubic extrapolated beyond its fitted span can curl back over the
+        # detector and read as carried, so X1-X2 must stay inside that span.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        tracer.detect_traces("GREEN")
+        tracer.assign_trace_identities("GREEN")
+
+        cluster = tracer._clusters["GREEN"][
+            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+        ]
+        half = image.shape[1] // 2
+        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+        cluster["row_indices"] = np.concatenate(
+            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+        )
+        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+
+        fitted = tracer.fit_trace_polynomials("GREEN")
+        assert fitted[["X1", "X2"]].iloc[0].tolist() == [0.0, half - 1.0]
+        assert (fitted["X2"].iloc[1:] == image.shape[1] - 1).all()
+
+        table = tracer.estimate_trace_apertures("GREEN")
+        assert table["X1"].iloc[0] == 0.0 and table["X2"].iloc[0] <= half - 1
+        assert table["Status"].iloc[0] == "partial"
+        assert (table["Status"].iloc[1:] == "full").all()
+
+    def test_refits_a_partial_trace_whose_fit_turns_back_within_its_span(
+        self, tmp_path, monkeypatch, caplog
+    ):
+        # Over the columns a partial trace was not fitted at, a cubic is free
+        # to turn back and carry the aperture off the detector and onto it
+        # again, so such a fit is redone as a parabola.
+        image, _ = _synthetic_flat()
+        tracer = _tracer(tmp_path, image, monkeypatch)
+        tracer.detect_traces("GREEN")
+        tracer.assign_trace_identities("GREEN")
+
+        cluster = tracer._clusters["GREEN"][
+            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+        ]
+        half = image.shape[1] // 2
+        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+        cluster["row_indices"] = np.concatenate(
+            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+        )
+        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+
+        degrees = []
+        fit_polynomial = order_trace_module.robust_polyfit
+        turn = half / 2.0
+
+        def spy(x, y, deg, **kwargs):
+            degrees.append(deg)
+            coeffs, good, rms = fit_polynomial(x, y, deg, **kwargs)
+            if len(degrees) == 1:
+                # (x - turn)**3, whose only turning point is inside the span.
+                coeffs = np.array([-(turn**3), 3 * turn**2, -3 * turn, 1.0])
+            return coeffs, good, rms
+
+        monkeypatch.setattr(order_trace_module, "robust_polyfit", spy)
+        with caplog.at_level("WARNING"):
+            fitted = tracer.fit_trace_polynomials("GREEN")
+
+        assert degrees[:2] == [3, 2]
+        assert set(degrees[2:]) == {3}
+        assert fitted["Coeff3"].iloc[0] == 0.0
+        assert (fitted["Coeff3"].iloc[1:] != 0.0).all()
+        assert "turns back inside the span" in caplog.text
 
     def test_fitting_leaves_the_apertures_to_the_aperture_step(
         self, tmp_path, monkeypatch
@@ -773,9 +1056,12 @@ class TestApertureConstraint:
 
         fitted = tracer._trace_tables["GREEN"]
         assert list(fitted.columns) == _TRACE_FIELDS
-        assert fitted[["BottomEdge", "TopEdge", "X1", "X2"]].isna().all(axis=None)
+        assert fitted[["BottomEdge", "TopEdge"]].isna().all(axis=None)
         assert fitted[["Coeff0", "PolyfitRMS"]].notna().all(axis=None)
         assert (fitted["Status"] == "unknown").all()
+        # X1-X2 arrives as the span the fit was constrained over.
+        assert (fitted["X1"] == 0).all()
+        assert (fitted["X2"] == tracer.ccd["ncol"] - 1).all()
 
         # What the fit accepted at the sampled columns stays with them.
         sampled = tracer._profiles["GREEN"]
@@ -864,6 +1150,56 @@ class TestApertureConstraint:
         with pytest.raises(ValueError, match="apertures overlap"):
             tracer._validate_trace_table("GREEN")
 
+    def test_validation_rejects_a_trace_that_leaves_and_returns(self, master_path):
+        tracer = self._make_tracer(master_path, norder=1)
+        rows = [
+            {
+                **_straight_trace(100.0 + 20.0 * position, 0.0, 6.0, 6.0),
+                "Chip": "GREEN",
+                "X1": 0.0,
+                "X2": 399.0,
+                "Fiber": fiber,
+                "Order": 0,
+                "Status": "full",
+            }
+            for position, fiber in enumerate(_FIBERS)
+        ]
+        # Sink SKY below the detector at mid-dispersion and bring it back;
+        # X1-X2 is one span, so both ends cannot be carried.
+        rows[0].update(Coeff0=100.0, Coeff1=-2.0, Coeff2=0.005)
+        tracer._trace_tables["GREEN"] = pd.DataFrame(rows, columns=_TRACE_FIELDS)
+
+        with pytest.raises(ValueError, match="SKY order 0 leaves the detector"):
+            tracer._validate_trace_table("GREEN")
+
+    def test_neighbours_sharing_no_fitted_column_are_left_unclamped(
+        self, master_path, caplog
+    ):
+        tracer = self._make_tracer(master_path, norder=1)
+        rows = [
+            {
+                **_straight_trace(100.0 + 20.0 * position, 0.0, 6.0, 6.0),
+                "Chip": "GREEN",
+                "X1": 0.0,
+                "X2": 399.0,
+                "Fiber": fiber,
+                "Order": 0,
+                "Status": "full",
+            }
+            for position, fiber in enumerate(_FIBERS)
+        ]
+        # SKY was fitted over one end of the dispersion and SCI1 the other, so
+        # their spacing could be measured nowhere.
+        rows[0]["X2"], rows[1]["X1"] = 150.0, 250.0
+        tracer._trace_tables["GREEN"] = pd.DataFrame(rows, columns=_TRACE_FIELDS)
+
+        with caplog.at_level("WARNING"):
+            tracer._clamp_neighboring_apertures("GREEN")
+
+        assert "fitted over no common column" in caplog.text
+        # Every other pair is still clamped against its neighbour.
+        assert (tracer._trace_tables["GREEN"]["TopEdge"] == 6.0).all()
+
 
 # ---------------------------------------------------------------------------
 # Real-data test
@@ -874,13 +1210,24 @@ class TestRealData:
     @pytest.mark.slow
     @pytest.mark.requires_testdata
     def test_real_20240405_master_flat(self, tmp_path):
-        """Trace a real vNext master flat and check it against the references."""
+        """Trace a real vNext master flat and check it reproduces the reference.
+
+        The comparison is against the vetted reference the pipeline ships for
+        this era, which was measured from this flat -- so it pins the shipped
+        artifact to what the module produces today, rather than standing as
+        independent truth."""
         testdata = Path(__file__).parent.parent / "testdata"
         masters = sorted(testdata.glob("**/KP.20240405.*_master_flat_L1.fits"))
         if not masters:
             pytest.skip("a 20240405 vNext master flat is not installed")
 
-        repo_root = Path(__file__).parent.parent.parent
+        vetted = pd.read_csv(
+            Path(__file__).parents[2]
+            / "reference"
+            / "order_traces"
+            / "order_trace_20240405.csv"
+        )
+
         tracer = OrderTrace(masters[0])
         combined = tracer.make_master(output_dir=tmp_path)
         tables = {chip: combined[combined["Chip"] == chip] for chip in ("GREEN", "RED")}
@@ -897,13 +1244,9 @@ class TestRealData:
             _assert_apertures_disjoint(tables[chip], tracer.ccd["ncol"])
             assert np.nanmax(tables[chip]["PolyfitRMS"]) < 2.0
 
-            # The reference tables are 1-based in Order and predate this module;
-            # they are used only as independent truth for position and labelling.
-            reference = pd.read_csv(
-                repo_root / "reference" / f"order_trace_{chip.lower()}.csv",
-                index_col=0,
-            )
-            reference["Order"] -= 1
+            reference = vetted[
+                (vetted["Chip"] == chip) & (vetted["Status"] != "missing")
+            ]
             merged = tables[chip].merge(
                 reference, on=["Order", "Fiber"], suffixes=("", "_ref")
             )

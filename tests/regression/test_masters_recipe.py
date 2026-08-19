@@ -13,7 +13,7 @@ import pytest
 
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import FileHandler, kpf_filepath
+from kpfpipe.utils.io import FileHandler, kpf_directory, kpf_filepath
 from recipes._logging import masters_run_summary
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
@@ -97,6 +97,93 @@ class TestMastersRecipe:
             ml1 = KPFMasterL1.from_fits(path)
             filenames = ml1.data["INPUT_FILES"]["FILENAME"].tolist()
             assert all(f.endswith(".fits") for f in filenames)
+
+
+# ---------------------------------------------------------------------------
+# Masters recipe order-trace stage (stacking stubbed -- wiring only)
+# ---------------------------------------------------------------------------
+
+
+class TestMastersRecipeOrderTraceStage:
+    """The recipe traces every master flat it just stacked.
+
+    The stacking modules are stubbed out: what is under test is the wiring --
+    which flat the tracer is handed, where its CSV is written, and that the
+    trace reaches the run summary. OrderTrace's own geometry is covered by
+    test_master_order_trace.py.
+    """
+
+    @pytest.fixture
+    def traced(self, tmp_path, monkeypatch):
+        import argparse
+
+        recipe = _load_masters_recipe()
+        calls = {}
+
+        class StubFileHandler:
+            def __init__(self, data_dirs):
+                pass
+
+            def build_mini_database(self, datecode, cache=None):
+                pass
+
+            def build_calibration_stacks(self, cal_type, **kwargs):
+                # Only the flats matter here; the other stages have nothing to
+                # stack and fall through.
+                return [["/l0/KP.20240405.00020.86.fits"]] if cal_type == "flat" else []
+
+        class StubFlat:
+            def __init__(self, files, config):
+                pass
+
+            def make_master_l1(self, master_path=None):
+                calls["flat_path"] = master_path
+
+        class StubOrderTrace:
+            def __init__(self, flat_path, config):
+                calls["traced_flat"] = flat_path
+                self.output_path = str(tmp_path / "kpf_20240405_order_trace.csv")
+
+            def make_master(self, output_dir=None):
+                calls["output_dir"] = output_dir
+
+        monkeypatch.setattr(recipe, "FileHandler", StubFileHandler)
+        monkeypatch.setattr(recipe, "Flat", StubFlat)
+        monkeypatch.setattr(recipe, "OrderTrace", StubOrderTrace)
+
+        def capture_summary(datecode, built, elapsed):
+            calls["built"] = built
+            return ""
+
+        monkeypatch.setattr(recipe, "masters_run_summary", capture_summary)
+
+        config = ConfigHandler(
+            str(MASTERS_CONFIG_PATH),
+            overrides={
+                "DATA_DIRS": {
+                    "KPF_DATA_INPUT": str(TESTDATA_DIR),
+                    "KPF_MASTERS_OUTPUT": str(tmp_path),
+                }
+            },
+        )
+        recipe.main(config, argparse.Namespace(datecode="20240405", obs_id=None))
+        return calls
+
+    def test_traces_the_master_flat_it_just_stacked(self, traced):
+        assert traced["traced_flat"] == traced["flat_path"]
+
+    def test_writes_the_trace_into_the_masters_directory(self, traced, tmp_path):
+        expected = kpf_directory(
+            kind="masters", data_root=str(tmp_path), datecode="20240405"
+        )
+        assert str(traced["output_dir"]) == str(expected)
+
+    def test_reports_the_trace_in_the_run_summary(self, traced):
+        traces = [entry for entry in traced["built"] if entry[0] == "order_trace"]
+        assert len(traces) == 1
+        _, path, n_frames = traces[0]
+        assert path.endswith("_order_trace.csv")
+        assert n_frames == 1
 
 
 # ---------------------------------------------------------------------------

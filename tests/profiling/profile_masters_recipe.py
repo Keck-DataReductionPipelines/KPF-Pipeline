@@ -1,11 +1,12 @@
 """End-to-end profile of the masters recipe (``recipes/kpf_drp_masters``).
 
-Builds the nightly calibration masters for one real datecode (master bias and
-dark L1, then the master WLS L2 from ThAr) under cProfile and ranks functions
-across all master modules, so the report shows which stage dominates the masters
-run. Optimized independently of the science recipe. Per-module line detail is in
-``profile_master_bias.py`` / ``profile_master_dark.py`` / ``profile_master_wls.py``,
-so the second line-profiler pass is disabled here.
+Builds the nightly calibration masters for one real datecode (master bias, dark,
+and flat L1, the order traces measured from each master flat, then the master WLS
+L2 from ThAr) under cProfile and ranks functions across all master modules, so the
+report shows which stage dominates the masters run. Optimized independently of the
+science recipe. Per-module line detail is in ``profile_master_bias.py`` /
+``profile_master_dark.py`` / ``profile_master_order_trace.py`` /
+``profile_master_wls.py``, so the second line-profiler pass is disabled here.
 
 The bundled darks span two default-gap clusters, so the recipe's
 ``build_calibration_stacks`` is wrapped to widen ``cluster_gap_seconds`` (the same
@@ -30,9 +31,10 @@ except ModuleNotFoundError:
 import kpfpipe.modules.masters.base as m_base
 import kpfpipe.modules.masters.bias as m_bias
 import kpfpipe.modules.masters.dark as m_dark
+import kpfpipe.modules.masters.order_trace as m_order_trace
 import kpfpipe.modules.masters.wls as m_wls
 
-MASTERS_MODULES = [m_base, m_bias, m_dark, m_wls]
+MASTERS_MODULES = [m_base, m_bias, m_dark, m_order_trace, m_wls]
 
 
 def _load_recipe():
@@ -59,7 +61,7 @@ def run():
         return (config, args)
 
     P.run_profile(
-        title="Masters recipe (bias, dark, WLS)",
+        title="Masters recipe (bias, dark, flat, order trace, WLS)",
         report_name="masters_recipe",
         setup=setup,
         call=recipe.main,

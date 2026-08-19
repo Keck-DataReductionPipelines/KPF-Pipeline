@@ -121,7 +121,7 @@ class TestParseArgs:
         assert s.parse_args(["--obs_ids", _OID1, "--jobs", "3"]).jobs == 3
 
     def test_job_timeout_default_and_override(self, s):
-        assert s.parse_args(["--obs_ids", _OID1]).job_timeout == 600
+        assert s.parse_args(["--obs_ids", _OID1]).job_timeout == 1200
         assert (
             s.parse_args(["--obs_ids", _OID1, "--job_timeout", "120"]).job_timeout
             == 120

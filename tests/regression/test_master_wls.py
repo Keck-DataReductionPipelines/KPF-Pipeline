@@ -223,20 +223,26 @@ def mock_make_master_l2(monkeypatch):
         chip,
         fibers,
         lineprofile=None,
-        polyorder_x=None,
-        polyorder_m=None,
-        polyorder_f=None,
+        poly_degree_x=None,
+        poly_degree_m=None,
+        poly_degree_f=None,
         **kwargs,
     ):
-        polyorder_x = polyorder_x if polyorder_x is not None else self.polyorder_x
-        polyorder_m = polyorder_m if polyorder_m is not None else self.polyorder_m
-        polyorder_f = polyorder_f if polyorder_f is not None else self.polyorder_f
+        poly_degree_x = (
+            poly_degree_x if poly_degree_x is not None else self.poly_degree_x
+        )
+        poly_degree_m = (
+            poly_degree_m if poly_degree_m is not None else self.poly_degree_m
+        )
+        poly_degree_f = (
+            poly_degree_f if poly_degree_f is not None else self.poly_degree_f
+        )
 
         nfibers = len(fibers)
         if nfibers == 1:
-            coeffs = np.zeros((polyorder_x + 1, polyorder_m + 1))
+            coeffs = np.zeros((poly_degree_x + 1, poly_degree_m + 1))
         else:
-            coeffs = np.zeros((polyorder_x + 1, polyorder_m + 1, polyorder_f + 1))
+            coeffs = np.zeros((poly_degree_x + 1, poly_degree_m + 1, poly_degree_f + 1))
 
         return [
             {
@@ -300,7 +306,7 @@ class TestMakeMasterL2:
         monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kw: MockL2())
 
         def mock_fit_and_qc(self, chip, fibers, **kwargs):
-            coeffs = np.zeros((self.polyorder_x + 1, self.polyorder_m + 1, 1))
+            coeffs = np.zeros((self.poly_degree_x + 1, self.poly_degree_m + 1, 1))
             return [
                 {
                     "obs_id": None,
@@ -317,7 +323,7 @@ class TestMakeMasterL2:
             W = np.empty((norder, NCOL_TEST, nfibers))
             for i in range(nfibers):
                 W[:, :, i] = float(i)
-            coeffs = np.zeros((self.polyorder_x + 1, self.polyorder_m + 1, 1))
+            coeffs = np.zeros((self.poly_degree_x + 1, self.poly_degree_m + 1, 1))
             return W, coeffs
 
         monkeypatch.setattr(WLS, "_fit_and_qc_lines_stack", mock_fit_and_qc)
@@ -356,9 +362,9 @@ class TestMakeMasterL2:
             coeffs = ml2.data[ext]
             assert coeffs is not None
             assert coeffs.shape == (
-                wls.polyorder_x + 1,
-                wls.polyorder_m + 1,
-                wls.polyorder_f + 1,
+                wls.poly_degree_x + 1,
+                wls.poly_degree_m + 1,
+                wls.poly_degree_f + 1,
             )
 
     def test_primary_header_keywords(self, mock_make_master_l2):
@@ -369,9 +375,9 @@ class TestMakeMasterL2:
             "ROUGHWLS",
             "LINELIST",
             "LINEPROF",
-            "POLYORDX",
-            "POLYORDM",
-            "POLYORDF",
+            "POLYDEGX",
+            "POLYDEGM",
+            "POLYDEGF",
         ]:
             assert key in primary
 
@@ -382,7 +388,7 @@ class TestMakeMasterL2:
         ml2 = wls.make_master_l2()
         primary = ml2.headers["PRIMARY"]
         assert primary.comments["MASTYPE"] == "Master calibration type"
-        assert primary.comments["POLYORDX"] == "WLS polynomial degree, pixel axis"
+        assert primary.comments["POLYDEGX"] == "WLS polynomial degree, pixel axis"
 
     def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
         # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),
@@ -411,13 +417,13 @@ class TestMakeMasterL2:
         read_back = KPFMasterL2.from_fits(str(out_path))
         assert read_back.headers["PRIMARY"].get("DATALVL") == "ML2"
 
-    def test_polyorder_override_stamped(self, mock_make_master_l2):
+    def test_poly_degree_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
-        override_x = wls.polyorder_x + 4  # ensure different from default
-        ml2 = wls.make_master_l2(polyorder_x=override_x)
-        assert ml2.headers["PRIMARY"].get("POLYORDX") == override_x
+        override_x = wls.poly_degree_x + 4  # ensure different from default
+        ml2 = wls.make_master_l2(poly_degree_x=override_x)
+        assert ml2.headers["PRIMARY"].get("POLYDEGX") == override_x
         for chip in wls.chips:
-            # POLYORD* live on PRIMARY only now; verify the override actually
+            # POLYDEG* live on PRIMARY only now; verify the override actually
             # propagated into the fit (coeffs array shape), not just the header.
             coeffs = ml2.data[f"{chip}_WLS_COEFFS"]
             assert coeffs.shape[0] == override_x + 1
@@ -540,9 +546,9 @@ class TestMakeMasterL2:
         h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
 
         expected_coeffs_shape = (
-            wls.polyorder_x + 1,
-            wls.polyorder_m + 1,
-            wls.polyorder_f + 1,
+            wls.poly_degree_x + 1,
+            wls.poly_degree_m + 1,
+            wls.poly_degree_f + 1,
         )
         expected_obs_ids = {get_obs_id(fn) for fn in FILE_LIST}
 
@@ -748,7 +754,7 @@ class TestCalculateWlsCoeffs:
         }
 
     def test_underconstrained_single_fiber_raises(self):
-        # default polyorder is (6, 3, 2) → 7*4 = 28 free params single-fiber
+        # default poly_degree is (6, 3, 2) → 7*4 = 28 free params single-fiber
         wls = WLS(FILE_LIST)
         lines = self._make_lines(5, fibers=("SCI1",))
         with pytest.raises(ValueError, match=r"underconstrained"):
@@ -765,7 +771,7 @@ class TestCalculateWlsCoeffs:
         wls = WLS(FILE_LIST)
         lines = self._make_lines(50, fibers=("SCI1",))
         coeffs = wls._calculate_wls_coeffs(lines, wls._echelle_orders["GREEN"])
-        assert coeffs.shape == (wls.polyorder_x + 1, wls.polyorder_m + 1)
+        assert coeffs.shape == (wls.poly_degree_x + 1, wls.poly_degree_m + 1)
 
     def test_mlambda_roundtrip_recovers_wavelength(self):
         """A surface exactly representable as m*lambda is recovered by the fit."""
@@ -775,7 +781,7 @@ class TestCalculateWlsCoeffs:
 
         # true m*lambda is a known low-degree Legendre surface -> divide out the
         # order to get a wavelength surface the fit must recover exactly.
-        coeffs_true = np.zeros((wls.polyorder_x + 1, wls.polyorder_m + 1))
+        coeffs_true = np.zeros((wls.poly_degree_x + 1, wls.poly_degree_m + 1))
         coeffs_true[0, 0], coeffs_true[1, 0] = 8.0e5, 300.0  # mean, pixel slope
         coeffs_true[0, 1], coeffs_true[1, 1] = 5.0e4, 5.0  # order slope, cross term
         wave_true = wls._evaluate_wls_coeffs(coeffs_true, orders, nfiber=1)
@@ -970,9 +976,9 @@ class TestMinStackSizeGate:
                     if rejected
                     else np.zeros(
                         (
-                            self.polyorder_x + 1,
-                            self.polyorder_m + 1,
-                            self.polyorder_f + 1,
+                            self.poly_degree_x + 1,
+                            self.poly_degree_m + 1,
+                            self.poly_degree_f + 1,
                         )
                     )
                 )
@@ -992,7 +998,7 @@ class TestMinStackSizeGate:
         def mock_combine(self, frames, chip, nfibers, **kwargs):
             norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
             coeffs = np.zeros(
-                (self.polyorder_x + 1, self.polyorder_m + 1, self.polyorder_f + 1)
+                (self.poly_degree_x + 1, self.poly_degree_m + 1, self.poly_degree_f + 1)
             )
             return np.full((norder, NCOL_TEST, nfibers), 5500.0), coeffs
 

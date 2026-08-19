@@ -247,7 +247,7 @@ translator; vNext may differ by design — confirm each is intended):
    trace. Structural gap if EPRV compliance requires it.
 2. **Extraction method.** vNext default is `box` (`spectral_extraction`); the EPRV KPF doc
    states `optimal extraction`. (PRIMARY `EXTRACT` should reflect whatever we ship.)
-3. **WLS polynomial order.** vNext default `polyorder_x = 6`; the doc states a **9th-order**
+3. **WLS polynomial order.** vNext default `poly_degree_x = 6`; the doc states a **9th-order**
    Legendre fit.
 4. **WLS source.** vNext fits a ThAr line list (rough WLS + `thar_line_list.csv`); the doc
    describes an **LFC-based** solution interpolated between bracketing LFC frames.
@@ -261,5 +261,5 @@ translator; vNext may differ by design — confirm each is intended):
    when Ca H&K is built and products are regenerated.
 
 **Instrument eras (`INSTERA`)**: the KPF era table is vendored at
-`reference/kpf_instrument_eras.csv` (era tag, UT
+`reference/instrument_eras.csv` (era tag, UT
 start/end, comment) — use it to stamp/validate `INSTERA` by observation date.

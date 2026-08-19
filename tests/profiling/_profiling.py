@@ -258,6 +258,20 @@ MASTERS_CLUSTER_GAP_SECONDS = 24 * 3600
 MASTERS_CONFIG = {"KPF_MASTERS_OUTPUT": str(TESTDATA_DIR)}
 
 
+def masters_flat_file():
+    """The bundled master flat of ``MASTERS_DATECODE``, the OrderTrace input."""
+    from kpfpipe.utils.io import FileHandler
+
+    masters = FileHandler(MASTERS_CONFIG).find_masters("flat", "L1", MASTERS_DATECODE)
+    if not masters:
+        print(
+            f"[skip] no {MASTERS_DATECODE} master flat under {TESTDATA_DIR} — "
+            "build one first with `make profile-masters`; nothing to do."
+        )
+        raise SystemExit(0)
+    return masters[0]
+
+
 def masters_l0_files(imtype):
     """First real L0 cluster of ``imtype`` ('bias'|'dark'|'thar') from testdata."""
     from kpfpipe.utils.io import FileHandler
