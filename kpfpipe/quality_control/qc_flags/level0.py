@@ -127,12 +127,22 @@ class QCL0(QC):
     def radec_consistent(self):
         """Pointing agrees with the target and catalog positions.
 
+        Telescope pointing is only meaningful for a science frame (IMTYPE
+        'Object'), so a calibration frame passes unconditionally: it has no
+        target, AstroQuery never runs on it, and DiagL0 therefore leaves
+        TARGOFF/OBJOFF/GAIAOFF blank -- which would otherwise fail the required
+        TARGOFF branch below.
+
         TARGOFF (pointing vs the DCS target) is internal telescope-pointing
         consistency and is required: an empty value (astrometry unavailable) or
         one >= 1" fails. OBJOFF/GAIAOFF are external catalog cross-matches with a
         looser 5" bound, checked only when present-and-valued, so a disabled or
         failed Gaia/SIMBAD lookup passes.
         """
+        imtype = self.kpf_obj.headers["PRIMARY"].get("IMTYPE")
+        if str(imtype).strip().lower() != "object":
+            return True
+
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         targoff = self._hdr_float(hdr, "TARGOFF")
         if targoff is None or targoff >= 1.0:

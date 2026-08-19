@@ -50,13 +50,15 @@ def _make_kpf0(
     obs_id="KP.20240405.00001.00",
     dates=None,
     expmeter=None,
+    imtype="Object",
 ):
     """Minimal 4-amp KPF0 object with required headers.
 
     ``dates`` optionally seeds raw DATE-BEG/MID/END/ELAPSED cards on PRIMARY for
     the DATTIMOK timing check. ``expmeter`` optionally maps an EXPMETER_SCI/SKY
     extension name to its table, for the EMTIMEOK/EMFLUXOK checks; without it the
-    frame has no EM data at all, like a calibration.
+    frame has no EM data at all, like a calibration. ``imtype`` sets the PRIMARY
+    IMTYPE ('Object' is a science frame; anything else is a calibration).
     """
     fn = str(tmp_path / f"{obs_id}.fits")
     primary = fits.PrimaryHDU()
@@ -65,7 +67,7 @@ def _make_kpf0(
     primary.header["EXPTIME"] = exptime
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = f"{obs_id}.fits"
-    primary.header["IMTYPE"] = "Object"
+    primary.header["IMTYPE"] = imtype
     for k, v in (dates or {}).items():
         primary.header[k] = v
 
@@ -628,6 +630,20 @@ class TestQCL0:
         l0.set_keyword("TARGOFF", 0.02)
         l0.set_keyword("GAIAOFF", None)
         l0.set_keyword("OBJOFF", None)
+        assert QCL0(l0).radec_consistent() is True
+
+    @pytest.mark.parametrize("imtype", ["Bias", "Dark", "Flatlamp", "Arclamp"])
+    def test_radec_calibration_frames_pass(self, tmp_path, imtype):
+        """Pointing is a science-frame check: a calibration frame has no target,
+        so its blank TARGOFF must not fail RADECOK."""
+        l0 = _make_kpf0(tmp_path, imtype=imtype)
+        assert QCL0(l0).radec_consistent() is True
+
+    def test_radec_calibration_ignores_offsets(self, tmp_path):
+        """Even a badly-off offset on a calibration frame is not a pointing fault."""
+        l0 = _make_kpf0(tmp_path, imtype="Bias")
+        for k, v in (("TARGOFF", 1.5), ("OBJOFF", 6.0), ("GAIAOFF", 91004.96)):
+            l0.set_keyword(k, v)
         assert QCL0(l0).radec_consistent() is True
 
     def test_radecok_key_present(self):
