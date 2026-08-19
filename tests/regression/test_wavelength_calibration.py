@@ -252,7 +252,7 @@ class TestPerform:
             master.data[f"{chip}_SCI2_WAVE"] = rng.uniform(
                 4000.0, 8000.0, size=(norder, NCOL)
             ).astype(np.float64)  # WAVE is born-64 (EPRV / dtype policy)
-        master_path = str(tmp_path / "partial_master.fits")
+        master_path = str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
         master.to_fits(master_path)
 
         l2 = _make_science_l2(wls_path=master_path)

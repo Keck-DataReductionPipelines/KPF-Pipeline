@@ -67,6 +67,7 @@ def _make_kpf0(
     primary.header["EXPTIME"] = exptime
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = f"{obs_id}.fits"
+    primary.header["PROGNAME"] = "K123"
     primary.header["IMTYPE"] = imtype
     for k, v in (dates or {}).items():
         primary.header[k] = v
@@ -407,6 +408,7 @@ class TestQCL0:
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
         primary.header["OFNAME"] = os.path.basename(fn)
+        primary.header["PROGNAME"] = "K123"
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in range(1, 5):
@@ -423,6 +425,7 @@ class TestQCL0:
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
         primary.header["OFNAME"] = os.path.basename(fn)
+        primary.header["PROGNAME"] = "K123"
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in (1, 2):
@@ -439,6 +442,7 @@ class TestQCL0:
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
         primary.header["OFNAME"] = os.path.basename(fn)
+        primary.header["PROGNAME"] = "K123"
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in (1, 2, 3):  # 3 amps -> not a valid 2/4-amp readout

@@ -64,7 +64,7 @@ class TestKPF0:
         assert len(l0.receipt) >= 1
         assert "from_fits" in l0.receipt["FUNCTION"].values
 
-        out_fn = str(tmp_path / "receipt_test.fits")
+        out_fn = str(tmp_path / "KP.20240113.00002.00.fits")
         l0.to_fits(out_fn)
         assert "to_fits" in l0.receipt["FUNCTION"].values
 
@@ -106,6 +106,7 @@ class TestKPF0ErrorPaths:
         primary.header["INSTRUME"] = "KPF"
         primary.header["DATE-OBS"] = "2024-01-13T00:00:02"
         primary.header["OFNAME"] = "KP.20240113.00002.00.fits"
+        primary.header["PROGNAME"] = "K123"
         hdul = fits.HDUList([primary, *extra_hdus])
         hdul.writeto(fn, overwrite=True)
         hdul.close()
@@ -147,7 +148,7 @@ class TestKPF0ErrorPaths:
 
     def test_to_fits_creates_parent_dirs(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        out = str(tmp_path / "nested" / "sub" / "out.fits")
+        out = str(tmp_path / "nested" / "sub" / "KP.20240113.00002.00.fits")
         l0.to_fits(out)
         assert os.path.isfile(out)
 
@@ -232,6 +233,7 @@ class TestKPF0CatalogRecord:
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
         primary.header["OFNAME"] = "KP.20240405.00001.00.fits"
+        primary.header["PROGNAME"] = "K123"
         primary.header["OBJECT"] = "testtarget"
         primary.header["IMTYPE"] = "Object"
         primary.header["TARGRA"] = "12:00:00.00"
@@ -258,6 +260,7 @@ class TestCatalogRecordMissingValues:
         l0 = KPF0()
         l0.headers["PRIMARY"]["INSTRUME"] = "KPF"
         l0.headers["PRIMARY"]["OFNAME"] = "KP.20240405.00002.00.fits"
+        l0.headers["PRIMARY"]["PROGNAME"] = "K123"
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         l0.to_fits(fn)

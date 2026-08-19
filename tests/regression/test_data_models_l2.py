@@ -541,7 +541,7 @@ class TestKPFMasterL2:
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         original = m.data["TRACE3_WAVE"].copy()
 
-        out_fn = str(tmp_path / "roundtrip_ml2.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
         m.to_fits(out_fn)
 
         m2 = KPFMasterL2.from_fits(out_fn)
@@ -549,7 +549,7 @@ class TestKPFMasterL2:
 
     def test_datalvl_header_in_fits(self, synthetic_masters_l2_file, tmp_path):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
-        out_fn = str(tmp_path / "datalvl_ml2.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
         m.to_fits(out_fn)
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML2"
@@ -572,7 +572,7 @@ class TestKPFMasterL2:
         m.set_input_files(files, "thar")
         m.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
 
-        out_fn = str(tmp_path / "ml2_input_files.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
         m.to_fits(out_fn)
 
         m2 = KPFMasterL2.from_fits(out_fn)

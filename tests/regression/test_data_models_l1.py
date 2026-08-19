@@ -92,7 +92,7 @@ class TestKPF1:
         l1 = KPF1.from_fits(synthetic_l1_file)
         original_green = l1.data["GREEN_CCD"].copy()
 
-        out_fn = str(tmp_path / "roundtrip_l1.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
 
         l1_reread = KPF1.from_fits(out_fn)
@@ -104,7 +104,7 @@ class TestKPF1:
         l1 = KPF1.from_fits(synthetic_l1_file)
         assert len(l1.receipt) >= 1
 
-        out_fn = str(tmp_path / "receipt_l1.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
         assert "to_fits" in l1.receipt["FUNCTION"].values
 
@@ -115,7 +115,7 @@ class TestKPF1:
         into it before writing; without that the receipt is silently lost."""
         l1 = KPF1.from_fits(synthetic_l1_file)
         l1.receipt_add_entry("image_assembly", "", "PASS")
-        out_fn = str(tmp_path / "roundtrip_l1.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
 
         modules = KPF1.from_fits(out_fn).receipt["FUNCTION"].values
@@ -129,7 +129,7 @@ class TestKPF1:
 
     def test_datalvl_header(self, synthetic_l1_file, tmp_path):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        out_fn = str(tmp_path / "datalvl_test.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
 
         with fits.open(out_fn) as hdul:
@@ -430,6 +430,7 @@ class TestToKpf1:
         p = fits.PrimaryHDU()
         p.header["INSTRUME"] = "KPF"
         p.header["OFNAME"] = "KP.20240113.00009.00.fits"
+        p.header["PROGNAME"] = "K123"
         p.header["PARANTEL"] = 108.03  # header_map maps PARANTEL -> non-standard PARANG
         fits.HDUList([p]).writeto(fn)
         l1 = KPF0.from_fits(fn).to_kpf1()
@@ -621,7 +622,7 @@ class TestKPFMasterL1:
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
         original = m.data["GREEN_IMG"].copy()
 
-        out_fn = str(tmp_path / "roundtrip_ml1.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10_master_bias_L1.fits")
         m.to_fits(out_fn)
 
         m2 = KPFMasterL1.from_fits(out_fn)
@@ -629,7 +630,7 @@ class TestKPFMasterL1:
 
     def test_datalvl_header_in_fits(self, synthetic_masters_l1_file, tmp_path):
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
-        out_fn = str(tmp_path / "datalvl_ml1.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10_master_bias_L1.fits")
         m.to_fits(out_fn)
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML1"

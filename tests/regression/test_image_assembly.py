@@ -58,6 +58,7 @@ def synthetic_4amp_l0(tmp_path_factory):
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
     primary.header["OFNAME"] = os.path.basename(fn)
+    primary.header["PROGNAME"] = "K123"
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -272,7 +273,14 @@ class TestDtypeProvenance:
         l1 = ImageAssembly(l0).perform()
         for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
             assert_dtype(l1.data[ext], L1_IMAGE, ext)
-        assert_roundtrip_dtype(KPF1, l1, "GREEN_CCD", L1_IMAGE, tmp_path)
+        assert_roundtrip_dtype(
+            KPF1,
+            l1,
+            "GREEN_CCD",
+            L1_IMAGE,
+            tmp_path,
+            name="kpf_L1_20240113T102656.fits",
+        )
 
     def test_l0_amps_not_float64(self, synthetic_4amp_l0):
         l0 = KPF0.from_fits(synthetic_4amp_l0)
@@ -395,6 +403,7 @@ def synthetic_4amp_l0_with_expmeter(tmp_path):
     primary.header["IMTYPE"] = "Bias"
     primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
     primary.header["OFNAME"] = os.path.basename(fn)
+    primary.header["PROGNAME"] = "K123"
 
     hdus = [primary]
     for chip in ["GREEN", "RED"]:
@@ -519,7 +528,7 @@ class TestImageAssemblyRoundTrip:
         l1 = ia.perform()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "test_l1.fits")
+            fn = os.path.join(tmpdir, "kpf_L1_20240113T102656.fits")
             l1.to_fits(fn)
 
             l1_read = KPF1.from_fits(fn)
@@ -539,7 +548,7 @@ class TestImageAssemblyRoundTrip:
         l1 = ia.perform()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "test_l1.fits")
+            fn = os.path.join(tmpdir, "kpf_L1_20240113T102656.fits")
             l1.to_fits(fn)
 
             l1_read = KPF1.from_fits(fn)

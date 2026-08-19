@@ -351,7 +351,14 @@ class TestMakeMasterL2:
         ml2 = wls.make_master_l2()
         assert_dtype(ml2.data["TRACE3_WAVE"], WAVE, "master TRACE3_WAVE")
         ml2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
-        assert_roundtrip_dtype(KPFMasterL2, ml2, "TRACE3_WAVE", WAVE, tmp_path)
+        assert_roundtrip_dtype(
+            KPFMasterL2,
+            ml2,
+            "TRACE3_WAVE",
+            WAVE,
+            tmp_path,
+            name="KP.20240113.23249.10_master_thar_L2.fits",
+        )
 
     def test_coeffs_extensions_populated(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
@@ -396,7 +403,7 @@ class TestMakeMasterL2:
         # we set survives the round-trip.
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
-        out_path = tmp_path / "round_trip_master.fits"
+        out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))
         assert out_path.exists()
 
@@ -412,7 +419,7 @@ class TestMakeMasterL2:
         seeded = set(ml2.keyword_registry.eprv_primary_seed)
         assert not (seeded & set(ml2.headers["PRIMARY"])) - {"DATALVL"}
 
-        out_path = tmp_path / "ml2_datalvl.fits"
+        out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))
         read_back = KPFMasterL2.from_fits(str(out_path))
         assert read_back.headers["PRIMARY"].get("DATALVL") == "ML2"
@@ -487,7 +494,9 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
         with pytest.raises(ValueError, match="level"):
-            wls.save_master("L4", str(tmp_path / "master.fits"))
+            wls.save_master(
+                "L4", str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
+            )
 
     def test_master_path_writes_fits(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
@@ -498,7 +507,7 @@ class TestMakeMasterL2:
     def test_save_master_post_hoc(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()  # no master_path; ml2_obj stashed on self
-        master_path = tmp_path / "master.fits"
+        master_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         wls.save_master("L2", str(master_path))
         assert master_path.exists()
 
@@ -521,7 +530,9 @@ class TestMakeMasterL2:
     def test_save_reduced_frames_before_make_raises(self, tmp_path):
         wls = WLS(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_reduced_frames(str(tmp_path / "master.fits"))
+            wls.save_reduced_frames(
+                str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
+            )
 
     def test_save_reduced_frames_refuses_overwrite(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
@@ -534,7 +545,7 @@ class TestMakeMasterL2:
     def test_save_master_overwrite_true_replaces(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
-        master_path = tmp_path / "master.fits"
+        master_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         master_path.write_bytes(b"stale")
         wls.save_master("L2", str(master_path), overwrite=True)
         assert master_path.read_bytes()[:6] == b"SIMPLE"

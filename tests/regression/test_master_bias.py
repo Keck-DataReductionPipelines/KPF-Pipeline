@@ -123,7 +123,7 @@ class TestMasterBiasRoundTrip:
             ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_bias.fits")
+            fn = os.path.join(tmpdir, "KP.20240113.23249.10_master_bias_L1.fits")
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 
@@ -141,7 +141,7 @@ class TestMasterBiasRoundTrip:
             ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_bias.fits")
+            fn = os.path.join(tmpdir, "KP.20240113.23249.10_master_bias_L1.fits")
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 
@@ -155,7 +155,7 @@ class TestMasterBiasRoundTrip:
             ml1 = bias.make_master_l1()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_bias.fits")
+            fn = os.path.join(tmpdir, "KP.20240113.23249.10_master_bias_L1.fits")
             ml1.to_fits(fn)
             ml1_read = KPFMasterL1.from_fits(fn)
 

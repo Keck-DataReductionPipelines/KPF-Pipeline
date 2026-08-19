@@ -53,16 +53,29 @@ _CATALOG_CARDS = {
     "CPLX3": 10.0,
     "CEPCH3": 2016.0,
     "CEQNX3": 2000.0,
+    "CRV3": 0.0,  # no systemic RV; set so the module need not fall back to 0
 }
 
 
+def _expmeter_table(data):
+    """EXPMETER_SCI table from Date-Beg/Date-End plus flux columns.
+
+    Real EXPMETER_SCI always carries the shutter-corrected columns, and the module
+    prefers them; mirror the uncorrected ones so every expected time is unchanged.
+    """
+    return Table(
+        {**data, "Date-Beg-Corr": data["Date-Beg"], "Date-End-Corr": data["Date-End"]}
+    )
+
+
 def _make_expmeter_table():
-    begs = [f"{_T0}00:00:00.000", f"{_T0}00:02:00.000", f"{_T0}00:04:00.000"]
-    ends = [f"{_T0}00:01:00.000", f"{_T0}00:03:00.000", f"{_T0}00:05:00.000"]
-    data = {"Date-Beg": begs, "Date-End": ends}
+    data = {
+        "Date-Beg": [f"{_T0}00:00:00.000", f"{_T0}00:02:00.000", f"{_T0}00:04:00.000"],
+        "Date-End": [f"{_T0}00:01:00.000", f"{_T0}00:03:00.000", f"{_T0}00:05:00.000"],
+    }
     for wc in _WAVE_COLS:
         data[wc] = np.full(3, _FLUX_VALUE)
-    return Table(data)
+    return _expmeter_table(data)
 
 
 @pytest.fixture
@@ -222,7 +235,7 @@ class TestGetTimestamps:
         assert np.all(t_mid.jd < t_end.jd)
 
     def test_non_monotonic_raises(self, synthetic_kpf2):
-        bad_table = Table(
+        bad_table = _expmeter_table(
             {
                 "Date-Beg": [
                     "2024-01-01T00:04:00.000",
@@ -394,7 +407,7 @@ class TestFluxWeightedMidpointExpmeter:
             "5000": [100.0, 100.0, 100.0],
             "5100": [0.0, 0.0, 0.0],
         }
-        synthetic_kpf2.set_data("EXPMETER_SCI", Table(data))
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         bc = BarycentricCorrection(synthetic_kpf2)
         with pytest.raises(ValueError, match="total flux"):
             bc.compute_flux_weighted_midpoint_times(
@@ -421,7 +434,7 @@ class TestFluxWeightedMidpointExpmeter:
             "5000": [1000.0, 1.0, 1.0],
             "5100": [1000.0, 1.0, 1.0],
         }
-        synthetic_kpf2.set_data("EXPMETER_SCI", Table(data))
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         bc = BarycentricCorrection(synthetic_kpf2)
 
         _, t_no = bc.compute_flux_weighted_midpoint_times(
@@ -460,7 +473,7 @@ class TestFluxWeightedMidpointExpmeter:
             "5000": [1000.0, 1.0, 1.0],
             "5100": [1000.0, 1.0, 1.0],
         }
-        synthetic_kpf2.set_data("EXPMETER_SCI", Table(data))
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         # Shutter open 00:00:00 → 00:05:00; readings only 00:02:00–00:03:20
         synthetic_kpf2.headers["INSTRUMENT_HEADER"]["DATE-BEG"] = (
             "2024-01-01T00:00:00.000"
@@ -529,7 +542,7 @@ class TestFluxWeightedMidpointOrders:
             "5000": [1000.0, 1.0, 1.0],
             "5100": [1.0, 1.0, 1000.0],
         }
-        synthetic_kpf2.set_data("EXPMETER_SCI", Table(data))
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
 
         bc = BarycentricCorrection(synthetic_kpf2)
         _, t = bc.compute_flux_weighted_midpoint_times(output="orders", **self._KWARGS)
@@ -591,7 +604,7 @@ class TestFluxWeightedMidpointCcds:
             "5000": [1000.0, 1.0, 1.0],
             "5300": [1.0, 1.0, 1000.0],
         }
-        synthetic_kpf2.set_data("EXPMETER_SCI", Table(data))
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
 
         bc = BarycentricCorrection(synthetic_kpf2)
         _, t_orders = bc.compute_flux_weighted_midpoint_times(
@@ -658,7 +671,7 @@ class TestFluxWeightedMidpointCcds:
             "5000": [1000.0, 1.0, 1.0],
             "5100": [1.0, 1.0, 1000.0],
         }
-        synthetic_kpf2.set_data("EXPMETER_SCI", Table(data))
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
 
         bc = BarycentricCorrection(synthetic_kpf2)
         w, t = bc.compute_flux_weighted_midpoint_times(output="ccds", **self._KWARGS)
@@ -907,7 +920,7 @@ class TestPerform:
 
     def test_missing_crv_defaults_to_zero(self, caplog, bc_monkeypatched, monkeypatch):
         """No CRV3 on PRIMARY (no catalog rv, no TARGRADV) → rv_mps=0, warns."""
-        # synthetic_kpf2 fixture does not set CRV3
+        del bc_monkeypatched.l2_obj.headers["PRIMARY"]["CRV3"]
         captured = {}
 
         def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
@@ -947,7 +960,7 @@ class TestPerform:
             data[wc] = rng.normal(100.0, 2.0, ntime).astype(float)
         # Inject a clear outlier so the filter has work to do
         data[wave_cols[5]][30] = 1e6
-        synthetic_kpf2.set_data("EXPMETER_SCI", Table(data))
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         synthetic_kpf2.headers["INSTRUMENT_HEADER"]["DATE-END"] = (
             "2024-01-01T01:00:00.000"
         )

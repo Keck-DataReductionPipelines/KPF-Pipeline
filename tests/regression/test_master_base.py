@@ -780,13 +780,21 @@ class TestDtypeProvenance:
             assert_dtype(master.data[ext], MASK_MEM, ext)
 
     def test_roundtrip_img_float32_mask_uint8(self, master, tmp_path):
-        assert_roundtrip_dtype(KPFMasterL1, master, "GREEN_IMG", L1_IMAGE, tmp_path)
+        assert_roundtrip_dtype(
+            KPFMasterL1,
+            master,
+            "GREEN_IMG",
+            L1_IMAGE,
+            tmp_path,
+            name="KP.20240113.23249.10_master_bias_L1.fits",
+        )
         assert_roundtrip_dtype(
             KPFMasterL1,
             master,
             "GREEN_MASK",
             MASK_MEM,
             tmp_path,
+            name="KP.20240113.23249.10_master_bias_L1.fits",
             expected_disk=MASK_DISK,
         )
 
@@ -803,7 +811,7 @@ class TestSaveMaster:
     def test_master_path_writes_fits(self, tmp_path):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        master_path = tmp_path / "master_bias.fits"
+        master_path = tmp_path / "KP.20240113.23249.10_master_bias_L1.fits"
         with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1(master_path=str(master_path))
         assert master_path.exists()
@@ -811,7 +819,9 @@ class TestSaveMaster:
     def test_master_path_creates_parent_dir(self, tmp_path):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        master_path = tmp_path / "nested" / "subdir" / "master_bias.fits"
+        master_path = (
+            tmp_path / "nested" / "subdir" / "KP.20240113.23249.10_master_bias_L1.fits"
+        )
         with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1(master_path=str(master_path))
         assert master_path.exists()
@@ -819,7 +829,7 @@ class TestSaveMaster:
     def test_master_path_overwrites_existing(self, tmp_path):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        master_path = tmp_path / "master_bias.fits"
+        master_path = tmp_path / "KP.20240113.23249.10_master_bias_L1.fits"
         master_path.touch()
         with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1(master_path=str(master_path))
@@ -833,7 +843,7 @@ class TestSaveMaster:
     def test_save_master_refuses_overwrite_by_default(self, tmp_path):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        master_path = tmp_path / "master_bias.fits"
+        master_path = tmp_path / "KP.20240113.23249.10_master_bias_L1.fits"
         master_path.touch()
         with patch.object(bias, "stack_frames", return_value=synthetic):
             bias.make_master_l1()  # populates ml1_obj

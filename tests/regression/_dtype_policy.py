@@ -56,7 +56,7 @@ def assert_not_float64(arr, label):
 
 
 def assert_roundtrip_dtype(
-    model_cls, obj, ext, expected, tmp_path, name="rt.fits", expected_disk=None
+    model_cls, obj, ext, expected, tmp_path, name, expected_disk=None
 ):
     """Write ``obj`` to FITS, read it back with ``model_cls``, and assert the
     extension ``ext`` round-trips correctly.
@@ -65,8 +65,8 @@ def assert_roundtrip_dtype(
     on-disk dtype (BITPIX), defaulting to ``expected``. They differ for MASK,
     which is bool in memory but uint8 (8-bit) on disk.
 
-    ``name`` defaults to a throwaway; L2/L4 callers should pass a conventional
-    EPRV name, since those levels warn (via rvdata) on an off-convention write.
+    ``name`` is the output filename, required because every level warns on an
+    off-convention write (L2/L4 via rvdata, the rest via check_filename_convention).
     """
     expected_disk = expected if expected_disk is None else expected_disk
     out = str(tmp_path / name)

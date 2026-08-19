@@ -51,7 +51,7 @@ class TestPrimaryCommentRoundTrip:
         l1.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
         l1.headers["PRIMARY"]["BIASAGE"] = (-0.5, "[day] bias age")
 
-        fn = str(tmp_path / "header_roundtrip_l1.fits")
+        fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(fn)
 
         prim = KPF1.from_fits(fn).headers["PRIMARY"]
@@ -71,7 +71,7 @@ class TestUndefinedRoundTrip:
         # RV on PRIMARY, written None on a failed fit.
         l1.headers["PRIMARY"]["RV"] = None
 
-        fn = str(tmp_path / "header_undefined_l1.fits")
+        fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(fn)
 
         prim = KPF1.from_fits(fn).headers["PRIMARY"]
