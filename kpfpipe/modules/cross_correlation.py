@@ -756,16 +756,16 @@ class CrossCorrelation:
 
             # Per-orderlet RV table, one row per order (green then red). ORDER_ID
             # is a composite string label ``{CHIP}_{FIBER}_{n}`` whose ``n`` is
-            # 1-based per chip, while ORDER_INDEX holds the plain 0-based row
-            # index; ECHELLE_ORDER is the physical grating order (detector.toml,
-            # blue->red); WEIGHT is the per-order CCF weight
+            # 0-based per chip, while ORDER_INDEX holds the 0-based row index
+            # across both chips; ECHELLE_ORDER is the physical grating order
+            # (detector.toml, blue->red); WEIGHT is the per-order CCF weight
             # (ccf_order_weights.csv). RV/RV_ERR are NaN placeholders
             # RadialVelocity fills from the CCFs.
             order_id = np.array(
                 [
                     f"{chip}_{fiber}_{order}"
                     for chip in ("GREEN", "RED")
-                    for order in range(1, self.norder[chip] + 1)
+                    for order in range(self.norder[chip])
                 ]
             )
             echelle_order = np.concatenate(

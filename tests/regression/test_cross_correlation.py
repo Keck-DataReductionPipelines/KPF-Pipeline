@@ -601,7 +601,7 @@ class TestPerform:
             np.testing.assert_array_equal(weight, expected)
 
     def test_rv_table_order_id_and_echelle_columns(self, performed):
-        # ORDER_ID is the KPF chip/fiber/order name, 1-based per chip (green then
+        # ORDER_ID is the KPF chip/fiber/order name, 0-based per chip (green then
         # red). ECHELLE_ORDER is the physical grating order (detector.toml),
         # blue->red: GREEN 137..103, RED 102..71.
         cc_module, l4 = performed
@@ -609,10 +609,10 @@ class TestPerform:
             table = l4.data[f"{fiber}_RV"]
             order_id = np.asarray(table["ORDER_ID"])
             echelle = np.asarray(table["ECHELLE_ORDER"])
-            assert order_id[0] == f"GREEN_{fiber}_1"
-            assert order_id[NORDER_GREEN - 1] == f"GREEN_{fiber}_{NORDER_GREEN}"
-            assert order_id[NORDER_GREEN] == f"RED_{fiber}_1"
-            assert order_id[-1] == f"RED_{fiber}_{NORDER_RED}"
+            assert order_id[0] == f"GREEN_{fiber}_0"
+            assert order_id[NORDER_GREEN - 1] == f"GREEN_{fiber}_{NORDER_GREEN - 1}"
+            assert order_id[NORDER_GREEN] == f"RED_{fiber}_0"
+            assert order_id[-1] == f"RED_{fiber}_{NORDER_RED - 1}"
             assert echelle[0] == 137
             assert echelle[NORDER_GREEN - 1] == 103
             assert echelle[NORDER_GREEN] == 102
@@ -679,7 +679,7 @@ class TestPerform:
             assert rv["CTYPE1"] == "Columns"
             assert "RVMETHOD" not in rv
             rv_table = hdul["RV3"].data
-            assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_1"
+            assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
             assert rv_table["ECHELLE_ORDER"][0] == 137
             # The per-bin CCF variance cube round-trips as an image extension.
             assert hdul["CCF_VAR3"].data.shape == (NORDER, _NVEL)

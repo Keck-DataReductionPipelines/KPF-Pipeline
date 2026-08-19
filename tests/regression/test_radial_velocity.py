@@ -592,7 +592,7 @@ class TestPerform:
             assert hdul["PRIMARY"].header["RVERR"] > 0
             # The seeded ORDER_ID / ECHELLE_ORDER columns round-trip alongside RV.
             rv_table = hdul["RV3"].data
-            assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_1"
+            assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
             assert rv_table["ECHELLE_ORDER"][0] == 137
             assert np.all(np.isfinite(rv_table["RV"]))
 

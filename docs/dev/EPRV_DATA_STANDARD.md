@@ -138,7 +138,7 @@ L4 PRIMARY gains: `BJDTDB`, `RV`, `RVERR`, `BERV`, `RVMETHOD`, `SYSVEL`.
 >   (`VELSTART/VELSTEP/VELNSTEP/CCFMASK`) on `CCFn`. Our code emits exactly the 0.4.0 set.
 > - **Optional columns** — KPF populates the EPRV-optional `ORDER_INDEX`, `ECHELLE_ORDER`
 >   (physical grating order, blue→red), and `WEIGHT` (per-order CCF-combination weight),
->   plus a KPF-custom `ORDER_ID` (chip/fiber/order name, 1-based per chip — the standard
+>   plus a KPF-custom `ORDER_ID` (chip/fiber/order name, 0-based per chip — the standard
 >   permits team-added columns).
 > - **Structural cards as keywords** — 0.4.0's per-extension keyword CSVs redundantly
 >   register FITS *structural* cards astropy writes on its own (`XTENSION`, `EXTNAME`) as
