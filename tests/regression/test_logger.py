@@ -57,10 +57,12 @@ class TestBuildLogPath:
 
 
 class TestSetupLogging:
-    def test_creates_file_and_returns_path(self, tmp_path):
+    def test_creates_file_and_returns_path(self, tmp_path, monkeypatch):
+        # Freeze the clock: recomputing the datecode after the call races UT
+        # midnight, a once-a-day flake in a CI-scheduled suite.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         path = kpflog.setup_logging(str(tmp_path), "science", "KP.1.2.3")
-        datecode = time.strftime("%Y%m%d", time.gmtime())
-        assert path.startswith(str(tmp_path / datecode))
+        assert path.startswith(str(tmp_path / "20260702"))
         assert re.search(r"kpf_science_KP\.1\.2\.3_\d{8}T\d{6}\.log$", path)
         assert _read(path) == ""  # created, empty until a record arrives
 
@@ -96,6 +98,16 @@ class TestSetupLogging:
         first = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
         second = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
         assert second == f"{first}.1"
+
+    def test_collision_retries_are_exhausted_loudly(self, tmp_path, monkeypatch):
+        # The retry loop must terminate: turning it into `while True` would hang
+        # a run forever instead of failing it.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
+        monkeypatch.setattr(kpflog, "_MAX_COLLISION_RETRIES", 1)
+        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        with pytest.raises(FileExistsError, match="unique log file"):
+            kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
 
     def test_repeated_setup_no_duplicate_handlers(self, tmp_path):
         root = logging.getLogger()
@@ -136,10 +148,11 @@ class TestSetupBatchLogging:
     """A per-invocation ``_batch_`` log echoed to stdout so an operator can watch
     fan-out progress live."""
 
-    def test_creates_batch_file_and_returns_path(self, tmp_path):
+    def test_creates_batch_file_and_returns_path(self, tmp_path, monkeypatch):
+        # Frozen for the same UT-midnight reason as TestSetupLogging's twin.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         path = kpflog.setup_batch_logging(str(tmp_path), "masters")
-        datecode = time.strftime("%Y%m%d", time.gmtime())
-        assert path.startswith(str(tmp_path / datecode))
+        assert path.startswith(str(tmp_path / "20260702"))
         assert re.search(r"kpf_masters_batch_\d{8}T\d{6}\.log$", path)
         assert _read(path) == ""  # created, empty until a record arrives
 
@@ -262,6 +275,9 @@ def _config(tmp_path, body):
     return path
 
 
+# resolve_logging lives in scripts/processing/reduce.py, so this class belongs to
+# the scripts/CLI layer -- without the mark `make test-cli` collects none of it.
+@pytest.mark.cli
 class TestResolveLogging:
     _LOGGER_TOML = '[LOGGER]\nlog_dir = "/logs/"\nlog_level = "DEBUG"\n'
 

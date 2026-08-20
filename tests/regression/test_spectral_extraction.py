@@ -4,6 +4,7 @@ Extraction-algorithm and perform() tests run on synthetic arrays, the latter wit
 extract_ffi monkeypatched; the real-L0 regression class is marked slow.
 """
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -151,12 +152,12 @@ class TestDtypeProvenance:
 class TestUnimplementedExtraction:
     def test_optimal_raises(self):
         D = V = np.ones((5, 10))
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(NotImplementedError, match="[Oo]ptimal"):
             SpectralExtraction._optimal_extraction(D, V)
 
     def test_flat_relative_raises(self):
         D = V = np.ones((5, 10))
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(NotImplementedError, match="[Ff]lat"):
             SpectralExtraction._flat_relative_extraction(D, V)
 
 
@@ -182,30 +183,11 @@ class TestPerformShapes:
                 arrays[f"{chip}_{fiber}_VAR"] = np.ones((n, NCOL), dtype=np.float32)
         return arrays
 
-    def test_returns_kpf2(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(
-            SpectralExtraction,
-            "extract_ffi",
-            lambda self, chip, fibers, extraction_method, **kwargs: {
-                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
-            },
-        )
-        se = SpectralExtraction(minimal_l1)
-        l2 = se.perform()
-        assert isinstance(l2, KPF2)
-        assert l2.level == 2
-
-    @pytest.mark.parametrize(
-        "key, expected_rows",
-        [
-            ("GREEN_SCI2_FLUX", NORDER_GREEN),
-            ("RED_SCI2_FLUX", NORDER_RED),
-            ("SCI2_FLUX", NORDER_GREEN + NORDER_RED),
-        ],
-    )
-    def test_trace_shape(
-        self, minimal_l1, mock_ffi_arrays, monkeypatch, key, expected_rows
+    def test_whole_trace_concatenates_green_then_red(
+        self, minimal_l1, mock_ffi_arrays, monkeypatch
     ):
+        # Per-chip shapes would only restate the arrays the mock handed in; the
+        # concatenation is the part perform() actually computes.
         monkeypatch.setattr(
             SpectralExtraction,
             "extract_ffi",
@@ -213,23 +195,32 @@ class TestPerformShapes:
                 k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
             },
         )
-        se = SpectralExtraction(minimal_l1)
-        l2 = se.perform()
-        assert l2.data[key].shape == (expected_rows, NCOL)
+        l2 = SpectralExtraction(minimal_l1).perform()
+        assert l2.level == 2
+        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
 
-    def test_all_fibers_populated(self, minimal_l1, mock_ffi_arrays, monkeypatch):
-        monkeypatch.setattr(
-            SpectralExtraction,
-            "extract_ffi",
-            lambda self, chip, fibers, extraction_method, **kwargs: {
-                k: v for k, v in mock_ffi_arrays.items() if k.startswith(chip)
-            },
-        )
-        se = SpectralExtraction(minimal_l1)
-        l2 = se.perform()
-        for fiber in ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]:
-            assert l2.data[f"{fiber}_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
-            assert l2.data[f"{fiber}_VAR"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+    def test_every_fiber_lands_on_its_own_trace(self, minimal_l1, monkeypatch):
+        # One fill value per fiber, so this sees a fiber written over another's
+        # trace -- which a shape assertion cannot.
+        fills = {"CAL": 1.0, "SCI1": 2.0, "SCI2": 3.0, "SCI3": 4.0, "SKY": 5.0}
+        norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
+
+        def mock_extract(self, chip, fibers, extraction_method, **kwargs):
+            return {
+                f"{chip}_{fiber}_{quantity}": np.full(
+                    (norder[chip], NCOL), fill, dtype=np.float32
+                )
+                for fiber, fill in fills.items()
+                for quantity in ("FLUX", "VAR")
+            }
+
+        monkeypatch.setattr(SpectralExtraction, "extract_ffi", mock_extract)
+        l2 = SpectralExtraction(minimal_l1).perform()
+        for fiber, fill in fills.items():
+            for quantity in ("FLUX", "VAR"):
+                array = l2.data[f"{fiber}_{quantity}"]
+                assert array.shape == (NORDER_GREEN + NORDER_RED, NCOL)
+                np.testing.assert_array_equal(array, fill)
 
     def test_green_red_slices_independent(self, minimal_l1, monkeypatch):
         def mock_extract(self, chip, fibers, extraction_method, **kwargs):
@@ -506,6 +497,21 @@ class TestValidColumnSpan:
 
         assert np.all(np.isfinite(flux_1d))
 
+    @pytest.mark.parametrize("center", [50.0, 50.5])
+    def test_aperture_weights_sum_to_the_aperture_height(self, center):
+        # TopEdge = BottomEdge = 5.0 is a 10-pixel aperture, so on a uniform
+        # detector every carried column must weigh exactly 10 -- whole pixels
+        # inside plus the two fractional edge rows. Existing tests assert only
+        # WHERE W is non-zero; an off-by-one in edge_pixel_top/bottom or an
+        # inverted frac_bot is a ~10% photometric error they all tolerate.
+        se = self._make_se(center, x1=0.0, x2=99.0)
+
+        _, _, W = se._get_orderlet_pixels("GREEN", "SCI1", 0)
+        np.testing.assert_allclose(W.sum(axis=0), 10.0, atol=1e-5)
+
+        flux_1d, _ = se.extract_orderlet("GREEN", "SCI1", 0)
+        np.testing.assert_allclose(flux_1d, 10.0 * 1234.0, rtol=1e-5)
+
     def test_the_box_is_sized_from_the_carried_columns_alone(self):
         # This trace climbs a row per column, so past X2 its extrapolation runs
         # off the top of the detector and would size a box of rows the orderlet
@@ -520,6 +526,92 @@ class TestValidColumnSpan:
         assert (row_min, row_max) == (5, 54)
         assert W[:, :40].any(axis=0).all()
         assert not W[:, 40:].any()
+
+
+# ---------------------------------------------------------------------------
+# extract_ffi's missing-trace tolerance, and the extraction-method guard
+# ---------------------------------------------------------------------------
+
+
+class TestExtractFfiFailureTolerance:
+    """One missing trace degrades to a NaN row; two or more fail loudly.
+
+    The single-failure tolerance exists because in some KPF eras one trace does
+    not fall on the detector. Widening it would let a systematically broken
+    order trace produce an all-NaN L2 that only surfaces far downstream, as a
+    zero CCF.
+    """
+
+    def _make_se(self, n_traced):
+        """SpectralExtraction over 2 GREEN orders with only ``n_traced`` traced."""
+
+        class StubL1:
+            data = {
+                "GREEN_CCD": np.full((100, 100), 1.0, dtype=np.float32),
+                "GREEN_VAR": np.ones((100, 100), dtype=np.float32),
+            }
+            headers = {"PRIMARY": {}}
+
+        rows = [
+            {
+                "Fiber": "SCI1",
+                "Order": order,
+                "TopEdge": 5.0,
+                "BottomEdge": 5.0,
+                "X1": 0.0,
+                "X2": 99.0,
+                "Coeff0": 20.0 + 20.0 * order,
+                "Coeff1": 0.0,
+                "Coeff2": 0.0,
+                "Coeff3": 0.0,
+            }
+            for order in range(n_traced)
+        ]
+        trace = pd.DataFrame(
+            rows,
+            columns=[
+                "Fiber",
+                "Order",
+                "TopEdge",
+                "BottomEdge",
+                "X1",
+                "X2",
+                "Coeff0",
+                "Coeff1",
+                "Coeff2",
+                "Coeff3",
+            ],
+        ).set_index(["Fiber", "Order"])
+        se = SpectralExtraction(StubL1())
+        se._order_trace = {"GREEN": trace}
+        se._order_trace_path = "<stub>"
+        # Rebind rather than mutate: self.norder is the shared DETECTOR dict, so
+        # an item assignment here would resize every later test's detector.
+        se.norder = dict(se.norder, GREEN=2)
+        return se
+
+    def test_one_missing_trace_leaves_a_nan_row(self, caplog):
+        se = self._make_se(n_traced=1)
+        with caplog.at_level(logging.WARNING):
+            arrays = se.extract_ffi("GREEN", ["SCI1"])
+        flux = arrays["GREEN_SCI1_FLUX"]
+        assert np.all(np.isfinite(flux[0]))
+        assert np.all(np.isnan(flux[1]))
+        assert "1 orderlet failed" in caplog.text
+
+    def test_two_missing_traces_raise(self):
+        se = self._make_se(n_traced=0)
+        with pytest.raises(LookupError, match="Failed to extract 2"):
+            se.extract_ffi("GREEN", ["SCI1"])
+
+
+class TestExtractionMethodGuard:
+    def test_unsupported_method_names_itself(self):
+        # Dispatch is getattr(self, f"_{extraction_method}_extraction"), so a
+        # config typo must not surface as a bare AttributeError mid-loop.
+        se = TestValidColumnSpan()._make_se(50.0, x1=0.0, x2=99.0)
+        with pytest.raises(AttributeError, match="Unsupported extraction"):
+            se.extract_orderlet("GREEN", "SCI1", 0, extraction_method="boxx")
 
 
 # ---------------------------------------------------------------------------

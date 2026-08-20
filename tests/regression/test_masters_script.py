@@ -85,18 +85,25 @@ class TestParseArgs:
             )
 
     @pytest.mark.parametrize(
-        "argv",
+        "argv,expected",
         [
-            ["--dates", "2024"],  # malformed datecode (list form)
-            ["--date_range", "2024", "20240131"],  # malformed datecode (range form)
-            ["--date_range", "20240201", "20240101"],  # start > end
-            ["--dates", "20240405", "--jobs", "0"],  # jobs below 1
-            ["--dates", "20240405", "--job_timeout", "0"],  # timeout below 1
+            (["--dates", "2024"], "2024"),  # malformed datecode (list form)
+            (
+                ["--date_range", "2024", "20240131"],  # malformed datecode (range form)
+                "2024",
+            ),
+            (["--date_range", "20240201", "20240101"], "20240201"),  # start > end
+            (["--dates", "20240405", "--jobs", "0"], "jobs"),  # jobs below 1
+            (
+                ["--dates", "20240405", "--job_timeout", "0"],  # timeout below 1
+                "job_timeout",
+            ),
         ],
     )
-    def test_invalid_args_exit(self, m, argv):
+    def test_invalid_args_exit(self, m, argv, expected, capsys):
         with pytest.raises(SystemExit):
             m.parse_args(argv)
+        assert expected in capsys.readouterr().err
 
     def test_config_defaults_to_none(self, m):
         assert m.parse_args(["--dates", "20240405"]).config is None
@@ -186,13 +193,13 @@ class TestResolveDatecodes:
 
     def test_range_missing_l0_root_exits(self, m, tmp_path):
         args = m.parse_args(["--date_range", "20240101", "20240131"])
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="L0 input directory not found"):
             m.resolve_datecodes(args, str(tmp_path))  # no L0/ dir
 
     def test_range_no_nights_in_range_exits(self, m, tmp_path):
         (tmp_path / "L0" / "20250101").mkdir(parents=True)
         args = m.parse_args(["--date_range", "20240101", "20240131"])
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="no datecode dirs"):
             m.resolve_datecodes(args, str(tmp_path))
 
 
@@ -215,7 +222,7 @@ class TestMainExitCode:
 
         def _fake_run_stage(*a, **k):
             if calls is not None:
-                calls.append(k)
+                calls.append({"args": a, **k})
             return set(failed)
 
         monkeypatch.setattr(m, "run_stage", _fake_run_stage)
@@ -262,6 +269,31 @@ class TestMainExitCode:
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["jobs"] == m._default_masters_jobs()
         assert warm_args["cache"] == "rw"  # masters default: warm up front
+
+    def test_forwards_dir_and_log_overrides_to_each_child(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        m.main(
+            [
+                "--dates",
+                "20240405",
+                "--input_dir",
+                "/in",
+                "--output_dir",
+                "/out",
+                "--log_level",
+                "DEBUG",
+            ]
+        )
+        tasks = calls[0]["args"][1]
+        assert len(tasks) == 1
+        _, argv = tasks[0]
+        assert argv[-8:] == [
+            "--kpf_data_input", "/in",
+            "--kpf_masters_output", "/out",
+            "--log_dir", "/out/logs",
+            "--log_level", "DEBUG",
+        ]  # fmt: skip
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out.

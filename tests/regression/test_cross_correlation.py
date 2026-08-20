@@ -351,32 +351,56 @@ class TestBuildVelocityGrid:
 # ---------------------------------------------------------------------------
 
 
-def _build_cc_kpf2():
-    """KPF2 with identical per-order synthetic spectra (absorption at MASK_CENTERS
-    shifted by V_INJECT) for every orderlet and zero barycentric correction."""
+def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
+    """KPF2 with per-order synthetic spectra (absorption at MASK_CENTERS shifted
+    by V_INJECT) for every orderlet.
+
+    ``berv`` (length NORDER, km/s) puts each order in its own barycentric frame:
+    BARYCORR_Z/_KMS carry it and the observed lines are placed at
+    ``MASK_CENTERS * (1 + V_INJECT/c) / (1 + z)``, the convention
+    ``_compute_ccf_1d`` implements (it divides the mask shift by ``1 + z``).
+    Recovering V_INJECT then requires the module to have removed the right
+    order's z. ``wave_offsets`` (length NORDER, Angstrom) gives each order its
+    own wavelength span, and ``bjd`` its own timestamp. All default to the
+    degenerate all-orders-identical, zero-barycorr case.
+    """
     kpf2 = KPF2()
     # Illumination sources: SCI on a star, SKY on sky, CAL dark (skipped).
     seed_sci2_cards(kpf2)
 
-    wave_1d = np.linspace(5000.0, 5050.0, NCOL)
-    lam_obs = MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS)  # z = 0
-    flux_1d = absorption_spectrum(wave_1d, lam_obs)
+    berv = np.zeros(NORDER) if berv is None else np.asarray(berv, dtype=float)
+    offsets = (
+        np.zeros(NORDER)
+        if wave_offsets is None
+        else np.asarray(wave_offsets, dtype=float)
+    )
+    bjd = np.zeros(NORDER) if bjd is None else np.asarray(bjd, dtype=float)
+    z = berv / SPEED_OF_LIGHT_KMS
 
-    for chip, n in [("GREEN", NORDER_GREEN), ("RED", NORDER_RED)]:
+    wave_1d = np.linspace(5000.0, 5050.0, NCOL)
+    rows = {}
+    for order in range(NORDER):
+        lam_obs = (
+            MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS) / (1.0 + z[order])
+            + offsets[order]
+        )
+        wave = wave_1d + offsets[order]
+        rows[order] = (wave, absorption_spectrum(wave, lam_obs))
+
+    for chip, start, n in [
+        ("GREEN", 0, NORDER_GREEN),
+        ("RED", NORDER_GREEN, NORDER_RED),
+    ]:
+        wave = np.stack([rows[start + i][0] for i in range(n)]).astype(np.float64)
+        flux = np.stack([rows[start + i][1] for i in range(n)]).astype(np.float64)
         for fiber in _FIBERS:
-            kpf2.set_data(
-                f"{chip}_{fiber}_WAVE", np.tile(wave_1d, (n, 1)).astype(np.float64)
-            )
-            kpf2.set_data(
-                f"{chip}_{fiber}_FLUX", np.tile(flux_1d, (n, 1)).astype(np.float64)
-            )
-            kpf2.set_data(
-                f"{chip}_{fiber}_VAR", np.tile(flux_1d, (n, 1)).astype(np.float64)
-            )
+            kpf2.set_data(f"{chip}_{fiber}_WAVE", wave.copy())
+            kpf2.set_data(f"{chip}_{fiber}_FLUX", flux.copy())
+            kpf2.set_data(f"{chip}_{fiber}_VAR", flux.copy())
     # Per-order barycentric extensions (populated together by BarycentricCorrection).
-    kpf2.set_data("BARYCORR_Z", np.zeros(NORDER))
-    kpf2.set_data("BARYCORR_KMS", np.zeros(NORDER))
-    kpf2.set_data("BJD_TDB", np.zeros(NORDER))
+    kpf2.set_data("BARYCORR_Z", z)
+    kpf2.set_data("BARYCORR_KMS", berv)
+    kpf2.set_data("BJD_TDB", bjd)
     return kpf2
 
 
@@ -451,6 +475,34 @@ class TestComputeCCFPublic:
         with pytest.raises(ValueError, match="BARYCORR_Z"):
             cc.compute_ccfs("GREEN", "SCI2")
 
+    def test_barycorr_z_removed_per_order(self, monkeypatch):
+        # The plumbing under test is L2 BARYCORR_Z -> {chip}_BARYCORR_Z slice ->
+        # barycorr_z[order]. A single constant z would survive a green/red slice
+        # swap or an order off-by-one, so every order gets its own BERV.
+        _stub_line_mask(monkeypatch)
+        berv = -5.0 + 0.05 * np.arange(NORDER)
+        cc = CrossCorrelation(
+            _build_cc_kpf2(berv=berv), config={"ccf_window": RANGE_KMS}
+        )
+        for chip in ("GREEN", "RED"):
+            res = cc.compute_ccfs(chip, "SCI2")
+            vel, ccf = res["velocity"], res["ccf"]
+            recovered = vel[np.argmin(ccf, axis=1)]
+            np.testing.assert_allclose(recovered, V_INJECT, atol=0.3)
+
+    def test_barycorr_z_sign_is_pinned(self, monkeypatch):
+        # Negating only BARYCORR_Z (leaving the spectra alone) must displace the
+        # recovered velocity by about -2*BERV. A sign flip, or BARYCORR_KMS used
+        # where the dimensionless z belongs, lands here.
+        _stub_line_mask(monkeypatch)
+        berv = np.full(NORDER, -5.0)
+        kpf2 = _build_cc_kpf2(berv=berv)
+        kpf2.set_data("BARYCORR_Z", -np.asarray(kpf2.data["BARYCORR_Z"]))
+        cc = CrossCorrelation(kpf2, config={"ccf_window": RANGE_KMS})
+        res = cc.compute_ccfs("GREEN", "SCI2")
+        recovered = res["velocity"][np.argmin(res["ccf"][0])]
+        assert recovered == pytest.approx(V_INJECT - 2 * berv[0], abs=0.3)
+
     def test_all_zero_ccf_raises(self, cc_module):
         # No usable signal across the whole orderlet -> fail loudly instead of
         # silently returning an all-zero CCF cube.
@@ -460,8 +512,27 @@ class TestComputeCCFPublic:
             cc_module.compute_ccfs("GREEN", "SCI2")
 
     def test_clip_edge_pixels_zero_keeps_all(self, cc_module):
+        # "Not all zero" would also hold for an implementation that ignored the
+        # argument; the unclipped CCF must differ from a heavily clipped one.
         full = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[0, 0])["ccf"]
+        # 800 of the 2000 pixels is 20 A of the 50 A order, enough to cut past
+        # the bluest mask lines; a smaller clip leaves every line inside and the
+        # CCF genuinely unchanged.
+        clipped = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[800, 0])[
+            "ccf"
+        ]
         assert np.any(full)
+        assert not np.allclose(full, clipped)
+
+    def test_clip_edge_pixels_ends_are_distinguished(self, cc_module):
+        # clip_edge_pixels is [short_wavelength_end, long_wavelength_end]; on this
+        # ascending fixture pixel 0 is the short end, so clipping one end must not
+        # produce the same CCF as clipping the other. (The descending branch at
+        # cross_correlation.py:512 is unreachable in production and is not covered
+        # here -- see the dead-code defect report.)
+        blue = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[800, 0])["ccf"]
+        red = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[0, 800])["ccf"]
+        assert not np.allclose(blue, red)
 
     def test_clip_edge_pixels_too_large_raises(self, cc_module):
         with pytest.raises(ValueError, match="removes all"):
@@ -571,6 +642,28 @@ class TestPerform:
             assert echelle[NORDER_GREEN - 1] == 103
             assert echelle[NORDER_GREEN] == 102
             assert echelle[-1] == 71
+
+    def test_rv_table_metadata_columns_match_the_l2(self, monkeypatch):
+        # BJD_TDB/BERV are copied from the L2 barycentric extensions and
+        # WAVE_START/WAVE_END are the per-order first/last wavelength. With the
+        # shared fixture every order carries the same wave and a zero barycorr,
+        # so a wave[:, 0]/wave[:, -1] swap or a green/red row slip is invisible;
+        # here each order gets its own span and timestamp.
+        _stub_line_mask(monkeypatch)
+        berv = -5.0 + 0.05 * np.arange(NORDER)
+        bjd = 2460000.0 + np.arange(NORDER)
+        offsets = 5.0 * np.arange(NORDER)
+        cc = CrossCorrelation(
+            _build_cc_kpf2(berv=berv, wave_offsets=offsets, bjd=bjd),
+            config={"ccf_window": RANGE_KMS},
+        )
+        l4 = cc.perform(chips=["GREEN"], fibers=["SCI2"])
+        table = l4.data["GREEN_SCI2_RV"]
+        wave = np.asarray(cc.l2_obj.data["GREEN_SCI2_WAVE"])
+        np.testing.assert_allclose(table["WAVE_START"], wave[:, 0])
+        np.testing.assert_allclose(table["WAVE_END"], wave[:, -1])
+        np.testing.assert_allclose(table["BJD_TDB"], bjd[:NORDER_GREEN])
+        np.testing.assert_allclose(table["BERV"], berv[:NORDER_GREEN])
 
     def test_ccf_and_rv_headers(self, performed):
         # CrossCorrelation stamps the CCF EPRV keywords and the RV table-structure

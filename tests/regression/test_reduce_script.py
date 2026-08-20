@@ -7,6 +7,7 @@ reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
 """
 
 import argparse
+import logging
 import os
 
 import pytest
@@ -128,18 +129,95 @@ class TestShortcutOverride:
 
 
 class TestGuards:
-    def test_masters_rejects_obs_id(self):
-        with pytest.raises(SystemExit):
+    # main() raises SystemExit with two different meanings -- argparse's 2 for a
+    # usage error, and a string payload (exit 1) for a bad recipe -- so a bare
+    # `raises(SystemExit)` cannot tell a rejected flag from a crash. Every case
+    # here pins the code and the specific message.
+
+    def test_masters_rejects_obs_id(self, capsys):
+        with pytest.raises(SystemExit) as exc:
             red.main(["--masters", "-o", "KP.x"])
+        assert exc.value.code == 2
+        assert "masters recipe takes -d/--datecode" in capsys.readouterr().err
 
-    def test_science_rejects_datecode(self):
-        with pytest.raises(SystemExit):
+    def test_science_rejects_datecode(self, capsys):
+        with pytest.raises(SystemExit) as exc:
             red.main(["--science", "-d", "20240405"])
+        assert exc.value.code == 2
+        assert "science recipe takes -o/--obs_id" in capsys.readouterr().err
 
-    def test_missing_recipe_and_config_errors(self):
+    def test_missing_recipe_and_config_errors(self, capsys):
         # No --masters/--science and no explicit -r/-c pair.
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             red.main(["-o", "KP.x"])
+        assert exc.value.code == 2
+        assert "must specify --masters, --science" in capsys.readouterr().err
+
+    def test_masters_and_science_are_mutually_exclusive(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(["--masters", "--science", "-d", "20240405"])
+        assert exc.value.code == 2
+        assert "not allowed with argument" in capsys.readouterr().err
+
+    def test_datecode_and_obs_id_are_mutually_exclusive(self, capsys):
+        # The guard against running a masters recipe on a science target.
+        with pytest.raises(SystemExit) as exc:
+            red.main(["--science", "-d", "20240405", "-o", "KP.x"])
+        assert exc.value.code == 2
+        assert "not allowed with argument" in capsys.readouterr().err
+
+
+class TestRecipeLoading:
+    """reduce.py's recipe-loading failure branches. All in-process via main(),
+    no subprocess. None of these asserts anything about clear_stale_outputs,
+    which runs earlier at reduce.py:149 -- see the note in that module."""
+
+    def test_missing_recipe_file_exits(self, monkeypatch, tmp_path):
+        cfg = _base_cfg(tmp_path)
+        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        with pytest.raises(SystemExit, match="Recipe file not found"):
+            red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", "KP.x"])
+
+    def test_recipe_without_main_exits(self, monkeypatch, tmp_path):
+        cfg = _base_cfg(tmp_path)
+        recipe = tmp_path / "nomain.py"
+        recipe.write_text("VALUE = 1\n")
+        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        with pytest.raises(SystemExit, match="has no main"):
+            red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
+
+    def test_recipe_exception_is_logged_before_reraise(
+        self, monkeypatch, tmp_path, caplog
+    ):
+        # reduce.py's one sanctioned catch-log-reraise: the only place a
+        # traceback is guaranteed to reach the log before the nonzero exit
+        # (DRP-RUN-08). A bare `raise` here would lose the logged traceback.
+        cfg = _base_cfg(tmp_path)
+        recipe = tmp_path / "boom.py"
+        recipe.write_text("def main(config, args):\n    raise RuntimeError('boom')\n")
+        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        caplog.set_level(logging.CRITICAL)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
+
+        assert "uncaught exception; pipeline aborted" in caplog.text
+
+    def test_missing_log_dir_is_a_usage_error(self, monkeypatch, tmp_path):
+        # resolve_logging's ValueError must surface as a clean usage error
+        # (DRP-RUN-07), not a traceback out of main().
+        cfg = tmp_path / "nolog.toml"
+        cfg.write_text(
+            "[DATA_DIRS]\n"
+            'KPF_DATA_INPUT = "/cfg/in"\n'
+            'KPF_MASTERS_OUTPUT = "/cfg/m"\n'
+            'KPF_SCIENCE_OUTPUT = "/cfg/s"\n'
+            "[LOGGER]\n"
+        )
+        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
+        with pytest.raises(SystemExit) as exc:
+            red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
+        assert exc.value.code == 2
 
 
 class _Config:

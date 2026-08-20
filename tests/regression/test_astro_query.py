@@ -4,7 +4,8 @@ Covers ``merge_catalog_records`` (gaia/simbad/wmko -> the canonical ``kpf-drp``
 row), ``read_wmko_header`` off synthetic L0 PRIMARY TARG*, and the external query
 contract. The network is never touched: ``Gaia.launch_job``/``Simbad`` are mocked
 with one-row result Tables, so parsing, the fail-soft None+warning paths, and the
-``_verify_units`` schema-drift guard all run offline.
+``_verify_units`` schema-drift guard all run offline. That is enforced, not just
+intended -- tests/conftest.py blocks outbound connect() for the whole suite.
 """
 
 import logging
@@ -20,6 +21,7 @@ from astropy.table import Column, Table
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import _GAIA_UNITS, _SIMBAD_UNITS, AstroQuery
 from kpfpipe.utils.astro import compute_redshift
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import _RETRY_WAITS
 
 
@@ -943,3 +945,39 @@ class TestPerform:
         assert row["ra"] == _ra_str(20.0)
         assert row["radec_src"] == "simbad"
         assert row["object"] == "tau Cet"
+
+
+class TestConstructor:
+    """The constructor's three guards. Every other AstroQuery(...) in the suite
+    passes IMTYPE='object' and either None or a plain dict, so none of these is
+    otherwise exercised."""
+
+    @staticmethod
+    def _l0(imtype):
+        l0 = KPF0()
+        if imtype is not None:
+            l0.headers["PRIMARY"]["IMTYPE"] = imtype
+        return l0
+
+    @pytest.mark.parametrize("imtype", ["Bias", "Flat", None])
+    def test_rejects_non_object_frames(self, imtype):
+        # The class docstring's headline promise. Without it, AstroQuery would
+        # fire SIMBAD lookups on OBJECT='bias' and write a bogus CATALOG_RECORD
+        # that to_kpf1 copies onto the EPRV C*# cards.
+        with pytest.raises(ValueError, match="science frames"):
+            AstroQuery(self._l0(imtype))
+
+    def test_rejects_unsupported_config_type(self):
+        with pytest.raises(TypeError, match="must be None, dict, or ConfigHandler"):
+            AstroQuery(self._l0("Object"), config=["gaia"])
+
+    def test_config_handler_branch_is_read(self, tmp_path):
+        # How the recipes construct it. A section-name typo here would be
+        # invisible: params would come back empty and _DEFAULTS would silently
+        # turn both catalog queries back on.
+        cfg = tmp_path / "aq.toml"
+        cfg.write_text(
+            "[DATA_DIRS]\n[TRACES]\n[MODULE_ASTRO_QUERY]\ndo_gaia_query = false\n"
+        )
+        aq = AstroQuery(self._l0("Object"), config=ConfigHandler(str(cfg)))
+        assert aq.do_gaia_query is False

@@ -809,9 +809,13 @@ class TestCSVWriting:
 
         tracer.save_master(output, overwrite=False)
         assert output.is_file()
-        with pytest.raises(FileExistsError):
+        with pytest.raises(FileExistsError, match="pass overwrite=True"):
             tracer.save_master(output, overwrite=False)
+
+        output.write_text("")  # the rewrite must replace this, not skip it
         tracer.save_master(output, overwrite=True)
+        assert tracer.output_path == output
+        assert pd.read_csv(output)["Fiber"].tolist() == ["SKY"]
 
     def test_refuses_to_save_before_make_master(self, tmp_path, master_path):
         tracer = OrderTrace(master_path)
@@ -850,6 +854,30 @@ def _assert_apertures_disjoint(table, ncol):
     upper = centers + measured["TopEdge"].to_numpy(dtype=float)[:, None]
     lower = centers - measured["BottomEdge"].to_numpy(dtype=float)[:, None]
     assert np.all(lower[1:] > upper[:-1])
+
+
+def _edge_reaching_tracer(tmp_path, monkeypatch):
+    """A detected, identified tracer whose first cluster runs off a row edge.
+
+    Extends that cluster to row 0 over every column past the midpoint, so the
+    trace can no longer be centered there. Returns ``(tracer, image, half)``;
+    ``half`` is the first column the cluster reaches the edge at.
+    """
+    image, _ = _synthetic_flat()
+    tracer = _tracer(tmp_path, image, monkeypatch)
+    tracer.detect_traces("GREEN")
+    tracer.assign_trace_identities("GREEN")
+
+    cluster = tracer._clusters["GREEN"][
+        int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+    ]
+    half = image.shape[1] // 2
+    reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+    cluster["row_indices"] = np.concatenate(
+        [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+    )
+    cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+    return tracer, image, half
 
 
 def _fitted_tracer(tmp_path, monkeypatch, **kwargs):
@@ -947,21 +975,10 @@ class TestApertureConstraint:
         # A column where the cluster reaches a detector edge cannot yield a
         # center, so an order running off the detector is judged on its own
         # span rather than on the whole dispersion.
-        image, _ = _synthetic_flat()
-        tracer = _tracer(tmp_path, image, monkeypatch)
-        tracer.detect_traces("GREEN")
-        tracer.assign_trace_identities("GREEN")
+        tracer, _, half = _edge_reaching_tracer(tmp_path, monkeypatch)
+        # Sampled columns depend on the column alone, so the cluster edit above
+        # does not affect them.
         columns = tracer._sample_profiles("GREEN")["columns"]
-
-        cluster = tracer._clusters["GREEN"][
-            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
-        ]
-        half = image.shape[1] // 2
-        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
-        cluster["row_indices"] = np.concatenate(
-            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
-        )
-        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
 
         offered = []
         fit_polynomial = order_trace_module.robust_polyfit
@@ -981,20 +998,7 @@ class TestApertureConstraint:
     ):
         # A cubic extrapolated beyond its fitted span can curl back over the
         # detector and read as carried, so X1-X2 must stay inside that span.
-        image, _ = _synthetic_flat()
-        tracer = _tracer(tmp_path, image, monkeypatch)
-        tracer.detect_traces("GREEN")
-        tracer.assign_trace_identities("GREEN")
-
-        cluster = tracer._clusters["GREEN"][
-            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
-        ]
-        half = image.shape[1] // 2
-        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
-        cluster["row_indices"] = np.concatenate(
-            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
-        )
-        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+        tracer, image, half = _edge_reaching_tracer(tmp_path, monkeypatch)
 
         fitted = tracer.fit_trace_polynomials("GREEN")
         assert fitted[["X1", "X2"]].iloc[0].tolist() == [0.0, half - 1.0]
@@ -1011,20 +1015,7 @@ class TestApertureConstraint:
         # Over the columns a partial trace was not fitted at, a cubic is free
         # to turn back and carry the aperture off the detector and onto it
         # again, so such a fit is redone as a parabola.
-        image, _ = _synthetic_flat()
-        tracer = _tracer(tmp_path, image, monkeypatch)
-        tracer.detect_traces("GREEN")
-        tracer.assign_trace_identities("GREEN")
-
-        cluster = tracer._clusters["GREEN"][
-            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
-        ]
-        half = image.shape[1] // 2
-        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
-        cluster["row_indices"] = np.concatenate(
-            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
-        )
-        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+        tracer, image, half = _edge_reaching_tracer(tmp_path, monkeypatch)
 
         degrees = []
         fit_polynomial = order_trace_module.robust_polyfit

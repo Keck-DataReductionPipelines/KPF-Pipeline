@@ -17,7 +17,6 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.data_models.masters.base import KPFMasterModel
-from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 
 from ._catalog import SOURCES, catalog_record_table
@@ -94,9 +93,7 @@ class TestKPF1:
         l1.to_fits(out_fn)
 
         l1_reread = KPF1.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(
-            l1_reread.data["GREEN_CCD"], original_green, decimal=4
-        )
+        np.testing.assert_array_equal(l1_reread.data["GREEN_CCD"], original_green)
 
     def test_receipt_tracking(self, synthetic_l1_file, tmp_path):
         l1 = KPF1.from_fits(synthetic_l1_file)
@@ -313,6 +310,11 @@ class TestToKpf1:
     @staticmethod
     def _l0_with_catalog(record):
         # A science KPF0 carrying a canonical 'kpf-drp' CATALOG_RECORD row, no network.
+        # Deferred, not for a cycle: astro_query pulls in astroquery, and this
+        # module would otherwise pay that import at collection in every worker
+        # for the sake of one test. Mirrors tests/conftest.py's _catalog_record_hdu.
+        from kpfpipe.modules.astro_query import AstroQuery
+
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         AstroQuery(l0)._write_catalog_record("kpf-drp", record)
@@ -617,7 +619,7 @@ class TestKPFMasterL1:
         m.to_fits(out_fn)
 
         m2 = KPFMasterL1.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(m2.data["GREEN_IMG"], original, decimal=4)
+        np.testing.assert_array_equal(m2.data["GREEN_IMG"], original)
 
     def test_datalvl_header_in_fits(self, synthetic_masters_l1_file, tmp_path):
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
@@ -635,12 +637,20 @@ class TestKPFMasterL1:
             m.generate_standard_filename() == "KP.20240113.23249.10_master_bias_L1.fits"
         )
 
-    def test_generate_filename_requires_inputs(self):
+    def test_generate_filename_requires_mastype(self):
         # A master can never produce a non-compliant name: with no recorded
         # inputs / type, generate_standard_filename raises rather than falling
-        # back to a KOAID-less name.
-        with pytest.raises(ValueError):
+        # back to a KOAID-less name. MASTYPE is checked first.
+        with pytest.raises(ValueError, match="MASTYPE"):
             KPFMasterL1().generate_standard_filename()
+
+    def test_generate_filename_requires_inputs(self):
+        # The second guard, reachable only once MASTYPE is set -- what a
+        # partially-failed stack leaves behind.
+        m = KPFMasterL1()
+        m.set_keyword("MASTYPE", "bias")
+        with pytest.raises(ValueError, match="INPUT_FILES"):
+            m.generate_standard_filename()
 
     def test_no_warning_on_known_extensions(self, caplog, synthetic_masters_l1_file):
         with caplog.at_level(logging.WARNING):

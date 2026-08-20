@@ -152,3 +152,23 @@ class TestPoolParser:
             parents=[_argparse.pool_parser(jobs_help="SENTINEL help text")]
         )
         assert "SENTINEL help text" in parser.format_help()
+
+
+class TestCacheParser:
+    """The --cache mode flag. Its parameterised default is what makes the leaf
+    `reduce` read-only while the orchestrators own cache writing -- the
+    one-writer-per-cache-file invariant documented at _scan.py:1-15."""
+
+    def test_factory_default_is_read_only(self):
+        assert _parse([_argparse.cache_parser()], []).cache == "r"
+
+    def test_orchestrator_default_is_honoured(self):
+        assert _parse([_argparse.cache_parser(default="rw")], []).cache == "rw"
+
+    @pytest.mark.parametrize("mode", ["r", "w", "rw", "wr"])
+    def test_every_choice_parses(self, mode):
+        assert _parse([_argparse.cache_parser()], ["--cache", mode]).cache == mode
+
+    def test_unknown_mode_rejected(self):
+        with pytest.raises(SystemExit):
+            _parse([_argparse.cache_parser()], ["--cache", "rr"])

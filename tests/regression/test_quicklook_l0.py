@@ -25,7 +25,46 @@ pytestmark = pytest.mark.quicklook
 
 @pytest.fixture
 def synthetic_4amp_l0(tmp_path):
-    # 4-amp readout geometry, at full detector size so the stitch is realistic.
+    # 4-amp readout geometry. Deliberately tiny: every consumer asserts titles,
+    # axis counts, run() keys or PNG names, none of which depend on detector
+    # size. Only test_image_shape_4amp needs real geometry -- it takes
+    # fullres_4amp_l0 instead.
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00001.00.fits",
+        namps=4,
+        shape=(32, 24),
+        bias_level=1000.0,
+        seed=42,
+        primary_cards={
+            "OBJECT": "synthetic-4amp",
+            "DATE-OBS": "2024-04-05T01:00:37",
+        },
+    )
+    return KPF0.from_fits(fn)
+
+
+@pytest.fixture
+def synthetic_2amp_l0(tmp_path):
+    # Tiny for the same reason as synthetic_4amp_l0; test_image_shape_2amp takes
+    # fullres_2amp_l0.
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00002.00.fits",
+        namps=2,
+        shape=(32, 24),
+        bias_level=1000.0,
+        seed=99,
+        primary_cards={
+            "OBJECT": "synthetic-2amp",
+            "DATE-OBS": "2024-04-05T01:00:38",
+        },
+    )
+    return KPF0.from_fits(fn)
+
+
+@pytest.fixture
+def fullres_4amp_l0(tmp_path):
+    """Real detector geometry: the stitched-shape assertion is the only thing
+    that needs it, and it costs ~1.5 s to build and render."""
     fn = write_amp_l0(
         tmp_path / "KP.20240405.00001.00.fits",
         namps=4,
@@ -41,7 +80,8 @@ def synthetic_4amp_l0(tmp_path):
 
 
 @pytest.fixture
-def synthetic_2amp_l0(tmp_path):
+def fullres_2amp_l0(tmp_path):
+    """Real detector geometry for the 2-amp stitched-shape assertion."""
     fn = write_amp_l0(
         tmp_path / "KP.20240405.00002.00.fits",
         namps=2,
@@ -131,10 +171,10 @@ class TestStitchedImage4Amp:
         assert len(fig.axes) == 2
         plt.close(fig)
 
-    def test_image_shape_4amp(self, synthetic_4amp_l0):
+    def test_image_shape_4amp(self, fullres_4amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
-        qlp = PlotL0(synthetic_4amp_l0)
+        qlp = PlotL0(fullres_4amp_l0)
         fig = qlp.stitched_image("green")
         ax = fig.axes[0]
         images = ax.get_images()
@@ -150,10 +190,10 @@ class TestStitchedImage4Amp:
 
 
 class TestStitchedImage2Amp:
-    def test_image_shape_2amp(self, synthetic_2amp_l0):
+    def test_image_shape_2amp(self, fullres_2amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
-        qlp = PlotL0(synthetic_2amp_l0)
+        qlp = PlotL0(fullres_2amp_l0)
         fig = qlp.stitched_image("red")
         ax = fig.axes[0]
         images = ax.get_images()

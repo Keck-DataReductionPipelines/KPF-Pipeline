@@ -63,7 +63,7 @@ _ROUNDTRIP_NAMES = {
     "KPF0": "KP.20240113.23249.10.fits",
     "KPF1": "kpf_L1_20240113T102656.fits",
     "KPF2": "kpf_SL2_20240101T000000.fits",
-    "KPF4": "kpf_L4_20240101T000000.fits",
+    "KPF4": "kpf_SL4_20240101T000000.fits",
     "KPFMasterL1": "KP.20240113.23249.10_master_bias_L1.fits",
     "KPFMasterL2": "KP.20240113.23249.10_master_thar_L2.fits",
 }

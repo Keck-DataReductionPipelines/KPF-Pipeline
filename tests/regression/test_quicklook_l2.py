@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from PIL import Image
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
@@ -87,12 +88,9 @@ class TestConstructor:
 
 
 class TestPlots:
-    @pytest.mark.parametrize("method", _PLOT_METHODS)
-    @pytest.mark.parametrize("chip", ["green", "red"])
-    def test_method_returns_figure(self, l2, method, chip):
-        fig = getattr(PlotL2(l2), method)(chip)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+    # A parametrized "every method returns a Figure" test used to live here. It
+    # rendered the same ten figures TestRun::test_run_all_returns_all_plots_both_chips
+    # already renders, and asserted strictly less about them.
 
     def test_spectrum_single_order_explicit_order(self, l2):
         fig = PlotL2(l2).spectrum_single_order("green", order=3)
@@ -108,6 +106,9 @@ class TestPlots:
         title = fig.axes[0].get_title()
         assert _OBS_ID in title
         assert "Tau Ceti" in title
+        # Riding on the same render: the series carries one point per green
+        # order, so a chip-slice or order-index slip is visible here.
+        assert len(fig.axes[0].lines[0].get_xdata()) == NORDER_GREEN
         plt.close(fig)
 
 
@@ -168,7 +169,9 @@ class TestFileSaving:
             for c in ("green", "red")
         )
         assert pngs == expected
-        assert all((tmp_path / n).stat().st_size > 0 for n in pngs)
+        # The name set is the contract; a blank canvas would still satisfy it.
+        with Image.open(tmp_path / pngs[0]) as png:
+            assert png.convert("L").getextrema() != (255, 255)
 
     def test_no_files_when_output_dir_none(self, l2, tmp_path):
         PlotL2(l2).run("all")

@@ -134,30 +134,36 @@ class TestParseArgs:
             ["--job_timeout", "0"],  # below 1
         ],
     )
-    def test_invalid_args_exit(self, ts, extra):
+    def test_invalid_args_exit(self, ts, capsys, extra):
         argv = ["--target", "10700"]
         if "--date_range" not in extra:
             argv += ["--date_range", "20240101", "20240131"]
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             ts.parse_args(argv + extra)
+        assert exc.value.code == 2
+        # Four different validators; without this the flag name never appears.
+        assert extra[0] in capsys.readouterr().err
 
-    def test_target_required(self, ts):
-        with pytest.raises(SystemExit):
+    def test_target_required(self, ts, capsys):
+        with pytest.raises(SystemExit) as exc:
             ts.parse_args(["--date_range", "20240101", "20240131"])
+        assert exc.value.code == 2
+        assert "the following arguments are required: --target" in (
+            capsys.readouterr().err
+        )
 
-    @pytest.mark.parametrize(
-        "flag",
-        [
-            "--file_limit",
-            "--plots_only",
-            "--group_bursts",
-            "--skip_existing_masters",
-            "--skip_existing_science",
-        ],  # fmt: skip
-    )
-    def test_removed_flags_rejected(self, ts, flag):
-        with pytest.raises(SystemExit):
-            ts.parse_args(_BASE_ARGS + [flag, "x"])
+    def test_removed_flags_have_no_dest(self, ts):
+        # The real contract is that the flags' *dests* are gone. Asserting only
+        # that argparse exits tests argparse: "--nonsense x" passes identically,
+        # and a flag quietly re-added as a no-op alias would still pass.
+        removed = {
+            "file_limit",
+            "plots_only",
+            "group_bursts",
+            "skip_existing_masters",
+            "skip_existing_science",
+        }
+        assert removed & set(vars(ts.parse_args(_BASE_ARGS))) == set()
 
 
 # ---------------------------------------------------------------------------
@@ -257,13 +263,15 @@ class TestDiscoverScienceObsIds:
 
     def test_no_matches_exits(self, ts, tmp_path):
         _write_l0(str(tmp_path), "20240101", 3600, "99999")  # no target frames
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="no science frames for target"):
             ts.discover_science_obs_ids(
                 str(tmp_path), "10700", "20240101", "20240131", jobs=2
             )
 
     def test_missing_l0_root_exits(self, ts, tmp_path):
-        with pytest.raises(SystemExit):
+        # A distinct diagnostic from "no matches": without the match= the tmp
+        # tree yields no frames either way and this duplicates its neighbour.
+        with pytest.raises(SystemExit, match="L0 input directory not found"):
             ts.discover_science_obs_ids(
                 str(tmp_path), "10700", "20240101", "20240131", jobs=2
             )
@@ -313,6 +321,17 @@ class TestMainDispatch:
 
         monkeypatch.setattr(ts.subprocess, "run", _run)
         return calls
+
+    def test_missing_log_dir_exits(self, ts, monkeypatch, tmp_path):
+        # _FakeConfig hands every other dispatch test a hardcoded log_dir, so
+        # this DRP-RUN-07 guard is unreachable from all of them. Losing it means
+        # a ValueError from deep in build_log_path, after the batch has started.
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        monkeypatch.setattr(
+            ts, "ConfigHandler", lambda path: _FakeConfig(path, str(tmp_path), None)
+        )
+        with pytest.raises(SystemExit, match="no log directory configured"):
+            ts.main(_BASE_ARGS)
 
     def test_masters_science_plots_dispatch(self, ts, monkeypatch, tmp_path):
         # Stages run in order: masters, then science over every discovered frame,

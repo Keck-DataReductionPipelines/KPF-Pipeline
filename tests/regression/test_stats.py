@@ -118,6 +118,27 @@ class TestFlagOutliers:
         out = flag_outliers(x, sigma=5.0, kernel_size=5, method="trend")
         assert out[25]
 
+    def test_trend_restricted_to_dispersion_axis(self):
+        """The flat-master rejection path: masters/base.py calls this with
+        axis=1 so the blaze along dispersion is smoothed away while structure
+        ACROSS orders is not. Without the axis restriction the cross-order step
+        dominates the residual scale and the real spike goes unflagged -- a
+        silent change to a flat's rejection mask, which is RV-relevant."""
+        cols = np.linspace(0.0, 10.0, 40)  # smooth blaze along dispersion
+        x = np.stack([cols + (100.0 if r % 2 else 0.0) for r in range(8)])
+        x[3, 20] += 50.0  # one hot pixel
+
+        restricted = flag_outliers(x, sigma=5.0, axis=1, kernel_size=5, method="trend")
+        assert restricted[3, 20]
+        assert restricted.sum() == 1  # the blaze itself is not flagged
+
+        # Smoothing across orders too: the row-to-row step inflates the spread
+        # so far that the spike no longer stands out at all.
+        unrestricted = flag_outliers(
+            x, sigma=5.0, axis=None, kernel_size=5, method="trend"
+        )
+        assert not unrestricted[3, 20]
+
     def test_unsupported_method_raises(self):
         with pytest.raises(ValueError, match="method must be 'median' or 'trend'"):
             flag_outliers(np.arange(10.0), sigma=5.0, method="bogus")

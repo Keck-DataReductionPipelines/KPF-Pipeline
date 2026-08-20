@@ -18,6 +18,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.io import (
     FileHandler,
     datecode_dirs_in_range,
@@ -189,13 +190,7 @@ class TestBuildCalibrationStacks:
     def test_two_bias_clusters_returned_separately(self):
         lists = _cluster("bias", _make_mini_db())
         assert len(lists) == 2
-
-    def test_bias_cluster_a_files(self):
-        lists = _cluster("bias", _make_mini_db())
         assert lists[0] == sorted(_BIAS_A)
-
-    def test_bias_cluster_b_files(self):
-        lists = _cluster("bias", _make_mini_db())
         assert lists[1] == sorted(_BIAS_B)
 
     def test_files_are_sorted(self):
@@ -206,6 +201,13 @@ class TestBuildCalibrationStacks:
         # Both bias clusters hold 5 files, so min_stack_size=6 drops everything.
         with pytest.raises(ValueError, match="no cluster with at least"):
             _cluster("bias", _make_mini_db(), min_stack_size=6)
+
+    def test_stacks_require_a_mini_database(self):
+        # Forgetting build_mini_database(datecode) must give a readable error,
+        # not a TypeError from inside pandas. All three groupby modes funnel
+        # through _select_frames, so this one guard covers them all.
+        with pytest.raises(ValueError, match="no mini database"):
+            FileHandler({}).build_calibration_stacks("bias")
 
     def test_raises_when_no_frames_found(self):
         with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
@@ -280,13 +282,7 @@ class TestBuildCalibrationStacks:
         # Morning and evening ThArs differ in OBJECT suffix and are >2 hr apart.
         lists = _cluster("thar", _make_mini_db())
         assert len(lists) == 2
-
-    def test_thar_morn_cluster(self):
-        lists = _cluster("thar", _make_mini_db())
         assert lists[0] == sorted(_THAR_MORN)
-
-    def test_thar_eve_cluster(self):
-        lists = _cluster("thar", _make_mini_db())
         assert lists[1] == sorted(_THAR_EVE)
 
 
@@ -399,10 +395,6 @@ class TestKpfFilepath:
         )
         assert path == "/data/masters/20240405/KP.20240405.14000.00_master_flat_L1.fits"
 
-    def test_master_bare_filename(self):
-        name = kpf_filepath("KP.20240405.03600.00", "L1", master="bias")
-        assert name == "KP.20240405.03600.00_master_bias_L1.fits"
-
     def test_science_l0(self):
         path = kpf_filepath("KP.20240405.49597.71", "L0", data_root="/data")
         assert path == "/data/L0/20240405/KP.20240405.49597.71.fits"
@@ -412,15 +404,6 @@ class TestKpfFilepath:
         # 49597 s of day = 13:46:37.
         path = kpf_filepath("KP.20240405.49597.71", "L1", data_root="/data")
         assert path == "/data/L1/20240405/kpf_L1_20240405T134637.fits"
-
-    def test_science_bare_filename_l0(self):
-        name = kpf_filepath("KP.20240405.49597.71", "L0")
-        assert name == "KP.20240405.49597.71.fits"
-
-    def test_science_bare_filename_l1(self):
-        # 49597 s of day = 13:46:37.
-        name = kpf_filepath("KP.20240405.49597.71", "L1")
-        assert name == "kpf_L1_20240405T134637.fits"
 
     def test_science_l2(self):
         # 40113 s of day = 11:08:33.
@@ -439,7 +422,9 @@ class TestKpfFilepath:
         path = kpf_filepath("KP.20240405.00000.00", "L2", data_root="/data")
         assert path == "/data/L2/20240405/kpf_SL2_20240405T000000.fits"
 
-    def test_science_bare_filename_l2(self):
+    def test_omitted_data_root_returns_bare_filename(self):
+        # kpf_filepath's own branch: with no data_root it returns kpf_filename's
+        # result unjoined. The per-level filename literals live in TestKpfFilename.
         name = kpf_filepath("KP.20240405.40113.57", "L2")
         assert name == "kpf_SL2_20240405T110833.fits"
 
@@ -448,10 +433,6 @@ class TestKpfFilepath:
             "KP.20240405.03600.00", "L2", data_root="/data", master="thar"
         )
         assert path == "/data/masters/20240405/KP.20240405.03600.00_master_thar_L2.fits"
-
-    def test_invalid_obs_id_raises(self):
-        with pytest.raises(ValueError, match="valid observation ID"):
-            kpf_filepath("20240405", "L1")
 
     def test_invalid_data_root_empty_string_raises(self):
         with pytest.raises(
@@ -583,6 +564,22 @@ class TestFilenameConsistency:
         obj = self._make(level)
         expected = os.path.basename(kpf_filepath(self.OBS_ID, level))
         assert obj.generate_standard_filename() == expected
+
+    @pytest.mark.parametrize("level", ["L0", "L1", "L2", "L4"])
+    def test_generated_name_passes_the_convention_check(self, level):
+        # The name generator (kpf_filename's f-strings) and the name validator
+        # (independent regexes, plus rvdata's EPRV check for L2/L4) are never
+        # otherwise compared. The test above pins the two *generators* against
+        # each other; both call kpf_filename, so only this pins the generator
+        # against the validator. For L0/L1/masters a mismatch is a log warning
+        # and the write proceeds, so the drift would be silent.
+        obj = self._make(level)
+        assert obj.check_filename_convention(obj.generate_standard_filename())
+
+    def test_generated_master_name_passes_the_convention_check(self):
+        master = KPFMasterL1()
+        master.set_input_files([f"{self.OBS_ID}.fits"], "bias")
+        assert master.check_filename_convention(master.generate_standard_filename())
 
 
 # ---------------------------------------------------------------------------
@@ -735,6 +732,13 @@ class TestBuildMiniDatabase:
         # No junk list ships in tests/testdata, so every frame is ISJUNK=False.
         assert "ISJUNK" in mini_db.columns
         assert not mini_db["ISJUNK"].any()
+
+
+class TestBuildMiniDatabaseErrors:
+    """build_mini_database's two loud-failure paths. Deliberately unmarked: these
+    run on tmp_path with no frames at all, so they belong in the fast subset --
+    under the class marks above they were excluded from it and skipped outright
+    whenever tests/testdata was absent."""
 
     def test_empty_directory_raises(self, tmp_path):
         (tmp_path / "L0" / "20240405").mkdir(parents=True)
@@ -961,5 +965,5 @@ class TestJunkExclusion:
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
         db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
-        with pytest.raises(KeyError):
+        with pytest.raises(KeyError, match="ISJUNK"):
             _cluster("bias", db, min_stack_size=1)

@@ -14,9 +14,13 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+import kpfpipe.modules.masters.base as masters_base
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 from kpfpipe.modules.masters.dark import Dark
+from kpfpipe.modules.masters.flat import Flat
+from kpfpipe.modules.masters.wls import WLS
+from kpfpipe.utils.config import ConfigHandler
 
 from ._dtype_policy import (
     L1_IMAGE,
@@ -30,6 +34,11 @@ from ._masters import (
     MASTER_NAME,
     make_mocked_master,
     mocked_stack,
+)
+
+MASTERS_CONFIG_PATH = (
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    + "/configs/kpf_drp_masters.toml"
 )
 
 # ---------------------------------------------------------------------------
@@ -81,18 +90,29 @@ class TestMasterBaseErrors:
         fn = FILE_LIST[0]
         qc_result = {kw: (True, "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         assembled = object()
+        raw_l0 = object()
+        seen = {}
         monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: object()
+            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: raw_l0
         )
-        monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.QCL0",
-            lambda l0: MagicMock(run=lambda: qc_result),
-        )
-        monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.ImageAssembly",
-            lambda l0: MagicMock(perform=lambda: assembled),
-        )
+
+        def _qc(l0):
+            seen["qc"] = l0
+            return MagicMock(run=lambda: qc_result)
+
+        def _assembly(l0):
+            seen["assembly"] = l0
+            return MagicMock(perform=lambda: assembled)
+
+        monkeypatch.setattr("kpfpipe.modules.masters.base.QCL0", _qc)
+        monkeypatch.setattr("kpfpipe.modules.masters.base.ImageAssembly", _assembly)
+
         assert m._load_frame(fn, cache=False) is assembled
+        # Both stages must see the frame that was read, not some other object:
+        # assembling the pre-QC frame, or QC-ing the wrong one, still returns
+        # `assembled` if only the return value is checked.
+        assert seen["qc"] is raw_l0
+        assert seen["assembly"] is raw_l0
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +435,38 @@ class TestRateEstimator:
         img = self._stacked_img(frames, nstream=3)
         np.testing.assert_allclose(img, 5.0, rtol=1e-5)
 
+    def test_flat_is_total_electrons_not_a_rate(self):
+        # A master flat is the total electrons summed over the stack, not a
+        # rate: two frames of 100 e- over 10 s give 200, not 10. Deleting that
+        # branch rescales every master flat by 1/exptime_sum while leaving
+        # BUNIT ("electrons") and every other assertion in the suite true.
+        # The final cleaning pass is bypassed so the arithmetic is exact; the
+        # flat-mode cleaner is covered by TestCleanL1Arrays and by the real
+        # master flat in test_master_flat.py.
+        frames = [_stack_frame(10.0, 100.0, 10.0), _stack_frame(10.0, 100.0, 10.0)]
+        file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
+        dark = Dark(file_list)
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": 2, "ncol": 2}
+        dark.stack_sigma = 1e6
+        by_fn = dict(zip(file_list, frames, strict=True))
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+            patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
+        ):
+            arrays = dark.stack_frames(cal_type="flat")
+        np.testing.assert_allclose(arrays["GREEN_IMG"], 200.0, rtol=1e-5)
+
+        # Same frames without the flat token take the rate branch: 200/20 = 10.
+        with (
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+            patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
+        ):
+            arrays = dark.stack_frames()
+        np.testing.assert_allclose(arrays["GREEN_IMG"], 10.0, rtol=1e-5)
+
 
 # ---------------------------------------------------------------------------
 # Per-pixel-per-frame rejection in the final normalization
@@ -555,6 +607,75 @@ class TestDatacubeClipping:
 
 
 # ---------------------------------------------------------------------------
+# Per-pixel inclusion gates in the final normalization
+# ---------------------------------------------------------------------------
+
+
+class TestSurvivorGate:
+    """The last gate before a pixel enters a master: it must have survived in a
+    majority of the requested frames, and carry non-zero variance and exposure.
+    Otherwise it is zeroed and flagged rather than reconstructed from a
+    minority of the stack and published as if fully sampled."""
+
+    @staticmethod
+    def _stats(nframe_ccd, var_sum, exptime_sum):
+        counts = np.full((2, 2), 300.0, dtype=np.float32)
+        return {
+            "GREEN_CCD": {
+                "counts_sum": counts,
+                "exptime_sum": np.asarray(exptime_sum, dtype=np.float32),
+                "nframe": np.asarray(nframe_ccd, dtype=np.int32),
+            },
+            "GREEN_VAR": {
+                "counts_sum": np.asarray(var_sum, dtype=np.float32),
+                "nframe": np.asarray(nframe_ccd, dtype=np.int32),
+            },
+        }
+
+    def _stack(self, stats, nrequested=4):
+        dark = Dark(sorted(f"f{i}.fits" for i in range(nrequested)))
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": 2, "ncol": 2}
+        # The gate is what is under test, so the later cleaning pass -- which
+        # would interpolate the zeroed pixels back in -- is bypassed.
+        with (
+            patch.object(
+                dark, "_compute_stats_from_datacube", return_value=(stats, False)
+            ),
+            patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
+        ):
+            return dark.stack_frames()
+
+    def test_pixel_surviving_a_minority_of_frames_is_dropped(self):
+        # Four frames requested, so the threshold is > 2.0: three survivors pass,
+        # two do not. Weakening this to >= would admit the half-sampled pixel.
+        stats = self._stats(
+            nframe_ccd=[[2, 3], [4, 4]],
+            var_sum=[[9.0, 9.0], [9.0, 9.0]],
+            exptime_sum=[[3.0, 3.0], [3.0, 3.0]],
+        )
+        arrays = self._stack(stats)
+        assert bool(arrays["GREEN_MASK"][0, 0]) is False
+        assert arrays["GREEN_IMG"][0, 0] == 0.0
+        assert bool(arrays["GREEN_MASK"][0, 1]) is True
+        assert arrays["GREEN_IMG"][0, 1] > 0.0
+
+    def test_zero_variance_or_zero_exposure_pixels_are_dropped(self):
+        # Both guards sit beside the majority test and are otherwise unexercised:
+        # a pixel with no variance has no SNR, and one with no exposure has no
+        # rate, so neither may be published as good.
+        stats = self._stats(
+            nframe_ccd=[[4, 4], [4, 4]],
+            var_sum=[[0.0, 9.0], [9.0, 9.0]],
+            exptime_sum=[[3.0, 0.0], [3.0, 3.0]],
+        )
+        arrays = self._stack(stats)
+        assert bool(arrays["GREEN_MASK"][0, 0]) is False  # var_sum == 0
+        assert bool(arrays["GREEN_MASK"][0, 1]) is False  # exptime_sum == 0
+        assert bool(arrays["GREEN_MASK"][1, 1]) is True
+
+
+# ---------------------------------------------------------------------------
 # _clean_l1_arrays: bad-pixel interpolation and mask recompute
 # ---------------------------------------------------------------------------
 
@@ -613,6 +734,50 @@ class TestCleanL1Arrays:
         out = self._dark()._clean_l1_arrays(self._arrays(img, snr, mask), sigma=5.0)
 
         assert bool(out["GREEN_MASK"][4, 4]) is False
+
+    @pytest.mark.parametrize(
+        "cal_type,expected",
+        [
+            # The detector is illuminated only for flats, so each master type
+            # judges a pixel against a different reference: a bias against its
+            # own cross-dispersion column (axis=0), a flat against the smooth
+            # illumination trend along dispersion (axis=1, windowed), a dark
+            # against the global median. Collapsing this dispatch to one mode
+            # over-flags bias column structure and the flat's blaze while
+            # leaving mean(mask) > 0.9 true.
+            (None, {"method": "median"}),
+            ("dark", {"method": "median"}),
+            ("bias", {"axis": 0, "method": "median"}),
+            ("flat", {"axis": 1, "kernel_size": 32, "method": "trend"}),
+        ],
+    )
+    def test_cal_type_selects_the_flagging_mode(self, cal_type, expected, monkeypatch):
+        seen = {}
+
+        def _spy(data, sigma, **kwargs):
+            seen.update(kwargs)
+            return np.zeros(data.shape, dtype=bool)
+
+        monkeypatch.setattr(masters_base, "flag_outliers", _spy)
+        img = np.full((5, 5), 10.0, dtype=np.float32)
+        snr = np.full((5, 5), 20.0, dtype=np.float32)
+        mask = np.ones((5, 5), dtype=bool)
+
+        self._dark()._clean_l1_arrays(
+            self._arrays(img, snr, mask), sigma=5.0, cal_type=cal_type
+        )
+
+        assert seen == expected
+
+    def test_unknown_cal_type_raises(self):
+        # Fail loud rather than silently falling back to the dark mode.
+        img = np.full((5, 5), 10.0, dtype=np.float32)
+        snr = np.full((5, 5), 20.0, dtype=np.float32)
+        mask = np.ones((5, 5), dtype=bool)
+        with pytest.raises(ValueError, match="unknown cal_type"):
+            self._dark()._clean_l1_arrays(
+                self._arrays(img, snr, mask), sigma=5.0, cal_type="wls"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -778,6 +943,10 @@ class TestDtypeProvenance:
             name=MASTER_NAME,
             expected_disk=MASK_DISK,
         )
+        # to_fits casts the masks to uint8 and restores them in a finally:.
+        # Losing that restore would turn boolean masking into fancy integer
+        # indexing for every in-process consumer of this object.
+        assert_dtype(master.data["GREEN_MASK"], MASK_MEM, "GREEN_MASK after to_fits")
 
 
 # ---------------------------------------------------------------------------
@@ -817,3 +986,70 @@ class TestSaveMaster:
             bias.make_master_l1()  # populates ml1_obj
         with pytest.raises(FileExistsError, match="overwrite=True"):
             bias.save_master("L1", str(master_path))
+
+
+# ---------------------------------------------------------------------------
+# Config plumbing: each module reads the sections it names, and only those
+# ---------------------------------------------------------------------------
+
+
+class TestConfigSectionPlumbing:
+    """Every masters subclass names the config sections it reads. Dropping one
+    from that list is a silent fallback to _DEFAULTS -- a stack_sigma of 5.0
+    instead of the configured rejection threshold, or a search window reset --
+    with the master still building and only the numbers changing."""
+
+    # One config carrying a different stack_sigma in every section, so a module
+    # reading the wrong section is caught by the value, not merely by its absence.
+    SIGMAS = {"BIAS": 1.5, "DARK": 7.5, "FLAT": 3.25, "WLS": 9.0}
+
+    @classmethod
+    def _config(cls, **extra):
+        overrides = {section: {"stack_sigma": v} for section, v in cls.SIGMAS.items()}
+        for section, values in extra.items():
+            overrides.setdefault(section, {}).update(values)
+        return ConfigHandler(MASTERS_CONFIG_PATH, overrides=overrides)
+
+    @pytest.mark.parametrize(
+        "cls,section",
+        [(Bias, "BIAS"), (Dark, "DARK"), (Flat, "FLAT"), (WLS, "WLS")],
+    )
+    def test_stack_sigma_comes_from_the_modules_own_section(self, cls, section):
+        module = cls(FILE_LIST, self._config())
+        assert module.stack_sigma == self.SIGMAS[section]
+
+    @pytest.mark.parametrize("cls", [Bias, Dark, Flat, WLS])
+    def test_masters_output_comes_from_data_dirs(self, cls, tmp_path):
+        config = self._config(DATA_DIRS={"KPF_MASTERS_OUTPUT": str(tmp_path)})
+        assert cls(FILE_LIST, config)._masters_output == str(tmp_path)
+
+    @pytest.mark.parametrize("cls", [Dark, Flat, WLS])
+    def test_search_window_comes_from_the_calibration_association_section(self, cls):
+        # Bias takes no calibrations, so only the three that associate masters
+        # need this section; a reset to the default window would silently change
+        # which master calibrates which frame.
+        config = self._config(
+            MODULE_CALIBRATION_ASSOCIATION={"masters_search_window_days": [-3, 1]}
+        )
+        assert cls(FILE_LIST, config)._masters_search_window_days == [-3, 1]
+
+
+# ---------------------------------------------------------------------------
+# INPUT_FILES provenance
+# ---------------------------------------------------------------------------
+
+
+class TestInputFilesProvenance:
+    def test_records_the_input_list_and_master_type(self):
+        # INPUT_FILES and MASTYPE are the master's provenance anchor, and
+        # MASTYPE is what generate_standard_filename() needs to build a
+        # DRP-RUN-05 name after a round trip.
+        #
+        # NOTE: production records the *requested* L0 list, not the frames that
+        # survived stacking -- _build_ml1_obj passes l0_file_list straight to
+        # set_input_files, while _load_frame may drop QC failures within the
+        # tolerated budget. No frame is dropped here, so this assertion holds
+        # under either semantic; it is deliberately silent on which is intended.
+        ml1 = make_mocked_master(Bias)
+        assert ml1.data["INPUT_FILES"]["FILENAME"].tolist() == FILE_LIST
+        assert ml1.headers["PRIMARY"]["MASTYPE"] == "bias"

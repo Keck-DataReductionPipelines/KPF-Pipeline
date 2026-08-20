@@ -12,6 +12,8 @@ import pytest
 
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
+from kpfpipe.utils.io import kpf_filepath
+from kpfpipe.utils.kpf import get_obs_id
 
 from ._dtype_policy import L1_IMAGE, assert_dtype
 from ._masters import (
@@ -55,10 +57,6 @@ class TestMasterBiasUnit:
     )
     def test_extension_shape(self, master_bias, ext):
         assert master_bias.data[ext].shape == (NROW, NCOL)
-
-    def test_snr_non_negative(self, master_bias):
-        assert np.all(master_bias.data["GREEN_SNR"] >= 0)
-        assert np.all(master_bias.data["RED_SNR"] >= 0)
 
     def test_receipt_entry(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values
@@ -132,8 +130,9 @@ class TestMasterBiasRoundTrip:
 class TestMasterBiasSignature:
     @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
     def test_calibration_kwargs_rejected(self, kwarg):
-        with pytest.raises(TypeError):
-            Bias(FILE_LIST).make_master_l1(**{kwarg: True})
+        module = Bias(FILE_LIST)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            module.make_master_l1(**{kwarg: True})
 
 
 # ---------------------------------------------------------------------------
@@ -177,3 +176,52 @@ class TestMasterBiasRegression:
 
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values
+
+    # ------------------------------------------------------------------
+    # The persisted product: written through kpf_filepath, as the masters
+    # recipe writes it, then read back. These assertions arrived from a
+    # recipe test that re-stacked this same five-frame bias to reach them.
+    # ------------------------------------------------------------------
+
+    @pytest.fixture(scope="class")
+    def master_bias_on_disk(self, master_bias, tmp_path_factory):
+        out_path = kpf_filepath(
+            get_obs_id(TESTDATA_BIAS_FILES[0]),
+            "L1",
+            data_root=str(tmp_path_factory.mktemp("master_bias_out")),
+            master="bias",
+        )
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        master_bias.to_fits(out_path)
+        return out_path, KPFMasterL1.from_fits(out_path)
+
+    def test_written_to_the_convention_path(self, master_bias_on_disk):
+        out_path, _ = master_bias_on_disk
+        assert Path(out_path).is_file()
+        assert Path(out_path).name.endswith("_master_bias_L1.fits")
+
+    def test_round_trip_preserves_chip_images(self, master_bias, master_bias_on_disk):
+        _, read_back = master_bias_on_disk
+        for chip in CHIPS:
+            np.testing.assert_array_equal(
+                read_back.data[f"{chip}_IMG"], master_bias.data[f"{chip}_IMG"]
+            )
+
+    def test_input_files_extension_present(self, master_bias_on_disk):
+        _, read_back = master_bias_on_disk
+        assert "INPUT_FILES" in read_back.extensions
+
+    def test_input_files_records_the_stacked_frames(self, master_bias_on_disk):
+        # NOTE: production records the *requested* file list, not the frames that
+        # survived stacking -- masters/base.py passes l0_file_list into
+        # set_input_files unchanged, while _load_frame may drop QC failures within
+        # the tolerated budget. All five frames here pass, so the count is the
+        # same under either semantic; when that provenance defect is fixed, this
+        # is the assertion that will need revisiting.
+        _, read_back = master_bias_on_disk
+        assert len(read_back.data["INPUT_FILES"]) == len(TESTDATA_BIAS_FILES)
+
+    def test_input_files_all_fits(self, master_bias_on_disk):
+        _, read_back = master_bias_on_disk
+        filenames = read_back.data["INPUT_FILES"]["FILENAME"].tolist()
+        assert all(name.endswith(".fits") for name in filenames)

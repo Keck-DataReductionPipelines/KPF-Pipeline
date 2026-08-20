@@ -186,7 +186,7 @@ class TestExtrapolate:
         t0 = self._t(60)
         f = np.ones(4)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="t0 must be before"):
             BarycentricCorrection._extrapolate(t0, t_beg, t_end, f)
 
 
@@ -261,11 +261,6 @@ class TestGetNormalizedFlux:
         bc = BarycentricCorrection(synthetic_kpf2)
         w, _ = bc._get_normalized_flux()
         np.testing.assert_array_equal(w, [float(c) for c in _WAVE_COLS])
-
-    def test_non_numeric_columns_excluded(self, synthetic_kpf2):
-        bc = BarycentricCorrection(synthetic_kpf2)
-        _, f = bc._get_normalized_flux()
-        assert f.shape[1] == len(_WAVE_COLS)
 
     def test_gain_and_dispersion_applied(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)

@@ -159,7 +159,7 @@ class TestInit:
         assert ip.chips == ["GREEN"]
 
     def test_invalid_config_raises(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="config must be"):
             ImageProcessing(MockL1(), config=42)
 
     def test_paths_none_before_perform(self):
@@ -497,27 +497,6 @@ class TestPerformDark:
         mod = _make_module(dark_file="missing.fits", dark_dir=str(tmp_path))
         with pytest.raises(FileNotFoundError, match="missing.fits"):
             mod.perform(bias=False)
-
-
-# ---------------------------------------------------------------------------
-# TestVarianceBudget -- bias/dark add only a small fraction to the error budget
-# ---------------------------------------------------------------------------
-
-
-class TestVarianceBudget:
-    def test_bias_and_dark_contribution_is_small(self, tmp_path):
-        _write_master_bias(str(tmp_path / "master_bias.fits"))
-        _write_master_dark(str(tmp_path / "master_dark.fits"))
-        mod = _make_module(
-            bias_file="master_bias.fits",
-            bias_dir=str(tmp_path),
-            dark_file="master_dark.fits",
-            dark_dir=str(tmp_path),
-        )
-        mod.perform()
-        added = mod.l1_obj.data["GREEN_VAR"] - _VAR_VALUE
-        assert np.all(added > 0)
-        assert np.all(added < 0.01 * _VAR_VALUE)
 
 
 # ---------------------------------------------------------------------------

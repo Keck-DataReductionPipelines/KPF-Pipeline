@@ -165,14 +165,22 @@ class TestCliTask:
 
 
 class TestMainExitCode:
-    def _patch(self, s, monkeypatch, failed):
+    def _patch(self, s, monkeypatch, failed, calls=None):
         # Skip the runtime setup, config resolution and subprocess fan-out (and
-        # any real batch log file); assert only run_stage's failure set -> exit code.
+        # any real batch log file). ``calls`` collects run_stage's arguments for
+        # the fan-out contract tests below; the rest assert only its failure set
+        # -> exit code.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(s, "setup_batch_logging", lambda *a, **k: "/l/x.log")
         monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
-        monkeypatch.setattr(s, "run_stage", lambda *a, **k: set(failed))
+
+        def fake_run_stage(*args, **kwargs):
+            if calls is not None:
+                calls.append((args, kwargs))
+            return set(failed)
+
+        monkeypatch.setattr(s, "run_stage", fake_run_stage)
 
     def test_derives_datecodes_for_prescan(self, s, monkeypatch):
         # The pre-scan gets the unique-sorted nights the frames span, not the raw
@@ -200,6 +208,34 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             s.main(["--obs_ids", _OID1])
         assert exc.value.code == 1
+
+    def test_fan_out_is_fail_soft(self, s, monkeypatch):
+        # This driver reduces a whole night: one bad frame must not abort the
+        # rest. Its sibling drivers assert the same contract for themselves.
+        calls = []
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        s.main(["--obs_ids", _OID1, _OID2])
+        assert calls[0][1]["abort_on_failure"] is False
+
+    def test_fan_out_paces_launches(self, s, monkeypatch):
+        # Every reduction resolves catalog astrometry, so the launches are spaced
+        # to stay inside the SIMBAD/Gaia rate limits.
+        calls = []
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        s.main(["--obs_ids", _OID1, "--job_timeout", "42"])
+        assert calls[0][1]["launch_interval"] == s._LAUNCH_INTERVAL > 0
+        assert calls[0][1]["job_timeout"] == 42
+
+    def test_output_dir_reaches_the_per_frame_argv(self, s, monkeypatch):
+        # Parsing --kpf_science_output is not enough: dropping it from `forward`
+        # sends every product to the config's data root with a green suite.
+        calls = []
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        s.main(["--obs_ids", _OID1, "--kpf_science_output", "/out"])
+        tasks = calls[0][0][1]
+        _, argv = tasks[0]
+        assert "--kpf_science_output" in argv
+        assert argv[argv.index("--kpf_science_output") + 1] == "/out"
 
     def test_errors_when_log_dir_unset(self, s, monkeypatch):
         # A missing log_dir is fatal before any fan-out.

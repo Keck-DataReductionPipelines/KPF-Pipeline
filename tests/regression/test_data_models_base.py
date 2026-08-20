@@ -312,6 +312,20 @@ class TestKeywordRegistry:
         assert table.loc["DATALVL", "Default"] == "UNKNOWN"
         assert reg.eprv_primary_seed["DATALVL"][0] == "UNKNOWN"
 
+    def test_kpf_row_may_not_claim_the_eprv_sentinel(self):
+        # 'EPRV' is the discriminator every derived lookup keys on, so a KPF CSV
+        # row claiming it would silently misclassify itself as EPRV-sourced --
+        # a KPF keyword routed to PRIMARY, or a corrupted L1 seed.
+        import pandas as pd
+
+        from kpfpipe.data_models.keyword_registry import KeywordRegistry
+
+        df = pd.DataFrame(
+            [{"Keyword": "FOO", "Description": "d", "PopulatedBy": "EPRV"}]
+        )
+        with pytest.raises(ValueError, match="reserved as the EPRV-row discriminator"):
+            KeywordRegistry._parse_kpf_keyword_config(df, "fake.csv", lambda r: "L0")
+
 
 class TestQualityControlPropagation:
     """QUALITY_CONTROL + RECEIPT header cards survive to_fits and L0->L1->L2."""

@@ -251,6 +251,10 @@ class TestDtypeProvenance:
         l1 = ImageAssembly(l0).perform()
         for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
             assert_dtype(l1.data[ext], L1_IMAGE, ext)
+        # BITPIX and the re-read dtype are shape-independent, so the round-trip
+        # runs on a corner of each array rather than 270 MB of full detector.
+        for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
+            l1.data[ext] = l1.data[ext][:16, :16]
         assert_roundtrip_dtype(
             KPF1,
             l1,
@@ -453,6 +457,90 @@ class TestExpmeterWavelengthConversion:
 
 
 # ---------------------------------------------------------------------------
+# Overscan methods and the config-typo guards (synthetic, no perform())
+# ---------------------------------------------------------------------------
+
+
+class TestOverscanMethods:
+    """The three ``_oscan_*`` kernels and the OSCANSUB provenance flag.
+
+    ``rowmedian`` is the configured default, so it is the only method the
+    real-frame tests above ever run; ``median`` and ``zero`` are equally
+    selectable in production and are exercised here on a hand-built amp.
+    """
+
+    @pytest.fixture
+    def ia(self, tmp_path):
+        """ImageAssembly on a tiny 4-amp frame, with the geometry set by hand.
+
+        ``dims``/``prescan`` normally come from count_amplifiers(); setting
+        them directly keeps the overscan slicing arithmetic in view.
+        """
+        path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12))
+        module = ImageAssembly(KPF0.from_fits(path))
+        module.namp["GREEN"] = 4
+        module.dims["GREEN"] = (8, 8)
+        module.prescan = 2
+        return module
+
+    def _set_serial_overscan(self, ia, values):
+        """Write ``values`` into GREEN_AMP1's serial overscan strip (cols 10:12)."""
+        amp = np.array(ia.l0_obj.data["GREEN_AMP1"], dtype=np.float32)
+        amp[:8, 10:] = values
+        ia.l0_obj.data["GREEN_AMP1"] = amp
+
+    def test_zero_returns_scalar_zero(self, ia):
+        assert ia._oscan_zero("GREEN", 1) == 0.0
+
+    def test_median_is_the_strip_median(self, ia):
+        self._set_serial_overscan(ia, 7.0)
+        assert ia._oscan_median("GREEN", 1) == pytest.approx(7.0)
+
+    def test_rowmedian_is_per_row_and_column_shaped(self, ia):
+        # A row ramp: row i of the overscan strip holds the value i.
+        self._set_serial_overscan(ia, np.arange(8, dtype=np.float32)[:, None])
+        bias = ia._oscan_rowmedian("GREEN", 1)
+        assert bias.shape == (8, 1)
+        np.testing.assert_array_equal(bias[:, 0], np.arange(8))
+
+    def test_unsupported_method_raises(self, ia):
+        # The dispatch is getattr(self, f"_oscan_{method}"), so a config typo
+        # must name itself rather than surface as a bare AttributeError.
+        with pytest.raises(AttributeError, match="Unsupported overscan"):
+            ia.subtract_overscan("GREEN", method="rowmedain")
+
+    @pytest.mark.parametrize(
+        "method, expected", [("rowmedian", 1), ("median", 1), ("zero", 0)]
+    )
+    def test_oscansub_flag_tracks_method(self, ia, method, expected):
+        # OSCANSUB is a provenance card: 'zero' subtracts nothing and must say so.
+        ia.overscan_method = method
+        l1 = KPF1()
+        ia._set_headers(l1)
+        assert l1.headers["RECEIPT"].get("OSCANSUB") == expected
+
+
+class TestAmplifierGuards:
+    """The two fail-loud guards on an unexpected readout geometry."""
+
+    def test_one_amp_mode_raises(self, tmp_path):
+        path = write_amp_l0(
+            tmp_path / "KP.20240101.00001.00.fits", namps=1, shape=(10, 10)
+        )
+        module = ImageAssembly(KPF0.from_fits(path))
+        with pytest.raises(ValueError, match="Only 2-amp and 4-amp"):
+            module.count_amplifiers("GREEN")
+
+    def test_unexpected_flip_entry_raises(self, tmp_path):
+        path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
+        module = ImageAssembly(KPF0.from_fits(path))
+        module.count_amplifiers("GREEN")
+        module.orientation["GREEN_AMP1"] = "sideways"
+        with pytest.raises(ValueError, match="unexpected 'flip' entry"):
+            module.orient_channels("GREEN")
+
+
+# ---------------------------------------------------------------------------
 # FITS round-trip tests (real data)
 # ---------------------------------------------------------------------------
 
@@ -476,9 +564,6 @@ class TestImageAssemblyRoundTrip:
                 l1_read.data[ext], assembled.data[ext], decimal=4
             )
 
-    def test_roundtrip_preserves_obs_id(self, assembled, tmp_path):
         # INSTRUME is guaranteed by from_fits, so it cannot catch an assembly
         # bug; obs_id is carried by the write path this test exercises.
-        fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
-        assembled.to_fits(fn)
-        assert KPF1.from_fits(fn).obs_id == assembled.obs_id
+        assert l1_read.obs_id == assembled.obs_id

@@ -86,7 +86,7 @@ class TestParseArgs:
     @pytest.mark.parametrize(
         "drop", ["--target", "--date_range", "--data_dir", "--plot_dir"]
     )
-    def test_required_flags(self, pt, drop):
+    def test_required_flags(self, pt, capsys, drop):
         # Removing any one required flag (and its value) is a parse error.
         argv, skip = [], 0
         for tok in _BASE_ARGS:
@@ -96,23 +96,35 @@ class TestParseArgs:
                 skip -= 1
                 continue
             argv.append(tok)
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(argv)
+        assert exc.value.code == 2
+        assert drop in capsys.readouterr().err
 
-    @pytest.mark.parametrize(
-        "rng",
-        [["2024", "20240131"], ["20240201", "20240101"]],  # malformed / start>end
-    )
-    def test_date_range_validated(self, pt, rng):
+    @pytest.mark.parametrize("rng", [["2024", "20240131"], ["20240101", "2024"]])
+    def test_date_range_validated(self, pt, capsys, rng):
         argv = ["--target", "x", "--date_range", *rng, "--data_dir", "/d",
                 "--plot_dir", "/p"]  # fmt: skip
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(argv)
+        assert exc.value.code == 2
+        # Distinguishes the two validators: a malformed datecode vs start > end.
+        assert "--date_range value is not a valid datecode" in capsys.readouterr().err
 
-    def test_group_bursts_flag_removed(self, pt):
-        # Grouping is always on, so the flag was dropped.
-        with pytest.raises(SystemExit):
-            pt.parse_args(_BASE_ARGS + ["--group_bursts"])
+    def test_date_range_start_after_end(self, pt, capsys):
+        argv = ["--target", "x", "--date_range", "20240201", "20240101",
+                "--data_dir", "/d", "--plot_dir", "/p"]  # fmt: skip
+        with pytest.raises(SystemExit) as exc:
+            pt.parse_args(argv)
+        assert exc.value.code == 2
+        assert "--date_range START must be <= END" in capsys.readouterr().err
+
+    def test_removed_flag_has_no_dest(self, pt):
+        # Grouping is always on, so --group_bursts was dropped. Asserting the
+        # *dest* is gone is the real contract; argparse rejects any unknown
+        # string for free, so a bare "it exits" would pass on --nonsense too --
+        # and would keep passing if the flag came back as a no-op alias.
+        assert "group_bursts" not in vars(pt.parse_args(_BASE_ARGS))
 
     def test_obs_ids_source_valid(self, pt):
         ns = pt.parse_args(
@@ -129,16 +141,24 @@ class TestParseArgs:
         )
         assert ns.obs_ids == [_OID] and ns.date_range is None
 
-    def test_date_range_and_obs_ids_mutually_exclusive(self, pt):
-        with pytest.raises(SystemExit):
+    def test_date_range_and_obs_ids_mutually_exclusive(self, pt, capsys):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(_BASE_ARGS + ["--obs_ids", _OID])
+        assert exc.value.code == 2
+        assert "--obs_ids: not allowed with argument --date_range" in (
+            capsys.readouterr().err
+        )
 
-    def test_neither_source_errors(self, pt):
-        with pytest.raises(SystemExit):
+    def test_neither_source_errors(self, pt, capsys):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(["--target", "x", "--data_dir", "/d", "--plot_dir", "/p"])
+        assert exc.value.code == 2
+        assert "one of the arguments --date_range --obs_ids is required" in (
+            capsys.readouterr().err
+        )
 
-    def test_invalid_obs_id_errors(self, pt):
-        with pytest.raises(SystemExit):
+    def test_invalid_obs_id_errors(self, pt, capsys):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(
                 [
                     "--target",
@@ -151,6 +171,8 @@ class TestParseArgs:
                     "/p",
                 ]  # fmt: skip
             )
+        assert exc.value.code == 2
+        assert "--obs_ids value is not a valid obs_id" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -191,11 +213,13 @@ class TestDiscoverL4Files:
 
     def test_no_matches_exits(self, pt, tmp_path):
         _write_l4(str(tmp_path), "20240101", 100, "99999", 2.4e6, 1.0, 0.5)
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="no L4 products for target '10700'"):
             pt.discover_l4_files(str(tmp_path), "10700", "20240101", "20240131", 4)
 
     def test_missing_l4_root_exits(self, pt, tmp_path):
-        with pytest.raises(SystemExit):
+        # A distinct diagnostic from "no matches": without the match= the tmp
+        # tree has no matches either way and this test duplicates its neighbour.
+        with pytest.raises(SystemExit, match="L4 output directory not found"):
             pt.discover_l4_files(str(tmp_path), "10700", "20240101", "20240131", 4)
 
 
@@ -230,7 +254,7 @@ class TestL4PathsForObsIds:
         assert "not target '10700'" in out and "plotting anyway" in out
 
     def test_exits_when_none_present(self, pt, tmp_path):
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="none of the 1 supplied obs_id"):
             pt.l4_paths_for_obs_ids(str(tmp_path), ["KP.20240101.03600.00"], "10700")
 
 
@@ -423,6 +447,49 @@ class TestDeltaRvReference:
         assert ref == pytest.approx(np.median(g_rvs))
 
 
+class TestDeltaRvStats:
+    """``RV_RMS`` is the number an observer reads off the plot to judge RV
+    stability, and nothing checked it -- the plot tests assert only that a PNG
+    exists. Its sibling ``_delta_rv_reference`` is value-tested above; the
+    asymmetry was unintentional.
+
+    These are arithmetic checks on inputs the test supplies. They pin no
+    pipeline RV.
+    """
+
+    def test_scaling_and_rms(self, pt):
+        # km/s -> m/s on both the offsets and the error bars: rvs 2 mm/s either
+        # side of ref give drv [-2, 0, 2] m/s, whose std is sqrt(8/3).
+        rvs = np.array([1.000, 1.002, 1.004])
+        errs = np.array([0.001, 0.002, 0.003])
+        outlier = np.zeros(3, dtype=bool)
+        drv, derr, rms, med_err = pt._delta_rv_stats(rvs, errs, 1.002, outlier)
+        assert drv == pytest.approx([-2.0, 0.0, 2.0])
+        assert derr == pytest.approx([1.0, 2.0, 3.0])
+        assert rms == pytest.approx(np.sqrt(8.0 / 3.0))
+        assert med_err == pytest.approx(2.0)
+
+    def test_flagged_outlier_does_not_inflate_rms(self, pt):
+        # A flagged point 1 km/s off would dominate the std if it leaked back in;
+        # the retained three must give the same answer as if it were absent.
+        rvs = np.array([1.000, 1.002, 1.004, 2.000])
+        errs = np.full(4, 0.002)
+        outlier = np.array([False, False, False, True])
+        _, _, rms, _ = pt._delta_rv_stats(rvs, errs, 1.002, outlier)
+        assert rms == pytest.approx(np.sqrt(8.0 / 3.0))
+        # Guard the direction: including the outlier gives a vastly larger number.
+        assert rms < np.std((rvs - 1.002) * 1e3) / 100
+
+    def test_all_outliers_falls_back_to_every_point(self, pt):
+        # With nothing retained there is no meaningful subset, so the std is taken
+        # over everything rather than over an empty slice (which would be nan).
+        rvs = np.array([1.000, 1.002, 1.004])
+        errs = np.full(3, 0.002)
+        outlier = np.ones(3, dtype=bool)
+        _, _, rms, _ = pt._delta_rv_stats(rvs, errs, 1.002, outlier)
+        assert rms == pytest.approx(np.sqrt(8.0 / 3.0))
+
+
 # ---------------------------------------------------------------------------
 # plot outputs
 # ---------------------------------------------------------------------------
@@ -435,6 +502,22 @@ class TestPlot:
             _write_l4(data_dir, dc, sec, "10700", bjd, 1.0 + 0.001 * i, 0.3)
             for i, (dc, sec, bjd) in enumerate(spec)
         ]
+
+    def test_no_finite_rv_points_exits(self, pt, tmp_path):
+        # Without this guard the plotter runs on empty arrays and emits a blank
+        # PNG that looks like a successful run; the wrapper only reads the exit
+        # code, so the difference is "loud" vs "green run, no data".
+        # The one frame is dropped by _read_l4_rv for a missing RVERR (the
+        # builder idiom from TestReadL4Rv), leaving nothing to plot.
+        l4_dir = tmp_path / "L4" / "20240101"
+        l4_dir.mkdir(parents=True)
+        path = l4_dir / "kpf_SL4_20240101T000100.fits"
+        fits.PrimaryHDU(
+            header=fits.Header({"OBJECT": "10700", "BJDTDB": 2.4e6, "RV": 1.0})
+        ).writeto(path)
+
+        with pytest.raises(SystemExit, match="no finite RV"):
+            pt.plot_rv_timeseries("10700", [str(path)], str(tmp_path / "plots"))
 
     def test_timeseries_png_written(self, pt, tmp_path):
         # Single-observation nights get no nightly panel.

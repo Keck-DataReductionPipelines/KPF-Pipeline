@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from astropy.table import Table
+from PIL import Image
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level4 import KPF4
@@ -164,40 +165,35 @@ def _sci2_panel(fig):
 
 
 class TestCcfGridAnnotations:
-    def test_sci_panel_labels_every_order(self, l4):
-        # At least one text annotation per order (the order-index labels).
-        fig = PlotL4(l4).ccf_grid("green")
-        assert len(_sci2_panel(fig).texts) >= NORDER_GREEN
-        plt.close(fig)
+    def test_sci_panel_annotations(self, l4):
+        """Every read-only property of the SCI2 panel, on one render.
 
-    def test_sci_panel_has_delta_rv_and_weight_headers(self, l4):
-        fig = PlotL4(l4).ccf_grid("green")
-        txt = " ".join(t.get_text() for t in _sci2_panel(fig).texts)
-        assert "(this - avg)" in txt  # the delta-RV column header
-        assert "weight" in txt
-        plt.close(fig)
-
-    def test_orderlet_rv_value_annotated(self, l4):
-        # Green SCI2 combined RV is CCD1RV2 = 0.5 km/s, shown to 5 dp at the
-        # vertical RV line.
-        fig = PlotL4(l4).ccf_grid("green")
-        txt = " ".join(t.get_text() for t in _sci2_panel(fig).texts)
-        assert "0.50000" in txt and "km s" in txt
-        plt.close(fig)
-
-    def test_per_order_delta_rv_values_present(self, l4):
+        These were six tests re-rendering an identical 5-panel x 35-order figure
+        to make six read-only assertions; one render answers all of them. A
+        class-scoped figure fixture would not work here -- conftest's autouse
+        teardown closes every figure after each test.
+        """
         import re
 
         fig = PlotL4(l4).ccf_grid("green")
-        txt = " ".join(t.get_text() for t in _sci2_panel(fig).texts)
+        panel = _sci2_panel(fig)
+        txt = " ".join(t.get_text() for t in panel.texts)
+
+        # At least one text annotation per order (the order-index labels).
+        assert len(panel.texts) >= NORDER_GREEN
+        # The delta-RV and weight column headers.
+        assert "(this - avg)" in txt
+        assert "weight" in txt
+        # Green SCI2 combined RV is CCD1RV2 = 0.5 km/s, shown to 5 dp.
+        assert "0.50000" in txt and "km s" in txt
         # Per-order delta-RV is km/s to 4 decimals, e.g. "0.0020 km s^-1".
         assert re.search(r"\d\.\d{4}", txt)
+        # The three bluest green orders carry weight 0 in the CCF weight table;
+        # the panel must report them as "0.00", not a fabricated nonzero value.
+        assert "0.00" in txt
+        # Orders follow the default color cycle.
+        assert len({ln.get_color() for ln in panel.lines}) > 1
         plt.close(fig)
-
-    def test_per_order_distinct_colors(self, l4):
-        fig = PlotL4(l4).ccf_grid("green")
-        colors = {ln.get_color() for ln in _sci2_panel(fig).lines}
-        assert len(colors) > 1  # orders follow the default color cycle
 
     def test_renders_without_rv_tables(self):
         # No RV tables -> annotations are omitted but the plot still renders.
@@ -205,12 +201,16 @@ class TestCcfGridAnnotations:
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
 
-    def test_zero_weight_orders_annotated_as_zero(self, l4):
-        # The three bluest green orders carry weight 0 in the CCF weight table;
-        # the panel must report them as "0.00", not a fabricated nonzero value.
-        fig = PlotL4(l4).ccf_grid("green")
-        txt = " ".join(t.get_text() for t in _sci2_panel(fig).texts)
-        assert "0.00" in txt
+    def test_unilluminated_fiber_panel_says_not_illuminated(self, l4):
+        # CAL and SKY carry no CCF on many science frames. Draw the panel
+        # directly on a bare axes: the 5-panel grid render is not needed to see
+        # which branch _draw_ccf_panel takes.
+        l4.set_data("CAL_CCF", np.zeros((NORDER, NVEL), dtype=np.float64))
+        fig, ax = plt.subplots()
+        PlotL4(l4)._draw_ccf_panel(
+            ax, "green", "CAL", norder=NORDER_GREEN, vref=np.array([-10.0, 10.0])
+        )
+        assert any("not illuminated" in t.get_text() for t in ax.texts)
         plt.close(fig)
 
     def test_missing_weight_column_raises(self):
@@ -218,6 +218,17 @@ class TestCcfGridAnnotations:
         l4 = _make_l4(with_weight=False)
         with pytest.raises(ValueError, match="WEIGHT column"):
             PlotL4(l4).ccf_grid("green")
+
+
+class TestVelocityGrid:
+    def test_missing_velstep_raises(self, l4):
+        # CrossCorrelation writes VELSTART/VELSTEP/VELNSTEP on every CCF, so
+        # their absence is a malformed product. A hdr.get(..., 0.0) here would
+        # fabricate a velocity axis instead -- the silent substitution the
+        # method's docstring forbids. No render.
+        del l4.headers[l4.data._resolve("SCI2_CCF")]["VELSTEP"]
+        with pytest.raises(KeyError):
+            PlotL4(l4)._velocity_grid("SCI2", NVEL)
 
 
 # ---------------------------------------------------------------------------
@@ -251,5 +262,11 @@ class TestRun:
 class TestOutput:
     def test_writes_png_per_chip(self, l4, tmp_path):
         PlotL4(l4, output_dir=str(tmp_path), obs_id=_OBS_ID).run("all")
-        for chip in ("green", "red"):
-            assert (tmp_path / f"{_OBS_ID}_L4_ccf_grid_{chip}_zoomable.png").is_file()
+        pngs = sorted(p.name for p in tmp_path.glob("*.png"))
+        assert pngs == sorted(
+            f"{_OBS_ID}_L4_ccf_grid_{chip}_zoomable.png" for chip in ("green", "red")
+        )
+        # The name set is the real contract, but a blank canvas would satisfy it;
+        # check one file actually has ink on it.
+        with Image.open(tmp_path / pngs[0]) as png:
+            assert png.convert("L").getextrema() != (255, 255)

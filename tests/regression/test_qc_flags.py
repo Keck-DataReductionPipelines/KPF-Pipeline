@@ -337,7 +337,7 @@ class TestQCBase:
         assert QC._hdr_float(hdr, "NUM") == 3.5
         assert QC._hdr_float(hdr, "MISSING") is None
         assert QC._hdr_float(hdr, "EMPTY") is None
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="could not convert string to float"):
             QC._hdr_float(hdr, "STR")
 
 
@@ -533,7 +533,7 @@ class TestQCL0:
         # invariant and must fail loud rather than silently pass.
         l0 = _make_kpf0(tmp_path)
         l0.dirname = None
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="NoneType"):
             QCL0(l0).not_junk()
 
     def test_not_junk_key_present(self):
@@ -944,6 +944,22 @@ class TestQCL1:
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "bad RN")
         assert QCL1(l1).read_noise_ok() is False
 
+    def test_read_noise_ok_fail_too_low(self, tmp_path):
+        # The realistic failure signature: a broken or short-circuited RN
+        # estimator returns ~0, not 99. Only the upper bound was ever crossed,
+        # so rewriting the predicate as `v <= hi` left the whole suite green.
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (0.5, "collapsed RN")
+        assert QCL1(l1).read_noise_ok() is False
+
+    def test_read_noise_ok_boundaries_pass(self, tmp_path):
+        # The range is inclusive at both ends.
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        qc = l1.headers["QUALITY_CONTROL"]
+        qc["RNGREEN1"] = (2.0, "lower bound")
+        qc["RNRED1"] = (6.0, "upper bound")
+        assert QCL1(l1).read_noise_ok() is True
+
     def test_read_noise_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=False)
         assert QCL1(l1).read_noise_ok() is False
@@ -965,6 +981,11 @@ class TestQCL1:
         l1.headers["QUALITY_CONTROL"]["RNNGGR1"] = (9.9, "bad RNNG")
         assert QCL1(l1).read_noise_nongauss_ok() is False
 
+    def test_read_noise_nongauss_ok_fail_too_low(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, with_rn=True)
+        l1.headers["QUALITY_CONTROL"]["RNNGGR1"] = (0.1, "collapsed RNNG")
+        assert QCL1(l1).read_noise_nongauss_ok() is False
+
     def test_read_noise_nongauss_ok_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=False)
         assert QCL1(l1).read_noise_nongauss_ok() is False
@@ -980,6 +1001,19 @@ class TestQCL1:
     def test_bias_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=True, agebias=3.0)
         assert QCL1(l1).bias_ok() is True
+
+    def test_bias_ok_pass_future_dated_master(self, tmp_path):
+        # DiagL1 writes a SIGNED age (master_dt - obs_dt), and the check uses
+        # abs(), so a master processed after the science frame -- routine in the
+        # masters pipeline -- is still in range. Dropping the abs() would start
+        # failing BIASOK on every same-night master.
+        l1 = _make_kpf1(tmp_path, biassub=True, agebias=-3.0)
+        assert QCL1(l1).bias_ok() is True
+
+    def test_bias_ok_boundary(self, tmp_path):
+        # 7 days exactly is inside the gate; just past it is not.
+        assert QCL1(_make_kpf1(tmp_path, agebias=7.0)).bias_ok() is True
+        assert QCL1(_make_kpf1(tmp_path, agebias=7.5)).bias_ok() is False
 
     def test_bias_ok_fail_not_subtracted(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=False, agebias=3.0)
@@ -1217,7 +1251,7 @@ class TestQCL2:
         # FLUX populated with VAR left at its default empty (0,) shape is a
         # malformed product, so the shape mismatch raises rather than skipping.
         kpf2 = _make_kpf2_nan_headers()  # no VAR populated
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="could not be broadcast"):
             QCL2(kpf2).variance_positive()
 
     # --- science_snr (L2SNROK) ---
@@ -1357,8 +1391,46 @@ class TestQCL4:
         l4 = make_l4(sci=False, sci_obj="target", bervrng=0.5, bjdrng=2.0)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
-        l4.headers["QUALITY_CONTROL"]  # ensure present
         QCL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0 and qc["BJDOK"] == 0
         assert qc["ISGOOD"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Every check's _qc_key must be a registered keyword
+# ---------------------------------------------------------------------------
+
+
+class TestQCKeyRegistration:
+    """Each ``_qc_key`` tag resolves in the keyword registry.
+
+    The per-class ``test_qc_keys_correct`` tests above compare each tag against a
+    literal dict in this file, which restates the tag rather than checking it is
+    registered. ``QC.run`` looks the tag up in ``keyword_registry.routing`` to
+    fetch its comment, so an unregistered key is a ``KeyError`` at run time --
+    and QCL0/QCL2 have no in-process ``run()`` test to surface it.
+    """
+
+    _CLASSES = {"L0": QCL0, "L1": QCL1, "L2": QCL2, "L4": QCL4}
+
+    @pytest.mark.parametrize("level", sorted(_CLASSES))
+    def test_qc_keys_are_registered(self, level):
+        qc_cls = self._CLASSES[level]
+        registry = KPF0().keyword_registry
+        tagged = {
+            attr._qc_key
+            for cls in qc_cls.__mro__
+            for attr in cls.__dict__.values()
+            if getattr(attr, "_qc_key", None) is not None
+        }
+        assert tagged, f"{qc_cls.__name__} exposes no tagged checks"
+        for key in sorted(tagged):
+            assert key in registry.routing, (
+                f"{qc_cls.__name__} writes {key}, which no config/L*-headers.csv "
+                "row registers"
+            )
+            assert key in registry.qc_flag_keywords_by_level[level], (
+                f"{key} is not tagged as a {level} QC flag in the registry, so "
+                "Checkpoint.qc_flags would never scan it"
+            )

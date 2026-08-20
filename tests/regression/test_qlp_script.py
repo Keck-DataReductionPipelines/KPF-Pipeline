@@ -1,13 +1,17 @@
-"""Subprocess tests for scripts/quality_control/qlp.py, the quicklook-plot generator.
+"""Tests for scripts/quality_control/qlp.py, the quicklook-plot generator.
 
-Each test drives the CLI end-to-end on a synthetic, plottable L0 fixture.
+One subprocess test proves the script is invocable as a program; the rest drive
+``main()`` in-process, which costs milliseconds instead of an interpreter start
+and lets each case assert the message as well as the exit code.
 """
 
 import os
+import sys
 
 import pytest
 
 from kpfpipe.utils.io import kpf_directory
+from scripts.quality_control import qlp
 
 from ._data_models import write_amp_l0
 from ._scripts import run_script, write_config
@@ -41,6 +45,12 @@ def _run_qlp_script(*args):
     return run_script(_SCRIPT, *args)
 
 
+def _main(monkeypatch, *args):
+    """Drive qlp.main() in-process with ``args`` as argv."""
+    monkeypatch.setattr(sys, "argv", [_SCRIPT, *map(str, args)])
+    qlp.main()
+
+
 def _png_names(obs_id):
     """The two stitched-image PNG basenames PlotL0 writes for a frame."""
     return [
@@ -65,7 +75,7 @@ class TestQLPScript:
         for name in _png_names(_OBS_ID):
             assert (out_dir / name).is_file(), f"missing plot {name} in {out_dir}"
 
-    def test_config_output_resolution(self, tmp_path):
+    def test_config_output_resolution(self, tmp_path, monkeypatch):
         # --input supplies the frame, so only the output tree comes from the config.
         fixture = tmp_path / f"{_OBS_ID}.fits"
         _write_l0_image_fixture(str(fixture))
@@ -76,12 +86,8 @@ class TestQLPScript:
             {"KPF_DATA_INPUT": str(tmp_path), "KPF_SCIENCE_OUTPUT": str(science_out)},
         )
 
-        result = _run_qlp_script("--input", fixture, "--level", "L0", "--config", cfg)
+        _main(monkeypatch, "--input", fixture, "--level", "L0", "--config", cfg)
 
-        assert result.returncode == 0, (
-            f"Expected exit 0, got {result.returncode}\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
-        )
         expected_dir = kpf_directory(
             kind="QLP", data_root=str(science_out), level="L0", obs_id=_OBS_ID
         )
@@ -90,7 +96,7 @@ class TestQLPScript:
                 f"missing plot {name} in {expected_dir}"
             )
 
-    def test_missing_science_output_key_fails_loud(self, tmp_path):
+    def test_missing_science_output_key_fails_loud(self, tmp_path, monkeypatch):
         # The output path reads params["KPF_SCIENCE_OUTPUT"] with no default, so an
         # absent key must error rather than silently fall back to some other root.
         fixture = tmp_path / f"{_OBS_ID}.fits"
@@ -98,21 +104,27 @@ class TestQLPScript:
         cfg = tmp_path / "cfg.toml"
         write_config(cfg, {"KPF_DATA_INPUT": str(tmp_path)})  # no KPF_SCIENCE_OUTPUT
 
-        result = _run_qlp_script("--input", fixture, "--level", "L0", "--config", cfg)
+        with pytest.raises(KeyError, match="KPF_SCIENCE_OUTPUT"):
+            _main(monkeypatch, "--input", fixture, "--level", "L0", "--config", cfg)
 
-        assert result.returncode != 0
-        assert "KPF_SCIENCE_OUTPUT" in result.stderr, (
-            f"Expected 'KPF_SCIENCE_OUTPUT' in stderr:\n{result.stderr}"
-        )
-
-    def test_missing_file_exit_1(self, tmp_path):
+    def test_missing_file_exit_1(self, tmp_path, monkeypatch, capsys):
         missing = tmp_path / "does_not_exist.fits"
-        result = _run_qlp_script(
-            "--input", missing, "--level", "L0", "--output_dir", tmp_path
-        )
-        assert result.returncode == 1
+        with pytest.raises(SystemExit) as exc:
+            _main(
+                monkeypatch,
+                "--input",
+                missing,
+                "--level",
+                "L0",
+                "--output_dir",
+                tmp_path,
+            )
+        assert exc.value.code == 1
+        assert "file not found" in capsys.readouterr().err
 
-    def test_no_args_exit_nonzero(self):
+    def test_no_args_exit_nonzero(self, monkeypatch, capsys):
         # --level is required, so bare argv is an argparse error.
-        result = _run_qlp_script()
-        assert result.returncode != 0
+        with pytest.raises(SystemExit) as exc:
+            _main(monkeypatch)
+        assert exc.value.code == 2
+        assert "--level" in capsys.readouterr().err

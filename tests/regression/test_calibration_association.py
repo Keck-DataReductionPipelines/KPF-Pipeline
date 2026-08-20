@@ -197,6 +197,28 @@ class TestSelectNearest:
         mod = _make_module(tmp_path)
         assert mod._select_nearest("2024-04-05T11:08:33", []) is None
 
+    def test_selects_a_master_taken_after_the_frame(self, tmp_path):
+        # _select_nearest minimizes |dt|, so a master observed *after* the frame
+        # wins when it is closer; the signed {PREFIX}AGE DiagL1 recomputes is
+        # what makes that intentional. A past-only filter would be a plausible
+        # "fix" that silently changes which master calibrates which frame.
+        mod = _make_module(tmp_path)
+        # Science at 40113s; candidates 3 h before (29313s) and 1 h after (43713s).
+        result = mod._select_nearest(
+            "2024-04-05T11:08:33",
+            [
+                (
+                    "/masters/KP.20240405.29313.00_master_bias_L1.fits",
+                    "20240405.29313.00",
+                ),
+                (
+                    "/masters/KP.20240405.43713.00_master_bias_L1.fits",
+                    "20240405.43713.00",
+                ),
+            ],
+        )
+        assert "KP.20240405.43713.00" in result
+
     def test_prefers_same_day_over_previous_day(self, tmp_path):
         mod = _make_module(tmp_path)
         # Timestamps are seconds of day UTC: science at 7200s on 04-05, with
@@ -253,19 +275,10 @@ class TestPerform:
         )
         assert mod.l1_obj.headers["RECEIPT"].get("BIASFILE") == expected
 
-    def test_no_biasdir_header(self, masters_dir):
-        mod = _make_module(masters_dir)
-        mod.perform(["bias"])
-        assert "BIASDIR" not in mod.l1_obj.headers["RECEIPT"]
-
-    def test_does_not_write_biasage(self, masters_dir):
-        # BIASAGE is recomputed downstream by DiagL1 from the path this module
-        # writes (covered in test_diagnostics.py).
-        mod = _make_module(masters_dir)
-        mod.perform(["bias"])
-        assert "BIASAGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
-
     def test_sets_headers_for_dark_and_flat(self, masters_dir):
+        # {PREFIX}AGE is recomputed downstream by DiagL1 from the path this
+        # module writes (covered in test_diagnostics.py), so it must be absent
+        # here; likewise {PREFIX}DIR, since {PREFIX}FILE holds the full path.
         mod = _make_module(masters_dir)
         mod.perform(["bias", "dark", "flat"])
         for prefix in ("BIAS", "DARK", "FLAT"):
@@ -314,7 +327,7 @@ class TestPerform:
         _stub_master(d, "KP.20240403.03637.74", "bias")
 
         mod = _make_module(tmp_path)
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match="No 'bias' master found"):
             mod.perform(["bias"])  # default window doesn't reach 2 days back
 
         mod2 = _make_module(tmp_path)

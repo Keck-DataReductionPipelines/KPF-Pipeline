@@ -113,7 +113,7 @@ class TestConstructor:
         assert mod.fibers == _FIBERS
 
     def test_invalid_config_type(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="config must be"):
             WavelengthCalibration(_make_science_l2(), config="not a dict")
 
     def test_wls_path_is_none_before_load(self):
@@ -394,6 +394,32 @@ class TestSpectrumOrientation:
             f"mean native depth {mean_native:.3f} <= mean reversed {mean_reverse:.3f} "
             f"(flux flipped relative to WLS?)\n" + "\n".join(rows)
         )
+
+    def test_wavelength_solution_is_vacuum(self, science_l2):
+        # EPRV_DATA_STANDARD: all wavelengths are vacuum, never air. The
+        # orientation discriminator above deliberately centers its window
+        # BETWEEN the two frames, so nothing else here can tell them apart --
+        # yet a dropped air->vac conversion is ~1.6 A at Na D, i.e. ~80 m/s.
+        # The two frames differ by far more than the ~0.6 A stellar+barycentric
+        # shift, so the nearer catalog wavelength identifies the frame.
+        checked = 0
+        for name, chip, fiber, o, wave, flux, lambda_air in self._anchor_cases(
+            science_l2
+        ):
+            if name not in ("Na D1", "Na D2", "H-beta"):
+                continue
+            lambda_vac = float(air_to_vac(np.array([lambda_air]))[0])
+            window = np.abs(wave - 0.5 * (lambda_air + lambda_vac)) < 3.0
+            if np.count_nonzero(window) < 5 or not np.any(np.isfinite(flux[window])):
+                continue
+            trough = wave[window][np.nanargmin(flux[window])]
+            checked += 1
+            assert abs(trough - lambda_vac) < 0.5 * abs(trough - lambda_air), (
+                f"{name} {chip} {fiber} order {o}: absorption at {trough:.3f} A is "
+                f"nearer the AIR wavelength {lambda_air:.3f} than the vacuum "
+                f"{lambda_vac:.3f} -- the WLS looks like it is in the air frame"
+            )
+        assert checked, "no anchor usable for the air/vacuum discriminant"
 
     def test_strong_anchor_is_deep(self, science_l2):
         # Floor check: the Na D doublet must be a deep trough in the native

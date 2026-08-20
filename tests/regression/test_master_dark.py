@@ -49,8 +49,9 @@ class TestMasterDarkUnit:
 class TestMasterDarkSignature:
     @pytest.mark.parametrize("kwarg", ["dark", "flat"])
     def test_dark_flat_kwargs_rejected(self, kwarg):
-        with pytest.raises(TypeError):
-            Dark(FILE_LIST).make_master_l1(**{kwarg: True})
+        module = Dark(FILE_LIST)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            module.make_master_l1(**{kwarg: True})
 
     def test_bias_kwarg_accepted(self):
         assert isinstance(make_mocked_master(Dark, bias=False), KPFMasterL1)
@@ -102,6 +103,3 @@ class TestMasterDarkRegression:
             mask = master_dark.data[f"{chip}_MASK"]
             assert_dtype(mask, MASK_MEM, f"{chip}_MASK")
             assert np.mean(mask) > 0.9
-
-    def test_bias_subtracted_via_receipt(self, master_dark):
-        assert "master_dark" in master_dark.receipt["FUNCTION"].values

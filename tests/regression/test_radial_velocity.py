@@ -396,12 +396,30 @@ class TestComputeRVPublic:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 class TestPerform:
+    """perform() on the shared default run, plus the option and failure paths.
+
+    Not marked ``slow``: the class runs on synthetic CCFs in well under a
+    second, and it holds the only coverage of the combined-RV contract, the RV
+    header keywords and the L4 serialization -- which belong in the default
+    pre-commit loop.
+    """
+
     _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CAL-OBJ='None' -> skipped
 
-    def test_fills_rv_columns_preserving_metadata(self, rv_module):
-        l4 = rv_module.perform()
+    @pytest.fixture(scope="module")
+    def performed(self, rv_l4):
+        """One default-argument perform(), shared read-only.
+
+        Seven tests inspect different facets of the same result and each was
+        recomputing it. Tests that pass explicit chips/fibers, or that mutate
+        the L4 first, keep taking the per-test ``rv_module``.
+        """
+        module = RadialVelocity(copy.deepcopy(rv_l4), config={"rv_window": RANGE_KMS})
+        return module, module.perform()
+
+    def test_fills_rv_columns_preserving_metadata(self, performed):
+        _, l4 = performed
         assert isinstance(l4, KPF4)
         for fiber in self._ILLUMINATED:
             table = l4.data[f"{fiber}_RV"]
@@ -421,30 +439,30 @@ class TestPerform:
                 "RV_ERR",
             }
 
-    def test_unilluminated_fiber_skipped(self, rv_module):
+    def test_unilluminated_fiber_skipped(self, performed):
         # CAL-OBJ='None' -> CrossCorrelation wrote no CAL CCF or RV table.
-        l4 = rv_module.perform()
+        _, l4 = performed
         assert l4.data["CAL_CCF"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
 
-    def test_recovers_injected_rv_illuminated_orderlets(self, rv_module):
-        l4 = rv_module.perform()
+    def test_recovers_injected_rv_illuminated_orderlets(self, performed):
+        _, l4 = performed
         for fiber in self._ILLUMINATED:
             rv = np.asarray(l4.data[f"{fiber}_RV"]["RV"])
             np.testing.assert_allclose(rv, V_INJECT, atol=0.1)
 
-    def test_rv_headers(self, rv_module):
-        l4 = rv_module.perform()
+    def test_rv_headers(self, performed):
+        _, l4 = performed
         rv_hdr = l4.headers["SCI2_RV"]
         assert rv_hdr["RVMETHOD"] == "CCF"
         assert rv_hdr["SKYRMVD"] is False
         assert rv_hdr["TELLRMVD"] is False
         assert l4.headers["PRIMARY"]["RVMETHOD"] == "CCF"
 
-    def test_per_ccd_rv_keywords(self, rv_module):
+    def test_per_ccd_rv_keywords(self, performed):
         # Per-orderlet legacy RVs route to their RV# table header as CCD<n>RV<sfx>
         # (CCD1=GREEN, CCD2=RED; SCI2 has suffix '2' and lives on RV3).
-        l4 = rv_module.perform()
+        _, l4 = performed
         rv_hdr = l4.headers["RV3"]
         assert rv_hdr["CCD1RV2"] == pytest.approx(V_INJECT, abs=0.1)
         assert rv_hdr["CCD2RV2"] == pytest.approx(V_INJECT, abs=0.1)
@@ -452,9 +470,9 @@ class TestPerform:
         # The per-orderlet keywords do not leak onto PRIMARY.
         assert "CCD1RV2" not in l4.headers["PRIMARY"]
 
-    def test_combined_rv_populated(self, rv_module):
+    def test_combined_rv_populated(self, performed):
         # PRIMARY: EPRV RV/RVERR plus the KPF SCI-combined per-CCD CCD1RV/CCD2RV.
-        l4 = rv_module.perform()
+        _, l4 = performed
         prim = l4.headers["PRIMARY"]
         assert prim["CCD1RV"] == pytest.approx(V_INJECT, abs=0.1)
         assert prim["CCD2RV"] == pytest.approx(V_INJECT, abs=0.1)
@@ -465,13 +483,13 @@ class TestPerform:
         assert "CCD1RV" not in l4.headers["RV3"]
         assert "RV" not in l4.headers["RV3"]
 
-    def test_combined_rv_is_weighted_ccd_combine(self, rv_module):
+    def test_combined_rv_is_weighted_ccd_combine(self, performed):
         # PRIMARY RV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order
         # weights; RVERR = inverse-variance combination of the per-CCD errors.
-        l4 = rv_module.perform()
+        module, l4 = performed
         prim = l4.headers["PRIMARY"]
-        wg = np.nansum(rv_module._get_order_weights("GREEN", "SCI1"))
-        wr = np.nansum(rv_module._get_order_weights("RED", "SCI1"))
+        wg = np.nansum(module._get_order_weights("GREEN", "SCI1"))
+        wr = np.nansum(module._get_order_weights("RED", "SCI1"))
         expect_rv = (prim["CCD1RV"] * wg + prim["CCD2RV"] * wr) / (wg + wr)
         expect_err = (1.0 / prim["CCD1ERV"] ** 2 + 1.0 / prim["CCD2ERV"] ** 2) ** -0.5
         assert prim["RV"] == pytest.approx(expect_rv, abs=1e-9)

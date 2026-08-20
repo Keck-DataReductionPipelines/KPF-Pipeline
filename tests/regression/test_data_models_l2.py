@@ -167,7 +167,7 @@ class TestToKPF2:
         kpf2 = converted_l1.to_kpf2()
         assert kpf2.headers["PRIMARY"].get("DATALVL") == "L2"
         origin = kpf2.headers["PRIMARY"].get("ORIGIN")
-        assert origin is not None
+        assert origin == "Keck"
 
     def test_to_kpf2_carries_instrument_header(self, converted_l1):
         # INSTRUMENT_HEADER holds the raw natives, forwarded unchanged from L1.
@@ -221,6 +221,22 @@ class TestToKPF2:
         assert (
             kpf2.headers["RECEIPT"].get("DRPSTATU")
             == "Barycentric Correction module complete"
+        )
+
+    def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
+        # KPF2 reads through rvdata's RV2._read, a different path from KPF0/1,
+        # so the L0/L1 round-trip twins cover none of this.
+        kpf2 = KPF2()
+        kpf2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
+        kpf2.receipt_add_entry("spectral_extraction", "", "PASS")
+        fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        kpf2.to_fits(fn)
+
+        back = KPF2.from_fits(fn)
+        assert "spectral_extraction" in back.receipt["FUNCTION"].values
+        assert (
+            back.headers["RECEIPT"].get("DRPSTATU")
+            == "Spectral Extraction module complete"
         )
 
     def test_to_kpf2_propagates_origid(self, tmp_path):
@@ -295,6 +311,13 @@ class TestAliasedOrderedDict:
         assert aliased["B"] == 2
         aliased.register_alias("C", "A")
         assert aliased["C"] == 1
+
+    def test_delete_via_alias(self):
+        d = AliasedOrderedDict()
+        d["CANONICAL"] = 1
+        d.register_alias("ALIAS", "CANONICAL")
+        del d["ALIAS"]
+        assert "CANONICAL" not in d
 
     def test_identity_via_alias(self):
         d = AliasedOrderedDict()
@@ -472,7 +495,7 @@ class TestKPFMasterL2:
     def test_kind_required_and_validated(self):
         with pytest.raises(TypeError):
             KPFMasterL2()  # kind is required, no default
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="kind must be one of"):
             KPFMasterL2(kind="bogus")
 
     def test_aliases_work(self):
@@ -518,6 +541,25 @@ class TestKPFMasterL2:
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         assert "from_fits" in m.receipt["FUNCTION"].values
 
+    def test_from_fits_rejects_unreadable_input(self, tmp_path):
+        with pytest.raises(OSError, match="does not exist"):
+            KPFMasterL2.from_fits(str(tmp_path / "absent.fits"))
+        not_fits = tmp_path / "master.txt"
+        not_fits.write_text("not a FITS file")
+        with pytest.raises(OSError, match="must be FITS files"):
+            KPFMasterL2.from_fits(str(not_fits))
+
+    def test_from_fits_requires_a_known_mastype(self, tmp_path):
+        # MASTYPE picks the extension manifest, so an unmappable one must not
+        # fall back to a default kind -- a flat read under the WLS schema would
+        # land extracted spectra in TRACE*_WAVE.
+        fn = str(tmp_path / "KP.20240113.23249.10_master_bogus_L2.fits")
+        primary = fits.PrimaryHDU()
+        primary.header["MASTYPE"] = "bogus"
+        fits.HDUList([primary]).writeto(fn, overwrite=True)
+        with pytest.raises(ValueError, match="cannot infer KPFMasterL2 kind"):
+            KPFMasterL2.from_fits(fn)
+
     def test_round_trip(self, synthetic_masters_l2_file, tmp_path):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         original = m.data["TRACE3_WAVE"].copy()
@@ -526,9 +568,7 @@ class TestKPFMasterL2:
         m.to_fits(out_fn)
 
         m2 = KPFMasterL2.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(
-            m2.data["TRACE3_WAVE"], original, decimal=4
-        )
+        np.testing.assert_array_equal(m2.data["TRACE3_WAVE"], original)
 
     def test_datalvl_header_in_fits(self, synthetic_masters_l2_file, tmp_path):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)

@@ -539,9 +539,13 @@ class TestDiagL2Snr:
         kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones
         set_fiber_arrays(kpf2, "VAR", 0.25, ncol=_NCOL_TEST)
         DiagL2(kpf2).run()
+        # FLUX = 1, VAR = 0.25 -> per-fiber SNR = 1/sqrt(0.25) = 2.0 exactly, and
+        # the three summed SCI orderlets give 3/sqrt(0.75) = 3.464.
+        qc = kpf2.headers["QUALITY_CONTROL"]
         for key in self._SNR_KEYS:
-            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
-            assert kpf2.headers["QUALITY_CONTROL"].get(key) > 0
+            assert key in qc, f"missing {key}"
+            expected = 3.464 if key.endswith("SCI") else 2.0
+            assert qc.get(key) == pytest.approx(expected, abs=0.01), key
 
     def test_single_fiber_snr_value(self):
         # SKY flux=2, var=0.04 -> SNR = 2/sqrt(0.04) = 10.0 in every pixel.
@@ -671,6 +675,21 @@ class TestDiagL4:
         assert qc["BJDMEAN"] == pytest.approx(15.0)
         assert qc["BJDRNG"] == pytest.approx(864000.0)
         assert qc["BERVMEAN"] == pytest.approx(0.2)
+
+    def test_all_zero_weights_skips_metrics(self):
+        # w.sum() <= 0 makes _weighted_dispersion return None and the metrics are
+        # skipped entirely. That is load-bearing: absent BERVRNG/BJDRNG make
+        # QCL4.berv_within_tolerance / bjd_within_tolerance return False on a
+        # target frame, so this producing half must stay in step with the QC half.
+        l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [0.0, 0.0])
+        assert DiagL4(l4).run() == {}
+
+    def test_non_finite_samples_dropped(self):
+        # A NaN BJD is masked out rather than poisoning the mean; the surviving
+        # order is the answer.
+        l4 = _l4_with_sci2_rv([10.0, np.nan], [0.1, 0.3], [1.0, 1.0])
+        DiagL4(l4).run()
+        assert l4.headers["QUALITY_CONTROL"]["BJDMEAN"] == pytest.approx(10.0)
 
     def test_skips_without_sci2_rv_table(self):
         # No SCI2 RV table (e.g. unilluminated science) -> no metrics written.

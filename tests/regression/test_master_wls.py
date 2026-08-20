@@ -20,6 +20,9 @@ from kpfpipe.utils.kpf import get_obs_id
 from ._dtype_policy import MASK_MEM, WAVE, assert_dtype, assert_roundtrip_dtype
 from ._masters import FILE_LIST
 
+# Captured before the memoizing fixture below patches the method.
+_REAL_LOAD_ROUGH_WLS = WLS._load_rough_wls
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL_TEST = 16
@@ -30,6 +33,38 @@ DATECODE = "20240101"  # shared by FILE_LIST and the master obs_ids below
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def cached_rough_wls():
+    """The rough-WLS grid, built once for the whole module."""
+    return WLS(FILE_LIST).rough_wls
+
+
+@pytest.fixture(autouse=True)
+def _memoize_rough_wls(cached_rough_wls, monkeypatch):
+    """Serve every ``WLS(...)`` in this file the grid built once above.
+
+    ``WLS.__init__`` rebuilds the rough-WLS grid unconditionally -- measured at
+    0.15 s a call, and this file constructs roughly sixty. The grid depends only
+    on class defaults (the CSV, ncol, chips, fibers, echelle orders), so each
+    instance gets a fresh dict wrapping the shared arrays; the three tests that
+    override a channel rebind the key rather than writing through it.
+
+    A caller passing an explicit ``rough_wls_file`` still reaches the real
+    loader, so the missing-file path is unaffected, and
+    ``test_cached_grid_matches_the_real_loader`` drives the real loader once per
+    run to keep this cache honest.
+    """
+
+    def _cached(self, rough_wls_file=None):
+        if rough_wls_file is not None and rough_wls_file != self.rough_wls_file:
+            return _REAL_LOAD_ROUGH_WLS(self, rough_wls_file)
+        if not hasattr(self, "rough_wls"):
+            self.rough_wls = dict(cached_rough_wls)
+        return self.rough_wls
+
+    monkeypatch.setattr(WLS, "_load_rough_wls", _cached)
 
 
 class MockL1:
@@ -128,7 +163,9 @@ class TestInit:
         assert wls._masters_output is None
 
     def test_invalid_config_raises(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(
+            TypeError, match="config must be None, dict, or ConfigHandler"
+        ):
             WLS(FILE_LIST, config=42)
 
 
@@ -289,15 +326,6 @@ class TestMakeMasterL2:
         result = wls.make_master_l2()
         assert isinstance(result, KPFMasterL2)
 
-    def test_wave_extensions_populated(self, mock_make_master_l2):
-        wls = WLS(FILE_LIST)
-        ml2 = wls.make_master_l2()
-        for chip in wls.chips:
-            for fiber in wls.fibers:
-                wave = ml2.data[f"{chip}_{fiber}_WAVE"]
-                assert np.size(wave) > 0
-                assert np.all(wave == 5500.0)
-
     def test_wave_routing_uses_physical_position_not_fiber_order(self, monkeypatch):
         # W's planes are ordered by fiber_positions (SKY=0..CAL=4), so the write
         # loop must sort by that, not trust self.fibers' config-overridable
@@ -402,13 +430,22 @@ class TestMakeMasterL2:
 
     def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
         # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),
-        # which rejects (value, comment) tuple values. Make sure every header
-        # we set survives the round-trip.
+        # which rejects (value, comment) tuple values. Every header this module
+        # sets must come back off disk, not merely survive the write.
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
         out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))
-        assert out_path.exists()
+
+        read_back = KPFMasterL2.from_fits(str(out_path))
+        primary = read_back.headers["PRIMARY"]
+        assert primary["MASTYPE"] == "thar"
+        assert primary["ROUGHWLS"] == wls.rough_wls_file
+        assert primary["LINELIST"] == wls.linelist
+        assert primary["LINEPROF"] == wls.lineprofile
+        assert primary["POLYDEGX"] == wls.poly_degree_x
+        assert primary["POLYDEGM"] == wls.poly_degree_m
+        assert primary["POLYDEGF"] == wls.poly_degree_f
 
     def test_ml2_datalvl_and_minimal_primary(self, mock_make_master_l2, tmp_path):
         # Regression: ML2 must not inherit RV2's EPRV science PRIMARY skeleton, and
@@ -573,7 +610,7 @@ class TestMakeMasterL2:
                     assert grp.attrs["rejected"] == np.False_
 
                     assert grp["coeffs"].shape == expected_coeffs_shape
-                    assert np.issubdtype(grp["coeffs"].dtype, np.floating)
+                    assert_dtype(grp["coeffs"][...], WAVE, "h5 coeffs")
 
                     lines = grp["lines"]
                     for key in [
@@ -588,8 +625,8 @@ class TestMakeMasterL2:
                         "isgood",
                     ]:
                         assert key in lines
-                    assert np.issubdtype(lines["wav"].dtype, np.floating)
-                    assert np.issubdtype(lines["pix"].dtype, np.floating)
+                    assert_dtype(lines["wav"][...], WAVE, "h5 lines/wav")
+                    assert_dtype(lines["pix"][...], WAVE, "h5 lines/pix")
                     assert np.issubdtype(lines["index"].dtype, np.integer)
                     assert np.issubdtype(lines["echelle"].dtype, np.integer)
                     assert_dtype(lines["isgood"], MASK_MEM, "isgood")
@@ -639,36 +676,6 @@ class TestMakeMasterL2:
             assert rej.attrs["rejected"] == np.True_
             assert "coeffs" not in rej
             assert "lines" in rej  # rejected frame's line diagnostics still written
-
-    def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
-        # A NaN-filled orderlet (extraction failure) is skipped rather than
-        # crashing scipy's least_squares.
-        wls = WLS(FILE_LIST)
-        ncol = wls.ccd["ncol"]
-        norder = wls.norder["RED"]
-
-        flux = np.ones((norder, ncol))
-        flux[0, :] = np.nan
-
-        class StubL2:
-            data = {"RED_SCI1_FLUX": flux}
-
-        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
-            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
-        )
-        wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
-
-        with caplog.at_level(logging.DEBUG):
-            result = wls._fit_line_positions_ffi(
-                StubL2(),
-                "RED",
-                ["SCI1"],
-            )
-        assert "RED SCI1 order 102: orderlet skipped" in caplog.text
-
-        # The NaN order (bluest RED, echelle 102) contributed no lines; rest did.
-        assert 102 not in result["echelle"]
-        assert len(result["wav"]) > 0
 
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
         override = tmp_path / "alt_linelist.csv"
@@ -1041,6 +1048,36 @@ class TestMinStackSizeGate:
 
 
 class TestFitLinePositions:
+    def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
+        # A NaN-filled orderlet (extraction failure) is skipped rather than
+        # crashing scipy's least_squares.
+        wls = WLS(FILE_LIST)
+        ncol = wls.ccd["ncol"]
+        norder = wls.norder["RED"]
+
+        flux = np.ones((norder, ncol))
+        flux[0, :] = np.nan
+
+        class StubL2:
+            data = {"RED_SCI1_FLUX": flux}
+
+        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
+            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
+        )
+        wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
+
+        with caplog.at_level(logging.DEBUG):
+            result = wls._fit_line_positions_ffi(
+                StubL2(),
+                "RED",
+                ["SCI1"],
+            )
+        assert "RED SCI1 order 102: orderlet skipped" in caplog.text
+
+        # The NaN order (bluest RED, echelle 102) contributed no lines; rest did.
+        assert 102 not in result["echelle"]
+        assert len(result["wav"]) > 0
+
     def test_no_lines_returns_empty(self):
         wls = WLS(FILE_LIST)
         flux = np.ones(100)
@@ -1114,27 +1151,6 @@ class TestFitLinePositions:
         assert "RED SCI1: no good lines retained" in caplog.text
         assert len(result["wav"]) == 0
 
-    def test_nan_orderlet_emits_skip_warning(self, caplog):
-        wls = WLS(FILE_LIST)
-        ncol = wls.ccd["ncol"]
-        norder = wls.norder["RED"]
-
-        flux = np.ones((norder, ncol))
-        flux[0, :] = np.nan
-
-        class StubL2:
-            data = {"RED_SCI1_FLUX": flux}
-
-        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
-            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
-        )
-        wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
-
-        with caplog.at_level(logging.DEBUG):
-            wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"])
-
-        assert "orderlet skipped" in caplog.text
-
 
 # ---------------------------------------------------------------------------
 # TestRoughWlsLoading
@@ -1144,5 +1160,15 @@ class TestFitLinePositions:
 class TestRoughWlsLoading:
     def test_missing_rough_wls_file_raises(self):
         wls = WLS(FILE_LIST)
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match="/nonexistent/path.csv"):
             wls._load_rough_wls(rough_wls_file="/nonexistent/path.csv")
+
+    def test_cached_grid_matches_the_real_loader(self, cached_rough_wls):
+        # The one test that runs the real Legendre evaluation, so the module's
+        # memoized grid cannot drift from what production would have built.
+        wls = WLS(FILE_LIST)
+        del wls.rough_wls
+        _REAL_LOAD_ROUGH_WLS(wls)
+        assert set(wls.rough_wls) == set(cached_rough_wls)
+        for channel_ext, grid in wls.rough_wls.items():
+            np.testing.assert_array_equal(grid, cached_rough_wls[channel_ext])

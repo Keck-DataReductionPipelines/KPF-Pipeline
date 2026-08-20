@@ -48,8 +48,9 @@ class TestMasterFlatUnit:
 
 class TestMasterFlatSignature:
     def test_flat_kwarg_rejected(self):
-        with pytest.raises(TypeError):
-            Flat(FILE_LIST).make_master_l1(flat=True)
+        module = Flat(FILE_LIST)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            module.make_master_l1(flat=True)
 
     @pytest.mark.parametrize("kwarg", ["bias", "dark"])
     def test_bias_dark_kwargs_accepted(self, kwarg):
@@ -104,6 +105,3 @@ class TestMasterFlatRegression:
             mask = master_flat.data[f"{chip}_MASK"]
             assert_dtype(mask, MASK_MEM, f"{chip}_MASK")
             assert np.mean(mask) > 0.9
-
-    def test_calibrated_via_receipt(self, master_flat):
-        assert "master_flat" in master_flat.receipt["FUNCTION"].values

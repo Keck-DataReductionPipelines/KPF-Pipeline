@@ -65,6 +65,21 @@ class TestToKPF4:
         assert receipt.get("KOAID") == "KP.20201122.34567.89"
         assert "PROGID" not in l4.headers["PRIMARY"]
 
+    def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
+        # KPF4 reads through rvdata's RV4._read, a different path from KPF0/1,
+        # so the L0/L1 round-trip twins cover none of this.
+        l4 = KPF2().to_kpf4()
+        l4.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
+        l4.receipt_add_entry("radial_velocity", "", "PASS")
+        fn = str(tmp_path / "kpf_SL4_20240101T000000.fits")
+        l4.to_fits(fn)
+
+        back = KPF4.from_fits(fn)
+        assert "radial_velocity" in back.receipt["FUNCTION"].values
+        assert (
+            back.headers["RECEIPT"].get("DRPSTATU") == "Radial Velocity module complete"
+        )
+
     def test_kpf4_has_quality_control_extension(self):
         # KPF4 must create QUALITY_CONTROL (RV4 does not) so to_kpf4 has a
         # destination and the accumulated QC history reaches L4.
@@ -212,7 +227,7 @@ class TestKPF4:
 
 class TestKPFMasterStubs:
     def test_master_l4_not_implemented(self):
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(NotImplementedError, match="not yet implemented"):
             KPFMasterL4()
 
     def test_master_l4_inherits_kpf4(self):
@@ -243,16 +258,15 @@ class TestDtypeProvenance:
         )
         return kpf4
 
-    def test_ccf_cube_is_float64(self):
-        assert_dtype(self._populated().data["SCI2_CCF"], CCF, "SCI2_CCF in-mem")
-
-    @pytest.mark.parametrize("column", ["RV", "RV_ERR", "WAVE_START", "WAVE_END"])
-    def test_rv_table_columns_are_float64(self, column):
-        table = self._populated().data["SCI2_RV"]
-        assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} in-mem")
-
-    def test_bjd_tdb_is_float64(self):
-        table = self._populated().data["SCI2_RV"]
+    def test_populated_l4_is_born_float64(self):
+        # One in-memory check, not one per column: it localizes a break to
+        # set_data, which the round-trip tests below cannot distinguish from a
+        # FITS-layer break.
+        kpf4 = self._populated()
+        assert_dtype(kpf4.data["SCI2_CCF"], CCF, "SCI2_CCF in-mem")
+        table = kpf4.data["SCI2_RV"]
+        for column in ("RV", "RV_ERR", "WAVE_START", "WAVE_END"):
+            assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} in-mem")
         assert_dtype(table["BJD_TDB"], BJD, "SCI2_RV BJD_TDB in-mem")
 
     def test_ccf_cube_survives_round_trip_as_float64(self, tmp_path):
@@ -267,11 +281,9 @@ class TestDtypeProvenance:
             name="kpf_SL4_20240101T000003.fits",
         )
 
-    @pytest.mark.parametrize(
-        "column", ["RV", "RV_ERR", "WAVE_START", "WAVE_END", "BJD_TDB"]
-    )
-    def test_rv_table_survives_round_trip_as_float64(self, tmp_path, column):
+    def test_rv_table_survives_round_trip_as_float64(self, tmp_path):
         path = str(tmp_path / "kpf_SL4_20240101T000004.fits")
         self._populated().to_fits(path)
         table = KPF4.from_fits(path).data["SCI2_RV"]
-        assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} after round-trip")
+        for column in ("RV", "RV_ERR", "WAVE_START", "WAVE_END", "BJD_TDB"):
+            assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} after round-trip")

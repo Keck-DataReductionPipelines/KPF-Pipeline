@@ -171,8 +171,10 @@ class TestFileSaving:
         qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
         fig = qlp.image("green")
         expected = tmp_path / "KP.20240405.00001.00_L1_image_green_zoomable.png"
-        assert expected.exists()
-        assert expected.stat().st_size > 0
+        assert sorted(p.name for p in tmp_path.glob("*.png")) == [expected.name]
+        # An empty canvas would satisfy a bare exists(); check for ink.
+        with Image.open(expected) as png:
+            assert png.convert("L").getextrema() != (255, 255)
         plt.close(fig)
 
     def test_no_file_when_output_dir_none(self, synthetic_l1, tmp_path):
@@ -266,21 +268,22 @@ class TestRun:
 
 
 class TestStubs:
-    @pytest.mark.parametrize(
-        "method_name",
-        [
-            "histogram",
-            "column_cut",
-            "zoom_3x3",
-            "order_trace_overlay",
-            "bias_subtracted",
-            "dark_subtracted",
-        ],
+    _STUBS = (
+        "histogram",
+        "column_cut",
+        "zoom_3x3",
+        "order_trace_overlay",
+        "bias_subtracted",
+        "dark_subtracted",
     )
-    def test_stub_raises_not_implemented(self, synthetic_l1, method_name):
+
+    def test_stubs_raise_not_implemented(self):
+        # One behaviour, not six: each stub raises before reading any data, so a
+        # bare KPF1 is enough and the synthetic FITS fixture is not needed. The
+        # match= pins that the stub raised for its own reason.
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 
-        qlp = PlotL1(synthetic_l1)
-        method = getattr(qlp, method_name)
-        with pytest.raises(NotImplementedError):
-            method("green")
+        qlp = PlotL1(KPF1())
+        for method_name in self._STUBS:
+            with pytest.raises(NotImplementedError, match=method_name):
+                getattr(qlp, method_name)("green")

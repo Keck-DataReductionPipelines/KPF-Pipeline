@@ -51,9 +51,7 @@ class TestKPF0:
         l0.to_fits(out_fn)
 
         l0_reread = KPF0.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(
-            l0_reread.data["GREEN_AMP1"], original_green, decimal=4
-        )
+        np.testing.assert_array_equal(l0_reread.data["GREEN_AMP1"], original_green)
         assert l0_reread.headers["PRIMARY"]["INSTRUME"] == "KPF"
 
     def test_receipt_tracking(self, synthetic_l0_file, tmp_path):
@@ -83,14 +81,14 @@ class TestKPF0:
         assert l0.generate_standard_filename() == "KP.20240113.23249.10.fits"
 
     def test_file_not_found(self):
-        with pytest.raises(IOError):
+        with pytest.raises(IOError, match="does not exist"):
             KPF0.from_fits("/nonexistent/path.fits")
 
     def test_non_fits_file(self, tmp_path):
         fn = str(tmp_path / "not_a_fits.txt")
         with open(fn, "w") as f:
             f.write("hello")
-        with pytest.raises(IOError):
+        with pytest.raises(IOError, match="must be FITS files"):
             KPF0.from_fits(fn)
 
 
