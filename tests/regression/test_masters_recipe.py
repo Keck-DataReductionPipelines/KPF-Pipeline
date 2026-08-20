@@ -1,8 +1,7 @@
-"""Tests for the kpf_drp_masters recipe: end-to-end master production and error
-paths.
+"""Tests for the kpf_drp_masters recipe: master production and error paths.
 
 Integration tests use real L0 data from tests/testdata/L0/20240405/. The
-FileHandler and path builders these exercise are unit-tested in test_io.py.
+FileHandler and path builders they exercise are unit-tested in test_io.py.
 """
 
 import importlib.util
@@ -39,7 +38,7 @@ def _load_masters_recipe():
 
 @pytest.mark.slow
 class TestMastersRecipe:
-    """End-to-end recipe test: FileHandler → Bias.make_master_l1 → to_fits."""
+    """End-to-end: FileHandler -> Bias.make_master_l1 -> to_fits."""
 
     @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
@@ -107,9 +106,9 @@ class TestMastersRecipe:
 class TestMastersRecipeOrderTraceStage:
     """The recipe traces every master flat it just stacked.
 
-    The stacking modules are stubbed out: what is under test is the wiring --
-    which flat the tracer is handed, where its CSV is written, and that the
-    trace reaches the run summary. OrderTrace's own geometry is covered by
+    The stacking modules are stubbed out; what is under test is the wiring --
+    which flat the tracer is handed, where its CSV is written, and that the trace
+    reaches the run summary. OrderTrace's geometry is covered by
     test_master_order_trace.py.
     """
 
@@ -128,8 +127,7 @@ class TestMastersRecipeOrderTraceStage:
                 pass
 
             def build_calibration_stacks(self, cal_type, **kwargs):
-                # Only the flats matter here; the other stages have nothing to
-                # stack and fall through.
+                # Only the flats matter here; the other stages fall through.
                 return [["/l0/KP.20240405.00020.86.fits"]] if cal_type == "flat" else []
 
         class StubFlat:
@@ -223,8 +221,8 @@ class TestMastersRecipeErrors:
 
     @pytest.mark.slow
     def test_missing_min_stack_size_key_raises(self, tmp_path):
-        """min_stack_size is a required quality gate: a [BIAS] section present but
-        lacking the key must fail loud, not silently stack with no size gate."""
+        # min_stack_size is a required quality gate: a [BIAS] section lacking it
+        # must fail loud, not silently stack with no size gate.
         import argparse
 
         cfg = tmp_path / "no_min_stack.toml"
@@ -240,7 +238,7 @@ class TestMastersRecipeErrors:
 
 
 class TestMastersSummary:
-    """Unit tests for the masters_run_summary() run-verdict formatter."""
+    """Unit tests for the masters_run_summary() formatter."""
 
     def test_built_masters_listed(self):
         text = masters_run_summary(

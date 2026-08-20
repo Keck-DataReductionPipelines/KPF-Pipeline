@@ -1,13 +1,12 @@
 """Tests for the CrossCorrelation module (KPF2 -> KPF4: per-orderlet CCFs).
 
-Mirrors the CCF-side coverage of test_radial_velocity.py against the standalone
-CrossCorrelation module. Static-method unit tests (_compute_ccf_1d) build
-synthetic spectra with no fixtures. Build-helper tests use a header-only KPF2 and
-read the real on-disk line masks. Integration tests (compute_ccfs/perform) use a
-synthetic KPF2 with absorption injected at a monkeypatched line mask, and a
-narrow velocity grid for speed. CrossCorrelation writes the CCF cubes, the per-bin
-CCF variance cubes, and the metadata-seeded RV tables (RV/RV_ERR left NaN for
-RadialVelocity); it does not fit RVs or write any PRIMARY/combined-RV keywords.
+_compute_ccf_1d unit tests build synthetic spectra; build-helper tests use a
+header-only KPF2 and the real on-disk line masks; integration tests
+(compute_ccfs/perform) use a synthetic KPF2 with absorption injected at a
+monkeypatched line mask and a narrow velocity grid for speed. CrossCorrelation
+writes the CCF cubes, the per-bin CCF variance cubes, and the metadata-seeded RV
+tables (RV/RV_ERR left NaN for RadialVelocity); it does not fit RVs or write any
+PRIMARY/combined-RV keywords.
 """
 
 import logging
@@ -26,16 +25,16 @@ from ._dtype_policy import CCF, assert_dtype
 
 NORDER = NORDER_GREEN + NORDER_RED
 SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
-_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]  # all orderlets
+_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
 
 # Narrow CCF grid for fast integration tests.
 _RANGE_KMS = [-15.0, 15.0]
 _STEP_KMS = 0.25  # matches the module default
 _NVEL = round((_RANGE_KMS[1] - _RANGE_KMS[0]) / _STEP_KMS) + 1
 _V_INJECT = 1.5  # injected RV [km/s], on the grid
-_MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)  # vacuum line centers [Å]
+_MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)  # vacuum line centers [Angstrom]
 # Wide enough that the default compute_ccfs clip (clip_edge_pixels=(500, 500))
-# trims the order edges but leaves the 5015-5035 Å mask lines well inside.
+# trims the order edges but leaves the 5015-5035 A mask lines well inside.
 NCOL = 2000
 
 
@@ -308,19 +307,19 @@ class TestStellarMaskName:
             CrossCorrelation(header_kpf2)._resolve_stellar_mask()
 
     def test_ignores_instrument_header_targteff(self, header_kpf2):
-        """The catalog colour wins; the raw DCS temperature is no longer consulted."""
+        # The catalog colour wins; the raw DCS temperature is not consulted.
         header_kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 4000.0
         assert CrossCorrelation(header_kpf2)._resolve_stellar_mask() == "G2_espresso"
 
     def test_missing_crv_warns_and_centers_on_zero(self, header_kpf2, caplog):
-        """Many targets have no catalog rv; center on 0, but say so."""
+        # Many targets have no catalog rv; center on 0, but say so.
         del header_kpf2.headers["PRIMARY"]["CRV3"]
         with caplog.at_level(logging.WARNING):
             assert CrossCorrelation(header_kpf2)._get_systemic_rv() == 0.0
         assert "CRV3" in caplog.text
 
     def test_ignores_instrument_header_targradv(self, header_kpf2):
-        """The canonical catalog rv wins; the raw DCS value is no longer consulted."""
+        # The canonical catalog rv wins; the raw DCS value is not consulted.
         header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = -42.0
         header_kpf2.headers["PRIMARY"]["CRV3"] = 7.5
         assert CrossCorrelation(header_kpf2)._get_systemic_rv() == pytest.approx(7.5)
@@ -431,8 +430,6 @@ def _stub_line_mask(mp):
 
 @pytest.fixture
 def cc_kpf2():
-    """KPF2 with identical per-order synthetic spectra (absorption at _MASK_CENTERS
-    shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
     return _build_cc_kpf2()
 
 
@@ -447,12 +444,10 @@ def cc_module(cc_kpf2, monkeypatch):
 def performed():
     """Run the default full perform() once and share the (module, L4) read-only.
 
-    Every TestPerform test below inspects a different facet of the *same*
-    default-args L4 (shapes, RV columns, CCF/RV header cards, the injected dip);
-    recomputing it per test cost ~0.9s x ~9 tests. The line-mask stub only has to
-    be live during perform(), so a MonkeyPatch context (the function-scoped
-    monkeypatch fixture can't reach module scope) wraps the build. No consuming
-    test mutates the module or the L4, so the shared object stays read-only."""
+    Every TestPerform test inspects a different facet of the same default-args L4,
+    and recomputing it per test cost ~0.9s each. A MonkeyPatch context wraps the
+    build because the function-scoped monkeypatch fixture cannot reach module
+    scope. No consuming test mutates the module or the L4."""
     with pytest.MonkeyPatch.context() as mp:
         _stub_line_mask(mp)
         cc = CrossCorrelation(_build_cc_kpf2(), config={"ccf_window": _RANGE_KMS})
@@ -503,12 +498,10 @@ class TestComputeCCFPublic:
             cc_module.compute_ccfs("GREEN", "SCI2")
 
     def test_clip_edge_pixels_zero_keeps_all(self, cc_module):
-        # clip_edge_pixels=[0, 0] is a no-op (no pixels removed).
         full = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[0, 0])["ccf"]
         assert np.any(full)
 
     def test_clip_edge_pixels_too_large_raises(self, cc_module):
-        # Clipping more pixels than the order has fails loudly.
         with pytest.raises(ValueError, match="removes all"):
             cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[NCOL, NCOL])
 
@@ -577,7 +570,7 @@ class TestPerform:
         assert np.any(l4.data["GREEN_SCI2_CCF_VAR"])
 
     def test_dip_at_injected_velocity_illuminated_orderlets(self, performed):
-        # The CCFs dip at the injected velocity (no RV fit here, just the CCF).
+        # No RV fit is involved here -- only the CCF minimum.
         cc_module, l4 = performed
         vel = cc_module._velocity_grid["RED_SCI2"]
         for fiber in self._ILLUMINATED:
@@ -620,8 +613,8 @@ class TestPerform:
 
     def test_ccf_and_rv_headers(self, performed):
         # CrossCorrelation stamps the CCF EPRV keywords and the RV table-structure
-        # CTYPE cards, but NOT the RV-processing descriptors (those are
-        # RadialVelocity's, Phase 2) or any PRIMARY combined RV.
+        # CTYPE cards, but not the RV-processing descriptors (RadialVelocity's)
+        # or any PRIMARY combined RV.
         cc_module, l4 = performed
         ccf_hdr = l4.headers["SCI2_CCF"]
         assert ccf_hdr["CTYPE1"] == "Velocity"
@@ -643,7 +636,6 @@ class TestPerform:
         assert l4.headers["PRIMARY"].get("RVMETHOD") != "CCF"
 
     def test_thar_mask_recorded_for_cal(self, cc_module):
-        # A ThAr-illuminated CAL fiber records CCFMASK='thar'.
         cc_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "Th_gold"
         l4 = cc_module.perform(fibers=["CAL"])
         assert l4.headers["CAL_CCF"]["CCFMASK"] == "thar"
@@ -658,7 +650,6 @@ class TestPerform:
         assert len(l4.data["CAL_RV"]) == 0
 
     def test_explicit_chips_and_fibers(self, cc_module):
-        # A single chip / single fiber writes only that chip's CCF rows.
         l4 = cc_module.perform(chips=["GREEN"], fibers=["SCI2"])
         assert np.any(l4.data["GREEN_SCI2_CCF"])
         assert not np.any(l4.data["RED_SCI2_CCF"])

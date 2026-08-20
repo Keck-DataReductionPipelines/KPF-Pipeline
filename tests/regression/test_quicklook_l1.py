@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level1 import KPF1
 
-# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
-# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+# Quicklook/QLP render suite: slow PNG rendering, so it is excluded from
+# `make test-fast`. Run in the full suite or `make test-qlp`.
 pytestmark = pytest.mark.quicklook
 
 
@@ -27,8 +27,8 @@ def _close_figures():
 # Fixtures
 # ---------------------------------------------------------------------------
 
-# 300x300 is large enough to exercise the 100-pixel border stripping used by
-# image()'s percentile scaling without paying for full 4080x4080 arrays.
+# Large enough to exercise the 100-pixel border strip in image()'s percentile
+# scaling, without paying for full 4080x4080 arrays.
 _FIXTURE_SHAPE = (300, 300)
 
 
@@ -67,10 +67,9 @@ def _build_synthetic_l1(
 def _seed_read_noise(l1):
     """Seed RN*/RNNG* via set_keyword, exactly as ImageAssembly does.
 
-    set_keyword routes these to QUALITY_CONTROL (their registry home), so this
-    exercises the real read path the quicklook annotation depends on -- writing
-    them onto PRIMARY here would let the annotation test pass while production
-    (which reads QUALITY_CONTROL) silently rendered nothing.
+    set_keyword routes them to QUALITY_CONTROL, which is where the quicklook
+    annotation reads them; writing them onto PRIMARY here would let the
+    annotation test pass while production silently rendered nothing.
     """
     for i in range(1, 5):
         l1.set_keyword(f"RNGREEN{i}", 3.5 + 0.05 * i)
@@ -97,7 +96,7 @@ def synthetic_l1_no_rn(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Task 1: Constructor
+# Constructor
 # ---------------------------------------------------------------------------
 
 
@@ -143,8 +142,7 @@ class TestImage:
 
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image("green")
-        # image axis + colorbar axis
-        assert len(fig.axes) == 2
+        assert len(fig.axes) == 2  # image axis + colorbar axis
         plt.close(fig)
 
     def test_image_shape(self, synthetic_l1):
@@ -162,7 +160,6 @@ class TestImage:
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image("green")
         texts = [t.get_text() for t in fig.axes[0].texts]
-        # Should have a read noise annotation containing 'RN:' prefix
         assert any("RN:" in t for t in texts), f"texts found: {texts}"
         plt.close(fig)
 
@@ -250,7 +247,6 @@ class TestRun:
             qlp.run()
 
     def test_run_skips_missing_chip(self, tmp_path):
-        # KPF1 with only green CCD, no red
         rng = np.random.default_rng(42)
         fn = str(tmp_path / "KP.20240405.00003.00_L1.fits")
         primary = fits.PrimaryHDU()

@@ -1,8 +1,8 @@
 """Unit and regression tests for the master bias module (`Bias`).
 
-Unit tests mock stack_frames (no real data). TestMasterBiasRegression stacks the
-bundled L0 bias frames. The shared stacking engine and L1 output contract these
-exercise (`BaseMasterModule`) are unit-tested in test_master_base.py.
+Unit tests mock stack_frames (no real data); the regression tests stack the
+bundled L0 bias frames. The shared engine (`BaseMasterModule`) these exercise is
+unit-tested in test_master_base.py.
 """
 
 import os
@@ -30,8 +30,7 @@ TESTDATA_BIAS_FILES = sorted(
 )
 
 CHIPS = ["GREEN", "RED"]
-NROW, NCOL = 10, 10  # small arrays for unit tests
-# make_l1_arrays() -- shared synthetic stack_frames builder -- lives in _masters.py
+NROW, NCOL = 10, 10  # must match the shape make_l1_arrays() builds
 
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
@@ -42,8 +41,6 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 class TestMasterBiasUnit:
-    """Unit tests using a mocked stack_frames -- no real data needed."""
-
     @pytest.fixture(scope="class")
     def master_bias(self):
         synthetic = make_l1_arrays()
@@ -86,8 +83,6 @@ class TestMasterBiasUnit:
 
 
 class TestMasterBiasInfo:
-    """Smoke tests for Bias.info() in both pre- and post-perform states."""
-
     def test_info_before_make_master_l1(self, capsys):
         bias = Bias(FILE_LIST)
         bias.info()
@@ -114,8 +109,6 @@ class TestMasterBiasInfo:
 
 
 class TestMasterBiasRoundTrip:
-    """Test that master bias output survives a FITS write/read cycle."""
-
     def test_roundtrip_arrays(self):
         synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
@@ -182,8 +175,6 @@ class TestMasterBiasSignature:
 
 @pytest.mark.slow
 class TestMasterBiasRegression:
-    """Regression tests against a real stack of L0 bias frames."""
-
     @pytest.fixture(scope="class")
     def master_bias(self):
         return Bias(TESTDATA_BIAS_FILES).make_master_l1()

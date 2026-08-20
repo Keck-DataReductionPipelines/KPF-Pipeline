@@ -1,11 +1,9 @@
 """Tests for the RadialVelocity module (KPF4 -> KPF4: fit per-order CCFs to RVs).
 
-RadialVelocity consumes the CCF-bearing L4 that CrossCorrelation produces and
-fills the RV/RV_ERR columns and RV headers. Static-method unit tests
-(_compute_rv_1d, _ccf_noise_corr_length, _pixel_velocity_scale) build synthetic
-CCFs with no fixtures. Integration tests build a synthetic KPF2, run
-CrossCorrelation (mask monkeypatched, narrow grid) to get an L4, then exercise
-RadialVelocity on it.
+Static-method unit tests (_compute_rv_1d, _ccf_noise_corr_length,
+_pixel_velocity_scale) build synthetic CCFs with no fixtures. Integration tests
+build a synthetic KPF2, run CrossCorrelation (mask monkeypatched, narrow grid) to
+get a CCF-bearing L4, then exercise RadialVelocity on it.
 """
 
 import copy
@@ -25,7 +23,7 @@ from ._dtype_policy import RV_FLOAT, assert_dtype
 
 NORDER = NORDER_GREEN + NORDER_RED
 SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
-_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]  # all orderlets
+_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
 
 # Narrow CCF grid for fast integration tests; wide enough for the second-pass
 # +/-3 sigma window (sigma ~ 4 km/s) to stay on-grid: +/-15 km/s at 0.25 km/s.
@@ -33,9 +31,9 @@ _RANGE_KMS = [-15.0, 15.0]
 _STEP_KMS = 0.25  # matches the module default
 _NVEL = round((_RANGE_KMS[1] - _RANGE_KMS[0]) / _STEP_KMS) + 1
 _V_INJECT = 1.5  # injected RV [km/s], on the grid
-_MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)  # vacuum line centers [Å]
+_MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)  # vacuum line centers [Angstrom]
 # Wide enough that the default CCF clip (clip_edge_pixels=(500, 500)) trims the
-# order edges but leaves the 5015-5035 Å mask lines well inside.
+# order edges but leaves the mask lines well inside.
 NCOL = 2000
 
 
@@ -82,9 +80,8 @@ def _make_l4(
     bjd=0.0,
     perform_fibers=None,
 ):
-    """Build a synthetic KPF2 (absorption injected at _MASK_CENTERS, shifted by
-    _V_INJECT) and run CrossCorrelation (mask stubbed, narrow grid) to a KPF4.
-    """
+    """Synthetic KPF2 (absorption at _MASK_CENTERS, shifted by _V_INJECT) run
+    through CrossCorrelation (mask stubbed, narrow grid) into a KPF4."""
     kpf2 = KPF2()
     kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
     kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
@@ -94,7 +91,7 @@ def _make_l4(
     kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = cal_obj
 
     wave_1d = np.linspace(5000.0, 5050.0, NCOL)
-    lam_obs = _MASK_CENTERS * (1.0 + _V_INJECT / SPEED_OF_LIGHT_KMS)  # z = 0
+    lam_obs = _MASK_CENTERS * (1.0 + _V_INJECT / SPEED_OF_LIGHT_KMS)
     flux_1d = _absorption_spectrum(wave_1d, lam_obs)
     for chip, n in [("GREEN", NORDER_GREEN), ("RED", NORDER_RED)]:
         for fiber in _FIBERS:
@@ -186,7 +183,7 @@ class TestComputeRV:
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_nonfinite_ccf_returns_nan(self):
-        # Non-finite CCF values fail loudly (NaN) rather than being masked out.
+        # Non-finite CCF values are not quietly masked out; the fit returns NaN.
         vel, ccf, ccf_var, vps = self._ccf(v0=1.0)
         ccf[10] = np.nan
         rv, rv_err = RadialVelocity._compute_rv_1d(
@@ -216,7 +213,7 @@ class TestComputeRV:
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_first_pass_fit_failure_returns_nan(self, monkeypatch):
-        # optimize_lsq raising on the first pass fails loudly as NaN, not a crash.
+        # optimize_lsq raising on the first pass degrades to NaN, not a crash.
         vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
 
         def boom(*args, **kwargs):
@@ -229,7 +226,6 @@ class TestComputeRV:
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_nonfinite_fit_params_return_nan(self, monkeypatch):
-        # A fit returning a non-finite mean/sigma is rejected as NaN.
         vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
 
         def bad_fit(*args, **kwargs):
@@ -242,7 +238,6 @@ class TestComputeRV:
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_second_pass_fit_failure_keeps_first_pass_rv(self, monkeypatch):
-        # If the refinement (second) fit raises, the first-pass mean is retained.
         vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
         calls = []
 
@@ -259,10 +254,9 @@ class TestComputeRV:
         assert np.isfinite(rv) and rv == pytest.approx(0.0, abs=1e-9)
 
     def test_error_scales_with_correlation_length(self):
-        # The photon error is 1/sqrt(N_scale) with N_scale = dv / corr_length,
-        # so rv_err must scale as sqrt(corr_length): widening the mask hole (via
-        # mask_width) lengthens the noise correlation and inflates the error by
-        # exactly sqrt(L2/L1). Guards the corr-length term feeding the error.
+        # The photon error is 1/sqrt(N_scale) with N_scale = dv / corr_length, so
+        # widening the mask hole lengthens the noise correlation and inflates
+        # rv_err by exactly sqrt(L2/L1).
         vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
         _, err_a = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
@@ -300,8 +294,8 @@ class TestCCFNoiseCorrLength:
 
     def test_symmetric_in_the_two_widths(self):
         # L depends only on the {pixel, mask-hole} pair, not which is larger.
-        a = RadialVelocity._ccf_noise_corr_length(1.0, 0.8)  # widths {1.0, 0.8}
-        b = RadialVelocity._ccf_noise_corr_length(0.8, 1.0)  # widths {0.8, 1.0}
+        a = RadialVelocity._ccf_noise_corr_length(1.0, 0.8)
+        b = RadialVelocity._ccf_noise_corr_length(0.8, 1.0)
         assert a == pytest.approx(b)
 
 
@@ -314,10 +308,9 @@ class TestCCFNoiseCorrLength:
 def rv_l4():
     """A CCF-bearing L4 from CrossCorrelation (SCI on a star, SKY on sky, CAL dark).
 
-    Module-scoped: the CrossCorrelation.perform() build is ~1s, so it runs once and
-    is shared read-only. The stub is only needed during that build, so a self-managed
-    MonkeyPatch context replaces the function-scoped ``monkeypatch`` fixture. Tests
-    that need a mutable object wrap this via the function-scoped ``rv_module``.
+    Module-scoped: the ~1s CrossCorrelation.perform() build runs once and is shared
+    read-only. The mask stub is needed only during that build, hence a self-managed
+    MonkeyPatch context instead of the function-scoped ``monkeypatch`` fixture.
     """
     with pytest.MonkeyPatch.context() as mp:
         return _make_l4(mp)
@@ -327,9 +320,9 @@ def rv_l4():
 def rv_module(rv_l4):
     """RadialVelocity on a per-test copy of the CCF-bearing L4; caches not yet loaded.
 
-    ``perform()`` mutates the L4 in place, so each test wraps a deepcopy of the
-    shared module-scoped ``rv_l4`` (a memcpy — the ~1s cost was the CCF compute,
-    not the data). This keeps per-test isolation while building the CCFs only once.
+    ``perform()`` mutates the L4 in place, so each test deepcopies the shared
+    ``rv_l4``. The copy is a memcpy -- the ~1s cost was the CCF compute, not the
+    data -- so isolation is cheap while the CCFs are still built only once.
     """
     return RadialVelocity(copy.deepcopy(rv_l4), config={"rv_window": _RANGE_KMS})
 
@@ -357,8 +350,7 @@ class TestComputeRVPublic:
         np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
 
     def test_per_ccd_rv_recovers_injected(self, rv_loaded):
-        # The weighted-combined per-CCD RV recovers the injected velocity, with a
-        # finite positive error from the unweighted-summed CCF.
+        # The per-CCD error comes from the unweighted-summed CCF.
         ccd_rv, ccd_rv_err = rv_loaded.compute_weighted_rvs(
             ["GREEN"], "SCI2", combine_fibers=False, combine_ccds=False
         )["GREEN"]
@@ -367,7 +359,7 @@ class TestComputeRVPublic:
 
     def test_per_ccd_rv_sums_science_fibers(self, rv_loaded):
         # combine_fibers=True sums the three science fibers' cached CCFs before
-        # fitting (the SCI-combined per-CCD RV); still recovers the injected velocity.
+        # fitting, giving the SCI-combined per-CCD RV.
         ccd_rv, ccd_rv_err = rv_loaded.compute_weighted_rvs(
             ["GREEN"], ["SCI1", "SCI2", "SCI3"], combine_fibers=True, combine_ccds=False
         )["GREEN"]
@@ -375,8 +367,7 @@ class TestComputeRVPublic:
         assert np.isfinite(ccd_rv_err) and ccd_rv_err > 0
 
     def test_combine_ccds_returns_tuple_and_recovers_injected(self, rv_loaded):
-        # combine_ccds=True returns a single (rv, rv_err) tuple from the RV-level
-        # cross-chip combine.
+        # combine_ccds=True combines at the RV level, not the CCF level.
         out = rv_loaded.compute_weighted_rvs(
             ["GREEN", "RED"], "SCI2", combine_fibers=False, combine_ccds=True
         )
@@ -415,8 +406,8 @@ class TestComputeRVPublic:
         assert np.all(np.isfinite(rv_err)) and np.all(rv_err > 0)
 
     def test_nonphysical_order_degrades_to_nan(self, rv_loaded):
-        # A single order whose CCF window is non-physical (here, negative variance)
-        # degrades to NaN instead of aborting the frame; other orders are unaffected.
+        # One bad order (negative variance) degrades to NaN instead of aborting
+        # the whole frame.
         bad = 5
         rv_loaded._ccf_var["GREEN_SCI2"][bad] = -1.0
         res = rv_loaded.compute_order_by_order_rvs("GREEN", "SCI2")
@@ -451,7 +442,7 @@ class TestPerform:
             table = l4.data[f"{fiber}_RV"]
             assert len(table) == NORDER
             assert np.any(np.isfinite(np.asarray(table["RV"], dtype=float)))
-            # The CrossCorrelation-seeded metadata columns survive the fill.
+            # The CrossCorrelation-seeded metadata columns survive the RV fill.
             assert set(table.columns) >= {
                 "ORDER_INDEX",
                 "ORDER_ID",
@@ -486,8 +477,8 @@ class TestPerform:
         assert l4.headers["PRIMARY"]["RVMETHOD"] == "CCF"
 
     def test_per_ccd_rv_keywords(self, rv_module):
-        # Per-orderlet legacy RVs are registered KPF keywords routed to their RV#
-        # table header (CCD<n>RV<sfx>; CCD1=GREEN, CCD2=RED; SCI2 suffix '2' -> RV3).
+        # Per-orderlet legacy RVs route to their RV# table header as CCD<n>RV<sfx>
+        # (CCD1=GREEN, CCD2=RED; SCI2 has suffix '2' and lives on RV3).
         l4 = rv_module.perform()
         rv_hdr = l4.headers["RV3"]
         assert rv_hdr["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
@@ -506,7 +497,6 @@ class TestPerform:
         assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
         assert prim["RVERR"] > 0
         assert prim["RVMETHOD"] == "CCF"
-        # The combined-RV keywords are not duplicated onto the RV3 table.
         assert "CCD1RV" not in l4.headers["RV3"]
         assert "RV" not in l4.headers["RV3"]
 
@@ -524,9 +514,9 @@ class TestPerform:
 
     def test_primary_berv_bjdtdb_from_per_order(self, rv_module):
         # PRIMARY BERV/BJDTDB are the WEIGHT-weighted mean of the rep SCI fiber's
-        # per-order BERV/BJD_TDB (RVn). Constant per-order values -> that value.
-        # berv/bjd only seed the RV-table metadata columns (never the CCF compute),
-        # so overwrite them on the shared L4 rather than rebuild it via _make_l4.
+        # per-order columns, so constant per-order values reproduce that value.
+        # These columns never feed the CCF compute, so overwriting them on the
+        # shared L4 is cheaper than rebuilding it via _make_l4.
         l4 = rv_module.l4_obj
         table = l4.data["SCI1_RV"]
         table["BERV"] = -12.3
@@ -537,8 +527,8 @@ class TestPerform:
         assert prim["BJDTDB"] == pytest.approx(2460123.5)
 
     def test_primary_berv_undefined_when_berv_nan(self, rv_module):
-        # A rep-fiber BERV column that is all-NaN -> BERV UNDEFINED, while BJDTDB
-        # (from the still-finite BJD_TDB column) stays defined.
+        # An all-NaN BERV column leaves BERV UNDEFINED while BJDTDB, from the
+        # still-finite BJD_TDB column, stays defined.
         l4 = rv_module.l4_obj
         table = l4.data["SCI1_RV"]
         table["BERV"] = np.nan
@@ -548,15 +538,14 @@ class TestPerform:
         assert prim["BJDTDB"] is not None
 
     def test_no_science_illuminated_raises(self, monkeypatch):
-        # SCI requested (default fibers) but the L4 carries no SCI CCFs -> fail loudly.
+        # SCI requested by default, but the L4 carries no SCI CCFs -> fail loudly.
         l4 = _make_l4(monkeypatch, sci_obj="None")
         rv = RadialVelocity(l4, config={"rv_window": _RANGE_KMS})
         with pytest.raises(ValueError, match="none illuminated"):
             rv.perform()
 
     def test_cal_only_run_skips_combine(self, monkeypatch, caplog):
-        # A calibration-only run (no SCI requested) does not raise; PRIMARY RV is
-        # left UNDEFINED and a note is logged.
+        # A calibration-only run must not raise: PRIMARY RV is left UNDEFINED.
         l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="Th_gold")
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             prim = (
@@ -568,8 +557,7 @@ class TestPerform:
         assert "no science orderlet requested" in caplog.text
 
     def test_single_chip_combine_warns(self, rv_module, caplog):
-        # One chip present: the combined RV uses it alone (== CCD1RV) and a
-        # note is logged.
+        # With one chip present the combined RV is that chip's RV alone.
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             l4 = rv_module.perform(chips=["GREEN"])
         prim = l4.headers["PRIMARY"]
@@ -577,28 +565,26 @@ class TestPerform:
         assert "only chip GREEN present" in caplog.text
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):
-        # The filled RV columns and RV headers survive to_fits. SCI2 -> RV3.
+        # SCI2's per-orderlet RVs land on the RV3 table.
         l4 = rv_module.perform(fibers=["SCI1", "SCI2", "SCI3"])
         path = tmp_path / "kpf_SL4_20240405T000000.fits"
         l4.to_fits(str(path))
         with fits.open(path) as hdul:
             rv = hdul["RV3"].header
             assert rv["RVMETHOD"] == "CCF"
-            # Per-orderlet legacy RV lives on its RV# table header, not PRIMARY.
             assert rv["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
             assert "CCD1RV2" not in hdul["PRIMARY"].header
-            # The EPRV combined RV survives on PRIMARY.
+            # Only the EPRV combined RV belongs on PRIMARY.
             assert hdul["PRIMARY"].header["RV"] == pytest.approx(_V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
-            # The seeded ORDER_ID / ECHELLE_ORDER columns round-trip alongside RV.
             rv_table = hdul["RV3"].data
             assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
             assert rv_table["ECHELLE_ORDER"][0] == 137
             assert np.all(np.isfinite(rv_table["RV"]))
 
     def test_failed_combined_fit_written_as_undefined(self, rv_module, monkeypatch):
-        # A non-finite fit (failed fit) is written as a FITS UNDEFINED card
-        # (present, value None), never a bare NaN.
+        # A failed fit is written as a FITS UNDEFINED card (present, value None),
+        # never a bare NaN.
         monkeypatch.setattr(
             rv_module, "_compute_rv_1d", lambda *args, **kwargs: (np.nan, np.nan)
         )

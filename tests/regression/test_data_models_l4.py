@@ -1,8 +1,7 @@
-"""
-Tests for the KPF4 (RVs and CCFs / L4) data model, the L2->L4 transform,
-the KPFMasterL4 stub, and top-level data-model package imports.
+"""Tests for the KPF4 (RVs and CCFs / L4) data model, the L2->L4 transform, the
+KPFMasterL4 stub, and top-level data-model package imports.
 
-Uses synthetic FITS fixtures — no real KPF data needed.
+Synthetic FITS fixtures only -- no real KPF data needed.
 """
 
 import numpy as np
@@ -54,8 +53,7 @@ class TestToKPF4:
         assert len(kpf4.data["RV1"]) == 0
 
     def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
-        """PROGID/KOAID on the L1 RECEIPT survive L1->L2->L4 via the RECEIPT-header
-        forward (their registry home is RECEIPT, not PRIMARY)."""
+        # PROGID/KOAID live on RECEIPT, not PRIMARY, and ride the RECEIPT forward.
         l1 = KPF1.from_fits(synthetic_l1_file)
         l1.headers["RECEIPT"]["PROGID"] = "U999"
         l1.headers["RECEIPT"]["KOAID"] = "KP.20201122.34567.89"
@@ -72,8 +70,7 @@ class TestToKPF4:
         assert "QUALITY_CONTROL" in KPF4().extensions
 
     def test_to_kpf4_forwards_quality_control_and_receipt_headers(self):
-        """QUALITY_CONTROL + RECEIPT header cards (the accumulated L0/L1/L2 QC and
-        provenance history) are forwarded onto L4, like to_kpf2 does for L1->L2."""
+        # The accumulated L0/L1/L2 QC and provenance history must reach L4.
         kpf2 = KPF2()
         kpf2.set_keyword("NANSCI1", 7)  # DiagL2 metric -> QUALITY_CONTROL
         kpf2.headers["QUALITY_CONTROL"]["DATAPRL0"] = (1, "L0 flag (propagated)")
@@ -110,8 +107,7 @@ class TestCatalogRecordPassthrough:
         assert "CATALOG_RECORD" in KPF4().extensions
 
     def test_rows_and_flags_reach_l4(self):
-        """The rows, not just the flags, are copied onto L4, so the astrometry stays
-        with the RV product it fed."""
+        # The rows, not just the flags, so the astrometry stays with the RV it fed.
         kpf4 = self._l2_with_catalog().to_kpf4()
         assert [str(s) for s in kpf4.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert kpf4.headers["CATALOG_RECORD"]["GAIACR"] == 1
@@ -162,7 +158,6 @@ class TestKPF4:
         np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF"], red)
 
     def test_ccf_var_chip_prefix_views(self):
-        # CCF_VAR behaves exactly like CCF: a writable, chip-sliced image cube.
         kpf4 = KPF4()
         green = np.ones((NORDER_GREEN, 5))
         red = 2 * np.ones((NORDER - NORDER_GREEN, 5))
@@ -173,7 +168,6 @@ class TestKPF4:
         np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF_VAR"], red)
 
     def test_ccf_var_survives_round_trip(self, tmp_path):
-        # The CCF_VAR image cube serializes and reloads like CCF.
         kpf4 = KPF2().to_kpf4()
         ccf = np.arange(NORDER * 5, dtype=float).reshape(NORDER, 5)
         var = ccf + 0.5

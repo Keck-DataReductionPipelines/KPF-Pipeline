@@ -1,8 +1,7 @@
 """Tests for the network retry helper in kpfpipe.utils.network.
 
-The network is never touched: every test drives ``retry_request`` with a MagicMock
-callable and patches ``time.sleep`` so the backoff schedule is inspected rather than
-waited out.
+The network is never touched: every test drives ``retry_request`` with a mock
+callable and patches ``time.sleep``, so the backoff is inspected, not waited out.
 """
 
 import logging
@@ -15,7 +14,7 @@ from kpfpipe.utils.network import _RETRY_WAITS, retry_request
 
 
 def _patch_sleep():
-    """Patch the helper's time.sleep; the mock's call args are the backoff waits."""
+    """Patch the helper's time.sleep; its call args are the backoff waits."""
     return patch("kpfpipe.utils.network.time.sleep")
 
 
@@ -25,8 +24,6 @@ def _slept(sleep_mock):
 
 
 class TestRetryRequest:
-    """Backoff schedule, transient/non-transient classification, and logging."""
-
     def test_success_returns_immediately(self):
         func = MagicMock(return_value="ok")
         with _patch_sleep() as sleep:
@@ -58,8 +55,8 @@ class TestRetryRequest:
         "exc", [ValueError("bad input"), DALQueryError("malformed ADQL")]
     )
     def test_non_transient_exception_is_not_retried(self, exc):
-        # A bad query or bad input will never succeed on a second try, so it must
-        # fail at once rather than burn the full backoff.
+        # A bad query or bad input never succeeds on a retry, so it must fail at
+        # once rather than burn the full backoff.
         func = MagicMock(side_effect=exc)
         with _patch_sleep() as sleep, pytest.raises(type(exc)):
             retry_request(func, "Service")

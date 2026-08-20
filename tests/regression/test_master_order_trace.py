@@ -1,9 +1,9 @@
 """Tests for spectral order tracing from one vNext L1 master flat.
 
-Numerical tests use synthetic master images and require no real data. The
-synthetic flat reproduces the morphology the algorithm depends on: science and
-sky orderlets are wide and flat-topped, and the CAL orderlet is narrow, which
-is the difference identity rests on. The real master-flat test uses gitignored
+Numerical tests use synthetic master images and need no real data. The synthetic
+flat reproduces the morphology the algorithm depends on: science and sky
+orderlets are wide and flat-topped while the CAL orderlet is narrow, which is the
+difference identity rests on. The real master-flat test uses gitignored
 ``tests/testdata`` and is skipped when the vNext product is unavailable.
 """
 
@@ -72,7 +72,6 @@ def _stub_master_class(master_flat):
 
 
 def _orderlet_profile(offsets, fiber):
-    """Return the cross-dispersion profile of one orderlet."""
     if fiber == "CAL":
         return 1500.0 * np.exp(-0.5 * (offsets / 1.8) ** 2)
     return 500.0 * np.exp(-0.5 * (offsets / 5.5) ** 6)
@@ -189,9 +188,8 @@ def _band_cluster(rows, columns):
 def _curated_clusters(tracer):
     """Run detection and curation exactly as the module's own chain does.
 
-    The clusters are cached where the later steps read them from, as
-    detect_traces does, so identity can be exercised on cluster counts
-    detection itself would refuse.
+    The clusters are cached where the later steps read them from, as detect_traces
+    does, so identity can be exercised on cluster counts detection would refuse.
     """
     clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
     clusters = tracer._reject_small_clusters(clusters)
@@ -822,7 +820,7 @@ class TestCSVWriting:
 
 
 # ---------------------------------------------------------------------------
-# Aperture non-overlap constraint
+# Trace fitting, apertures, and validation
 # ---------------------------------------------------------------------------
 
 
@@ -1211,12 +1209,10 @@ class TestRealData:
     @pytest.mark.slow
     @pytest.mark.requires_testdata
     def test_real_20240405_master_flat(self, tmp_path):
-        """Trace a real vNext master flat and check it reproduces the reference.
-
-        The comparison is against the vetted reference extraction would pin to
-        this frame -- the latest trace measured before it within its instrument
-        era -- so it holds the module's output to the shipped artifact rather
-        than standing as independent truth."""
+        # The comparison is against the vetted reference extraction would pin to
+        # this frame -- the latest trace measured before it within its instrument
+        # era -- so it holds the module's output to the shipped artifact rather
+        # than standing as independent truth.
         testdata = Path(__file__).parent.parent / "testdata"
         masters = sorted(testdata.glob("**/KP.20240405.*_master_flat_L1.fits"))
         if not masters:

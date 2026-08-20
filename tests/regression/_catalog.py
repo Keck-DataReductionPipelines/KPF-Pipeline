@@ -1,4 +1,4 @@
-"""Synthetic CATALOG_RECORD tables for the data-model tests.
+"""Synthetic CATALOG_RECORD tables for the data-model tests (not a test module).
 
 Built column by column rather than through ``AstroQuery._write_catalog_record``, so
 the pass-through tests stay independent of the module that populates the extension.

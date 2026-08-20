@@ -1,15 +1,7 @@
 """Tests for the KPF QC framework (quality_control/qc_flags).
 
-Covers:
-  - QC base class runner (TestQCBase)
-  - QCL0 checks (TestQCL0)
-  - QCL1 checks (TestQCL1)
-  - QCL1 full run on an all-good synthetic L1 (TestQCL1Run)
-  - QCL2 checks (TestQCL2)
-  - QCL4 checks (TestQCL4)
-
-All tests use synthetic in-memory data -- no real KPF files required.
-The qc.py CLI smoke tests live in test_qc_script.py.
+All tests use synthetic in-memory data -- no real KPF files required. The qc.py
+CLI smoke tests live in test_qc_script.py.
 """
 
 import logging
@@ -54,11 +46,10 @@ def _make_kpf0(
 ):
     """Minimal 4-amp KPF0 object with required headers.
 
-    ``dates`` optionally seeds raw DATE-BEG/MID/END/ELAPSED cards on PRIMARY for
-    the DATTIMOK timing check. ``expmeter`` optionally maps an EXPMETER_SCI/SKY
-    extension name to its table, for the EMTIMEOK/EMFLUXOK checks; without it the
-    frame has no EM data at all, like a calibration. ``imtype`` sets the PRIMARY
-    IMTYPE ('Object' is a science frame; anything else is a calibration).
+    ``dates`` seeds raw DATE-BEG/MID/END/ELAPSED cards on PRIMARY. ``expmeter``
+    maps an EXPMETER_SCI/SKY extension name to its table; without it the frame has
+    no EM data at all, like a calibration. ``imtype`` sets PRIMARY IMTYPE
+    ('Object' is a science frame, anything else a calibration).
     """
     fn = str(tmp_path / f"{obs_id}.fits")
     primary = fits.PrimaryHDU()
@@ -100,9 +91,10 @@ _EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
 
 
 def _seed_required_primary(kpf, qc_cls):
-    """Seed every PRIMARY keyword ``qc_cls`` requires present, skipping any already
-    set. The KWRDPR* check is presence-only, so placeholder sentinel values are
-    fine; reusing the production ``_required_primary_keywords`` avoids drift.
+    """Seed every PRIMARY keyword ``qc_cls`` requires, skipping ones already set.
+
+    KWRDPR* is presence-only, so sentinel values suffice; reusing the production
+    ``_required_primary_keywords`` avoids drift.
     """
     for kw in qc_cls(kpf)._required_primary_keywords():
         if kw not in kpf.headers["PRIMARY"]:
@@ -125,10 +117,10 @@ def _make_kpf1(
 ):
     """Minimal KPF1 with all L1 QC-relevant headers.
 
-    QC-relevant keywords now live on their registry-home extensions rather than
-    PRIMARY: the applied-step flags (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) on
-    RECEIPT, and the read-noise and master-age keywords on QUALITY_CONTROL.
-    They are seeded on the loaded object after ``from_fits`` returns.
+    QC-relevant keywords live on their registry-home extensions, not PRIMARY: the
+    applied-step flags (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) on RECEIPT, and the
+    read-noise and master-age keywords on QUALITY_CONTROL. They are seeded on the
+    loaded object after ``from_fits`` returns.
     """
     fn = str(tmp_path / "kpf_L1_20240405T010037.fits")
     primary = fits.PrimaryHDU()
@@ -165,10 +157,8 @@ def _make_kpf1(
             qc[f"RNNGGR{i}"] = (1.0, "RNNG")
             qc[f"RNNGRD{i}"] = (1.0, "RNNG")
 
-    # Seed the full required-PRIMARY set so KWRDPRL1 (presence of all required
-    # keywords) passes. KPF1.__init__ seeds the EPRV skeleton, but KPF1._read
-    # replaces PRIMARY with the file's (sparse) header, so a synthetic from_fits L1
-    # is otherwise missing them.
+    # KPF1.__init__ seeds the EPRV skeleton, but KPF1._read replaces PRIMARY with
+    # the file's sparse header, so a synthetic from_fits L1 would fail KWRDPRL1.
     _seed_required_primary(l1, QCL1)
     return l1
 
@@ -176,12 +166,10 @@ def _make_kpf1(
 def _make_kpf2_with_flux(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
     """Minimal KPF2 with all 10 {CHIP}_{FIBER}_FLUX extensions populated.
 
-    Uses per-chip shapes matching NORDER_GREEN (35) and NORDER_RED (32)
-    because KPF2's chip-prefix __setitem__ requires the correct row count.
-
-    nan_frac: fraction of total pixels that are NaN (injected via NANSCI* headers).
-    zero_frac: value written to ZEROFRAC header.
-    missing_ext: optional chip_fiber key to leave empty (e.g. "GREEN_SKY_FLUX").
+    Per-chip row counts must match NORDER_GREEN/NORDER_RED because KPF2's
+    chip-prefix __setitem__ rejects any other shape. ``nan_frac`` is the fraction
+    of total pixels reported NaN via the NANSCI* headers, ``zero_frac`` the value
+    written to ZEROFRAC, and ``missing_ext`` a chip_fiber key to leave empty.
     """
     chips = ["GREEN", "RED"]
     fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
@@ -219,7 +207,7 @@ def _set_kpf2_var(kpf2, fill=1.0):
 
 
 # ---------------------------------------------------------------------------
-# Task 2: QC base class runner
+# QC base class runner
 # ---------------------------------------------------------------------------
 
 
@@ -229,13 +217,10 @@ class TestQCBase:
     def _make_obj(self):
         """Minimal object with a headers dict and a set_keyword router.
 
-        QC.run() writes each result via ``set_keyword`` and aggregates ISGOOD; it
-        does NOT validate headers (that moved to the checkpoints layer). It reads
-        each check's comment off ``keyword_registry.routing`` (the synthetic keys
-        are registered here with blank comments) and derives ISGOOD as the AND over
-        ``keyword_registry.qc_flag_keywords`` present on QUALITY_CONTROL, so the
-        stub declares the synthetic check keys as the QC-flag set. This fake stores
-        every keyword on QUALITY_CONTROL (value only).
+        QC.run() reads each check's comment off ``keyword_registry.routing`` and
+        derives ISGOOD as the AND over the ``keyword_registry.qc_flag_keywords``
+        present on QUALITY_CONTROL, so the stub declares the synthetic check keys
+        as the QC-flag set and stores every keyword on QUALITY_CONTROL.
         """
         qc_keys = frozenset({"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "ISGOOD"})
 
@@ -302,8 +287,7 @@ class TestQCBase:
 
             check_boom._qc_key = "BOOM"
 
-        # Fail-fast: the original exception propagates unchanged (no RuntimeError
-        # wrap), and run() logs the offending check at ERROR.
+        # Fail-fast: the exception propagates unwrapped, logged at ERROR.
         with caplog.at_level(logging.ERROR):
             with pytest.raises(ValueError, match="boom!"):
                 MyQC(obj).run()
@@ -320,12 +304,8 @@ class TestQCBase:
         assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
 
     def test_repeated_run_resets_results(self):
-        """Calling run() twice on the same instance should not accumulate state.
-
-        First run with one failing check → ISGOOD=0. Mutate underlying state to make
-        the check pass, run again → ISGOOD=1. Without the reset, the failed result
-        from the first run would still be in self.results and ISGOOD would stay 0.
-        """
+        # Without the per-run reset, the first run's failed result would linger in
+        # self.results and ISGOOD would stay 0 once the check starts passing.
         obj = self._make_obj()
         obj.flag = False
 
@@ -348,7 +328,6 @@ class TestQCBase:
         assert qc.results["FLAG"][0] is True
 
     def test_run_logs_pass_debug_fail_warning(self, caplog):
-        """Each flag is logged as written: a pass at DEBUG, a failure at WARNING."""
         obj = self._make_obj()
 
         class MyQC(QC):
@@ -374,22 +353,21 @@ class TestQCBase:
         assert not any("CHKOK" in r.getMessage() for r in warnings)
 
     def test_hdr_float_absent_empty_none_corrupt_raises(self):
-        # Absent and valueless cards degrade to None (checks skip/FAIL gracefully);
-        # a present-but-non-numeric card is malformed, so it raises rather than
-        # being silently swallowed.
+        # Absent and valueless cards degrade to None so checks can skip or fail
+        # gracefully; a present-but-non-numeric card is malformed and raises.
         hdr = fits.Header()
         hdr["NUM"] = 3.5
-        hdr["EMPTY"] = None  # present-but-empty (valueless) card
+        hdr["EMPTY"] = None  # a valueless card
         hdr["STR"] = "not-a-number"
         assert QC._hdr_float(hdr, "NUM") == 3.5
-        assert QC._hdr_float(hdr, "MISSING") is None  # absent
-        assert QC._hdr_float(hdr, "EMPTY") is None  # valueless
+        assert QC._hdr_float(hdr, "MISSING") is None
+        assert QC._hdr_float(hdr, "EMPTY") is None
         with pytest.raises(ValueError):
-            QC._hdr_float(hdr, "STR")  # corrupt -> surfaces
+            QC._hdr_float(hdr, "STR")
 
 
 # ---------------------------------------------------------------------------
-# Task 3: QCL0 checks
+# QCL0 checks
 # ---------------------------------------------------------------------------
 
 
@@ -403,7 +381,6 @@ class TestQCL0:
         assert QCL0(l0).data_l0_red_green() is False
 
     def test_data_l0_red_green_fail_empty(self, tmp_path):
-        """An extension present with data=None (stored as array(None)) should fail."""
         fn = str(tmp_path / "KP.20240405.00002.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
@@ -419,8 +396,7 @@ class TestQCL0:
         assert QCL0(l0).data_l0_red_green() is False
 
     def test_data_l0_red_green_pass_two_amp(self, tmp_path):
-        """2-amp readout (only AMP1/AMP2 per chip; AMP3/4 absent) -- the truth-frame
-        layout -- has data present and must pass."""
+        # 2-amp readout (AMP1/AMP2 only) is the truth-frame layout and must pass.
         fn = str(tmp_path / "KP.20240405.00003.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
@@ -436,8 +412,6 @@ class TestQCL0:
         assert QCL0(l0).data_l0_red_green() is True
 
     def test_data_l0_red_green_fail_partial_amp(self, tmp_path):
-        """A partial/invalid amp set (3 present) is not a supported readout mode
-        (2 or 4), so the inferred count is rejected."""
         fn = str(tmp_path / "KP.20240405.00004.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
@@ -457,7 +431,6 @@ class TestQCL0:
         assert QCL0(l0).header_keywords_present() is True
 
     def test_header_keywords_present_fail(self, tmp_path):
-        """Remove OFNAME from PRIMARY so check fails."""
         l0 = _make_kpf0(tmp_path)
         del l0.headers["PRIMARY"]["OFNAME"]
         assert QCL0(l0).header_keywords_present() is False
@@ -471,8 +444,7 @@ class TestQCL0:
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
 
     def test_times_ignores_elapsed(self, tmp_path):
-        # DATTIMOK checks only DATE ordering now; a mismatched ELAPSED (validated by
-        # EXPTIMOK instead) no longer affects it.
+        # DATTIMOK checks only DATE ordering; ELAPSED is EXPTIMOK's business.
         bad = dict(_GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is True
 
@@ -488,7 +460,7 @@ class TestQCL0:
         assert QCL0(l0).exptime_sane() is True
 
     def test_exptime_sane_pass_zero(self, tmp_path):
-        """Bias frames legitimately have EXPTIME=0; should pass."""
+        # Bias frames legitimately have EXPTIME=0.
         l0 = _make_kpf0(tmp_path, exptime=0.0)
         assert QCL0(l0).exptime_sane() is True
 
@@ -522,13 +494,11 @@ class TestQCL0:
         l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 301.0})
         assert QCL0(l0).exptime_sane() is False
 
-    # not_junk delegates all file I/O to io.load_junk_obs_ids, so these tests
-    # monkeypatch that helper (no junk file is ever written to a data tree) and
-    # verify only not_junk's own logic: the dirname -> data_input recovery, the
-    # obs_id membership test, and the two short-circuits. load_junk_obs_ids's
-    # CSV parsing is covered separately in test_masters_recipe.py.
+    # not_junk delegates all file I/O to load_junk_obs_ids, so these tests
+    # monkeypatch it (no junk file is ever written to a data tree) and cover only
+    # not_junk's own logic. The CSV parsing is covered in test_masters_recipe.py.
     def test_not_junk_pass_empty_list(self, tmp_path, monkeypatch):
-        """No junk (empty set, e.g. no list on disk) → not junk."""
+        # An empty set is what an absent junk list on disk yields.
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
         monkeypatch.setattr(mod, "load_junk_obs_ids", lambda data_input: set())
@@ -556,7 +526,7 @@ class TestQCL0:
         assert QCL0(l0).not_junk() is False
 
     def test_not_junk_recovers_data_input_from_dirname(self, tmp_path, monkeypatch):
-        """data_input is the L0 dir's grandparent ({root}/L0/{datecode} → {root})."""
+        # data_input is the L0 dir's grandparent: {root}/L0/{datecode} -> {root}.
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
         seen = {}
@@ -572,8 +542,7 @@ class TestQCL0:
         assert seen["data_input"] == str(tmp_path)
 
     def test_not_junk_pass_none_obs_id(self, tmp_path, monkeypatch):
-        """obs_id=None is not in any junk list → passes (documented residual: an
-        unresolved obs_id is not caught here)."""
+        # obs_id=None is on no junk list, so an unresolved obs_id passes here.
         import kpfpipe.quality_control.qc_flags.level0 as mod
 
         monkeypatch.setattr(
@@ -585,9 +554,8 @@ class TestQCL0:
         assert QCL0(l0).not_junk() is True
 
     def test_not_junk_raises_on_unknown_dirname(self, tmp_path):
-        """dirname is set on every L0 read; an absent one is a broken upstream
-        invariant and fails loud (os.path.dirname(None) → TypeError) rather than
-        silently passing."""
+        # dirname is set on every L0 read, so an absent one is a broken upstream
+        # invariant and must fail loud rather than silently pass.
         l0 = _make_kpf0(tmp_path)
         l0.dirname = None
         with pytest.raises(TypeError):
@@ -638,13 +606,12 @@ class TestQCL0:
 
     @pytest.mark.parametrize("imtype", ["Bias", "Dark", "Flatlamp", "Arclamp"])
     def test_radec_calibration_frames_pass(self, tmp_path, imtype):
-        """Pointing is a science-frame check: a calibration frame has no target,
-        so its blank TARGOFF must not fail RADECOK."""
+        # A calibration frame has no target, so its blank TARGOFF must not fail.
         l0 = _make_kpf0(tmp_path, imtype=imtype)
         assert QCL0(l0).radec_consistent() is True
 
     def test_radec_calibration_ignores_offsets(self, tmp_path):
-        """Even a badly-off offset on a calibration frame is not a pointing fault."""
+        # Even a badly-off offset on a calibration frame is not a pointing fault.
         l0 = _make_kpf0(tmp_path, imtype="Bias")
         for k, v in (("TARGOFF", 1.5), ("OBJOFF", 6.0), ("GAIAOFF", 91004.96)):
             l0.set_keyword(k, v)
@@ -654,11 +621,13 @@ class TestQCL0:
         assert QCL0.__dict__["radec_consistent"]._qc_key == "RADECOK"
 
     # --- catalog_astrometry_sane (ASTROMOK): physical range of the canonical
-    # CATALOG_RECORD astrometry, the v2.12 TARG* checks moved onto the merged row.
+    # CATALOG_RECORD astrometry.
 
     def _make_kpf0_with_canonical(self, tmp_path, **overrides):
-        """KPF0 whose CATALOG_RECORD holds a merged 'kpf-drp' row; overrides patch
-        individual fields of a physically-sane base."""
+        """KPF0 whose CATALOG_RECORD holds a merged 'kpf-drp' row.
+
+        Overrides patch individual fields of a physically-sane base.
+        """
         from kpfpipe.modules.astro_query import AstroQuery
 
         l0 = _make_kpf0(tmp_path)
@@ -685,15 +654,15 @@ class TestQCL0:
         assert QCL0(l0).catalog_astrometry_sane() is True
 
     def test_catalog_astrometry_sane_no_record_passes(self, tmp_path):
-        # Calibration/fresh L0: CATALOG_RECORD empty (AstroQuery never ran). Value
-        # sanity is N/A -> passes (presence is enforced elsewhere, not here).
+        # CATALOG_RECORD is empty when AstroQuery never ran; value sanity is then
+        # N/A and presence is enforced elsewhere.
         l0 = _make_kpf0(tmp_path)
         assert not l0.data["CATALOG_RECORD"].colnames
         assert QCL0(l0).catalog_astrometry_sane() is True
 
     def test_catalog_astrometry_sane_fail_epoch_zero(self, tmp_path):
-        # A WMKO TARGEPOC=0.0 placeholder passes the merge's is-not-None gate, so the
-        # range check is what catches it.
+        # A WMKO TARGEPOC=0.0 placeholder clears the merge's is-not-None gate, so
+        # only the range check catches it.
         l0 = self._make_kpf0_with_canonical(tmp_path, epoch=0.0)
         assert QCL0(l0).catalog_astrometry_sane() is False
 
@@ -735,8 +704,7 @@ class TestQCL0:
         assert QCL0(l0).catalog_astrometry_sane() is True
 
     def test_catalog_astrometry_sane_fail_parallax_negative(self, tmp_path):
-        # A negative Gaia parallax (routine for faint sources) is nonphysical; the
-        # legacy check bounded only the upper end.
+        # A negative Gaia parallax is routine for faint sources but nonphysical.
         l0 = self._make_kpf0_with_canonical(tmp_path, parallax=-0.3)
         assert QCL0(l0).catalog_astrometry_sane() is False
 
@@ -745,7 +713,7 @@ class TestQCL0:
         assert QCL0(l0).catalog_astrometry_sane() is False
 
     def test_catalog_astrometry_sane_fail_parallax_too_large(self, tmp_path):
-        # >= 1000 mas (< 1 pc) is unphysically close -- the legacy upper bound.
+        # >= 1000 mas is nearer than 1 pc, which nothing observable is.
         l0 = self._make_kpf0_with_canonical(tmp_path, parallax=1000.0)
         assert QCL0(l0).catalog_astrometry_sane() is False
 
@@ -766,8 +734,9 @@ class TestQCL0:
     def test_astromok_key_present(self):
         assert QCL0.__dict__["catalog_astrometry_sane"]._qc_key == "ASTROMOK"
 
-    # --- catalog_color_sane (COLOROK): the canonical color is present, labeled, and
-    # on the dwarf sequence, so CrossCorrelation can turn it into a line-mask Teff.
+    # --- catalog_color_sane (COLOROK): the canonical color must be present,
+    # labeled, and on the dwarf sequence for CrossCorrelation to turn it into a
+    # line-mask Teff.
 
     @pytest.mark.parametrize(
         ("color", "color_name"),
@@ -821,12 +790,11 @@ class TestQCL0:
     def test_dataprl0_key_and_comment(self):
         fn = QCL0.__dict__["data_l0_red_green"]
         assert fn._qc_key == "DATAPRL0"
-        # The comment now lives in the registry Description (not on the method).
+        # The comment lives in the registry Description, not on the method.
         assert "GREEN" in KPF0.keyword_registry.routing["DATAPRL0"][1]
 
-    # --- expmeter_times_consistent (EMTIMEOK) and expmeter_flux_sane (EMFLUXOK):
-    # the exposure-meter checks ported from v2.12 L0_datetime / EM_not_saturated /
-    # EM_flux_not_negative. Four readings tile the _GOOD_DATES shutter window.
+    # --- expmeter_times_consistent (EMTIMEOK) and expmeter_flux_sane (EMFLUXOK).
+    # Four readings tile the _GOOD_DATES shutter window.
 
     _EM_BEGS = [
         "2024-09-23T09:12:09.484",
@@ -851,9 +819,12 @@ class TestQCL0:
         sky_flux=None,
         corrected=False,
     ):
-        """KPF0 carrying an EXPMETER_SCI table (plus EXPMETER_SKY when ``sky_flux``
-        is given), built from per-reading timestamps and an (nreading, nchannel)
-        flux array with numeric (wavelength) column labels."""
+        """KPF0 carrying an EXPMETER_SCI table, plus EXPMETER_SKY when ``sky_flux``
+        is given.
+
+        Built from per-reading timestamps and an (nreading, nchannel) flux array
+        whose column labels are wavelengths.
+        """
         suffix = "-Corr" if corrected else ""
 
         def table(values):
@@ -897,7 +868,7 @@ class TestQCL0:
         assert QCL0(l0).expmeter_times_consistent() is False
 
     def test_expmeter_times_prefers_corrected_columns(self, tmp_path):
-        # Corrected columns bracket the window; only reading them passes.
+        # Only the -Corr columns bracket the window, so plain ones would fail.
         l0 = self._make_kpf0_with_expmeter(tmp_path, corrected=True)
         assert "Date-Beg-Corr" in l0.data["EXPMETER_SCI"].colnames
         assert QCL0(l0).expmeter_times_consistent() is True
@@ -960,7 +931,7 @@ class TestQCL0:
 
 
 # ---------------------------------------------------------------------------
-# Task 4: QCL1 checks
+# QCL1 checks
 # ---------------------------------------------------------------------------
 
 
@@ -1097,7 +1068,6 @@ class TestQCL1:
 
     def test_ffi_finite_fail_missing(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
-        # Remove GREEN_CCD from data
         l1.data["GREEN_CCD"] = None
         assert QCL1(l1).ffi_finite() is False
 
@@ -1120,7 +1090,7 @@ class TestQCL1:
 
 
 # ---------------------------------------------------------------------------
-# Task 4 integration: full QCL1 run on all-good synthetic L1
+# Full QCL1 run on an all-good synthetic L1
 # ---------------------------------------------------------------------------
 
 
@@ -1132,11 +1102,9 @@ class TestQCL1Run:
         isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
         assert isgood == 1
 
-        # Every L1 QC flag lands on QUALITY_CONTROL. The per-calibration OK flags
-        # (BIASOK/DARKOK/FLATOK) read the RECEIPT *SUB flags and DiagL1 *AGE
-        # values but are themselves QUALITY_CONTROL keywords. The applied-step
-        # flags (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) stay RECEIPT-only provenance
-        # and are not QC checks.
+        # BIASOK/DARKOK/FLATOK read the RECEIPT *SUB flags and DiagL1 *AGE values
+        # but are themselves QUALITY_CONTROL keywords; the applied-step flags
+        # (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) stay RECEIPT-only provenance.
         qc_keys = [
             "DATAPRL1",
             "KWRDPRL1",
@@ -1158,25 +1126,21 @@ class TestQCL1Run:
         isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
         assert isgood == 0
 
-        # Bias not subtracted -> BIASOK fails (a QUALITY_CONTROL flag); the
-        # RECEIPT BIASSUB provenance keyword is untouched by QC.
+        # QC writes the BIASOK flag and never touches RECEIPT's BIASSUB.
         assert l1.headers["QUALITY_CONTROL"].get("BIASOK") == 0
 
     def test_isgood_aggregates_propagated_flag(self, tmp_path):
-        """ISGOOD is the running aggregate over EVERY QC flag on QUALITY_CONTROL,
-        including ones propagated from a lower level -- not just this level's
-        checks. Seed a failed L0 flag; all L1 checks still pass, yet ISGOOD=0."""
+        # ISGOOD aggregates every QC flag on QUALITY_CONTROL, including ones
+        # propagated from a lower level, not just this level's checks.
         l1 = _make_kpf1(tmp_path)
         l1.headers["QUALITY_CONTROL"]["DATAPRL0"] = (0, "L0 data present (propagated)")
         QCL1(l1).run()
-        # This level's own checks all pass...
         assert l1.headers["QUALITY_CONTROL"].get("DATAPRL1") == 1
-        # ...but the propagated L0 failure drags the aggregate down.
         assert l1.headers["QUALITY_CONTROL"].get("ISGOOD") == 0
 
 
 # ---------------------------------------------------------------------------
-# Task 5: QCL2 checks
+# QCL2 checks
 # ---------------------------------------------------------------------------
 
 
@@ -1186,8 +1150,8 @@ class TestQCL2:
         assert QCL2(kpf2).extraction_present() is True
 
     def test_required_keywords_present_pass(self):
-        # Fresh KPF2 is rvdata-seeded with the EPRV-required PRIMARY keywords; seed
-        # the KPF provenance cards too so all required keywords are present.
+        # A fresh KPF2 carries only the rvdata-seeded EPRV keywords, not the KPF
+        # provenance cards.
         kpf2 = _make_kpf2_with_flux()
         _seed_required_primary(kpf2, QCL2)
         assert QCL2(kpf2).required_keywords_present() is True
@@ -1199,7 +1163,6 @@ class TestQCL2:
         assert QCL2(kpf2).required_keywords_present() is False
 
     def test_extraction_present_fail_empty_kpf2(self):
-        """A freshly constructed KPF2 with no flux data → all chip-prefix sizes=0."""
         kpf2 = KPF2()
         for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
             kpf2.headers["QUALITY_CONTROL"][k] = (0, k)
@@ -1207,35 +1170,31 @@ class TestQCL2:
         assert QCL2(kpf2).extraction_present() is False
 
     def test_extraction_present_fail_one_trace_cleared(self):
-        """Clearing a trace array (set to empty array) should fail the check."""
         kpf2 = _make_kpf2_with_flux()
-        # Resolve alias SKY_FLUX → TRACE1_FLUX and set to empty so chip views
-        # are size=0.
+        # The SKY_FLUX alias resolves to TRACE1_FLUX; emptying it zeroes the size
+        # of every chip view over it.
         kpf2.data["SKY_FLUX"] = np.array([], dtype=np.float32)
         assert QCL2(kpf2).extraction_present() is False
 
     def test_flux_finite_fraction_pass(self):
-        """0 NaN entries → passes."""
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         assert QCL2(kpf2).flux_finite_fraction() is True
 
     def test_flux_finite_fraction_fail_too_many_nans(self):
-        """Force nan_total/total_pixels > 1%."""
         kpf2 = _make_kpf2_with_flux()
-        # total_pixels = (35+32) * 5 fibers * _NCOLS (10) = 3350
-        # Set each NAN key to 200 → sum = 1000 → ~30% > 1%
+        # total_pixels = (35 + 32) * 5 fibers * _NCOLS = 3350, so 5 x 200 NaN is
+        # ~30%, well over the 1% limit.
         for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
             kpf2.headers["QUALITY_CONTROL"][k] = (200, k)
         assert QCL2(kpf2).flux_finite_fraction() is False
 
     def test_flux_finite_fraction_fail_missing_header(self):
-        """Missing one NAN key → False."""
         kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
         del kpf2.headers["QUALITY_CONTROL"]["NANSCI1"]
         assert QCL2(kpf2).flux_finite_fraction() is False
 
     def test_flux_finite_fraction_fail_no_extensions(self):
-        """Empty KPF2 (no flux arrays) → False (zero total pixels)."""
+        # No flux arrays means zero total pixels, so no fraction can be formed.
         kpf2 = KPF2()
         for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
             kpf2.headers["QUALITY_CONTROL"][k] = (0, k)
@@ -1255,7 +1214,7 @@ class TestQCL2:
         assert QCL2(kpf2).nonzero_flux() is False
 
     def test_nonzero_flux_exactly_half(self):
-        """ZEROFRAC == 0.5 should fail (check is strictly < 0.5)."""
+        # The check is strictly < 0.5.
         kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
         assert QCL2(kpf2).nonzero_flux() is False
 
@@ -1280,9 +1239,8 @@ class TestQCL2:
         assert QCL2(kpf2).variance_positive() is False
 
     def test_variance_positive_raises_on_shape_mismatch(self):
-        # FLUX populated but VAR left at its default empty (0,) shape is a
-        # malformed product: the shape-mismatched comparison raises rather than
-        # silently skipping the fiber.
+        # FLUX populated with VAR left at its default empty (0,) shape is a
+        # malformed product, so the shape mismatch raises rather than skipping.
         kpf2 = _make_kpf2_with_flux()  # no VAR populated
         with pytest.raises(ValueError):
             QCL2(kpf2).variance_positive()
@@ -1322,18 +1280,17 @@ class TestQCL2:
 
 
 # ---------------------------------------------------------------------------
-# QCL4 -- CCF/RV presence and BERV percent-change (ported from v2.12)
-# (timing consistency moved to QCL0 / DATTIMOK)
+# QCL4 -- CCF/RV presence and per-order BERV/BJD dispersion
 # ---------------------------------------------------------------------------
 
 
 def _make_l4(*, sci=True, rv_filled=True, bervrng=None, bjdrng=None, sci_obj=None):
     """KPF4 with science CCF/RV and optional per-order BERV/BJD range metrics.
 
-    ``rv_filled=False`` seeds the RV table with NaN RVs (a CrossCorrelation-only
-    L4, before RadialVelocity), so DATAPRL4 must fail. ``sci_obj`` sets the SCI2
-    illumination (INSTRUMENT_HEADER SCI-OBJ); the BERV/BJD tolerance checks only
-    apply when it is 'target'.
+    ``rv_filled=False`` seeds the RV table with NaN RVs, as a CrossCorrelation-only
+    L4 has before RadialVelocity runs. ``sci_obj`` sets the SCI2 illumination
+    (INSTRUMENT_HEADER SCI-OBJ), which the BERV/BJD tolerance checks apply only
+    when it is 'target'.
     """
     l4 = KPF4()
     if sci:
@@ -1371,13 +1328,13 @@ class TestQCL4:
         assert QCL4(_make_l4(sci=False)).ccf_rv_present() is False
 
     def test_ccf_rv_present_fail_when_rvs_unfilled(self):
-        # CCF present but RV column all-NaN (CrossCorrelation ran, RadialVelocity
-        # did not) -> the RVs are the L4 product, so DATAPRL4 must fail.
+        # The RVs are the L4 product, so an all-NaN RV column fails even with the
+        # CCFs in place.
         assert QCL4(_make_l4(rv_filled=False)).ccf_rv_present() is False
 
     def test_ccf_rv_present_fail_when_columns_missing(self):
-        # RV filled but the per-order BJD_TDB/BERV/WEIGHT columns the DiagL4
-        # dispersion metrics consume are absent -> DATAPRL4 must fail.
+        # The per-order BJD_TDB/BERV/WEIGHT columns the DiagL4 dispersion metrics
+        # consume are absent, so the product is incomplete.
         l4 = KPF4()
         for fiber in ("SCI1", "SCI2", "SCI3"):
             l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
@@ -1401,20 +1358,19 @@ class TestQCL4:
         assert QCL4(l4).berv_within_tolerance() is False
 
     def test_berv_within_tolerance_non_target_passes(self):
-        # SCI2 not star-illuminated (e.g. thar/etalon) -> not applicable, passes
-        # even with an out-of-tolerance BERVRNG present.
+        # SCI2 is not star-illuminated, so the check is N/A however bad BERVRNG is.
         l4 = _make_l4(sci_obj="etalon", bervrng=0.5)
         assert QCL4(l4).berv_within_tolerance() is True
 
     def test_berv_within_tolerance_raises_when_sci_obj_absent(self):
-        # A frame with no SCI-OBJ is malformed (CrossCorrelation requires it
-        # upstream) -> raise, not silently pass as a non-target source.
+        # CrossCorrelation requires SCI-OBJ upstream, so a frame without one is
+        # malformed and must not pass as a non-target source.
         with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
             QCL4(_make_l4(bervrng=0.05)).berv_within_tolerance()
 
     def test_berv_within_tolerance_target_absent_fails(self):
-        # Target frame but DiagL4 skipped the metric (degenerate weights / NaN
-        # barycorr) -> malformed, must fail rather than pass vacuously.
+        # DiagL4 skips the metric on degenerate weights or a NaN barycorr; on a
+        # target frame that is malformed, not a vacuous pass.
         assert QCL4(_make_l4(sci_obj="target")).berv_within_tolerance() is False
 
     def test_bjd_within_tolerance_pass(self):

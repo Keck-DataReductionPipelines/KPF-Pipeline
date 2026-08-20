@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 
 from kpfpipe.data_models.level0 import KPF0
 
-# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
-# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+# Quicklook/QLP render suite: slow PNG rendering, so excluded from
+# `make test-fast`. Run in the full suite or `make test-qlp`.
 pytestmark = pytest.mark.quicklook
 
 
@@ -33,7 +33,6 @@ def _close_figures():
 
 @pytest.fixture
 def synthetic_4amp_l0(tmp_path):
-    """Create a synthetic KPF0 with 4-amp green and red data."""
     fn = str(tmp_path / "KP.20240405.00001.00.fits")
     rng = np.random.default_rng(42)
 
@@ -62,7 +61,6 @@ def synthetic_4amp_l0(tmp_path):
 
 @pytest.fixture
 def synthetic_2amp_l0(tmp_path):
-    """Create a synthetic KPF0 with 2-amp green and red data."""
     fn = str(tmp_path / "KP.20240405.00002.00.fits")
     rng = np.random.default_rng(99)
 
@@ -91,7 +89,7 @@ def synthetic_2amp_l0(tmp_path):
 
 @pytest.fixture
 def small_2amp_l0(tmp_path):
-    """Create a small two-amp KPF0 for native-resolution PNG tests."""
+    """Small enough that a native-resolution PNG can be size-checked exactly."""
     fn = str(tmp_path / "KP.20240405.00004.00.fits")
     rng = np.random.default_rng(123)
 
@@ -118,7 +116,7 @@ def small_2amp_l0(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Task 1: Constructor
+# Constructor
 # ---------------------------------------------------------------------------
 
 
@@ -140,7 +138,7 @@ class TestPlotL0Constructor:
 
 
 # ---------------------------------------------------------------------------
-# Task 2: stitched_image
+# stitched_image
 # ---------------------------------------------------------------------------
 
 
@@ -171,7 +169,7 @@ class TestStitchedImage4Amp:
 
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image("green")
-        # Figure should have 2 axes: image + colorbar
+        # image + colorbar
         assert len(fig.axes) == 2
         plt.close(fig)
 
@@ -189,7 +187,7 @@ class TestStitchedImage4Amp:
 
 
 # ---------------------------------------------------------------------------
-# Task 3: 2-amp mode and 2^16 scaling
+# 2-amp mode and 2^16 scaling
 # ---------------------------------------------------------------------------
 
 
@@ -217,7 +215,7 @@ class TestStitchedImage2Amp:
 
 class TestStitchedImage2To16:
     def test_scales_high_values(self, tmp_path):
-        """Data with median > 200 * 2^16 should be divided by 2^16."""
+        # A median above the 200 * 2^16 threshold triggers the 2^16 rescale.
         fn = str(tmp_path / "KP.20240405.00003.00.fits")
         high_val = 300 * 2**16
 
@@ -242,7 +240,6 @@ class TestStitchedImage2To16:
         qlp = PlotL0(l0)
         fig = qlp.stitched_image("green")
 
-        # Image data should be scaled down to ~300
         ax = fig.axes[0]
         # imshow keeps the stitched image masked, so use the mask-aware median.
         img_data = ax.get_images()[0].get_array()
@@ -251,7 +248,7 @@ class TestStitchedImage2To16:
 
 
 # ---------------------------------------------------------------------------
-# Task 4: File saving and all()
+# File saving and run()
 # ---------------------------------------------------------------------------
 
 
@@ -273,7 +270,6 @@ class TestPlotL0FileSaving:
 
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image("green")
-        # No PNG should exist anywhere in tmp_path
         pngs = list(tmp_path.glob("*.png"))
         assert pngs == []
         plt.close(fig)
@@ -340,7 +336,6 @@ class TestPlotL0Run:
             qlp.run()
 
     def test_run_skips_missing_chip(self, tmp_path):
-        """L0 with only green amps should only produce green plot."""
         fn = str(tmp_path / "KP.20240405.00004.00.fits")
         rng = np.random.default_rng(7)
 

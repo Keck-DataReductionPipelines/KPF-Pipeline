@@ -1,10 +1,6 @@
-"""Tests for scripts/quality_control/qlp.py: the standalone quicklook-plot generator.
+"""Subprocess tests for scripts/quality_control/qlp.py, the quicklook-plot generator.
 
-Subprocess smoke tests that drive the CLI end-to-end on a synthetic, plottable L0
-fixture: direct-path plotting (--input/--output_dir), the config-driven output
-tree (--config → {KPF_SCIENCE_OUTPUT}/QLP/...), and the usual missing-file /
-no-args guards. A fail-loud check confirms a config missing KPF_SCIENCE_OUTPUT
-errors rather than substituting a default output root.
+Each test drives the CLI end-to-end on a synthetic, plottable L0 fixture.
 """
 
 import os
@@ -27,12 +23,10 @@ _REPO_ROOT = os.path.dirname(
 # A valid obs_id (and matching datecode) the quicklook filenames/paths key off.
 _OBS_ID = "KP.20240405.00004.00"
 
-# pytest's filterwarnings does not reach a child process, so the CLI would run with
-# default filters and any warning it raised would be invisible. Mirror the pyproject
-# rules into the child, where a warning becomes a non-zero exit the tests already check.
-# PYTHONWARNINGS splits entries on commas and resolves categories at interpreter
-# startup, before astropy is importable, so the astropy rule is carried by its
-# message prefix alone.
+# pytest's filterwarnings does not reach a child process, so mirror the pyproject
+# rules in: a child warning then becomes the non-zero exit the tests check for.
+# PYTHONWARNINGS resolves categories at interpreter startup, before astropy is
+# importable, so the astropy rule is carried by its message prefix alone.
 _CHILD_WARNINGS = ",".join(
     (
         "error",
@@ -41,18 +35,13 @@ _CHILD_WARNINGS = ",".join(
     )
 )
 
-# A child that reaches the network (astropy's IERS auto-download) can block forever --
-# nothing bounds a connection that opens and never answers. Cap every run: a hang
-# becomes a loud TimeoutExpired instead of a stalled suite.
+# A child that reaches the network (astropy's IERS auto-download) can block forever,
+# so cap every run: a hang becomes a loud TimeoutExpired instead of a stalled suite.
 _CHILD_TIMEOUT = 120
 
 
 def _write_l0_image_fixture(path):
-    """Write a small, plottable two-amp L0 FITS fixture (green + red).
-
-    Two amps per chip at 32x24 is enough for PlotL0 to stitch and render both
-    CCDs; the pixel values are arbitrary noise.
-    """
+    """Write an L0 FITS fixture with the two amps per chip PlotL0 needs to stitch."""
     rng = np.random.default_rng(123)
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
@@ -71,14 +60,12 @@ def _write_l0_image_fixture(path):
 
 
 def _write_config(path, data_dirs):
-    """Write a TOML config with a [DATA_DIRS] section from ``data_dirs``."""
     lines = ["[DATA_DIRS]"]
     lines += [f'{key} = "{value}"' for key, value in data_dirs.items()]
     path.write_text("\n".join(lines) + "\n")
 
 
 def _run_qlp_script(*args):
-    """Run scripts/quality_control/qlp.py via subprocess; return the result."""
     env = {**os.environ, "PYTHONPATH": _REPO_ROOT, "PYTHONWARNINGS": _CHILD_WARNINGS}
     cmd = [sys.executable, "scripts/quality_control/qlp.py", *map(str, args)]
     return subprocess.run(
@@ -99,10 +86,7 @@ def _png_names(obs_id):
 
 
 class TestQLPScript:
-    """Smoke tests for scripts/quality_control/qlp.py via subprocess."""
-
     def test_generates_plots_exit_0(self, tmp_path):
-        """--input + --output_dir → exit 0, both CCD PNGs written."""
         fixture = tmp_path / f"{_OBS_ID}.fits"
         _write_l0_image_fixture(str(fixture))
         out_dir = tmp_path / "out"
@@ -119,12 +103,7 @@ class TestQLPScript:
             assert (out_dir / name).is_file(), f"missing plot {name} in {out_dir}"
 
     def test_config_output_resolution(self, tmp_path):
-        """--config (no --output_dir) → plots under {KPF_SCIENCE_OUTPUT}/QLP/...
-
-        Exercises the fix that reads KPF_SCIENCE_OUTPUT (the science output root)
-        rather than the never-defined KPF_DATA_OUTPUT. --input supplies the frame,
-        so only the output tree comes from the config.
-        """
+        # --input supplies the frame, so only the output tree comes from the config.
         fixture = tmp_path / f"{_OBS_ID}.fits"
         _write_l0_image_fixture(str(fixture))
         science_out = tmp_path / "science-root"
@@ -149,11 +128,8 @@ class TestQLPScript:
             )
 
     def test_missing_science_output_key_fails_loud(self, tmp_path):
-        """--config without KPF_SCIENCE_OUTPUT → nonzero exit naming the key.
-
-        The output path reads params["KPF_SCIENCE_OUTPUT"] directly (no default),
-        so an absent key surfaces as an error rather than a silent fallback root.
-        """
+        # The output path reads params["KPF_SCIENCE_OUTPUT"] with no default, so an
+        # absent key must error rather than silently fall back to some other root.
         fixture = tmp_path / f"{_OBS_ID}.fits"
         _write_l0_image_fixture(str(fixture))
         cfg = tmp_path / "cfg.toml"
@@ -167,7 +143,6 @@ class TestQLPScript:
         )
 
     def test_missing_file_exit_1(self, tmp_path):
-        """Non-existent input file → exit code 1."""
         missing = tmp_path / "does_not_exist.fits"
         result = _run_qlp_script(
             "--input", missing, "--level", "L0", "--output_dir", tmp_path
@@ -175,6 +150,6 @@ class TestQLPScript:
         assert result.returncode == 1
 
     def test_no_args_exit_nonzero(self):
-        """No args → argparse error (--level required) → non-zero exit."""
+        # --level is required, so bare argv is an argparse error.
         result = _run_qlp_script()
         assert result.returncode != 0

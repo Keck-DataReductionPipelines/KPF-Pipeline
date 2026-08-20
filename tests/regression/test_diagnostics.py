@@ -24,8 +24,8 @@ from kpfpipe.quality_control.diagnostics import (
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-_NCOL_TEST = 8  # small, even column count for synthetic FLUX/VAR (DiagL2 reads
-# only per-fiber NaN counts and zero-flux ratios, so real detector width is moot)
+_NCOL_TEST = 8  # DiagL2 metrics are pixel aggregates, so the real detector width
+# is moot; an even count keeps the half-zeroed ZEROFRAC test exact
 
 _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
@@ -43,9 +43,9 @@ class TestDiagnosticsBase:
             data = {}
 
             def set_keyword(self, key, value):
-                # Mirror the real routing: set_keyword writes the value only
-                # (the comment comes from the registry). The base test keys are
-                # not in any registry, so the stub just lands them on PRIMARY.
+                # The real set_keyword writes the value only (the comment comes
+                # from the registry); these test keys are in no registry, so the
+                # stub just lands them on PRIMARY.
                 self.headers["PRIMARY"][key] = value
 
         return _FakeObj()
@@ -136,15 +136,14 @@ class TestDiagnosticsBase:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 with no pointing (e.g. a calibration frame) and DiagL1 with no
-# calibrations are each a clean no-op
+# DiagL1 with no calibrations is a clean no-op
 # ---------------------------------------------------------------------------
 
 
 class TestEmptyLevels:
     def test_diag_l1_runs_cleanly(self):
-        # DATE-OBS present (required) but no RECEIPT cal paths -> calibration_ages
-        # returns {} (no crash). DATE-OBS itself is now a required read.
+        # DATE-OBS present (a required read) but no RECEIPT cal paths ->
+        # calibration_ages returns {} rather than crashing.
         results = DiagL1(_make_kpf1_with_calibrations()).run()
         assert results == {}
 
@@ -181,9 +180,9 @@ def _record_at(coord, **overrides):
 
 
 def _set_catalog_record(l0, records):
-    """Write l0's CATALOG_RECORD rows + presence flags from a
-    {source: record-dict-or-None} mapping, the way perform does. A source left out of
-    the mapping gets flag 0, exactly as a gated-off one does in production."""
+    """Write l0's CATALOG_RECORD rows and presence flags from a
+    {source: record-dict-or-None} mapping, the way perform does. A source left out
+    of the mapping gets flag 0, exactly as a gated-off one does in production."""
     aq = AstroQuery(l0)
     for source, record in records.items():
         aq._write_catalog_record(source, record)
@@ -362,9 +361,8 @@ class TestDiagL0Contingency:
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
     """A KPF1 carrying a PRIMARY DATE-OBS and RECEIPT master paths.
 
-    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has
-    written each ``{PREFIX}FILE`` to RECEIPT (via set_keyword) and to_kpf1 has
-    populated the EPRV PRIMARY (DATE-OBS).
+    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has written
+    each ``{PREFIX}FILE`` to RECEIPT and to_kpf1 has populated the EPRV PRIMARY.
     """
     l1 = KPF1()
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
@@ -440,14 +438,12 @@ class TestDiagL1CalibrationAges:
 
 
 def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0, populate=True):
-    """Build a minimal KPF2 and populate FLUX extensions with controllable NaN
-    and zero fractions across all (chip, fiber) pairs.
+    """Minimal KPF2 with FLUX at controllable NaN and zero fractions.
 
-    A bare KPF2() already exposes the FLUX extensions DiagL2 reads (no FITS
-    round-trip needed -- mirrors test_qc_flags._make_kpf2_with_flux). Each FLUX
-    extension has shape (norder[chip], _NCOL_TEST), initialized to ones, then a
-    fraction replaced with NaN, then a fraction with 0.0. With populate=False no
-    FLUX arrays are set -- the "no data populated" schema cases.
+    A bare KPF2() already exposes the FLUX extensions DiagL2 reads, so no FITS
+    round-trip is needed. Each extension is (norder[chip], _NCOL_TEST) ones, then
+    nan_frac of the pixels replaced with NaN and zero_frac with 0.0.
+    populate=False sets no FLUX arrays -- the "no data populated" schema cases.
     """
     kpf2 = KPF2()
     if not populate:
@@ -487,8 +483,7 @@ class TestDiagL2NanCounts:
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_writes_keys_even_when_no_data(self):
-        """KPF2 with no FLUX extensions populated should still write all 5
-        keys with value 0 (consistent header schema)."""
+        # The header schema stays consistent: all five keys present, value 0.
         kpf2 = _make_kpf2_with_flux(populate=False)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
@@ -508,22 +503,18 @@ class TestDiagL2ZeroFlux:
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
 
     def test_zerofrac_half_when_half_zero(self):
-        """Exactly half of every fiber's flux pixels zeroed → ZEROFRAC == 0.5.
-
-        Deterministic even/odd pattern (each array has an even pixel count), so
-        the result is exact and independent of array size and seed.
-        """
+        # A deterministic even/odd pattern (every array has an even pixel count)
+        # makes ZEROFRAC exactly 0.5, independent of array size and seed.
         kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
         for chip in ("GREEN", "RED"):
             for fiber in _FIBERS:
                 arr = np.ones_like(np.asarray(kpf2.data[f"{chip}_{fiber}_FLUX"]))
-                arr.reshape(-1)[::2] = 0.0  # every other pixel → exactly 50%
+                arr.reshape(-1)[::2] = 0.0
                 kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.5)
 
     def test_zerofrac_skipped_when_no_data(self):
-        """KPF2 with no populated FLUX extensions → no ZEROFRAC key written."""
         kpf2 = _make_kpf2_with_flux(populate=False)
         DiagL2(kpf2).run()
         assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]

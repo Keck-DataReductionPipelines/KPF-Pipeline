@@ -1,11 +1,9 @@
 """Tests for scripts/processing/science.py: the science-reduction driver.
 
-Cover the driver's own surface: arg parsing and obs_id validation, the
+Covers the driver's own surface: arg parsing and obs_id validation, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
-at least one frame failed). The shared fan-out engine (``run_stage``, the
-cores-based job sizing) lives in ``_dispatch`` and is tested in test_dispatch_script.py.
-
-Unit tests use trivial subprocess stubs -- no real testdata needed.
+at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
+is tested in test_dispatch_script.py. Stubs only -- no real testdata needed.
 """
 
 import sys
@@ -22,7 +20,7 @@ _OID2 = "KP.20240405.40237.36"
 
 
 class _FakeConfig:
-    """Stand-in for ConfigHandler in the exit-code tests (no real file read)."""
+    """Stand-in for ConfigHandler in the exit-code tests: no real file read."""
 
     def __init__(self, path):
         pass
@@ -35,12 +33,11 @@ class _NoLogDirConfig(_FakeConfig):
     """A config with a resolvable data input but no configured log_dir."""
 
     def get_params(self, keys):
-        return {"KPF_DATA_INPUT": "/in"}  # no log_dir
+        return {"KPF_DATA_INPUT": "/in"}
 
 
 @pytest.fixture(scope="module")
 def s():
-    """The science driver module (a normal package import)."""
     return _science
 
 
@@ -184,9 +181,8 @@ class TestCliTask:
 
 class TestMainExitCode:
     def _patch(self, s, monkeypatch, failed):
-        # Skip the runtime setup and the real dir/config resolution + subprocess
-        # fan-out; assert only the exit-code contract from run_stage's failure set.
-        # setup_batch_logging is stubbed so main() writes no real batch log file.
+        # Skip the runtime setup, config resolution and subprocess fan-out (and
+        # any real batch log file); assert only run_stage's failure set -> exit code.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(s, "setup_batch_logging", lambda *a, **k: "/l/x.log")
@@ -195,8 +191,7 @@ class TestMainExitCode:
 
     def test_derives_datecodes_for_prescan(self, s, monkeypatch):
         # The pre-scan gets the unique-sorted nights the frames span, not the raw
-        # obs_ids: two 20240405 frames collapse to one datecode. It warms up front
-        # (the science default cache="rw").
+        # obs_ids: two 20240405 frames collapse to one datecode.
         warm_args = {}
         self._patch(s, monkeypatch, failed=[])
         monkeypatch.setattr(
@@ -222,7 +217,7 @@ class TestMainExitCode:
         assert exc.value.code == 1
 
     def test_errors_when_log_dir_unset(self, s, monkeypatch):
-        # A missing log_dir is fatal before any fan-out (DRP-RUN-07).
+        # A missing log_dir is fatal before any fan-out.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _NoLogDirConfig)
         with pytest.raises(SystemExit) as exc:

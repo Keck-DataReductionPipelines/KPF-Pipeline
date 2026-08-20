@@ -21,7 +21,7 @@ class TestConfigHandler:
 
     def test_get_params_default_sections(self, tmp_path):
         cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n[TRACES]\nn = 3\n')
-        params = ConfigHandler(cfg).get_params()  # sections=None -> defaults
+        params = ConfigHandler(cfg).get_params()  # sections=None -> default sections
         assert params == {"root": "/data", "n": 3}
 
     def test_get_params_flattens_nested_dict(self, tmp_path):

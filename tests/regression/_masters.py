@@ -1,7 +1,4 @@
-"""Shared helpers for master-frame unit tests (test_master_base, bias, dark).
-
-Not a test module (no ``test_`` prefix), so pytest does not collect it.
-"""
+"""Shared helpers for the master-frame unit tests (not a test module)."""
 
 import numpy as np
 
@@ -12,9 +9,8 @@ NROW, NCOL = 10, 10  # small arrays for unit tests
 def make_l1_arrays(rng=None, chips=CHIPS, shape=(NROW, NCOL)):
     """Return a synthetic ``stack_frames`` output dict.
 
-    Seeded for deterministic shape/dtype/sign fixtures; the values themselves
-    are not asserted numerically (real numeric behavior is pinned by the
-    regression and stacking unit tests in each module).
+    Seeded for deterministic shape/dtype/sign fixtures; the values themselves are
+    never asserted numerically, which the regression tests do instead.
     """
     if rng is None:
         rng = np.random.default_rng(42)

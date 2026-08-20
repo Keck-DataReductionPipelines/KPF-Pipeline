@@ -41,8 +41,8 @@ NCOL = 32
 def _make_master_l2(seed=42):
     """Build a KPFMasterL2 with deterministic, distinct per-fiber WAVE arrays.
 
-    Each (chip, fiber) gets its own random-but-reproducible block so we can
-    later confirm that exactly the right block lands on the science L2.
+    Each (chip, fiber) block differs, so tests can confirm that exactly the right
+    one lands on the science L2.
     """
     master = KPFMasterL2(kind="wls")
     master.headers["PRIMARY"]["INSTRUME"] = "KPF"
@@ -53,8 +53,8 @@ def _make_master_l2(seed=42):
     for chip in _CHIPS:
         norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
         for fiber in _FIBERS:
-            # WAVE is born-64 (EPRV / dtype policy); rvdata's MinBitDepth would
-            # otherwise upcast-and-warn a float32 WAVE on read.
+            # WAVE is born-64; rvdata's MinBitDepth would otherwise
+            # upcast-and-warn a float32 WAVE on read.
             arr = rng.uniform(4000.0, 8000.0, size=(norder, NCOL)).astype(np.float64)
             master.data[f"{chip}_{fiber}_WAVE"] = arr
     return master
@@ -66,19 +66,19 @@ def _make_science_l2(wls_path=None):
     l2.headers["PRIMARY"]["INSTRUME"] = "KPF"
     l2.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T11:08:33"
     if wls_path is not None:
-        # WLSFILE is a registered KPF-pipeline keyword routed to the RECEIPT
-        # header (written by CalibrationAssociation on the L1 RECEIPT and carried
-        # through by to_kpf2); set_keyword places it on RECEIPT.
+        # set_keyword routes WLSFILE to RECEIPT, where CalibrationAssociation
+        # writes it on the L1 and to_kpf2 carries it through.
         l2.set_keyword("WLSFILE", wls_path)
     return l2
 
 
 @pytest.fixture(scope="module")
 def master_wls_path(tmp_path_factory):
-    """Write a synthetic KPFMasterL2 to disk and return its path.
+    """Path to a synthetic KPFMasterL2 on disk.
 
-    Module-scoped read-only source: perform()/load_wls() only read the master (they
-    copy WAVE onto a fresh science L2), so the write happens once per module."""
+    Module-scoped: perform()/load_wls() only read the master, so one write serves
+    every test.
+    """
     master = _make_master_l2()
     path = str(
         tmp_path_factory.mktemp("wls") / "KP.20240405.03637.00_master_thar_L2.fits"
@@ -177,7 +177,6 @@ class TestPerform:
         assert mod.fibers == _FIBERS
 
     def test_copies_all_wave_arrays(self, master_wls_path):
-        # Every (chip, fiber) WAVE array on the science L2 should match the master.
         l2 = _make_science_l2(wls_path=master_wls_path)
         WavelengthCalibration(l2).perform()
 
@@ -188,9 +187,8 @@ class TestPerform:
                 np.testing.assert_array_equal(l2.data[key], master.data[key])
 
     def test_wave_arrays_are_float64(self, master_wls_path):
-        # WAVE is born-64 everywhere (EPRV / dtype policy; rvdata MinBitDepth also
-        # enforces 64-bit WAVE on read). Both the master and the science WAVE it is
-        # copied onto must be float64.
+        # WAVE is born-64 everywhere, so both the master and the science arrays
+        # it is copied onto must be float64.
         master = KPFMasterL2.from_fits(master_wls_path)
         # from_fits yields big-endian (>f8); compare precision, not byte order.
         assert_dtype(master.data["GREEN_SCI2_WAVE"], WAVE, "master GREEN_SCI2_WAVE")
@@ -201,7 +199,7 @@ class TestPerform:
                 assert l2.data[f"{chip}_{fiber}_WAVE"].dtype == np.float64
 
     def test_explicit_path_bypasses_header(self, master_wls_path):
-        # WLSFILE header is bogus, but wls_path override is valid → perform() succeeds.
+        # The WLSFILE header is bogus; the valid wls_path override wins.
         l2 = _make_science_l2(wls_path="/tmp/bogus.fits")
         WavelengthCalibration(l2).perform(wls_path=master_wls_path)
 
@@ -220,9 +218,8 @@ class TestPerform:
         )
 
     def test_subset_chips_and_fibers(self, master_wls_path):
-        # Only the requested (chip, fiber) blocks are copied; everything
-        # else stays zero -- both un-requested fibers within the requested
-        # chip, and un-requested chips entirely.
+        # Only the requested (chip, fiber) blocks are copied; every other fiber
+        # and chip stays zero.
         l2 = _make_science_l2(wls_path=master_wls_path)
         WavelengthCalibration(l2).perform(chips=["GREEN"], fibers=["SCI2"])
 
@@ -230,9 +227,7 @@ class TestPerform:
         np.testing.assert_array_equal(
             l2.data["GREEN_SCI2_WAVE"], master.data["GREEN_SCI2_WAVE"]
         )
-        # Un-requested fiber within the requested chip stays zero.
         assert not np.any(l2.data["GREEN_SCI1_WAVE"])
-        # Un-requested chip stays zero.
         assert not np.any(l2.data["RED_SCI2_WAVE"])
 
     def test_raises_when_wlsfile_missing(self):
@@ -241,7 +236,7 @@ class TestPerform:
             WavelengthCalibration(l2).perform()
 
     def test_raises_when_master_missing_requested_fiber(self, tmp_path):
-        # Master only has SCI2; config asks for all 5 fibers → fail loudly.
+        # The master only has SCI2, but all 5 fibers are requested.
         master = KPFMasterL2(kind="wls")
         master.headers["PRIMARY"]["INSTRUME"] = "KPF"
         master.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
@@ -251,7 +246,7 @@ class TestPerform:
             norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
             master.data[f"{chip}_SCI2_WAVE"] = rng.uniform(
                 4000.0, 8000.0, size=(norder, NCOL)
-            ).astype(np.float64)  # WAVE is born-64 (EPRV / dtype policy)
+            ).astype(np.float64)  # WAVE is born-64
         master_path = str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
         master.to_fits(master_path)
 
@@ -266,15 +261,13 @@ class TestPerform:
 #
 # Once WavelengthCalibration assigns the master WLS, the extracted flux must be
 # co-oriented with that wavelength axis: a strong stellar absorption line has to
-# land at its catalog wavelength, NOT at the mirror-image wavelength that a
-# flux/wave flip would produce. We test this with deep Fraunhofer lines, whose
-# rest wavelengths are textbook-known.
+# land at its catalog wavelength, NOT at the mirror-image wavelength a flux/wave
+# flip would produce. Deep Fraunhofer lines, whose rest wavelengths are
+# textbook-known, are the probe.
 #
-# Fraunhofer absorption lines, AIR wavelengths [Angstrom]:
-#   https://en.wikipedia.org/wiki/Fraunhofer_lines
-# KPF covers ~4457-8700 A, so only H-beta, the Na D doublet, and H-alpha are
-# actually observable; the bluer Ca II H&K and H-gamma/H-delta fall below the
-# blue cutoff and are skipped automatically (kept here for documentation).
+# Fraunhofer absorption lines, AIR wavelengths [Angstrom]. KPF covers
+# ~4457-8700 A, so only H-beta, the Na D doublet, and H-alpha are observable;
+# the bluer lines fall below the blue cutoff and are skipped automatically.
 
 _FRAUNHOFER_AIR = {
     "Ca II K": 3933.66,
@@ -297,10 +290,9 @@ def _trough_depth(wave_order, flux_order, lambda_air, halfwin=3.0):
     ``lambda_air``, or None if the line is not covered by this order or the
     window holds no finite flux. The window is centered between the air and
     vacuum line wavelengths, so it absorbs both the air<->vacuum offset (~1.5 A)
-    and the stellar+barycentric Doppler shift (~0.3 A) without needing to know
-    which frame the WLS is in. Continuum is the window's 90th percentile -- over
-    this narrow a span the blaze is locally flat, so its curvature is
-    negligible.
+    and the stellar+barycentric Doppler shift (~0.3 A) without knowing which
+    frame the WLS is in. Continuum is the window's 90th percentile -- the blaze
+    is locally flat over this narrow a span.
     """
     lambda_vac = float(air_to_vac(np.array([lambda_air]))[0])
     center = 0.5 * (lambda_air + lambda_vac)
@@ -319,21 +311,20 @@ def _trough_depth(wave_order, flux_order, lambda_air, halfwin=3.0):
 @pytest.mark.slow
 @pytest.mark.requires_testdata
 class TestSpectrumOrientation:
-    """Discriminator: the WLS-calibrated L2 must have its flux co-oriented with
-    the assigned wavelength axis.
+    """The WLS-calibrated L2 must have its flux co-oriented with its wave axis.
 
     For every in-coverage Fraunhofer anchor on every science fiber, the native
-    ``(wave, flux)`` pairing must show a DEEPER absorption trough at the catalog
-    wavelength than the reversed ``(wave, flux[::-1])`` pairing. A flux/wave flip
-    inverts that relationship and fails the test.
+    ``(wave, flux)`` pairing must show a deeper absorption trough at the catalog
+    wavelength than the reversed ``(wave, flux[::-1])`` pairing; a flux/wave flip
+    inverts that relationship.
     """
 
     @pytest.fixture(scope="class")
     def science_l2(self):
         # Build the real L0->L2 chain just far enough to get extracted flux with
-        # the master WLS assigned. Restricted to the SCI fibers because the truth
-        # WLS master only carries those. Upstream modules are imported here, not
-        # at module scope, to keep this WLS-application test file's surface small.
+        # the master WLS assigned, restricted to the SCI fibers because the truth
+        # WLS master only carries those. Upstream modules are imported here to
+        # keep this file's module-level surface small.
         from kpfpipe.data_models import KPF0
         from kpfpipe.modules.calibration_association import CalibrationAssociation
         from kpfpipe.modules.image_assembly import ImageAssembly
@@ -356,8 +347,7 @@ class TestSpectrumOrientation:
         return WavelengthCalibration(l2, config).perform()
 
     def _anchor_cases(self, l2):
-        """List in-coverage anchors as
-        (name, chip, fiber, order, wave, flux, lambda_air)."""
+        """In-coverage anchors: (name, chip, fiber, order, wave, flux, lambda_air)."""
         cases = []
         for name, lambda_air in _FRAUNHOFER_AIR.items():
             for chip in _CHIPS:
@@ -373,20 +363,14 @@ class TestSpectrumOrientation:
         return cases
 
     def test_expected_anchors_in_coverage(self, science_l2):
-        """The observable Fraunhofer lines are found; the bluer ones are out of
-        range."""
         names = {c[0] for c in self._anchor_cases(science_l2)}
         assert {"H-beta", "Na D2", "Na D1", "H-alpha"} <= names
         assert names.isdisjoint({"Ca II K", "Ca II H", "H-delta", "H-gamma"})
 
     def test_flux_co_oriented_with_wave(self, science_l2):
-        """Anchors sit in deeper troughs in the native pairing than reversed.
-
-        Orientation is a single global property of the FFI, so the verdict is
-        aggregate: the mean native trough depth must clearly exceed the mean
-        reversed depth. (A per-anchor comparison is brittle for lines near an
-        order center, where the mirror wavelength falls back onto the line.)
-        """
+        # Orientation is a single global property of the FFI, so the verdict is
+        # aggregate. A per-anchor comparison would be brittle for lines near an
+        # order center, where the mirror wavelength falls back onto the line.
         cases = self._anchor_cases(science_l2)
         assert cases, "no Fraunhofer anchor lines found in coverage"
 
@@ -411,8 +395,8 @@ class TestSpectrumOrientation:
         )
 
     def test_strong_anchor_is_deep(self, science_l2):
-        """Floor check: the Na D doublet must be a deep trough in the native
-        pairing, so the discriminator cannot pass trivially on near-zero flux."""
+        # Floor check: the Na D doublet must be a deep trough in the native
+        # pairing, so the discriminator cannot pass trivially on near-zero flux.
         deepest = 0.0
         for name, _chip, _fiber, _o, wave, flux, lambda_air in self._anchor_cases(
             science_l2

@@ -1,9 +1,8 @@
 """Tests for scripts/quality_control/qc.py: the standalone QC runner.
 
-Subprocess smoke tests that drive the CLI end-to-end on synthetic L0 fixtures --
-exit codes and the ISGOOD summary (TestQCScript) -- plus a fail-loud check that a
-config missing a required DATA_DIRS key errors instead of substituting a default
-(TestQCScriptConfig).
+Subprocess smoke tests driving the CLI on synthetic L0 fixtures -- exit codes and
+the ISGOOD summary -- plus a fail-loud check that a config missing a required
+DATA_DIRS key errors instead of substituting a default.
 """
 
 import os
@@ -21,12 +20,10 @@ _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-# pytest's filterwarnings does not reach a child process, so the CLI would run with
-# default filters and any warning it raised would be invisible. Mirror the pyproject
-# rules into the child, where a warning becomes a non-zero exit the tests already check.
-# PYTHONWARNINGS splits entries on commas and resolves categories at interpreter
-# startup, before astropy is importable, so the astropy rule is carried by its
-# message prefix alone.
+# pytest's filterwarnings does not reach a child process, so mirror the pyproject
+# rules in, where a warning becomes the non-zero exit the tests already check.
+# PYTHONWARNINGS resolves categories at interpreter startup, before astropy is
+# importable, so the astropy rule is carried by its message prefix alone.
 _CHILD_WARNINGS = ",".join(
     (
         "error",
@@ -35,10 +32,9 @@ _CHILD_WARNINGS = ",".join(
     )
 )
 
-# qc.py reaches the network (Gaia/SIMBAD via AstroQuery, and astropy's IERS
-# auto-download), and neither bounds a connection that opens and never answers, so a
-# child can block forever. Cap every run: a hang becomes a loud TimeoutExpired instead
-# of a stalled suite. Generous enough that a slow-but-working run still passes.
+# qc.py reaches the network (AstroQuery, astropy's IERS auto-download) and neither
+# bounds a stalled connection, so a child can block forever. Cap every run so a hang
+# becomes a loud TimeoutExpired; generous enough for a slow-but-working run.
 _CHILD_TIMEOUT = 120
 
 # Self-consistent raw exposure times so DATTIMOK passes (END-BEG == ELAPSED).
@@ -53,17 +49,13 @@ _GOOD_DATES = {
 def _write_l0_fixture(path, *, passing=True, imtype="Object"):
     """Write a minimal L0 FITS fixture at path.
 
-    passing=True  → all QCL0 checks pass (valid header keywords, EXPTIME finite
-                    and consistent with ELAPSED, amps present).
-    passing=False → inject a failure (negative EXPTIME so EXPTIMOK fails).
-    imtype        → PRIMARY IMTYPE; a non-'Object' (calibration) frame carries no
-                    pointing/DCS target block, so qc.py skips AstroQuery for it.
+    passing=False injects a negative EXPTIME so EXPTIMOK fails. A non-'Object'
+    imtype carries no pointing/DCS target block, so qc.py skips AstroQuery for it.
     """
     primary = fits.PrimaryHDU()
     primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
     primary.header["MJD-OBS"] = 60405.04
-    # Requested EXPTIME within tolerance of the elapsed time (_GOOD_DATES
-    # ELAPSED = 12.07) so EXPTIMOK's ELAPSED-consistency check passes.
+    # Within tolerance of _GOOD_DATES ELAPSED (12.07) so EXPTIMOK passes.
     primary.header["EXPTIME"] = 12.0 if passing else -1.0
     primary.header["OBJECT"] = "synthetic"
     primary.header["OFNAME"] = os.path.basename(path)
@@ -72,9 +64,8 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object"):
         primary.header[k] = v
 
     if imtype == "Object":
-        # Pointing + DCS target (identical -> TARGOFF ~ 0) so AstroQuery resolves the
-        # wmko record and DiagL0's required TARGOFF is available offline; the external
-        # Gaia/SIMBAD lookups are disabled via config (see _write_astro_config).
+        # Pointing + DCS target (identical -> TARGOFF ~ 0) so the header-native wmko
+        # record supplies DiagL0's required TARGOFF with Gaia/SIMBAD disabled.
         primary.header["RA"] = "12:00:00.00"
         primary.header["DEC"] = "+40:00:00.0"
         primary.header["TARGRA"] = "12:00:00.00"
@@ -99,7 +90,7 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object"):
 
 
 def _write_config(path, data_dirs):
-    """Write a TOML config with a [DATA_DIRS] section from ``data_dirs``."""
+    """Write a TOML config with a [DATA_DIRS] section."""
     lines = ["[DATA_DIRS]"]
     lines += [f'{key} = "{value}"' for key, value in data_dirs.items()]
     path.write_text("\n".join(lines) + "\n")
@@ -108,9 +99,10 @@ def _write_config(path, data_dirs):
 def _write_astro_config(path):
     """A minimal config that disables AstroQuery's network lookups.
 
-    qc.py runs AstroQuery for L0; disabling Gaia/SIMBAD keeps these smoke tests
-    offline, so wmko -- the header-native row, the only one left -- must also be
-    the permitted astrometric base for the merge to succeed and TARGOFF to exist."""
+    Disabling Gaia/SIMBAD keeps these smoke tests offline, so wmko -- the
+    header-native row, the only one left -- must also be the permitted astrometric
+    base for the merge to succeed and TARGOFF to exist.
+    """
     path.write_text(
         "[DATA_DIRS]\n[TRACES]\n"
         "[MODULE_ASTRO_QUERY]\ndo_gaia_query = false\ndo_simbad_query = false\n"
@@ -120,7 +112,6 @@ def _write_astro_config(path):
 
 
 def _run_qc_script(fixture_path, level="L0", extra_args=None):
-    """Run scripts/quality_control/qc.py via subprocess, return the CompletedProcess."""
     cmd = [
         sys.executable,
         "scripts/quality_control/qc.py",
@@ -143,10 +134,7 @@ def _run_qc_script(fixture_path, level="L0", extra_args=None):
 
 
 class TestQCScript:
-    """Smoke tests for scripts/quality_control/qc.py via subprocess."""
-
     def test_all_passing_exit_0_isgood_pass(self, tmp_path):
-        """All-good L0 → exit code 0, stdout contains 'ISGOOD: PASS'."""
         fixture = tmp_path / "KP.20240405.00001.00.fits"
         _write_l0_fixture(str(fixture), passing=True)
         cfg = _write_astro_config(tmp_path / "astro.toml")
@@ -162,7 +150,6 @@ class TestQCScript:
         )
 
     def test_failure_injected_exit_1_isgood_fail(self, tmp_path):
-        """L0 with negative EXPTIME → exit code 1, stdout contains 'ISGOOD: FAIL'."""
         fixture = tmp_path / "KP.20240405.00002.00.fits"
         _write_l0_fixture(str(fixture), passing=False)
         cfg = _write_astro_config(tmp_path / "astro.toml")
@@ -178,8 +165,7 @@ class TestQCScript:
         )
 
     def test_calibration_frame_skips_astroquery_no_exit_2(self, tmp_path):
-        """A calibration L0 (IMTYPE != 'Object') stays inspectable: qc.py skips
-        AstroQuery rather than erroring, so it never exits 2 on a cal frame."""
+        # A cal frame stays inspectable: qc.py skips AstroQuery rather than erroring.
         fixture = tmp_path / "KP.20240405.00005.00.fits"
         _write_l0_fixture(str(fixture), passing=True, imtype="Bias")
         cfg = _write_astro_config(tmp_path / "astro.toml")
@@ -195,13 +181,11 @@ class TestQCScript:
         )
 
     def test_missing_file_exit_2(self, tmp_path):
-        """Non-existent file → exit code 2."""
         missing = tmp_path / "does_not_exist.fits"
         result = _run_qc_script(missing, level="L0")
         assert result.returncode == 2
 
     def test_no_args_exit_nonzero(self):
-        """No args → argparse error → non-zero exit."""
         env = {
             **os.environ,
             "PYTHONPATH": _REPO_ROOT,
@@ -222,11 +206,8 @@ class TestQCScriptConfig:
     """The config-driven input path fails loud on a missing DATA_DIRS key."""
 
     def test_missing_data_input_key_fails_loud(self, tmp_path):
-        """--obs_id + a config without KPF_DATA_INPUT → nonzero exit naming the key.
-
-        The runner reads params["KPF_DATA_INPUT"] directly (no default), so an
-        absent key surfaces as an error rather than silently using a hardcoded path.
-        """
+        # The runner reads KPF_DATA_INPUT with no default, so an absent key must
+        # surface as an error rather than silently using a hardcoded path.
         cfg = tmp_path / "cfg.toml"
         _write_config(cfg, {"KPF_SCIENCE_OUTPUT": str(tmp_path)})  # no KPF_DATA_INPUT
         env = {

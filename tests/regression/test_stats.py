@@ -66,7 +66,7 @@ class TestInterpolateBadPixels:
         mask[2, 2] = False
         data[2, 2] = 1e6
         out = interpolate_bad_pixels(data, mask)
-        # 8 neighbors all = 2.0 → interpolated value should be ~2.0
+        # 8 neighbors all = 2.0 -> interpolated value should be ~2.0
         assert np.isclose(out[2, 2], 2.0, atol=1e-5)
 
     def test_good_pixels_unchanged(self):

@@ -1,8 +1,8 @@
 """Tests for the BarycentricCorrection module (KPF2 -> KPF2).
 
-Static-method unit tests require no fixtures. Integration tests use a
-synthetic KPF2 with a small EXPMETER_SCI table, populated SCI2_WAVE, and the
-SCI2 catalog cards on PRIMARY. barycorrpy calls are stubbed via monkeypatching.
+Static-method unit tests require no fixtures. Integration tests use a synthetic
+KPF2 with a small EXPMETER_SCI table, populated SCI2_WAVE, and the SCI2 catalog
+cards on PRIMARY; barycorrpy is stubbed except in TestComputeBarycorrReference.
 """
 
 import logging
@@ -30,15 +30,11 @@ NCOL = 50  # reduced column count for speed
 # Synthetic KPF2 fixture
 # ---------------------------------------------------------------------------
 
-# Exposure meter: 3 readings of 60s, with 60s gaps, starting at T0.
-#   Reading 0: 00:00:00 → 00:01:00
-#   Gap:       00:01:00 → 00:02:00
-#   Reading 1: 00:02:00 → 00:03:00
-#   Gap:       00:03:00 → 00:04:00
-#   Reading 2: 00:04:00 → 00:05:00
-# DATE-BEG = 00:00:00, DATE-END = 00:05:00 (shutter open for full range)
+# Exposure meter: 3 readings of 60 s at 00:00, 00:02 and 00:04, separated by 60 s
+# gaps. The shutter (DATE-BEG/DATE-END) is open 00:00:00 to 00:05:00, so it
+# exactly brackets the readings unless a test says otherwise.
 _T0 = "2024-01-01T"
-_WAVE_COLS = ["5000", "5100", "5200", "5300"]  # 100Å spacing → dispersion = 100Å
+_WAVE_COLS = ["5000", "5100", "5200", "5300"]  # 100 Angstrom spacing = dispersion
 _FLUX_VALUE = 100.0  # uniform ADU per reading
 
 # SCI2 catalog cards as KPF0.to_kpf1 writes them: ICRS, RA/Dec sexagesimal (hourangle
@@ -53,15 +49,15 @@ _CATALOG_CARDS = {
     "CPLX3": 10.0,
     "CEPCH3": 2016.0,
     "CEQNX3": 2000.0,
-    "CRV3": 0.0,  # no systemic RV; set so the module need not fall back to 0
+    "CRV3": 0.0,  # present so the module does not take its warn-and-default path
 }
 
 
 def _expmeter_table(data):
     """EXPMETER_SCI table from Date-Beg/Date-End plus flux columns.
 
-    Real EXPMETER_SCI always carries the shutter-corrected columns, and the module
-    prefers them; mirror the uncorrected ones so every expected time is unchanged.
+    The module prefers the shutter-corrected columns, which real EXPMETER_SCI
+    always carries; mirroring the uncorrected ones keeps expected times unchanged.
     """
     return Table(
         {**data, "Date-Beg-Corr": data["Date-Beg"], "Date-End-Corr": data["Date-End"]}
@@ -82,14 +78,12 @@ def _make_expmeter_table():
 def synthetic_kpf2():
     """KPF2 with synthetic EXPMETER_SCI and wavelength arrays.
 
-    SCI2_WAVE is filled with 5000.0 -- order_center = 5000 for every order,
-    so np.interp returns the per-channel value at 5000Å (i.e. the first
-    PHOTON_JD) for every order. Tests that need per-order variation
-    populate SCI2_WAVE themselves.
+    Every order's center is 5000.0, so all orders interpolate to the same
+    per-channel time. Tests needing per-order variation set SCI2_WAVE themselves.
     """
     kpf2 = KPF2()
 
-    # KPF-native keywords live in INSTRUMENT_HEADER on L2 (preserved L1 PRIMARY).
+    # KPF-native keywords live in INSTRUMENT_HEADER on L2 (the preserved L1 PRIMARY).
     kpf2.headers["INSTRUMENT_HEADER"]["DATE-BEG"] = f"{_T0}00:00:00.000"
     kpf2.headers["INSTRUMENT_HEADER"]["DATE-END"] = f"{_T0}00:05:00.000"
 
@@ -110,7 +104,7 @@ def synthetic_kpf2():
 
 
 # ---------------------------------------------------------------------------
-# Static helpers -- unchanged behavior across the split
+# Static helpers
 # ---------------------------------------------------------------------------
 
 
@@ -288,11 +282,10 @@ class TestGetNormalizedFlux:
 class TestComputeBarycorrReference:
     """The real barycorrpy handoff, pinned to a golden value.
 
-    Every perform() test stubs _compute_barycorr, so this is the only guard that
-    the real barycorrpy wiring stays correct: the ICRS ra/dec/pm/parallax, the
-    J2000 epoch, UTC->JD, Keck lat/lon/alt, and the m/s units and sign. It calls
-    barycorrpy directly (no stub) and may download JPL ephemeris on first run,
-    hence @slow. Golden values are pinned to barycorrpy==0.4.4 (see pyproject).
+    Every perform() test stubs _compute_barycorr, so this is the only guard on
+    the real wiring: ICRS ra/dec/pm/parallax, the J2000 epoch, UTC->JD, the Keck
+    site, and the m/s units and sign. It may download JPL ephemeris on first run,
+    hence @slow. Golden values are pinned to barycorrpy==0.4.4.
     """
 
     def test_matches_barycorrpy_reference(self):
@@ -313,8 +306,8 @@ class TestComputeBarycorrReference:
         # a few minutes of JD_UTC (clock + Romer light-travel delay).
         assert abs(bc_vel[0]) < 3.0e4
         assert abs(bjd_tdb[0] - t.utc.jd) < 0.01
-        # Regression pins (1 cm/s, ~0.1 s): catch any frame/unit/sign rewiring,
-        # well above barycorrpy/ephemeris/IERS numerical noise at the pinned version.
+        # Pins at 1 cm/s and ~0.1 s: tight enough to catch a frame/unit/sign
+        # rewiring, loose enough to clear ephemeris/IERS noise at the pinned version.
         assert bc_vel[0] == pytest.approx(24627.871206121636, abs=1e-2)
         assert bjd_tdb[0] == pytest.approx(2460476.873644211, abs=1e-6)
 
@@ -348,15 +341,13 @@ class TestFluxWeightedMidpointExpmeter:
         assert len(t_fwm) == len(_WAVE_COLS)
 
     def test_small_negative_flux_preserved(self, synthetic_kpf2, monkeypatch):
-        """Small negative fluctuations (background-subtraction noise near zero
-        flux) are preserved with their real weight, not floored: flooring would
-        bias the flux-weighted midpoint. Only a non-positive *channel total*
-        raises (the meaningful guard); a single negative sample does not."""
-
+        # Small negatives are background-subtraction noise near zero flux;
+        # flooring them to zero would bias the flux-weighted midpoint. Only a
+        # nonpositive channel *total* raises.
         def mock_flux(self):
             w = np.array([float(c) for c in _WAVE_COLS])
             f = np.full((3, len(_WAVE_COLS)), 100.0)
-            f[0, 0] = -20.0  # one small negative; channel total stays positive (+180)
+            f[0, 0] = -20.0  # channel total stays positive (+180)
             return w, f
 
         monkeypatch.setattr(BarycentricCorrection, "_get_normalized_flux", mock_flux)
@@ -371,9 +362,9 @@ class TestFluxWeightedMidpointExpmeter:
         )
 
         # Compare midpoints as seconds from the first reading: JD magnitudes
-        # (~2.46e6) make any relative tolerance meaningless, so reduce to O(100 s)
-        # offsets where absolute tolerances actually mean what they say.
-        f0 = np.array([-20.0, 100.0, 100.0])  # channel 0 carries the negative sample
+        # (~2.46e6) swamp any relative tolerance, so reduce to O(100 s) offsets
+        # where absolute tolerances mean what they say.
+        f0 = np.array([-20.0, 100.0, 100.0])
         floored = np.clip(f0, 0.0, None)
         ref = t_mid.jd[0]
 
@@ -381,18 +372,17 @@ class TestFluxWeightedMidpointExpmeter:
             return (np.sum(t_mid.jd * weights) / np.sum(weights) - ref) * 86400.0
 
         actual_s = (t_fwm.jd[0] - ref) * 86400.0
-        expected_s = offset_seconds(f0)  # negative-preserving weighting
-        floored_s = offset_seconds(floored)  # what flooring to zero would give
+        expected_s = offset_seconds(f0)
+        floored_s = offset_seconds(floored)
 
         assert np.isfinite(actual_s)
-        # Matches the exact negative-preserving midpoint to <1 ms...
         np.testing.assert_allclose(actual_s, expected_s, atol=1e-3)
-        # ...and is unambiguously not the floored result (the two differ by the
-        # negative sample's ~20 s pull on the earliest reading).
+        # The two weightings differ by the negative sample's ~20 s pull, so this
+        # separates the actual result from the floored one unambiguously.
         assert abs(actual_s - floored_s) > 1.0
 
     def test_zero_flux_channel_raises(self, synthetic_kpf2):
-        """A channel with zero flux across all readings → 0/0 midpoint; fail loudly."""
+        # Zero flux across all readings makes the midpoint 0/0; fail loudly.
         data = {
             "Date-Beg": [
                 "2024-01-01T00:00:00.000",
@@ -418,8 +408,8 @@ class TestFluxWeightedMidpointExpmeter:
             )
 
     def test_interpolate_shifts_midpoint_with_front_weighted_flux(self, synthetic_kpf2):
-        """Front-weighted flux: interpolation sees a bright sample at the
-        first gap (~T+90s) that pulls the FWM strictly later."""
+        # Front-weighted flux makes interpolation add a bright sample at the
+        # first gap (~T+90 s), which pulls the FWM strictly later.
         data = {
             "Date-Beg": [
                 "2024-01-01T00:00:00.000",
@@ -449,16 +439,16 @@ class TestFluxWeightedMidpointExpmeter:
             extrapolate=False,
             fix_outliers=False,
         )
-        # Shift should be sub-minute → tens of microdays, easily > 1e-9 days
+        # The shift is sub-minute (tens of microdays), comfortably clearing the
+        # 1e-7 day (~9 ms) margin below.
         assert np.mean(t_yes.jd) > np.mean(t_no.jd) + 1e-7
 
     def test_extrapolate_shifts_midpoint_when_shutter_brackets_expmeter(
         self, synthetic_kpf2
     ):
-        """DATE-BEG before t_beg[0] and DATE-END after t_end[-1] → extrapolated
-        gap samples on both sides pull the FWM. Bright first reading + faint
-        last → leading extrapolation dominates → midpoint earlier than with
-        extrapolate=False."""
+        # The shutter brackets the readings on both sides, so extrapolation adds
+        # a gap sample at each end. A bright first reading plus a 2-minute
+        # leading gap makes the leading sample dominate and pull the FWM earlier.
         data = {
             "Date-Beg": [
                 "2024-01-01T00:02:00.000",  # readings inset from shutter
@@ -474,7 +464,7 @@ class TestFluxWeightedMidpointExpmeter:
             "5100": [1000.0, 1.0, 1.0],
         }
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
-        # Shutter open 00:00:00 → 00:05:00; readings only 00:02:00–00:03:20
+        # Shutter open 00:00:00 to 00:05:00; readings only 00:02:00 to 00:03:20.
         synthetic_kpf2.headers["INSTRUMENT_HEADER"]["DATE-BEG"] = (
             "2024-01-01T00:00:00.000"
         )
@@ -495,8 +485,6 @@ class TestFluxWeightedMidpointExpmeter:
             extrapolate=True,
             fix_outliers=False,
         )
-        # Bright first reading + 2-minute leading shutter gap → big leading
-        # extrapolation pulls FWM clearly earlier than the no-extrap case.
         assert np.mean(t_yes.jd) < np.mean(t_no.jd) - 1e-7
 
 
@@ -510,24 +498,21 @@ class TestFluxWeightedMidpointOrders:
         assert len(t) == NORDER
 
     def test_constant_wave_gives_constant_time(self, synthetic_kpf2):
-        """SCI2_WAVE filled with 5000.0 → every order interpolates at 5000Å
-        and gets the value from the first per-channel t_fwm."""
         bc = BarycentricCorrection(synthetic_kpf2)
         _, t = bc.compute_flux_weighted_midpoint_times(output="orders", **self._KWARGS)
-        # All per-channel times are equal (uniform flux), so all per-order
-        # interpolated times equal that shared value.
+        # Uniform flux makes every per-channel time equal, and the fixture's flat
+        # SCI2_WAVE makes every order interpolate to that shared value.
         assert np.std(t.jd) < 1e-12
 
     def test_orders_get_distinct_times_when_waves_vary(self, synthetic_kpf2):
-        """Front-weighted flux + GREEN orders at 5000Å vs RED at 5100Å:
-        GREEN orders should get an earlier midpoint than RED."""
         synthetic_kpf2.set_data(
             "GREEN_SCI2_WAVE", np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float64)
         )
         synthetic_kpf2.set_data(
             "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float64)
         )
-        # Front-weighted at 5000Å, back-weighted at 5100Å
+        # Front-weighted at 5000 A (GREEN), back-weighted at 5100 A (RED), so
+        # GREEN's midpoint must land earlier than RED's.
         data = {
             "Date-Beg": [
                 "2024-01-01T00:00:00.000",
@@ -565,8 +550,8 @@ class TestFluxWeightedMidpointCcds:
         assert len(t) == 2
 
     def test_ccd_values_equal_chip_means_with_uniform_weights(self, synthetic_kpf2):
-        """With no SCI2_FLUX (uniform weights), the ccds output should equal the
-        plain per-chip means of the orders output."""
+        # With no SCI2_FLUX the order weights are uniform, so the chip summary
+        # reduces to a plain mean.
         bc = BarycentricCorrection(synthetic_kpf2)
         _, t_orders = bc.compute_flux_weighted_midpoint_times(
             output="orders", **self._KWARGS
@@ -580,8 +565,6 @@ class TestFluxWeightedMidpointCcds:
         )
 
     def test_flux_weighting_biases_ccd_time_toward_bright_orders(self, synthetic_kpf2):
-        """A bright bluest GREEN order pulls the chip summary toward its
-        (earlier) midpoint relative to the unweighted chip mean."""
         green_waves = np.linspace(5000.0, 5300.0, NORDER_GREEN, dtype=np.float64)
         synthetic_kpf2.set_data(
             "GREEN_SCI2_WAVE", np.repeat(green_waves[:, None], NCOL, axis=1)
@@ -626,8 +609,6 @@ class TestFluxWeightedMidpointCcds:
     # it one line later (nan_to_num -> zero weight), which is what this asserts.
     @pytest.mark.filterwarnings("ignore:All-NaN slice encountered:RuntimeWarning")
     def test_nan_flux_order_gets_zero_weight(self, synthetic_kpf2):
-        """A failed-extraction order (all-NaN SCI2 flux) gets zero weight rather
-        than poisoning its chip summary, so the ccds time stays finite."""
         flux = np.ones((NORDER, NCOL), dtype=float)
         flux[NORDER_GREEN] = np.nan  # first RED order failed extraction
         synthetic_kpf2.set_data("SCI2_FLUX", flux)
@@ -639,24 +620,22 @@ class TestFluxWeightedMidpointCcds:
         assert np.all(np.isfinite(t_ccds.jd))
 
     def test_all_zero_weight_chip_raises(self, synthetic_kpf2):
-        """A whole chip with zero SCI2 flux → undefined weighted mean; fail loudly."""
+        # A whole chip at zero flux makes the weighted mean undefined.
         flux = np.ones((NORDER, NCOL), dtype=float)
-        flux[NORDER_GREEN:] = 0.0  # all RED orders have zero flux
+        flux[NORDER_GREEN:] = 0.0
         synthetic_kpf2.set_data("SCI2_FLUX", flux)
         bc = BarycentricCorrection(synthetic_kpf2)
         with pytest.raises(ValueError, match="weights are zero"):
             bc.compute_flux_weighted_midpoint_times(output="ccds", **self._KWARGS)
 
     def test_green_and_red_resolve_distinct_values(self, synthetic_kpf2):
-        """With GREEN orders at 5000Å and RED orders at 5100Å plus a chromatic
-        flux gradient, 'ccds' should report distinguishable times per chip."""
         synthetic_kpf2.set_data(
             "GREEN_SCI2_WAVE", np.full((NORDER_GREEN, NCOL), 5000.0, dtype=np.float64)
         )
         synthetic_kpf2.set_data(
             "RED_SCI2_WAVE", np.full((NORDER_RED, NCOL), 5100.0, dtype=np.float64)
         )
-        # Front-weighted at 5000Å, back-weighted at 5100Å → distinct midpoints
+        # Front-weighted at 5000 A, back-weighted at 5100 A: distinct midpoints.
         data = {
             "Date-Beg": [
                 "2024-01-01T00:00:00.000",
@@ -704,7 +683,7 @@ class TestFluxWeightedMidpointFormat:
 
 
 class TestGetAstrometry:
-    """Convert the C*# cards to barycorrpy's arguments and sanitize the parallax."""
+    """Convert the C*# cards to barycorrpy's units and sanitize the parallax."""
 
     def test_converts_cards_to_barycorrpy_units(self, synthetic_kpf2):
         primary = synthetic_kpf2.headers["PRIMARY"]
@@ -737,8 +716,8 @@ class TestGetAstrometry:
     # an absent card (covered below) or a blank one, never as NaN.
     @pytest.mark.parametrize("parallax", [-0.4, 0.0, ""])
     def test_unusable_parallax_becomes_zero(self, caplog, synthetic_kpf2, parallax):
-        """A nonpositive parallax (routine for faint Gaia sources) degrades to px=0,
-        not a negative distance."""
+        # A nonpositive parallax is routine for faint Gaia sources, so it degrades
+        # to px=0 rather than becoming a negative distance.
         synthetic_kpf2.headers["PRIMARY"]["CPLX3"] = parallax
         bc = BarycentricCorrection(synthetic_kpf2)
         with caplog.at_level(logging.WARNING):
@@ -747,7 +726,7 @@ class TestGetAstrometry:
         assert "CPLX3" in caplog.text
 
     def test_missing_parallax_becomes_zero(self, caplog, synthetic_kpf2):
-        """CPLX# is Required=No, so it is absent when the catalog measured none."""
+        # CPLX# is optional, so it is absent when the catalog measured no parallax.
         del synthetic_kpf2.headers["PRIMARY"]["CPLX3"]
         bc = BarycentricCorrection(synthetic_kpf2)
         with caplog.at_level(logging.WARNING):
@@ -757,8 +736,8 @@ class TestGetAstrometry:
 
     @pytest.mark.parametrize("card", ["CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3"])
     def test_missing_position_card_raises(self, synthetic_kpf2, card):
-        """The position block is all-or-nothing: AstroQuery's merge never emits a
-        canonical row without it, so a gap means the pipeline is misordered."""
+        # The position block is all-or-nothing: AstroQuery never emits a canonical
+        # row without it, so a gap means the pipeline ran out of order.
         del synthetic_kpf2.headers["PRIMARY"][card]
         bc = BarycentricCorrection(synthetic_kpf2)
         with pytest.raises(ValueError, match=card):
@@ -786,7 +765,7 @@ class TestPerform:
         def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
             n = len(np.atleast_1d(obs_times.jd))
             bc_vel = np.full(n, TestPerform.DELTA_RV_MPS, dtype=float)
-            # BJD = JD + 500s (light-travel approx); same for every order in this stub
+            # BJD = JD + 500 s stands in for the light-travel delay.
             bjd_tdb = np.atleast_1d(obs_times.jd) + 500.0 / 86400.0
             return bc_vel, bjd_tdb
 
@@ -796,9 +775,8 @@ class TestPerform:
         monkeypatch.setattr(
             BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
         )
-        # Stub _fix_expmeter_outliers: the 3×4 uniform-flux fixture triggers a
-        # degenerate triangulation inside scipy.griddata. Filter itself is
-        # exercised by TestFixExpmeterOutliers with a noisy 60×20 array.
+        # The 3x4 uniform-flux fixture triggers a degenerate triangulation inside
+        # scipy.griddata; TestFixExpmeterOutliers exercises the real filter.
         monkeypatch.setattr(
             BarycentricCorrection, "_fix_expmeter_outliers", staticmethod(passthrough)
         )
@@ -815,7 +793,7 @@ class TestPerform:
         bjd = np.asarray(kpf2.data["BJD_TDB"])
         assert bjd.shape == (NORDER,)
         assert np.all(np.isfinite(bjd))
-        assert bjd.dtype == np.float64  # EPRV: BJD_TDB is 64-bit
+        assert bjd.dtype == np.float64
 
     def test_barycorr_kms_extension_populated(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
@@ -829,10 +807,9 @@ class TestPerform:
         kpf2 = bc_monkeypatched.perform()
         z = np.asarray(kpf2.data["BARYCORR_Z"])
         assert z.shape == (NORDER,)
-        # All orders share the same delta_rv → all z values identical
         assert np.std(z) < 1e-12
-        # BARYCORR_Z is the small redshift z (~ v/c), same sign as the velocity:
-        # +30 km/s (receding) -> small positive z, not the Doppler factor (~1).
+        # BARYCORR_Z is the small redshift z (~ v/c), not the Doppler factor
+        # (~1), and carries the same sign as the velocity.
         assert z[0] == pytest.approx(
             TestPerform.DELTA_RV_MPS / c.to("m/s").value, rel=1e-4
         )
@@ -846,7 +823,7 @@ class TestPerform:
         assert_dtype(kpf2.data["BJD_TDB"], BJD, "BJD_TDB")
 
     def test_wave_arrays_untouched(self, bc_monkeypatched):
-        """BarycentricCorrection should track but not apply: WAVE arrays unchanged."""
+        # BarycentricCorrection tracks the correction; it never applies it.
         kpf2 = bc_monkeypatched.l2_obj
         orig = {
             f"{chip}_{fiber}_WAVE": kpf2.data[f"{chip}_{fiber}_WAVE"].copy()
@@ -875,13 +852,13 @@ class TestPerform:
         for key in ("CCD1BZ", "CCD2BZ"):
             assert key in z, f"{key} missing from BARYCORR_Z"
 
-        # All orders had the same delta_rv → green and red means are equal
+        # The stub gives every order the same delta_rv, so the chip means match.
         np.testing.assert_allclose(kms.get("CCD1BKMS"), kms.get("CCD2BKMS"))
         np.testing.assert_allclose(z.get("CCD1BZ"), z.get("CCD2BZ"))
 
     def test_ctype1_axis_label(self, bc_monkeypatched):
-        # These are 1-D per-order arrays: CTYPE1 names the order axis (registered
-        # content). CTYPE2 is N/A (no second axis).
+        # These are 1-D per-order arrays, so CTYPE1 names the order axis and
+        # there is no second axis to label.
         kpf2 = bc_monkeypatched.perform()
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             hdr = kpf2.headers[ext]
@@ -896,7 +873,6 @@ class TestPerform:
     def test_crv_converted_km_to_m_and_passed_through(
         self, synthetic_kpf2, monkeypatch
     ):
-        """CRV3 (km/s) should arrive at _compute_barycorr as m/s."""
         synthetic_kpf2.headers["PRIMARY"]["CRV3"] = 81.87  # km/s
         captured = {}
 
@@ -919,7 +895,6 @@ class TestPerform:
         assert captured["rv_mps"] == pytest.approx(81870.0)
 
     def test_missing_crv_defaults_to_zero(self, caplog, bc_monkeypatched, monkeypatch):
-        """No CRV3 on PRIMARY (no catalog rv, no TARGRADV) → rv_mps=0, warns."""
         del bc_monkeypatched.l2_obj.headers["PRIMARY"]["CRV3"]
         captured = {}
 
@@ -947,8 +922,8 @@ class TestPerform:
             assert len(getattr(bc_monkeypatched, attr)) == 2
 
     def test_real_outlier_filter_runs_end_to_end(self, synthetic_kpf2, monkeypatch):
-        """Exercise fix_expmeter_outliers=True through perform() with a
-        noisy expmeter table (3×4 uniform fixture would crash griddata)."""
+        # The real filter needs a noisy table; the 3x4 uniform fixture would
+        # crash griddata.
         rng = np.random.default_rng(0)
         ntime, nwave = 60, 20
         wave_cols = [str(5000.0 + 10 * i) for i in range(nwave)]
@@ -958,8 +933,7 @@ class TestPerform:
         }
         for wc in wave_cols:
             data[wc] = rng.normal(100.0, 2.0, ntime).astype(float)
-        # Inject a clear outlier so the filter has work to do
-        data[wave_cols[5]][30] = 1e6
+        data[wave_cols[5]][30] = 1e6  # a clear outlier, so the filter has work
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         synthetic_kpf2.headers["INSTRUMENT_HEADER"]["DATE-END"] = (
             "2024-01-01T01:00:00.000"
@@ -973,7 +947,7 @@ class TestPerform:
             BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
         )
 
-        # No monkeypatch on _fix_expmeter_outliers -- real filter runs.
+        # _fix_expmeter_outliers is deliberately not stubbed here.
         kpf2 = BarycentricCorrection(synthetic_kpf2).perform(fix_expmeter_outliers=True)
         assert np.all(np.isfinite(np.asarray(kpf2.data["BJD_TDB"])))
 
@@ -997,8 +971,10 @@ def _user_skycoord(ra_deg=90.0):
 
 
 class TestSkycoordOverride:
-    """A user-supplied SkyCoord bypasses the PRIMARY C*# cards, so an L2 in hand can
-    be re-corrected without re-reducing from L0."""
+    """A user-supplied SkyCoord bypasses the PRIMARY C*# cards.
+
+    That lets an L2 already in hand be re-corrected without re-reducing from L0.
+    """
 
     @staticmethod
     def _capture(monkeypatch):
@@ -1031,14 +1007,14 @@ class TestSkycoordOverride:
         assert captured["epoch"] == pytest.approx(Time(2020.0, format="jyear").jd)
 
     def test_overrides_the_header_cards(self, synthetic_kpf2, monkeypatch):
-        """The fixture's CRA3 is 12h (180 deg); the override must win."""
+        # The fixture's CRA3 is 12h (180 deg); the override must win.
         captured = self._capture(monkeypatch)
         BarycentricCorrection(synthetic_kpf2).perform(skycoord=_user_skycoord())
         assert captured["ra"] == pytest.approx(90.0)
 
     def test_works_without_catalog_cards(self, synthetic_kpf2, monkeypatch):
-        """An L2 whose C*# cards are absent (AstroQuery never ran) is still
-        correctable -- the point of the escape hatch."""
+        # An L2 whose C*# cards are absent (AstroQuery never ran) is still
+        # correctable -- the point of the escape hatch.
         for card in ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3"):
             del synthetic_kpf2.headers["PRIMARY"][card]
         captured = self._capture(monkeypatch)
@@ -1060,14 +1036,14 @@ class TestSkycoordOverride:
         assert bc._astrometry_source == "user SkyCoord"
 
     def test_override_is_not_cached(self, synthetic_kpf2, monkeypatch):
-        """The override must not poison the cache, or a later header-path call would
-        silently reuse the user's values."""
+        # A cached override would make a later header-path call silently reuse
+        # the user's values.
         captured = self._capture(monkeypatch)
         bc = BarycentricCorrection(synthetic_kpf2)
         bc.perform(skycoord=_user_skycoord())
         assert bc._astrometry is None
 
-        bc.perform()  # no override -> back to the header
+        bc.perform()  # no override: back to the header
         assert captured["ra"] == pytest.approx(180.0)
 
     def test_default_reads_the_header(self, synthetic_kpf2, monkeypatch):
@@ -1078,13 +1054,13 @@ class TestSkycoordOverride:
     @pytest.mark.parametrize(
         "kwargs, error, match",
         [
-            # No proper motion -> the frame carries no velocity data.
+            # No proper motion: the frame carries no velocity data.
             (
                 {"distance": Distance(parallax=25.0 * u.mas)},
                 TypeError,
                 "no associated differentials",
             ),
-            # No distance -> .distance is a dimensionless 1.0, not convertible to pc.
+            # No distance: .distance is a dimensionless 1.0, not convertible to pc.
             (
                 {
                     "pm_ra_cosdec": 100.0 * u.mas / u.yr,
@@ -1098,8 +1074,8 @@ class TestSkycoordOverride:
     def test_incomplete_skycoord_raises(
         self, synthetic_kpf2, monkeypatch, kwargs, error, match
     ):
-        """Deliberately unvalidated: astropy raises on its own for a SkyCoord missing
-        components the correction needs."""
+        # Deliberately unvalidated: astropy raises on its own for a SkyCoord
+        # missing components the correction needs.
         self._capture(monkeypatch)
         incomplete = SkyCoord(
             ra=90.0 * u.deg,
@@ -1127,8 +1103,8 @@ class TestMissingHeader:
     """perform() should fail loudly when required header keys are absent."""
 
     def test_missing_catalog_cards_raises(self, synthetic_kpf2, monkeypatch):
-        # Stub _fix_expmeter_outliers so we don't hit the griddata degeneracy
-        # before reaching the catalog-card lookup.
+        # Stub the outlier filter so the griddata degeneracy does not fire before
+        # the catalog-card lookup under test.
         def passthrough(f, kernel_size=5):
             return f.copy()
 
@@ -1153,10 +1129,9 @@ class TestMissingHeader:
             )
 
     def test_missing_date_beg_ok_without_extrapolate(self, synthetic_kpf2):
-        """DATE-BEG is only needed when extrapolate=True."""
+        # DATE-BEG is read only to extrapolate, so this must not raise.
         del synthetic_kpf2.headers["INSTRUMENT_HEADER"]["DATE-BEG"]
         bc = BarycentricCorrection(synthetic_kpf2)
-        # Should not raise:
         bc.compute_flux_weighted_midpoint_times(
             output="expmeter",
             interpolate=False,

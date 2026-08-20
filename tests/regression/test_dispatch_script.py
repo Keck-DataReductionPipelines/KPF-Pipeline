@@ -1,14 +1,10 @@
 """Tests for scripts/processing/_dispatch.py: the shared fan-out engine.
 
-Covers the job-sizing helpers (cores-based and the masters cap, including the
-never-below-one clamp), the ``run_stage`` dispatch in both modes (fail-soft:
-attempt all, return the failed set; fail-fast: any failure aborts the run with
-exit 1), the per-job timeout kill (a wedged fan-out job is killed and counted as a
-failure while the canary keeps its own larger timeout), the failure sentinel, and
-the ``_run_one`` interrupt guards (both the pre-launch guard and the
-launch-vs-track race re-check). Trivial subprocess stubs -- no real testdata
-needed. The launch throttle (``launch_interval``) defaults to 0 here so the
-dispatch tests stay fast and free of thread-timing flakiness.
+Covers the job-sizing helpers, the ``run_stage`` dispatch in both modes (fail-soft:
+attempt all, return the failed set; fail-fast: any failure aborts with exit 1), the
+per-job timeout kill, the failure sentinel, and the ``_run_one`` interrupt guards.
+Trivial subprocess stubs -- no real testdata needed. ``launch_interval`` defaults to
+0 here so the dispatch tests stay fast and free of thread-timing flakiness.
 """
 
 import logging
@@ -107,8 +103,8 @@ class TestRunStageFailSoft:
         assert self._run(tasks, tmp_path) == set()
 
     def test_failed_canary_still_fans_out_and_is_reported(self, tmp_path, caplog):
-        # A bad canary does not stop the rest; it is collected. The narration now
-        # flows through the batch logger, so assert against caplog, not stdout.
+        # A bad canary does not stop the rest; it is collected. Narration flows
+        # through the batch logger, so assert against caplog, not stdout.
         caplog.set_level(logging.INFO)
         tasks = [("a", _FAIL), ("b", _OK), ("c", _OK)]
         assert self._run(tasks, tmp_path) == {"a"}
@@ -152,9 +148,8 @@ class TestRunStageFailFast:
 
 class TestRunStageTimeout:
     def test_slow_fanout_job_is_killed_and_counts_as_failure(self, tmp_path):
-        # A fanned-out job that overruns job_timeout is a wedged subprocess: it is
-        # killed and reported as a failure, so one stuck unit can't hang the batch.
-        # The canary is fast; the 30s sleeper is the fan-out job, bounded to 1s.
+        # A job that overruns job_timeout is killed and reported as a failure, so
+        # one stuck unit can't hang the batch. The 30s sleeper is bounded to 1s.
         start = time.monotonic()
         failed = f.run_stage(
             "job",
@@ -169,8 +164,7 @@ class TestRunStageTimeout:
 
     def test_canary_uses_canary_timeout_not_job_timeout(self, tmp_path):
         # job_timeout bounds only the fan-out; the canary keeps its own, larger
-        # limit, so a canary slower than job_timeout is not killed by it (else the
-        # cold-cache canary would die on every real run).
+        # limit, else the cold-cache canary would die on every real run.
         slow_canary = [sys.executable, "-c", "import time; time.sleep(2)"]
         failed = f.run_stage(
             "job",
@@ -191,7 +185,7 @@ class TestRunStageTimeout:
 
 class TestReportFailures:
     def test_prints_header_hint_and_stderr_tail(self, tmp_path, caplog):
-        # The sentinels now flow through the batch logger, so assert on caplog.
+        # The sentinels flow through the batch logger, so assert on caplog.
         caplog.set_level(logging.INFO)
         failures = [("science", "KP.x", 1, "boom line 1\nboom line 2")]
         f._report_failures(failures, str(tmp_path), header="WARNING: 1 failed")
@@ -209,12 +203,9 @@ class TestRunOneInterrupt:
         assert f._run_one(_OK) == (130, "")
 
     def test_interrupt_in_launch_window_kills_child(self, monkeypatch):
-        # Reproduce the launch-vs-track race: the interrupt lands after Popen but
-        # before the child is tracked. Wrapping Popen to set _interrupted models
-        # exactly that -- the top-of-function guard is clear, so launch proceeds,
-        # and the post-track re-check must catch it, kill the child, and return 130
-        # (a missed child would otherwise run its full 30s sleep untracked).
-        # (_interrupted is reset by the autouse fixture, so it can't leak.)
+        # The launch-vs-track race: the interrupt lands after Popen but before the
+        # child is tracked, so the top-of-function guard is clear and the post-track
+        # re-check must catch it -- else the child runs its full 30s sleep untracked.
         real_popen = f.subprocess.Popen
         launched = []
 

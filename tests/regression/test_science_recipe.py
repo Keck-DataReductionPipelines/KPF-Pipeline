@@ -1,6 +1,6 @@
 """Tests for the kpf_drp_science recipe.
 
-Integration tests run the full recipe (L0 -> L1 -> L2) against a real star
+Integration tests run the full recipe (L0 -> L1 -> L2 -> L4) against a real star
 observation from tests/testdata/L0/20240405/.
 """
 
@@ -52,8 +52,6 @@ def _load_recipe():
 @pytest.mark.slow
 @pytest.mark.requires_testdata
 class TestScienceRecipe:
-    """End-to-end recipe test: KPF0 → ImageAssembly → SpectralExtraction → KPF2."""
-
     @pytest.fixture(scope="class")
     def recipe_output(self, tmp_path_factory):
         tmp_path = tmp_path_factory.mktemp("science_out")
@@ -89,7 +87,6 @@ class TestScienceRecipe:
         assert isinstance(l2, KPF2)
 
     def test_flux_positive(self, recipe_output):
-        """Star flux should be positive after extraction."""
         l2 = KPF2.from_fits(recipe_output)
         assert np.nanmedian(l2.data["GREEN_SCI2_FLUX"]) > 0
         assert np.nanmedian(l2.data["RED_SCI2_FLUX"]) > 0
@@ -104,8 +101,6 @@ class TestScienceRecipe:
         assert "barycentric_correction" in modules
 
     def test_barycorr_extensions_populated(self, recipe_output):
-        """BarycentricCorrection should populate the EPRV-standard extensions
-        per-order, with finite values."""
         l2 = KPF2.from_fits(recipe_output)
         norder = NORDER_GREEN + NORDER_RED
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
@@ -114,7 +109,6 @@ class TestScienceRecipe:
             assert np.all(np.isfinite(arr)), f"{ext} has non-finite values"
 
     def test_per_ccd_barycorr_keywords(self, recipe_output):
-        """Per-CCD scalar summaries land on their barycentric extension headers."""
         l2 = KPF2.from_fits(recipe_output)
         homes = {
             "CCD1BJD": "BJD_TDB",
@@ -130,36 +124,32 @@ class TestScienceRecipe:
             assert np.isfinite(float(hdr.get(key))), f"{key} not finite"
 
     def test_calibration_headers_set(self, recipe_output):
-        """CalibrationAssociation's writes survive onto the L2 product: master
-        paths on RECEIPT, ages on QUALITY_CONTROL (their registry homes)."""
+        # Master paths land on RECEIPT, ages on QUALITY_CONTROL (registry homes).
         l2 = KPF2.from_fits(recipe_output)
         receipt = l2.headers["RECEIPT"]
         qc = l2.headers["QUALITY_CONTROL"]
-        # bias/dark use full-path FILE + float AGE (no DIR). Flat association is
-        # not part of the basic runnable path until flat processing is
-        # implemented.
+        # bias/dark use a full-path FILE + float AGE (no DIR). Flat association
+        # is not wired up until flat processing exists.
         for prefix in ("BIAS", "DARK"):
             assert f"{prefix}FILE" in receipt
             assert f"{prefix}DIR" not in receipt
             assert f"{prefix}AGE" in qc
         assert "FLATFILE" not in receipt
         assert "FLATAGE" not in qc
-        # thar uses the same convention: WLSFILE = full path (no WLSDIR),
-        # WLSAGE = float days
+        # thar follows the same convention; WLSAGE is in days.
         assert "WLSFILE" in receipt
         assert "WLSDIR" not in receipt
         assert receipt.get("WLSFILE").endswith("_master_thar_L2.fits")
         assert isinstance(qc.get("WLSAGE"), float)
 
     def test_provenance_keywords_set(self, recipe_output):
-        """DRPTAG (EPRV) stays on the L2 PRIMARY; the WMKO DRP-RUN provenance cards
-        live on the L2 RECEIPT."""
+        # DRPTAG stays on the L2 PRIMARY; the other provenance cards live on
+        # the L2 RECEIPT.
         l2 = KPF2.from_fits(recipe_output)
         prim = l2.headers["PRIMARY"]
         receipt = l2.headers["RECEIPT"]
         version = importlib.metadata.version("kpfpipe")
         assert prim.get("DRPTAG") == version
-        # The four provenance cards moved off PRIMARY onto RECEIPT.
         assert all(k not in prim for k in ("DRPVERNO", "DRPSTATU", "PROGID", "KOAID"))
         assert receipt.get("DRPVERNO") == version
         assert "PROGID" in receipt
@@ -168,8 +158,6 @@ class TestScienceRecipe:
         assert receipt.get("DRPSTATU") == "Barycentric Correction module complete"
 
     def test_wave_arrays_populated(self, recipe_output):
-        """WavelengthCalibration wiring: the per-fiber WAVE extensions are
-        populated (nonzero) after the real run."""
         l2 = KPF2.from_fits(recipe_output)
         assert np.any(l2.data["GREEN_SCI2_WAVE"] != 0)
         assert np.any(l2.data["RED_SCI2_WAVE"] != 0)
@@ -235,7 +223,7 @@ class TestScienceRecipeErrors:
 
 
 class _FakeL4:
-    """Minimal stand-in for a finished KPF4: the attributes _summary reads."""
+    """Minimal stand-in for a finished KPF4: what science_run_summary reads."""
 
     def __init__(self, obs_id, headers, receipt):
         self.obs_id = obs_id
@@ -244,7 +232,7 @@ class _FakeL4:
 
 
 class TestScienceSummary:
-    """Unit tests for the science_run_summary() run-verdict formatter."""
+    """Unit tests for the science_run_summary() formatter."""
 
     def _l4(self):
         headers = {

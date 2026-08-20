@@ -1,10 +1,10 @@
 """Tests for scripts/processing/masters.py: the nightly-masters build driver.
 
-Cover the driver's own surface: arg parsing and the two input forms, the
+Covers the driver's own surface: arg parsing and the two input forms, the
 ``_cli_task`` argv it fans out, datecode resolution, and the ``main`` exit-code
-contract (nonzero iff at least one night failed). The shared fan-out engine
-(``run_stage``, job sizing) lives in ``_dispatch`` and the ``datecode_dirs_in_range``
-helper in ``kpfpipe.utils.io``; they are tested in test_dispatch_script.py / test_io.py.
+contract (nonzero iff at least one night failed). The shared fan-out engine and
+the ``datecode_dirs_in_range`` helper are tested in test_dispatch_script.py and
+test_io.py.
 
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
@@ -33,12 +33,11 @@ class _NoLogDirConfig(_FakeConfig):
     """A config with a resolvable data input but no configured log_dir."""
 
     def get_params(self, keys):
-        return {"KPF_DATA_INPUT": "/in"}  # no log_dir
+        return {"KPF_DATA_INPUT": "/in"}
 
 
 @pytest.fixture(scope="module")
 def m():
-    """The masters driver module (a normal package import)."""
     return _masters
 
 
@@ -219,10 +218,10 @@ class TestResolveDatecodes:
 
 class TestMainExitCode:
     def _patch(self, m, monkeypatch, failed, calls=None):
-        # Skip the runtime setup and the real dir/config resolution + subprocess
-        # fan-out; assert only the exit-code contract from run_stage's failure set.
-        # setup_batch_logging is stubbed so main() writes no real batch log file.
-        # `calls`, if given, records run_stage's kwargs for wiring assertions.
+        # Stub out runtime setup, dir/config resolution and the subprocess fan-out
+        # (setup_batch_logging included, so main() writes no real batch log), and
+        # assert only what run_stage's failure set does. `calls`, if given, records
+        # run_stage's kwargs for wiring assertions.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: "/l/x.log")
@@ -247,8 +246,8 @@ class TestMainExitCode:
         assert exc.value.code == 1
 
     def test_fan_out_is_staggered(self, m, monkeypatch):
-        # Masters must pass its stagger interval to run_stage so the lockstep
-        # disk-read wave is desynchronized (see _LAUNCH_INTERVAL).
+        # Masters passes its stagger interval to run_stage so the lockstep
+        # disk-read wave is desynchronized.
         calls = []
         self._patch(m, monkeypatch, failed=[], calls=calls)
         m.main(["--dates", "20240405"])
@@ -256,8 +255,7 @@ class TestMainExitCode:
         assert m._LAUNCH_INTERVAL > 0
 
     def test_prescans_before_fan_out(self, m, monkeypatch):
-        # The mini-db caches are warmed up front (parallel per-datecode) before the
-        # reduces fan out, with the resolved datecodes and the pool size.
+        # The mini-db caches are warmed up front, before the reduces fan out.
         order = []
         warm_args = {}
 
@@ -274,14 +272,14 @@ class TestMainExitCode:
             m, "run_stage", lambda *a, **k: order.append("run_stage") or set()
         )
         m.main(["--dates", "20240405"])
-        assert order == ["warm", "run_stage"]  # pre-scan precedes fan-out
+        assert order == ["warm", "run_stage"]
         assert warm_args["data_input"] == "/in"  # resolved L0 input root
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["jobs"] == m._default_masters_jobs()
         assert warm_args["cache"] == "rw"  # masters default: warm up front
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
-        # A missing log_dir is fatal before any fan-out (DRP-RUN-07).
+        # A missing log_dir is fatal before any fan-out.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _NoLogDirConfig)
         with pytest.raises(SystemExit) as exc:

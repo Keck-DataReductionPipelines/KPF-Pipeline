@@ -1,13 +1,9 @@
 """Tests for scripts/processing/reduce.py: the ``kpfpipe run`` leaf.
 
-reduce.py is the single-recipe, single-unit runner relocated out of the old
-tools/cli.py. These cover the shortcut/`-r`/`-c` resolution and the recipe-kind
-guards, and that ``--masters``/``--science`` set a default config an explicit
-``-c`` overrides. Each test drives ``main(argv)`` against a tiny stub recipe
+Covers the shortcut/`-r`/`-c` resolution, the recipe-kind guards, and
+clear_stale_outputs. Each test drives ``main(argv)`` against a tiny stub recipe
 (which records the resolved config) with logging stubbed out, so no real
-reduction runs.
-
-(``resolve_logging`` itself is unit-tested in test_logger.py.)
+reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
 """
 
 import argparse
@@ -33,7 +29,7 @@ def _stub_recipe(tmp_path, sentinel):
 
 
 def _run(monkeypatch, argv):
-    # Keep the real logging stack untouched; we only assert config resolution.
+    # Only config resolution is asserted; keep the real logging stack untouched.
     monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
     red.main(argv)
 
@@ -88,7 +84,6 @@ class TestDirShortcuts:
         assert data_input == "/aliased/in"
 
     def test_output_dir_sets_every_output_dir(self, monkeypatch, tmp_path):
-        # --output_dir fills masters/science output + log dir; input keeps the config.
         cfg = _base_cfg(tmp_path)
         sentinel = tmp_path / "seen.txt"
         recipe = _dirs_stub_recipe(tmp_path, sentinel)
@@ -108,14 +103,12 @@ class TestDirShortcuts:
         )
         data_input, masters, science, log_dir = sentinel.read_text().split("|")
         assert data_input == "/cfg/in"  # untouched by --output_dir
-        # masters/science outputs take the root; the log dir gets its subdir.
         assert masters == "/out" and science == "/out" and log_dir == "/out/logs"
 
 
 class TestShortcutOverride:
     def test_c_and_r_override_are_accepted(self, monkeypatch, tmp_path):
-        # A temp config with a distinctive data dir; --science supplies the kind,
-        # -r/-c override its defaults. This combination is allowed (not an error).
+        # --science supplies the kind; -r/-c override its defaults rather than erroring.
         cfg = tmp_path / "custom.toml"
         cfg.write_text(
             "[DATA_DIRS]\n"
@@ -169,8 +162,6 @@ class TestClearStaleOutputs:
 
     def test_science_removes_l1_l2_l4_for_obs_id(self, tmp_path):
         science_root = str(tmp_path / "sci")
-        # Create the three deterministic per-obs_id products (plus a stray file
-        # in the same tree that must survive).
         targets = []
         for level in ("L1", "L2", "L4"):
             p = red.kpf_filepath(self._OID, level, data_root=science_root)
@@ -188,19 +179,18 @@ class TestClearStaleOutputs:
         assert os.path.exists(stray)  # a different obs_id's product is untouched
 
     def test_science_raises_when_output_root_unset(self, tmp_path):
-        # No KPF_SCIENCE_OUTPUT -> can't know what to clear; fail loud, matching
-        # the recipe's required data_dirs["KPF_SCIENCE_OUTPUT"] read.
+        # No KPF_SCIENCE_OUTPUT -> can't know what to clear; fail loud.
         with pytest.raises(KeyError, match="KPF_SCIENCE_OUTPUT"):
             red.clear_stale_outputs(_Config({}), _args(obs_id=self._OID))
 
     def test_masters_raises_when_output_root_unset(self, tmp_path):
-        # Same for the masters branch: absent KPF_MASTERS_OUTPUT fails loud.
+        # Same for the masters branch.
         with pytest.raises(KeyError, match="KPF_MASTERS_OUTPUT"):
             red.clear_stale_outputs(_Config({}), _args(datecode="20240405"))
 
     def test_science_noop_for_invalid_obs_id(self, tmp_path):
-        # A malformed obs_id can't build a path; skip rather than raise (the recipe
-        # reports the real error). This mirrors the -o KP.x guard-test case.
+        # A malformed obs_id can't build a path; skip rather than raise -- the
+        # recipe reports the real error.
         red.clear_stale_outputs(
             _Config({"KPF_SCIENCE_OUTPUT": str(tmp_path)}), _args(obs_id="KP.x")
         )
@@ -222,8 +212,8 @@ class TestClearStaleOutputs:
         for name in removed + kept:
             open(os.path.join(night, name), "w").close()
 
-        # The WLS thar_L2/ subdir: per-frame ThAr L2s + the diagnostics HDF5, all
-        # removed wholesale with the thar master.
+        # The thar_L2/ subdir (per-frame ThAr L2s + diagnostics HDF5) goes
+        # wholesale with the thar master.
         stack_subdir = os.path.join(night, "thar_L2")
         os.makedirs(stack_subdir)
         stack_files = [
@@ -240,7 +230,7 @@ class TestClearStaleOutputs:
 
         for name in removed:
             assert not os.path.exists(os.path.join(night, name)), name
-        assert not os.path.exists(stack_subdir)  # entire subdir gone
+        assert not os.path.exists(stack_subdir)
         for name in kept:
             assert os.path.exists(os.path.join(night, name)), name
 

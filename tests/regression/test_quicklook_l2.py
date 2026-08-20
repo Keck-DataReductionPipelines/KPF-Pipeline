@@ -11,14 +11,13 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
 
-# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
-# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+# Slow PNG rendering off the production path: excluded from `make test-fast`.
 pytestmark = pytest.mark.quicklook
 
 
 @pytest.fixture(autouse=True)
 def _close_figures():
-    """Close any figures a test left open (the output_dir=None path returns them)."""
+    """Close figures a test left open; the output_dir=None path returns them."""
     yield
     plt.close("all")
 
@@ -41,10 +40,7 @@ _OBS_ID = "KP.20240405.40113.57"
 
 
 def _make_l2(*, with_wave=True, object_name="Tau Ceti"):
-    """Build a KPF2 with FLUX/VAR (and optionally WAVE) for all fibers/chips.
-
-    obs_id is set on the model attribute, as the pipeline populates it.
-    """
+    """Build a KPF2 with FLUX/VAR (and optionally WAVE) for all fibers/chips."""
     l2 = KPF2()
     l2.obs_id = _OBS_ID
     l2.headers["PRIMARY"]["INSTRUME"] = "KPF"

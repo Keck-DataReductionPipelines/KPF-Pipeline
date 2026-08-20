@@ -12,8 +12,8 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.quality_control.quicklook.level4 import PlotL4
 
-# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
-# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+# Quicklook/QLP render suite: slow PNG rendering, so it is excluded from
+# `make test-fast`. Run in the full suite or `make test-qlp`.
 pytestmark = pytest.mark.quicklook
 
 
@@ -39,7 +39,7 @@ _RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
 
 
 def _gaussian_ccf(rng, depth=0.5):
-    """A single-order CCF: a downward Gaussian dip plus noise (one per order)."""
+    """A single-order CCF: a downward Gaussian dip plus noise."""
     v = np.arange(NVEL) * _VELSTEP + _VELSTART
     dip = 1.0 - depth * np.exp(-0.5 * (v / 3.0) ** 2)
     return dip + rng.normal(0.0, 0.01, size=NVEL)
@@ -50,14 +50,12 @@ def _make_l4(
 ):
     """Build a KPF4 with CCF cubes + velocity headers + per-CCD RV keywords.
 
-    `chips` selects which detector halves carry real CCF data; a chip omitted
-    here is left as the zero-filled concatenation slice (i.e. "no CCF there").
-    `with_rv` also attaches per-order RV tables (ORDER_INDEX/RV/RV_ERR/WEIGHT) for
-    the science + sky orderlets, as RadialVelocity writes them; the first three
-    green orders carry weight 0 (excluded from the combined RV, as the real CCF
-    order-weight table does). `with_weight=False` omits the WEIGHT column to
-    exercise PlotL4's fail-loud path. obs_id is set on the model attribute, as
-    the pipeline populates it.
+    `chips` selects which detector halves carry real CCF data; an omitted chip is
+    left as the zero-filled concatenation slice ("no CCF there"). `with_rv` adds
+    per-order RV tables for the science + sky orderlets, as RadialVelocity writes
+    them, with weight 0 on the three bluest green orders as the real CCF
+    order-weight table has. `with_weight=False` omits the WEIGHT column to
+    exercise PlotL4's fail-loud path.
     """
     l4 = KPF4()
     l4.obs_id = _OBS_ID
@@ -66,8 +64,7 @@ def _make_l4(
 
     rng = np.random.default_rng(7)
     for fiber in _FIBERS:
-        # Build the full concatenated cube, writing real data only into the
-        # requested chips' order ranges (the rest stays zero).
+        # Real data goes only into the requested chips' order ranges.
         cube = np.zeros((NORDER, NVEL), dtype=np.float64)
         green_sl = slice(0, NORDER_GREEN)
         red_sl = slice(NORDER_GREEN, NORDER)
@@ -79,7 +76,7 @@ def _make_l4(
                 cube[red_sl][o] = _gaussian_ccf(rng)
         l4.set_data(f"{fiber}_CCF", cube)
 
-        # Velocity grid + mask live in the CCF extension header (resolved alias).
+        # Velocity grid + mask live in the CCF extension header.
         ext = l4.data._resolve(f"{fiber}_CCF")
         l4.headers[ext]["VELSTART"] = _VELSTART
         l4.headers[ext]["VELSTEP"] = _VELSTEP
@@ -87,8 +84,7 @@ def _make_l4(
         l4.headers[ext]["CCFMASK"] = "G2_espresso"
 
     # Per-order RV tables (green orders near CCD1RV=0.5, red near CCD2RV=0.6),
-    # plus the legacy combined-RV keyword on each fiber's own RV extension header
-    # (CCD{n}RV{sfx} -> RV#), as RadialVelocity writes them via set_keyword.
+    # plus the combined-RV keyword on each fiber's own RV extension header.
     if with_rv:
         rng2 = np.random.default_rng(11)
         base = np.where(np.arange(NORDER) < NORDER_GREEN, 0.5, 0.6)
@@ -186,13 +182,13 @@ class TestCcfGridAnnotations:
     def test_sci_panel_has_delta_rv_and_weight_headers(self, l4):
         fig = PlotL4(l4).ccf_grid("green")
         txt = " ".join(t.get_text() for t in _sci2_panel(fig).texts)
-        assert "(this - avg)" in txt  # the delta-RV column header (mathtext Delta)
+        assert "(this - avg)" in txt  # the delta-RV column header
         assert "weight" in txt
         plt.close(fig)
 
     def test_orderlet_rv_value_annotated(self, l4):
-        # Green SCI2 combined RV is CCD1RV2 = 0.5 km/s; shown (5 dp, km s^-1) at
-        # the vertical RV line.
+        # Green SCI2 combined RV is CCD1RV2 = 0.5 km/s, shown to 5 dp at the
+        # vertical RV line.
         fig = PlotL4(l4).ccf_grid("green")
         txt = " ".join(t.get_text() for t in _sci2_panel(fig).texts)
         assert "0.50000" in txt and "km s" in txt
@@ -227,8 +223,7 @@ class TestCcfGridAnnotations:
         plt.close(fig)
 
     def test_missing_weight_column_raises(self):
-        # An RV table without WEIGHT must fail loudly -- PlotL4 never substitutes
-        # weights the pipeline did not actually use (e.g. inverse-variance).
+        # PlotL4 must never substitute weights the pipeline did not actually use.
         l4 = _make_l4(with_weight=False)
         with pytest.raises(ValueError, match="WEIGHT column"):
             PlotL4(l4).ccf_grid("green")

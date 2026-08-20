@@ -1,11 +1,9 @@
 """Unit and regression tests for the master flat module (`Flat`).
 
-Unit tests mock stack_frames (no real data). TestMasterFlatRegression builds a
-real master flat from the bundled L0 flats: the five frames fall within one
-time-of-day cluster, so it groups them with groupby='time_of_day' (as the masters
-recipe does for flats) before bias- and dark-subtracting each frame. The shared
-stacking engine these exercise (`BaseMasterModule`) is unit-tested in
-test_master_base.py.
+Unit tests mock stack_frames; the regression class builds a real master flat from
+the five bundled L0 flats, which fall in one time-of-day cluster and so are grouped
+with groupby='time_of_day', as the masters recipe does for flats. The shared
+stacking engine (`BaseMasterModule`) is unit-tested in test_master_base.py.
 """
 
 from pathlib import Path
@@ -21,7 +19,6 @@ from kpfpipe.utils.io import FileHandler
 from ._masters import make_l1_arrays
 
 CHIPS = ["GREEN", "RED"]
-# make_l1_arrays() -- shared synthetic stack_frames builder -- lives in _masters.py
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
@@ -34,8 +31,6 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 class TestMasterFlatUnit:
-    """Unit tests using a mocked stack_frames -- no real data needed."""
-
     @pytest.fixture(scope="class")
     def master_flat(self):
         synthetic = make_l1_arrays()
@@ -80,11 +75,6 @@ class TestMasterFlatSignature:
 
 @pytest.mark.slow
 class TestMasterFlatRegression:
-    """End-to-end master flat from real L0 frames. The five bundled flats fall
-    within a single time-of-day cluster, so they are grouped with
-    groupby='time_of_day' (as the masters recipe does for flats); each frame is
-    bias- and dark-subtracted against the bundled master bias and dark."""
-
     @pytest.fixture(scope="class")
     def master_flat(self):
         file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
@@ -102,8 +92,7 @@ class TestMasterFlatRegression:
         assert isinstance(master_flat, KPFMasterL1)
 
     def test_flat_is_illuminated(self, master_flat):
-        # A flat is an illuminated exposure, so the stacked image has real
-        # positive signal.
+        # A flat is an illuminated exposure, so the stack carries positive signal.
         for chip in CHIPS:
             median = np.nanmedian(master_flat.data[f"{chip}_IMG"])
             assert median > 0
@@ -117,10 +106,9 @@ class TestMasterFlatRegression:
             assert np.all(master_flat.data[f"{chip}_SNR"] >= 0)
 
     def test_mask_mostly_good(self, master_flat):
-        # A clean detector stack keeps the large majority of pixels. The final
-        # trend outlier pass scales its threshold by a local (not global) noise
-        # scale, so the flat's bright orders are not over-flagged against the
-        # dark inter-order floor.
+        # A clean detector stack keeps the large majority of pixels: the final trend
+        # outlier pass scales its threshold by a local (not global) noise scale, so
+        # bright orders are not over-flagged against the dark inter-order floor.
         for chip in CHIPS:
             mask = master_flat.data[f"{chip}_MASK"]
             assert mask.dtype == bool

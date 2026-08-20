@@ -1,10 +1,10 @@
 """Regression tests for the AstroQuery module.
 
 Covers ``merge_catalog_records`` (gaia/simbad/wmko -> the canonical ``kpf-drp``
-row), ``read_wmko_header`` off synthetic L0 PRIMARY TARG*, and the external
-query contract. The network is never touched: ``Gaia.launch_job``/``Simbad`` are
-mocked with one-row result Tables, so parsing, the fail-soft None+warning paths,
-and the ``_verify_units`` schema-drift guard all run offline.
+row), ``read_wmko_header`` off synthetic L0 PRIMARY TARG*, and the external query
+contract. The network is never touched: ``Gaia.launch_job``/``Simbad`` are mocked
+with one-row result Tables, so parsing, the fail-soft None+warning paths, and the
+``_verify_units`` schema-drift guard all run offline.
 """
 
 import logging
@@ -24,20 +24,20 @@ from kpfpipe.utils.network import _RETRY_WAITS
 
 
 def _ra_str(deg):
-    """RA in deg -> the EPRV C*# sexagesimal hour-angle string the schema stores."""
+    """RA in deg -> the sexagesimal hour-angle string the CRA# schema stores."""
     return Angle(deg, u.deg).to_string(unit=u.hourangle, sep=":", pad=True, precision=4)
 
 
 def _dec_str(deg):
-    """Dec in deg -> the EPRV C*# sexagesimal string the schema stores."""
+    """Dec in deg -> the sexagesimal string the CDEC# schema stores."""
     return Angle(deg, u.deg).to_string(
         unit=u.deg, sep=":", pad=True, alwayssign=True, precision=3
     )
 
 
 def _record(obj, ra=180.0, **overrides):
-    """A complete canonical record at ``ra`` in the EPRV C*# format: sexagesimal
-    RA/Dec, PM in arcsec/yr. Override a field with None to mark it missing."""
+    """A complete canonical record at ``ra``: sexagesimal RA/Dec, PM in arcsec/yr.
+    Override a field with None to mark it missing."""
     rec = {
         "object": obj,
         "ra": _ra_str(ra),
@@ -60,8 +60,8 @@ def _merge(records, targradv=None, priority=("gaia", "simbad", "wmko")):
     """Merge {source: record} the way perform does: preset each source's record on
     a fresh AstroQuery, then merge. Returns the canonical kpf-drp record dict
     (missing cells None). ``targradv`` seeds TARGRADV for the rv fallback. The
-    default ``priority`` admits all three sources so these tests exercise the merge
-    itself; the shipped policy is pinned separately in TestAstrometryPriority."""
+    default ``priority`` admits all three sources so these exercise the merge
+    itself; the shipped policy is pinned in TestAstrometryPriority."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "object"
     if targradv is not None:
@@ -82,7 +82,7 @@ class TestMergeCatalogRecords:
         assert row["rv"] == pytest.approx(10.0)
 
     def test_position_follows_priority(self):
-        # All three complete but at different RAs -> position from Gaia (highest).
+        # All three complete but at different RAs, so the winner is visible.
         row = _merge(
             {
                 "gaia": _record("G", ra=10.0),
@@ -117,7 +117,7 @@ class TestMergeCatalogRecords:
         assert row["color_name"] == "Gaia BP-RP"
 
     def test_color_borrowed_from_lower_priority_when_base_lacks(self, caplog):
-        # Unlike rv, a color index is independent of the astrometry, so borrowing
+        # A color index is independent of the astrometry (unlike rv), so borrowing
         # one from a lower-priority catalog is acceptable -- with a WARNING.
         with caplog.at_level(logging.WARNING, logger="kpfpipe.modules.astro_query"):
             row = _merge(
@@ -142,8 +142,8 @@ class TestMergeCatalogRecords:
         assert row["color_name"] is None
 
     def test_rv_not_borrowed_from_lower_priority(self):
-        # Gaia is the base and lacks rv; SIMBAD's is not borrowed, and with no
-        # TARGRADV the rv stays missing.
+        # rv must ride with the astrometric base: SIMBAD's is not borrowed, and
+        # with no TARGRADV the rv stays missing.
         row = _merge(
             {
                 "gaia": _record("G", rv=None),
@@ -155,8 +155,7 @@ class TestMergeCatalogRecords:
         assert row["rv_src"] == ""
 
     def test_rv_missing_falls_back_to_targradv(self, caplog):
-        # Base lacks rv -> fall back to the telescope TARGRADV on PRIMARY
-        # ([km/s], no conversion), tagged rv_src='wmko'.
+        # TARGRADV is already km/s, so the fallback needs no conversion.
         with caplog.at_level(logging.WARNING, logger="kpfpipe.modules.astro_query"):
             row = _merge({"gaia": _record("G", rv=None)}, targradv=-4.5)
         assert row["radec_src"] == "gaia"
@@ -175,7 +174,7 @@ class TestMergeCatalogRecords:
             }
         )
         assert row["radec_src"] == "simbad"
-        assert row["ra"] == _ra_str(20.0)  # position from SIMBAD, not Gaia
+        assert row["ra"] == _ra_str(20.0)  # SIMBAD's RA, not Gaia's
         assert row["parallax"] == pytest.approx(7.0)
         assert row["plx_src"] == "simbad"
 
@@ -192,7 +191,7 @@ class TestMergeCatalogRecords:
 
     def test_lone_source_missing_parallax_raises(self):
         # parallax is part of the astrometric block, so a sole source lacking it
-        # cannot anchor the canonical position.
+        # cannot anchor the position.
         with pytest.raises(ValueError, match="position"):
             _merge({"gaia": _record("G", parallax=None)})
 
@@ -207,7 +206,6 @@ class TestMergeCatalogRecords:
             _merge({})
 
     def test_incomplete_position_raises(self):
-        # The only candidate lacks a coherent position block (pmra missing).
         with pytest.raises(ValueError, match="position"):
             _merge({"gaia": _record("G", pmra=None)})
 
@@ -222,7 +220,7 @@ class TestMergeCatalogRecords:
         assert row["radec_src"] == "gaia"
         assert row["rv"] is None
         assert row["rv_src"] == ""  # nothing supplied rv -> empty provenance
-        assert row["parallax"] == pytest.approx(50.0)  # parallax still filled
+        assert row["parallax"] == pytest.approx(50.0)
 
 
 class TestAstrometryPriority:
@@ -234,7 +232,7 @@ class TestAstrometryPriority:
     """
 
     def test_shipped_default_bars_wmko_from_anchoring(self):
-        # The default must not let a Gaia+SIMBAD outage fall through to TCS values.
+        # A Gaia+SIMBAD outage must not fall through to TCS values.
         aq = AstroQuery(_l0_for_query())
         assert "wmko" not in aq.astrometry_priority
 
@@ -243,7 +241,6 @@ class TestAstrometryPriority:
             _merge({"wmko": _record("W")}, priority=("gaia", "simbad"))
 
     def test_priority_order_is_honored(self):
-        # Reversing the order moves the base, proving the list drives selection.
         records = {"gaia": _record("G", ra=10.0), "simbad": _record("S", ra=20.0)}
         assert _merge(records, priority=("gaia", "simbad"))["radec_src"] == "gaia"
         assert _merge(records, priority=("simbad", "gaia"))["radec_src"] == "simbad"
@@ -261,16 +258,15 @@ class TestAstrometryPriority:
 
     @pytest.mark.parametrize("bad", [(), ("gaia", "nope"), ("tcs",)])
     def test_invalid_priority_raises_at_construction(self, bad):
-        # Caught at construction: an unknown name would otherwise read as "that
-        # source had no record" and silently demote the position.
+        # An unknown name would otherwise read as "that source had no record" and
+        # silently demote the position, so it must be caught at construction.
         with pytest.raises(ValueError, match="astrometry_priority"):
             AstroQuery(_l0_for_query(), {"astrometry_priority": bad})
 
 
 class TestSingleSourceProvenance:
     def test_source_row_provenance_defaults_to_source(self):
-        # A source row holds only its own values, so all three provenance labels
-        # are its own label.
+        # A source row holds only its own values, so all three labels are its own.
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "object"
         aq = AstroQuery(l0)
@@ -325,8 +321,8 @@ class TestColor:
 
 
 class TestReadWmkoHeader:
-    """read_wmko_header builds the native wmko record from L0 PRIMARY TARG*,
-    fail-soft on absent or malformed astrometry."""
+    """read_wmko_header builds the wmko record from L0 PRIMARY TARG*, fail-soft on
+    absent or malformed astrometry."""
 
     _GOOD_TARG = {
         "TARGRA": "12:00:00.00",
@@ -350,18 +346,17 @@ class TestReadWmkoHeader:
         return l0
 
     def test_good_targ_builds_row(self):
-        # Well-formed FK5 TARG* -> a wmko record rotated to ICRS, so all sources
-        # share one frame. The WMKOCR flag is a header, written later by
-        # _set_headers (covered in TestPerform).
+        # TARG* is FK5 but the record is rotated to ICRS, so all sources share
+        # one frame.
         l0 = self._l0_targ(**self._GOOD_TARG)
         aq = AstroQuery(l0)
         aq.read_wmko_header()  # builds the wmko row and writes it in one go
         table = l0.data["CATALOG_RECORD"]
         wmko = table[table["source"] == "wmko"][0]
         assert wmko["object"] == "testtarget"
-        assert wmko["frame"] == "icrs"  # native FK5 rotated to ICRS, not relabeled
-        # Within the ~tens-of-mas FK5->ICRS frame bias of the input, but shifted
-        # from it -- a real rotation, not a copy.
+        assert wmko["frame"] == "icrs"
+        # The FK5->ICRS bias is tens of mas, so the result stays within 1 arcsec of
+        # the input yet must not equal it -- a real rotation, not a relabel.
         ra = Angle(wmko["ra"], unit=u.hourangle)
         dec = Angle(wmko["dec"], unit=u.deg)
         fk5_ra = Angle(self._GOOD_TARG["TARGRA"], unit=u.hourangle)
@@ -371,8 +366,8 @@ class TestReadWmkoHeader:
         assert wmko["ra"] != "12:00:00.0000"  # rotated, not copied
 
     def test_pmra_time_to_angle_conversion(self):
-        # TARGPMRA is DCS seconds-of-time/yr: convert to on-sky arcsec/yr via
-        # x15 x cos(dec). TARGPMDC is already arcsec/yr and passes through.
+        # TARGPMRA is DCS seconds-of-time/yr: on-sky arcsec/yr needs x15 x cos(dec).
+        # TARGPMDC is already arcsec/yr and passes through.
         dec_deg = 40.0
         rec = AstroQuery(
             self._l0_targ(**{**self._GOOD_TARG, "TARGPMRA": 0.5, "TARGPMDC": 2.0})
@@ -380,8 +375,8 @@ class TestReadWmkoHeader:
 
         expected_pmra = 0.5 * 15.0 * np.cos(np.deg2rad(dec_deg))
         assert rec["pmra"] == pytest.approx(expected_pmra)
-        assert expected_pmra != pytest.approx(0.5)  # factor actually applied
-        assert rec["pmdec"] == pytest.approx(2.0)  # dec PM unchanged
+        assert expected_pmra != pytest.approx(0.5)  # the factor really applies
+        assert rec["pmdec"] == pytest.approx(2.0)
 
     def test_builds_g_minus_j_color(self):
         # The G-J color comes straight off PRIMARY: GAIAMAG - 2MASSMAG.
@@ -392,49 +387,49 @@ class TestReadWmkoHeader:
         assert rec["color_name"] == "G-J"
 
     def test_absent_magnitude_leaves_color_none(self):
-        # A missing GAIAMAG/2MASSMAG -> no color (both fields None), not an error.
+        # A missing magnitude -> no color, not an error.
         rec = AstroQuery(self._l0_targ(**self._GOOD_TARG)).read_wmko_header()
         assert rec["color"] is None and rec["color_name"] is None
 
     def test_no_targ_returns_none_no_warning(self, caplog):
-        # No TARGRA (e.g. a science frame with no pointing) -> None, silently.
+        # No TARGRA (e.g. a frame with no pointing) -> None, and no warning.
         with caplog.at_level(logging.WARNING):
             assert AstroQuery(self._l0_targ()).read_wmko_header() is None
         assert "CATALOG_RECORD" not in caplog.text
 
     def test_malformed_targ_warns_returns_none(self, caplog):
-        # Unparseable TARG* astrometry -> warns and returns None (never raises).
+        # Unparseable TARG* astrometry warns rather than raising.
         l0 = self._l0_targ(**{**self._GOOD_TARG, "TARGDEC": "not-a-coordinate"})
         with caplog.at_level(logging.WARNING):
             assert AstroQuery(l0).read_wmko_header() is None
         assert "could not build wmko CATALOG_RECORD" in caplog.text
 
     def test_nonnumeric_numeric_fields_laundered_to_none(self):
-        # A non-numeric TARG* numeric card must be laundered to None by _scalar,
-        # or the stray value passes the merge's completeness gate as a
-        # valid-looking solution. A string is the only reachable case: astropy
-        # rejects NaN in headers, and a valueless card already reads as None.
+        # A non-numeric numeric card must launder to None, or it passes the merge's
+        # completeness gate as a valid-looking solution. A string is the only
+        # reachable case: astropy rejects NaN in headers, and a valueless card
+        # already reads as None.
         rec = AstroQuery(
             self._l0_targ(**{**self._GOOD_TARG, "TARGPLAX": "UNKNOWN"})
         ).read_wmko_header()
         assert rec["parallax"] is None
 
     def test_non_fk5_frame_raises(self):
-        # KPF pointing is always FK5; any other TARGFRAM (e.g. galactic) raises
-        # rather than being coerced onto a frame it does not have.
+        # KPF pointing is always FK5; another TARGFRAM must not be coerced onto a
+        # frame the data does not have.
         l0 = self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "galactic"})
         with pytest.raises(ValueError, match="TARGFRAM"):
             AstroQuery(l0).read_wmko_header()
 
     def test_absent_frame_raises(self):
-        # An absent TARGFRAM cannot be verified as FK5 -> raise (never guess a frame).
+        # An absent TARGFRAM cannot be verified as FK5, and a frame is never guessed.
         targ = {k: v for k, v in self._GOOD_TARG.items() if k != "TARGFRAM"}
         with pytest.raises(ValueError, match="TARGFRAM"):
             AstroQuery(self._l0_targ(**targ)).read_wmko_header()
 
     def test_wmko_row_built_even_when_barred_from_anchoring(self):
-        # The wmko row is unconditional -- TARGOFF needs it -- but with wmko outside
-        # astrometry_priority and both catalogs off, nothing may anchor, so merge
+        # The wmko row is unconditional (TARGOFF needs it), but with wmko outside
+        # astrometry_priority and both catalogs off nothing may anchor, so the merge
         # raises rather than quietly falling back to telescope astrometry.
         aq = AstroQuery(
             self._l0_targ(**self._GOOD_TARG),
@@ -517,7 +512,7 @@ def _simbad_instance(table):
 
 
 def _l0_for_query(**primary):
-    """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID/OBJECT)."""
+    """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID)."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "object"
     for key, value in primary.items():
@@ -539,7 +534,7 @@ class TestExternalQueries:
 
     def test_scalar_variants(self):
         # astroquery hands back masked/NaN cells for unmeasured quantities; every
-        # unusable form must coerce to a clean None, real values to float.
+        # unusable form must coerce to None, real values to float.
         assert AstroQuery._scalar(None) is None
         assert AstroQuery._scalar(np.ma.masked) is None
         assert AstroQuery._scalar(float("nan")) is None
@@ -610,10 +605,9 @@ class TestExternalQueries:
         assert rec["epoch"] == pytest.approx(2016.0)
         assert rec["frame"] == "icrs"
         assert rec["equinox"] == pytest.approx(2000.0)
-        assert rec["object"] == "Gaia DR3 12345"  # full designation -> EPRV CID#
+        assert rec["object"] == "Gaia DR3 12345"  # full designation -> CID#
         assert rec["color"] == pytest.approx(1.0)  # G_BP - G_RP
         assert rec["color_name"] == "Gaia BP-RP"
-        # Row written to CATALOG_RECORD; the GAIACR flag follows in _set_headers.
         assert "gaia" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
 
     def test_query_gaia_missing_rv_becomes_none(self):
@@ -630,7 +624,7 @@ class TestExternalQueries:
         assert rec["color"] is None and rec["color_name"] is None
 
     def test_record_without_color_writes_blank(self):
-        # A record that omits color/color_name writes NaN / "" for them, not an error.
+        # An omitted color writes NaN / "" rather than raising.
         record = _record("K")
         record.pop("color")
         record.pop("color_name")
@@ -648,7 +642,7 @@ class TestExternalQueries:
         assert "no usable GAIAID" in caplog.text
 
     def test_query_gaia_lookup_failure_returns_none(self, caplog):
-        # A dropped connection is transient, so the lookup is retried before it is
+        # A dropped connection is transient, so the lookup is retried before being
         # given up on; sleep is patched so the backoff is not waited out.
         aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with (
@@ -696,7 +690,6 @@ class TestExternalQueries:
         assert rec["epoch"] == pytest.approx(2000.0)
         assert rec["color"] == pytest.approx(1.0)  # Johnson B - V
         assert rec["color_name"] == "B-V"
-        # Row written; the SIMBADCR flag follows in _set_headers.
         assert "simbad" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
 
     def test_query_simbad_missing_photometry_leaves_color_none(self):
@@ -717,7 +710,7 @@ class TestExternalQueries:
         assert "no OBJECT name" in caplog.text
 
     def test_query_simbad_lookup_failure_returns_none(self, caplog):
-        # Retried like the Gaia failure above; see there for the sleep patch.
+        # Retried like the Gaia failure above; sleep is patched for the same reason.
         aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
         inst = MagicMock()
         inst.query_object.side_effect = ConnectionError("simbad down")
@@ -766,10 +759,9 @@ def _adql_select_columns(query):
 class TestRequestMatchesParse:
     """Each query asks for exactly the columns its parser reads.
 
-    The mocked tables are built from _GAIA_UNITS/_SIMBAD_UNITS -- the schema the
-    parser consumes -- so they answer whatever was asked, and a request that drifts
-    from the parse (asking SIMBAD for the deprecated 'plx' while reading
-    'plx_value') leaves every other test green. These pin the request side.
+    The mocked tables are built from the parser's own _GAIA_UNITS/_SIMBAD_UNITS, so
+    they answer whatever was asked and a drifted request (asking SIMBAD for the
+    deprecated 'plx' while reading 'plx_value') leaves every other test green.
     """
 
     def test_gaia_select_list_matches_parsed_columns(self):
@@ -788,8 +780,8 @@ class TestRequestMatchesParse:
     def test_gaia_release_selects_table_and_designation(
         self, gaiaid, table, designation
     ):
-        # A source_id denotes different stars in different releases, so querying
-        # the table GAIAID names is what keeps the astrometry on the right star.
+        # A source_id denotes different stars in different releases, so the table
+        # GAIAID names is what keeps the astrometry on the right star.
         aq = AstroQuery(_l0_for_query(GAIAID=gaiaid))
         with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
             rec = aq.query_gaia()
@@ -832,7 +824,7 @@ def _release_aware_launch_job(present=(), failing=()):
 class TestBareGaiaIdResolution:
     """A GAIAID with no release prefix is verified against the archive, not assumed.
 
-    The same source_id denotes different stars in different releases, so guessing one
+    The same source_id denotes different stars in different releases, so guessing
     would silently attach another star's astrometry to the frame.
     """
 
@@ -930,8 +922,8 @@ class TestPerform:
         assert row["object"] == "Gaia DR3 12345"
 
     def test_presence_flags_written_for_every_source(self):
-        # Always all three flags, so an absent one means AstroQuery never ran
-        # (what DiagL0 warns on). wmko is 0 here: the L0 carries no TARG*.
+        # All three flags are always written, so an absent one means AstroQuery
+        # never ran (what DiagL0 warns on). wmko is 0 here: the L0 carries no TARG*.
         aq, _ = _perform()
         hdr = aq.l0_obj.headers["CATALOG_RECORD"]
         assert hdr["GAIACR"] == 1
@@ -944,8 +936,7 @@ class TestPerform:
         assert aq.l0_obj.headers["CATALOG_RECORD"]["SIMBADCR"] == 1
 
     def test_gaia_off_falls_through_to_simbad(self):
-        # The merge falls to the next source down, and the provenance follows it
-        # rather than staying stamped "gaia".
+        # The provenance must follow the merge down rather than stay "gaia".
         aq, record = _perform(do_gaia_query=False)
         assert aq._gaia is None
         row = _kpf_drp_row(record)

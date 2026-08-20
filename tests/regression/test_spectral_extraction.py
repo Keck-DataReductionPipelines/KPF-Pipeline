@@ -1,10 +1,7 @@
-"""
-Tests for the SpectralExtraction module (L1 → L2).
+"""Tests for the SpectralExtraction module (L1 -> L2).
 
-Unit tests for extraction algorithms use synthetic arrays and require no
-real data. Integration tests (perform()) monkeypatch extract_ffi so they
-also require no real data. Regression tests using real L1 FITS files are
-skipped if KPF_TESTDATA is not set.
+Extraction-algorithm and perform() tests run on synthetic arrays, the latter with
+extract_ffi monkeypatched; the real-L0 regression class is marked slow.
 """
 
 from pathlib import Path
@@ -39,7 +36,7 @@ L0_FILE = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 
 @pytest.fixture
 def minimal_l1(tmp_path):
-    """Minimal KPF1 object sufficient for to_kpf2() and SpectralExtraction init."""
+    """Minimal KPF1 sufficient for to_kpf2() and SpectralExtraction init."""
     fn = str(tmp_path / "kpf_L1_20240101T000000.fits")
     primary = fits.PrimaryHDU()
     primary.header["INSTRUME"] = "KPF"
@@ -71,7 +68,6 @@ class TestBoxExtraction:
         np.testing.assert_allclose(flux, 5.0)
 
     def test_with_weights(self):
-        """Weights < 1 at edges should reduce total flux."""
         D = np.ones((5, 10), dtype=np.float32)
         V = np.ones((5, 10), dtype=np.float32)
         W = np.ones((5, 10), dtype=np.float32)
@@ -89,20 +85,19 @@ class TestBoxExtraction:
         np.testing.assert_allclose(flux, 5 * (10.0 - 3.0))
 
     def test_with_mask(self):
-        """Masking a pixel should redistribute weight via M normalisation."""
         D = np.ones((5, 10), dtype=np.float32)
         V = np.ones((5, 10), dtype=np.float32)
         M = np.ones((5, 10), dtype=np.float32)
-        M[2, :] = 0  # mask centre row
+        M[2, :] = 0
         flux, _ = SpectralExtraction._box_extraction(D, V, M=M)
-        # Sum should still equal nrow (mask re-normalises)
+        # M is renormalised to nrow, so masking a row redistributes its weight.
         np.testing.assert_allclose(flux, 5.0)
 
     def test_fully_masked_column_raises(self):
         D = np.ones((5, 10), dtype=np.float32)
         V = np.ones((5, 10), dtype=np.float32)
         M = np.ones((5, 10), dtype=np.float32)
-        M[:, 3] = 0  # fully mask column 3
+        M[:, 3] = 0
         with pytest.raises(ValueError, match="Fully masked"):
             SpectralExtraction._box_extraction(D, V, M=M)
 
@@ -171,12 +166,11 @@ class TestUnimplementedExtraction:
 
 
 class TestPerformShapes:
-    """Verify perform() assembles GREEN and RED arrays into correctly shaped
-    KPF2 traces. extract_ffi is monkeypatched to return pre-built arrays."""
+    """perform() assembles GREEN and RED arrays into correctly shaped KPF2 traces."""
 
     @pytest.fixture
     def mock_ffi_arrays(self):
-        """Return pre-built (chip, fiber) arrays matching real detector dims."""
+        """Pre-built (chip, fiber) arrays matching real detector dimensions."""
         chips = ["GREEN", "RED"]
         fibers = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
         norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
@@ -238,8 +232,6 @@ class TestPerformShapes:
             assert l2.data[f"{fiber}_VAR"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
 
     def test_green_red_slices_independent(self, minimal_l1, monkeypatch):
-        """GREEN and RED slices should contain distinct values."""
-
         def mock_extract(self, chip, fibers, extraction_method, **kwargs):
             fill = 1.0 if chip == "GREEN" else 2.0
             n = NORDER_GREEN if chip == "GREEN" else NORDER_RED
@@ -257,11 +249,8 @@ class TestPerformShapes:
         np.testing.assert_array_equal(l2.data["RED_SCI2_FLUX"], 2.0)
 
     def test_each_order_lands_on_its_own_row(self, monkeypatch):
-        """Order n occupies row n of the L2 array.
-
-        The reference numbers its orders from zero, so the loop index is the row
-        index. Shape alone cannot see a rebase: every row stays populated while
-        the spectra rotate."""
+        # The reference numbers orders from zero, so order n must land on row n.
+        # Shape alone cannot see a rebase: every row stays populated either way.
 
         def mock_orderlet(self, chip, fiber, order, extraction_method=None):
             spectrum = np.full(100, order, dtype=np.float32)
@@ -293,7 +282,7 @@ class TestPerformShapes:
 
 
 # ---------------------------------------------------------------------------
-# Regression tests (real L0 data → assemble L1 → extract)
+# Regression tests (real L0 data -> assemble L1 -> extract)
 # ---------------------------------------------------------------------------
 
 
@@ -324,14 +313,12 @@ class TestSpectralExtractionRealData:
         assert l2.data[key].shape == (expected_rows, NCOL)
 
     def test_flux_positive(self, l2_from_flat):
-        """Flat lamp flux should be positive after extraction."""
         l2, _ = l2_from_flat
         assert np.nanmedian(l2.data["GREEN_SCI2_FLUX"]) > 0
         assert np.nanmedian(l2.data["RED_SCI2_FLUX"]) > 0
 
     def test_variance_positive(self, l2_from_flat):
-        """Variance is non-negative wherever it exists; a column outside its
-        trace's valid span is NaN by design, not negative."""
+        # A column outside its trace's valid span is NaN by design, not negative.
         l2, _ = l2_from_flat
         for key in ("GREEN_SCI2_VAR", "RED_SCI2_VAR"):
             var = l2.data[key]
@@ -501,10 +488,8 @@ class TestValidColumnSpan:
 
     @pytest.mark.parametrize("center", [3.0, 96.0])
     def test_columns_beyond_the_span_are_nan(self, center):
-        """A trace clipped at either edge NaNs its extrapolated columns.
-
-        The bottom edge is the one that used to leak: a clamped aperture still
-        lands inside the box and would carry detector row 0 off as flux."""
+        # The bottom edge is the one that used to leak: a clamped aperture still
+        # lands inside the box and would carry detector row 0 off as flux.
         se = self._make_se(center, x1=0.0, x2=59.0)
 
         flux_1d, var_1d = se.extract_orderlet("GREEN", "SCI1", 0)
@@ -557,7 +542,7 @@ _STUB_TRACE = (
 
 
 def _stub_reference_tree(tmp_path, monkeypatch):
-    """Stub the repo reference tree: three instrument eras, three traces."""
+    """Stub the repo reference tree: three instrument eras, three order traces."""
     traces = tmp_path / "reference" / "order_traces"
     traces.mkdir(parents=True)
     (tmp_path / "reference" / "instrument_eras.csv").write_text(_STUB_ERAS)
@@ -633,8 +618,8 @@ class TestOrderTraceSelection:
         self, tmp_path, monkeypatch
     ):
         # extract_ffi catches LookupError to NaN-fill an absent orderlet. An era
-        # that cannot be inferred must not arrive disguised as one -- and must
-        # abort on the first orderlet rather than be retried 175 times.
+        # that cannot be inferred must not arrive disguised as one -- it must
+        # abort on the first orderlet rather than be retried for every order.
         _stub_reference_tree(tmp_path, monkeypatch)
         se = SpectralExtraction(_StubL1(None, "2.0"))
 

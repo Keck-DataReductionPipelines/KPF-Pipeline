@@ -1,12 +1,11 @@
 """Tests for the Checkpoint layer (quality_control/checkpoints).
 
-Checkpoints are the third QC stage: they READ the 0/1 QC flags and the product
+Checkpoints are the third QC stage: they read the 0/1 QC flags and the product
 headers, then warn or raise (never write). This pins:
 
   - ``unregistered_keywords`` -- raises on a card not registered for a governed
     extension (including a raw WMKO native leaked onto an EPRV PRIMARY); skips the
-    raw WMKO L0 PRIMARY; passes a clean product. (Migrated from the old
-    ``QC._validate_headers`` tests.)
+    raw WMKO L0 PRIMARY; passes a clean product.
   - ``qc_flags`` -- a failed (0) flag named in the level's ``RAISE_FLAGS`` raises;
     any other failed flag warns; all-pass is silent.
 
@@ -36,11 +35,9 @@ _NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
 
 class TestUnregisteredKeywords:
     def test_clean_product_passes(self, caplog):
-        # Fresh KPF2: EPRV-seeded PRIMARY (all registered) + empty governed
-        # extensions -> no unregistered card, and no QC flags present -> qc_flags
-        # is a no-op, so the checkpoint methods are silent. (run() is not used
-        # here: it folds in QC, which a bare product can't satisfy -- the fold is
-        # covered by TestRunFoldsDiagnosticsAndQC.)
+        # A fresh KPF2 has no unregistered card and no QC flags, so both methods
+        # are silent. run() is not used here: it folds in QC, which a bare product
+        # cannot satisfy.
         l2 = KPF2()
         with caplog.at_level(logging.WARNING):
             chk = CheckpointL2(l2)
@@ -56,9 +53,9 @@ class TestUnregisteredKeywords:
 
     def test_native_wmko_leak_on_primary_raises(self):
         l2 = KPF2()
-        # GAIAID is a raw WMKO native (kept in INSTRUMENT_HEADER, never on PRIMARY).
-        # It is not a registered PRIMARY keyword, so it fails the general
-        # unregistered-keyword check (no dedicated WMKO-leak branch needed).
+        # GAIAID is a raw WMKO native (kept in INSTRUMENT_HEADER, never on
+        # PRIMARY), so the general unregistered-keyword check catches it -- no
+        # dedicated WMKO-leak branch needed.
         l2.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
         with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
             CheckpointL2(l2).unregistered_keywords()
@@ -112,10 +109,8 @@ class TestQCFlags:
         assert not caplog.records
 
     def test_summary_lists_all_failing_flags_cross_level(self, caplog):
-        # The ISGOOD summary is the cross-level roll-up: it names every failing
-        # flag on QUALITY_CONTROL by bare keyword, including one propagated from a
-        # lower level (RNOK from L1). Per-flag detail with comments is the QC
-        # stage's job (see test_qc_flags), so the checkpoint need not repeat it.
+        # The ISGOOD summary names every failing flag on QUALITY_CONTROL,
+        # including one propagated from a lower level (RNOK from L1).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (
@@ -205,11 +200,11 @@ class TestRunFoldsDiagnosticsAndQC:
 def _make_l4(*, sci=True):
     """KPF4 good enough for CheckpointL4.run(): science CCF + RV tables (with
     BJD_TDB/BERV/WEIGHT for DiagL4) and the required PRIMARY keywords seeded so
-    KWRDPRL4 passes. (Timing consistency is an L0 check, DATTIMOK, not L4.)
+    KWRDPRL4 passes.
 
     SCI-OBJ is 'target' (star-illuminated) so the BJDOK/BERVOK gates apply, and the
-    per-order BJD/BERV jitter is kept well inside those range gates (1 s / 0.1 m/s)
-    so a good product passes."""
+    per-order BJD/BERV jitter is kept well inside those gates (1 s / 0.1 m/s) so a
+    good product passes."""
     l4 = KPF4()
     l4.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "target"
     if sci:
@@ -240,7 +235,7 @@ class TestCheckpointL4:
             CheckpointL4(l4).run()
         assert not caplog.records
         qc = l4.headers["QUALITY_CONTROL"]
-        # Folded DiagL4 metrics + QCL4 flags both landed on QUALITY_CONTROL.
+        # The folded DiagL4 metrics and QCL4 flags both land on QUALITY_CONTROL.
         assert qc["BERVMEAN"] is not None and qc["BJDMEAN"] is not None
         assert qc["DATAPRL4"] == 1
         assert qc["ISGOOD"] == 1
