@@ -29,8 +29,17 @@ _OBS_ID = "KP.20240405.00004.00"
 
 # pytest's filterwarnings does not reach a child process, so the CLI would run with
 # default filters and any warning it raised would be invisible. Mirror the pyproject
-# rule into the child, where a warning becomes a non-zero exit the tests already check.
-_CHILD_WARNINGS = "error"
+# rules into the child, where a warning becomes a non-zero exit the tests already check.
+# PYTHONWARNINGS splits entries on commas and resolves categories at interpreter
+# startup, before astropy is importable, so the astropy rule is carried by its
+# message prefix alone.
+_CHILD_WARNINGS = ",".join(
+    (
+        "error",
+        "ignore:Card is too long",
+        "default::ResourceWarning",
+    )
+)
 
 # A child that reaches the network (astropy's IERS auto-download) can block forever --
 # nothing bounds a connection that opens and never answers. Cap every run: a hang

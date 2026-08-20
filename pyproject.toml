@@ -54,11 +54,16 @@ testpaths = ["tests"]
 # Quiet output; re-run a single failure with --tb=long for full frame context.
 addopts = "-q --no-header --tb=short"
 # Exempt only warnings that are expected *and* handled, and prefer
-# @pytest.mark.filterwarnings on the one test over widening this list.
+# @pytest.mark.filterwarnings on the one test over widening this list. The
+# exception is a warning raised during garbage collection: it surfaces at an
+# arbitrary later test, so no single test owns it and only a global rule works.
 filterwarnings = [
     "error",
     # masters INPUT_FILES deliberately round-trips long paths.
     "ignore:Card is too long, comment will be truncated:astropy.io.fits.verify.VerifyWarning",
+    # astroquery.gaia opens a connection to ESA at import (astro_query.py:27) and
+    # never closes it. Print the leak; do not fail on GC timing.
+    "default::ResourceWarning",
 ]
 # Markers are registered in tests/conftest.py (pytest_configure).
 
