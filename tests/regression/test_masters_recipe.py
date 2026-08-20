@@ -37,6 +37,7 @@ def _load_masters_recipe():
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestMastersRecipe:
     """End-to-end: FileHandler -> Bias.make_master_l1 -> to_fits."""
 
@@ -103,6 +104,7 @@ class TestMastersRecipe:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.requires_testdata
 class TestMastersRecipeOrderTraceStage:
     """The recipe traces every master flat it just stacked.
 
@@ -220,6 +222,7 @@ class TestMastersRecipeErrors:
             recipe.main(config, args)
 
     @pytest.mark.slow
+    @pytest.mark.requires_testdata
     def test_missing_min_stack_size_key_raises(self, tmp_path):
         # min_stack_size is a required quality gate: a [BIAS] section lacking it
         # must fail loud, not silently stack with no size gate.

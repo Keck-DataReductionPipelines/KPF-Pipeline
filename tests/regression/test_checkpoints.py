@@ -21,11 +21,13 @@ from astropy.table import Table
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
+from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.quality_control.checkpoints import (
     Checkpoint,
     CheckpointL0,
+    CheckpointL1,
     CheckpointL2,
     CheckpointL4,
 )
@@ -101,13 +103,6 @@ class TestQCFlags:
             CheckpointL2(l2).qc_flags()
         assert not caplog.records
 
-    def test_absent_flag_is_ignored(self, caplog):
-        # A flag the QC stage never wrote is absent -> neither warns nor raises.
-        l2 = KPF2()
-        with caplog.at_level(logging.WARNING):
-            CheckpointL2(l2).qc_flags()
-        assert not caplog.records
-
     def test_summary_lists_all_failing_flags_cross_level(self, caplog):
         # The ISGOOD summary names every failing flag on QUALITY_CONTROL,
         # including one propagated from a lower level (RNOK from L1).
@@ -123,17 +118,6 @@ class TestQCFlags:
             CheckpointL2(l2).qc_flags()
         assert "L2VAROK" in caplog.text
         assert "RNOK" in caplog.text
-
-    def test_registry_qc_flag_sets_scoping(self):
-        from kpfpipe.data_models.keyword_registry import keyword_registry as reg
-
-        # ISGOOD is the cross-level aggregate: in the full set, in no per-level set.
-        assert "ISGOOD" in reg.qc_flag_keywords
-        assert all("ISGOOD" not in s for s in reg.qc_flag_keywords_by_level.values())
-        # Representative checks live under their own level.
-        assert "RNOK" in reg.qc_flag_keywords_by_level["L1"]
-        assert "DATAPRL2" in reg.qc_flag_keywords_by_level["L2"]
-        assert "RNOK" not in reg.qc_flag_keywords_by_level["L2"]
 
 
 class TestRunFoldsDiagnosticsAndQC:
@@ -190,6 +174,84 @@ class TestRunFoldsDiagnosticsAndQC:
             chk.run()
         assert chk.qc_results == {}
         assert not caplog.records
+
+
+# ---------------------------------------------------------------------------
+# CheckpointL1 -- folds DiagL1 + QCL1, then validates the assembled FFI product
+# ---------------------------------------------------------------------------
+
+
+def _make_l1(*, ccd=True, shape=(8, 8)):
+    """KPF1 good enough for CheckpointL1.run(): GREEN/RED CCD + VAR arrays, the
+    applied-calibration flags on RECEIPT, and the read-noise and master-age
+    keywords on QUALITY_CONTROL, all inside the ranges QCL1 accepts.
+
+    Built in memory. Not the same as test_qc_flags.py's ``_make_kpf1``, which
+    deliberately round-trips through from_fits to reproduce the sparse-PRIMARY
+    case its KWRDPRL1 test needs; here the skeleton PRIMARY is what is wanted.
+    """
+    l1 = KPF1()
+    l1.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
+    if ccd:
+        for chip in ("GREEN", "RED"):
+            l1.set_data(f"{chip}_CCD", np.ones(shape, dtype=np.float32))
+            l1.set_data(f"{chip}_VAR", np.ones(shape, dtype=np.float32))
+
+    receipt = l1.headers["RECEIPT"]
+    for kw in ("OSCANSUB", "BIASSUB", "DARKSUB", "FLATDIV"):
+        receipt[kw] = (True, "applied")
+
+    qc = l1.headers["QUALITY_CONTROL"]
+    qc["BIASAGE"] = (1.0, "Age of bias master [days]")
+    qc["DARKAGE"] = (5.0, "Age of dark master [days]")
+    qc["FLATAGE"] = (10.0, "Age of flat master [days]")
+    for i in range(1, 5):
+        qc[f"RNGREEN{i}"] = (3.5, "RN e-")
+        qc[f"RNRED{i}"] = (4.0, "RN e-")
+        qc[f"RNNGGR{i}"] = (1.0, "RNNG")
+        qc[f"RNNGRD{i}"] = (1.0, "RNNG")
+
+    for kw in CheckpointL1.QC(l1)._required_primary_keywords():
+        if kw not in l1.headers["PRIMARY"]:
+            l1.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
+    return l1
+
+
+class TestCheckpointL1:
+    def test_run_good_product_passes_and_writes_flags(self, caplog):
+        l1 = _make_l1()
+        with caplog.at_level(logging.WARNING):
+            CheckpointL1(l1).run()
+        assert not caplog.records
+        qc = l1.headers["QUALITY_CONTROL"]
+        assert qc["DATAPRL1"] == 1
+        assert qc["KWRDPRL1"] == 1
+        assert qc["ISGOOD"] == 1
+
+    def test_run_raises_when_ccd_data_missing(self):
+        # DATAPRL1 is fatal (in RAISE_FLAGS): no GREEN/RED CCD -> run() raises.
+        l1 = _make_l1(ccd=False)
+        with pytest.raises(ValueError, match="DATAPRL1 = 0"):
+            CheckpointL1(l1).run()
+
+    def test_run_raises_when_required_keyword_missing(self):
+        # KWRDPRL1 is fatal (in RAISE_FLAGS): a missing required PRIMARY keyword
+        # -> KWRDPRL1 = 0 -> run() raises.
+        l1 = _make_l1()
+        req = sorted(CheckpointL1.QC(l1)._required_primary_keywords())
+        del l1.headers["PRIMARY"][req[0]]
+        with pytest.raises(ValueError, match="KWRDPRL1 = 0"):
+            CheckpointL1(l1).run()
+
+    def test_run_warns_when_read_noise_out_of_range(self, caplog):
+        # RNOK is not a RAISE_FLAG, so an out-of-range amp lands in the ISGOOD
+        # summary rather than raising.
+        l1 = _make_l1()
+        l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "RN e-")
+        with caplog.at_level(logging.WARNING):
+            CheckpointL1(l1).run()
+        assert "ISGOOD=0" in caplog.text
+        assert "RNOK" in caplog.text
 
 
 # ---------------------------------------------------------------------------

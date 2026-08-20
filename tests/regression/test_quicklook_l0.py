@@ -2,28 +2,20 @@
 
 import os
 
-import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from astropy.io import fits
 from PIL import Image
 
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
-
 from kpfpipe.data_models.level0 import KPF0
+
+from ._data_models import write_amp_l0
 
 # Quicklook/QLP render suite: slow PNG rendering, so excluded from
 # `make test-fast`. Run in the full suite or `make test-qlp`.
+# The Agg pin and the close-figures teardown come from tests/regression/conftest.py.
 pytestmark = pytest.mark.quicklook
-
-
-@pytest.fixture(autouse=True)
-def _close_figures():
-    """Close any figures a test left open (the output_dir=None path returns them)."""
-    yield
-    plt.close("all")
 
 
 # ---------------------------------------------------------------------------
@@ -33,85 +25,51 @@ def _close_figures():
 
 @pytest.fixture
 def synthetic_4amp_l0(tmp_path):
-    fn = str(tmp_path / "KP.20240405.00001.00.fits")
-    rng = np.random.default_rng(42)
-
-    nrow, ncol = 2070, 2094
-    bias_level = 1000.0
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-4amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    primary.header["OFNAME"] = os.path.basename(fn)
-    primary.header["PROGNAME"] = "K123"
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
+    # 4-amp readout geometry, at full detector size so the stitch is realistic.
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00001.00.fits",
+        namps=4,
+        shape=(2070, 2094),
+        bias_level=1000.0,
+        seed=42,
+        primary_cards={
+            "OBJECT": "synthetic-4amp",
+            "DATE-OBS": "2024-04-05T01:00:37",
+        },
+    )
     return KPF0.from_fits(fn)
 
 
 @pytest.fixture
 def synthetic_2amp_l0(tmp_path):
-    fn = str(tmp_path / "KP.20240405.00002.00.fits")
-    rng = np.random.default_rng(99)
-
-    nrow, ncol = 4080, 2094
-    bias_level = 1000.0
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-2amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:38"
-    primary.header["OFNAME"] = os.path.basename(fn)
-    primary.header["PROGNAME"] = "K123"
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 3):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00002.00.fits",
+        namps=2,
+        shape=(4080, 2094),
+        bias_level=1000.0,
+        seed=99,
+        primary_cards={
+            "OBJECT": "synthetic-2amp",
+            "DATE-OBS": "2024-04-05T01:00:38",
+        },
+    )
     return KPF0.from_fits(fn)
 
 
 @pytest.fixture
 def small_2amp_l0(tmp_path):
     """Small enough that a native-resolution PNG can be size-checked exactly."""
-    fn = str(tmp_path / "KP.20240405.00004.00.fits")
-    rng = np.random.default_rng(123)
-
-    nrow, ncol = 32, 24
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "small-2amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:39"
-    primary.header["OFNAME"] = os.path.basename(fn)
-    primary.header["PROGNAME"] = "K123"
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 3):
-            data = rng.normal(1000.0, 3.0, (nrow, ncol)).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00004.00.fits",
+        namps=2,
+        shape=(32, 24),
+        bias_level=1000.0,
+        seed=123,
+        primary_cards={
+            "OBJECT": "small-2amp",
+            "DATE-OBS": "2024-04-05T01:00:39",
+        },
+    )
     return KPF0.from_fits(fn)
 
 
@@ -336,22 +294,16 @@ class TestPlotL0Run:
             qlp.run()
 
     def test_run_skips_missing_chip(self, tmp_path):
-        fn = str(tmp_path / "KP.20240405.00004.00.fits")
-        rng = np.random.default_rng(7)
-
-        primary = fits.PrimaryHDU()
-        primary.header["OBJECT"] = "green-only"
-        primary.header["OFNAME"] = os.path.basename(fn)
-        primary.header["PROGNAME"] = "K123"
-        hdus = [primary]
-        for amp in range(1, 5):
-            data = rng.normal(1000, 3, (100, 100)).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"GREEN_AMP{amp}"))
-
-        hdul = fits.HDUList(hdus)
-        hdul.writeto(fn, overwrite=True)
-        hdul.close()
-
+        # GREEN only: no RED_AMP* HDU at all, so run() must skip the red chip.
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00004.00.fits",
+            namps=4,
+            chips=("GREEN",),
+            shape=(100, 100),
+            bias_level=1000.0,
+            seed=7,
+            primary_cards={"OBJECT": "green-only"},
+        )
         l0 = KPF0.from_fits(fn)
 
         from kpfpipe.quality_control.quicklook.level0 import PlotL0

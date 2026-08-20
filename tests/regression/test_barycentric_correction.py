@@ -793,7 +793,7 @@ class TestPerform:
         bjd = np.asarray(kpf2.data["BJD_TDB"])
         assert bjd.shape == (NORDER,)
         assert np.all(np.isfinite(bjd))
-        assert bjd.dtype == np.float64
+        assert_dtype(bjd, BJD, "BJD_TDB")
 
     def test_barycorr_kms_extension_populated(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()

@@ -53,9 +53,13 @@ class MockL1:
         self._receipt = []
 
     def set_keyword(self, key, value):
-        # Mirrors KPFDataModel.set_keyword routing: BIASSUB/DARKSUB live on RECEIPT.
-        ext = "RECEIPT" if key in ("BIASSUB", "DARKSUB") else "PRIMARY"
-        self.headers[ext][key] = value
+        # Mirrors KPFDataModel.set_keyword routing: L1-headers.csv routes both
+        # keys ImageProcessing writes to RECEIPT. Anything else is unregistered
+        # here, so fail loud rather than inventing a PRIMARY fallback the real
+        # router would never take.
+        if key not in ("BIASSUB", "DARKSUB"):
+            raise KeyError(f"{key!r} is not routed by this mock; extend it")
+        self.headers["RECEIPT"][key] = value
 
     def receipt_add_entry(self, name, args, status):
         self._receipt.append((name, args, status))

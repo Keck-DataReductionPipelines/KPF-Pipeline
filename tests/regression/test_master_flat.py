@@ -7,7 +7,6 @@ stacking engine (`BaseMasterModule`) is unit-tested in test_master_base.py.
 """
 
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -16,13 +15,10 @@ from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.utils.io import FileHandler
 
-from ._masters import make_l1_arrays
-
-CHIPS = ["GREEN", "RED"]
+from ._dtype_policy import MASK_MEM, assert_dtype
+from ._masters import CHIPS, FILE_LIST, make_mocked_master
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
-
-FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 # ---------------------------------------------------------------------------
@@ -33,10 +29,7 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 class TestMasterFlatUnit:
     @pytest.fixture(scope="class")
     def master_flat(self):
-        synthetic = make_l1_arrays()
-        flat = Flat(FILE_LIST)
-        with patch.object(flat, "stack_frames", return_value=synthetic):
-            return flat.make_master_l1()
+        return make_mocked_master(Flat)
 
     def test_receipt_entry(self, master_flat):
         assert "master_flat" in master_flat.receipt["FUNCTION"].values
@@ -60,10 +53,7 @@ class TestMasterFlatSignature:
 
     @pytest.mark.parametrize("kwarg", ["bias", "dark"])
     def test_bias_dark_kwargs_accepted(self, kwarg):
-        synthetic = make_l1_arrays()
-        flat = Flat(FILE_LIST)
-        with patch.object(flat, "stack_frames", return_value=synthetic):
-            ml1 = flat.make_master_l1(**{kwarg: False})
+        ml1 = make_mocked_master(Flat, **{kwarg: False})
         assert isinstance(ml1, KPFMasterL1)
 
 
@@ -74,6 +64,7 @@ class TestMasterFlatSignature:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestMasterFlatRegression:
     @pytest.fixture(scope="class")
     def master_flat(self):
@@ -111,7 +102,7 @@ class TestMasterFlatRegression:
         # bright orders are not over-flagged against the dark inter-order floor.
         for chip in CHIPS:
             mask = master_flat.data[f"{chip}_MASK"]
-            assert mask.dtype == bool
+            assert_dtype(mask, MASK_MEM, f"{chip}_MASK")
             assert np.mean(mask) > 0.9
 
     def test_calibrated_via_receipt(self, master_flat):

@@ -12,6 +12,8 @@ from astropy.table import Table
 from kpfpipe.data_models.level0 import KPF0
 
 from ._catalog import catalog_record_table
+from ._data_models import write_minimal_l0
+from ._dtype_policy import assert_not_float64
 
 # synthetic_l0_file and synthetic_l0_minimal fixtures live in tests/conftest.py
 
@@ -50,7 +52,7 @@ class TestKPF0:
 
         l0_reread = KPF0.from_fits(out_fn)
         np.testing.assert_array_almost_equal(
-            l0_reread.data["GREEN_AMP1"], original_green
+            l0_reread.data["GREEN_AMP1"], original_green, decimal=4
         )
         assert l0_reread.headers["PRIMARY"]["INSTRUME"] == "KPF"
 
@@ -96,16 +98,11 @@ class TestKPF0ErrorPaths:
     """Malformed-input, provenance, and write-path guards."""
 
     def _minimal_l0(self, tmp_path, extra_hdus=()):
-        fn = str(tmp_path / "KP.20240113.00002.00.fits")
-        primary = fits.PrimaryHDU()
-        primary.header["INSTRUME"] = "KPF"
-        primary.header["DATE-OBS"] = "2024-01-13T00:00:02"
-        primary.header["OFNAME"] = "KP.20240113.00002.00.fits"
-        primary.header["PROGNAME"] = "K123"
-        hdul = fits.HDUList([primary, *extra_hdus])
-        hdul.writeto(fn, overwrite=True)
-        hdul.close()
-        return fn
+        return write_minimal_l0(
+            tmp_path / "KP.20240113.00002.00.fits",
+            primary_cards={"DATE-OBS": "2024-01-13T00:00:02"},
+            extra_hdus=extra_hdus,
+        )
 
     def test_raises_on_unknown_extension(self, tmp_path):
         weird = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="MYSTERY")
@@ -271,3 +268,25 @@ class TestCatalogRecordMissingValues:
         assert not l1.headers["PRIMARY"].get("CRV2")
         assert l1.headers["PRIMARY"]["CRA2"] == "01:44:04.0000"
         l1.to_fits(str(tmp_path / "kpf_L1_20240405T000000.fits"))
+
+
+class TestDtypeProvenance:
+    """L0 is the raw product: whatever the detector wrote is what we keep.
+
+    There is no single L0 dtype to assert -- amp data arrives as the instrument
+    recorded it -- so the policy here is one-directional: reading a frame must
+    never upcast it, because every downstream array inherits that width.
+    """
+
+    def test_amp_data_not_upcast_on_read(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        for ext in ("GREEN_AMP1", "GREEN_AMP2", "RED_AMP1", "CA_HK"):
+            assert_not_float64(l0.data[ext], ext)
+
+    def test_amp_data_not_upcast_on_round_trip(self, synthetic_l0_file, tmp_path):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        out_fn = str(tmp_path / "KP.20240113.23249.10.fits")
+        l0.to_fits(out_fn)
+        reread = KPF0.from_fits(out_fn)
+        for ext in ("GREEN_AMP1", "RED_AMP1"):
+            assert_not_float64(reread.data[ext], f"{ext} after round-trip")

@@ -25,10 +25,12 @@ from ._dtype_policy import (
     assert_dtype,
     assert_roundtrip_dtype,
 )
-from ._masters import make_l1_arrays
-
-FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
-
+from ._masters import (
+    FILE_LIST,
+    MASTER_NAME,
+    make_mocked_master,
+    mocked_stack,
+)
 
 # ---------------------------------------------------------------------------
 # Base-class fail-loudly paths (construction + frame loading)
@@ -748,9 +750,7 @@ class TestDtypeProvenance:
 
     @pytest.fixture(scope="class")
     def master(self):
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=make_l1_arrays()):
-            return bias.make_master_l1()
+        return make_mocked_master(Bias)
 
     def test_img_snr_float32(self, master):
         for ext in ("GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR"):
@@ -767,7 +767,7 @@ class TestDtypeProvenance:
             "GREEN_IMG",
             L1_IMAGE,
             tmp_path,
-            name="KP.20240113.23249.10_master_bias_L1.fits",
+            name=MASTER_NAME,
         )
         assert_roundtrip_dtype(
             KPFMasterL1,
@@ -775,7 +775,7 @@ class TestDtypeProvenance:
             "GREEN_MASK",
             MASK_MEM,
             tmp_path,
-            name="KP.20240113.23249.10_master_bias_L1.fits",
+            name=MASTER_NAME,
             expected_disk=MASK_DISK,
         )
 
@@ -789,43 +789,31 @@ class TestSaveMaster:
     """The shared write path, exercised through Bias (the simplest master)."""
 
     def test_master_path_writes_fits(self, tmp_path):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        master_path = tmp_path / "KP.20240113.23249.10_master_bias_L1.fits"
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(master_path=str(master_path))
+        master_path = tmp_path / MASTER_NAME
+        make_mocked_master(Bias, master_path=str(master_path))
         assert master_path.exists()
 
     def test_master_path_creates_parent_dir(self, tmp_path):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        master_path = (
-            tmp_path / "nested" / "subdir" / "KP.20240113.23249.10_master_bias_L1.fits"
-        )
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(master_path=str(master_path))
+        master_path = tmp_path / "nested" / "subdir" / MASTER_NAME
+        make_mocked_master(Bias, master_path=str(master_path))
         assert master_path.exists()
 
     def test_master_path_overwrites_existing(self, tmp_path):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        master_path = tmp_path / "KP.20240113.23249.10_master_bias_L1.fits"
+        master_path = tmp_path / MASTER_NAME
         master_path.touch()
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            bias.make_master_l1(master_path=str(master_path))
+        make_mocked_master(Bias, master_path=str(master_path))
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
-    def test_save_master_before_make_raises(self):
+    def test_save_master_before_make_raises(self, tmp_path):
         bias = Bias(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l1"):
-            bias.save_master("L1", "/tmp/should_not_be_created.fits")
+            bias.save_master("L1", str(tmp_path / "should_not_be_created.fits"))
 
     def test_save_master_refuses_overwrite_by_default(self, tmp_path):
-        synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        master_path = tmp_path / "KP.20240113.23249.10_master_bias_L1.fits"
+        master_path = tmp_path / MASTER_NAME
         master_path.touch()
-        with patch.object(bias, "stack_frames", return_value=synthetic):
+        with mocked_stack(bias):
             bias.make_master_l1()  # populates ml1_obj
         with pytest.raises(FileExistsError, match="overwrite=True"):
             bias.save_master("L1", str(master_path))

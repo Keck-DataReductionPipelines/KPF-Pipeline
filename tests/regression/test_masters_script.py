@@ -15,25 +15,10 @@ import pytest
 
 from scripts.processing import masters as _masters
 
+from ._scripts import _FakeConfig, _NoLogDirConfig
+
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
-
-
-class _FakeConfig:
-    """Stand-in for ConfigHandler in the exit-code tests (no real file read)."""
-
-    def __init__(self, path):
-        pass
-
-    def get_params(self, keys):
-        return {"KPF_DATA_INPUT": "/in", "log_dir": "/l"}
-
-
-class _NoLogDirConfig(_FakeConfig):
-    """A config with a resolvable data input but no configured log_dir."""
-
-    def get_params(self, keys):
-        return {"KPF_DATA_INPUT": "/in"}
 
 
 @pytest.fixture(scope="module")

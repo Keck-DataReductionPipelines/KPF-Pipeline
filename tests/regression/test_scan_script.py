@@ -8,30 +8,13 @@ cache read-only. Frames are synthetic FITS in temp trees; no testdata is needed.
 from pathlib import Path
 
 import pytest
-from astropy.io import fits
 
 from scripts.processing import _scan
 
+from ._scripts import write_l0_tree
+
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
-
-
-def _write_l0(data_input, datecode, seconds, obj="10700", imtype="Object"):
-    """Write one L0 frame under {data_input}/L0/{datecode}; return its obs_id."""
-    l0_dir = Path(data_input) / "L0" / datecode
-    l0_dir.mkdir(parents=True, exist_ok=True)
-    obs_id = f"KP.{datecode}.{seconds:05d}.00"
-    header = fits.Header(
-        {
-            "OBJECT": obj,
-            "IMTYPE": imtype,
-            "TARGNAME": obj,
-            "EXPTIME": 60.0,
-            "ELAPSED": 60.0,
-        }
-    )
-    fits.PrimaryHDU(header=header).writeto(l0_dir / f"{obs_id}.fits")
-    return obs_id
 
 
 def _cache_path(data_input, datecode):
@@ -45,8 +28,8 @@ def _cache_path(data_input, datecode):
 
 class TestScanNightToCache:
     def test_scans_and_writes_cache(self, tmp_path):
-        _write_l0(str(tmp_path), "20240101", 3600)
-        _write_l0(str(tmp_path), "20240101", 3700)
+        write_l0_tree(str(tmp_path), "20240101", 3600)
+        write_l0_tree(str(tmp_path), "20240101", 3700)
 
         df = _scan.scan_night_to_cache(str(tmp_path), "20240101")
 
@@ -56,7 +39,7 @@ class TestScanNightToCache:
 
     def test_read_only_mode_does_not_write(self, tmp_path):
         # Recipes read the cache; only the scripts layer writes it.
-        _write_l0(str(tmp_path), "20240101", 3600)
+        write_l0_tree(str(tmp_path), "20240101", 3600)
 
         df = _scan.scan_night_to_cache(str(tmp_path), "20240101", cache="r")
 
@@ -98,7 +81,7 @@ class TestScanDatecodes:
         nights = [f"202401{d:02d}" for d in range(1, 7)]
         expected = {}
         for dc in nights:
-            ids = {_write_l0(str(tmp_path), dc, 3600 + j * 100) for j in range(4)}
+            ids = {write_l0_tree(str(tmp_path), dc, 3600 + j * 100) for j in range(4)}
             expected[dc] = ids
 
         def _worker(dc):
@@ -119,7 +102,7 @@ class TestWarmMiniDbCaches:
     def test_writes_all_and_counts(self, tmp_path):
         nights = ["20240101", "20240102"]
         for dc in nights:
-            _write_l0(str(tmp_path), dc, 3600)
+            write_l0_tree(str(tmp_path), dc, 3600)
 
         written, skipped = _scan.warm_mini_db_caches(str(tmp_path), nights, jobs=2)
 
@@ -131,7 +114,7 @@ class TestWarmMiniDbCaches:
         # A read-only mode warms nothing: every night is reported skipped, unscanned.
         nights = ["20240101", "20240102"]
         for dc in nights:
-            _write_l0(str(tmp_path), dc, 3600)
+            write_l0_tree(str(tmp_path), dc, 3600)
 
         written, skipped = _scan.warm_mini_db_caches(
             str(tmp_path), nights, jobs=2, cache="r"
@@ -142,7 +125,7 @@ class TestWarmMiniDbCaches:
             assert not _cache_path(str(tmp_path), dc).exists()
 
     def test_empty_night_counted_skipped(self, tmp_path):
-        _write_l0(str(tmp_path), "20240101", 3600)  # good
+        write_l0_tree(str(tmp_path), "20240101", 3600)  # good
         (Path(tmp_path) / "L0" / "20240102").mkdir(parents=True)  # empty
 
         written, skipped = _scan.warm_mini_db_caches(

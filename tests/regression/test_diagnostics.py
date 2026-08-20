@@ -22,6 +22,8 @@ from kpfpipe.quality_control.diagnostics import (
     Diagnostics,
 )
 
+from ._data_models import set_fiber_arrays
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 _NCOL_TEST = 8  # DiagL2 metrics are pixel aggregates, so the real detector width
@@ -437,8 +439,13 @@ class TestDiagL1CalibrationAges:
 # ---------------------------------------------------------------------------
 
 
-def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0, populate=True):
+def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True):
     """Minimal KPF2 with FLUX at controllable NaN and zero fractions.
+
+    Injects real NaN/zero PIXELS, because DiagL2 measures them. Not the same as
+    test_qc_flags.py's ``_make_kpf2_nan_headers``, which writes NaN-count/ZEROFRAC
+    HEADERS over clean arrays for QCL2 to read -- the opposite mechanism. Do not
+    merge them; each would destroy the other's test.
 
     A bare KPF2() already exposes the FLUX extensions DiagL2 reads, so no FITS
     round-trip is needed. Each extension is (norder[chip], _NCOL_TEST) ones, then
@@ -467,14 +474,14 @@ def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0, populate=True):
 
 class TestDiagL2NanCounts:
     def test_writes_all_five_keys_with_zero_when_clean(self):
-        kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
+        kpf2 = _make_kpf2_nan_pixels(nan_frac=0.0)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
             assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_counts_injected_nans_per_fiber(self):
-        kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
+        kpf2 = _make_kpf2_nan_pixels(nan_frac=0.0)
         # Inject one NaN into GREEN_SCI1_FLUX; expect NANSCI1==1, others==0.
         kpf2.data["GREEN_SCI1_FLUX"][0, 0] = np.nan
         DiagL2(kpf2).run()
@@ -484,7 +491,7 @@ class TestDiagL2NanCounts:
 
     def test_writes_keys_even_when_no_data(self):
         # The header schema stays consistent: all five keys present, value 0.
-        kpf2 = _make_kpf2_with_flux(populate=False)
+        kpf2 = _make_kpf2_nan_pixels(populate=False)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
@@ -492,20 +499,20 @@ class TestDiagL2NanCounts:
 
 class TestDiagL2ZeroFlux:
     def test_zerofrac_written_when_data_present(self):
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
         assert "ZEROFRAC" in kpf2.headers["QUALITY_CONTROL"]
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.0)
 
     def test_zerofrac_one_when_all_zero(self):
-        kpf2 = _make_kpf2_with_flux(zero_frac=1.0)
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=1.0)
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
 
     def test_zerofrac_half_when_half_zero(self):
         # A deterministic even/odd pattern (every array has an even pixel count)
         # makes ZEROFRAC exactly 0.5, independent of array size and seed.
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)  # all ones
         for chip in ("GREEN", "RED"):
             for fiber in _FIBERS:
                 arr = np.ones_like(np.asarray(kpf2.data[f"{chip}_{fiber}_FLUX"]))
@@ -515,20 +522,9 @@ class TestDiagL2ZeroFlux:
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.5)
 
     def test_zerofrac_skipped_when_no_data(self):
-        kpf2 = _make_kpf2_with_flux(populate=False)
+        kpf2 = _make_kpf2_nan_pixels(populate=False)
         DiagL2(kpf2).run()
         assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]
-
-
-def _set_fiber_arrays(kpf2, suffix, value, chips=("GREEN", "RED"), fibers=_FIBERS):
-    """Populate {chip}_{fiber}_{suffix} with a constant for the given fibers."""
-    norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
-    for chip in chips:
-        for fiber in fibers:
-            kpf2.set_data(
-                f"{chip}_{fiber}_{suffix}",
-                np.full((norder[chip], _NCOL_TEST), value, dtype=np.float32),
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -540,8 +536,8 @@ class TestDiagL2Snr:
     _SNR_KEYS = ("GSNRSCI", "GSNRSKY", "GSNRCAL", "RSNRSCI", "RSNRSKY", "RSNRCAL")
 
     def test_keys_written_when_flux_and_var_present(self):
-        kpf2 = _make_kpf2_with_flux()  # all FLUX ones
-        _set_fiber_arrays(kpf2, "VAR", 0.25)
+        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones
+        set_fiber_arrays(kpf2, "VAR", 0.25, ncol=_NCOL_TEST)
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
             assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
@@ -549,9 +545,9 @@ class TestDiagL2Snr:
 
     def test_single_fiber_snr_value(self):
         # SKY flux=2, var=0.04 -> SNR = 2/sqrt(0.04) = 10.0 in every pixel.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",))
-        _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",), ncol=_NCOL_TEST)
+        set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",), ncol=_NCOL_TEST)
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSKY") == pytest.approx(
             10.0, abs=0.01
@@ -563,9 +559,13 @@ class TestDiagL2Snr:
     def test_summed_sci_snr_value(self):
         # Each SCI fiber flux=2, var=0.04 -> summed flux=6, var=0.12;
         # SNR = 6/sqrt(0.12) ~= 17.32.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"))
-        _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(
+            kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"), ncol=_NCOL_TEST
+        )
+        set_fiber_arrays(
+            kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"), ncol=_NCOL_TEST
+        )
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSCI") == pytest.approx(
             17.32, abs=0.05
@@ -574,15 +574,17 @@ class TestDiagL2Snr:
     def test_summed_sci_skipped_when_a_sci_var_missing(self):
         # VAR for SCI1/SCI2 only (SCI3 var stays empty) -> summed-SCI skipped,
         # but SKY (var present) is still computed.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(
+            kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"), ncol=_NCOL_TEST
+        )
         DiagL2(kpf2).run()
         assert "GSNRSCI" not in kpf2.headers["QUALITY_CONTROL"]
         assert "GSNRSKY" in kpf2.headers["QUALITY_CONTROL"]
 
     def test_skipped_without_var(self):
         # Default fixture leaves VAR empty -> no SNR keys at all.
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_pixels()
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
             assert key not in kpf2.headers["QUALITY_CONTROL"]
@@ -607,7 +609,7 @@ class TestDiagL2OrderletFluxRatios:
 
     def test_keys_written_and_unity_when_uniform(self):
         # All fibers flux=1 (default) -> every inter-fiber ratio == 1.0.
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_pixels()
         DiagL2(kpf2).run()
         for key in self._RATIO_KEYS:
             assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
@@ -615,8 +617,10 @@ class TestDiagL2OrderletFluxRatios:
 
     def test_ratio_value(self):
         # GREEN SCI1 flux=2 over SCI2 flux=1 -> GFR12 == 2.0.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(
+            kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",), ncol=_NCOL_TEST
+        )
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("GFR12") == pytest.approx(2.0)
 

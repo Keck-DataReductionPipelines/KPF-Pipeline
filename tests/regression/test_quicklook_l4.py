@@ -1,8 +1,5 @@
 """Tests for L4 quicklook plots (CCFs and radial velocities)."""
 
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -14,14 +11,8 @@ from kpfpipe.quality_control.quicklook.level4 import PlotL4
 
 # Quicklook/QLP render suite: slow PNG rendering, so it is excluded from
 # `make test-fast`. Run in the full suite or `make test-qlp`.
+# The Agg pin and the close-figures teardown come from tests/regression/conftest.py.
 pytestmark = pytest.mark.quicklook
-
-
-@pytest.fixture(autouse=True)
-def _close_figures():
-    """Close any figures a test left open (the output_dir=None path returns them)."""
-    yield
-    plt.close("all")
 
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]

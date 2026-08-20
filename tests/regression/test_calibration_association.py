@@ -30,9 +30,12 @@ class MockL1:
         self._receipt.append((name, args, status))
 
     def set_keyword(self, key, value):
-        # Mirror the real routing: master paths ({PREFIX}FILE) land on RECEIPT.
-        ext = "RECEIPT" if key.endswith("FILE") else "PRIMARY"
-        self.headers[ext][key] = value
+        # Mirror the real routing: L1-headers.csv routes every {PREFIX}FILE
+        # master path to RECEIPT, and that is all CalibrationAssociation writes.
+        # Fail loud on anything else rather than inventing a PRIMARY fallback.
+        if not key.endswith("FILE"):
+            raise KeyError(f"{key!r} is not routed by this mock; extend it")
+        self.headers["RECEIPT"][key] = value
 
 
 def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):

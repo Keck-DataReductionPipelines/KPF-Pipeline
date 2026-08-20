@@ -196,7 +196,8 @@ class TestPerform:
         WavelengthCalibration(l2).perform()
         for chip in _CHIPS:
             for fiber in _FIBERS:
-                assert l2.data[f"{chip}_{fiber}_WAVE"].dtype == np.float64
+                ext = f"{chip}_{fiber}_WAVE"
+                assert_dtype(l2.data[ext], WAVE, ext)
 
     def test_explicit_path_bypasses_header(self, master_wls_path):
         # The WLSFILE header is bogus; the valid wls_path override wins.
@@ -230,7 +231,7 @@ class TestPerform:
         assert not np.any(l2.data["GREEN_SCI1_WAVE"])
         assert not np.any(l2.data["RED_SCI2_WAVE"])
 
-    def test_raises_when_wlsfile_missing(self):
+    def test_perform_raises_when_wlsfile_missing(self):
         l2 = _make_science_l2()  # no WLSFILE
         with pytest.raises(KeyError, match="WLSFILE"):
             WavelengthCalibration(l2).perform()

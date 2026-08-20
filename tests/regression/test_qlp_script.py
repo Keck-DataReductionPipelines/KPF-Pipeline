@@ -4,78 +4,41 @@ Each test drives the CLI end-to-end on a synthetic, plottable L0 fixture.
 """
 
 import os
-import subprocess
-import sys
 
-import numpy as np
 import pytest
-from astropy.io import fits
 
 from kpfpipe.utils.io import kpf_directory
+
+from ._data_models import write_amp_l0
+from ._scripts import run_script, write_config
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
 
-_REPO_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+_SCRIPT = "scripts/quality_control/qlp.py"
 
 # A valid obs_id (and matching datecode) the quicklook filenames/paths key off.
 _OBS_ID = "KP.20240405.00004.00"
 
-# pytest's filterwarnings does not reach a child process, so mirror the pyproject
-# rules in: a child warning then becomes the non-zero exit the tests check for.
-# PYTHONWARNINGS resolves categories at interpreter startup, before astropy is
-# importable, so the astropy rule is carried by its message prefix alone.
-_CHILD_WARNINGS = ",".join(
-    (
-        "error",
-        "ignore:Card is too long",
-        "default::ResourceWarning",
-    )
-)
-
-# A child that reaches the network (astropy's IERS auto-download) can block forever,
-# so cap every run: a hang becomes a loud TimeoutExpired instead of a stalled suite.
-_CHILD_TIMEOUT = 120
-
 
 def _write_l0_image_fixture(path):
     """Write an L0 FITS fixture with the two amps per chip PlotL0 needs to stitch."""
-    rng = np.random.default_rng(123)
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "small-2amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:39"
-    primary.header["OFNAME"] = os.path.basename(path)
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 3):
-            data = rng.normal(1000.0, 3.0, (32, 24)).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    fits.HDUList(hdus).writeto(path, overwrite=True)
-
-
-def _write_config(path, data_dirs):
-    lines = ["[DATA_DIRS]"]
-    lines += [f'{key} = "{value}"' for key, value in data_dirs.items()]
-    path.write_text("\n".join(lines) + "\n")
+    write_amp_l0(
+        path,
+        namps=2,
+        shape=(32, 24),
+        bias_level=1000.0,
+        seed=123,
+        primary_cards={
+            "OBJECT": "small-2amp",
+            "DATE-OBS": "2024-04-05T01:00:39",
+            "PROGNAME": None,
+        },
+    )
 
 
 def _run_qlp_script(*args):
-    env = {**os.environ, "PYTHONPATH": _REPO_ROOT, "PYTHONWARNINGS": _CHILD_WARNINGS}
-    cmd = [sys.executable, "scripts/quality_control/qlp.py", *map(str, args)]
-    return subprocess.run(
-        cmd,
-        cwd=_REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=_CHILD_TIMEOUT,
-    )
+    return run_script(_SCRIPT, *args)
 
 
 def _png_names(obs_id):
@@ -108,7 +71,7 @@ class TestQLPScript:
         _write_l0_image_fixture(str(fixture))
         science_out = tmp_path / "science-root"
         cfg = tmp_path / "cfg.toml"
-        _write_config(
+        write_config(
             cfg,
             {"KPF_DATA_INPUT": str(tmp_path), "KPF_SCIENCE_OUTPUT": str(science_out)},
         )
@@ -133,7 +96,7 @@ class TestQLPScript:
         fixture = tmp_path / f"{_OBS_ID}.fits"
         _write_l0_image_fixture(str(fixture))
         cfg = tmp_path / "cfg.toml"
-        _write_config(cfg, {"KPF_DATA_INPUT": str(tmp_path)})  # no KPF_SCIENCE_OUTPUT
+        write_config(cfg, {"KPF_DATA_INPUT": str(tmp_path)})  # no KPF_SCIENCE_OUTPUT
 
         result = _run_qlp_script("--input", fixture, "--level", "L0", "--config", cfg)
 

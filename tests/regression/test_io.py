@@ -29,6 +29,8 @@ from kpfpipe.utils.io import (
 )
 from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
 
+from ._scripts import write_l0_tree
+
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
 
@@ -294,6 +296,7 @@ class TestBuildCalibrationStacks:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestBuildCalibrationStacksRealData:
     @pytest.fixture(scope="class")
     def fh(self):
@@ -329,6 +332,7 @@ class TestBuildCalibrationStacksRealData:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestBuildMiniDatabaseDatecodeType:
     """build_mini_database accepts an int datecode as well as a 'YYYYMMDD' string."""
 
@@ -707,6 +711,7 @@ class TestKpfDirectory:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestBuildMiniDatabase:
     @pytest.fixture(scope="class")
     def mini_db(self):
@@ -752,20 +757,16 @@ def _write_l0_frame(tmp_path, datecode, obs_id):
     """Write a minimal L0 FITS (PRIMARY only) into L0/{datecode} so
     build_mini_database has a real header to scan; returns the FileHandler.
     Safe to call repeatedly per night to stage multiple frames."""
-    from astropy.io import fits
-
-    l0_dir = tmp_path / "L0" / datecode
-    l0_dir.mkdir(parents=True, exist_ok=True)
-    header = fits.Header(
-        {
-            "TARGNAME": "bias",
-            "IMTYPE": "Bias",
-            "OBJECT": "autocal-bias",
-            "EXPTIME": 0.0,
-            "ELAPSED": 0.0,
-        }
+    write_l0_tree(
+        tmp_path,
+        datecode,
+        int(obs_id.split(".")[2]),
+        obj="autocal-bias",
+        imtype="Bias",
+        targname="bias",
+        exptime=0.0,
+        elapsed=0.0,
     )
-    fits.PrimaryHDU(header=header).writeto(l0_dir / f"{obs_id}.fits")
     return FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
 
 

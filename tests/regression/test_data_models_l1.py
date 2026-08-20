@@ -95,7 +95,7 @@ class TestKPF1:
 
         l1_reread = KPF1.from_fits(out_fn)
         np.testing.assert_array_almost_equal(
-            l1_reread.data["GREEN_CCD"], original_green
+            l1_reread.data["GREEN_CCD"], original_green, decimal=4
         )
 
     def test_receipt_tracking(self, synthetic_l1_file, tmp_path):
@@ -517,7 +517,7 @@ class TestCatalogRecordPassthrough:
     """
 
     @staticmethod
-    def _l0_with_catalog(rv=-16.6):
+    def _l0_with_catalog_table(rv=-16.6):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
@@ -527,7 +527,7 @@ class TestCatalogRecordPassthrough:
     def test_rows_and_flags_reach_l1(self):
         # Beyond the C*# overlay, L1 keeps every source row -- not just the merged
         # one -- so the astrometry stays auditable.
-        l1 = self._l0_with_catalog().to_kpf1()
+        l1 = self._l0_with_catalog_table().to_kpf1()
         assert [str(s) for s in l1.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert l1.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
@@ -536,7 +536,7 @@ class TestCatalogRecordPassthrough:
         # all (an unlisted extension raises), and a missing rv comes back NaN
         # rather than masked.
         fn = str(tmp_path / "kpf_L1_20240405T000000.fits")
-        self._l0_with_catalog(rv=None).to_kpf1().to_fits(fn)
+        self._l0_with_catalog_table(rv=None).to_kpf1().to_fits(fn)
         back = KPF1.from_fits(fn)
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
@@ -617,7 +617,7 @@ class TestKPFMasterL1:
         m.to_fits(out_fn)
 
         m2 = KPFMasterL1.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(m2.data["GREEN_IMG"], original)
+        np.testing.assert_array_almost_equal(m2.data["GREEN_IMG"], original, decimal=4)
 
     def test_datalvl_header_in_fits(self, synthetic_masters_l1_file, tmp_path):
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)

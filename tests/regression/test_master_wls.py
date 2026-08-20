@@ -17,13 +17,13 @@ from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 from kpfpipe.utils.kpf import get_obs_id
 
-from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
+from ._dtype_policy import MASK_MEM, WAVE, assert_dtype, assert_roundtrip_dtype
+from ._masters import FILE_LIST
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL_TEST = 16
 
-FILE_LIST = sorted([f"KP.20240101.{i:05d}.00.fits" for i in range(8)])
 DATECODE = "20240101"  # shared by FILE_LIST and the master obs_ids below
 
 
@@ -94,6 +94,21 @@ def mock_pipeline(monkeypatch):
 # ---------------------------------------------------------------------------
 # TestInit
 # ---------------------------------------------------------------------------
+
+
+def _stub_frame_pipeline(monkeypatch, l1=None, extract=None):
+    """Short-circuit load -> process -> extract so a test drives only the fit.
+
+    ``_load_frame`` threads each source filename through as the opaque L1 token
+    unless ``l1`` overrides it, so the extracted L2 stub carries that frame's
+    obs_id (which drives per-frame naming). The fit/combine stubs stay per-test:
+    their survivor and rejection structure IS what each test asserts.
+    """
+    load = (lambda self, fn, cache=False, **kw: fn) if l1 is None else l1
+    extract = extract or (lambda self, l1_obj, **kw: MockL2(get_obs_id(l1_obj)))
+    monkeypatch.setattr(WLS, "_load_frame", load)
+    monkeypatch.setattr(WLS, "_process_frame", lambda self, l1_obj, **kw: l1_obj)
+    monkeypatch.setattr(WLS, "_extract_frame", extract)
 
 
 class TestInit:
@@ -207,13 +222,7 @@ def mock_make_master_l2(monkeypatch):
     so the default min_stack_size=5 gate passes); the combine stub returns
     synthetic W and coefficient arrays with chip-correct shapes.
     """
-    # Thread each source filename through as the opaque L1 token so the
-    # extracted L2 stub carries that frame's obs_id (drives per-frame naming).
-    monkeypatch.setattr(WLS, "_load_frame", lambda self, fn, cache=False, **kwargs: fn)
-    monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kwargs: l1)
-    monkeypatch.setattr(
-        WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2(get_obs_id(l1))
-    )
+    _stub_frame_pipeline(monkeypatch)
 
     def mock_fit_and_qc(
         self,
@@ -293,11 +302,11 @@ class TestMakeMasterL2:
         # W's planes are ordered by fiber_positions (SKY=0..CAL=4), so the write
         # loop must sort by that, not trust self.fibers' config-overridable
         # order -- else SKY's solution lands on CAL and vice versa.
-        monkeypatch.setattr(
-            WLS, "_load_frame", lambda self, fn, cache=False, **kw: MockL1()
+        _stub_frame_pipeline(
+            monkeypatch,
+            l1=lambda self, fn, cache=False, **kw: MockL1(),
+            extract=lambda self, l1_obj, **kw: MockL2(),
         )
-        monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
-        monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kw: MockL2())
 
         def mock_fit_and_qc(self, chip, fibers, **kwargs):
             coeffs = np.zeros((self.poly_degree_x + 1, self.poly_degree_m + 1, 1))
@@ -451,10 +460,12 @@ class TestMakeMasterL2:
             assert chip in wls._frame_diagnostics
             assert len(wls._frame_diagnostics[chip]) == len(FILE_LIST)
 
-    def test_save_diagnostics_before_make_raises(self):
+    def test_save_diagnostics_before_make_raises(self, tmp_path):
         wls = WLS(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_diagnostics("/tmp/KP.20240101.00000.00_master_thar_L2.fits")
+            wls.save_diagnostics(
+                str(tmp_path / "KP.20240101.00000.00_master_thar_L2.fits")
+            )
 
     def test_save_diagnostics_with_empty_stash_raises(self, tmp_path):
         # An empty (not None) stash means the chip loop aborted before any chip
@@ -581,7 +592,7 @@ class TestMakeMasterL2:
                     assert np.issubdtype(lines["pix"].dtype, np.floating)
                     assert np.issubdtype(lines["index"].dtype, np.integer)
                     assert np.issubdtype(lines["echelle"].dtype, np.integer)
-                    assert lines["isgood"].dtype == bool
+                    assert_dtype(lines["isgood"], MASK_MEM, "isgood")
                     assert h5py.check_string_dtype(lines["chip"].dtype) is not None
                     assert h5py.check_string_dtype(lines["fiber"].dtype) is not None
                     for key in ["wav", "pix", "std", "amp"]:
@@ -947,11 +958,7 @@ class TestMinStackSizeGate:
         # n_survivors is an int (same for every chip) or a {chip: count} dict, so
         # a test can make GREEN and RED pass/fail the gate independently.
         files = sorted(f"KP.20240101.{i:05d}.00.fits" for i in range(n_frames))
-        monkeypatch.setattr(WLS, "_load_frame", lambda self, fn, cache=False, **kw: fn)
-        monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
-        monkeypatch.setattr(
-            WLS, "_extract_frame", lambda self, l1, **kw: MockL2(get_obs_id(l1))
-        )
+        _stub_frame_pipeline(monkeypatch)
 
         def mock_fit(self, chip, fibers, **kwargs):
             n = n_survivors[chip] if isinstance(n_survivors, dict) else n_survivors
@@ -1079,7 +1086,7 @@ class TestFitLinePositions:
         )
         assert len(result["wav"]) == 1
         for key in ["wav", "pix", "std", "amp"]:
-            assert result[key].dtype == np.float64
+            assert_dtype(result[key], WAVE, f"_fit_line_positions_1d {key}")
 
     def test_all_nan_fiber_emits_fiber_level_warning(self, caplog):
         wls = WLS(FILE_LIST)

@@ -15,6 +15,7 @@ from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters import KPFMasterL4
 
 from ._catalog import SOURCES, catalog_record_table
+from ._dtype_policy import BJD, CCF, RV_FLOAT, assert_dtype, assert_roundtrip_dtype
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -147,25 +148,16 @@ class TestKPF4:
         # bare RV is not an alias (RV is trace-mapped, not a 1:1 alias)
         assert kpf4.data._resolve("RV") == "RV"
 
-    def test_ccf_chip_prefix_views(self):
+    @pytest.mark.parametrize("suffix", ["CCF", "CCF_VAR"])
+    def test_ccf_chip_prefix_views(self, suffix):
         kpf4 = KPF4()
         green = np.ones((NORDER_GREEN, 5))
         red = 2 * np.ones((NORDER - NORDER_GREEN, 5))
-        kpf4.set_data("GREEN_SCI2_CCF", green)
-        kpf4.set_data("RED_SCI2_CCF", red)
-        assert kpf4.data["SCI2_CCF"].shape == (NORDER, 5)
-        np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF"], green)
-        np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF"], red)
-
-    def test_ccf_var_chip_prefix_views(self):
-        kpf4 = KPF4()
-        green = np.ones((NORDER_GREEN, 5))
-        red = 2 * np.ones((NORDER - NORDER_GREEN, 5))
-        kpf4.set_data("GREEN_SCI2_CCF_VAR", green)
-        kpf4.set_data("RED_SCI2_CCF_VAR", red)
-        assert kpf4.data["SCI2_CCF_VAR"].shape == (NORDER, 5)
-        np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF_VAR"], green)
-        np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF_VAR"], red)
+        kpf4.set_data(f"GREEN_SCI2_{suffix}", green)
+        kpf4.set_data(f"RED_SCI2_{suffix}", red)
+        assert kpf4.data[f"SCI2_{suffix}"].shape == (NORDER, 5)
+        np.testing.assert_array_equal(kpf4.data[f"GREEN_SCI2_{suffix}"], green)
+        np.testing.assert_array_equal(kpf4.data[f"RED_SCI2_{suffix}"], red)
 
     def test_ccf_var_survives_round_trip(self, tmp_path):
         kpf4 = KPF2().to_kpf4()
@@ -227,18 +219,59 @@ class TestKPFMasterStubs:
         assert issubclass(KPFMasterL4, KPF4)
 
 
-class TestImports:
-    def test_data_models_import(self):
-        from kpfpipe.data_models import KPF0, KPF1, KPF2, KPF4
+class TestDtypeProvenance:
+    """EPRV mandates 64-bit for the L4 product: the CCF cubes and the RV table's
+    WAVE_START/WAVE_END/BJD_TDB. A downscale anywhere here costs RV accuracy, so
+    assert both the in-memory dtype and what survives the FITS round-trip."""
 
-        assert KPF0 is not None
-        assert KPF1 is not None
-        assert KPF2 is not None
-        assert KPF4 is not None
+    @staticmethod
+    def _populated():
+        kpf4 = KPF2().to_kpf4()
+        kpf4.set_data("SCI2_CCF", np.ones((NORDER, 5), dtype=np.float64))
+        kpf4.set_data(
+            "SCI2_RV",
+            pd.DataFrame(
+                {
+                    "ORDER_INDEX": np.arange(NORDER),
+                    "RV": np.zeros(NORDER, dtype=np.float64),
+                    "RV_ERR": np.full(NORDER, 1e-3, dtype=np.float64),
+                    "WAVE_START": np.full(NORDER, 4500.0, dtype=np.float64),
+                    "WAVE_END": np.full(NORDER, 8700.0, dtype=np.float64),
+                    "BJD_TDB": np.full(NORDER, 2460000.0, dtype=np.float64),
+                }
+            ),
+        )
+        return kpf4
 
-    def test_masters_data_models_import(self):
-        from kpfpipe.data_models.masters import KPFMasterL1, KPFMasterL2, KPFMasterL4
+    def test_ccf_cube_is_float64(self):
+        assert_dtype(self._populated().data["SCI2_CCF"], CCF, "SCI2_CCF in-mem")
 
-        assert KPFMasterL1 is not None
-        assert KPFMasterL2 is not None
-        assert KPFMasterL4 is not None
+    @pytest.mark.parametrize("column", ["RV", "RV_ERR", "WAVE_START", "WAVE_END"])
+    def test_rv_table_columns_are_float64(self, column):
+        table = self._populated().data["SCI2_RV"]
+        assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} in-mem")
+
+    def test_bjd_tdb_is_float64(self):
+        table = self._populated().data["SCI2_RV"]
+        assert_dtype(table["BJD_TDB"], BJD, "SCI2_RV BJD_TDB in-mem")
+
+    def test_ccf_cube_survives_round_trip_as_float64(self, tmp_path):
+        # assert_roundtrip_dtype reads BITPIX off the raw HDU, so it needs the
+        # on-disk extension name (SCI2_CCF is an alias for CCF3).
+        assert_roundtrip_dtype(
+            KPF4,
+            self._populated(),
+            "CCF3",
+            CCF,
+            tmp_path,
+            name="kpf_SL4_20240101T000003.fits",
+        )
+
+    @pytest.mark.parametrize(
+        "column", ["RV", "RV_ERR", "WAVE_START", "WAVE_END", "BJD_TDB"]
+    )
+    def test_rv_table_survives_round_trip_as_float64(self, tmp_path, column):
+        path = str(tmp_path / "kpf_SL4_20240101T000004.fits")
+        self._populated().to_fits(path)
+        table = KPF4.from_fits(path).data["SCI2_RV"]
+        assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} after round-trip")

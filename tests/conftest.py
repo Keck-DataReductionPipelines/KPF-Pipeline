@@ -146,18 +146,14 @@ def synthetic_l0_file(tmp_path_factory):
 @pytest.fixture
 def synthetic_l0_minimal(tmp_path):
     """Create an L0 file with only PRIMARY (no optional extensions)."""
-    fn = str(tmp_path / "KP.20240113.00001.00.fits")
+    # Deferred like _catalog_record_hdu above: this root conftest is imported at
+    # collection for every session, and _data_models pulls in kpfpipe.
+    from .regression._data_models import write_minimal_l0
 
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["DATE-OBS"] = "2024-01-13T00:00:01"
-    primary.header["OFNAME"] = "KP.20240113.00001.00.fits"
-
-    hdul = fits.HDUList([primary])
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
-
-    return fn
+    return write_minimal_l0(
+        tmp_path / "KP.20240113.00001.00.fits",
+        primary_cards={"DATE-OBS": "2024-01-13T00:00:01", "PROGNAME": None},
+    )
 
 
 @pytest.fixture(scope="session")

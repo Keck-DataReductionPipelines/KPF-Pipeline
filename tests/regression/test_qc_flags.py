@@ -13,7 +13,6 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -24,8 +23,16 @@ from kpfpipe.quality_control.qc_flags.level1 import QCL1
 from kpfpipe.quality_control.qc_flags.level2 import QCL2
 from kpfpipe.quality_control.qc_flags.level4 import QCL4
 
-_NORDER = {"GREEN": DETECTOR["norder"]["GREEN"], "RED": DETECTOR["norder"]["RED"]}
-_NORDER_TOTAL = _NORDER["GREEN"] + _NORDER["RED"]
+from ._data_models import (
+    GOOD_DATES,
+    NORDER,
+    NORDER_TOTAL,
+    make_l4,
+    seed_required_primary,
+    set_fiber_arrays,
+    write_amp_l0,
+)
+
 _NCOLS = 10  # small column count for fast tests
 
 
@@ -51,54 +58,27 @@ def _make_kpf0(
     no EM data at all, like a calibration. ``imtype`` sets PRIMARY IMTYPE
     ('Object' is a science frame, anything else a calibration).
     """
-    fn = str(tmp_path / f"{obs_id}.fits")
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    primary.header["EXPTIME"] = exptime
-    primary.header["OBJECT"] = "synthetic"
-    primary.header["OFNAME"] = f"{obs_id}.fits"
-    primary.header["PROGNAME"] = "K123"
-    primary.header["IMTYPE"] = imtype
-    for k, v in (dates or {}).items():
-        primary.header[k] = v
-
-    hdus = [primary]
-    if with_amps:
-        for chip in ["GREEN", "RED"]:
-            for amp in range(1, 5):
-                data = np.ones((10, 10), dtype=np.float32)
-                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-    for name, table in (expmeter or {}).items():
-        hdus.append(fits.BinTableHDU(table, name=name))
-
-    fits.HDUList(hdus).writeto(fn, overwrite=True)
+    fn = write_amp_l0(
+        tmp_path / f"{obs_id}.fits",
+        namps=4 if with_amps else 0,
+        shape=(10, 10),
+        primary_cards={
+            "DATE-OBS": "2024-04-05T01:00:37",
+            "EXPTIME": exptime,
+            "IMTYPE": imtype,
+            **(dates or {}),
+        },
+        extra_hdus=[
+            fits.BinTableHDU(table, name=name)
+            for name, table in (expmeter or {}).items()
+        ],
+    )
     return KPF0.from_fits(fn)
-
-
-# Self-consistent raw timing cards (END - BEG == ELAPSED), for the DATTIMOK check.
-_GOOD_DATES = {
-    "DATE-BEG": "2024-09-23T09:12:09.484",
-    "DATE-MID": "2024-09-23T09:12:15.519",
-    "DATE-END": "2024-09-23T09:12:21.554",
-    "ELAPSED": 12.07,
-}
 
 
 # Clean exposure-meter flux for the EMFLUXOK tests: 4 readings x 25 wavelength
 # channels (more than the 20-channel negative run the check looks for).
 _EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
-
-
-def _seed_required_primary(kpf, qc_cls):
-    """Seed every PRIMARY keyword ``qc_cls`` requires, skipping ones already set.
-
-    KWRDPR* is presence-only, so sentinel values suffice; reusing the production
-    ``_required_primary_keywords`` avoids drift.
-    """
-    for kw in qc_cls(kpf)._required_primary_keywords():
-        if kw not in kpf.headers["PRIMARY"]:
-            kpf.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
 
 
 def _make_kpf1(
@@ -159,12 +139,17 @@ def _make_kpf1(
 
     # KPF1.__init__ seeds the EPRV skeleton, but KPF1._read replaces PRIMARY with
     # the file's sparse header, so a synthetic from_fits L1 would fail KWRDPRL1.
-    _seed_required_primary(l1, QCL1)
+    seed_required_primary(l1, QCL1)
     return l1
 
 
-def _make_kpf2_with_flux(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
+def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
     """Minimal KPF2 with all 10 {CHIP}_{FIBER}_FLUX extensions populated.
+
+    The arrays stay clean; the NaN counts and zero fraction are written as HEADERS,
+    because QCL2 reads them from the header rather than measuring pixels. Not the
+    same as test_diagnostics.py's ``_make_kpf2_nan_pixels``, which injects real
+    NaN/zero PIXELS for DiagL2 to measure. Do not merge them.
 
     Per-chip row counts must match NORDER_GREEN/NORDER_RED because KPF2's
     chip-prefix __setitem__ rejects any other shape. ``nan_frac`` is the fraction
@@ -179,7 +164,7 @@ def _make_kpf2_with_flux(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
 
     total_pixels = 0
     for chip in chips:
-        nrows = _NORDER[chip]
+        nrows = NORDER[chip]
         for fiber in fibers:
             ext = f"{chip}_{fiber}_FLUX"
             if ext == missing_ext:
@@ -194,16 +179,6 @@ def _make_kpf2_with_flux(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
     kpf2.headers["QUALITY_CONTROL"]["ZEROFRAC"] = (zero_frac, "Zero-flux fraction")
 
     return kpf2
-
-
-def _set_kpf2_var(kpf2, fill=1.0):
-    """Populate all {CHIP}_{FIBER}_VAR extensions with a constant fill."""
-    for chip in ["GREEN", "RED"]:
-        nrows = _NORDER[chip]
-        for fiber in ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]:
-            kpf2.set_data(
-                f"{chip}_{fiber}_VAR", np.full((nrows, _NCOLS), fill, dtype=np.float32)
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -436,16 +411,16 @@ class TestQCL0:
         assert QCL0(l0).header_keywords_present() is False
 
     def test_times_consistent_pass(self, tmp_path):
-        l0 = _make_kpf0(tmp_path, dates=_GOOD_DATES)
+        l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
         assert QCL0(l0).times_consistent() is True
 
     def test_times_out_of_order_fails(self, tmp_path):
-        bad = dict(_GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
+        bad = dict(GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
 
     def test_times_ignores_elapsed(self, tmp_path):
         # DATTIMOK checks only DATE ordering; ELAPSED is EXPTIMOK's business.
-        bad = dict(_GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
+        bad = dict(GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is True
 
     def test_times_missing_keys_fail(self, tmp_path):
@@ -794,7 +769,7 @@ class TestQCL0:
         assert "GREEN" in KPF0.keyword_registry.routing["DATAPRL0"][1]
 
     # --- expmeter_times_consistent (EMTIMEOK) and expmeter_flux_sane (EMFLUXOK).
-    # Four readings tile the _GOOD_DATES shutter window.
+    # Four readings tile the GOOD_DATES shutter window.
 
     _EM_BEGS = [
         "2024-09-23T09:12:09.484",
@@ -839,7 +814,7 @@ class TestQCL0:
         extensions = {"EXPMETER_SCI": table(_EM_CLEAN_FLUX if flux is None else flux)}
         if sky_flux is not None:
             extensions["EXPMETER_SKY"] = table(sky_flux)
-        return _make_kpf0(tmp_path, dates=_GOOD_DATES, expmeter=extensions)
+        return _make_kpf0(tmp_path, dates=GOOD_DATES, expmeter=extensions)
 
     def test_expmeter_times_consistent_pass(self, tmp_path):
         l0 = self._make_kpf0_with_expmeter(tmp_path)
@@ -847,7 +822,7 @@ class TestQCL0:
 
     def test_expmeter_times_no_em_data_passes(self, tmp_path):
         # Calibration frames carry no EM extension; there is nothing to check.
-        l0 = _make_kpf0(tmp_path, dates=_GOOD_DATES)
+        l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
         assert l0.data.get("EXPMETER_SCI") is None
         assert QCL0(l0).expmeter_times_consistent() is True
 
@@ -887,7 +862,7 @@ class TestQCL0:
         assert QCL0(l0).expmeter_flux_sane() is True
 
     def test_expmeter_flux_no_em_data_passes(self, tmp_path):
-        l0 = _make_kpf0(tmp_path, dates=_GOOD_DATES)
+        l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
         assert QCL0(l0).expmeter_flux_sane() is True
 
     def test_expmeter_flux_saturated_fails(self, tmp_path):
@@ -1146,19 +1121,19 @@ class TestQCL1Run:
 
 class TestQCL2:
     def test_extraction_present_pass(self):
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_headers()
         assert QCL2(kpf2).extraction_present() is True
 
     def test_required_keywords_present_pass(self):
         # A fresh KPF2 carries only the rvdata-seeded EPRV keywords, not the KPF
         # provenance cards.
-        kpf2 = _make_kpf2_with_flux()
-        _seed_required_primary(kpf2, QCL2)
+        kpf2 = _make_kpf2_nan_headers()
+        seed_required_primary(kpf2, QCL2)
         assert QCL2(kpf2).required_keywords_present() is True
 
     def test_required_keywords_present_fail_missing(self):
-        kpf2 = _make_kpf2_with_flux()
-        _seed_required_primary(kpf2, QCL2)
+        kpf2 = _make_kpf2_nan_headers()
+        seed_required_primary(kpf2, QCL2)
         del kpf2.headers["PRIMARY"]["INSTRUME"]
         assert QCL2(kpf2).required_keywords_present() is False
 
@@ -1170,18 +1145,18 @@ class TestQCL2:
         assert QCL2(kpf2).extraction_present() is False
 
     def test_extraction_present_fail_one_trace_cleared(self):
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_headers()
         # The SKY_FLUX alias resolves to TRACE1_FLUX; emptying it zeroes the size
         # of every chip view over it.
         kpf2.data["SKY_FLUX"] = np.array([], dtype=np.float32)
         assert QCL2(kpf2).extraction_present() is False
 
     def test_flux_finite_fraction_pass(self):
-        kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
+        kpf2 = _make_kpf2_nan_headers(nan_frac=0.0)
         assert QCL2(kpf2).flux_finite_fraction() is True
 
     def test_flux_finite_fraction_fail_too_many_nans(self):
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_headers()
         # total_pixels = (35 + 32) * 5 fibers * _NCOLS = 3350, so 5 x 200 NaN is
         # ~30%, well over the 1% limit.
         for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
@@ -1189,7 +1164,7 @@ class TestQCL2:
         assert QCL2(kpf2).flux_finite_fraction() is False
 
     def test_flux_finite_fraction_fail_missing_header(self):
-        kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
+        kpf2 = _make_kpf2_nan_headers(nan_frac=0.0)
         del kpf2.headers["QUALITY_CONTROL"]["NANSCI1"]
         assert QCL2(kpf2).flux_finite_fraction() is False
 
@@ -1201,39 +1176,39 @@ class TestQCL2:
         assert QCL2(kpf2).flux_finite_fraction() is False
 
     def test_nonzero_flux_pass(self):
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.1)
+        kpf2 = _make_kpf2_nan_headers(zero_frac=0.1)
         assert QCL2(kpf2).nonzero_flux() is True
 
     def test_nonzero_flux_fail_high_frac(self):
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.75)
+        kpf2 = _make_kpf2_nan_headers(zero_frac=0.75)
         assert QCL2(kpf2).nonzero_flux() is False
 
     def test_nonzero_flux_fail_missing(self):
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_headers()
         del kpf2.headers["QUALITY_CONTROL"]["ZEROFRAC"]
         assert QCL2(kpf2).nonzero_flux() is False
 
     def test_nonzero_flux_exactly_half(self):
         # The check is strictly < 0.5.
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.5)
+        kpf2 = _make_kpf2_nan_headers(zero_frac=0.5)
         assert QCL2(kpf2).nonzero_flux() is False
 
     # --- variance_positive (L2VAROK) ---
 
     def test_variance_positive_pass(self):
-        kpf2 = _make_kpf2_with_flux()
-        _set_kpf2_var(kpf2, 1.0)
+        kpf2 = _make_kpf2_nan_headers()
+        set_fiber_arrays(kpf2, "VAR", 1.0, ncol=_NCOLS)
         assert QCL2(kpf2).variance_positive() is True
 
     def test_variance_positive_tolerates_zero(self):
-        kpf2 = _make_kpf2_with_flux()
-        _set_kpf2_var(kpf2, 0.0)  # zero variance is allowed
+        kpf2 = _make_kpf2_nan_headers()
+        set_fiber_arrays(kpf2, "VAR", 0.0, ncol=_NCOLS)  # zero variance is allowed
         assert QCL2(kpf2).variance_positive() is True
 
     def test_variance_positive_fail_negative(self):
-        kpf2 = _make_kpf2_with_flux()
-        _set_kpf2_var(kpf2, 1.0)
-        var = np.full((_NORDER["GREEN"], _NCOLS), 1.0, dtype=np.float32)
+        kpf2 = _make_kpf2_nan_headers()
+        set_fiber_arrays(kpf2, "VAR", 1.0, ncol=_NCOLS)
+        var = np.full((NORDER["GREEN"], _NCOLS), 1.0, dtype=np.float32)
         var[0, 0] = -1.0  # negative variance where flux is finite
         kpf2.set_data("GREEN_SCI1_VAR", var)
         assert QCL2(kpf2).variance_positive() is False
@@ -1241,24 +1216,24 @@ class TestQCL2:
     def test_variance_positive_raises_on_shape_mismatch(self):
         # FLUX populated with VAR left at its default empty (0,) shape is a
         # malformed product, so the shape mismatch raises rather than skipping.
-        kpf2 = _make_kpf2_with_flux()  # no VAR populated
+        kpf2 = _make_kpf2_nan_headers()  # no VAR populated
         with pytest.raises(ValueError):
             QCL2(kpf2).variance_positive()
 
     # --- science_snr (L2SNROK) ---
 
     def test_science_snr_pass(self):
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_headers()
         kpf2.headers["QUALITY_CONTROL"]["GSNRSCI"] = (20.0, "g snr")
         kpf2.headers["QUALITY_CONTROL"]["RSNRSCI"] = (18.0, "r snr")
         assert QCL2(kpf2).science_snr() is True
 
     def test_science_snr_fail_missing(self):
-        kpf2 = _make_kpf2_with_flux()  # no GSNRSCI/RSNRSCI headers
+        kpf2 = _make_kpf2_nan_headers()  # no GSNRSCI/RSNRSCI headers
         assert QCL2(kpf2).science_snr() is False
 
     def test_science_snr_fail_below_floor(self):
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_headers()
         kpf2.headers["QUALITY_CONTROL"]["GSNRSCI"] = (0.5, "g snr")  # below floor
         kpf2.headers["QUALITY_CONTROL"]["RSNRSCI"] = (18.0, "r snr")
         assert QCL2(kpf2).science_snr() is False
@@ -1284,117 +1259,81 @@ class TestQCL2:
 # ---------------------------------------------------------------------------
 
 
-def _make_l4(*, sci=True, rv_filled=True, bervrng=None, bjdrng=None, sci_obj=None):
-    """KPF4 with science CCF/RV and optional per-order BERV/BJD range metrics.
-
-    ``rv_filled=False`` seeds the RV table with NaN RVs, as a CrossCorrelation-only
-    L4 has before RadialVelocity runs. ``sci_obj`` sets the SCI2 illumination
-    (INSTRUMENT_HEADER SCI-OBJ), which the BERV/BJD tolerance checks apply only
-    when it is 'target'.
-    """
-    l4 = KPF4()
-    if sci:
-        rv_col = (
-            np.zeros(_NORDER_TOTAL) if rv_filled else np.full(_NORDER_TOTAL, np.nan)
-        )
-        for fiber in ("SCI1", "SCI2", "SCI3"):
-            l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
-            l4.set_data(
-                f"{fiber}_RV",
-                Table(
-                    {
-                        "ORDER_INDEX": np.arange(_NORDER_TOTAL),
-                        "RV": rv_col,
-                        "BJD_TDB": np.full(_NORDER_TOTAL, 2460000.0),
-                        "BERV": np.zeros(_NORDER_TOTAL),
-                        "WEIGHT": np.ones(_NORDER_TOTAL),
-                    }
-                ),
-            )
-    if bervrng is not None:
-        l4.headers["QUALITY_CONTROL"]["BERVRNG"] = bervrng
-    if bjdrng is not None:
-        l4.headers["QUALITY_CONTROL"]["BJDRNG"] = bjdrng
-    if sci_obj is not None:
-        l4.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
-    return l4
-
-
 class TestQCL4:
     def test_ccf_rv_present_pass(self):
-        assert QCL4(_make_l4()).ccf_rv_present() is True
+        assert QCL4(make_l4()).ccf_rv_present() is True
 
     def test_ccf_rv_present_fail_when_missing(self):
-        assert QCL4(_make_l4(sci=False)).ccf_rv_present() is False
+        assert QCL4(make_l4(sci=False)).ccf_rv_present() is False
 
     def test_ccf_rv_present_fail_when_rvs_unfilled(self):
         # The RVs are the L4 product, so an all-NaN RV column fails even with the
         # CCFs in place.
-        assert QCL4(_make_l4(rv_filled=False)).ccf_rv_present() is False
+        assert QCL4(make_l4(rv_filled=False)).ccf_rv_present() is False
 
     def test_ccf_rv_present_fail_when_columns_missing(self):
         # The per-order BJD_TDB/BERV/WEIGHT columns the DiagL4 dispersion metrics
         # consume are absent, so the product is incomplete.
         l4 = KPF4()
         for fiber in ("SCI1", "SCI2", "SCI3"):
-            l4.set_data(f"{fiber}_CCF", np.ones((_NORDER_TOTAL, 5)))
+            l4.set_data(f"{fiber}_CCF", np.ones((NORDER_TOTAL, 5)))
             l4.set_data(
                 f"{fiber}_RV",
                 Table(
                     {
-                        "ORDER_INDEX": np.arange(_NORDER_TOTAL),
-                        "RV": np.zeros(_NORDER_TOTAL),
+                        "ORDER_INDEX": np.arange(NORDER_TOTAL),
+                        "RV": np.zeros(NORDER_TOTAL),
                     }
                 ),
             )
         assert QCL4(l4).ccf_rv_present() is False
 
     def test_berv_within_tolerance_pass(self):
-        l4 = _make_l4(sci_obj="target", bervrng=0.05)
+        l4 = make_l4(sci_obj="target", bervrng=0.05)
         assert QCL4(l4).berv_within_tolerance() is True
 
     def test_berv_within_tolerance_fail(self):
-        l4 = _make_l4(sci_obj="target", bervrng=0.5)
+        l4 = make_l4(sci_obj="target", bervrng=0.5)
         assert QCL4(l4).berv_within_tolerance() is False
 
     def test_berv_within_tolerance_non_target_passes(self):
         # SCI2 is not star-illuminated, so the check is N/A however bad BERVRNG is.
-        l4 = _make_l4(sci_obj="etalon", bervrng=0.5)
+        l4 = make_l4(sci_obj="etalon", bervrng=0.5)
         assert QCL4(l4).berv_within_tolerance() is True
 
     def test_berv_within_tolerance_raises_when_sci_obj_absent(self):
         # CrossCorrelation requires SCI-OBJ upstream, so a frame without one is
         # malformed and must not pass as a non-target source.
         with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
-            QCL4(_make_l4(bervrng=0.05)).berv_within_tolerance()
+            QCL4(make_l4(bervrng=0.05)).berv_within_tolerance()
 
     def test_berv_within_tolerance_target_absent_fails(self):
         # DiagL4 skips the metric on degenerate weights or a NaN barycorr; on a
         # target frame that is malformed, not a vacuous pass.
-        assert QCL4(_make_l4(sci_obj="target")).berv_within_tolerance() is False
+        assert QCL4(make_l4(sci_obj="target")).berv_within_tolerance() is False
 
     def test_bjd_within_tolerance_pass(self):
-        l4 = _make_l4(sci_obj="target", bjdrng=0.5)
+        l4 = make_l4(sci_obj="target", bjdrng=0.5)
         assert QCL4(l4).bjd_within_tolerance() is True
 
     def test_bjd_within_tolerance_fail(self):
-        l4 = _make_l4(sci_obj="target", bjdrng=2.0)
+        l4 = make_l4(sci_obj="target", bjdrng=2.0)
         assert QCL4(l4).bjd_within_tolerance() is False
 
     def test_bjd_within_tolerance_non_target_passes(self):
         assert (
-            QCL4(_make_l4(sci_obj="etalon", bjdrng=2.0)).bjd_within_tolerance() is True
+            QCL4(make_l4(sci_obj="etalon", bjdrng=2.0)).bjd_within_tolerance() is True
         )
 
     def test_bjd_within_tolerance_raises_when_sci_obj_absent(self):
         with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
-            QCL4(_make_l4(bjdrng=0.5)).bjd_within_tolerance()
+            QCL4(make_l4(bjdrng=0.5)).bjd_within_tolerance()
 
     def test_bjd_within_tolerance_target_absent_fails(self):
-        assert QCL4(_make_l4(sci_obj="target")).bjd_within_tolerance() is False
+        assert QCL4(make_l4(sci_obj="target")).bjd_within_tolerance() is False
 
     def test_required_keywords_present(self):
-        l4 = _make_l4()
+        l4 = make_l4()
         req = QCL4(l4)._required_primary_keywords()
         for kw in req:
             l4.headers["PRIMARY"][kw] = 1.0
@@ -1404,7 +1343,7 @@ class TestQCL4:
             assert QCL4(l4).required_keywords_present() is False
 
     def test_run_all_good_isgood(self):
-        l4 = _make_l4(sci_obj="target", bervrng=0.05, bjdrng=0.5)
+        l4 = make_l4(sci_obj="target", bervrng=0.05, bjdrng=0.5)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
@@ -1415,7 +1354,7 @@ class TestQCL4:
 
     def test_run_flags_failure_in_isgood(self):
         # no CCF/RV, and out-of-tolerance BERV/BJD ranges on a target frame
-        l4 = _make_l4(sci=False, sci_obj="target", bervrng=0.5, bjdrng=2.0)
+        l4 = make_l4(sci=False, sci_obj="target", bervrng=0.5, bjdrng=2.0)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         l4.headers["QUALITY_CONTROL"]  # ensure present

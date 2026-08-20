@@ -526,7 +526,9 @@ class TestKPFMasterL2:
         m.to_fits(out_fn)
 
         m2 = KPFMasterL2.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(m2.data["TRACE3_WAVE"], original)
+        np.testing.assert_array_almost_equal(
+            m2.data["TRACE3_WAVE"], original, decimal=4
+        )
 
     def test_datalvl_header_in_fits(self, synthetic_masters_l2_file, tmp_path):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)

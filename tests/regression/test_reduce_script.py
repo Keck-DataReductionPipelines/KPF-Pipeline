@@ -128,15 +128,15 @@ class TestShortcutOverride:
 
 
 class TestGuards:
-    def test_masters_rejects_obs_id(self, monkeypatch):
+    def test_masters_rejects_obs_id(self):
         with pytest.raises(SystemExit):
             red.main(["--masters", "-o", "KP.x"])
 
-    def test_science_rejects_datecode(self, monkeypatch):
+    def test_science_rejects_datecode(self):
         with pytest.raises(SystemExit):
             red.main(["--science", "-d", "20240405"])
 
-    def test_missing_recipe_and_config_errors(self, monkeypatch):
+    def test_missing_recipe_and_config_errors(self):
         # No --masters/--science and no explicit -r/-c pair.
         with pytest.raises(SystemExit):
             red.main(["-o", "KP.x"])
@@ -178,12 +178,12 @@ class TestClearStaleOutputs:
         assert not any(os.path.exists(p) for p in targets)
         assert os.path.exists(stray)  # a different obs_id's product is untouched
 
-    def test_science_raises_when_output_root_unset(self, tmp_path):
+    def test_science_raises_when_output_root_unset(self):
         # No KPF_SCIENCE_OUTPUT -> can't know what to clear; fail loud.
         with pytest.raises(KeyError, match="KPF_SCIENCE_OUTPUT"):
             red.clear_stale_outputs(_Config({}), _args(obs_id=self._OID))
 
-    def test_masters_raises_when_output_root_unset(self, tmp_path):
+    def test_masters_raises_when_output_root_unset(self):
         # Same for the masters branch.
         with pytest.raises(KeyError, match="KPF_MASTERS_OUTPUT"):
             red.clear_stale_outputs(_Config({}), _args(datecode="20240405"))

@@ -5,44 +5,35 @@ the ISGOOD summary -- plus a fail-loud check that a config missing a required
 DATA_DIRS key errors instead of substituting a default.
 """
 
-import os
-import subprocess
-import sys
+import tomllib
+from pathlib import Path
 
-import numpy as np
 import pytest
-from astropy.io import fits
+
+from ._data_models import GOOD_DATES, write_amp_l0
+from ._scripts import CHILD_WARNINGS, REPO_ROOT, run_script, write_config
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
 
-_REPO_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+_SCRIPT = "scripts/quality_control/qc.py"
 
-# pytest's filterwarnings does not reach a child process, so mirror the pyproject
-# rules in, where a warning becomes the non-zero exit the tests already check.
-# PYTHONWARNINGS resolves categories at interpreter startup, before astropy is
-# importable, so the astropy rule is carried by its message prefix alone.
-_CHILD_WARNINGS = ",".join(
-    (
-        "error",
-        "ignore:Card is too long",
-        "default::ResourceWarning",
-    )
-)
-
-# qc.py reaches the network (AstroQuery, astropy's IERS auto-download) and neither
-# bounds a stalled connection, so a child can block forever. Cap every run so a hang
-# becomes a loud TimeoutExpired; generous enough for a slow-but-working run.
-_CHILD_TIMEOUT = 120
-
-# Self-consistent raw exposure times so DATTIMOK passes (END-BEG == ELAPSED).
-_GOOD_DATES = {
-    "DATE-BEG": "2024-09-23T09:12:09.484",
-    "DATE-MID": "2024-09-23T09:12:15.519",
-    "DATE-END": "2024-09-23T09:12:21.554",
-    "ELAPSED": 12.07,
+# Pointing + DCS target (identical -> TARGOFF ~ 0) so the header-native wmko
+# record supplies DiagL0's required TARGOFF with Gaia/SIMBAD disabled.
+_TARGET_CARDS = {
+    "RA": "12:00:00.00",
+    "DEC": "+40:00:00.0",
+    "TARGRA": "12:00:00.00",
+    "TARGDEC": "+40:00:00.0",
+    "TARGFRAM": "FK5",
+    "TARGEQUI": 2000.0,
+    "TARGPMRA": 0.0,
+    "TARGPMDC": 0.0,
+    "TARGPLAX": 100.0,
+    "TARGEPOC": 2000.0,
+    # The wmko record's colour is G-J, so COLOROK needs both magnitudes.
+    "GAIAMAG": 6.0,
+    "2MASSMAG": 5.0,
 }
 
 
@@ -52,48 +43,19 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object"):
     passing=False injects a negative EXPTIME so EXPTIMOK fails. A non-'Object'
     imtype carries no pointing/DCS target block, so qc.py skips AstroQuery for it.
     """
-    primary = fits.PrimaryHDU()
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    primary.header["MJD-OBS"] = 60405.04
-    # Within tolerance of _GOOD_DATES ELAPSED (12.07) so EXPTIMOK passes.
-    primary.header["EXPTIME"] = 12.0 if passing else -1.0
-    primary.header["OBJECT"] = "synthetic"
-    primary.header["OFNAME"] = os.path.basename(path)
-    primary.header["IMTYPE"] = imtype
-    for k, v in _GOOD_DATES.items():
-        primary.header[k] = v
-
+    cards = {
+        "DATE-OBS": "2024-04-05T01:00:37",
+        "MJD-OBS": 60405.04,
+        # Within tolerance of GOOD_DATES ELAPSED (12.07) so EXPTIMOK passes.
+        "EXPTIME": 12.0 if passing else -1.0,
+        "OBJECT": "synthetic",
+        "IMTYPE": imtype,
+        "PROGNAME": None,  # not a QC input here
+        **GOOD_DATES,
+    }
     if imtype == "Object":
-        # Pointing + DCS target (identical -> TARGOFF ~ 0) so the header-native wmko
-        # record supplies DiagL0's required TARGOFF with Gaia/SIMBAD disabled.
-        primary.header["RA"] = "12:00:00.00"
-        primary.header["DEC"] = "+40:00:00.0"
-        primary.header["TARGRA"] = "12:00:00.00"
-        primary.header["TARGDEC"] = "+40:00:00.0"
-        primary.header["TARGFRAM"] = "FK5"
-        primary.header["TARGEQUI"] = 2000.0
-        primary.header["TARGPMRA"] = 0.0
-        primary.header["TARGPMDC"] = 0.0
-        primary.header["TARGPLAX"] = 100.0
-        primary.header["TARGEPOC"] = 2000.0
-        # The wmko record's colour is G-J, so COLOROK needs both magnitudes.
-        primary.header["GAIAMAG"] = 6.0
-        primary.header["2MASSMAG"] = 5.0
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = np.ones((10, 10), dtype=np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    fits.HDUList(hdus).writeto(path, overwrite=True)
-
-
-def _write_config(path, data_dirs):
-    """Write a TOML config with a [DATA_DIRS] section."""
-    lines = ["[DATA_DIRS]"]
-    lines += [f'{key} = "{value}"' for key, value in data_dirs.items()]
-    path.write_text("\n".join(lines) + "\n")
+        cards.update(_TARGET_CARDS)
+    write_amp_l0(path, namps=4, shape=(10, 10), primary_cards=cards)
 
 
 def _write_astro_config(path):
@@ -112,24 +74,8 @@ def _write_astro_config(path):
 
 
 def _run_qc_script(fixture_path, level="L0", extra_args=None):
-    cmd = [
-        sys.executable,
-        "scripts/quality_control/qc.py",
-        "--input",
-        str(fixture_path),
-        "--level",
-        level,
-    ]
-    if extra_args:
-        cmd.extend(extra_args)
-    env = {**os.environ, "PYTHONPATH": _REPO_ROOT, "PYTHONWARNINGS": _CHILD_WARNINGS}
-    return subprocess.run(
-        cmd,
-        cwd=_REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=_CHILD_TIMEOUT,
+    return run_script(
+        _SCRIPT, "--input", fixture_path, "--level", level, *(extra_args or ())
     )
 
 
@@ -186,19 +132,7 @@ class TestQCScript:
         assert result.returncode == 2
 
     def test_no_args_exit_nonzero(self):
-        env = {
-            **os.environ,
-            "PYTHONPATH": _REPO_ROOT,
-            "PYTHONWARNINGS": _CHILD_WARNINGS,
-        }
-        result = subprocess.run(
-            [sys.executable, "scripts/quality_control/qc.py"],
-            cwd=_REPO_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=_CHILD_TIMEOUT,
-        )
+        result = run_script(_SCRIPT)
         assert result.returncode != 0
 
 
@@ -209,30 +143,49 @@ class TestQCScriptConfig:
         # The runner reads KPF_DATA_INPUT with no default, so an absent key must
         # surface as an error rather than silently using a hardcoded path.
         cfg = tmp_path / "cfg.toml"
-        _write_config(cfg, {"KPF_SCIENCE_OUTPUT": str(tmp_path)})  # no KPF_DATA_INPUT
-        env = {
-            **os.environ,
-            "PYTHONPATH": _REPO_ROOT,
-            "PYTHONWARNINGS": _CHILD_WARNINGS,
-        }
-        result = subprocess.run(
-            [
-                sys.executable,
-                "scripts/quality_control/qc.py",
-                "--obs_id",
-                "KP.20240405.00001.00",
-                "--level",
-                "L0",
-                "--config",
-                str(cfg),
-            ],
-            cwd=_REPO_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=_CHILD_TIMEOUT,
+        write_config(cfg, {"KPF_SCIENCE_OUTPUT": str(tmp_path)})  # no KPF_DATA_INPUT
+
+        result = run_script(
+            _SCRIPT,
+            "--obs_id",
+            "KP.20240405.00001.00",
+            "--level",
+            "L0",
+            "--config",
+            cfg,
         )
+
         assert result.returncode != 0
         assert "KPF_DATA_INPUT" in result.stderr, (
             f"Expected 'KPF_DATA_INPUT' in stderr:\n{result.stderr}"
         )
+
+
+class TestChildWarningParity:
+    """``_scripts.CHILD_WARNINGS`` mirrors pyproject's filterwarnings.
+
+    pytest's filterwarnings never crosses a subprocess boundary, so a rule added
+    to pyproject.toml silently stops applying to every CLI test unless it is
+    hand-mirrored into PYTHONWARNINGS. Nothing else asserts the mirror is complete.
+    """
+
+    @staticmethod
+    def _parent_rules():
+        pyproject = Path(REPO_ROOT) / "pyproject.toml"
+        config = tomllib.loads(pyproject.read_text())
+        return config["tool"]["pytest"]["ini_options"]["filterwarnings"]
+
+    def test_pyproject_rules_are_all_mirrored(self):
+        child = CHILD_WARNINGS.split(",")
+        for rule in self._parent_rules():
+            action, _, rest = rule.partition(":")
+            message = rest.split(":")[0]
+            # PYTHONWARNINGS resolves categories at interpreter startup, before
+            # astropy is importable, so a mirrored rule may truncate the message
+            # and drop the category. Require only that some child rule shares the
+            # action and carries a message prefix of the parent's.
+            assert any(
+                c.partition(":")[0] == action
+                and message.startswith(c.partition(":")[2].split(":")[0])
+                for c in child
+            ), f"pyproject filterwarnings rule {rule!r} is not in CHILD_WARNINGS"

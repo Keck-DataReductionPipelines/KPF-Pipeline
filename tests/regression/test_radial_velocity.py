@@ -11,7 +11,6 @@ import logging
 
 import numpy as np
 import pytest
-from astropy.constants import c
 from astropy.io import fits
 
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
@@ -19,56 +18,27 @@ from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
 from kpfpipe.modules.radial_velocity import RadialVelocity
 
+from ._catalog import seed_sci2_cards
 from ._dtype_policy import RV_FLOAT, assert_dtype
+from ._science import (
+    MASK_CENTERS,
+    NCOL,
+    RANGE_KMS,
+    SPEED_OF_LIGHT_KMS,
+    V_INJECT,
+    absorption_spectrum,
+    make_mask,
+)
 
 NORDER = NORDER_GREEN + NORDER_RED
-SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
+# Fiber order is the module's own config-overridable default, not the canonical
+# slicer order -- spelled out so a reordering in production shows up here.
 _FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
-
-# Narrow CCF grid for fast integration tests; wide enough for the second-pass
-# +/-3 sigma window (sigma ~ 4 km/s) to stay on-grid: +/-15 km/s at 0.25 km/s.
-_RANGE_KMS = [-15.0, 15.0]
-_STEP_KMS = 0.25  # matches the module default
-_NVEL = round((_RANGE_KMS[1] - _RANGE_KMS[0]) / _STEP_KMS) + 1
-_V_INJECT = 1.5  # injected RV [km/s], on the grid
-_MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)  # vacuum line centers [Angstrom]
-# Wide enough that the default CCF clip (clip_edge_pixels=(500, 500)) trims the
-# order edges but leaves the mask lines well inside.
-NCOL = 2000
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_mask(centers, weights=None, width=1.0):
-    """Build a line-mask dict matching CrossCorrelation._build_line_mask."""
-    centers = np.asarray(centers, dtype=np.float64)
-    if weights is None:
-        weights = np.ones_like(centers)
-    half_width = centers * (width / 2.0 / SPEED_OF_LIGHT_KMS)
-    return {
-        "center": centers,
-        "weight": np.asarray(weights, dtype=np.float64),
-        "start": centers - half_width,
-        "end": centers + half_width,
-    }
-
-
-def _absorption_spectrum(wave, centers, weights=None, depth=0.6, sigma_kms=4.0):
-    """Unit continuum with Gaussian absorption lines at `centers`."""
-    if weights is None:
-        weights = np.ones_like(centers)
-    flux = np.ones_like(wave)
-    for center, weight in zip(centers, weights, strict=False):
-        sigma_a = center * sigma_kms / SPEED_OF_LIGHT_KMS
-        flux -= (
-            depth
-            * (weight / np.max(weights))
-            * np.exp(-0.5 * ((wave - center) / sigma_a) ** 2)
-        )
-    return flux
 
 
 def _make_l4(
@@ -80,19 +50,14 @@ def _make_l4(
     bjd=0.0,
     perform_fibers=None,
 ):
-    """Synthetic KPF2 (absorption at _MASK_CENTERS, shifted by _V_INJECT) run
+    """Synthetic KPF2 (absorption at MASK_CENTERS, shifted by V_INJECT) run
     through CrossCorrelation (mask stubbed, narrow grid) into a KPF4."""
     kpf2 = KPF2()
-    kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
-    kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
-    kpf2.headers["PRIMARY"]["CRV3"] = 0.0
-    kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
-    kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = sky_obj
-    kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = cal_obj
+    seed_sci2_cards(kpf2, sci_obj=sci_obj, sky_obj=sky_obj, cal_obj=cal_obj)
 
     wave_1d = np.linspace(5000.0, 5050.0, NCOL)
-    lam_obs = _MASK_CENTERS * (1.0 + _V_INJECT / SPEED_OF_LIGHT_KMS)
-    flux_1d = _absorption_spectrum(wave_1d, lam_obs)
+    lam_obs = MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS)
+    flux_1d = absorption_spectrum(wave_1d, lam_obs)
     for chip, n in [("GREEN", NORDER_GREEN), ("RED", NORDER_RED)]:
         for fiber in _FIBERS:
             kpf2.set_data(
@@ -108,13 +73,13 @@ def _make_l4(
     kpf2.set_data("BARYCORR_KMS", np.full(NORDER, berv))
     kpf2.set_data("BJD_TDB", np.full(NORDER, bjd))
 
-    mask = _make_mask(_MASK_CENTERS)
+    mask = make_mask(MASK_CENTERS)
     monkeypatch.setattr(
         CrossCorrelation,
         "_build_line_mask",
         lambda self, chip, fiber, mask_width=None: mask,
     )
-    return CrossCorrelation(kpf2, config={"ccf_window": _RANGE_KMS}).perform(
+    return CrossCorrelation(kpf2, config={"ccf_window": RANGE_KMS}).perform(
         fibers=perform_fibers
     )
 
@@ -324,7 +289,7 @@ def rv_module(rv_l4):
     ``rv_l4``. The copy is a memcpy -- the ~1s cost was the CCF compute, not the
     data -- so isolation is cheap while the CCFs are still built only once.
     """
-    return RadialVelocity(copy.deepcopy(rv_l4), config={"rv_window": _RANGE_KMS})
+    return RadialVelocity(copy.deepcopy(rv_l4), config={"rv_window": RANGE_KMS})
 
 
 @pytest.fixture
@@ -347,14 +312,14 @@ class TestComputeRVPublic:
 
     def test_recovers_injected_rv(self, rv_loaded):
         rv = rv_loaded.compute_order_by_order_rvs("GREEN", "SCI2")["rv"]
-        np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
+        np.testing.assert_allclose(rv, V_INJECT, atol=0.1)
 
     def test_per_ccd_rv_recovers_injected(self, rv_loaded):
         # The per-CCD error comes from the unweighted-summed CCF.
         ccd_rv, ccd_rv_err = rv_loaded.compute_weighted_rvs(
             ["GREEN"], "SCI2", combine_fibers=False, combine_ccds=False
         )["GREEN"]
-        assert ccd_rv == pytest.approx(_V_INJECT, abs=0.1)
+        assert ccd_rv == pytest.approx(V_INJECT, abs=0.1)
         assert np.isfinite(ccd_rv_err) and ccd_rv_err > 0
 
     def test_per_ccd_rv_sums_science_fibers(self, rv_loaded):
@@ -363,7 +328,7 @@ class TestComputeRVPublic:
         ccd_rv, ccd_rv_err = rv_loaded.compute_weighted_rvs(
             ["GREEN"], ["SCI1", "SCI2", "SCI3"], combine_fibers=True, combine_ccds=False
         )["GREEN"]
-        assert ccd_rv == pytest.approx(_V_INJECT, abs=0.1)
+        assert ccd_rv == pytest.approx(V_INJECT, abs=0.1)
         assert np.isfinite(ccd_rv_err) and ccd_rv_err > 0
 
     def test_combine_ccds_returns_tuple_and_recovers_injected(self, rv_loaded):
@@ -372,7 +337,7 @@ class TestComputeRVPublic:
             ["GREEN", "RED"], "SCI2", combine_fibers=False, combine_ccds=True
         )
         assert isinstance(out, tuple) and len(out) == 2
-        assert out[0] == pytest.approx(_V_INJECT, abs=0.1)
+        assert out[0] == pytest.approx(V_INJECT, abs=0.1)
         assert np.isfinite(out[1]) and out[1] > 0
 
     def test_combine_fibers_requires_three_sci(self, rv_loaded):
@@ -466,7 +431,7 @@ class TestPerform:
         l4 = rv_module.perform()
         for fiber in self._ILLUMINATED:
             rv = np.asarray(l4.data[f"{fiber}_RV"]["RV"])
-            np.testing.assert_allclose(rv, _V_INJECT, atol=0.1)
+            np.testing.assert_allclose(rv, V_INJECT, atol=0.1)
 
     def test_rv_headers(self, rv_module):
         l4 = rv_module.perform()
@@ -481,8 +446,8 @@ class TestPerform:
         # (CCD1=GREEN, CCD2=RED; SCI2 has suffix '2' and lives on RV3).
         l4 = rv_module.perform()
         rv_hdr = l4.headers["RV3"]
-        assert rv_hdr["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert rv_hdr["CCD2RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert rv_hdr["CCD1RV2"] == pytest.approx(V_INJECT, abs=0.1)
+        assert rv_hdr["CCD2RV2"] == pytest.approx(V_INJECT, abs=0.1)
         assert rv_hdr["CCD1ERV2"] > 0 and rv_hdr["CCD2ERV2"] > 0
         # The per-orderlet keywords do not leak onto PRIMARY.
         assert "CCD1RV2" not in l4.headers["PRIMARY"]
@@ -491,10 +456,10 @@ class TestPerform:
         # PRIMARY: EPRV RV/RVERR plus the KPF SCI-combined per-CCD CCD1RV/CCD2RV.
         l4 = rv_module.perform()
         prim = l4.headers["PRIMARY"]
-        assert prim["CCD1RV"] == pytest.approx(_V_INJECT, abs=0.1)
-        assert prim["CCD2RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["CCD1RV"] == pytest.approx(V_INJECT, abs=0.1)
+        assert prim["CCD2RV"] == pytest.approx(V_INJECT, abs=0.1)
         assert prim["CCD1ERV"] > 0 and prim["CCD2ERV"] > 0
-        assert prim["RV"] == pytest.approx(_V_INJECT, abs=0.1)
+        assert prim["RV"] == pytest.approx(V_INJECT, abs=0.1)
         assert prim["RVERR"] > 0
         assert prim["RVMETHOD"] == "CCF"
         assert "CCD1RV" not in l4.headers["RV3"]
@@ -540,7 +505,7 @@ class TestPerform:
     def test_no_science_illuminated_raises(self, monkeypatch):
         # SCI requested by default, but the L4 carries no SCI CCFs -> fail loudly.
         l4 = _make_l4(monkeypatch, sci_obj="None")
-        rv = RadialVelocity(l4, config={"rv_window": _RANGE_KMS})
+        rv = RadialVelocity(l4, config={"rv_window": RANGE_KMS})
         with pytest.raises(ValueError, match="none illuminated"):
             rv.perform()
 
@@ -549,7 +514,7 @@ class TestPerform:
         l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="Th_gold")
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             prim = (
-                RadialVelocity(l4, config={"rv_window": _RANGE_KMS})
+                RadialVelocity(l4, config={"rv_window": RANGE_KMS})
                 .perform(fibers=["CAL"])
                 .headers["PRIMARY"]
             )
@@ -572,10 +537,10 @@ class TestPerform:
         with fits.open(path) as hdul:
             rv = hdul["RV3"].header
             assert rv["RVMETHOD"] == "CCF"
-            assert rv["CCD1RV2"] == pytest.approx(_V_INJECT, abs=0.1)
+            assert rv["CCD1RV2"] == pytest.approx(V_INJECT, abs=0.1)
             assert "CCD1RV2" not in hdul["PRIMARY"].header
             # Only the EPRV combined RV belongs on PRIMARY.
-            assert hdul["PRIMARY"].header["RV"] == pytest.approx(_V_INJECT, abs=0.1)
+            assert hdul["PRIMARY"].header["RV"] == pytest.approx(V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
             rv_table = hdul["RV3"].data
             assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"

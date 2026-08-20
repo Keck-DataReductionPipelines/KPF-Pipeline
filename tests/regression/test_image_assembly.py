@@ -5,8 +5,6 @@ FITS frames from the gitignored ``tests/testdata/L0/20240405`` tree. Every other
 test runs on synthetic data and needs no external frames.
 """
 
-import os
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +17,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
+from ._data_models import write_amp_l0
 from ._dtype_policy import (
     L1_IMAGE,
     assert_dtype,
@@ -42,33 +41,14 @@ def synthetic_4amp_l0(tmp_path_factory):
 
     Module-scoped and read-only, so the ~140 MB write happens once, not per test.
     """
-    fn = str(tmp_path_factory.mktemp("l0_4amp") / "KP.20240101.00001.00.fits")
-    rng = np.random.default_rng(42)
-
     # 4-amp dimensions: 2040 imaging rows + 30 parallel overscan,
     # 4 prescan + 2040 imaging cols + 50 serial overscan
-    nrow, ncol = 2070, 2094
-    bias_level = 1000.0
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-4amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
-    primary.header["OFNAME"] = os.path.basename(fn)
-    primary.header["PROGNAME"] = "K123"
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdu = fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}")
-            hdus.append(hdu)
-
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
-    return fn
+    return write_amp_l0(
+        tmp_path_factory.mktemp("l0_4amp") / "KP.20240101.00001.00.fits",
+        shape=(2070, 2094),
+        bias_level=1000.0,
+        primary_cards={"OBJECT": "synthetic-4amp"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +57,7 @@ def synthetic_4amp_l0(tmp_path_factory):
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestImageAssemblyBias:
     """Regression tests using a bias frame (no signal, 2-amp mode)."""
 
@@ -95,7 +76,7 @@ class TestImageAssemblyBias:
     def test_ccd_shape(self, l1_bias, chip):
         l1, _ = l1_bias
         assert l1.data[f"{chip}_CCD"].shape == (4080, 4080)
-        assert l1.data[f"{chip}_CCD"].dtype == np.float32
+        assert_dtype(l1.data[f"{chip}_CCD"], L1_IMAGE, f"{chip}_CCD")
 
     def test_variance_frames_exist(self, l1_bias):
         l1, _ = l1_bias
@@ -113,8 +94,14 @@ class TestImageAssemblyBias:
         assert abs(np.nanmedian(l1.data["RED_CCD"])) < 5.0
 
     def test_primary_header_carried_forward(self, l1_bias):
-        l1, _ = l1_bias
-        assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
+        # INSTRUME is stamped by from_fits on any KPF file, so asserting it
+        # cannot catch an assembly bug. DATE-OBS comes from the source frame,
+        # so compare the L1 card against the L0 it was assembled from.
+        l1, ia = l1_bias
+        assert (
+            l1.headers["PRIMARY"]["DATE-OBS"]
+            == ia.l0_obj.headers["PRIMARY"]["DATE-OBS"]
+        )
 
     def test_obs_id_carried_forward(self, l1_bias):
         l1, _ = l1_bias
@@ -166,6 +153,7 @@ class TestImageAssemblyBias:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestImageAssemblyFlat:
     """Regression tests using a flat lamp frame (has signal)."""
 
@@ -368,28 +356,9 @@ def synthetic_4amp_l0_with_expmeter(tmp_path):
 
     The column labels mirror real KPF expmeter native units (e.g. '498.12' nm).
     """
-    fn = str(tmp_path / "KP.20240101.00002.00.fits")
-    rng = np.random.default_rng(7)
-
-    nrow, ncol = 2070, 2094
-    bias_level = 1000.0
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-expmeter"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
-    primary.header["OFNAME"] = os.path.basename(fn)
-    primary.header["PROGNAME"] = "K123"
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
     wave_nm_labels = ["498.12", "604.38", "710.62", "816.88"]
     nrows = 3
+    expmeter_hdus = []
     for ext_name in ["EXPMETER_SCI", "EXPMETER_SKY"]:
         cols = [
             fits.Column(
@@ -405,10 +374,16 @@ def synthetic_4amp_l0_with_expmeter(tmp_path):
                     name=w, format="E", array=np.full(nrows, 100.0, dtype=np.float32)
                 )
             )
-        hdus.append(fits.BinTableHDU.from_columns(cols, name=ext_name))
+        expmeter_hdus.append(fits.BinTableHDU.from_columns(cols, name=ext_name))
 
-    fits.HDUList(hdus).writeto(fn, overwrite=True)
-    return fn
+    return write_amp_l0(
+        tmp_path / "KP.20240101.00002.00.fits",
+        shape=(2070, 2094),
+        bias_level=1000.0,
+        seed=7,
+        primary_cards={"OBJECT": "synthetic-expmeter"},
+        extra_hdus=expmeter_hdus,
+    )
 
 
 def _expmeter_table():
@@ -439,19 +414,11 @@ class TestExpmeterWavelengthConversion:
         ImageAssembly._convert_expmeter_wavelengths_to_angstroms(l1)
         return l1
 
-    def test_sci_columns_converted_to_angstroms(self):
-        cols = (
-            self._convert(EXPMETER_SCI=_expmeter_table()).data["EXPMETER_SCI"].colnames
-        )
+    @pytest.mark.parametrize("ext", ["EXPMETER_SCI", "EXPMETER_SKY"])
+    def test_columns_converted_to_angstroms(self, ext):
+        cols = self._convert(**{ext: _expmeter_table()}).data[ext].colnames
         for expected in ("4981.2", "6043.8", "7106.2", "8168.8"):
             assert expected in cols, f"missing Å column {expected!r}; got {cols}"
-
-    def test_sky_columns_converted_to_angstroms(self):
-        cols = (
-            self._convert(EXPMETER_SKY=_expmeter_table()).data["EXPMETER_SKY"].colnames
-        )
-        for expected in ("4981.2", "6043.8", "7106.2", "8168.8"):
-            assert expected in cols
 
     def test_nm_labels_removed(self):
         cols = (
@@ -491,35 +458,27 @@ class TestExpmeterWavelengthConversion:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestImageAssemblyRoundTrip:
-    def test_write_and_read_back(self):
-        l0 = KPF0.from_fits(L0_BIAS)
-        ia = ImageAssembly(l0)
-        l1 = ia.perform()
+    @pytest.fixture(scope="class")
+    def assembled(self):
+        return ImageAssembly(KPF0.from_fits(L0_BIAS)).perform()
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "kpf_L1_20240113T102656.fits")
-            l1.to_fits(fn)
+    def test_write_and_read_back(self, assembled, tmp_path):
+        fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
+        assembled.to_fits(fn)
+        l1_read = KPF1.from_fits(fn)
 
-            l1_read = KPF1.from_fits(fn)
-
-            assert l1_read.data["GREEN_CCD"].shape == (4080, 4080)
-            assert l1_read.data["RED_CCD"].shape == (4080, 4080)
+        for chip in ("GREEN", "RED"):
+            ext = f"{chip}_CCD"
+            assert l1_read.data[ext].shape == (4080, 4080)
             np.testing.assert_array_almost_equal(
-                l1_read.data["GREEN_CCD"], l1.data["GREEN_CCD"], decimal=4
-            )
-            np.testing.assert_array_almost_equal(
-                l1_read.data["RED_CCD"], l1.data["RED_CCD"], decimal=4
+                l1_read.data[ext], assembled.data[ext], decimal=4
             )
 
-    def test_roundtrip_preserves_header(self):
-        l0 = KPF0.from_fits(L0_BIAS)
-        ia = ImageAssembly(l0)
-        l1 = ia.perform()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "kpf_L1_20240113T102656.fits")
-            l1.to_fits(fn)
-
-            l1_read = KPF1.from_fits(fn)
-            assert l1_read.headers["PRIMARY"]["INSTRUME"] == "KPF"
+    def test_roundtrip_preserves_obs_id(self, assembled, tmp_path):
+        # INSTRUME is guaranteed by from_fits, so it cannot catch an assembly
+        # bug; obs_id is carried by the write path this test exercises.
+        fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
+        assembled.to_fits(fn)
+        assert KPF1.from_fits(fn).obs_id == assembled.obs_id

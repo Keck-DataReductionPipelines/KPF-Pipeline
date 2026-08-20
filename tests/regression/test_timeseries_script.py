@@ -13,9 +13,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from astropy.io import fits
 
 from scripts.processing import timeseries as _ts
+
+from ._scripts import write_l0_tree
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
@@ -35,20 +36,11 @@ def ts():
 
 
 def _write_l0(data_input, datecode, seconds, obj, imtype="Object", junk=False):
-    """Write one L0 frame under {data_input}/L0/{datecode}; return its obs_id."""
-    l0_dir = Path(data_input) / "L0" / datecode
-    l0_dir.mkdir(parents=True, exist_ok=True)
-    obs_id = f"KP.{datecode}.{seconds:05d}.00"
-    header = fits.Header(
-        {
-            "OBJECT": obj,
-            "IMTYPE": imtype,
-            "TARGNAME": obj,
-            "EXPTIME": 60.0,
-            "ELAPSED": 60.0,
-        }
-    )
-    fits.PrimaryHDU(header=header).writeto(l0_dir / f"{obs_id}.fits")
+    """Write one L0 frame under {data_input}/L0/{datecode}; return its obs_id.
+
+    Thin wrapper over the shared writer for the junk-list hook, which only the
+    timeseries discovery tests need."""
+    obs_id = write_l0_tree(data_input, datecode, seconds, obj=obj, imtype=imtype)
     if junk:
         _add_junk(data_input, obs_id)
     return obs_id

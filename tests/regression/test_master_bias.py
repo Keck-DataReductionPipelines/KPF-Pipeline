@@ -5,10 +5,7 @@ bundled L0 bias frames. The shared engine (`BaseMasterModule`) these exercise is
 unit-tested in test_master_base.py.
 """
 
-import os
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -16,7 +13,16 @@ import pytest
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 
-from ._masters import make_l1_arrays
+from ._dtype_policy import L1_IMAGE, assert_dtype
+from ._masters import (
+    CHIPS,
+    FILE_LIST,
+    MASTER_NAME,
+    NCOL,
+    NROW,
+    make_mocked_master,
+    mocked_stack,
+)
 
 TESTDATA_L0_DIR = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 TESTDATA_BIAS_FILES = sorted(
@@ -29,11 +35,6 @@ TESTDATA_BIAS_FILES = sorted(
     ]
 )
 
-CHIPS = ["GREEN", "RED"]
-NROW, NCOL = 10, 10  # must match the shape make_l1_arrays() builds
-
-FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
-
 
 # ---------------------------------------------------------------------------
 # Unit tests (mocked stack_frames)
@@ -43,10 +44,7 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 class TestMasterBiasUnit:
     @pytest.fixture(scope="class")
     def master_bias(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            return bias.make_master_l1()
+        return make_mocked_master(Bias)
 
     def test_returns_kpf_master_l1(self, master_bias):
         assert isinstance(master_bias, KPFMasterL1)
@@ -57,10 +55,6 @@ class TestMasterBiasUnit:
     )
     def test_extension_shape(self, master_bias, ext):
         assert master_bias.data[ext].shape == (NROW, NCOL)
-
-    def test_mask_is_boolean(self, master_bias):
-        assert master_bias.data["GREEN_MASK"].dtype == bool
-        assert master_bias.data["RED_MASK"].dtype == bool
 
     def test_snr_non_negative(self, master_bias):
         assert np.all(master_bias.data["GREEN_SNR"] >= 0)
@@ -91,9 +85,8 @@ class TestMasterBiasInfo:
         assert "make_master_l1() has not been called" in out
 
     def test_info_after_make_master_l1(self, capsys):
-        synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
+        with mocked_stack(bias):
             bias.make_master_l1()
         bias.info()
         out = capsys.readouterr().out
@@ -109,51 +102,26 @@ class TestMasterBiasInfo:
 
 
 class TestMasterBiasRoundTrip:
-    def test_roundtrip_arrays(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.make_master_l1()
+    """The mask/BITPIX dtype round-trip lives in test_master_base.py, which
+    exercises the same shared write path and also checks the on-disk BITPIX."""
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "KP.20240113.23249.10_master_bias_L1.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
+    @pytest.fixture
+    def reread(self, tmp_path):
+        ml1 = make_mocked_master(Bias)
+        fn = str(tmp_path / MASTER_NAME)
+        ml1.to_fits(fn)
+        return ml1, KPFMasterL1.from_fits(fn)
 
-        np.testing.assert_array_almost_equal(
-            ml1_read.data["GREEN_IMG"], ml1.data["GREEN_IMG"], decimal=4
-        )
-        np.testing.assert_array_almost_equal(
-            ml1_read.data["RED_IMG"], ml1.data["RED_IMG"], decimal=4
-        )
+    def test_roundtrip_arrays(self, reread):
+        ml1, ml1_read = reread
+        for chip in CHIPS:
+            np.testing.assert_array_almost_equal(
+                ml1_read.data[f"{chip}_IMG"], ml1.data[f"{chip}_IMG"], decimal=4
+            )
 
-    def test_roundtrip_datalvl(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.make_master_l1()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "KP.20240113.23249.10_master_bias_L1.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
-
-        val = ml1_read.headers["PRIMARY"].get("DATALVL")
-        assert val == "ML1"
-
-    def test_roundtrip_mask_dtype(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.make_master_l1()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "KP.20240113.23249.10_master_bias_L1.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
-
-        assert ml1_read.data["GREEN_MASK"].dtype == bool
-        assert ml1_read.data["RED_MASK"].dtype == bool
+    def test_roundtrip_datalvl(self, reread):
+        _, ml1_read = reread
+        assert ml1_read.headers["PRIMARY"].get("DATALVL") == "ML1"
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +142,7 @@ class TestMasterBiasSignature:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestMasterBiasRegression:
     @pytest.fixture(scope="class")
     def master_bias(self):
@@ -201,9 +170,10 @@ class TestMasterBiasRegression:
         assert np.sum(master_bias.data["RED_MASK"]) > 0
 
     def test_img_snr_dtype_is_float32(self, master_bias):
-        for chip in ("GREEN", "RED"):
-            assert master_bias.data[f"{chip}_IMG"].dtype == np.float32
-            assert master_bias.data[f"{chip}_SNR"].dtype == np.float32
+        for chip in CHIPS:
+            for suffix in ("IMG", "SNR"):
+                ext = f"{chip}_{suffix}"
+                assert_dtype(master_bias.data[ext], L1_IMAGE, ext)
 
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values

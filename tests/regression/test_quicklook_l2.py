@@ -1,8 +1,5 @@
 """Tests for L2 quicklook plots (wavelength-aware extracted spectra)."""
 
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -12,14 +9,8 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
 
 # Slow PNG rendering off the production path: excluded from `make test-fast`.
+# The Agg pin and the close-figures teardown come from tests/regression/conftest.py.
 pytestmark = pytest.mark.quicklook
-
-
-@pytest.fixture(autouse=True)
-def _close_figures():
-    """Close figures a test left open; the output_dir=None path returns them."""
-    yield
-    plt.close("all")
 
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
