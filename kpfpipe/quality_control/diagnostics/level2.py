@@ -4,11 +4,11 @@ import numpy as np
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
-_FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
-_CHIPS = ("GREEN", "RED")
-_SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
-_SNR_PERCENTILE = 95
+_CHIPS = ["GREEN", "RED"]
+_FIBERS = ["SCI1", "SCI2", "SCI3", "SKY", "CAL"]
+_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 _CHIP_PREFIX = {"GREEN": "G", "RED": "R"}
+_SNR_PERCENTILE = 95
 
 # Fiber -> NaN-count keyword. (FITS comment from the registry -- see ``_tag``.)
 _NAN_KEYS = {

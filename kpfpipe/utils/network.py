@@ -11,8 +11,8 @@ from pyvo.dal import DALServiceError
 logger = logging.getLogger(__name__)
 
 # Nominal seconds to wait before each retry; len() sets the retry count, so a call
-# is attempted len(_RETRY_WAITS) + 1 times (~44 s of waiting worst case).
-_RETRY_WAITS = (1.0, 3.0, 10.0, 30.0)
+# is attempted len(_RETRY_WAITS) + 1 times (~55 s of waiting worst case).
+_RETRY_WAITS = (1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 30.0)
 
 # Transient failures worth another attempt. OSError covers the builtin
 # ConnectionError/TimeoutError and every requests exception (RequestException

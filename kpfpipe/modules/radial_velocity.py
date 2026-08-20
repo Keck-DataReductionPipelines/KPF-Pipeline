@@ -25,6 +25,9 @@ _DEFAULTS = {
     "rv_window": [-25.0, 25.0],
 }
 
+_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
+_RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
+
 
 class RadialVelocity:
     """
@@ -73,9 +76,6 @@ class RadialVelocity:
         self._primary_berv = np.nan  # PRIMARY BERV
         self._primary_bjdtdb = np.nan  # PRIMARY BJDTDB
         self._info = None
-
-    # Science orderlets that may be summed together (shared mask and grid).
-    _SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -243,10 +243,10 @@ class RadialVelocity:
         chip = chip.upper()
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
-        if len(fibers) != 1 and set(fibers) != set(self._SCI_FIBERS):
+        if len(fibers) != 1 and set(fibers) != set(_SCI_FIBERS):
             raise ValueError(
                 f"fibers must be a single fiber or exactly the three science "
-                f"fibers {list(self._SCI_FIBERS)}; got {fibers}"
+                f"fibers {_SCI_FIBERS}; got {fibers}"
             )
         for f in fibers:
             if f"{chip}_{f}" not in self._ccf:
@@ -437,10 +437,10 @@ class RadialVelocity:
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
 
-        if combine_fibers and set(fibers) != set(self._SCI_FIBERS):
+        if combine_fibers and set(fibers) != set(_SCI_FIBERS):
             raise ValueError(
                 f"combine_fibers=True requires the three science fibers "
-                f"{list(self._SCI_FIBERS)}; got {fibers}"
+                f"{_SCI_FIBERS}; got {fibers}"
             )
         if not combine_fibers and len(fibers) != 1:
             raise ValueError(
@@ -573,7 +573,6 @@ class RadialVelocity:
         RV/RVERR/BERV/BJDTDB. Non-finite values are written as None (FITS
         UNDEFINED). The RVn CTYPE cards belong to CrossCorrelation.
         """
-        sfx = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
         for fiber in self._processed:
             rv_ext = f"{fiber}_RV"
             l4_obj.set_keyword("RVMETHOD", "CCF", ext=rv_ext)
@@ -584,10 +583,10 @@ class RadialVelocity:
                 n = 1 if chip == "GREEN" else 2
                 e = pf["ccd_rv_err"][chip]
                 l4_obj.set_keyword(
-                    f"CCD{n}RV{sfx[fiber]}", float(v) if np.isfinite(v) else None
+                    f"CCD{n}RV{_RV_SFX[fiber]}", float(v) if np.isfinite(v) else None
                 )
                 l4_obj.set_keyword(
-                    f"CCD{n}ERV{sfx[fiber]}", float(e) if np.isfinite(e) else None
+                    f"CCD{n}ERV{_RV_SFX[fiber]}", float(e) if np.isfinite(e) else None
                 )
 
         # PRIMARY (EPRV L4): always the RV method; the combined RV only when a
@@ -735,7 +734,7 @@ class RadialVelocity:
         # Final science RV: sum the science orderlets' CCFs per chip, fit, then
         # combine the two CCDs at the RV level (see compute_weighted_rvs). RVs are
         # already barycentric, so the reported BERV/BJDTDB are descriptive.
-        sci_req = [f for f in fibers if f in self._SCI_FIBERS]
+        sci_req = [f for f in fibers if f in _SCI_FIBERS]
         sci = [f for f in sci_req if f in self._processed]
         if not sci_req:
             # Calibration-only run: PRIMARY RV/RVERR/BERV/BJDTDB stay UNDEFINED.

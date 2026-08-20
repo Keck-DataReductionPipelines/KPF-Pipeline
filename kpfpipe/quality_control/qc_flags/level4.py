@@ -9,7 +9,7 @@ import numpy as np
 
 from kpfpipe.quality_control.qc_flags.base import QC
 
-_SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
+_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 # Columns every science RV table must carry (RV product + per-order BJD/BERV/WEIGHT).
 _REQUIRED_RV_COLUMNS = frozenset({"RV", "BJD_TDB", "BERV", "WEIGHT"})
 # Max per-order peak-to-peak range tolerated across orders (SCI2).

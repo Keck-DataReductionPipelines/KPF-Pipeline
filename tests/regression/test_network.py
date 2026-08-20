@@ -84,7 +84,9 @@ class TestRetryRequest:
         # Equal jitter: half the nominal wait is fixed, the other half random.
         for delay, wait in zip(delays, _RETRY_WAITS, strict=True):
             assert wait / 2 <= delay <= wait
-        assert delays == sorted(delays)
+        # Only the nominal schedule is monotonic; realized delays can cross where
+        # adjacent waits' jitter ranges overlap.
+        assert list(_RETRY_WAITS) == sorted(_RETRY_WAITS)
 
     def test_retry_logs_warning(self, caplog):
         func = MagicMock(side_effect=[ConnectionError("down"), "ok"])

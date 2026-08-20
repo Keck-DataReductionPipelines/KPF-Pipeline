@@ -233,10 +233,11 @@ class PlotL4(Plot):
                 self._norm_order(row, is_sci) + o * _ORDER_OFFSET,
                 color=colors[o],
             )
+            # Order numbers are 1-based in plot labels only; ``o`` stays 0-based.
             ax.text(
                 vgrid[-1] + 0.75,
                 1 + o * _ORDER_OFFSET - 0.10,
-                str(o),
+                str(o + 1),
                 color=colors[o],
                 va="center",
                 ha="left",
@@ -275,9 +276,10 @@ class PlotL4(Plot):
     def ccf_grid(self, chip):
         """Per-orderlet CCF grid for one chip, matching the v2.12 plot_CCF_grid
         layout: five panels (SCI1, SCI2, SCI3, CAL, SKY), each order's CCF
-        normalized and offset, colored by the default cycle and labeled by order
-        index. SCI panels add the combined-RV line + value and per-order
-        delta-RV / weight columns. Returns None if the chip has no CCF data.
+        normalized and offset, colored by the default cycle and labeled by
+        1-based order number. SCI panels add the combined-RV line + value and
+        per-order delta-RV / weight columns. Returns None if the chip has no
+        CCF data.
         """
         if not self._has_chip(chip):
             return None

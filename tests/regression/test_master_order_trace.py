@@ -16,6 +16,7 @@ from scipy.ndimage import label
 
 import kpfpipe.modules.masters.order_trace as order_trace_module
 from kpfpipe.modules.masters import OrderTrace
+from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
 
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
@@ -1212,25 +1213,28 @@ class TestRealData:
     def test_real_20240405_master_flat(self, tmp_path):
         """Trace a real vNext master flat and check it reproduces the reference.
 
-        The comparison is against the vetted reference the pipeline ships for
-        this era, which was measured from this flat -- so it pins the shipped
-        artifact to what the module produces today, rather than standing as
-        independent truth."""
+        The comparison is against the vetted reference extraction would pin to
+        this frame -- the latest trace measured before it within its instrument
+        era -- so it holds the module's output to the shipped artifact rather
+        than standing as independent truth."""
         testdata = Path(__file__).parent.parent / "testdata"
         masters = sorted(testdata.glob("**/KP.20240405.*_master_flat_L1.fits"))
         if not masters:
             pytest.skip("a 20240405 vNext master flat is not installed")
 
-        vetted = pd.read_csv(
-            Path(__file__).parents[2]
-            / "reference"
-            / "order_traces"
-            / "order_trace_20240405.csv"
-        )
-
         tracer = OrderTrace(masters[0])
         combined = tracer.make_master(output_dir=tmp_path)
         tables = {chip: combined[combined["Chip"] == chip] for chip in ("GREEN", "RED")}
+
+        # Resolve the reference through the same era lookup extraction uses. A
+        # masters product carries no JD_UTC, so date the flat from its filename.
+        datecode = masters[0].name.split(".")[1]
+        tracer._master_flat.set_keyword(
+            "JD_UTC", pd.Timestamp(datecode).to_julian_date()
+        )
+        extractor = SpectralExtraction(tracer._master_flat)
+        extractor._read_order_trace_reference()
+        vetted = pd.read_csv(extractor._order_trace_path)
 
         assert len(tables["GREEN"]) == 175
         assert len(tables["RED"]) == 160
