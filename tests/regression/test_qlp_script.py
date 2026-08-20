@@ -27,6 +27,16 @@ _REPO_ROOT = os.path.dirname(
 # A valid obs_id (and matching datecode) the quicklook filenames/paths key off.
 _OBS_ID = "KP.20240405.00004.00"
 
+# pytest's filterwarnings does not reach a child process, so the CLI would run with
+# default filters and any warning it raised would be invisible. Mirror the pyproject
+# rule into the child, where a warning becomes a non-zero exit the tests already check.
+_CHILD_WARNINGS = "error"
+
+# A child that reaches the network (astropy's IERS auto-download) can block forever --
+# nothing bounds a connection that opens and never answers. Cap every run: a hang
+# becomes a loud TimeoutExpired instead of a stalled suite.
+_CHILD_TIMEOUT = 120
+
 
 def _write_l0_image_fixture(path):
     """Write a small, plottable two-amp L0 FITS fixture (green + red).
@@ -60,9 +70,16 @@ def _write_config(path, data_dirs):
 
 def _run_qlp_script(*args):
     """Run scripts/quality_control/qlp.py via subprocess; return the result."""
-    env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
+    env = {**os.environ, "PYTHONPATH": _REPO_ROOT, "PYTHONWARNINGS": _CHILD_WARNINGS}
     cmd = [sys.executable, "scripts/quality_control/qlp.py", *map(str, args)]
-    return subprocess.run(cmd, cwd=_REPO_ROOT, env=env, capture_output=True, text=True)
+    return subprocess.run(
+        cmd,
+        cwd=_REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=_CHILD_TIMEOUT,
+    )
 
 
 def _png_names(obs_id):

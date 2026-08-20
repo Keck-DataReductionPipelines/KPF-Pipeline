@@ -21,6 +21,17 @@ _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+# pytest's filterwarnings does not reach a child process, so the CLI would run with
+# default filters and any warning it raised would be invisible. Mirror the pyproject
+# rule into the child, where a warning becomes a non-zero exit the tests already check.
+_CHILD_WARNINGS = "error"
+
+# qc.py reaches the network (Gaia/SIMBAD via AstroQuery, and astropy's IERS
+# auto-download), and neither bounds a connection that opens and never answers, so a
+# child can block forever. Cap every run: a hang becomes a loud TimeoutExpired instead
+# of a stalled suite. Generous enough that a slow-but-working run still passes.
+_CHILD_TIMEOUT = 120
+
 # Self-consistent raw exposure times so DATTIMOK passes (END-BEG == ELAPSED).
 _GOOD_DATES = {
     "DATE-BEG": "2024-09-23T09:12:09.484",
@@ -111,8 +122,15 @@ def _run_qc_script(fixture_path, level="L0", extra_args=None):
     ]
     if extra_args:
         cmd.extend(extra_args)
-    env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
-    return subprocess.run(cmd, cwd=_REPO_ROOT, env=env, capture_output=True, text=True)
+    env = {**os.environ, "PYTHONPATH": _REPO_ROOT, "PYTHONWARNINGS": _CHILD_WARNINGS}
+    return subprocess.run(
+        cmd,
+        cwd=_REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=_CHILD_TIMEOUT,
+    )
 
 
 class TestQCScript:
@@ -175,13 +193,18 @@ class TestQCScript:
 
     def test_no_args_exit_nonzero(self):
         """No args → argparse error → non-zero exit."""
-        env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
+        env = {
+            **os.environ,
+            "PYTHONPATH": _REPO_ROOT,
+            "PYTHONWARNINGS": _CHILD_WARNINGS,
+        }
         result = subprocess.run(
             [sys.executable, "scripts/quality_control/qc.py"],
             cwd=_REPO_ROOT,
             env=env,
             capture_output=True,
             text=True,
+            timeout=_CHILD_TIMEOUT,
         )
         assert result.returncode != 0
 
@@ -197,7 +220,11 @@ class TestQCScriptConfig:
         """
         cfg = tmp_path / "cfg.toml"
         _write_config(cfg, {"KPF_SCIENCE_OUTPUT": str(tmp_path)})  # no KPF_DATA_INPUT
-        env = {**os.environ, "PYTHONPATH": _REPO_ROOT}
+        env = {
+            **os.environ,
+            "PYTHONPATH": _REPO_ROOT,
+            "PYTHONWARNINGS": _CHILD_WARNINGS,
+        }
         result = subprocess.run(
             [
                 sys.executable,
@@ -213,6 +240,7 @@ class TestQCScriptConfig:
             env=env,
             capture_output=True,
             text=True,
+            timeout=_CHILD_TIMEOUT,
         )
         assert result.returncode != 0
         assert "KPF_DATA_INPUT" in result.stderr, (
