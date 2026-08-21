@@ -120,6 +120,9 @@ class BaseMasterModule:
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
         self.ml2_obj = None
 
+        # L0 files that actually stacked; recorded as the master's INPUT_FILES.
+        self._stacked_files = []
+
         # Per-chip stack statistics cached by _populate_stack_info() (dict);
         # consumed by the subclass _track_info() when it builds the info() text.
         self._stack_info = None
@@ -342,6 +345,7 @@ class BaseMasterModule:
 
         i = 0
         failure_count = 0
+        self._stacked_files = []
 
         for fn in l0_file_list:
             l1_obj = self._load_frame(fn, cache=cache)
@@ -353,6 +357,7 @@ class BaseMasterModule:
                 )
                 continue
 
+            self._stacked_files.append(fn)
             l1_obj = self._process_frame(l1_obj)
 
             exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
@@ -501,6 +506,7 @@ class BaseMasterModule:
 
         failure = 0
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
+        self._stacked_files = []
 
         for fn in l0_file_list:
             # The first ``ndirect`` frames are cache hits from the approximation
@@ -514,6 +520,7 @@ class BaseMasterModule:
                 )
                 continue
 
+            self._stacked_files.append(fn)
             l1_obj = self._process_frame(l1_obj)
 
             exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
@@ -593,12 +600,12 @@ class BaseMasterModule:
     # Private helpers for building outputs and tracking results.
     # ------------------------------------------------------------------
 
-    def _build_ml1_obj(self, l1_arrays, l0_file_list, *, master_type):
+    def _build_ml1_obj(self, l1_arrays, *, master_type):
         """
         Assemble a KPFMasterL1 from finalized per-chip '{chip}_IMG/_SNR/_MASK'
         arrays. ``master_type`` ('bias'/'dark'/'flat') drives the WMKO filename
         token, the receipt key (``master_{master_type}``), and the BUNIT units
-        (``_BUNIT_BY_TYPE``).
+        (``_BUNIT_BY_TYPE``). INPUT_FILES records ``self._stacked_files``.
         """
         receipt_key = f"master_{master_type}"
         bunit = self._BUNIT_BY_TYPE.get(master_type)
@@ -613,7 +620,7 @@ class BaseMasterModule:
             if bunit is not None:
                 ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
 
-        ml1_obj.set_input_files(l0_file_list, master_type)
+        ml1_obj.set_input_files(self._stacked_files, master_type)
         ml1_obj.receipt_add_entry(receipt_key, "", "PASS")
 
         return ml1_obj

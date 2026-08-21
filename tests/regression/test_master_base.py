@@ -1044,12 +1044,31 @@ class TestInputFilesProvenance:
         # INPUT_FILES and MASTYPE are the master's provenance anchor, and
         # MASTYPE is what generate_standard_filename() needs to build a
         # DRP-RUN-05 name after a round trip.
-        #
-        # NOTE: production records the *requested* L0 list, not the frames that
-        # survived stacking -- _build_ml1_obj passes l0_file_list straight to
-        # set_input_files, while _load_frame may drop QC failures within the
-        # tolerated budget. No frame is dropped here, so this assertion holds
-        # under either semantic; it is deliberately silent on which is intended.
         ml1 = make_mocked_master(Bias)
         assert ml1.data["INPUT_FILES"]["FILENAME"].tolist() == FILE_LIST
         assert ml1.headers["PRIMARY"]["MASTYPE"] == "bias"
+
+    def test_records_only_the_frames_that_stacked(self):
+        # A frame _load_frame drops contributed nothing to the master, so it
+        # must not appear in INPUT_FILES -- and, dropped first, must not name
+        # the master via generate_standard_filename()'s INPUT_FILES[0].
+        # Eight frames, so one drop stays inside the tolerated failure budget.
+        dark = Dark(sorted(f"f{i}.fits" for i in range(8)))
+        dark.chips = ["GREEN"]
+        dark.ccd = {"nrow": 2, "ncol": 2}
+
+        dropped = dark.l0_file_list[0]
+        with (
+            patch.object(
+                dark,
+                "_load_frame",
+                lambda fn, **k: (
+                    None if fn == dropped else _stack_frame(10.0, 100.0, 1.0)
+                ),
+            ),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            l1_arrays = dark.stack_frames()
+
+        ml1 = dark._build_ml1_obj(l1_arrays, master_type="dark")
+        assert ml1.data["INPUT_FILES"]["FILENAME"].tolist() == dark.l0_file_list[1:]

@@ -195,6 +195,7 @@ class WLS(BaseMasterModule):
             raise ValueError("Empty l0_file_list; must supply at least one valid file")
 
         self._l2_obj_cache = []
+        self._stacked_files = []
         failure = 0
 
         for fn in l0_file_list:
@@ -207,6 +208,7 @@ class WLS(BaseMasterModule):
                 )
                 continue
 
+            self._stacked_files.append(fn)
             l1_obj = self._process_frame(l1_obj)
             l2_obj = self._extract_frame(l1_obj)
             self._l2_obj_cache.append(l2_obj)
@@ -828,7 +830,7 @@ class WLS(BaseMasterModule):
                 self.ml2_obj.create_extension(coeffs_ext, "ImageHDU")
             self.ml2_obj.set_data(coeffs_ext, coeffs_mean)
 
-        self.ml2_obj.set_input_files(l0_file_list, "thar")
+        self.ml2_obj.set_input_files(self._stacked_files, "thar")
 
         # WLS metadata is out of EPRV scope but registered in ML2-wls-headers.csv,
         # so it routes through set_keyword (-> PRIMARY, registry comments).
