@@ -72,9 +72,8 @@ _SIMBAD_UNITS = {
     "V": None,
 }
 
-# Votable fields asked of SIMBAD, beyond the ra/dec every query returns. Deliberately
-# spelled out beside _SIMBAD_UNITS rather than derived from it, so the two can be seen
-# to diverge; test_astro_query guards the pair against drift.
+# Votable fields asked of SIMBAD, beyond the ra/dec every query returns. Spelled out
+# rather than derived from _SIMBAD_UNITS, so the two can be seen to diverge.
 _SIMBAD_FIELDS = ("pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V")
 
 # Queryable Gaia release -> its gaia_source table, newest last. DR1 and EDR3 are
