@@ -1,8 +1,6 @@
-"""
-Tests for the KPF1 (assembled FFI / L1) data model, the L0->L1 transform,
-and the KPFMasterL1 calibration product.
-
-Uses synthetic FITS fixtures — no real KPF data needed.
+"""Tests for the KPF1 (assembled FFI / L1) data model, the L0->L1 transform, and
+the KPFMasterL1 calibration product. Synthetic FITS fixtures throughout -- no real
+KPF data needed.
 """
 
 import importlib.metadata
@@ -19,7 +17,6 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.data_models.masters.base import KPFMasterModel
-from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 
 from ._catalog import SOURCES, catalog_record_table
@@ -34,8 +31,8 @@ from ._catalog import SOURCES, catalog_record_table
 
 @pytest.fixture(scope="module")
 def synthetic_masters_l1_file(tmp_path_factory):
-    """Create a minimal synthetic Masters L1 FITS file (module-scoped read-only
-    source: consumers only from_fits() read it)."""
+    """Minimal synthetic Masters L1 FITS file (module-scoped: consumers only read
+    it via from_fits)."""
     rng = np.random.default_rng(20240113)
     fn = str(
         tmp_path_factory.mktemp("ml1") / "KP.20240113.23249.10_master_bias_L1.fits"
@@ -92,30 +89,27 @@ class TestKPF1:
         l1 = KPF1.from_fits(synthetic_l1_file)
         original_green = l1.data["GREEN_CCD"].copy()
 
-        out_fn = str(tmp_path / "roundtrip_l1.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
 
         l1_reread = KPF1.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(
-            l1_reread.data["GREEN_CCD"], original_green
-        )
+        np.testing.assert_array_equal(l1_reread.data["GREEN_CCD"], original_green)
 
     def test_receipt_tracking(self, synthetic_l1_file, tmp_path):
         l1 = KPF1.from_fits(synthetic_l1_file)
         assert len(l1.receipt) >= 1
 
-        out_fn = str(tmp_path / "receipt_l1.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
         assert "to_fits" in l1.receipt["FUNCTION"].values
 
     def test_receipt_survives_roundtrip(self, synthetic_l1_file, tmp_path):
-        """The processing history must be written to the FITS RECEIPT extension,
-        not just held in memory. rvdata's _create_hdul serializes
-        self.data["RECEIPT"], so KPFDataModel._create_hdul syncs self.receipt
-        into it before writing; without that the receipt is silently lost."""
+        # rvdata's _create_hdul serializes self.data["RECEIPT"], so
+        # KPFDataModel._create_hdul syncs self.receipt into it before writing;
+        # without that the in-memory history is silently lost on write.
         l1 = KPF1.from_fits(synthetic_l1_file)
         l1.receipt_add_entry("image_assembly", "", "PASS")
-        out_fn = str(tmp_path / "roundtrip_l1.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
 
         modules = KPF1.from_fits(out_fn).receipt["FUNCTION"].values
@@ -129,7 +123,7 @@ class TestKPF1:
 
     def test_datalvl_header(self, synthetic_l1_file, tmp_path):
         l1 = KPF1.from_fits(synthetic_l1_file)
-        out_fn = str(tmp_path / "datalvl_test.fits")
+        out_fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
         l1.to_fits(out_fn)
 
         with fits.open(out_fn) as hdul:
@@ -153,8 +147,7 @@ class TestKPF1:
     def test_to_fits_warns_on_nonconforming_name_but_writes(
         self, caplog, synthetic_l1_file, tmp_path
     ):
-        """L1 to_fits runs the same warn-only filename advisory as L0: a
-        non-conforming output name warns but the write still proceeds."""
+        # The filename advisory is warn-only, as at L0: the write still proceeds.
         l1 = KPF1.from_fits(synthetic_l1_file)
         out = str(tmp_path / "not_kpf_convention.fits")
         with caplog.at_level(logging.WARNING):
@@ -166,8 +159,7 @@ class TestKPF1:
 class TestL1PrimarySeed:
     """KPF1.__init__ seeds the EPRV Required PRIMARY skeleton from the registry,
     mirroring rvdata's RV2.__init__ (which KPF2/KPF4 inherit but KPF1 cannot, as
-    L1 is not an EPRV level). This makes KWRDPRL1 a meaningful presence check.
-    """
+    L1 is not an EPRV level). This makes KWRDPRL1 a meaningful presence check."""
 
     @staticmethod
     def _required_l1_primary():
@@ -209,14 +201,14 @@ class TestL1PrimarySeed:
         )
 
     def test_converted_l1_has_all_required(self, synthetic_l0_file):
-        # The original goal: a converted L1 carries every EPRV-Required PRIMARY
-        # keyword, so QCL1's KWRDPRL1 presence check is meaningful (and passes).
+        # A converted L1 carries every EPRV-Required PRIMARY keyword, which is
+        # what makes QCL1's KWRDPRL1 presence check meaningful.
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         assert self._required_l1_primary() <= set(l1.headers["PRIMARY"])
 
     def test_native_overlay_is_typed(self, synthetic_l0_file):
         # _map_header coerces native/header_map-default values to their EPRV
-        # DataType (was raw strings) and preserves the seeded comment.
+        # DataType and preserves the seeded comment.
         prim = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
         assert prim["NUMTRACE"] == 5 and isinstance(prim["NUMTRACE"], int)
         assert isinstance(prim["OBSALT"], float)
@@ -236,8 +228,7 @@ class TestHeaderMapFiberRealignment:
     """rvdata's header_map numbers per-trace keywords CAL-first (1=CAL..5=SKY);
     _load_header_map realigns them to KPF's SKY-first numbering (1=SKY..5=CAL) by
     swapping index 1<->5 for the fiber-indexed families. Keywords that also end in
-    1/5 but are not fiber-indexed (EXSNR wavelength bands) must be left alone.
-    """
+    1/5 but are not fiber-indexed (EXSNR wavelength bands) must be left alone."""
 
     @staticmethod
     def _source(standard):
@@ -319,6 +310,11 @@ class TestToKpf1:
     @staticmethod
     def _l0_with_catalog(record):
         # A science KPF0 carrying a canonical 'kpf-drp' CATALOG_RECORD row, no network.
+        # Deferred, not for a cycle: astro_query pulls in astroquery, and this
+        # module would otherwise pay that import at collection in every worker
+        # for the sake of one test. Mirrors tests/conftest.py's _catalog_record_hdu.
+        from kpfpipe.modules.astro_query import AstroQuery
+
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         AstroQuery(l0)._write_catalog_record("kpf-drp", record)
@@ -395,7 +391,6 @@ class TestToKpf1:
         assert "mixed sources" not in caplog.text
 
     def test_to_kpf1_converts_native_to_eprv(self, synthetic_l0_file):
-        """to_kpf1 renames WMKO natives to their EPRV PRIMARY counterparts."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         prim = l1.headers["PRIMARY"]
@@ -408,7 +403,7 @@ class TestToKpf1:
         assert "GROBSERV" not in prim
 
     def test_to_kpf1_preserves_raw_header_in_instrument_header(self, synthetic_l0_file):
-        """INSTRUMENT_HEADER is a pure verbatim copy of the raw L0 PRIMARY."""
+        # INSTRUMENT_HEADER is a verbatim copy of the raw L0 PRIMARY.
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         assert "INSTRUMENT_HEADER" in l1.extensions
@@ -423,13 +418,14 @@ class TestToKpf1:
         assert "DRPSTATU" not in inst
 
     def test_to_kpf1_filters_non_registry_headermap_keys(self, tmp_path):
-        """_map_header emits only registered keywords; header_map's non-standard
-        STANDARD keys (e.g. PARANG <- PARANTEL) are dropped, not leaked onto the
-        EPRV PRIMARY. The raw value survives verbatim in INSTRUMENT_HEADER."""
+        # _map_header emits only registered keywords, so header_map's non-standard
+        # STANDARD keys (here PARANG <- PARANTEL) are dropped rather than leaked
+        # onto the EPRV PRIMARY; the raw value survives in INSTRUMENT_HEADER.
         fn = str(tmp_path / "KP.20240113.00009.00.fits")
         p = fits.PrimaryHDU()
         p.header["INSTRUME"] = "KPF"
         p.header["OFNAME"] = "KP.20240113.00009.00.fits"
+        p.header["PROGNAME"] = "K123"
         p.header["PARANTEL"] = 108.03  # header_map maps PARANTEL -> non-standard PARANG
         fits.HDUList([p]).writeto(fn)
         l1 = KPF0.from_fits(fn).to_kpf1()
@@ -437,7 +433,6 @@ class TestToKpf1:
         assert l1.headers["INSTRUMENT_HEADER"]["PARANTEL"] == 108.03
 
     def test_to_kpf1_fixes_value_bugs(self, synthetic_l0_file):
-        """NUMORDER, JD_UTC, and the DRP version keywords are corrected/stamped."""
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
         prim = l1.headers["PRIMARY"]
@@ -446,14 +441,14 @@ class TestToKpf1:
         assert prim.get("JD_UTC") == pytest.approx(2460322.93537, abs=1e-3)
         version = importlib.metadata.version("kpfpipe")
         assert prim.get("DRPTAG") == version  # EPRV version keyword stays on PRIMARY
-        # DRPVERNO (WMKO DRP-RUN-11) now lives on RECEIPT, not PRIMARY.
+        # DRPVERNO lives on RECEIPT, not PRIMARY.
         assert prim.get("DRPVERNO") is None
         assert l1.headers["RECEIPT"].get("DRPVERNO") == version
 
     def test_map_header_is_pure_tabular_except_jd_utc(self, synthetic_l0_file):
-        """The above values are correct on the L1 PRIMARY, but _map_header itself
-        no longer special-cases NUMORDER/DRPTAG/DATALVL (those ride the seed /
-        model level); JD_UTC is the one transform it still performs."""
+        # Those values are correct on the L1 PRIMARY, but _map_header itself does
+        # not special-case NUMORDER/DRPTAG/DATALVL (they ride the seed / model
+        # level); JD_UTC is the one transform it performs.
         out = KPF0.from_fits(synthetic_l0_file)._map_header()
         assert "NUMORDER" not in out  # seeded (registry _DEFAULT_OVERRIDES)
         assert "DRPTAG" not in out  # seeded (registry _DEFAULT_OVERRIDES)
@@ -461,8 +456,8 @@ class TestToKpf1:
         assert "JD_UTC" in out  # the one per-frame transform kept in _map_header
 
     def test_to_kpf1_forwards_program_ids(self, synthetic_l0_file):
-        """Native PROGID/KOAID stamped to the L0 RECEIPT at read carry onto the L1
-        RECEIPT via the RECEIPT-header forward (no longer onto PRIMARY)."""
+        # PROGID/KOAID are stamped to the L0 RECEIPT at read and forwarded to the
+        # L1 RECEIPT, never onto PRIMARY.
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         receipt = l1.headers["RECEIPT"]
         assert receipt.get("PROGID") == "K123"
@@ -470,8 +465,8 @@ class TestToKpf1:
         assert "PROGID" not in l1.headers["PRIMARY"]
 
     def test_to_kpf1_forwards_drpstatus(self, synthetic_l0_file):
-        """DRPSTATU stamped at read carries onto the L1 RECEIPT; the to_kpf1 receipt
-        is denylisted, so the ingest default survives until the first real module."""
+        # The to_kpf1 receipt is denylisted, so the ingest-time DRPSTATU survives
+        # until the first real module runs.
         receipt = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["RECEIPT"]
         assert receipt.get("DRPSTATU") == "File ingested into KPF-DRP"
 
@@ -494,7 +489,7 @@ class TestToKpf1:
         l1 = l0.to_kpf1()
         assert "GREEN_CCD" in l1.extensions
         assert "RED_CCD" in l1.extensions
-        # Extensions exist but data is empty (not populated yet)
+        # Extensions exist but ImageAssembly has not populated them yet.
         assert len(l1.data["GREEN_CCD"]) == 0
         assert len(l1.data["RED_CCD"]) == 0
 
@@ -518,14 +513,13 @@ class TestToKpf1:
 
 
 class TestCatalogRecordPassthrough:
-    """AstroQuery's CATALOG_RECORD rows + presence flags ride L0 -> L1 unchanged.
+    """AstroQuery's CATALOG_RECORD rows and presence flags ride L0 -> L1 unchanged.
 
-    (The L1 -> L2 and L2 -> L4 hops have the same class in
-    test_data_models_l{2,4}.py.)
+    The L1 -> L2 and L2 -> L4 hops have the same class in test_data_models_l{2,4}.py.
     """
 
     @staticmethod
-    def _l0_with_catalog(rv=-16.6):
+    def _l0_with_catalog_table(rv=-16.6):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
@@ -533,18 +527,18 @@ class TestCatalogRecordPassthrough:
         return l0
 
     def test_rows_and_flags_reach_l1(self):
-        """Beyond the C*# overlay, L1 keeps the whole table (every source row, not
-        just the merged one) and the flags, so the astrometry stays auditable."""
-        l1 = self._l0_with_catalog().to_kpf1()
+        # Beyond the C*# overlay, L1 keeps every source row -- not just the merged
+        # one -- so the astrometry stays auditable.
+        l1 = self._l0_with_catalog_table().to_kpf1()
         assert [str(s) for s in l1.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert l1.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
-        """CATALOG_RECORD is registered in L1-extensions.csv, so an L1 carrying it
-        reads back (an unlisted extension raises 'Non-standard extension'), and the
-        missing rv reads back NaN, not masked."""
+        # CATALOG_RECORD is registered in L1-extensions.csv, so it reads back at
+        # all (an unlisted extension raises), and a missing rv comes back NaN
+        # rather than masked.
         fn = str(tmp_path / "kpf_L1_20240405T000000.fits")
-        self._l0_with_catalog(rv=None).to_kpf1().to_fits(fn)
+        self._l0_with_catalog_table(rv=None).to_kpf1().to_fits(fn)
         back = KPF1.from_fits(fn)
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
@@ -555,7 +549,7 @@ class TestCatalogRecordPassthrough:
 class TestDrpStatus:
     """DRPSTATU advances to '<Module Name> module complete' via the
     receipt_add_entry override; data-model conversion/IO receipts are denylisted
-    so it names the last real science/masters stage (DRP-RUN-20)."""
+    so it names the last real science/masters stage."""
 
     def test_module_receipt_updates_status(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
@@ -621,15 +615,15 @@ class TestKPFMasterL1:
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
         original = m.data["GREEN_IMG"].copy()
 
-        out_fn = str(tmp_path / "roundtrip_ml1.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10_master_bias_L1.fits")
         m.to_fits(out_fn)
 
         m2 = KPFMasterL1.from_fits(out_fn)
-        np.testing.assert_array_almost_equal(m2.data["GREEN_IMG"], original)
+        np.testing.assert_array_equal(m2.data["GREEN_IMG"], original)
 
     def test_datalvl_header_in_fits(self, synthetic_masters_l1_file, tmp_path):
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
-        out_fn = str(tmp_path / "datalvl_ml1.fits")
+        out_fn = str(tmp_path / "KP.20240113.23249.10_master_bias_L1.fits")
         m.to_fits(out_fn)
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML1"
@@ -643,12 +637,20 @@ class TestKPFMasterL1:
             m.generate_standard_filename() == "KP.20240113.23249.10_master_bias_L1.fits"
         )
 
-    def test_generate_filename_requires_inputs(self):
+    def test_generate_filename_requires_mastype(self):
         # A master can never produce a non-compliant name: with no recorded
         # inputs / type, generate_standard_filename raises rather than falling
-        # back to a KOAID-less name.
-        with pytest.raises(ValueError):
+        # back to a KOAID-less name. MASTYPE is checked first.
+        with pytest.raises(ValueError, match="MASTYPE"):
             KPFMasterL1().generate_standard_filename()
+
+    def test_generate_filename_requires_inputs(self):
+        # The second guard, reachable only once MASTYPE is set -- what a
+        # partially-failed stack leaves behind.
+        m = KPFMasterL1()
+        m.set_keyword("MASTYPE", "bias")
+        with pytest.raises(ValueError, match="INPUT_FILES"):
+            m.generate_standard_filename()
 
     def test_no_warning_on_known_extensions(self, caplog, synthetic_masters_l1_file):
         with caplog.at_level(logging.WARNING):

@@ -1,8 +1,7 @@
-"""
-Tests for the KPF4 (RVs and CCFs / L4) data model, the L2->L4 transform,
-the KPFMasterL4 stub, and top-level data-model package imports.
+"""Tests for the KPF4 (RVs and CCFs / L4) data model, the L2->L4 transform, the
+KPFMasterL4 stub, and top-level data-model package imports.
 
-Uses synthetic FITS fixtures — no real KPF data needed.
+Synthetic FITS fixtures only -- no real KPF data needed.
 """
 
 import numpy as np
@@ -16,6 +15,7 @@ from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters import KPFMasterL4
 
 from ._catalog import SOURCES, catalog_record_table
+from ._dtype_policy import BJD, CCF, RV_FLOAT, assert_dtype, assert_roundtrip_dtype
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -54,8 +54,7 @@ class TestToKPF4:
         assert len(kpf4.data["RV1"]) == 0
 
     def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
-        """PROGID/KOAID on the L1 RECEIPT survive L1->L2->L4 via the RECEIPT-header
-        forward (their registry home is RECEIPT, not PRIMARY)."""
+        # PROGID/KOAID live on RECEIPT, not PRIMARY, and ride the RECEIPT forward.
         l1 = KPF1.from_fits(synthetic_l1_file)
         l1.headers["RECEIPT"]["PROGID"] = "U999"
         l1.headers["RECEIPT"]["KOAID"] = "KP.20201122.34567.89"
@@ -66,14 +65,28 @@ class TestToKPF4:
         assert receipt.get("KOAID") == "KP.20201122.34567.89"
         assert "PROGID" not in l4.headers["PRIMARY"]
 
+    def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
+        # KPF4 reads through rvdata's RV4._read, a different path from KPF0/1,
+        # so the L0/L1 round-trip twins cover none of this.
+        l4 = KPF2().to_kpf4()
+        l4.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
+        l4.receipt_add_entry("radial_velocity", "", "PASS")
+        fn = str(tmp_path / "kpf_SL4_20240101T000000.fits")
+        l4.to_fits(fn)
+
+        back = KPF4.from_fits(fn)
+        assert "radial_velocity" in back.receipt["FUNCTION"].values
+        assert (
+            back.headers["RECEIPT"].get("DRPSTATU") == "Radial Velocity module complete"
+        )
+
     def test_kpf4_has_quality_control_extension(self):
         # KPF4 must create QUALITY_CONTROL (RV4 does not) so to_kpf4 has a
         # destination and the accumulated QC history reaches L4.
         assert "QUALITY_CONTROL" in KPF4().extensions
 
     def test_to_kpf4_forwards_quality_control_and_receipt_headers(self):
-        """QUALITY_CONTROL + RECEIPT header cards (the accumulated L0/L1/L2 QC and
-        provenance history) are forwarded onto L4, like to_kpf2 does for L1->L2."""
+        # The accumulated L0/L1/L2 QC and provenance history must reach L4.
         kpf2 = KPF2()
         kpf2.set_keyword("NANSCI1", 7)  # DiagL2 metric -> QUALITY_CONTROL
         kpf2.headers["QUALITY_CONTROL"]["DATAPRL0"] = (1, "L0 flag (propagated)")
@@ -87,7 +100,7 @@ class TestToKPF4:
         kpf2 = KPF2()
         kpf2.set_keyword("NANSCI1", 7)
         kpf4 = kpf2.to_kpf4()
-        path = tmp_path / "rt_l4.fits"
+        path = tmp_path / "kpf_SL4_20240101T000000.fits"
         kpf4.to_fits(str(path))
         back = KPF4.from_fits(str(path))
         assert "QUALITY_CONTROL" in back.extensions
@@ -110,14 +123,13 @@ class TestCatalogRecordPassthrough:
         assert "CATALOG_RECORD" in KPF4().extensions
 
     def test_rows_and_flags_reach_l4(self):
-        """The rows, not just the flags, are copied onto L4, so the astrometry stays
-        with the RV product it fed."""
+        # The rows, not just the flags, so the astrometry stays with the RV it fed.
         kpf4 = self._l2_with_catalog().to_kpf4()
         assert [str(s) for s in kpf4.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
         assert kpf4.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
-        path = tmp_path / "rt_l4_catalog.fits"
+        path = tmp_path / "kpf_SL4_20240101T000001.fits"
         self._l2_with_catalog().to_kpf4().to_fits(str(path))
         back = KPF4.from_fits(str(path))
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
@@ -151,35 +163,24 @@ class TestKPF4:
         # bare RV is not an alias (RV is trace-mapped, not a 1:1 alias)
         assert kpf4.data._resolve("RV") == "RV"
 
-    def test_ccf_chip_prefix_views(self):
+    @pytest.mark.parametrize("suffix", ["CCF", "CCF_VAR"])
+    def test_ccf_chip_prefix_views(self, suffix):
         kpf4 = KPF4()
         green = np.ones((NORDER_GREEN, 5))
         red = 2 * np.ones((NORDER - NORDER_GREEN, 5))
-        kpf4.set_data("GREEN_SCI2_CCF", green)
-        kpf4.set_data("RED_SCI2_CCF", red)
-        assert kpf4.data["SCI2_CCF"].shape == (NORDER, 5)
-        np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF"], green)
-        np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF"], red)
-
-    def test_ccf_var_chip_prefix_views(self):
-        # CCF_VAR behaves exactly like CCF: a writable, chip-sliced image cube.
-        kpf4 = KPF4()
-        green = np.ones((NORDER_GREEN, 5))
-        red = 2 * np.ones((NORDER - NORDER_GREEN, 5))
-        kpf4.set_data("GREEN_SCI2_CCF_VAR", green)
-        kpf4.set_data("RED_SCI2_CCF_VAR", red)
-        assert kpf4.data["SCI2_CCF_VAR"].shape == (NORDER, 5)
-        np.testing.assert_array_equal(kpf4.data["GREEN_SCI2_CCF_VAR"], green)
-        np.testing.assert_array_equal(kpf4.data["RED_SCI2_CCF_VAR"], red)
+        kpf4.set_data(f"GREEN_SCI2_{suffix}", green)
+        kpf4.set_data(f"RED_SCI2_{suffix}", red)
+        assert kpf4.data[f"SCI2_{suffix}"].shape == (NORDER, 5)
+        np.testing.assert_array_equal(kpf4.data[f"GREEN_SCI2_{suffix}"], green)
+        np.testing.assert_array_equal(kpf4.data[f"RED_SCI2_{suffix}"], red)
 
     def test_ccf_var_survives_round_trip(self, tmp_path):
-        # The CCF_VAR image cube serializes and reloads like CCF.
         kpf4 = KPF2().to_kpf4()
         ccf = np.arange(NORDER * 5, dtype=float).reshape(NORDER, 5)
         var = ccf + 0.5
         kpf4.set_data("SCI2_CCF", ccf)
         kpf4.set_data("SCI2_CCF_VAR", var)
-        path = tmp_path / "rt_ccf_var.fits"
+        path = tmp_path / "kpf_SL4_20240101T000002.fits"
         kpf4.to_fits(str(path))
         back = KPF4.from_fits(str(path))
         assert "CCF_VAR3" in back.extensions
@@ -226,25 +227,63 @@ class TestKPF4:
 
 class TestKPFMasterStubs:
     def test_master_l4_not_implemented(self):
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(NotImplementedError, match="not yet implemented"):
             KPFMasterL4()
 
     def test_master_l4_inherits_kpf4(self):
         assert issubclass(KPFMasterL4, KPF4)
 
 
-class TestImports:
-    def test_data_models_import(self):
-        from kpfpipe.data_models import KPF0, KPF1, KPF2, KPF4
+class TestDtypeProvenance:
+    """EPRV mandates 64-bit for the L4 product: the CCF cubes and the RV table's
+    WAVE_START/WAVE_END/BJD_TDB. A downscale anywhere here costs RV accuracy, so
+    assert both the in-memory dtype and what survives the FITS round-trip."""
 
-        assert KPF0 is not None
-        assert KPF1 is not None
-        assert KPF2 is not None
-        assert KPF4 is not None
+    @staticmethod
+    def _populated():
+        kpf4 = KPF2().to_kpf4()
+        kpf4.set_data("SCI2_CCF", np.ones((NORDER, 5), dtype=np.float64))
+        kpf4.set_data(
+            "SCI2_RV",
+            pd.DataFrame(
+                {
+                    "ORDER_INDEX": np.arange(NORDER),
+                    "RV": np.zeros(NORDER, dtype=np.float64),
+                    "RV_ERR": np.full(NORDER, 1e-3, dtype=np.float64),
+                    "WAVE_START": np.full(NORDER, 4500.0, dtype=np.float64),
+                    "WAVE_END": np.full(NORDER, 8700.0, dtype=np.float64),
+                    "BJD_TDB": np.full(NORDER, 2460000.0, dtype=np.float64),
+                }
+            ),
+        )
+        return kpf4
 
-    def test_masters_data_models_import(self):
-        from kpfpipe.data_models.masters import KPFMasterL1, KPFMasterL2, KPFMasterL4
+    def test_populated_l4_is_born_float64(self):
+        # One in-memory check, not one per column: it localizes a break to
+        # set_data, which the round-trip tests below cannot distinguish from a
+        # FITS-layer break.
+        kpf4 = self._populated()
+        assert_dtype(kpf4.data["SCI2_CCF"], CCF, "SCI2_CCF in-mem")
+        table = kpf4.data["SCI2_RV"]
+        for column in ("RV", "RV_ERR", "WAVE_START", "WAVE_END"):
+            assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} in-mem")
+        assert_dtype(table["BJD_TDB"], BJD, "SCI2_RV BJD_TDB in-mem")
 
-        assert KPFMasterL1 is not None
-        assert KPFMasterL2 is not None
-        assert KPFMasterL4 is not None
+    def test_ccf_cube_survives_round_trip_as_float64(self, tmp_path):
+        # assert_roundtrip_dtype reads BITPIX off the raw HDU, so it needs the
+        # on-disk extension name (SCI2_CCF is an alias for CCF3).
+        assert_roundtrip_dtype(
+            KPF4,
+            self._populated(),
+            "CCF3",
+            CCF,
+            tmp_path,
+            name="kpf_SL4_20240101T000003.fits",
+        )
+
+    def test_rv_table_survives_round_trip_as_float64(self, tmp_path):
+        path = str(tmp_path / "kpf_SL4_20240101T000004.fits")
+        self._populated().to_fits(path)
+        table = KPF4.from_fits(path).data["SCI2_RV"]
+        for column in ("RV", "RV_ERR", "WAVE_START", "WAVE_END", "BJD_TDB"):
+            assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} after round-trip")

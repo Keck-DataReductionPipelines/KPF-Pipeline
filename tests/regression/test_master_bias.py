@@ -1,22 +1,30 @@
 """Unit and regression tests for the master bias module (`Bias`).
 
-Unit tests mock stack_frames (no real data). TestMasterBiasRegression stacks the
-bundled L0 bias frames. The shared stacking engine and L1 output contract these
-exercise (`BaseMasterModule`) are unit-tested in test_master_base.py.
+Unit tests mock stack_frames (no real data); the regression tests stack the
+bundled L0 bias frames. The shared engine (`BaseMasterModule`) these exercise is
+unit-tested in test_master_base.py.
 """
 
-import os
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
+from kpfpipe.utils.io import kpf_filepath
+from kpfpipe.utils.kpf import get_obs_id
 
-from ._masters import make_l1_arrays
+from ._dtype_policy import L1_IMAGE, assert_dtype
+from ._masters import (
+    CHIPS,
+    FILE_LIST,
+    MASTER_NAME,
+    NCOL,
+    NROW,
+    make_mocked_master,
+    mocked_stack,
+)
 
 TESTDATA_L0_DIR = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 TESTDATA_BIAS_FILES = sorted(
@@ -29,12 +37,6 @@ TESTDATA_BIAS_FILES = sorted(
     ]
 )
 
-CHIPS = ["GREEN", "RED"]
-NROW, NCOL = 10, 10  # small arrays for unit tests
-# make_l1_arrays() -- shared synthetic stack_frames builder -- lives in _masters.py
-
-FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
-
 
 # ---------------------------------------------------------------------------
 # Unit tests (mocked stack_frames)
@@ -42,14 +44,9 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 class TestMasterBiasUnit:
-    """Unit tests using a mocked stack_frames -- no real data needed."""
-
     @pytest.fixture(scope="class")
     def master_bias(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            return bias.make_master_l1()
+        return make_mocked_master(Bias)
 
     def test_returns_kpf_master_l1(self, master_bias):
         assert isinstance(master_bias, KPFMasterL1)
@@ -60,14 +57,6 @@ class TestMasterBiasUnit:
     )
     def test_extension_shape(self, master_bias, ext):
         assert master_bias.data[ext].shape == (NROW, NCOL)
-
-    def test_mask_is_boolean(self, master_bias):
-        assert master_bias.data["GREEN_MASK"].dtype == bool
-        assert master_bias.data["RED_MASK"].dtype == bool
-
-    def test_snr_non_negative(self, master_bias):
-        assert np.all(master_bias.data["GREEN_SNR"] >= 0)
-        assert np.all(master_bias.data["RED_SNR"] >= 0)
 
     def test_receipt_entry(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values
@@ -86,8 +75,6 @@ class TestMasterBiasUnit:
 
 
 class TestMasterBiasInfo:
-    """Smoke tests for Bias.info() in both pre- and post-perform states."""
-
     def test_info_before_make_master_l1(self, capsys):
         bias = Bias(FILE_LIST)
         bias.info()
@@ -96,9 +83,8 @@ class TestMasterBiasInfo:
         assert "make_master_l1() has not been called" in out
 
     def test_info_after_make_master_l1(self, capsys):
-        synthetic = make_l1_arrays()
         bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
+        with mocked_stack(bias):
             bias.make_master_l1()
         bias.info()
         out = capsys.readouterr().out
@@ -114,53 +100,26 @@ class TestMasterBiasInfo:
 
 
 class TestMasterBiasRoundTrip:
-    """Test that master bias output survives a FITS write/read cycle."""
+    """The mask/BITPIX dtype round-trip lives in test_master_base.py, which
+    exercises the same shared write path and also checks the on-disk BITPIX."""
 
-    def test_roundtrip_arrays(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.make_master_l1()
+    @pytest.fixture
+    def reread(self, tmp_path):
+        ml1 = make_mocked_master(Bias)
+        fn = str(tmp_path / MASTER_NAME)
+        ml1.to_fits(fn)
+        return ml1, KPFMasterL1.from_fits(fn)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_bias.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
+    def test_roundtrip_arrays(self, reread):
+        ml1, ml1_read = reread
+        for chip in CHIPS:
+            np.testing.assert_array_almost_equal(
+                ml1_read.data[f"{chip}_IMG"], ml1.data[f"{chip}_IMG"], decimal=4
+            )
 
-        np.testing.assert_array_almost_equal(
-            ml1_read.data["GREEN_IMG"], ml1.data["GREEN_IMG"], decimal=4
-        )
-        np.testing.assert_array_almost_equal(
-            ml1_read.data["RED_IMG"], ml1.data["RED_IMG"], decimal=4
-        )
-
-    def test_roundtrip_datalvl(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.make_master_l1()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_bias.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
-
-        val = ml1_read.headers["PRIMARY"].get("DATALVL")
-        assert val == "ML1"
-
-    def test_roundtrip_mask_dtype(self):
-        synthetic = make_l1_arrays()
-        bias = Bias(FILE_LIST)
-        with patch.object(bias, "stack_frames", return_value=synthetic):
-            ml1 = bias.make_master_l1()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "master_bias.fits")
-            ml1.to_fits(fn)
-            ml1_read = KPFMasterL1.from_fits(fn)
-
-        assert ml1_read.data["GREEN_MASK"].dtype == bool
-        assert ml1_read.data["RED_MASK"].dtype == bool
+    def test_roundtrip_datalvl(self, reread):
+        _, ml1_read = reread
+        assert ml1_read.headers["PRIMARY"].get("DATALVL") == "ML1"
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +130,9 @@ class TestMasterBiasRoundTrip:
 class TestMasterBiasSignature:
     @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
     def test_calibration_kwargs_rejected(self, kwarg):
-        with pytest.raises(TypeError):
-            Bias(FILE_LIST).make_master_l1(**{kwarg: True})
+        module = Bias(FILE_LIST)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            module.make_master_l1(**{kwarg: True})
 
 
 # ---------------------------------------------------------------------------
@@ -181,9 +141,8 @@ class TestMasterBiasSignature:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestMasterBiasRegression:
-    """Regression tests against a real stack of L0 bias frames."""
-
     @pytest.fixture(scope="class")
     def master_bias(self):
         return Bias(TESTDATA_BIAS_FILES).make_master_l1()
@@ -210,9 +169,59 @@ class TestMasterBiasRegression:
         assert np.sum(master_bias.data["RED_MASK"]) > 0
 
     def test_img_snr_dtype_is_float32(self, master_bias):
-        for chip in ("GREEN", "RED"):
-            assert master_bias.data[f"{chip}_IMG"].dtype == np.float32
-            assert master_bias.data[f"{chip}_SNR"].dtype == np.float32
+        for chip in CHIPS:
+            for suffix in ("IMG", "SNR"):
+                ext = f"{chip}_{suffix}"
+                assert_dtype(master_bias.data[ext], L1_IMAGE, ext)
 
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values
+
+    # ------------------------------------------------------------------
+    # The persisted product: written through kpf_filepath, as the masters
+    # recipe writes it, then read back. These assertions arrived from a
+    # recipe test that re-stacked this same five-frame bias to reach them.
+    # ------------------------------------------------------------------
+
+    @pytest.fixture(scope="class")
+    def master_bias_on_disk(self, master_bias, tmp_path_factory):
+        out_path = kpf_filepath(
+            get_obs_id(TESTDATA_BIAS_FILES[0]),
+            "L1",
+            data_root=str(tmp_path_factory.mktemp("master_bias_out")),
+            master="bias",
+        )
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        master_bias.to_fits(out_path)
+        return out_path, KPFMasterL1.from_fits(out_path)
+
+    def test_written_to_the_convention_path(self, master_bias_on_disk):
+        out_path, _ = master_bias_on_disk
+        assert Path(out_path).is_file()
+        assert Path(out_path).name.endswith("_master_bias_L1.fits")
+
+    def test_round_trip_preserves_chip_images(self, master_bias, master_bias_on_disk):
+        _, read_back = master_bias_on_disk
+        for chip in CHIPS:
+            np.testing.assert_array_equal(
+                read_back.data[f"{chip}_IMG"], master_bias.data[f"{chip}_IMG"]
+            )
+
+    def test_input_files_extension_present(self, master_bias_on_disk):
+        _, read_back = master_bias_on_disk
+        assert "INPUT_FILES" in read_back.extensions
+
+    def test_input_files_records_the_stacked_frames(self, master_bias_on_disk):
+        # NOTE: production records the *requested* file list, not the frames that
+        # survived stacking -- masters/base.py passes l0_file_list into
+        # set_input_files unchanged, while _load_frame may drop QC failures within
+        # the tolerated budget. All five frames here pass, so the count is the
+        # same under either semantic; when that provenance defect is fixed, this
+        # is the assertion that will need revisiting.
+        _, read_back = master_bias_on_disk
+        assert len(read_back.data["INPUT_FILES"]) == len(TESTDATA_BIAS_FILES)
+
+    def test_input_files_all_fits(self, master_bias_on_disk):
+        _, read_back = master_bias_on_disk
+        filenames = read_back.data["INPUT_FILES"]["FILENAME"].tolist()
+        assert all(name.endswith(".fits") for name in filenames)

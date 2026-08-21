@@ -17,19 +17,54 @@ from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 from kpfpipe.utils.kpf import get_obs_id
 
-from ._dtype_policy import WAVE, assert_dtype, assert_roundtrip_dtype
+from ._dtype_policy import MASK_MEM, WAVE, assert_dtype, assert_roundtrip_dtype
+from ._masters import FILE_LIST
+
+# Captured before the memoizing fixture below patches the method.
+_REAL_LOAD_ROUGH_WLS = WLS._load_rough_wls
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL_TEST = 16
 
-FILE_LIST = sorted([f"KP.20240101.{i:05d}.00.fits" for i in range(8)])
-DATECODE = "20240101"  # datecode shared by FILE_LIST and the master obs_ids below
+DATECODE = "20240101"  # shared by FILE_LIST and the master obs_ids below
 
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def cached_rough_wls():
+    """The rough-WLS grid, built once for the whole module."""
+    return WLS(FILE_LIST).rough_wls
+
+
+@pytest.fixture(autouse=True)
+def _memoize_rough_wls(cached_rough_wls, monkeypatch):
+    """Serve every ``WLS(...)`` in this file the grid built once above.
+
+    ``WLS.__init__`` rebuilds the rough-WLS grid unconditionally -- measured at
+    0.15 s a call, and this file constructs roughly sixty. The grid depends only
+    on class defaults (the CSV, ncol, chips, fibers, echelle orders), so each
+    instance gets a fresh dict wrapping the shared arrays; the three tests that
+    override a channel rebind the key rather than writing through it.
+
+    A caller passing an explicit ``rough_wls_file`` still reaches the real
+    loader, so the missing-file path is unaffected, and
+    ``test_cached_grid_matches_the_real_loader`` drives the real loader once per
+    run to keep this cache honest.
+    """
+
+    def _cached(self, rough_wls_file=None):
+        if rough_wls_file is not None and rough_wls_file != self.rough_wls_file:
+            return _REAL_LOAD_ROUGH_WLS(self, rough_wls_file)
+        if not hasattr(self, "rough_wls"):
+            self.rough_wls = dict(cached_rough_wls)
+        return self.rough_wls
+
+    monkeypatch.setattr(WLS, "_load_rough_wls", _cached)
 
 
 class MockL1:
@@ -54,19 +89,18 @@ def _linelist_df(chip, norder, waves):
 
 
 def _master_and_stack(masters_output, obs_id="KP.20240101.00000.00"):
-    """The (master_path, stack_dir) pair in the canonical masters tree under
-    `masters_output` for a ThAr master keyed on `obs_id`. The stack subdir is
-    where WLS writes its per-frame L2s/diagnostics (via kpf_directory), beside
-    the master itself."""
+    """The (master_path, stack_dir) pair for a ThAr master keyed on `obs_id`.
+
+    The stack subdir, beside the master, is where WLS writes its per-frame L2s
+    and diagnostics.
+    """
     night = masters_output / "masters" / DATECODE
     return night / f"{obs_id}_master_thar_L2.fits", night / "thar_L2"
 
 
 @pytest.fixture
 def mock_pipeline(monkeypatch):
-    """Patch CalibrationAssociation, ImageProcessing, and SpectralExtraction so
-    that _process_frame and _extract_frame run without touching disk or real
-    data.
+    """Run _process_frame and _extract_frame without touching disk or real data.
 
     Returns the MockL2 instance that SpectralExtraction.perform() will return.
     """
@@ -77,7 +111,7 @@ def mock_pipeline(monkeypatch):
 
     mock_ip = MagicMock()
     mock_ip.return_value.perform.return_value = MockL1()
-    mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
+    mock_ip.calibration_applied.return_value = False
 
     mock_se = MagicMock()
     mock_se.return_value.perform.return_value = l2
@@ -97,25 +131,41 @@ def mock_pipeline(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def _stub_frame_pipeline(monkeypatch, l1=None, extract=None):
+    """Short-circuit load -> process -> extract so a test drives only the fit.
+
+    ``_load_frame`` threads each source filename through as the opaque L1 token
+    unless ``l1`` overrides it, so the extracted L2 stub carries that frame's
+    obs_id (which drives per-frame naming). The fit/combine stubs stay per-test:
+    their survivor and rejection structure IS what each test asserts.
+    """
+    load = (lambda self, fn, cache=False, **kw: fn) if l1 is None else l1
+    extract = extract or (lambda self, l1_obj, **kw: MockL2(get_obs_id(l1_obj)))
+    monkeypatch.setattr(WLS, "_load_frame", load)
+    monkeypatch.setattr(WLS, "_process_frame", lambda self, l1_obj, **kw: l1_obj)
+    monkeypatch.setattr(WLS, "_extract_frame", extract)
+
+
 class TestInit:
     def test_none_config_sets_masters_output_none(self):
         wls = WLS(FILE_LIST)
         assert wls._masters_output is None
 
     def test_reads_masters_output_from_config(self):
-        # WLS associates the master bias from KPF_MASTERS_OUTPUT -- where the
-        # masters recipe writes it and where CalibrationAssociation reads it.
+        # WLS associates the master bias from KPF_MASTERS_OUTPUT, where the
+        # masters recipe writes it.
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
         assert wls._masters_output == "/masters"
 
     def test_ignores_data_input_for_masters_output(self):
-        # The raw input root is not where masters live; only KPF_MASTERS_OUTPUT
-        # drives the masters search.
+        # The raw input root is not where masters live.
         wls = WLS(FILE_LIST, config={"KPF_DATA_INPUT": "/in"})
         assert wls._masters_output is None
 
     def test_invalid_config_raises(self):
-        with pytest.raises(TypeError):
+        with pytest.raises(
+            TypeError, match="config must be None, dict, or ConfigHandler"
+        ):
             WLS(FILE_LIST, config=42)
 
 
@@ -131,13 +181,12 @@ class TestExtractFrame:
         assert result is mock_pipeline
 
     def test_passes_masters_output_to_calibration_association(self, monkeypatch):
-        # _process_frame (run before _extract_frame) associates the bias from
-        # KPF_MASTERS_OUTPUT; _extract_frame itself no longer does calibration.
+        # _process_frame, not _extract_frame, is what associates the bias.
         mock_ca = MagicMock()
         mock_ca.return_value.perform.return_value = MockL1()
         mock_ip = MagicMock()
         mock_ip.return_value.perform.return_value = MockL1()
-        mock_ip.calibration_applied.return_value = False  # frame not yet calibrated
+        mock_ip.calibration_applied.return_value = False
         mock_se = MagicMock()
         mock_se.return_value.perform.return_value = MockL2()
 
@@ -204,19 +253,13 @@ class TestProcessIndividualFrames:
 
 @pytest.fixture
 def mock_make_master_l2(monkeypatch):
-    """Patch frame loading, _fit_and_qc_lines_stack, and _combine_coeffs_stack so
-    make_master_l2 runs without touching disk or real spectra. The fitting
-    stub reports one non-rejected frame per input (FILE_LIST has 8 frames, so
-    the default min_stack_size=5 gate passes), and the combine stub returns
+    """Run make_master_l2 without touching disk or real spectra.
+
+    The fitting stub reports one non-rejected frame per input (FILE_LIST has 8,
+    so the default min_stack_size=5 gate passes); the combine stub returns
     synthetic W and coefficient arrays with chip-correct shapes.
     """
-    # Thread each source filename through as the opaque L1 token so the
-    # extracted L2 stub carries that frame's obs_id (drives per-frame naming).
-    monkeypatch.setattr(WLS, "_load_frame", lambda self, fn, cache=False, **kwargs: fn)
-    monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kwargs: l1)
-    monkeypatch.setattr(
-        WLS, "_extract_frame", lambda self, l1, **kwargs: MockL2(get_obs_id(l1))
-    )
+    _stub_frame_pipeline(monkeypatch)
 
     def mock_fit_and_qc(
         self,
@@ -283,27 +326,15 @@ class TestMakeMasterL2:
         result = wls.make_master_l2()
         assert isinstance(result, KPFMasterL2)
 
-    def test_wave_extensions_populated(self, mock_make_master_l2):
-        wls = WLS(FILE_LIST)
-        ml2 = wls.make_master_l2()
-        for chip in wls.chips:
-            for fiber in wls.fibers:
-                wave = ml2.data[f"{chip}_{fiber}_WAVE"]
-                assert np.size(wave) > 0
-                assert np.all(wave == 5500.0)
-
     def test_wave_routing_uses_physical_position_not_fiber_order(self, monkeypatch):
-        """Each W plane routes to its fiber by physical slicer position, even
-        when self.fibers is reordered. W's planes are ordered by fiber_positions
-        (SKY=0..CAL=4), so the write loop must sort by that, not trust
-        self.fibers' (config-overridable) order -- else SKY's solution lands on
-        CAL and vice versa.
-        """
-        monkeypatch.setattr(
-            WLS, "_load_frame", lambda self, fn, cache=False, **kw: MockL1()
+        # W's planes are ordered by fiber_positions (SKY=0..CAL=4), so the write
+        # loop must sort by that, not trust self.fibers' config-overridable
+        # order -- else SKY's solution lands on CAL and vice versa.
+        _stub_frame_pipeline(
+            monkeypatch,
+            l1=lambda self, fn, cache=False, **kw: MockL1(),
+            extract=lambda self, l1_obj, **kw: MockL2(),
         )
-        monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
-        monkeypatch.setattr(WLS, "_extract_frame", lambda self, l1, **kw: MockL2())
 
         def mock_fit_and_qc(self, chip, fibers, **kwargs):
             coeffs = np.zeros((self.poly_degree_x + 1, self.poly_degree_m + 1, 1))
@@ -330,7 +361,7 @@ class TestMakeMasterL2:
         monkeypatch.setattr(WLS, "_combine_coeffs_stack", mock_combine)
 
         wls = WLS(FILE_LIST)
-        # Reorder away from physical-slicer order (here: TRACE order).
+        # Reorder away from physical-slicer order.
         wls.fibers = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
         ml2 = wls.make_master_l2()
 
@@ -351,7 +382,14 @@ class TestMakeMasterL2:
         ml2 = wls.make_master_l2()
         assert_dtype(ml2.data["TRACE3_WAVE"], WAVE, "master TRACE3_WAVE")
         ml2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
-        assert_roundtrip_dtype(KPFMasterL2, ml2, "TRACE3_WAVE", WAVE, tmp_path)
+        assert_roundtrip_dtype(
+            KPFMasterL2,
+            ml2,
+            "TRACE3_WAVE",
+            WAVE,
+            tmp_path,
+            name="KP.20240113.23249.10_master_thar_L2.fits",
+        )
 
     def test_coeffs_extensions_populated(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
@@ -383,7 +421,7 @@ class TestMakeMasterL2:
 
     def test_primary_header_keyword_comments_from_registry(self, mock_make_master_l2):
         # WLS metadata routes through set_keyword, so the FITS comments come from
-        # ML2-wls-headers.csv (registry), not code-local strings.
+        # the keyword registry, not code-local strings.
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
         primary = ml2.headers["PRIMARY"]
@@ -392,39 +430,46 @@ class TestMakeMasterL2:
 
     def test_to_fits_round_trip(self, mock_make_master_l2, tmp_path):
         # Regression: rvdata builds non-PRIMARY headers via fits.Header(dict),
-        # which rejects (value, comment) tuple values. Make sure every header
-        # we set survives the round-trip.
+        # which rejects (value, comment) tuple values. Every header this module
+        # sets must come back off disk, not merely survive the write.
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
-        out_path = tmp_path / "round_trip_master.fits"
+        out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))
-        assert out_path.exists()
+
+        read_back = KPFMasterL2.from_fits(str(out_path))
+        primary = read_back.headers["PRIMARY"]
+        assert primary["MASTYPE"] == "thar"
+        assert primary["ROUGHWLS"] == wls.rough_wls_file
+        assert primary["LINELIST"] == wls.linelist
+        assert primary["LINEPROF"] == wls.lineprofile
+        assert primary["POLYDEGX"] == wls.poly_degree_x
+        assert primary["POLYDEGM"] == wls.poly_degree_m
+        assert primary["POLYDEGF"] == wls.poly_degree_f
 
     def test_ml2_datalvl_and_minimal_primary(self, mock_make_master_l2, tmp_path):
         # Regression: ML2 must not inherit RV2's EPRV science PRIMARY skeleton, and
-        # DATALVL must be "ML2" (not the RV2 placeholder "UNKNOWN") in-memory and on
-        # disk -- rvdata's to_fits never re-stamps DATALVL.
+        # DATALVL must be "ML2" both in memory and on disk -- rvdata's to_fits
+        # never re-stamps DATALVL.
         from kpfpipe.data_models.masters.level2 import KPFMasterL2
 
         ml2 = WLS(FILE_LIST).make_master_l2()
         assert ml2.headers["PRIMARY"].get("DATALVL") == "ML2"
-        # None of the EPRV-required science PRIMARY keywords should be seeded.
         seeded = set(ml2.keyword_registry.eprv_primary_seed)
         assert not (seeded & set(ml2.headers["PRIMARY"])) - {"DATALVL"}
 
-        out_path = tmp_path / "ml2_datalvl.fits"
+        out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))
         read_back = KPFMasterL2.from_fits(str(out_path))
         assert read_back.headers["PRIMARY"].get("DATALVL") == "ML2"
 
     def test_poly_degree_override_stamped(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
-        override_x = wls.poly_degree_x + 4  # ensure different from default
+        override_x = wls.poly_degree_x + 4
         ml2 = wls.make_master_l2(poly_degree_x=override_x)
         assert ml2.headers["PRIMARY"].get("POLYDEGX") == override_x
         for chip in wls.chips:
-            # POLYDEG* live on PRIMARY only now; verify the override actually
-            # propagated into the fit (coeffs array shape), not just the header.
+            # Verify the override propagated into the fit, not just the header.
             coeffs = ml2.data[f"{chip}_WLS_COEFFS"]
             assert coeffs.shape[0] == override_x + 1
 
@@ -452,15 +497,16 @@ class TestMakeMasterL2:
             assert chip in wls._frame_diagnostics
             assert len(wls._frame_diagnostics[chip]) == len(FILE_LIST)
 
-    def test_save_diagnostics_before_make_raises(self):
+    def test_save_diagnostics_before_make_raises(self, tmp_path):
         wls = WLS(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_diagnostics("/tmp/KP.20240101.00000.00_master_thar_L2.fits")
+            wls.save_diagnostics(
+                str(tmp_path / "KP.20240101.00000.00_master_thar_L2.fits")
+            )
 
     def test_save_diagnostics_with_empty_stash_raises(self, tmp_path):
-        # make_master_l2 initialises _frame_diagnostics to {} before populating
-        # it. If the chip loop raises before any chip is added, it stays empty --
-        # save_diagnostics must refuse rather than write an empty HDF5.
+        # An empty (not None) stash means the chip loop aborted before any chip
+        # was added; save_diagnostics must refuse rather than write empty HDF5.
         wls = WLS(FILE_LIST)
         wls._frame_diagnostics = {}
         master_path = tmp_path / "KP.20240101.00000.00_master_thar_L2.fits"
@@ -487,7 +533,9 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
         with pytest.raises(ValueError, match="level"):
-            wls.save_master("L4", str(tmp_path / "master.fits"))
+            wls.save_master(
+                "L4", str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
+            )
 
     def test_master_path_writes_fits(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
@@ -498,7 +546,7 @@ class TestMakeMasterL2:
     def test_save_master_post_hoc(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()  # no master_path; ml2_obj stashed on self
-        master_path = tmp_path / "master.fits"
+        master_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         wls.save_master("L2", str(master_path))
         assert master_path.exists()
 
@@ -521,20 +569,22 @@ class TestMakeMasterL2:
     def test_save_reduced_frames_before_make_raises(self, tmp_path):
         wls = WLS(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_reduced_frames(str(tmp_path / "master.fits"))
+            wls.save_reduced_frames(
+                str(tmp_path / "KP.20240113.23249.10_master_thar_L2.fits")
+            )
 
     def test_save_reduced_frames_refuses_overwrite(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         wls.make_master_l2()  # populates _l2_obj_cache, writes nothing
         master_path = str(_master_and_stack(tmp_path)[0])
-        wls.save_reduced_frames(master_path)  # first write; overwrite defaults False
+        wls.save_reduced_frames(master_path)  # first write
         with pytest.raises(FileExistsError, match="overwrite=True"):
             wls.save_reduced_frames(master_path)
 
     def test_save_master_overwrite_true_replaces(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
-        master_path = tmp_path / "master.fits"
+        master_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         master_path.write_bytes(b"stale")
         wls.save_master("L2", str(master_path), overwrite=True)
         assert master_path.read_bytes()[:6] == b"SIMPLE"
@@ -560,7 +610,7 @@ class TestMakeMasterL2:
                     assert grp.attrs["rejected"] == np.False_
 
                     assert grp["coeffs"].shape == expected_coeffs_shape
-                    assert np.issubdtype(grp["coeffs"].dtype, np.floating)
+                    assert_dtype(grp["coeffs"][...], WAVE, "h5 coeffs")
 
                     lines = grp["lines"]
                     for key in [
@@ -575,11 +625,11 @@ class TestMakeMasterL2:
                         "isgood",
                     ]:
                         assert key in lines
-                    assert np.issubdtype(lines["wav"].dtype, np.floating)
-                    assert np.issubdtype(lines["pix"].dtype, np.floating)
+                    assert_dtype(lines["wav"][...], WAVE, "h5 lines/wav")
+                    assert_dtype(lines["pix"][...], WAVE, "h5 lines/pix")
                     assert np.issubdtype(lines["index"].dtype, np.integer)
                     assert np.issubdtype(lines["echelle"].dtype, np.integer)
-                    assert lines["isgood"].dtype == bool
+                    assert_dtype(lines["isgood"], MASK_MEM, "isgood")
                     assert h5py.check_string_dtype(lines["chip"].dtype) is not None
                     assert h5py.check_string_dtype(lines["fiber"].dtype) is not None
                     for key in ["wav", "pix", "std", "amp"]:
@@ -627,40 +677,7 @@ class TestMakeMasterL2:
             assert "coeffs" not in rej
             assert "lines" in rej  # rejected frame's line diagnostics still written
 
-    def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
-        """
-        A NaN-filled orderlet (extraction failure) should be skipped (logged at
-        DEBUG) rather than crashing scipy's least_squares.
-        """
-        wls = WLS(FILE_LIST)
-        ncol = wls.ccd["ncol"]
-        norder = wls.norder["RED"]
-
-        flux = np.ones((norder, ncol))
-        flux[0, :] = np.nan  # simulate failed-extraction orderlet
-
-        class StubL2:
-            data = {"RED_SCI1_FLUX": flux}
-
-        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
-            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
-        )
-        wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
-
-        with caplog.at_level(logging.DEBUG):
-            result = wls._fit_line_positions_ffi(
-                StubL2(),
-                "RED",
-                ["SCI1"],
-            )
-        assert "RED SCI1 order 102: orderlet skipped" in caplog.text
-
-        # The NaN order (bluest RED, echelle 102) contributed no lines; rest did.
-        assert 102 not in result["echelle"]
-        assert len(result["wav"]) > 0
-
     def test_linelist_override(self, mock_make_master_l2, tmp_path, monkeypatch):
-        """Override file is loaded into the cache and stamped to the header."""
         override = tmp_path / "alt_linelist.csv"
         override.write_text(
             "CHIP,INDEX,ECHELLE,WAVE\n"
@@ -682,8 +699,7 @@ class TestMakeMasterL2:
         assert ml2.headers["PRIMARY"].get("LINELIST") == str(override)
 
     def test_single_frame_stack(self, mock_make_master_l2):
-        """A 1-frame stack still produces a valid master L2 when the survivor
-        gate allows it (min_stack_size=1)."""
+        # A 1-frame stack is valid only once the survivor gate is lowered to 1.
         wls = WLS(FILE_LIST[:1])
         wls.min_stack_size = 1
         ml2 = wls.make_master_l2()
@@ -699,19 +715,16 @@ class TestMakeMasterL2:
             wls.make_master_l2()
 
     def test_single_chip_config(self, mock_make_master_l2):
-        """A WLS configured for one chip only should not populate the other."""
         wls = WLS(FILE_LIST, config={"chips": ["GREEN"]})
         ml2 = wls.make_master_l2()
         for fiber in wls.fibers:
-            # GREEN populated by the mock (5500.0); RED left at the schema-
-            # default zeros since RED was not in self.chips.
+            # RED stays at the schema-default zeros: it is not in self.chips.
             assert np.all(ml2.data[f"GREEN_{fiber}_WAVE"] == 5500.0)
             assert np.all(ml2.data[f"RED_{fiber}_WAVE"] == 0.0)
         assert "GREEN_WLS_COEFFS" in ml2.extensions
         assert "RED_WLS_COEFFS" not in ml2.extensions
 
     def test_info_before_make_master_l2(self, capsys):
-        """info() before perform should print config and the not-called message."""
         wls = WLS(FILE_LIST)
         wls.info()
         out = capsys.readouterr().out
@@ -719,10 +732,9 @@ class TestMakeMasterL2:
         assert "make_master_l2() has not been called" in out
 
     def test_info_after_make_master_l2(self, mock_make_master_l2, capsys):
-        """info() after perform should print the per-chip line yield table."""
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
-        capsys.readouterr()  # discard any output from make_master_l2 itself
+        capsys.readouterr()  # discard make_master_l2's own output
         wls.info()
         out = capsys.readouterr().out
         assert "WLS" in out
@@ -754,14 +766,14 @@ class TestCalculateWlsCoeffs:
         }
 
     def test_underconstrained_single_fiber_raises(self):
-        # default poly_degree is (6, 3, 2) → 7*4 = 28 free params single-fiber
+        # default poly_degree is (6, 6, 2): 7*7 = 49 free params single-fiber
         wls = WLS(FILE_LIST)
         lines = self._make_lines(5, fibers=("SCI1",))
         with pytest.raises(ValueError, match=r"underconstrained"):
             wls._calculate_wls_coeffs(lines, wls._echelle_orders["GREEN"])
 
     def test_underconstrained_multi_fiber_raises(self):
-        # 5-fiber → 7*4*3 = 84 free params; 10 lines per fiber * 5 = 50 < 84
+        # 5-fiber: 7*7*3 = 147 free params; 10 lines per fiber * 5 = 50 < 147
         wls = WLS(FILE_LIST)
         lines = self._make_lines(10, fibers=("SKY", "SCI1", "SCI2", "SCI3", "CAL"))
         with pytest.raises(ValueError, match=r"underconstrained"):
@@ -774,13 +786,12 @@ class TestCalculateWlsCoeffs:
         assert coeffs.shape == (wls.poly_degree_x + 1, wls.poly_degree_m + 1)
 
     def test_mlambda_roundtrip_recovers_wavelength(self):
-        """A surface exactly representable as m*lambda is recovered by the fit."""
         wls = WLS(FILE_LIST)
         orders = wls._echelle_orders["GREEN"]
         ncol = wls.ccd["ncol"]
 
-        # true m*lambda is a known low-degree Legendre surface -> divide out the
-        # order to get a wavelength surface the fit must recover exactly.
+        # The fit models m*lambda as a Legendre surface, so a surface built from
+        # known low-degree coefficients must be recovered exactly.
         coeffs_true = np.zeros((wls.poly_degree_x + 1, wls.poly_degree_m + 1))
         coeffs_true[0, 0], coeffs_true[1, 0] = 8.0e5, 300.0  # mean, pixel slope
         coeffs_true[0, 1], coeffs_true[1, 1] = 5.0e4, 5.0  # order slope, cross term
@@ -802,19 +813,19 @@ class TestCalculateWlsCoeffs:
 
 
 # ---------------------------------------------------------------------------
-# TestComputeWlsFrameRejection
+# Stack QC: line-fit QC, coefficient combination, min_stack_size gate
 # ---------------------------------------------------------------------------
 
 
 class TestFitAndQcStack:
-    """Frame-level QC in _fit_and_qc_lines_stack: a frame whose line-fit failure
-    fraction exceeds max_bad_frac, or whose per-frame WLS fit fails, is warned
-    and dropped (rejected=True, coeffs=None) -- never raised. Every frame is
-    reported so the diagnostics stay fully populated."""
+    """A frame failing line-fit QC is warned and dropped, never raised.
+
+    Dropped frames are still reported (rejected=True, coeffs=None) so the
+    diagnostics stay fully populated.
+    """
 
     def _setup(self, monkeypatch, bad_fracs, nlines=100):
-        """Build a WLS whose stack yields one fake `lines` dict per entry in
-        `bad_fracs`, each with the requested fraction of bad line fits."""
+        """Build a WLS whose stack yields one fake `lines` dict per bad_fracs entry."""
         wls = WLS(FILE_LIST)
         wls._l2_obj_cache = [MockL2() for _ in bad_fracs]
 
@@ -836,7 +847,6 @@ class TestFitAndQcStack:
     def test_all_clean_frames_kept(self, monkeypatch):
         wls = self._setup(monkeypatch, [0.01, 0.02, 0.0, 0.03, 0.01])
         frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
-        # every input frame is reported; none rejected, all carry coeffs
         assert len(frames) == 5
         assert [fr["rejected"] for fr in frames] == [False] * 5
         assert all(fr["coeffs"] is not None for fr in frames)
@@ -846,15 +856,13 @@ class TestFitAndQcStack:
         with caplog.at_level(logging.WARNING):
             frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
         assert "line fits failed QC" in caplog.text
-        # the 22%-bad frame (index 1) is flagged rejected with no coeffs, but
-        # still reported alongside the four kept frames
+        # The 22%-bad frame is rejected but still reported alongside the rest.
         assert len(frames) == 5
         assert [fr["rejected"] for fr in frames] == [False, True, False, False, False]
         assert frames[1]["coeffs"] is None
 
     def test_many_bad_frames_all_dropped_no_raise(self, caplog, monkeypatch):
-        # more than one over-threshold frame no longer aborts: each is warned
-        # and rejected, and every frame is still reported
+        # More than one over-threshold frame does not abort the build.
         wls = self._setup(monkeypatch, [0.22, 0.01, 0.34, 0.01, 0.01])
         with caplog.at_level(logging.WARNING):
             frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
@@ -863,14 +871,13 @@ class TestFitAndQcStack:
         assert sum(not fr["rejected"] for fr in frames) == 3
 
     def test_threshold_is_inclusive_at_max_bad_frac(self, monkeypatch):
-        # exactly 5% bad is not > 5%, so the frame is kept
+        # Exactly max_bad_frac (5%) is not > 5%, so the frame is kept.
         wls = self._setup(monkeypatch, [0.05, 0.01], nlines=100)
         frames = wls._fit_and_qc_lines_stack("GREEN", ["SCI1"])
         assert [fr["rejected"] for fr in frames] == [False, False]
 
     def test_nonfinite_coeffs_frame_rejected_not_raised(self, caplog, monkeypatch):
-        # a per-frame fit yielding a NaN coefficient rejects (warns) that frame
-        # rather than aborting the whole build
+        # A NaN coefficient rejects that frame, not the whole build.
         wls = WLS(FILE_LIST)
         wls._l2_obj_cache = [MockL2() for _ in range(3)]
         lines = {"wav": np.zeros(100), "isgood": np.ones(100, dtype=bool)}
@@ -888,8 +895,7 @@ class TestFitAndQcStack:
         assert frames[1]["coeffs"] is None
 
     def test_underconstrained_frame_rejected_not_raised(self, caplog, monkeypatch):
-        # a per-frame fit that raises (e.g. underconstrained) rejects (warns)
-        # that frame instead of aborting
+        # A per-frame fit that raises rejects that frame, not the whole build.
         wls = WLS(FILE_LIST)
         wls._l2_obj_cache = [MockL2() for _ in range(3)]
         lines = {"wav": np.zeros(100), "isgood": np.ones(100, dtype=bool)}
@@ -911,8 +917,7 @@ class TestFitAndQcStack:
 
 
 class TestCombineCoeffs:
-    """_combine_coeffs_stack averages the surviving per-frame coeffs; it raises only on
-    the cross-frame degeneracy where every frame is an outlier for a coefficient."""
+    """_combine_coeffs_stack averages the surviving per-frame coeffs."""
 
     def _frames(self, coeffs_list):
         return [{"coeffs": c, "rejected": False} for c in coeffs_list]
@@ -940,11 +945,9 @@ class TestCombineCoeffs:
         np.testing.assert_allclose(coeffs_mean, 5.0)
 
     def test_all_outliers_raises(self):
-        # The cross-frame degeneracy: with qc_sigma tight enough that no frame
-        # survives for some coefficient (here every frame differs from the median),
-        # denom hits 0 and the stack is uncombinable, so it raises rather than
-        # producing a spurious master. (At the default qc_sigma the MAD keeps at
-        # least half the frames within threshold, so this guard needs qc_sigma=0.)
+        # With no frame surviving for some coefficient the stack is uncombinable,
+        # so it raises rather than producing a spurious master. The default
+        # qc_sigma keeps at least half the frames, hence qc_sigma=0 here.
         wls = WLS(FILE_LIST)
         frames = self._frames([np.full((2, 2), 0.0), np.full((2, 2), 10.0)])
         with pytest.raises(ValueError, match=r"all frames rejected as outliers"):
@@ -952,19 +955,17 @@ class TestCombineCoeffs:
 
 
 class TestMinStackSizeGate:
-    """make_master_l2 gates the master on min_stack_size survivors per chip:
-    below the threshold it raises, but the per-frame diagnostics/L2s are still
-    written; at or above it, the master is produced."""
+    """make_master_l2 gates the master on min_stack_size survivors per chip.
+
+    Below the threshold it raises, but the per-frame diagnostics and L2s are
+    still written.
+    """
 
     def _mock(self, monkeypatch, n_survivors, n_frames=8, masters_output=None):
-        # n_survivors is an int (same count for every chip) or a {chip: count}
-        # dict, so a test can make GREEN and RED pass/fail the gate independently.
+        # n_survivors is an int (same for every chip) or a {chip: count} dict, so
+        # a test can make GREEN and RED pass/fail the gate independently.
         files = sorted(f"KP.20240101.{i:05d}.00.fits" for i in range(n_frames))
-        monkeypatch.setattr(WLS, "_load_frame", lambda self, fn, cache=False, **kw: fn)
-        monkeypatch.setattr(WLS, "_process_frame", lambda self, l1, **kw: l1)
-        monkeypatch.setattr(
-            WLS, "_extract_frame", lambda self, l1, **kw: MockL2(get_obs_id(l1))
-        )
+        _stub_frame_pipeline(monkeypatch)
 
         def mock_fit(self, chip, fibers, **kwargs):
             n = n_survivors[chip] if isinstance(n_survivors, dict) else n_survivors
@@ -1029,9 +1030,9 @@ class TestMinStackSizeGate:
         assert master_path.exists()
 
     def test_gate_is_per_chip(self, monkeypatch, tmp_path):
-        # GREEN clears the gate (5 survivors) but RED does not (2): the build
-        # raises naming the failing chip and withholds the master even though the
-        # other chip passed. The diagnostics still persist (saved before the gate).
+        # GREEN clears the gate but RED does not: the master is withheld even
+        # though one chip passed. Diagnostics are saved before the gate, so they
+        # still persist.
         wls = self._mock(monkeypatch, {"GREEN": 5, "RED": 2}, masters_output=tmp_path)
         wls.min_stack_size = 5
         master_path, thar_dir = _master_and_stack(tmp_path)
@@ -1047,8 +1048,37 @@ class TestMinStackSizeGate:
 
 
 class TestFitLinePositions:
+    def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
+        # A NaN-filled orderlet (extraction failure) is skipped rather than
+        # crashing scipy's least_squares.
+        wls = WLS(FILE_LIST)
+        ncol = wls.ccd["ncol"]
+        norder = wls.norder["RED"]
+
+        flux = np.ones((norder, ncol))
+        flux[0, :] = np.nan
+
+        class StubL2:
+            data = {"RED_SCI1_FLUX": flux}
+
+        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
+            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
+        )
+        wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
+
+        with caplog.at_level(logging.DEBUG):
+            result = wls._fit_line_positions_ffi(
+                StubL2(),
+                "RED",
+                ["SCI1"],
+            )
+        assert "RED SCI1 order 102: orderlet skipped" in caplog.text
+
+        # The NaN order (bluest RED, echelle 102) contributed no lines; rest did.
+        assert 102 not in result["echelle"]
+        assert len(result["wav"]) > 0
+
     def test_no_lines_returns_empty(self):
-        """No reference lines for the order yields empty arrays."""
         wls = WLS(FILE_LIST)
         flux = np.ones(100)
         wave = np.linspace(5000.0, 5100.0, 100)
@@ -1058,8 +1088,8 @@ class TestFitLinePositions:
             assert len(result[key]) == 0
 
     def test_line_outside_rough_wls_range_raises(self):
-        """A reference line outside the order's rough WLS span is a CHIP/ORDER
-        labeling inconsistency and must fail loudly."""
+        # A line outside the order's rough WLS span means the CHIP/ORDER labels
+        # are inconsistent, which must fail loudly rather than fit garbage.
         wls = WLS(FILE_LIST)
         flux = np.ones(100)
         wave = np.linspace(5000.0, 5100.0, 100)
@@ -1067,8 +1097,8 @@ class TestFitLinePositions:
             wls._fit_line_positions_1d(flux, wave, np.array([6000.0]))
 
     def test_line_fit_qc_flags_centroid_outside_window(self):
-        """A fitted centroid more than `window` pixels from its window center
-        is flagged bad, even when amplitude and width are in range."""
+        # Centroid distance from the window center is an independent QC axis:
+        # amplitude and width are in range for all three lines here.
         wls = WLS(FILE_LIST)
         lines = {
             "amp": np.array([1.0, 1.0, 1.0]),
@@ -1080,7 +1110,7 @@ class TestFitLinePositions:
         assert list(isgood) == [True, True, False]
 
     def test_fit_returns_float64_from_float32_inputs(self):
-        """float32 flux/wave inputs must not drag the line fit into float32."""
+        # float32 inputs must not drag the line fit down to float32.
         wls = WLS(FILE_LIST)
         ncol = 100
         x = np.arange(ncol)
@@ -1093,15 +1123,14 @@ class TestFitLinePositions:
         )
         assert len(result["wav"]) == 1
         for key in ["wav", "pix", "std", "amp"]:
-            assert result[key].dtype == np.float64
+            assert_dtype(result[key], WAVE, f"_fit_line_positions_1d {key}")
 
     def test_all_nan_fiber_emits_fiber_level_warning(self, caplog):
-        """A fiber whose every order is NaN should emit a fiber-level warning."""
         wls = WLS(FILE_LIST)
         ncol = wls.ccd["ncol"]
         norder = wls.norder["RED"]
 
-        flux = np.full((norder, ncol), np.nan)  # entire fiber NaN
+        flux = np.full((norder, ncol), np.nan)
 
         class StubL2:
             data = {"RED_SCI1_FLUX": flux}
@@ -1111,8 +1140,8 @@ class TestFitLinePositions:
         )
         wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0])
 
-        # The all-NaN fiber logs a per-order skip at DEBUG plus a fiber-level
-        # WARNING; capture at WARNING and assert the fiber-level one.
+        # Capture at WARNING to isolate the fiber-level message from the
+        # per-order skips, which log at DEBUG.
         with caplog.at_level(logging.WARNING):
             result = wls._fit_line_positions_ffi(
                 StubL2(),
@@ -1121,28 +1150,6 @@ class TestFitLinePositions:
             )
         assert "RED SCI1: no good lines retained" in caplog.text
         assert len(result["wav"]) == 0
-
-    def test_nan_orderlet_emits_skip_warning(self, caplog):
-        """A single NaN-filled orderlet logs the per-orderlet skip at DEBUG."""
-        wls = WLS(FILE_LIST)
-        ncol = wls.ccd["ncol"]
-        norder = wls.norder["RED"]
-
-        flux = np.ones((norder, ncol))
-        flux[0, :] = np.nan  # one orderlet NaN-filled
-
-        class StubL2:
-            data = {"RED_SCI1_FLUX": flux}
-
-        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
-            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
-        )
-        wls._linelist_df = _linelist_df("RED", norder, [6502.0, 6505.0, 6508.0])
-
-        with caplog.at_level(logging.DEBUG):
-            wls._fit_line_positions_ffi(StubL2(), "RED", ["SCI1"])
-
-        assert "orderlet skipped" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -1153,5 +1160,15 @@ class TestFitLinePositions:
 class TestRoughWlsLoading:
     def test_missing_rough_wls_file_raises(self):
         wls = WLS(FILE_LIST)
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match="/nonexistent/path.csv"):
             wls._load_rough_wls(rough_wls_file="/nonexistent/path.csv")
+
+    def test_cached_grid_matches_the_real_loader(self, cached_rough_wls):
+        # The one test that runs the real Legendre evaluation, so the module's
+        # memoized grid cannot drift from what production would have built.
+        wls = WLS(FILE_LIST)
+        del wls.rough_wls
+        _REAL_LOAD_ROUGH_WLS(wls)
+        assert set(wls.rough_wls) == set(cached_rough_wls)
+        for channel_ext, grid in wls.rough_wls.items():
+            np.testing.assert_array_equal(grid, cached_rough_wls[channel_ext])

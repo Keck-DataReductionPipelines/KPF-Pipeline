@@ -1,10 +1,10 @@
 """Tests for scripts/plots/plot_timeseries.py: the standalone RV-timeseries plotter.
 
-plot_timeseries reads a target's L4 products off disk (over a datecode range) and
-renders the RV-vs-date plot; bursts are always grouped, and per-night panels are
-written only for nights with multiple observations. These cover what the script
-owns: arg parsing, the threaded L4 discovery, the RV-header read, the burst
-grouping, the main() wiring, and that the plot files actually get written.
+plot_timeseries reads a target's L4 products off disk and renders the RV-vs-date
+plot; bursts are always grouped, and per-night panels are written only for nights
+with multiple observations. These cover what the script owns: arg parsing, the
+threaded L4 discovery, the RV-header read, the burst grouping, the main() wiring,
+and that the plot files actually get written.
 
 Unit tests use synthetic bare-PRIMARY L4 frames in temp trees -- no real testdata.
 """
@@ -40,8 +40,8 @@ def pt():
 def _write_l4(data_dir, datecode, seconds, obj, bjd, rv, rverr, notjunk=None):
     """Write one L4 frame under {data_dir}/L4/{datecode}; return path.
 
-    Bare PRIMARY by default; pass `notjunk` (0/1) to add a QUALITY_CONTROL extension
-    carrying that NOTJUNK card (the junk QC flag the plotter reads).
+    Bare PRIMARY by default; pass `notjunk` (0/1) to add a QUALITY_CONTROL
+    extension carrying that NOTJUNK card, the junk QC flag the plotter reads.
     """
     from pathlib import Path
 
@@ -86,7 +86,7 @@ class TestParseArgs:
     @pytest.mark.parametrize(
         "drop", ["--target", "--date_range", "--data_dir", "--plot_dir"]
     )
-    def test_required_flags(self, pt, drop):
+    def test_required_flags(self, pt, capsys, drop):
         # Removing any one required flag (and its value) is a parse error.
         argv, skip = [], 0
         for tok in _BASE_ARGS:
@@ -96,23 +96,35 @@ class TestParseArgs:
                 skip -= 1
                 continue
             argv.append(tok)
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(argv)
+        assert exc.value.code == 2
+        assert drop in capsys.readouterr().err
 
-    @pytest.mark.parametrize(
-        "rng",
-        [["2024", "20240131"], ["20240201", "20240101"]],  # malformed / start>end
-    )
-    def test_date_range_validated(self, pt, rng):
+    @pytest.mark.parametrize("rng", [["2024", "20240131"], ["20240101", "2024"]])
+    def test_date_range_validated(self, pt, capsys, rng):
         argv = ["--target", "x", "--date_range", *rng, "--data_dir", "/d",
                 "--plot_dir", "/p"]  # fmt: skip
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(argv)
+        assert exc.value.code == 2
+        # Distinguishes the two validators: a malformed datecode vs start > end.
+        assert "--date_range value is not a valid datecode" in capsys.readouterr().err
 
-    def test_group_bursts_flag_removed(self, pt):
-        # --group_bursts no longer exists (grouping is always on).
-        with pytest.raises(SystemExit):
-            pt.parse_args(_BASE_ARGS + ["--group_bursts"])
+    def test_date_range_start_after_end(self, pt, capsys):
+        argv = ["--target", "x", "--date_range", "20240201", "20240101",
+                "--data_dir", "/d", "--plot_dir", "/p"]  # fmt: skip
+        with pytest.raises(SystemExit) as exc:
+            pt.parse_args(argv)
+        assert exc.value.code == 2
+        assert "--date_range START must be <= END" in capsys.readouterr().err
+
+    def test_removed_flag_has_no_dest(self, pt):
+        # Grouping is always on, so --group_bursts was dropped. Asserting the
+        # *dest* is gone is the real contract; argparse rejects any unknown
+        # string for free, so a bare "it exits" would pass on --nonsense too --
+        # and would keep passing if the flag came back as a no-op alias.
+        assert "group_bursts" not in vars(pt.parse_args(_BASE_ARGS))
 
     def test_obs_ids_source_valid(self, pt):
         ns = pt.parse_args(
@@ -129,17 +141,24 @@ class TestParseArgs:
         )
         assert ns.obs_ids == [_OID] and ns.date_range is None
 
-    def test_date_range_and_obs_ids_mutually_exclusive(self, pt):
-        with pytest.raises(SystemExit):
+    def test_date_range_and_obs_ids_mutually_exclusive(self, pt, capsys):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(_BASE_ARGS + ["--obs_ids", _OID])
+        assert exc.value.code == 2
+        assert "--obs_ids: not allowed with argument --date_range" in (
+            capsys.readouterr().err
+        )
 
-    def test_neither_source_errors(self, pt):
-        # Exactly one of --date_range / --obs_ids is required.
-        with pytest.raises(SystemExit):
+    def test_neither_source_errors(self, pt, capsys):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(["--target", "x", "--data_dir", "/d", "--plot_dir", "/p"])
+        assert exc.value.code == 2
+        assert "one of the arguments --date_range --obs_ids is required" in (
+            capsys.readouterr().err
+        )
 
-    def test_invalid_obs_id_errors(self, pt):
-        with pytest.raises(SystemExit):
+    def test_invalid_obs_id_errors(self, pt, capsys):
+        with pytest.raises(SystemExit) as exc:
             pt.parse_args(
                 [
                     "--target",
@@ -152,6 +171,8 @@ class TestParseArgs:
                     "/p",
                 ]  # fmt: skip
             )
+        assert exc.value.code == 2
+        assert "--obs_ids value is not a valid obs_id" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -192,11 +213,13 @@ class TestDiscoverL4Files:
 
     def test_no_matches_exits(self, pt, tmp_path):
         _write_l4(str(tmp_path), "20240101", 100, "99999", 2.4e6, 1.0, 0.5)
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="no L4 products for target '10700'"):
             pt.discover_l4_files(str(tmp_path), "10700", "20240101", "20240131", 4)
 
     def test_missing_l4_root_exits(self, pt, tmp_path):
-        with pytest.raises(SystemExit):
+        # A distinct diagnostic from "no matches": without the match= the tmp
+        # tree has no matches either way and this test duplicates its neighbour.
+        with pytest.raises(SystemExit, match="L4 output directory not found"):
             pt.discover_l4_files(str(tmp_path), "10700", "20240101", "20240131", 4)
 
 
@@ -216,7 +239,7 @@ class TestL4PathsForObsIds:
 
     def test_skips_missing_l4(self, pt, tmp_path, capsys):
         a = _write_l4_for(str(tmp_path), "KP.20240101.03600.00", "10700")
-        # The second obs_id has no L4 on disk -> warned and skipped, not fatal.
+        # The second obs_id has no L4 on disk: warn and skip, not fatal.
         got = pt.l4_paths_for_obs_ids(
             str(tmp_path), ["KP.20240101.03600.00", "KP.20240101.07200.00"], "10700"
         )
@@ -224,7 +247,6 @@ class TestL4PathsForObsIds:
         assert "no L4 product for KP.20240101.07200.00" in capsys.readouterr().out
 
     def test_mismatched_object_warns_but_kept(self, pt, tmp_path, capsys):
-        # A frame whose L4 OBJECT != target is plotted anyway, with a warning.
         a = _write_l4_for(str(tmp_path), "KP.20240101.03600.00", "99999")
         got = pt.l4_paths_for_obs_ids(str(tmp_path), ["KP.20240101.03600.00"], "10700")
         assert got == [a]
@@ -232,7 +254,7 @@ class TestL4PathsForObsIds:
         assert "not target '10700'" in out and "plotting anyway" in out
 
     def test_exits_when_none_present(self, pt, tmp_path):
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="none of the 1 supplied obs_id"):
             pt.l4_paths_for_obs_ids(str(tmp_path), ["KP.20240101.03600.00"], "10700")
 
 
@@ -266,13 +288,13 @@ class TestReadL4Rv:
         assert times.size == 0
 
     def test_skips_string_valued_card_without_crashing(self, pt, tmp_path):
-        # A present-but-non-numeric card (e.g. a stringified 'nan' -- these bare
-        # keywords aren't registry-validated) must skip the one frame, not raise
-        # from np.isfinite(str) and abort the whole plot. The good frame survives.
+        # These bare keywords aren't registry-validated, so a non-numeric card
+        # (a stringified 'nan') must skip its frame rather than raise from
+        # np.isfinite(str) and abort the whole plot.
         good = _write_l4(str(tmp_path), "20240101", 100, "10700", 2.4e6, 1.5, 0.5)
         bad = tmp_path / "L4" / "20240101" / "kpf_SL4_str.fits"
-        # All three cards present so the None-guard passes; RV is a string, which
-        # is exactly what would reach (and crash) np.isfinite before the fix.
+        # All three cards present so the None-guard passes and the string RV is
+        # what reaches np.isfinite.
         fits.PrimaryHDU(
             header=fits.Header(
                 {"OBJECT": "10700", "BJDTDB": 2.4e6, "RV": "nan", "RVERR": 0.5}
@@ -317,7 +339,6 @@ class TestJunkExclusion:
 
 class TestGroupBursts:
     def test_single_burst_weighted_mean(self, pt):
-        # Three frames within a burst collapse to one 1/err^2-weighted point.
         day = 1.0 / 1440.0  # one minute in days
         times = np.array([0.0, day, 2 * day])
         rvs = np.array([10.0, 20.0, 30.0])
@@ -353,7 +374,7 @@ class TestClassifyObservingMode:
         ]
 
     def test_uniform_many_frames_is_high_cadence(self, pt):
-        # 40 frames at a steady ~1-min cadence: ratio ~ 1, well over the floor.
+        # 40 frames at a steady ~1-min cadence: ratio ~1, above the frame floor.
         assert self._mode(pt, np.arange(40) * self._MIN) == pt._MODE_HIGH_CADENCE
 
     def test_three_frame_cluster_is_burst(self, pt):
@@ -368,7 +389,7 @@ class TestClassifyObservingMode:
         assert self._mode(pt, [0.0]) == pt._MODE_STANDARD
 
     def test_multi_burst_night_is_burst_not_high_cadence(self, pt):
-        # Many frames but in two clusters hours apart: ratio >> 3 -> burst, not hicad.
+        # Many frames, but in two clusters hours apart: ratio >> 3 -> burst.
         first = np.arange(6) * self._MIN
         second = 0.2 + np.arange(6) * self._MIN  # ~4.8 h later
         assert self._mode(pt, np.concatenate([first, second])) == pt._MODE_BURST
@@ -395,9 +416,8 @@ class TestClassifyObservingMode:
 
 class TestDeltaRvReference:
     def test_zero_point_excludes_outlier(self, pt):
-        # 12 points at RV=1.0 plus one gross outlier at 1000. The zero-point must be
-        # the median of the retained points (1.0), NOT the all-points median that
-        # the outlier would tug upward, and the outlier must be flagged.
+        # The zero-point must be the median of the retained points (1.0), not the
+        # all-points median that the 1000 outlier would tug upward.
         g_times = np.arange(13, dtype=float)
         g_rvs = np.full(13, 1.0)
         g_rvs[6] = 1000.0
@@ -406,8 +426,8 @@ class TestDeltaRvReference:
         assert outlier[6] and outlier.sum() == 1
 
     def test_reference_is_order_independent(self, pt):
-        # The mask is found on the time-ordered series, so a shuffled input yields
-        # the same reference and the same flagged point (by identity, not index).
+        # The mask is found on the time-ordered series, so a shuffled input gives
+        # the same reference and flags the same point (by identity, not index).
         g_times = np.arange(13, dtype=float)
         g_rvs = np.full(13, 5.0)
         g_rvs[3] = -900.0
@@ -418,8 +438,8 @@ class TestDeltaRvReference:
         assert g_times[out_a][0] == g_times[perm][out_b][0] == 3.0
 
     def test_below_gate_flags_nothing(self, pt):
-        # Fewer than 10 points: no trend, nothing flagged, zero-point is the plain
-        # median over all points (an outlier is not rejected here by design).
+        # Below the 10-point gate: no trend fit, so nothing is flagged and the
+        # zero-point is the plain median over all points.
         g_times = np.arange(5, dtype=float)
         g_rvs = np.array([1.0, 1.0, 1.0, 1.0, 50.0])
         ref, outlier = pt._delta_rv_reference(g_times, g_rvs)
@@ -427,8 +447,51 @@ class TestDeltaRvReference:
         assert ref == pytest.approx(np.median(g_rvs))
 
 
+class TestDeltaRvStats:
+    """``RV_RMS`` is the number an observer reads off the plot to judge RV
+    stability, and nothing checked it -- the plot tests assert only that a PNG
+    exists. Its sibling ``_delta_rv_reference`` is value-tested above; the
+    asymmetry was unintentional.
+
+    These are arithmetic checks on inputs the test supplies. They pin no
+    pipeline RV.
+    """
+
+    def test_scaling_and_rms(self, pt):
+        # km/s -> m/s on both the offsets and the error bars: rvs 2 mm/s either
+        # side of ref give drv [-2, 0, 2] m/s, whose std is sqrt(8/3).
+        rvs = np.array([1.000, 1.002, 1.004])
+        errs = np.array([0.001, 0.002, 0.003])
+        outlier = np.zeros(3, dtype=bool)
+        drv, derr, rms, med_err = pt._delta_rv_stats(rvs, errs, 1.002, outlier)
+        assert drv == pytest.approx([-2.0, 0.0, 2.0])
+        assert derr == pytest.approx([1.0, 2.0, 3.0])
+        assert rms == pytest.approx(np.sqrt(8.0 / 3.0))
+        assert med_err == pytest.approx(2.0)
+
+    def test_flagged_outlier_does_not_inflate_rms(self, pt):
+        # A flagged point 1 km/s off would dominate the std if it leaked back in;
+        # the retained three must give the same answer as if it were absent.
+        rvs = np.array([1.000, 1.002, 1.004, 2.000])
+        errs = np.full(4, 0.002)
+        outlier = np.array([False, False, False, True])
+        _, _, rms, _ = pt._delta_rv_stats(rvs, errs, 1.002, outlier)
+        assert rms == pytest.approx(np.sqrt(8.0 / 3.0))
+        # Guard the direction: including the outlier gives a vastly larger number.
+        assert rms < np.std((rvs - 1.002) * 1e3) / 100
+
+    def test_all_outliers_falls_back_to_every_point(self, pt):
+        # With nothing retained there is no meaningful subset, so the std is taken
+        # over everything rather than over an empty slice (which would be nan).
+        rvs = np.array([1.000, 1.002, 1.004])
+        errs = np.full(3, 0.002)
+        outlier = np.ones(3, dtype=bool)
+        _, _, rms, _ = pt._delta_rv_stats(rvs, errs, 1.002, outlier)
+        assert rms == pytest.approx(np.sqrt(8.0 / 3.0))
+
+
 # ---------------------------------------------------------------------------
-# plot outputs (establishes the repo's first Agg/PNG test)
+# plot outputs
 # ---------------------------------------------------------------------------
 
 
@@ -440,8 +503,24 @@ class TestPlot:
             for i, (dc, sec, bjd) in enumerate(spec)
         ]
 
+    def test_no_finite_rv_points_exits(self, pt, tmp_path):
+        # Without this guard the plotter runs on empty arrays and emits a blank
+        # PNG that looks like a successful run; the wrapper only reads the exit
+        # code, so the difference is "loud" vs "green run, no data".
+        # The one frame is dropped by _read_l4_rv for a missing RVERR (the
+        # builder idiom from TestReadL4Rv), leaving nothing to plot.
+        l4_dir = tmp_path / "L4" / "20240101"
+        l4_dir.mkdir(parents=True)
+        path = l4_dir / "kpf_SL4_20240101T000100.fits"
+        fits.PrimaryHDU(
+            header=fits.Header({"OBJECT": "10700", "BJDTDB": 2.4e6, "RV": 1.0})
+        ).writeto(path)
+
+        with pytest.raises(SystemExit, match="no finite RV"):
+            pt.plot_rv_timeseries("10700", [str(path)], str(tmp_path / "plots"))
+
     def test_timeseries_png_written(self, pt, tmp_path):
-        # Two single-observation nights: the main plot is written, no nightly panel.
+        # Single-observation nights get no nightly panel.
         paths = self._paths(
             str(tmp_path), [("20240101", 100, 2.4e6), ("20240102", 100, 2.4e6 + 1)]
         )
@@ -451,7 +530,7 @@ class TestPlot:
         assert not (plot_dir / "10700_rv_nightly.png").exists()
 
     def test_nightly_png_only_for_multiobs_nights(self, pt, tmp_path):
-        # One night with two frames (a burst) -> the nightly panel is written too.
+        # One night with two frames (a burst) also gets the nightly panel.
         day = 1.0 / 1440.0
         paths = self._paths(
             str(tmp_path),
@@ -463,9 +542,8 @@ class TestPlot:
         assert (plot_dir / "10700_rv_nightly.png").exists()
 
     def test_high_cadence_night_gets_own_plot_and_is_held_out(self, pt, tmp_path):
-        # A 12-frame uniform night (high cadence) plus two ordinary single-obs
-        # nights: the high-cadence night gets its own PNG and is excluded from the
-        # main plot, which is still written from the two remaining nights.
+        # The high-cadence night gets its own PNG and is excluded from the main
+        # plot, which is still written from the two remaining nights.
         minute = 1.0 / 1440.0
         spec = [("20240926", 100 + i, 2.4e6 + i * minute) for i in range(12)]
         spec += [("20240101", 100, 2.45e6), ("20240102", 100, 2.45e6 + 1)]
@@ -479,7 +557,7 @@ class TestPlot:
         assert not (plot_dir / "10700_rv_nightly.png").exists()
 
     def test_all_high_cadence_writes_only_per_night_plots(self, pt, tmp_path):
-        # Every night high-cadence: only the per-night plots exist, no main plot.
+        # Every night high-cadence, so there is nothing left for a main plot.
         minute = 1.0 / 1440.0
         spec = [("20240926", 100 + i, 2.4e6 + i * minute) for i in range(12)]
         spec += [("20240927", 200 + i, 2.41e6 + i * minute) for i in range(12)]

@@ -1,26 +1,17 @@
 """Tests for L2 quicklook plots (wavelength-aware extracted spectra)."""
 
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from PIL import Image
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.quality_control.quicklook.level2 import PlotL2
 
-# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
-# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+# Slow PNG rendering off the production path: excluded from `make test-fast`.
+# The Agg pin and the close-figures teardown come from tests/regression/conftest.py.
 pytestmark = pytest.mark.quicklook
-
-
-@pytest.fixture(autouse=True)
-def _close_figures():
-    """Close any figures a test left open (the output_dir=None path returns them)."""
-    yield
-    plt.close("all")
 
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
@@ -41,10 +32,7 @@ _OBS_ID = "KP.20240405.40113.57"
 
 
 def _make_l2(*, with_wave=True, object_name="Tau Ceti"):
-    """Build a KPF2 with FLUX/VAR (and optionally WAVE) for all fibers/chips.
-
-    obs_id is set on the model attribute, as the pipeline populates it.
-    """
+    """Build a KPF2 with FLUX/VAR (and optionally WAVE) for all fibers/chips."""
     l2 = KPF2()
     l2.obs_id = _OBS_ID
     l2.headers["PRIMARY"]["INSTRUME"] = "KPF"
@@ -100,12 +88,9 @@ class TestConstructor:
 
 
 class TestPlots:
-    @pytest.mark.parametrize("method", _PLOT_METHODS)
-    @pytest.mark.parametrize("chip", ["green", "red"])
-    def test_method_returns_figure(self, l2, method, chip):
-        fig = getattr(PlotL2(l2), method)(chip)
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+    # A parametrized "every method returns a Figure" test used to live here. It
+    # rendered the same ten figures TestRun::test_run_all_returns_all_plots_both_chips
+    # already renders, and asserted strictly less about them.
 
     def test_spectrum_single_order_explicit_order(self, l2):
         fig = PlotL2(l2).spectrum_single_order("green", order=3)
@@ -121,6 +106,9 @@ class TestPlots:
         title = fig.axes[0].get_title()
         assert _OBS_ID in title
         assert "Tau Ceti" in title
+        # Riding on the same render: the series carries one point per green
+        # order, so a chip-slice or order-index slip is visible here.
+        assert len(fig.axes[0].lines[0].get_xdata()) == NORDER_GREEN
         plt.close(fig)
 
 
@@ -181,7 +169,9 @@ class TestFileSaving:
             for c in ("green", "red")
         )
         assert pngs == expected
-        assert all((tmp_path / n).stat().st_size > 0 for n in pngs)
+        # The name set is the contract; a blank canvas would still satisfy it.
+        with Image.open(tmp_path / pngs[0]) as png:
+            assert png.convert("L").getextrema() != (255, 255)
 
     def test_no_files_when_output_dir_none(self, l2, tmp_path):
         PlotL2(l2).run("all")

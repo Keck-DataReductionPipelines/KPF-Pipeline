@@ -1,10 +1,10 @@
 """Tests for scripts/processing/masters.py: the nightly-masters build driver.
 
-Cover the driver's own surface: arg parsing and the two input forms, the
+Covers the driver's own surface: arg parsing and the two input forms, the
 ``_cli_task`` argv it fans out, datecode resolution, and the ``main`` exit-code
-contract (nonzero iff at least one night failed). The shared fan-out engine
-(``run_stage``, job sizing) lives in ``_dispatch`` and the ``datecode_dirs_in_range``
-helper in ``kpfpipe.utils.io``; they are tested in test_dispatch_script.py / test_io.py.
+contract (nonzero iff at least one night failed). The shared fan-out engine and
+the ``datecode_dirs_in_range`` helper are tested in test_dispatch_script.py and
+test_io.py.
 
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
@@ -15,30 +15,14 @@ import pytest
 
 from scripts.processing import masters as _masters
 
+from ._scripts import _FakeConfig, _NoLogDirConfig
+
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
 
 
-class _FakeConfig:
-    """Stand-in for ConfigHandler in the exit-code tests (no real file read)."""
-
-    def __init__(self, path):
-        pass
-
-    def get_params(self, keys):
-        return {"KPF_DATA_INPUT": "/in", "log_dir": "/l"}
-
-
-class _NoLogDirConfig(_FakeConfig):
-    """A config with a resolvable data input but no configured log_dir."""
-
-    def get_params(self, keys):
-        return {"KPF_DATA_INPUT": "/in"}  # no log_dir
-
-
 @pytest.fixture(scope="module")
 def m():
-    """The masters driver module (a normal package import)."""
     return _masters
 
 
@@ -101,18 +85,25 @@ class TestParseArgs:
             )
 
     @pytest.mark.parametrize(
-        "argv",
+        "argv,expected",
         [
-            ["--dates", "2024"],  # malformed datecode (list form)
-            ["--date_range", "2024", "20240131"],  # malformed datecode (range form)
-            ["--date_range", "20240201", "20240101"],  # start > end
-            ["--dates", "20240405", "--jobs", "0"],  # jobs below 1
-            ["--dates", "20240405", "--job_timeout", "0"],  # timeout below 1
+            (["--dates", "2024"], "2024"),  # malformed datecode (list form)
+            (
+                ["--date_range", "2024", "20240131"],  # malformed datecode (range form)
+                "2024",
+            ),
+            (["--date_range", "20240201", "20240101"], "20240201"),  # start > end
+            (["--dates", "20240405", "--jobs", "0"], "jobs"),  # jobs below 1
+            (
+                ["--dates", "20240405", "--job_timeout", "0"],  # timeout below 1
+                "job_timeout",
+            ),
         ],
     )
-    def test_invalid_args_exit(self, m, argv):
+    def test_invalid_args_exit(self, m, argv, expected, capsys):
         with pytest.raises(SystemExit):
             m.parse_args(argv)
+        assert expected in capsys.readouterr().err
 
     def test_config_defaults_to_none(self, m):
         assert m.parse_args(["--dates", "20240405"]).config is None
@@ -202,13 +193,13 @@ class TestResolveDatecodes:
 
     def test_range_missing_l0_root_exits(self, m, tmp_path):
         args = m.parse_args(["--date_range", "20240101", "20240131"])
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="L0 input directory not found"):
             m.resolve_datecodes(args, str(tmp_path))  # no L0/ dir
 
     def test_range_no_nights_in_range_exits(self, m, tmp_path):
         (tmp_path / "L0" / "20250101").mkdir(parents=True)
         args = m.parse_args(["--date_range", "20240101", "20240131"])
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit, match="no datecode dirs"):
             m.resolve_datecodes(args, str(tmp_path))
 
 
@@ -219,10 +210,10 @@ class TestResolveDatecodes:
 
 class TestMainExitCode:
     def _patch(self, m, monkeypatch, failed, calls=None):
-        # Skip the runtime setup and the real dir/config resolution + subprocess
-        # fan-out; assert only the exit-code contract from run_stage's failure set.
-        # setup_batch_logging is stubbed so main() writes no real batch log file.
-        # `calls`, if given, records run_stage's kwargs for wiring assertions.
+        # Stub out runtime setup, dir/config resolution and the subprocess fan-out
+        # (setup_batch_logging included, so main() writes no real batch log), and
+        # assert only what run_stage's failure set does. `calls`, if given, records
+        # run_stage's kwargs for wiring assertions.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
         monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: "/l/x.log")
@@ -231,7 +222,7 @@ class TestMainExitCode:
 
         def _fake_run_stage(*a, **k):
             if calls is not None:
-                calls.append(k)
+                calls.append({"args": a, **k})
             return set(failed)
 
         monkeypatch.setattr(m, "run_stage", _fake_run_stage)
@@ -247,8 +238,8 @@ class TestMainExitCode:
         assert exc.value.code == 1
 
     def test_fan_out_is_staggered(self, m, monkeypatch):
-        # Masters must pass its stagger interval to run_stage so the lockstep
-        # disk-read wave is desynchronized (see _LAUNCH_INTERVAL).
+        # Masters passes its stagger interval to run_stage so the lockstep
+        # disk-read wave is desynchronized.
         calls = []
         self._patch(m, monkeypatch, failed=[], calls=calls)
         m.main(["--dates", "20240405"])
@@ -256,8 +247,7 @@ class TestMainExitCode:
         assert m._LAUNCH_INTERVAL > 0
 
     def test_prescans_before_fan_out(self, m, monkeypatch):
-        # The mini-db caches are warmed up front (parallel per-datecode) before the
-        # reduces fan out, with the resolved datecodes and the pool size.
+        # The mini-db caches are warmed up front, before the reduces fan out.
         order = []
         warm_args = {}
 
@@ -274,14 +264,39 @@ class TestMainExitCode:
             m, "run_stage", lambda *a, **k: order.append("run_stage") or set()
         )
         m.main(["--dates", "20240405"])
-        assert order == ["warm", "run_stage"]  # pre-scan precedes fan-out
+        assert order == ["warm", "run_stage"]
         assert warm_args["data_input"] == "/in"  # resolved L0 input root
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["jobs"] == m._default_masters_jobs()
         assert warm_args["cache"] == "rw"  # masters default: warm up front
 
+    def test_forwards_dir_and_log_overrides_to_each_child(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        m.main(
+            [
+                "--dates",
+                "20240405",
+                "--input_dir",
+                "/in",
+                "--output_dir",
+                "/out",
+                "--log_level",
+                "DEBUG",
+            ]
+        )
+        tasks = calls[0]["args"][1]
+        assert len(tasks) == 1
+        _, argv = tasks[0]
+        assert argv[-8:] == [
+            "--kpf_data_input", "/in",
+            "--kpf_masters_output", "/out",
+            "--log_dir", "/out/logs",
+            "--log_level", "DEBUG",
+        ]  # fmt: skip
+
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
-        # A missing log_dir is fatal before any fan-out (DRP-RUN-07).
+        # A missing log_dir is fatal before any fan-out.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _NoLogDirConfig)
         with pytest.raises(SystemExit) as exc:

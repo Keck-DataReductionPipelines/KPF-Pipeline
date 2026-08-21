@@ -1,15 +1,13 @@
 """Unit and regression tests for the master dark module (`Dark`).
 
-Unit tests mock stack_frames (no real data). TestMasterDarkRegression builds a
-real master dark from the bundled L0 darks: the five frames span two default-gap
-clusters and HST midnight, so it groups them with groupby='obs_night' (the whole
-loaded night in one stack) before bias-subtracting each frame. The shared
-stacking engine these exercise (`BaseMasterModule`) is unit-tested in
-test_master_base.py.
+Unit tests mock stack_frames; the regression class builds a real master dark from
+the five bundled L0 darks, which span two default-gap clusters and HST midnight and
+so are grouped with groupby='obs_night' (the whole night in one stack), as the
+masters recipe does for darks. The shared stacking engine (`BaseMasterModule`) is
+unit-tested in test_master_base.py.
 """
 
 from pathlib import Path
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -18,14 +16,10 @@ from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.dark import Dark
 from kpfpipe.utils.io import FileHandler
 
-from ._masters import make_l1_arrays
-
-CHIPS = ["GREEN", "RED"]
-# make_l1_arrays() -- shared synthetic stack_frames builder -- lives in _masters.py
+from ._dtype_policy import MASK_MEM, assert_dtype
+from ._masters import CHIPS, FILE_LIST, make_mocked_master
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
-
-FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 # ---------------------------------------------------------------------------
@@ -34,14 +28,9 @@ FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
 
 class TestMasterDarkUnit:
-    """Unit tests using a mocked stack_frames -- no real data needed."""
-
     @pytest.fixture(scope="class")
     def master_dark(self):
-        synthetic = make_l1_arrays()
-        dark = Dark(FILE_LIST)
-        with patch.object(dark, "stack_frames", return_value=synthetic):
-            return dark.make_master_l1()
+        return make_mocked_master(Dark)
 
     def test_receipt_entry(self, master_dark):
         assert "master_dark" in master_dark.receipt["FUNCTION"].values
@@ -60,15 +49,12 @@ class TestMasterDarkUnit:
 class TestMasterDarkSignature:
     @pytest.mark.parametrize("kwarg", ["dark", "flat"])
     def test_dark_flat_kwargs_rejected(self, kwarg):
-        with pytest.raises(TypeError):
-            Dark(FILE_LIST).make_master_l1(**{kwarg: True})
+        module = Dark(FILE_LIST)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            module.make_master_l1(**{kwarg: True})
 
     def test_bias_kwarg_accepted(self):
-        synthetic = make_l1_arrays()
-        dark = Dark(FILE_LIST)
-        with patch.object(dark, "stack_frames", return_value=synthetic):
-            ml1 = dark.make_master_l1(bias=False)
-        assert isinstance(ml1, KPFMasterL1)
+        assert isinstance(make_mocked_master(Dark, bias=False), KPFMasterL1)
 
 
 # ---------------------------------------------------------------------------
@@ -78,12 +64,8 @@ class TestMasterDarkSignature:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestMasterDarkRegression:
-    """End-to-end master dark from real L0 frames. The five bundled darks span
-    two default-gap clusters *and* HST midnight, so they are grouped with
-    groupby='obs_night' (the whole night in one stack, as the masters recipe does
-    for darks); each frame is bias-subtracted against the bundled master bias."""
-
     @pytest.fixture(scope="class")
     def master_dark(self):
         file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
@@ -116,11 +98,8 @@ class TestMasterDarkRegression:
             assert np.all(master_dark.data[f"{chip}_SNR"] >= 0)
 
     def test_mask_mostly_good(self, master_dark):
-        # A clean detector stack should keep the large majority of pixels.
+        # A clean detector stack keeps the large majority of pixels.
         for chip in CHIPS:
             mask = master_dark.data[f"{chip}_MASK"]
-            assert mask.dtype == bool
+            assert_dtype(mask, MASK_MEM, f"{chip}_MASK")
             assert np.mean(mask) > 0.9
-
-    def test_bias_subtracted_via_receipt(self, master_dark):
-        assert "master_dark" in master_dark.receipt["FUNCTION"].values

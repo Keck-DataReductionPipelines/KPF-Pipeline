@@ -1,19 +1,23 @@
-"""Tests for the kpf_drp_masters recipe: end-to-end master production and error
-paths.
+"""Tests for the kpf_drp_masters recipe: stage wiring and error paths.
 
-Integration tests use real L0 data from tests/testdata/L0/20240405/. The
-FileHandler and path builders these exercise are unit-tested in test_io.py.
+The recipe's real ``main()`` is called with every stage it resolves replaced by a
+recorder, so what is under test is the wiring -- stage order, which stack each
+stage is handed, where each master is written, and which config section supplied
+each stage's stacking limits. The masters themselves are built from real L0 data
+in test_master_{bias,dark,flat}.py; the FileHandler and path builders are
+unit-tested in test_io.py.
 """
 
+import argparse
 import importlib.util
 import os
 from pathlib import Path
 
 import pytest
 
-from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import FileHandler, kpf_directory, kpf_filepath
+from kpfpipe.utils.io import kpf_directory, kpf_filepath
+from kpfpipe.utils.kpf import get_obs_id
 from recipes._logging import masters_run_summary
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
@@ -33,157 +37,246 @@ def _load_masters_recipe():
 
 
 # ---------------------------------------------------------------------------
-# Masters recipe integration (real L0 data from tests/testdata/)
+# Stage wiring: the real main() runs with every collaborator replaced.
+#
+# This is the canonical recipe-wiring harness; test_science_recipe.py mirrors it.
+# The rules it encodes: load the recipe and call its real main() rather than
+# re-implementing the loop; monkeypatch collaborators on the *loaded module*, so
+# what is asserted is the recipe's own wiring; record every stage into one list
+# whose order is itself the assertion; and model "nothing to stack" the way
+# production does -- by raising, never by returning an empty list.
 # ---------------------------------------------------------------------------
 
+# Three frames per stack: above no gate, below every max, and enough that a
+# dropped stack is visible in the run summary's frame counts.
+STACK_FILES = {
+    "bias": [
+        "/l0/20240405/KP.20240405.03637.74.fits",
+        "/l0/20240405/KP.20240405.03687.64.fits",
+        "/l0/20240405/KP.20240405.03737.52.fits",
+    ],
+    "dark": [
+        "/l0/20240405/KP.20240405.04184.73.fits",
+        "/l0/20240405/KP.20240405.04484.61.fits",
+        "/l0/20240405/KP.20240405.04784.49.fits",
+    ],
+    "flat": [
+        "/l0/20240405/KP.20240405.00020.86.fits",
+        "/l0/20240405/KP.20240405.00120.74.fits",
+        "/l0/20240405/KP.20240405.00220.62.fits",
+    ],
+    "thar": [
+        "/l0/20240405/KP.20240405.63499.95.fits",
+        "/l0/20240405/KP.20240405.63599.83.fits",
+        "/l0/20240405/KP.20240405.63699.71.fits",
+    ],
+}
 
-@pytest.mark.slow
-class TestMastersRecipe:
-    """End-to-end recipe test: FileHandler → Bias.make_master_l1 → to_fits."""
+# (groupby, min_stack_size, max_stack_size) each stage must read from its OWN
+# section of configs/kpf_drp_masters.toml. Reading [BIAS]'s limits for the flats,
+# or grouping darks by time_of_day, changes which frames are combined into a
+# master -- the RV-stability surface -- so the section-to-stage mapping is
+# asserted, not the numbers alone.
+STACK_LIMITS = {
+    "bias": ("time_of_day", 5, 20),
+    "dark": ("obs_night", 3, 20),
+    "flat": ("time_of_day", 5, 20),
+    "thar": ("time_of_day", 5, 20),
+}
 
-    @pytest.fixture(scope="class")
-    def recipe_output(self, tmp_path_factory):
-        from kpfpipe.modules.masters.bias import Bias
-        from kpfpipe.utils.kpf import get_obs_id
-
-        tmp_path = tmp_path_factory.mktemp("recipe_out")
-        data_root_out = str(tmp_path)
-
-        file_handler = FileHandler({"KPF_DATA_INPUT": str(TESTDATA_DIR)})
-        file_handler.build_mini_database("20240405")
-        output_paths = []
-        for files in file_handler.build_calibration_stacks("bias"):
-            bias_handler = Bias(files)
-            bias_l1 = bias_handler.make_master_l1()
-            out_path = kpf_filepath(
-                get_obs_id(files[0]), "L1", data_root=data_root_out, master="bias"
-            )
-            os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            bias_l1.to_fits(out_path)
-            output_paths.append(out_path)
-
-        return output_paths
-
-    def test_at_least_one_master_produced(self, recipe_output):
-        assert len(recipe_output) >= 1
-
-    def test_output_files_exist(self, recipe_output):
-        for path in recipe_output:
-            assert os.path.isfile(path), f"Expected output not found: {path}"
-
-    def test_output_filename_format(self, recipe_output):
-        for path in recipe_output:
-            fname = os.path.basename(path)
-            assert "_master_bias_L1.fits" in fname
-
-    def test_output_is_valid_fits(self, recipe_output):
-        for path in recipe_output:
-            ml1 = KPFMasterL1.from_fits(path)
-            assert ml1.data["GREEN_IMG"] is not None
-            assert ml1.data["RED_IMG"] is not None
-
-    def test_input_files_extension_present(self, recipe_output):
-        for path in recipe_output:
-            ml1 = KPFMasterL1.from_fits(path)
-            assert "INPUT_FILES" in ml1.extensions
-
-    def test_input_files_extension_has_correct_count(self, recipe_output):
-        for path in recipe_output:
-            ml1 = KPFMasterL1.from_fits(path)
-            assert len(ml1.data["INPUT_FILES"]) == 5
-
-    def test_input_files_all_fits(self, recipe_output):
-        for path in recipe_output:
-            ml1 = KPFMasterL1.from_fits(path)
-            filenames = ml1.data["INPUT_FILES"]["FILENAME"].tolist()
-            assert all(f.endswith(".fits") for f in filenames)
+# Output level per stage, i.e. which kpf_filepath level token the recipe must use.
+STACK_LEVELS = {"bias": "L1", "dark": "L1", "flat": "L1", "thar": "L2"}
 
 
-# ---------------------------------------------------------------------------
-# Masters recipe order-trace stage (stacking stubbed -- wiring only)
-# ---------------------------------------------------------------------------
+def _wire_recipe(tmp_path, monkeypatch, stacks):
+    """Load the recipe, replace every stage on it, and return it ready to run.
 
+    ``stacks`` maps a cal type to the list of stacks ``build_calibration_stacks``
+    returns for it, or to an exception instance to raise instead -- the two
+    outcomes production has (``kpfpipe/utils/io.py`` raises when no cluster meets
+    ``min_stack_size``).
 
-class TestMastersRecipeOrderTraceStage:
-    """The recipe traces every master flat it just stacked.
-
-    The stacking modules are stubbed out: what is under test is the wiring --
-    which flat the tracer is handed, where its CSV is written, and that the
-    trace reaches the run summary. OrderTrace's own geometry is covered by
-    test_master_order_trace.py.
+    Returns ``(recipe, config, args, record)``. ``record["calls"]`` holds one
+    ``(stage, files, master_path, stack_kwargs)`` tuple per stage in call order;
+    ``stack_kwargs`` are the keywords the stage's stack source was called with.
     """
+    recipe = _load_masters_recipe()
+    record = {"calls": [], "built": []}
+    stack_kwargs = {}
 
-    @pytest.fixture
-    def traced(self, tmp_path, monkeypatch):
-        import argparse
+    (tmp_path / "L0" / "20240405").mkdir(parents=True, exist_ok=True)
 
-        recipe = _load_masters_recipe()
-        calls = {}
+    class StubFileHandler:
+        def __init__(self, data_dirs):
+            pass
 
-        class StubFileHandler:
-            def __init__(self, data_dirs):
-                pass
+        def build_mini_database(self, datecode, cache=None):
+            pass
 
-            def build_mini_database(self, datecode, cache=None):
-                pass
+        def build_calibration_stacks(self, cal_type, **kwargs):
+            stack_kwargs[cal_type] = kwargs
+            outcome = stacks[cal_type]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
 
-            def build_calibration_stacks(self, cal_type, **kwargs):
-                # Only the flats matter here; the other stages have nothing to
-                # stack and fall through.
-                return [["/l0/KP.20240405.00020.86.fits"]] if cal_type == "flat" else []
-
-        class StubFlat:
+    def _stage(name):
+        class StubStage:
             def __init__(self, files, config):
-                pass
+                self._files = files
+
+            def _record(self, master_path):
+                record["calls"].append(
+                    (name, tuple(self._files), master_path, stack_kwargs[name])
+                )
 
             def make_master_l1(self, master_path=None):
-                calls["flat_path"] = master_path
+                self._record(master_path)
 
-        class StubOrderTrace:
-            def __init__(self, flat_path, config):
-                calls["traced_flat"] = flat_path
-                self.output_path = str(tmp_path / "kpf_20240405_order_trace.csv")
+            def make_master_l2(self, master_path=None):
+                self._record(master_path)
 
-            def make_master(self, output_dir=None):
-                calls["output_dir"] = output_dir
+        return StubStage
 
-        monkeypatch.setattr(recipe, "FileHandler", StubFileHandler)
-        monkeypatch.setattr(recipe, "Flat", StubFlat)
-        monkeypatch.setattr(recipe, "OrderTrace", StubOrderTrace)
+    class StubOrderTrace:
+        def __init__(self, flat_path, config):
+            self._flat_path = flat_path
+            self.output_path = None
 
-        def capture_summary(datecode, built, elapsed):
-            calls["built"] = built
-            return ""
+        def make_master(self, output_dir=None):
+            self.output_path = os.path.join(
+                str(output_dir), "KP.20240405.00020.86_master_order_trace.csv"
+            )
+            record["calls"].append(
+                ("order_trace", (self._flat_path,), self.output_path, {})
+            )
+            record["trace_output_dir"] = output_dir
 
-        monkeypatch.setattr(recipe, "masters_run_summary", capture_summary)
+    monkeypatch.setattr(recipe, "FileHandler", StubFileHandler)
+    monkeypatch.setattr(recipe, "Bias", _stage("bias"))
+    monkeypatch.setattr(recipe, "Dark", _stage("dark"))
+    monkeypatch.setattr(recipe, "Flat", _stage("flat"))
+    monkeypatch.setattr(recipe, "WLS", _stage("thar"))
+    monkeypatch.setattr(recipe, "OrderTrace", StubOrderTrace)
 
-        config = ConfigHandler(
-            str(MASTERS_CONFIG_PATH),
-            overrides={
-                "DATA_DIRS": {
-                    "KPF_DATA_INPUT": str(TESTDATA_DIR),
-                    "KPF_MASTERS_OUTPUT": str(tmp_path),
-                }
-            },
+    def capture_summary(datecode, built, elapsed):
+        record["built"] = built
+        return ""
+
+    monkeypatch.setattr(recipe, "masters_run_summary", capture_summary)
+
+    config = ConfigHandler(
+        str(MASTERS_CONFIG_PATH),
+        overrides={
+            "DATA_DIRS": {
+                "KPF_DATA_INPUT": str(tmp_path),
+                "KPF_MASTERS_OUTPUT": str(tmp_path),
+            }
+        },
+    )
+    args = argparse.Namespace(datecode="20240405", obs_id=None)
+    return recipe, config, args, record
+
+
+class TestMastersRecipeStages:
+    """Every stage the recipe drives, in order, with the paths and limits it uses."""
+
+    @pytest.fixture
+    def run(self, tmp_path, monkeypatch):
+        recipe, config, args, record = _wire_recipe(
+            tmp_path,
+            monkeypatch,
+            {cal_type: [files] for cal_type, files in STACK_FILES.items()},
         )
-        recipe.main(config, argparse.Namespace(datecode="20240405", obs_id=None))
-        return calls
+        recipe.main(config, args)
+        return record
 
-    def test_traces_the_master_flat_it_just_stacked(self, traced):
-        assert traced["traced_flat"] == traced["flat_path"]
+    def test_stages_run_in_dependency_order(self, run):
+        # Bias before dark and flat so CalibrationAssociation finds the bias this
+        # run just wrote; flat before the trace, whose only input is that flat.
+        assert [call[0] for call in run["calls"]] == [
+            "bias",
+            "dark",
+            "flat",
+            "order_trace",
+            "thar",
+        ]
 
-    def test_writes_the_trace_into_the_masters_directory(self, traced, tmp_path):
+    def test_each_stage_stacks_the_files_the_handler_returned(self, run):
+        stacked = {call[0]: call[1] for call in run["calls"]}
+        for cal_type, files in STACK_FILES.items():
+            assert stacked[cal_type] == tuple(files)
+
+    def test_each_master_is_written_to_its_convention_path(self, run, tmp_path):
+        written = {call[0]: call[2] for call in run["calls"]}
+        for cal_type, level in STACK_LEVELS.items():
+            assert written[cal_type] == kpf_filepath(
+                get_obs_id(STACK_FILES[cal_type][0]),
+                level,
+                data_root=str(tmp_path),
+                master=cal_type,
+            )
+
+    def test_each_stage_reads_its_own_config_section(self, run):
+        limits = {call[0]: call[3] for call in run["calls"]}
+        for cal_type, (groupby, min_size, max_size) in STACK_LIMITS.items():
+            assert limits[cal_type] == {
+                "min_stack_size": min_size,
+                "max_stack_size": max_size,
+                "groupby": groupby,
+            }
+
+    def test_traces_the_master_flat_it_just_stacked(self, run):
+        traced = [call for call in run["calls"] if call[0] == "order_trace"][0]
+        flat = [call for call in run["calls"] if call[0] == "flat"][0]
+        assert traced[1] == (flat[2],)
+
+    def test_writes_the_trace_into_the_masters_directory(self, run, tmp_path):
         expected = kpf_directory(
             kind="masters", data_root=str(tmp_path), datecode="20240405"
         )
-        assert str(traced["output_dir"]) == str(expected)
+        assert str(run["trace_output_dir"]) == str(expected)
 
-    def test_reports_the_trace_in_the_run_summary(self, traced):
-        traces = [entry for entry in traced["built"] if entry[0] == "order_trace"]
-        assert len(traces) == 1
-        _, path, n_frames = traces[0]
-        assert path.endswith("_order_trace.csv")
-        assert n_frames == 1
+    def test_run_summary_lists_every_master_built(self, run):
+        assert [entry[0] for entry in run["built"]] == [
+            "bias",
+            "dark",
+            "flat",
+            "order_trace",
+            "thar",
+        ]
+        frames = {entry[0]: entry[2] for entry in run["built"]}
+        assert frames["order_trace"] == 1
+        assert all(frames[cal_type] == 3 for cal_type in STACK_FILES)
+
+
+class TestMastersRecipeStackFailure:
+    """A night with nothing to stack for one cal type.
+
+    ``build_calibration_stacks`` raises when no cluster meets ``min_stack_size``
+    (``kpfpipe/utils/io.py``); it never returns an empty list. The recipe has no
+    try/except, so the run aborts mid-way -- after the earlier masters are
+    already on disk. That partial-night behaviour is pinned here so neither a
+    fail-soft ``try/except`` nor a ``min_stack_size`` change alters it silently.
+    """
+
+    @pytest.fixture
+    def wired(self, tmp_path, monkeypatch):
+        stacks = {cal_type: [files] for cal_type, files in STACK_FILES.items()}
+        stacks["dark"] = ValueError("no dark cluster meets min_stack_size for 20240405")
+        return _wire_recipe(tmp_path, monkeypatch, stacks)
+
+    def test_propagates_the_stack_failure(self, wired):
+        recipe, config, args, _ = wired
+        with pytest.raises(ValueError, match="min_stack_size"):
+            recipe.main(config, args)
+
+    def test_aborts_after_the_stage_that_already_ran(self, wired):
+        recipe, config, args, record = wired
+        with pytest.raises(ValueError):
+            recipe.main(config, args)
+        # The bias masters are on disk; flat, order trace and WLS never happen.
+        assert [call[0] for call in record["calls"]] == ["bias"]
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +297,6 @@ class TestMastersRecipeErrors:
         )
 
     def test_nonexistent_l0_dir_raises(self, tmp_path):
-        import argparse
-
         config = self._make_config(tmp_path, tmp_path)
         args = argparse.Namespace(datecode="20240405", obs_id=None)
         recipe = _load_masters_recipe()
@@ -213,8 +304,6 @@ class TestMastersRecipeErrors:
             recipe.main(config, args)
 
     def test_missing_datecode_raises(self, tmp_path):
-        import argparse
-
         config = self._make_config(tmp_path, tmp_path)
         args = argparse.Namespace(datecode=None, obs_id=None)
         recipe = _load_masters_recipe()
@@ -222,11 +311,10 @@ class TestMastersRecipeErrors:
             recipe.main(config, args)
 
     @pytest.mark.slow
+    @pytest.mark.requires_testdata
     def test_missing_min_stack_size_key_raises(self, tmp_path):
-        """min_stack_size is a required quality gate: a [BIAS] section present but
-        lacking the key must fail loud, not silently stack with no size gate."""
-        import argparse
-
+        # min_stack_size is a required quality gate: a [BIAS] section lacking it
+        # must fail loud, not silently stack with no size gate.
         cfg = tmp_path / "no_min_stack.toml"
         cfg.write_text(
             f'[DATA_DIRS]\nKPF_DATA_INPUT = "{TESTDATA_DIR}"\n'
@@ -240,7 +328,7 @@ class TestMastersRecipeErrors:
 
 
 class TestMastersSummary:
-    """Unit tests for the masters_run_summary() run-verdict formatter."""
+    """Unit tests for the masters_run_summary() formatter."""
 
     def test_built_masters_listed(self):
         text = masters_run_summary(

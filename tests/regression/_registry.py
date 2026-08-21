@@ -1,15 +1,11 @@
-"""
-Shared test helper: read the KPF header-keyword registry CSVs independently.
+"""Read the KPF header-keyword registry CSVs independently (not a test module).
 
-The conformance test wants an oracle for the keyword->extension routing that is
-*independent of the code under test*: it reads ``config/L{0,1,2,4}-headers.csv``
-directly here, then compares against the live table the data model exposes
+The conformance test needs an oracle for the keyword->extension routing that is
+*independent of the code under test*, so it reads ``config/L{0,1,2,4}-headers.csv``
+directly here and compares against the live table the data model exposes
 (``KPFDataModel.keyword_registry.routing``). Tests therefore never import
-``data_models.keyword_registry`` — registry data reaches tests through the model
-or through this helper.
-
-Like ``_masters.py`` / ``_dtype_policy.py``, this is not a ``test_*`` module, so
-pytest does not collect it.
+``data_models.keyword_registry``: registry data reaches them through the model or
+through this helper.
 """
 
 import importlib.resources

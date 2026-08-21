@@ -1,6 +1,7 @@
 """Tests for kpfpipe.utils.config: ConfigHandler TOML loading and section overrides."""
 
 import logging
+import tomllib
 
 import pytest
 
@@ -21,7 +22,7 @@ class TestConfigHandler:
 
     def test_get_params_default_sections(self, tmp_path):
         cfg = _write_toml(tmp_path, '[DATA_DIRS]\nroot = "/data"\n[TRACES]\nn = 3\n')
-        params = ConfigHandler(cfg).get_params()  # sections=None -> defaults
+        params = ConfigHandler(cfg).get_params()  # sections=None -> default sections
         assert params == {"root": "/data", "n": 3}
 
     def test_get_params_flattens_nested_dict(self, tmp_path):
@@ -68,3 +69,19 @@ class TestConfigHandler:
         assert params == {"n": 1}
         assert "'TRACES' loaded (1 entries)" in caplog.text
         assert "'EMPTY' present but empty" in caplog.text
+
+
+class TestConfigHandlerFailures:
+    """The two failure modes load_config's docstring promises. Fail-loud on a bad
+    config is a charter guardrail: returning {} for a missing file, or falling
+    back to defaults on a decode error, would silently run the pipeline against
+    the wrong tree."""
+
+    def test_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            ConfigHandler(str(tmp_path / "absent.toml"))
+
+    def test_malformed_toml_raises(self, tmp_path):
+        cfg = _write_toml(tmp_path, "[BAD\nx = ")
+        with pytest.raises(tomllib.TOMLDecodeError):
+            ConfigHandler(cfg)

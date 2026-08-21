@@ -1,34 +1,25 @@
 """Tests for L1 quicklook plots."""
 
-import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from astropy.io import fits
 from PIL import Image
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
 from kpfpipe.data_models.level1 import KPF1
 
-# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
-# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+# Quicklook/QLP render suite: slow PNG rendering, so it is excluded from
+# `make test-fast`. Run in the full suite or `make test-qlp`.
+# The Agg pin and the close-figures teardown come from tests/regression/conftest.py.
 pytestmark = pytest.mark.quicklook
-
-
-@pytest.fixture(autouse=True)
-def _close_figures():
-    """Close any figures a test left open (the output_dir=None path returns them)."""
-    yield
-    plt.close("all")
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-# 300x300 is large enough to exercise the 100-pixel border stripping used by
-# image()'s percentile scaling without paying for full 4080x4080 arrays.
+# Large enough to exercise the 100-pixel border strip in image()'s percentile
+# scaling, without paying for full 4080x4080 arrays.
 _FIXTURE_SHAPE = (300, 300)
 
 
@@ -67,10 +58,9 @@ def _build_synthetic_l1(
 def _seed_read_noise(l1):
     """Seed RN*/RNNG* via set_keyword, exactly as ImageAssembly does.
 
-    set_keyword routes these to QUALITY_CONTROL (their registry home), so this
-    exercises the real read path the quicklook annotation depends on -- writing
-    them onto PRIMARY here would let the annotation test pass while production
-    (which reads QUALITY_CONTROL) silently rendered nothing.
+    set_keyword routes them to QUALITY_CONTROL, which is where the quicklook
+    annotation reads them; writing them onto PRIMARY here would let the
+    annotation test pass while production silently rendered nothing.
     """
     for i in range(1, 5):
         l1.set_keyword(f"RNGREEN{i}", 3.5 + 0.05 * i)
@@ -97,7 +87,7 @@ def synthetic_l1_no_rn(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Task 1: Constructor
+# Constructor
 # ---------------------------------------------------------------------------
 
 
@@ -143,8 +133,7 @@ class TestImage:
 
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image("green")
-        # image axis + colorbar axis
-        assert len(fig.axes) == 2
+        assert len(fig.axes) == 2  # image axis + colorbar axis
         plt.close(fig)
 
     def test_image_shape(self, synthetic_l1):
@@ -162,7 +151,6 @@ class TestImage:
         qlp = PlotL1(synthetic_l1)
         fig = qlp.image("green")
         texts = [t.get_text() for t in fig.axes[0].texts]
-        # Should have a read noise annotation containing 'RN:' prefix
         assert any("RN:" in t for t in texts), f"texts found: {texts}"
         plt.close(fig)
 
@@ -183,8 +171,10 @@ class TestFileSaving:
         qlp = PlotL1(synthetic_l1, output_dir=str(tmp_path))
         fig = qlp.image("green")
         expected = tmp_path / "KP.20240405.00001.00_L1_image_green_zoomable.png"
-        assert expected.exists()
-        assert expected.stat().st_size > 0
+        assert sorted(p.name for p in tmp_path.glob("*.png")) == [expected.name]
+        # An empty canvas would satisfy a bare exists(); check for ink.
+        with Image.open(expected) as png:
+            assert png.convert("L").getextrema() != (255, 255)
         plt.close(fig)
 
     def test_no_file_when_output_dir_none(self, synthetic_l1, tmp_path):
@@ -250,7 +240,6 @@ class TestRun:
             qlp.run()
 
     def test_run_skips_missing_chip(self, tmp_path):
-        # KPF1 with only green CCD, no red
         rng = np.random.default_rng(42)
         fn = str(tmp_path / "KP.20240405.00003.00_L1.fits")
         primary = fits.PrimaryHDU()
@@ -279,21 +268,22 @@ class TestRun:
 
 
 class TestStubs:
-    @pytest.mark.parametrize(
-        "method_name",
-        [
-            "histogram",
-            "column_cut",
-            "zoom_3x3",
-            "order_trace_overlay",
-            "bias_subtracted",
-            "dark_subtracted",
-        ],
+    _STUBS = (
+        "histogram",
+        "column_cut",
+        "zoom_3x3",
+        "order_trace_overlay",
+        "bias_subtracted",
+        "dark_subtracted",
     )
-    def test_stub_raises_not_implemented(self, synthetic_l1, method_name):
+
+    def test_stubs_raise_not_implemented(self):
+        # One behaviour, not six: each stub raises before reading any data, so a
+        # bare KPF1 is enough and the synthetic FITS fixture is not needed. The
+        # match= pins that the stub raised for its own reason.
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 
-        qlp = PlotL1(synthetic_l1)
-        method = getattr(qlp, method_name)
-        with pytest.raises(NotImplementedError):
-            method("green")
+        qlp = PlotL1(KPF1())
+        for method_name in self._STUBS:
+            with pytest.raises(NotImplementedError, match=method_name):
+                getattr(qlp, method_name)("green")

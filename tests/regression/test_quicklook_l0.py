@@ -2,28 +2,20 @@
 
 import os
 
-import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from astropy.io import fits
 from PIL import Image
 
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
-
 from kpfpipe.data_models.level0 import KPF0
 
-# Quicklook/QLP render suite: excluded from `make test-fast` (slow PNG rendering,
-# an offshoot from the production path). Run in the full suite or `make test-qlp`.
+from ._data_models import write_amp_l0
+
+# Quicklook/QLP render suite: slow PNG rendering, so excluded from
+# `make test-fast`. Run in the full suite or `make test-qlp`.
+# The Agg pin and the close-figures teardown come from tests/regression/conftest.py.
 pytestmark = pytest.mark.quicklook
-
-
-@pytest.fixture(autouse=True)
-def _close_figures():
-    """Close any figures a test left open (the output_dir=None path returns them)."""
-    yield
-    plt.close("all")
 
 
 # ---------------------------------------------------------------------------
@@ -33,89 +25,96 @@ def _close_figures():
 
 @pytest.fixture
 def synthetic_4amp_l0(tmp_path):
-    """Create a synthetic KPF0 with 4-amp green and red data."""
-    fn = str(tmp_path / "KP.20240405.00001.00.fits")
-    rng = np.random.default_rng(42)
-
-    nrow, ncol = 2070, 2094
-    bias_level = 1000.0
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-4amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-    primary.header["OFNAME"] = os.path.basename(fn)
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
+    # 4-amp readout geometry. Deliberately tiny: every consumer asserts titles,
+    # axis counts, run() keys or PNG names, none of which depend on detector
+    # size. Only test_image_shape_4amp needs real geometry -- it takes
+    # fullres_4amp_l0 instead.
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00001.00.fits",
+        namps=4,
+        shape=(32, 24),
+        bias_level=1000.0,
+        seed=42,
+        primary_cards={
+            "OBJECT": "synthetic-4amp",
+            "DATE-OBS": "2024-04-05T01:00:37",
+        },
+    )
     return KPF0.from_fits(fn)
 
 
 @pytest.fixture
 def synthetic_2amp_l0(tmp_path):
-    """Create a synthetic KPF0 with 2-amp green and red data."""
-    fn = str(tmp_path / "KP.20240405.00002.00.fits")
-    rng = np.random.default_rng(99)
+    # Tiny for the same reason as synthetic_4amp_l0; test_image_shape_2amp takes
+    # fullres_2amp_l0.
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00002.00.fits",
+        namps=2,
+        shape=(32, 24),
+        bias_level=1000.0,
+        seed=99,
+        primary_cards={
+            "OBJECT": "synthetic-2amp",
+            "DATE-OBS": "2024-04-05T01:00:38",
+        },
+    )
+    return KPF0.from_fits(fn)
 
-    nrow, ncol = 4080, 2094
-    bias_level = 1000.0
 
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-2amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:38"
-    primary.header["OFNAME"] = os.path.basename(fn)
+@pytest.fixture
+def fullres_4amp_l0(tmp_path):
+    """Real detector geometry: the stitched-shape assertion is the only thing
+    that needs it, and it costs ~1.5 s to build and render."""
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00001.00.fits",
+        namps=4,
+        shape=(2070, 2094),
+        bias_level=1000.0,
+        seed=42,
+        primary_cards={
+            "OBJECT": "synthetic-4amp",
+            "DATE-OBS": "2024-04-05T01:00:37",
+        },
+    )
+    return KPF0.from_fits(fn)
 
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 3):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
 
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
+@pytest.fixture
+def fullres_2amp_l0(tmp_path):
+    """Real detector geometry for the 2-amp stitched-shape assertion."""
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00002.00.fits",
+        namps=2,
+        shape=(4080, 2094),
+        bias_level=1000.0,
+        seed=99,
+        primary_cards={
+            "OBJECT": "synthetic-2amp",
+            "DATE-OBS": "2024-04-05T01:00:38",
+        },
+    )
     return KPF0.from_fits(fn)
 
 
 @pytest.fixture
 def small_2amp_l0(tmp_path):
-    """Create a small two-amp KPF0 for native-resolution PNG tests."""
-    fn = str(tmp_path / "KP.20240405.00004.00.fits")
-    rng = np.random.default_rng(123)
-
-    nrow, ncol = 32, 24
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "small-2amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-04-05T01:00:39"
-    primary.header["OFNAME"] = os.path.basename(fn)
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 3):
-            data = rng.normal(1000.0, 3.0, (nrow, ncol)).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
+    """Small enough that a native-resolution PNG can be size-checked exactly."""
+    fn = write_amp_l0(
+        tmp_path / "KP.20240405.00004.00.fits",
+        namps=2,
+        shape=(32, 24),
+        bias_level=1000.0,
+        seed=123,
+        primary_cards={
+            "OBJECT": "small-2amp",
+            "DATE-OBS": "2024-04-05T01:00:39",
+        },
+    )
     return KPF0.from_fits(fn)
 
 
 # ---------------------------------------------------------------------------
-# Task 1: Constructor
+# Constructor
 # ---------------------------------------------------------------------------
 
 
@@ -137,7 +136,7 @@ class TestPlotL0Constructor:
 
 
 # ---------------------------------------------------------------------------
-# Task 2: stitched_image
+# stitched_image
 # ---------------------------------------------------------------------------
 
 
@@ -168,14 +167,14 @@ class TestStitchedImage4Amp:
 
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image("green")
-        # Figure should have 2 axes: image + colorbar
+        # image + colorbar
         assert len(fig.axes) == 2
         plt.close(fig)
 
-    def test_image_shape_4amp(self, synthetic_4amp_l0):
+    def test_image_shape_4amp(self, fullres_4amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
-        qlp = PlotL0(synthetic_4amp_l0)
+        qlp = PlotL0(fullres_4amp_l0)
         fig = qlp.stitched_image("green")
         ax = fig.axes[0]
         images = ax.get_images()
@@ -186,15 +185,15 @@ class TestStitchedImage4Amp:
 
 
 # ---------------------------------------------------------------------------
-# Task 3: 2-amp mode and 2^16 scaling
+# 2-amp mode and 2^16 scaling
 # ---------------------------------------------------------------------------
 
 
 class TestStitchedImage2Amp:
-    def test_image_shape_2amp(self, synthetic_2amp_l0):
+    def test_image_shape_2amp(self, fullres_2amp_l0):
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
-        qlp = PlotL0(synthetic_2amp_l0)
+        qlp = PlotL0(fullres_2amp_l0)
         fig = qlp.stitched_image("red")
         ax = fig.axes[0]
         images = ax.get_images()
@@ -214,13 +213,14 @@ class TestStitchedImage2Amp:
 
 class TestStitchedImage2To16:
     def test_scales_high_values(self, tmp_path):
-        """Data with median > 200 * 2^16 should be divided by 2^16."""
+        # A median above the 200 * 2^16 threshold triggers the 2^16 rescale.
         fn = str(tmp_path / "KP.20240405.00003.00.fits")
         high_val = 300 * 2**16
 
         primary = fits.PrimaryHDU()
         primary.header["OBJECT"] = "high-value"
         primary.header["OFNAME"] = os.path.basename(fn)
+        primary.header["PROGNAME"] = "K123"
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in range(1, 5):
@@ -238,7 +238,6 @@ class TestStitchedImage2To16:
         qlp = PlotL0(l0)
         fig = qlp.stitched_image("green")
 
-        # Image data should be scaled down to ~300
         ax = fig.axes[0]
         # imshow keeps the stitched image masked, so use the mask-aware median.
         img_data = ax.get_images()[0].get_array()
@@ -247,7 +246,7 @@ class TestStitchedImage2To16:
 
 
 # ---------------------------------------------------------------------------
-# Task 4: File saving and all()
+# File saving and run()
 # ---------------------------------------------------------------------------
 
 
@@ -269,7 +268,6 @@ class TestPlotL0FileSaving:
 
         qlp = PlotL0(synthetic_4amp_l0)
         fig = qlp.stitched_image("green")
-        # No PNG should exist anywhere in tmp_path
         pngs = list(tmp_path.glob("*.png"))
         assert pngs == []
         plt.close(fig)
@@ -336,22 +334,16 @@ class TestPlotL0Run:
             qlp.run()
 
     def test_run_skips_missing_chip(self, tmp_path):
-        """L0 with only green amps should only produce green plot."""
-        fn = str(tmp_path / "KP.20240405.00004.00.fits")
-        rng = np.random.default_rng(7)
-
-        primary = fits.PrimaryHDU()
-        primary.header["OBJECT"] = "green-only"
-        primary.header["OFNAME"] = os.path.basename(fn)
-        hdus = [primary]
-        for amp in range(1, 5):
-            data = rng.normal(1000, 3, (100, 100)).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"GREEN_AMP{amp}"))
-
-        hdul = fits.HDUList(hdus)
-        hdul.writeto(fn, overwrite=True)
-        hdul.close()
-
+        # GREEN only: no RED_AMP* HDU at all, so run() must skip the red chip.
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00004.00.fits",
+            namps=4,
+            chips=("GREEN",),
+            shape=(100, 100),
+            bias_level=1000.0,
+            seed=7,
+            primary_cards={"OBJECT": "green-only"},
+        )
         l0 = KPF0.from_fits(fn)
 
         from kpfpipe.quality_control.quicklook.level0 import PlotL0

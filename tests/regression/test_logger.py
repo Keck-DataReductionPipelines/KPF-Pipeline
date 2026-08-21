@@ -17,12 +17,11 @@ _UT_FROZEN = time.struct_time((2026, 7, 2, 14, 3, 22, 2, 183, 0))
 
 @pytest.fixture(autouse=True)
 def _teardown():
-    """Always tear down after each test.
+    """Tear down after each test.
 
-    Critical for the captureWarnings bridge: pytest wraps every test in
-    ``catch_warnings``, so ``captureWarnings(False)`` must run inside the
-    same test context or ``logging._warnings_showwarning`` goes stale and a
-    later ``captureWarnings(True)`` silently no-ops.
+    pytest wraps every test in ``catch_warnings``, so ``captureWarnings(False)``
+    must run inside the same test context or ``logging._warnings_showwarning``
+    goes stale and a later ``captureWarnings(True)`` silently no-ops.
     """
     yield
     kpflog.teardown_logging()
@@ -58,10 +57,12 @@ class TestBuildLogPath:
 
 
 class TestSetupLogging:
-    def test_creates_file_and_returns_path(self, tmp_path):
+    def test_creates_file_and_returns_path(self, tmp_path, monkeypatch):
+        # Freeze the clock: recomputing the datecode after the call races UT
+        # midnight, a once-a-day flake in a CI-scheduled suite.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         path = kpflog.setup_logging(str(tmp_path), "science", "KP.1.2.3")
-        datecode = time.strftime("%Y%m%d", time.gmtime())
-        assert path.startswith(str(tmp_path / datecode))
+        assert path.startswith(str(tmp_path / "20260702"))
         assert re.search(r"kpf_science_KP\.1\.2\.3_\d{8}T\d{6}\.log$", path)
         assert _read(path) == ""  # created, empty until a record arrives
 
@@ -98,12 +99,22 @@ class TestSetupLogging:
         second = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
         assert second == f"{first}.1"
 
+    def test_collision_retries_are_exhausted_loudly(self, tmp_path, monkeypatch):
+        # The retry loop must terminate: turning it into `while True` would hang
+        # a run forever instead of failing it.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
+        monkeypatch.setattr(kpflog, "_MAX_COLLISION_RETRIES", 1)
+        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        with pytest.raises(FileExistsError, match="unique log file"):
+            kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+
     def test_repeated_setup_no_duplicate_handlers(self, tmp_path):
         root = logging.getLogger()
         before = len(root.handlers)
         first = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
         kpflog.setup_logging(str(tmp_path), "masters", "20240923", console=False)
-        assert len(root.handlers) == before + 1  # one file handler, never two
+        assert len(root.handlers) == before + 1
         (handler,) = [h for h in root.handlers if h.name == "kpfpipe_file"]
         assert handler.baseFilename != first  # the survivor is the second file
 
@@ -134,13 +145,14 @@ class TestSetupLogging:
 
 
 class TestSetupBatchLogging:
-    """The batch-orchestrator sibling: a per-invocation ``_batch_`` log echoed
-    to stdout so an operator can watch fan-out progress live."""
+    """A per-invocation ``_batch_`` log echoed to stdout so an operator can watch
+    fan-out progress live."""
 
-    def test_creates_batch_file_and_returns_path(self, tmp_path):
+    def test_creates_batch_file_and_returns_path(self, tmp_path, monkeypatch):
+        # Frozen for the same UT-midnight reason as TestSetupLogging's twin.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         path = kpflog.setup_batch_logging(str(tmp_path), "masters")
-        datecode = time.strftime("%Y%m%d", time.gmtime())
-        assert path.startswith(str(tmp_path / datecode))
+        assert path.startswith(str(tmp_path / "20260702"))
         assert re.search(r"kpf_masters_batch_\d{8}T\d{6}\.log$", path)
         assert _read(path) == ""  # created, empty until a record arrives
 
@@ -150,7 +162,6 @@ class TestSetupBatchLogging:
         assert "dispatching 3 job(s)" in _read(path)
 
     def test_console_echo_is_stdout(self, tmp_path):
-        # The live-echo contract: batch progress mirrors to stdout (not stderr).
         kpflog.setup_batch_logging(str(tmp_path), "science")
         (console,) = [
             h for h in logging.getLogger().handlers if h.name == "kpfpipe_console"
@@ -158,7 +169,6 @@ class TestSetupBatchLogging:
         assert console.stream is sys.stdout
 
     def test_filter_on_console_only_not_file(self, tmp_path):
-        # The batch console carries _BatchConsoleFilter; the log file stays raw.
         kpflog.setup_batch_logging(str(tmp_path), "science")
         root = logging.getLogger()
         (console,) = [h for h in root.handlers if h.name == "kpfpipe_console"]
@@ -169,29 +179,28 @@ class TestSetupBatchLogging:
         assert not file_h.filters
 
     def test_library_info_off_console_but_kept_in_file(self, tmp_path, capsys):
-        # The whole point: library INFO chatter is trimmed from the live terminal
-        # echo, while the driver's own narration and any WARNING still show -- and
-        # the batch log file keeps every record regardless.
-        # A neutral third-party name (not astropy, whose logger sets
-        # propagate=False and so never reaches the root handlers).
+        # Library INFO chatter is trimmed from the live terminal echo while the
+        # driver's narration and any WARNING still show; the file keeps everything.
+        # thirdparty.io is a neutral name -- astropy sets propagate=False on its
+        # logger, so its records never reach the root handlers.
         path = kpflog.setup_batch_logging(str(tmp_path), "masters")
         logging.getLogger("scripts.processing.masters").info("driver narration")
         logging.getLogger("thirdparty.io").info("library chatter")
         logging.getLogger("thirdparty.io").warning("library warning")
 
         out = capsys.readouterr().out
-        assert "driver narration" in out  # scripts.* INFO echoed
-        assert "library chatter" not in out  # library INFO trimmed from terminal
-        assert "library warning" in out  # WARNING always echoed
+        assert "driver narration" in out
+        assert "library chatter" not in out
+        assert "library warning" in out
         text = _read(path)
         assert {"driver narration", "library chatter", "library warning"} <= {
             line.split(": ", 1)[-1].strip() for line in text.splitlines()
-        }  # ...but the file is unfiltered
+        }
 
 
 class TestBatchConsoleFilter:
-    """The batch stdout echo trims sub-WARNING records to the driver's own
-    ``scripts.*``/``__main__`` sources; WARNING and above always pass."""
+    """Sub-WARNING records pass only from ``scripts.*``/``__main__``; WARNING and
+    above always pass."""
 
     _flt = kpflog._BatchConsoleFilter()
 
@@ -247,12 +256,12 @@ class TestTeardown:
 
 
 class TestIOChokepoints:
-    """Every FITS write/read emits one INFO record (DRP-RUN-08)."""
+    """Every FITS write/read emits one INFO record."""
 
     def test_to_fits_and_from_fits_log_records(self, tmp_path, caplog):
         from kpfpipe.data_models.level4 import KPF4
 
-        path = str(tmp_path / "rt_l4.fits")
+        path = str(tmp_path / "kpf_SL4_20240101T000000.fits")
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             KPF4().to_fits(path)
             KPF4.from_fits(path)
@@ -266,6 +275,9 @@ def _config(tmp_path, body):
     return path
 
 
+# resolve_logging lives in scripts/processing/reduce.py, so this class belongs to
+# the scripts/CLI layer -- without the mark `make test-cli` collects none of it.
+@pytest.mark.cli
 class TestResolveLogging:
     _LOGGER_TOML = '[LOGGER]\nlog_dir = "/logs/"\nlog_level = "DEBUG"\n'
 
@@ -317,13 +329,13 @@ class TestWarningsBridge:
         text = _read(path)
         assert "WARNING  py.warnings:" in text
         assert "bridged boom" in text
-        assert "test_logger.py" in text  # file:lineno source identification
+        assert "test_logger.py" in text
 
     @pytest.mark.filterwarnings("always")
     def test_pytest_warns_coexistence(self, tmp_path):
-        # Inside pytest.warns the recorder wins: the assertion passes and the
-        # record does NOT reach the log (captureWarnings only swaps
-        # showwarning; pytest.warns uses catch_warnings(record=True)).
+        # Inside pytest.warns the recorder wins and the record never reaches the
+        # log: captureWarnings only swaps showwarning, while pytest.warns uses
+        # catch_warnings(record=True).
         path = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
         with pytest.warns(UserWarning, match="recorded boom"):
             warnings.warn("recorded boom", stacklevel=2)

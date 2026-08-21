@@ -71,7 +71,6 @@ class TestKpfTimestampToEprv:
         assert kpf_timestamp_to_eprv_timestamp("20240405.03600.00") == "20240405T010000"
 
     def test_frame_field_dropped(self):
-        # Frame field should not appear in output
         result = kpf_timestamp_to_eprv_timestamp("20240405.40113.57")
         assert "57" not in result
         assert "." not in result

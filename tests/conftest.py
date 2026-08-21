@@ -7,12 +7,45 @@ them. Fixtures are seeded for run-to-run determinism, matching the convention
 already used by ``test_quicklook_l0.py`` and ``test_master_*.py``.
 """
 
+import socket
 from pathlib import Path
 
 import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
+
+# ---------------------------------------------------------------------------
+# Offline guard -- deliberately module-scope, not a fixture
+# ---------------------------------------------------------------------------
+#
+# The regression suite is offline by contract: every external query is mocked.
+# This makes that a rule the suite enforces rather than a claim its docstrings
+# make -- a test that reaches for the wire now fails loudly, naming the address.
+#
+# It must run at import, not in a fixture: astroquery.gaia opens a connection to
+# the ESA archive when `kpfpipe.modules.astro_query` is imported
+# (astro_query.py:27, a filed production defect), and that import happens during
+# COLLECTION, before any fixture -- even a session-scoped autouse one -- can run.
+# Blocking it there is worth 1.4-2.7 s per worker process; astroquery survives
+# the refusal, printing "Status messages could not be retrieved" and carrying on
+# with the real `Gaia` object the tests patch.
+#
+# Loopback stays open so pytest-xdist, execnet and any local-socket test are
+# unaffected.
+_real_connect = socket.socket.connect
+
+
+def _no_outbound_connect(self, address, *args, **kwargs):
+    host = address[0] if isinstance(address, tuple) else address
+    if isinstance(host, str) and (
+        host.startswith("127.") or host in ("::1", "localhost")
+    ):
+        return _real_connect(self, address, *args, **kwargs)
+    raise OSError(f"the regression suite is offline; blocked connect to {address!r}")
+
+
+socket.socket.connect = _no_outbound_connect
 
 # Fixed seed so every synthetic-FITS fixture is byte-stable across runs.
 _SEED = 20240113
@@ -40,8 +73,12 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "slow: slow integration or heavy-compute test; excluded from the fast "
-        "pre-commit subset (`-m 'not slow'`), run in the full suite",
+        "slow: touches the real tests/testdata truth frames. Paired with "
+        "requires_testdata rather than overlapping it: requires_testdata says "
+        "the frames must be present, slow says the fast pre-commit subset "
+        "(`-m 'not slow'`) skips the cost of reading them. Not a timing claim -- "
+        "do not mark a synthetic test slow because it feels slow, and do not "
+        "leave a real-data test unmarked because it happens to be quick.",
     )
     config.addinivalue_line(
         "markers",
@@ -51,9 +88,15 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "quicklook: quicklook/QLP render test (slow PNG rendering, an offshoot "
-        "from the production path); excluded from the fast pre-commit subset. "
-        "Run in the full suite or focused with `-m quicklook`",
+        "quicklook: exercises kpfpipe.quality_control.quicklook -- the "
+        "PlotL0/L1/L2/L4 renderers; excluded from the fast pre-commit subset "
+        "because the PNG rendering is slow. Names the MODULE under test, not "
+        "the technique: a test elsewhere in the tree that happens to render a "
+        "figure does not get this marker, so `-m quicklook` collects exactly "
+        "the quicklook plots a developer is working on and nothing else. "
+        "(scripts/quality_control/qlp.py drives these renderers, but its test "
+        "is scripts-layer and so carries `cli`.) Run in the full suite or "
+        "focused with `-m quicklook`",
     )
 
 
@@ -146,18 +189,14 @@ def synthetic_l0_file(tmp_path_factory):
 @pytest.fixture
 def synthetic_l0_minimal(tmp_path):
     """Create an L0 file with only PRIMARY (no optional extensions)."""
-    fn = str(tmp_path / "KP.20240113.00001.00.fits")
+    # Deferred like _catalog_record_hdu above: this root conftest is imported at
+    # collection for every session, and _data_models pulls in kpfpipe.
+    from .regression._data_models import write_minimal_l0
 
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["DATE-OBS"] = "2024-01-13T00:00:01"
-    primary.header["OFNAME"] = "KP.20240113.00001.00.fits"
-
-    hdul = fits.HDUList([primary])
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
-
-    return fn
+    return write_minimal_l0(
+        tmp_path / "KP.20240113.00001.00.fits",
+        primary_cards={"DATE-OBS": "2024-01-13T00:00:01", "PROGNAME": None},
+    )
 
 
 @pytest.fixture(scope="session")

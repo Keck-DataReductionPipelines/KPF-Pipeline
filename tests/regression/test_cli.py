@@ -1,11 +1,9 @@
 """Tests for tools/cli.py: the ``kpfpipe`` subcommand dispatcher.
 
 tools/cli.py is a thin, git-style router: it maps the first argument to a
-subcommand implementation under ``scripts/processing/`` and forwards the
-remaining argv verbatim. These tests verify the routing (each command reaches
-its handler with the untouched remainder), the usage banner, and the
-unknown-command error -- the subcommands' own parsing is tested in
-test_reduce_script.py / test_masters_script.py / test_science_script.py.
+subcommand under ``scripts/processing/`` and forwards the remaining argv verbatim.
+Only the routing, usage banner, and unknown-command error are covered here; the
+subcommands' own parsing lives in test_{reduce,masters,science}_script.py.
 """
 
 import pytest
@@ -53,8 +51,8 @@ class TestUnknownCommand:
         assert "unknown command" in err and "frobnicate" in err
 
     def test_plot_timeseries_is_not_a_command(self, capsys):
-        # The plotter is invoked only via `scripts.plots.plot_timeseries` (as a
-        # script and from the timeseries stage); it is deliberately not a CLI command.
+        # The plotter runs only via `scripts.plots.plot_timeseries` (as a script and
+        # from the timeseries stage); it is deliberately not a CLI command.
         assert "plot-timeseries" not in cli._COMMANDS
         with pytest.raises(SystemExit) as exc:
             cli.main(["plot-timeseries", "--target", "10700"])

@@ -1,13 +1,12 @@
 """Tests for the CrossCorrelation module (KPF2 -> KPF4: per-orderlet CCFs).
 
-Mirrors the CCF-side coverage of test_radial_velocity.py against the standalone
-CrossCorrelation module. Static-method unit tests (_compute_ccf_1d) build
-synthetic spectra with no fixtures. Build-helper tests use a header-only KPF2 and
-read the real on-disk line masks. Integration tests (compute_ccfs/perform) use a
-synthetic KPF2 with absorption injected at a monkeypatched line mask, and a
-narrow velocity grid for speed. CrossCorrelation writes the CCF cubes, the per-bin
-CCF variance cubes, and the metadata-seeded RV tables (RV/RV_ERR left NaN for
-RadialVelocity); it does not fit RVs or write any PRIMARY/combined-RV keywords.
+_compute_ccf_1d unit tests build synthetic spectra; build-helper tests use a
+header-only KPF2 and the real on-disk line masks; integration tests
+(compute_ccfs/perform) use a synthetic KPF2 with absorption injected at a
+monkeypatched line mask and a narrow velocity grid for speed. CrossCorrelation
+writes the CCF cubes, the per-bin CCF variance cubes, and the metadata-seeded RV
+tables (RV/RV_ERR left NaN for RadialVelocity); it does not fit RVs or write any
+PRIMARY/combined-RV keywords.
 """
 
 import logging
@@ -15,62 +14,34 @@ import re
 
 import numpy as np
 import pytest
-from astropy.constants import c
 from astropy.io import fits
 
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
 
-from ._dtype_policy import CCF, assert_dtype
+from ._catalog import seed_sci2_cards
+from ._dtype_policy import CCF, RV_FLOAT, assert_dtype
+from ._science import (
+    MASK_CENTERS,
+    NCOL,
+    NVEL,
+    RANGE_KMS,
+    SPEED_OF_LIGHT_KMS,
+    V_INJECT,
+    absorption_spectrum,
+    make_mask,
+)
 
 NORDER = NORDER_GREEN + NORDER_RED
-SPEED_OF_LIGHT_KMS = np.float64(c.to("km/s").value)
-_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]  # all orderlets
-
-# Narrow CCF grid for fast integration tests.
-_RANGE_KMS = [-15.0, 15.0]
-_STEP_KMS = 0.25  # matches the module default
-_NVEL = round((_RANGE_KMS[1] - _RANGE_KMS[0]) / _STEP_KMS) + 1
-_V_INJECT = 1.5  # injected RV [km/s], on the grid
-_MASK_CENTERS = np.linspace(5015.0, 5035.0, 30)  # vacuum line centers [Å]
-# Wide enough that the default compute_ccfs clip (clip_edge_pixels=(500, 500))
-# trims the order edges but leaves the 5015-5035 Å mask lines well inside.
-NCOL = 2000
+# Fiber order is the module's own config-overridable default, not the canonical
+# slicer order -- spelled out so a reordering in production shows up here.
+_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_mask(centers, weights=None, width=1.0):
-    """Build a line-mask dict matching _build_line_mask's structure."""
-    centers = np.asarray(centers, dtype=np.float64)
-    if weights is None:
-        weights = np.ones_like(centers)
-    half_width = centers * (width / 2.0 / SPEED_OF_LIGHT_KMS)
-    return {
-        "center": centers,
-        "weight": np.asarray(weights, dtype=np.float64),
-        "start": centers - half_width,
-        "end": centers + half_width,
-    }
-
-
-def _absorption_spectrum(wave, centers, weights=None, depth=0.6, sigma_kms=4.0):
-    """Unit continuum with Gaussian absorption lines at `centers`."""
-    if weights is None:
-        weights = np.ones_like(centers)
-    flux = np.ones_like(wave)
-    for center, weight in zip(centers, weights, strict=False):
-        sigma_a = center * sigma_kms / SPEED_OF_LIGHT_KMS
-        flux -= (
-            depth
-            * (weight / np.max(weights))
-            * np.exp(-0.5 * ((wave - center) / sigma_a) ** 2)
-        )
-    return flux
 
 
 # ---------------------------------------------------------------------------
@@ -82,10 +53,10 @@ class TestComputeCCF:
     def _order(self, v_dip=0.0, z=0.0):
         wave = np.linspace(5000.0, 5050.0, 2000)
         centers = np.linspace(5008.0, 5042.0, 20)
-        mask = _make_mask(centers)
+        mask = make_mask(centers)
         # Observed absorption that the CCF should align at velocity step v_dip.
         lam_obs = centers * (1.0 + v_dip / SPEED_OF_LIGHT_KMS) / (1.0 + z)
-        flux = _absorption_spectrum(wave, lam_obs)
+        flux = absorption_spectrum(wave, lam_obs)
         var = flux.copy()  # photon-noise proxy
         vel = np.arange(-402, 403) * 0.25
         return wave, flux, var, mask, vel
@@ -131,7 +102,7 @@ class TestComputeCCF:
         wave = np.linspace(6000.0, 6050.0, 2000)
         flux = np.ones_like(wave)
         var = flux.copy()  # photon-noise proxy
-        mask = _make_mask(np.linspace(5008.0, 5042.0, 20))  # all outside the order
+        mask = make_mask(np.linspace(5008.0, 5042.0, 20))  # all outside the order
         vel = np.arange(-402, 403) * 0.25
         ccf, _ = CrossCorrelation._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         assert not np.any(ccf)
@@ -166,12 +137,7 @@ class TestComputeCCF:
 def header_kpf2():
     """KPF2 with only the header keywords the build/dispatch helpers need."""
     kpf2 = KPF2()
-    kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
-    kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
-    kpf2.headers["PRIMARY"]["CRV3"] = 0.0
-    kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "Target"
-    kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = "Sky"
-    kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "None"
+    seed_sci2_cards(kpf2)
     return kpf2
 
 
@@ -308,19 +274,19 @@ class TestStellarMaskName:
             CrossCorrelation(header_kpf2)._resolve_stellar_mask()
 
     def test_ignores_instrument_header_targteff(self, header_kpf2):
-        """The catalog colour wins; the raw DCS temperature is no longer consulted."""
+        # The catalog colour wins; the raw DCS temperature is not consulted.
         header_kpf2.headers["INSTRUMENT_HEADER"]["TARGTEFF"] = 4000.0
         assert CrossCorrelation(header_kpf2)._resolve_stellar_mask() == "G2_espresso"
 
     def test_missing_crv_warns_and_centers_on_zero(self, header_kpf2, caplog):
-        """Many targets have no catalog rv; center on 0, but say so."""
+        # Many targets have no catalog rv; center on 0, but say so.
         del header_kpf2.headers["PRIMARY"]["CRV3"]
         with caplog.at_level(logging.WARNING):
             assert CrossCorrelation(header_kpf2)._get_systemic_rv() == 0.0
         assert "CRV3" in caplog.text
 
     def test_ignores_instrument_header_targradv(self, header_kpf2):
-        """The canonical catalog rv wins; the raw DCS value is no longer consulted."""
+        # The canonical catalog rv wins; the raw DCS value is not consulted.
         header_kpf2.headers["INSTRUMENT_HEADER"]["TARGRADV"] = -42.0
         header_kpf2.headers["PRIMARY"]["CRV3"] = 7.5
         assert CrossCorrelation(header_kpf2)._get_systemic_rv() == pytest.approx(7.5)
@@ -385,43 +351,62 @@ class TestBuildVelocityGrid:
 # ---------------------------------------------------------------------------
 
 
-def _build_cc_kpf2():
-    """KPF2 with identical per-order synthetic spectra (absorption at _MASK_CENTERS
-    shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
+def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
+    """KPF2 with per-order synthetic spectra (absorption at MASK_CENTERS shifted
+    by V_INJECT) for every orderlet.
+
+    ``berv`` (length NORDER, km/s) puts each order in its own barycentric frame:
+    BARYCORR_Z/_KMS carry it and the observed lines are placed at
+    ``MASK_CENTERS * (1 + V_INJECT/c) / (1 + z)``, the convention
+    ``_compute_ccf_1d`` implements (it divides the mask shift by ``1 + z``).
+    Recovering V_INJECT then requires the module to have removed the right
+    order's z. ``wave_offsets`` (length NORDER, Angstrom) gives each order its
+    own wavelength span, and ``bjd`` its own timestamp. All default to the
+    degenerate all-orders-identical, zero-barycorr case.
+    """
     kpf2 = KPF2()
-    kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
-    kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
-    kpf2.headers["PRIMARY"]["CRV3"] = 0.0
     # Illumination sources: SCI on a star, SKY on sky, CAL dark (skipped).
-    kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = "Target"
-    kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = "Sky"
-    kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "None"
+    seed_sci2_cards(kpf2)
+
+    berv = np.zeros(NORDER) if berv is None else np.asarray(berv, dtype=float)
+    offsets = (
+        np.zeros(NORDER)
+        if wave_offsets is None
+        else np.asarray(wave_offsets, dtype=float)
+    )
+    bjd = np.zeros(NORDER) if bjd is None else np.asarray(bjd, dtype=float)
+    z = berv / SPEED_OF_LIGHT_KMS
 
     wave_1d = np.linspace(5000.0, 5050.0, NCOL)
-    lam_obs = _MASK_CENTERS * (1.0 + _V_INJECT / SPEED_OF_LIGHT_KMS)  # z = 0
-    flux_1d = _absorption_spectrum(wave_1d, lam_obs)
+    rows = {}
+    for order in range(NORDER):
+        lam_obs = (
+            MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS) / (1.0 + z[order])
+            + offsets[order]
+        )
+        wave = wave_1d + offsets[order]
+        rows[order] = (wave, absorption_spectrum(wave, lam_obs))
 
-    for chip, n in [("GREEN", NORDER_GREEN), ("RED", NORDER_RED)]:
+    for chip, start, n in [
+        ("GREEN", 0, NORDER_GREEN),
+        ("RED", NORDER_GREEN, NORDER_RED),
+    ]:
+        wave = np.stack([rows[start + i][0] for i in range(n)]).astype(np.float64)
+        flux = np.stack([rows[start + i][1] for i in range(n)]).astype(np.float64)
         for fiber in _FIBERS:
-            kpf2.set_data(
-                f"{chip}_{fiber}_WAVE", np.tile(wave_1d, (n, 1)).astype(np.float64)
-            )
-            kpf2.set_data(
-                f"{chip}_{fiber}_FLUX", np.tile(flux_1d, (n, 1)).astype(np.float64)
-            )
-            kpf2.set_data(
-                f"{chip}_{fiber}_VAR", np.tile(flux_1d, (n, 1)).astype(np.float64)
-            )
+            kpf2.set_data(f"{chip}_{fiber}_WAVE", wave.copy())
+            kpf2.set_data(f"{chip}_{fiber}_FLUX", flux.copy())
+            kpf2.set_data(f"{chip}_{fiber}_VAR", flux.copy())
     # Per-order barycentric extensions (populated together by BarycentricCorrection).
-    kpf2.set_data("BARYCORR_Z", np.zeros(NORDER))
-    kpf2.set_data("BARYCORR_KMS", np.zeros(NORDER))
-    kpf2.set_data("BJD_TDB", np.zeros(NORDER))
+    kpf2.set_data("BARYCORR_Z", z)
+    kpf2.set_data("BARYCORR_KMS", berv)
+    kpf2.set_data("BJD_TDB", bjd)
     return kpf2
 
 
 def _stub_line_mask(mp):
-    """Patch _build_line_mask to the fixed _MASK_CENTERS top-hat mask."""
-    mask = _make_mask(_MASK_CENTERS)
+    """Patch _build_line_mask to the fixed MASK_CENTERS top-hat mask."""
+    mask = make_mask(MASK_CENTERS)
     mp.setattr(
         CrossCorrelation,
         "_build_line_mask",
@@ -431,31 +416,27 @@ def _stub_line_mask(mp):
 
 @pytest.fixture
 def cc_kpf2():
-    """KPF2 with identical per-order synthetic spectra (absorption at _MASK_CENTERS
-    shifted by _V_INJECT) for every orderlet and zero barycentric correction."""
     return _build_cc_kpf2()
 
 
 @pytest.fixture
 def cc_module(cc_kpf2, monkeypatch):
-    """CrossCorrelation on a narrow grid with the line mask stubbed to _MASK_CENTERS."""
+    """CrossCorrelation on a narrow grid with the line mask stubbed to MASK_CENTERS."""
     _stub_line_mask(monkeypatch)
-    return CrossCorrelation(cc_kpf2, config={"ccf_window": _RANGE_KMS})
+    return CrossCorrelation(cc_kpf2, config={"ccf_window": RANGE_KMS})
 
 
 @pytest.fixture(scope="module")
 def performed():
     """Run the default full perform() once and share the (module, L4) read-only.
 
-    Every TestPerform test below inspects a different facet of the *same*
-    default-args L4 (shapes, RV columns, CCF/RV header cards, the injected dip);
-    recomputing it per test cost ~0.9s x ~9 tests. The line-mask stub only has to
-    be live during perform(), so a MonkeyPatch context (the function-scoped
-    monkeypatch fixture can't reach module scope) wraps the build. No consuming
-    test mutates the module or the L4, so the shared object stays read-only."""
+    Every TestPerform test inspects a different facet of the same default-args L4,
+    and recomputing it per test cost ~0.9s each. A MonkeyPatch context wraps the
+    build because the function-scoped monkeypatch fixture cannot reach module
+    scope. No consuming test mutates the module or the L4."""
     with pytest.MonkeyPatch.context() as mp:
         _stub_line_mask(mp)
-        cc = CrossCorrelation(_build_cc_kpf2(), config={"ccf_window": _RANGE_KMS})
+        cc = CrossCorrelation(_build_cc_kpf2(), config={"ccf_window": RANGE_KMS})
         return cc, cc.perform()
 
 
@@ -463,17 +444,17 @@ class TestComputeCCFPublic:
     def test_returns_velocity_and_ccf(self, cc_module):
         res = cc_module.compute_ccfs("GREEN", "SCI2")
         assert set(res) == {"velocity", "ccf"}
-        assert res["velocity"].shape == (_NVEL,)
-        assert res["ccf"].shape == (NORDER_GREEN, _NVEL)
+        assert res["velocity"].shape == (NVEL,)
+        assert res["ccf"].shape == (NORDER_GREEN, NVEL)
 
     def test_red_chip_shape(self, cc_module):
         res = cc_module.compute_ccfs("RED", "SCI1")
-        assert res["ccf"].shape == (NORDER_RED, _NVEL)
+        assert res["ccf"].shape == (NORDER_RED, NVEL)
 
     def test_dip_at_injected_velocity(self, cc_module):
         res = cc_module.compute_ccfs("GREEN", "SCI2")
         vel, ccf = res["velocity"], res["ccf"]
-        assert vel[np.argmin(ccf[0])] == pytest.approx(_V_INJECT, abs=0.3)
+        assert vel[np.argmin(ccf[0])] == pytest.approx(V_INJECT, abs=0.3)
 
     def test_caches_ccf(self, cc_module):
         res = cc_module.compute_ccfs("GREEN", "SCI2")
@@ -481,18 +462,46 @@ class TestComputeCCFPublic:
 
     def test_lowercase_chip_accepted(self, cc_module):
         res = cc_module.compute_ccfs("green", "sci2")
-        assert res["ccf"].shape == (NORDER_GREEN, _NVEL)
+        assert res["ccf"].shape == (NORDER_GREEN, NVEL)
 
     def test_missing_barycorr_z_raises(self, cc_kpf2, monkeypatch):
         monkeypatch.setattr(
             CrossCorrelation,
             "_build_line_mask",
-            lambda self, chip, fiber, mask_width=None: _make_mask(_MASK_CENTERS),
+            lambda self, chip, fiber, mask_width=None: make_mask(MASK_CENTERS),
         )
         cc_kpf2.set_data("BARYCORR_Z", np.array([]))
-        cc = CrossCorrelation(cc_kpf2, config={"ccf_window": _RANGE_KMS})
+        cc = CrossCorrelation(cc_kpf2, config={"ccf_window": RANGE_KMS})
         with pytest.raises(ValueError, match="BARYCORR_Z"):
             cc.compute_ccfs("GREEN", "SCI2")
+
+    def test_barycorr_z_removed_per_order(self, monkeypatch):
+        # The plumbing under test is L2 BARYCORR_Z -> {chip}_BARYCORR_Z slice ->
+        # barycorr_z[order]. A single constant z would survive a green/red slice
+        # swap or an order off-by-one, so every order gets its own BERV.
+        _stub_line_mask(monkeypatch)
+        berv = -5.0 + 0.05 * np.arange(NORDER)
+        cc = CrossCorrelation(
+            _build_cc_kpf2(berv=berv), config={"ccf_window": RANGE_KMS}
+        )
+        for chip in ("GREEN", "RED"):
+            res = cc.compute_ccfs(chip, "SCI2")
+            vel, ccf = res["velocity"], res["ccf"]
+            recovered = vel[np.argmin(ccf, axis=1)]
+            np.testing.assert_allclose(recovered, V_INJECT, atol=0.3)
+
+    def test_barycorr_z_sign_is_pinned(self, monkeypatch):
+        # Negating only BARYCORR_Z (leaving the spectra alone) must displace the
+        # recovered velocity by about -2*BERV. A sign flip, or BARYCORR_KMS used
+        # where the dimensionless z belongs, lands here.
+        _stub_line_mask(monkeypatch)
+        berv = np.full(NORDER, -5.0)
+        kpf2 = _build_cc_kpf2(berv=berv)
+        kpf2.set_data("BARYCORR_Z", -np.asarray(kpf2.data["BARYCORR_Z"]))
+        cc = CrossCorrelation(kpf2, config={"ccf_window": RANGE_KMS})
+        res = cc.compute_ccfs("GREEN", "SCI2")
+        recovered = res["velocity"][np.argmin(res["ccf"][0])]
+        assert recovered == pytest.approx(V_INJECT - 2 * berv[0], abs=0.3)
 
     def test_all_zero_ccf_raises(self, cc_module):
         # No usable signal across the whole orderlet -> fail loudly instead of
@@ -503,12 +512,29 @@ class TestComputeCCFPublic:
             cc_module.compute_ccfs("GREEN", "SCI2")
 
     def test_clip_edge_pixels_zero_keeps_all(self, cc_module):
-        # clip_edge_pixels=[0, 0] is a no-op (no pixels removed).
+        # "Not all zero" would also hold for an implementation that ignored the
+        # argument; the unclipped CCF must differ from a heavily clipped one.
         full = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[0, 0])["ccf"]
+        # 800 of the 2000 pixels is 20 A of the 50 A order, enough to cut past
+        # the bluest mask lines; a smaller clip leaves every line inside and the
+        # CCF genuinely unchanged.
+        clipped = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[800, 0])[
+            "ccf"
+        ]
         assert np.any(full)
+        assert not np.allclose(full, clipped)
+
+    def test_clip_edge_pixels_ends_are_distinguished(self, cc_module):
+        # clip_edge_pixels is [short_wavelength_end, long_wavelength_end]; on this
+        # ascending fixture pixel 0 is the short end, so clipping one end must not
+        # produce the same CCF as clipping the other. (The descending branch at
+        # cross_correlation.py:512 is unreachable in production and is not covered
+        # here -- see the dead-code defect report.)
+        blue = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[800, 0])["ccf"]
+        red = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[0, 800])["ccf"]
+        assert not np.allclose(blue, red)
 
     def test_clip_edge_pixels_too_large_raises(self, cc_module):
-        # Clipping more pixels than the order has fails loudly.
         with pytest.raises(ValueError, match="removes all"):
             cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[NCOL, NCOL])
 
@@ -520,9 +546,9 @@ class TestPerform:
         cc_module, l4 = performed
         assert isinstance(l4, KPF4)
         for fiber in self._ILLUMINATED:
-            assert l4.data[f"{fiber}_CCF"].shape == (NORDER, _NVEL)
+            assert l4.data[f"{fiber}_CCF"].shape == (NORDER, NVEL)
             assert_dtype(l4.data[f"{fiber}_CCF"], CCF, f"{fiber}_CCF")
-            assert l4.data[f"{fiber}_CCF_VAR"].shape == (NORDER, _NVEL)
+            assert l4.data[f"{fiber}_CCF_VAR"].shape == (NORDER, NVEL)
             table = l4.data[f"{fiber}_RV"]
             assert len(table) == NORDER
             assert set(table.columns) >= {
@@ -537,9 +563,8 @@ class TestPerform:
                 "RV_ERR",
                 "WEIGHT",
             }
-            assert table["BJD_TDB"].dtype == np.float64
-            assert table["WAVE_START"].dtype == np.float64
-            assert table["WAVE_END"].dtype == np.float64
+            for column in ("BJD_TDB", "WAVE_START", "WAVE_END"):
+                assert_dtype(table[column], RV_FLOAT, column)
             assert np.issubdtype(table["ORDER_INDEX"].dtype, np.integer)
             assert np.issubdtype(table["ECHELLE_ORDER"].dtype, np.integer)
 
@@ -561,8 +586,8 @@ class TestPerform:
 
     def test_ccf_chip_halves_populated(self, performed):
         cc_module, l4 = performed
-        assert l4.data["GREEN_SCI2_CCF"].shape == (NORDER_GREEN, _NVEL)
-        assert l4.data["RED_SCI2_CCF"].shape == (NORDER_RED, _NVEL)
+        assert l4.data["GREEN_SCI2_CCF"].shape == (NORDER_GREEN, NVEL)
+        assert l4.data["RED_SCI2_CCF"].shape == (NORDER_RED, NVEL)
         assert np.any(l4.data["GREEN_SCI2_CCF"])
         assert np.any(l4.data["RED_SCI2_CCF"])
 
@@ -572,17 +597,17 @@ class TestPerform:
         cc_module, l4 = performed
         for chip, norder in (("GREEN", NORDER_GREEN), ("RED", NORDER_RED)):
             var = l4.data[f"{chip}_SCI2_CCF_VAR"]
-            assert var.shape == (norder, _NVEL)
+            assert var.shape == (norder, NVEL)
             np.testing.assert_array_equal(var, cc_module._ccf_var[f"{chip}_SCI2"])
         assert np.any(l4.data["GREEN_SCI2_CCF_VAR"])
 
     def test_dip_at_injected_velocity_illuminated_orderlets(self, performed):
-        # The CCFs dip at the injected velocity (no RV fit here, just the CCF).
+        # No RV fit is involved here -- only the CCF minimum.
         cc_module, l4 = performed
         vel = cc_module._velocity_grid["RED_SCI2"]
         for fiber in self._ILLUMINATED:
             ccf0 = np.asarray(l4.data[f"{fiber}_CCF"])[0]
-            assert vel[np.argmin(ccf0)] == pytest.approx(_V_INJECT, abs=0.3)
+            assert vel[np.argmin(ccf0)] == pytest.approx(V_INJECT, abs=0.3)
 
     def test_rv_table_weight_column_matches_order_weights(self, performed):
         # The per-order CCF-combination weights (ccf_order_weights.csv, column
@@ -618,17 +643,39 @@ class TestPerform:
             assert echelle[NORDER_GREEN] == 102
             assert echelle[-1] == 71
 
+    def test_rv_table_metadata_columns_match_the_l2(self, monkeypatch):
+        # BJD_TDB/BERV are copied from the L2 barycentric extensions and
+        # WAVE_START/WAVE_END are the per-order first/last wavelength. With the
+        # shared fixture every order carries the same wave and a zero barycorr,
+        # so a wave[:, 0]/wave[:, -1] swap or a green/red row slip is invisible;
+        # here each order gets its own span and timestamp.
+        _stub_line_mask(monkeypatch)
+        berv = -5.0 + 0.05 * np.arange(NORDER)
+        bjd = 2460000.0 + np.arange(NORDER)
+        offsets = 5.0 * np.arange(NORDER)
+        cc = CrossCorrelation(
+            _build_cc_kpf2(berv=berv, wave_offsets=offsets, bjd=bjd),
+            config={"ccf_window": RANGE_KMS},
+        )
+        l4 = cc.perform(chips=["GREEN"], fibers=["SCI2"])
+        table = l4.data["GREEN_SCI2_RV"]
+        wave = np.asarray(cc.l2_obj.data["GREEN_SCI2_WAVE"])
+        np.testing.assert_allclose(table["WAVE_START"], wave[:, 0])
+        np.testing.assert_allclose(table["WAVE_END"], wave[:, -1])
+        np.testing.assert_allclose(table["BJD_TDB"], bjd[:NORDER_GREEN])
+        np.testing.assert_allclose(table["BERV"], berv[:NORDER_GREEN])
+
     def test_ccf_and_rv_headers(self, performed):
         # CrossCorrelation stamps the CCF EPRV keywords and the RV table-structure
-        # CTYPE cards, but NOT the RV-processing descriptors (those are
-        # RadialVelocity's, Phase 2) or any PRIMARY combined RV.
+        # CTYPE cards, but not the RV-processing descriptors (RadialVelocity's)
+        # or any PRIMARY combined RV.
         cc_module, l4 = performed
         ccf_hdr = l4.headers["SCI2_CCF"]
         assert ccf_hdr["CTYPE1"] == "Velocity"
         assert ccf_hdr["CTYPE2"] == "Order-N"
-        assert ccf_hdr["VELNSTEP"] == _NVEL
+        assert ccf_hdr["VELNSTEP"] == NVEL
         assert ccf_hdr["VELSTEP"] == pytest.approx(0.25)
-        assert ccf_hdr["VELSTART"] == pytest.approx(_RANGE_KMS[0])  # center 0
+        assert ccf_hdr["VELSTART"] == pytest.approx(RANGE_KMS[0])  # center 0
         assert ccf_hdr["CCFMASK"] == "G2_espresso"  # BP-RP 0.823 -> 5770 K -> G2
         assert ccf_hdr["VELMASK"] == pytest.approx(cc_module.ccf_mask_width)
         rv_hdr = l4.headers["SCI2_RV"]
@@ -643,7 +690,6 @@ class TestPerform:
         assert l4.headers["PRIMARY"].get("RVMETHOD") != "CCF"
 
     def test_thar_mask_recorded_for_cal(self, cc_module):
-        # A ThAr-illuminated CAL fiber records CCFMASK='thar'.
         cc_module.l2_obj.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = "Th_gold"
         l4 = cc_module.perform(fibers=["CAL"])
         assert l4.headers["CAL_CCF"]["CCFMASK"] == "thar"
@@ -658,7 +704,6 @@ class TestPerform:
         assert len(l4.data["CAL_RV"]) == 0
 
     def test_explicit_chips_and_fibers(self, cc_module):
-        # A single chip / single fiber writes only that chip's CCF rows.
         l4 = cc_module.perform(chips=["GREEN"], fibers=["SCI2"])
         assert np.any(l4.data["GREEN_SCI2_CCF"])
         assert not np.any(l4.data["RED_SCI2_CCF"])
@@ -672,8 +717,8 @@ class TestPerform:
         l4.to_fits(str(path))
         with fits.open(path) as hdul:
             ccf = hdul["CCF3"].header
-            assert ccf["VELNSTEP"] == _NVEL
-            assert ccf["VELSTART"] == pytest.approx(_RANGE_KMS[0])
+            assert ccf["VELNSTEP"] == NVEL
+            assert ccf["VELSTART"] == pytest.approx(RANGE_KMS[0])
             assert ccf.comments["VELSTART"]  # comment preserved
             rv = hdul["RV3"].header
             assert rv["CTYPE1"] == "Columns"
@@ -682,7 +727,7 @@ class TestPerform:
             assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
             assert rv_table["ECHELLE_ORDER"][0] == 137
             # The per-bin CCF variance cube round-trips as an image extension.
-            assert hdul["CCF_VAR3"].data.shape == (NORDER, _NVEL)
+            assert hdul["CCF_VAR3"].data.shape == (NORDER, NVEL)
 
 
 class TestConstructor:

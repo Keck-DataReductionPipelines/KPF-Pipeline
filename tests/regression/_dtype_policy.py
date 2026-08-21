@@ -1,13 +1,14 @@
 """Shared dtype-provenance policy for the test suite (not a test module).
 
-Single source of truth for the float32/float64/uint8/bool matrix the pipeline
-must respect at every state — in-memory arrays, module-internal intermediates,
-and the FITS-serialized form. EPRV mandates 64-bit for ``*_WAVE``/``BJD_TDB``/
-``WAVE_START``/``WAVE_END`` and 8-bit for quality; the rest is KPF policy
-(float32 science arrays for performance, float64 for RV/CCF precision).
+Single source of truth for the float32/float64/uint8/bool matrix the pipeline must
+respect in memory, in module intermediates, and on disk. EPRV mandates 64-bit for
+``*_WAVE``/``BJD_TDB``/``WAVE_START``/``WAVE_END`` and 8-bit for quality; the rest
+is KPF policy (float32 science arrays for speed, float64 for RV/CCF precision).
+Both directions matter: an upscale costs performance, a downscale costs RV accuracy.
 
-Guard BOTH directions: never upscale float32->float64 (perf), never downscale
-float64->float32 (precision loss -> wrong RVs).
+Builder helpers are assertion-free. ``_dtype_policy.py`` is the one contract module;
+if a cross-cutting contract genuinely needs assertions, promote it to a new contract
+module and justify the contract.
 """
 
 import numpy as np
@@ -35,10 +36,8 @@ _BITPIX = {
 def assert_dtype(arr, expected, label):
     """Assert ``arr`` has ``expected`` precision (kind + itemsize).
 
-    Compares kind/itemsize, not the exact dtype object, so byte-order is
-    ignored (FITS round-trips to big-endian, e.g. ``>f4`` is still float32).
-    The policy is about precision — float32 vs float64 vs uint8 vs bool — not
-    endianness.
+    Kind/itemsize rather than the dtype object, so byte-order is ignored: FITS
+    round-trips to big-endian, and ``>f4`` is still float32.
     """
     actual = np.asarray(arr).dtype
     exp = np.dtype(expected)
@@ -55,23 +54,45 @@ def assert_not_float64(arr, label):
     )
 
 
+# Convention-conforming output names, one per model class, so a round-trip does not
+# have to spell one out just to dodge the off-convention write warning. Deliberately
+# literal and NOT derived from kpfpipe.utils.io.kpf_filename: the filename convention
+# is independently asserted in test_io.py, and calling production here would launder
+# that oracle. Keyed on the class name so this module imports no data model.
+_ROUNDTRIP_NAMES = {
+    "KPF0": "KP.20240113.23249.10.fits",
+    "KPF1": "kpf_L1_20240113T102656.fits",
+    "KPF2": "kpf_SL2_20240101T000000.fits",
+    "KPF4": "kpf_SL4_20240101T000000.fits",
+    "KPFMasterL1": "KP.20240113.23249.10_master_bias_L1.fits",
+    "KPFMasterL2": "KP.20240113.23249.10_master_thar_L2.fits",
+}
+
+
 def assert_roundtrip_dtype(
-    model_cls, obj, ext, expected, tmp_path, name="rt.fits", expected_disk=None
+    model_cls, obj, ext, expected, tmp_path, name=None, expected_disk=None
 ):
-    """Write ``obj`` to FITS, read it back with ``model_cls``, and assert the
-    extension ``ext`` round-trips correctly.
+    """Write ``obj`` to FITS, re-read it, and assert ``ext`` round-trips correctly.
 
     ``expected`` is the in-memory dtype after re-read; ``expected_disk`` is the
     on-disk dtype (BITPIX), defaulting to ``expected``. They differ for MASK,
-    which is bool in memory but uint8 (8-bit) on disk.
-    """
-    import warnings
+    which is bool in memory but uint8 on disk.
 
+    ``name`` overrides the output filename; it defaults to this model's entry in
+    ``_ROUNDTRIP_NAMES`` because every level warns on an off-convention write
+    (L2/L4 via rvdata, the rest via check_filename_convention).
+    """
     expected_disk = expected if expected_disk is None else expected_disk
+    if name is None:
+        try:
+            name = _ROUNDTRIP_NAMES[model_cls.__name__]
+        except KeyError:
+            raise KeyError(
+                f"no conventional round-trip filename for {model_cls.__name__}; "
+                "add one to _ROUNDTRIP_NAMES or pass name= explicitly"
+            ) from None
     out = str(tmp_path / name)
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Filename .* does not follow")
-        obj.to_fits(out)
+    obj.to_fits(out)
 
     from astropy.io import fits
 

@@ -1,10 +1,8 @@
 """Tests for scripts/processing/_argparse.py: the shared argparse parent parsers.
 
-Each factory returns an ``add_help=False`` parent that the three subcommand
-parsers compose via ``parents=[...]``. Drive each the way the commands do --
-compose it into a throwaway parser and parse -- asserting the flags it
-contributes, that data_dirs_parser gates ``--kpf_science_output`` on its argument,
-and that pool_parser threads the caller's ``--jobs`` help text through.
+Each factory returns an ``add_help=False`` parent that the subcommand parsers
+compose via ``parents=[...]``, so each is driven the way the commands drive it:
+composed into a throwaway parser, then parsed.
 """
 
 import argparse
@@ -56,22 +54,20 @@ class TestDataDirsParser:
         parser = argparse.ArgumentParser(
             parents=[_argparse.data_dirs_parser(science_output=False)]
         )
-        # The flag is absent from the namespace entirely...
+        # Masters produces no science output, so the flag is neither set nor accepted.
         ns = parser.parse_args(["--kpf_data_input", "/in"])
         assert not hasattr(ns, "kpf_science_output")
-        # ...and passing it is a parse error (masters produces no science output).
         with pytest.raises(SystemExit):
             parser.parse_args(["--kpf_science_output", "/s"])
 
     def test_input_dir_aliases_data_input(self):
-        # --input_dir is a plain alias: it writes the kpf_data_input dest.
         ns = _parse([_argparse.data_dirs_parser()], ["--input_dir", "/in"])
         assert ns.kpf_data_input == "/in"
 
     def test_output_dir_parses_to_its_own_dest(self):
         ns = _parse([_argparse.data_dirs_parser()], ["--output_dir", "/out"])
         assert ns.output_dir == "/out"
-        # It is a raw value here; the fan-out happens in resolve_dir_shortcuts.
+        # Still a raw value here; the fan-out happens in resolve_dir_shortcuts.
         assert ns.kpf_masters_output is None and ns.kpf_science_output is None
 
 
@@ -91,13 +87,11 @@ class TestResolveDirShortcuts:
         ns = _argparse.resolve_dir_shortcuts(
             self._parser(plot_dir=True).parse_args(["--output_dir", "/out"])
         )
-        # masters/science outputs take the root; logs and plots get their subdirs.
         assert ns.kpf_masters_output == "/out"
         assert ns.kpf_science_output == "/out"
         assert ns.log_dir == "/out/logs"
         assert ns.plot_dir == "/out/QLP/timeseries"
-        # The input dir is never touched by --output_dir.
-        assert ns.kpf_data_input is None
+        assert ns.kpf_data_input is None  # --output_dir never touches the input dir
 
     def test_explicit_flags_win(self):
         ns = _argparse.resolve_dir_shortcuts(
@@ -112,13 +106,13 @@ class TestResolveDirShortcuts:
                 ]
             )
         )
-        assert ns.kpf_masters_output == "/m"  # explicit kept
-        assert ns.plot_dir == "/p"  # explicit kept
-        # unset slots filled: science takes the root, log dir gets its subdir.
+        assert ns.kpf_masters_output == "/m"
+        assert ns.plot_dir == "/p"
         assert ns.kpf_science_output == "/out" and ns.log_dir == "/out/logs"
 
     def test_skips_absent_slots(self):
-        # masters-style parser: no science output, no plot dir -- no AttributeError.
+        # A masters-style parser has no science output or plot dir: absent slots
+        # must be skipped, not raise AttributeError.
         ns = _argparse.resolve_dir_shortcuts(
             self._parser(science_output=False).parse_args(["--output_dir", "/out"])
         )
@@ -158,3 +152,23 @@ class TestPoolParser:
             parents=[_argparse.pool_parser(jobs_help="SENTINEL help text")]
         )
         assert "SENTINEL help text" in parser.format_help()
+
+
+class TestCacheParser:
+    """The --cache mode flag. Its parameterised default is what makes the leaf
+    `reduce` read-only while the orchestrators own cache writing -- the
+    one-writer-per-cache-file invariant documented at _scan.py:1-15."""
+
+    def test_factory_default_is_read_only(self):
+        assert _parse([_argparse.cache_parser()], []).cache == "r"
+
+    def test_orchestrator_default_is_honoured(self):
+        assert _parse([_argparse.cache_parser(default="rw")], []).cache == "rw"
+
+    @pytest.mark.parametrize("mode", ["r", "w", "rw", "wr"])
+    def test_every_choice_parses(self, mode):
+        assert _parse([_argparse.cache_parser()], ["--cache", mode]).cache == mode
+
+    def test_unknown_mode_rejected(self):
+        with pytest.raises(SystemExit):
+            _parse([_argparse.cache_parser()], ["--cache", "rr"])

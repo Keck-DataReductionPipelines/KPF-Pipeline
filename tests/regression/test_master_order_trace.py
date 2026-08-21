@@ -1,9 +1,9 @@
 """Tests for spectral order tracing from one vNext L1 master flat.
 
-Numerical tests use synthetic master images and require no real data. The
-synthetic flat reproduces the morphology the algorithm depends on: science and
-sky orderlets are wide and flat-topped, and the CAL orderlet is narrow, which
-is the difference identity rests on. The real master-flat test uses gitignored
+Numerical tests use synthetic master images and need no real data. The synthetic
+flat reproduces the morphology the algorithm depends on: science and sky
+orderlets are wide and flat-topped while the CAL orderlet is narrow, which is the
+difference identity rests on. The real master-flat test uses gitignored
 ``tests/testdata`` and is skipped when the vNext product is unavailable.
 """
 
@@ -72,7 +72,6 @@ def _stub_master_class(master_flat):
 
 
 def _orderlet_profile(offsets, fiber):
-    """Return the cross-dispersion profile of one orderlet."""
     if fiber == "CAL":
         return 1500.0 * np.exp(-0.5 * (offsets / 1.8) ** 2)
     return 500.0 * np.exp(-0.5 * (offsets / 5.5) ** 6)
@@ -189,9 +188,8 @@ def _band_cluster(rows, columns):
 def _curated_clusters(tracer):
     """Run detection and curation exactly as the module's own chain does.
 
-    The clusters are cached where the later steps read them from, as
-    detect_traces does, so identity can be exercised on cluster counts
-    detection itself would refuse.
+    The clusters are cached where the later steps read them from, as detect_traces
+    does, so identity can be exercised on cluster counts detection would refuse.
     """
     clusters = tracer._detect_clusters(tracer._detect_illuminated_pixels("GREEN"))
     clusters = tracer._reject_small_clusters(clusters)
@@ -811,9 +809,13 @@ class TestCSVWriting:
 
         tracer.save_master(output, overwrite=False)
         assert output.is_file()
-        with pytest.raises(FileExistsError):
+        with pytest.raises(FileExistsError, match="pass overwrite=True"):
             tracer.save_master(output, overwrite=False)
+
+        output.write_text("")  # the rewrite must replace this, not skip it
         tracer.save_master(output, overwrite=True)
+        assert tracer.output_path == output
+        assert pd.read_csv(output)["Fiber"].tolist() == ["SKY"]
 
     def test_refuses_to_save_before_make_master(self, tmp_path, master_path):
         tracer = OrderTrace(master_path)
@@ -822,7 +824,7 @@ class TestCSVWriting:
 
 
 # ---------------------------------------------------------------------------
-# Aperture non-overlap constraint
+# Trace fitting, apertures, and validation
 # ---------------------------------------------------------------------------
 
 
@@ -852,6 +854,30 @@ def _assert_apertures_disjoint(table, ncol):
     upper = centers + measured["TopEdge"].to_numpy(dtype=float)[:, None]
     lower = centers - measured["BottomEdge"].to_numpy(dtype=float)[:, None]
     assert np.all(lower[1:] > upper[:-1])
+
+
+def _edge_reaching_tracer(tmp_path, monkeypatch):
+    """A detected, identified tracer whose first cluster runs off a row edge.
+
+    Extends that cluster to row 0 over every column past the midpoint, so the
+    trace can no longer be centered there. Returns ``(tracer, image, half)``;
+    ``half`` is the first column the cluster reaches the edge at.
+    """
+    image, _ = _synthetic_flat()
+    tracer = _tracer(tmp_path, image, monkeypatch)
+    tracer.detect_traces("GREEN")
+    tracer.assign_trace_identities("GREEN")
+
+    cluster = tracer._clusters["GREEN"][
+        int(tracer._metadata["GREEN"]["cluster"].iloc[0])
+    ]
+    half = image.shape[1] // 2
+    reaching = cluster["col_indices"][cluster["col_indices"] >= half]
+    cluster["row_indices"] = np.concatenate(
+        [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
+    )
+    cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+    return tracer, image, half
 
 
 def _fitted_tracer(tmp_path, monkeypatch, **kwargs):
@@ -949,21 +975,10 @@ class TestApertureConstraint:
         # A column where the cluster reaches a detector edge cannot yield a
         # center, so an order running off the detector is judged on its own
         # span rather than on the whole dispersion.
-        image, _ = _synthetic_flat()
-        tracer = _tracer(tmp_path, image, monkeypatch)
-        tracer.detect_traces("GREEN")
-        tracer.assign_trace_identities("GREEN")
+        tracer, _, half = _edge_reaching_tracer(tmp_path, monkeypatch)
+        # Sampled columns depend on the column alone, so the cluster edit above
+        # does not affect them.
         columns = tracer._sample_profiles("GREEN")["columns"]
-
-        cluster = tracer._clusters["GREEN"][
-            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
-        ]
-        half = image.shape[1] // 2
-        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
-        cluster["row_indices"] = np.concatenate(
-            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
-        )
-        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
 
         offered = []
         fit_polynomial = order_trace_module.robust_polyfit
@@ -983,20 +998,7 @@ class TestApertureConstraint:
     ):
         # A cubic extrapolated beyond its fitted span can curl back over the
         # detector and read as carried, so X1-X2 must stay inside that span.
-        image, _ = _synthetic_flat()
-        tracer = _tracer(tmp_path, image, monkeypatch)
-        tracer.detect_traces("GREEN")
-        tracer.assign_trace_identities("GREEN")
-
-        cluster = tracer._clusters["GREEN"][
-            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
-        ]
-        half = image.shape[1] // 2
-        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
-        cluster["row_indices"] = np.concatenate(
-            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
-        )
-        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+        tracer, image, half = _edge_reaching_tracer(tmp_path, monkeypatch)
 
         fitted = tracer.fit_trace_polynomials("GREEN")
         assert fitted[["X1", "X2"]].iloc[0].tolist() == [0.0, half - 1.0]
@@ -1013,20 +1015,7 @@ class TestApertureConstraint:
         # Over the columns a partial trace was not fitted at, a cubic is free
         # to turn back and carry the aperture off the detector and onto it
         # again, so such a fit is redone as a parabola.
-        image, _ = _synthetic_flat()
-        tracer = _tracer(tmp_path, image, monkeypatch)
-        tracer.detect_traces("GREEN")
-        tracer.assign_trace_identities("GREEN")
-
-        cluster = tracer._clusters["GREEN"][
-            int(tracer._metadata["GREEN"]["cluster"].iloc[0])
-        ]
-        half = image.shape[1] // 2
-        reaching = cluster["col_indices"][cluster["col_indices"] >= half]
-        cluster["row_indices"] = np.concatenate(
-            [cluster["row_indices"], np.zeros(reaching.size, dtype=int)]
-        )
-        cluster["col_indices"] = np.concatenate([cluster["col_indices"], reaching])
+        tracer, image, half = _edge_reaching_tracer(tmp_path, monkeypatch)
 
         degrees = []
         fit_polynomial = order_trace_module.robust_polyfit
@@ -1211,12 +1200,10 @@ class TestRealData:
     @pytest.mark.slow
     @pytest.mark.requires_testdata
     def test_real_20240405_master_flat(self, tmp_path):
-        """Trace a real vNext master flat and check it reproduces the reference.
-
-        The comparison is against the vetted reference extraction would pin to
-        this frame -- the latest trace measured before it within its instrument
-        era -- so it holds the module's output to the shipped artifact rather
-        than standing as independent truth."""
+        # The comparison is against the vetted reference extraction would pin to
+        # this frame -- the latest trace measured before it within its instrument
+        # era -- so it holds the module's output to the shipped artifact rather
+        # than standing as independent truth.
         testdata = Path(__file__).parent.parent / "testdata"
         masters = sorted(testdata.glob("**/KP.20240405.*_master_flat_L1.fits"))
         if not masters:

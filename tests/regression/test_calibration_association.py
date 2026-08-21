@@ -14,10 +14,7 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 
 class MockL1:
     def __init__(self, date_obs="2024-04-05T11:08:33"):
-        # DATE-OBS is read from the EPRV-standard PRIMARY (identity-mapped from
-        # the native WMKO DATE-OBS); the calibration ages/paths are KPF-pipeline
-        # keywords written to PRIMARY/RECEIPT. Headers are fits.Header, mirroring
-        # the real KPF data models.
+        # Headers are fits.Header, mirroring the real KPF data models.
         primary = fits.Header()
         primary["DATE-OBS"] = date_obs
         self.obs_id = "KP.20240405.40113.57"
@@ -33,11 +30,12 @@ class MockL1:
         self._receipt.append((name, args, status))
 
     def set_keyword(self, key, value):
-        # Mirror the real routing: master paths ({PREFIX}FILE) land on RECEIPT.
-        # The signed ages ({PREFIX}AGE) are written downstream by DiagL1, not by
-        # this module.
-        ext = "RECEIPT" if key.endswith("FILE") else "PRIMARY"
-        self.headers[ext][key] = value
+        # Mirror the real routing: L1-headers.csv routes every {PREFIX}FILE
+        # master path to RECEIPT, and that is all CalibrationAssociation writes.
+        # Fail loud on anything else rather than inventing a PRIMARY fallback.
+        if not key.endswith("FILE"):
+            raise KeyError(f"{key!r} is not routed by this mock; extend it")
+        self.headers["RECEIPT"][key] = value
 
 
 def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):
@@ -54,7 +52,7 @@ _LEVEL_BY_CAL_TYPE = {
 
 
 def _stub_master(directory, obs_id, cal_type):
-    """Create a zero-byte stub master file with the correct naming convention."""
+    """Zero-byte stub master following the production naming convention."""
     level = _LEVEL_BY_CAL_TYPE[cal_type]
     path = directory / f"{obs_id}_master_{cal_type}_{level}.fits"
     path.touch()
@@ -79,7 +77,7 @@ class TestFindMasterFiles:
         assert result[0][1] == "20240405.03637.74"
 
     def test_searches_previous_day_by_default(self, tmp_path):
-        # Default window is [-1, 0]; a file from the previous day should appear.
+        # Default window is [-1, 0] days.
         d = tmp_path / "masters" / "20240404"
         d.mkdir(parents=True)
         _stub_master(d, "KP.20240404.79200.00", "bias")
@@ -178,9 +176,8 @@ class TestSelectNearest:
 
     def test_selects_nearest_of_two(self, tmp_path):
         mod = _make_module(tmp_path)
-        # Science frame at 40113s (~11:08 UTC).
-        # Candidate A at 03637s (~01:00 UTC) -- delta ~7.1 hours.
-        # Candidate B at 36000s (~10:00 UTC) -- delta ~1.1 hours.
+        # Timestamps are seconds of day UTC: the science frame is at 40113s, so
+        # 36000s is ~1.1 h away and 03637s ~7.1 h.
         result = mod._select_nearest(
             "2024-04-05T11:08:33",
             [
@@ -200,12 +197,32 @@ class TestSelectNearest:
         mod = _make_module(tmp_path)
         assert mod._select_nearest("2024-04-05T11:08:33", []) is None
 
+    def test_selects_a_master_taken_after_the_frame(self, tmp_path):
+        # _select_nearest minimizes |dt|, so a master observed *after* the frame
+        # wins when it is closer; the signed {PREFIX}AGE DiagL1 recomputes is
+        # what makes that intentional. A past-only filter would be a plausible
+        # "fix" that silently changes which master calibrates which frame.
+        mod = _make_module(tmp_path)
+        # Science at 40113s; candidates 3 h before (29313s) and 1 h after (43713s).
+        result = mod._select_nearest(
+            "2024-04-05T11:08:33",
+            [
+                (
+                    "/masters/KP.20240405.29313.00_master_bias_L1.fits",
+                    "20240405.29313.00",
+                ),
+                (
+                    "/masters/KP.20240405.43713.00_master_bias_L1.fits",
+                    "20240405.43713.00",
+                ),
+            ],
+        )
+        assert "KP.20240405.43713.00" in result
+
     def test_prefers_same_day_over_previous_day(self, tmp_path):
         mod = _make_module(tmp_path)
-        # Science at 2024-04-05 02:00 UTC (7200s).
-        # Previous-day master at 23:00 HST = 23:00 local ≈ 23*3600 = 82800s
-        # on 2024-04-04.
-        # Same-day master at 00:30 UTC on 2024-04-05 (1800s).
+        # Timestamps are seconds of day UTC: science at 7200s on 04-05, with
+        # candidates 3 h earlier (82800s on 04-04) and 1.5 h earlier (1800s).
         result = mod._select_nearest(
             "2024-04-05T02:00:00",
             [
@@ -258,20 +275,10 @@ class TestPerform:
         )
         assert mod.l1_obj.headers["RECEIPT"].get("BIASFILE") == expected
 
-    def test_no_biasdir_header(self, masters_dir):
-        mod = _make_module(masters_dir)
-        mod.perform(["bias"])
-        assert "BIASDIR" not in mod.l1_obj.headers["RECEIPT"]
-
-    def test_does_not_write_biasage(self, masters_dir):
-        # The signed master-obs age (BIASAGE) is now recomputed downstream by
-        # DiagL1 from the path this module writes; the module itself emits only
-        # the path. (DiagL1.calibration_ages is covered in test_diagnostics.py.)
-        mod = _make_module(masters_dir)
-        mod.perform(["bias"])
-        assert "BIASAGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
-
     def test_sets_headers_for_dark_and_flat(self, masters_dir):
+        # {PREFIX}AGE is recomputed downstream by DiagL1 from the path this
+        # module writes (covered in test_diagnostics.py), so it must be absent
+        # here; likewise {PREFIX}DIR, since {PREFIX}FILE holds the full path.
         mod = _make_module(masters_dir)
         mod.perform(["bias", "dark", "flat"])
         for prefix in ("BIAS", "DARK", "FLAT"):
@@ -280,8 +287,7 @@ class TestPerform:
             assert f"{prefix}AGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_sets_headers_for_thar(self, masters_dir):
-        # WLS follows the same unified convention: WLSFILE holds the full path
-        # (no WLSDIR). The WLSAGE is written downstream by DiagL1.
+        # WLSFILE holds the full path (no WLSDIR); WLSAGE comes from DiagL1.
         d = masters_dir / "masters" / "20240405"
         _stub_master(d, "KP.20240405.03637.74", "thar")
 
@@ -305,7 +311,7 @@ class TestPerform:
             mod.perform(["bias"])
 
     def test_raises_on_first_missing_cal_type(self, masters_dir):
-        # Only bias exists; dark should trigger the error.
+        # dark is removed, so it is the type that fails.
         d = masters_dir / "masters" / "20240405"
         for f in d.glob("*_master_dark_L1.fits"):
             f.unlink()
@@ -321,11 +327,11 @@ class TestPerform:
         _stub_master(d, "KP.20240403.03637.74", "bias")
 
         mod = _make_module(tmp_path)
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match="No 'bias' master found"):
             mod.perform(["bias"])  # default window doesn't reach 2 days back
 
         mod2 = _make_module(tmp_path)
-        mod2.perform(["bias"], masters_search_window_days=[-2, 0])  # should succeed
+        mod2.perform(["bias"], masters_search_window_days=[-2, 0])
         assert "BIASFILE" in mod2.l1_obj.headers["RECEIPT"]
 
 

@@ -1,14 +1,10 @@
-"""
-Regression tests for image assembly (L0 → L1).
+"""Regression tests for image assembly (L0 -> L1).
 
 The 2-amp regression and round-trip tests are marked ``slow`` and read real L0
-FITS frames from the gitignored ``tests/testdata/L0/20240405`` tree (paths
-hard-coded below). The 4-amp, dtype-provenance, orientation, and expmeter tests
-run on synthetic data generated into ``tmp_path`` and need no external frames.
+FITS frames from the gitignored ``tests/testdata/L0/20240405`` tree. Every other
+test runs on synthetic data and needs no external frames.
 """
 
-import os
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +17,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
+from ._data_models import write_amp_l0
 from ._dtype_policy import (
     L1_IMAGE,
     assert_dtype,
@@ -40,36 +37,18 @@ L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 
 @pytest.fixture(scope="module")
 def synthetic_4amp_l0(tmp_path_factory):
-    """Create a synthetic L0 FITS file with 4-amp readout on both CCDs.
+    """Synthetic L0 with 4-amp readout on both CCDs.
 
-    Module-scoped read-only source: every consumer only from_fits() reads it, so
-    the ~140 MB write happens once instead of per test."""
-    fn = str(tmp_path_factory.mktemp("l0_4amp") / "KP.20240101.00001.00.fits")
-    rng = np.random.default_rng(42)
-
+    Module-scoped and read-only, so the ~140 MB write happens once, not per test.
+    """
     # 4-amp dimensions: 2040 imaging rows + 30 parallel overscan,
     # 4 prescan + 2040 imaging cols + 50 serial overscan
-    nrow, ncol = 2070, 2094
-    bias_level = 1000.0
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-4amp"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
-    primary.header["OFNAME"] = os.path.basename(fn)
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdu = fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}")
-            hdus.append(hdu)
-
-    hdul = fits.HDUList(hdus)
-    hdul.writeto(fn, overwrite=True)
-    hdul.close()
-    return fn
+    return write_amp_l0(
+        tmp_path_factory.mktemp("l0_4amp") / "KP.20240101.00001.00.fits",
+        shape=(2070, 2094),
+        bias_level=1000.0,
+        primary_cards={"OBJECT": "synthetic-4amp"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +57,7 @@ def synthetic_4amp_l0(tmp_path_factory):
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestImageAssemblyBias:
     """Regression tests using a bias frame (no signal, 2-amp mode)."""
 
@@ -96,7 +76,7 @@ class TestImageAssemblyBias:
     def test_ccd_shape(self, l1_bias, chip):
         l1, _ = l1_bias
         assert l1.data[f"{chip}_CCD"].shape == (4080, 4080)
-        assert l1.data[f"{chip}_CCD"].dtype == np.float32
+        assert_dtype(l1.data[f"{chip}_CCD"], L1_IMAGE, f"{chip}_CCD")
 
     def test_variance_frames_exist(self, l1_bias):
         l1, _ = l1_bias
@@ -109,14 +89,19 @@ class TestImageAssemblyBias:
         assert np.all(l1.data["RED_VAR"] >= 0)
 
     def test_bias_near_zero(self, l1_bias):
-        """After overscan subtraction, a bias frame should be near zero."""
         l1, _ = l1_bias
         assert abs(np.nanmedian(l1.data["GREEN_CCD"])) < 5.0
         assert abs(np.nanmedian(l1.data["RED_CCD"])) < 5.0
 
     def test_primary_header_carried_forward(self, l1_bias):
-        l1, _ = l1_bias
-        assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
+        # INSTRUME is stamped by from_fits on any KPF file, so asserting it
+        # cannot catch an assembly bug. DATE-OBS comes from the source frame,
+        # so compare the L1 card against the L0 it was assembled from.
+        l1, ia = l1_bias
+        assert (
+            l1.headers["PRIMARY"]["DATE-OBS"]
+            == ia.l0_obj.headers["PRIMARY"]["DATE-OBS"]
+        )
 
     def test_obs_id_carried_forward(self, l1_bias):
         l1, _ = l1_bias
@@ -129,19 +114,19 @@ class TestImageAssemblyBias:
 
     def test_read_noise_in_header(self, l1_bias):
         l1, _ = l1_bias
-        # 2-amp mode: expect RNGREEN1, RNGREEN2, RNRED1, RNRED2
+        # 2-amp mode names the amps RNGREEN1/2 and RNRED1/2.
         assert "RNGREEN1" in l1.headers["QUALITY_CONTROL"]
         assert "RNRED1" in l1.headers["QUALITY_CONTROL"]
 
     def test_read_noise_reasonable(self, l1_bias):
-        """Read noise should be between 1 and 20 electrons for KPF."""
+        # 1-20 e- brackets any physically sane KPF read noise.
         _, ia = l1_bias
         for channel_ext, rn in ia.readnoise.items():
             assert 1.0 < rn < 20.0, f"Read noise for {channel_ext} = {rn} e-"
 
     def test_rnng_in_header(self, l1_bias):
         l1, _ = l1_bias
-        # 2-amp mode: expect RNNGGR1, RNNGGR2, RNNGRD1, RNNGRD2
+        # 2-amp mode names the amps RNNGGR1/2 and RNNGRD1/2.
         assert "RNNGGR1" in l1.headers["QUALITY_CONTROL"]
         assert "RNNGRD1" in l1.headers["QUALITY_CONTROL"]
 
@@ -168,6 +153,7 @@ class TestImageAssemblyBias:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestImageAssemblyFlat:
     """Regression tests using a flat lamp frame (has signal)."""
 
@@ -178,12 +164,11 @@ class TestImageAssemblyFlat:
         return ia.perform()
 
     def test_flat_has_signal(self, l1_flat):
-        """A flat lamp should have significant positive signal."""
         assert np.nanmedian(l1_flat.data["GREEN_CCD"]) > 100.0
         assert np.nanmedian(l1_flat.data["RED_CCD"]) > 100.0
 
     def test_flat_variance_exceeds_readnoise(self, l1_flat):
-        """Variance should include photon noise (larger than read noise alone)."""
+        # Photon noise dominates read noise in a flat, so VAR is well above it.
         assert np.nanmedian(l1_flat.data["GREEN_VAR"]) > 10.0
         assert np.nanmedian(l1_flat.data["RED_VAR"]) > 10.0
 
@@ -194,13 +179,12 @@ class TestImageAssemblyFlat:
 
 
 class TestImageAssembly4Amp:
-    """Test 4-amp mode assembly using synthetic data."""
-
     @pytest.fixture(scope="class")
     def l1_4amp(self, synthetic_4amp_l0):
-        """Assemble the synthetic 4-amp L0 once; shared read-only across the class.
+        """Assemble the synthetic 4-amp L0 once, shared read-only across the class.
 
-        perform() itself counts amplifiers, so ia.namp/ia.dims are populated."""
+        perform() counts the amplifiers, so ia.namp/ia.dims come back populated.
+        """
         l0 = KPF0.from_fits(synthetic_4amp_l0)
         ia = ImageAssembly(l0)
         return ia.perform(), ia
@@ -220,7 +204,6 @@ class TestImageAssembly4Amp:
     def test_4amp_read_noise_all_amps(self, l1_4amp):
         l1, ia = l1_4amp
 
-        # 4-amp mode: should have 8 read noise measurements
         assert len(ia.readnoise) == 8
         for channel_ext in [
             "GREEN_AMP1",
@@ -234,7 +217,6 @@ class TestImageAssembly4Amp:
         ]:
             assert channel_ext in ia.readnoise
 
-        # All 8 RN keywords in header
         for key in [
             "RNGREEN1",
             "RNGREEN2",
@@ -248,7 +230,6 @@ class TestImageAssembly4Amp:
             assert key in l1.headers["QUALITY_CONTROL"]
 
     def test_4amp_bias_near_zero(self, l1_4amp):
-        """Synthetic bias with known noise should be near zero after overscan."""
         l1, _ = l1_4amp
         assert abs(np.nanmedian(l1.data["GREEN_CCD"])) < 10.0
         assert abs(np.nanmedian(l1.data["RED_CCD"])) < 10.0
@@ -265,14 +246,23 @@ class TestImageAssembly4Amp:
 
 
 class TestDtypeProvenance:
-    """L1 CCD/VAR are float32; L0 amps never upscale to float64."""
-
     def test_l1_ccd_var_float32_and_roundtrip(self, synthetic_4amp_l0, tmp_path):
         l0 = KPF0.from_fits(synthetic_4amp_l0)
         l1 = ImageAssembly(l0).perform()
         for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
             assert_dtype(l1.data[ext], L1_IMAGE, ext)
-        assert_roundtrip_dtype(KPF1, l1, "GREEN_CCD", L1_IMAGE, tmp_path)
+        # BITPIX and the re-read dtype are shape-independent, so the round-trip
+        # runs on a corner of each array rather than 270 MB of full detector.
+        for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
+            l1.data[ext] = l1.data[ext][:16, :16]
+        assert_roundtrip_dtype(
+            KPF1,
+            l1,
+            "GREEN_CCD",
+            L1_IMAGE,
+            tmp_path,
+            name="kpf_L1_20240113T102656.fits",
+        )
 
     def test_l0_amps_not_float64(self, synthetic_4amp_l0):
         l0 = KPF0.from_fits(synthetic_4amp_l0)
@@ -284,41 +274,36 @@ class TestOrientFFI:
     """Unit tests for the static FFI orientation helper.
 
     orient_ffi is the single source of truth for FFI orientation, shared by
-    stitch_ffi and the L0 quicklook. Flux and variance (and downstream wave)
-    frames are all run through it, so the correctness of the co-orientation
-    hinges entirely on this method applying the same deterministic flip.
+    stitch_ffi and the L0 quicklook. Flux and variance frames all run through it,
+    so co-orientation hinges on it applying the same deterministic flip.
     """
 
     # A small asymmetric array makes every flip unambiguous.
-    #   [[1, 2, 3],
-    #    [4, 5, 6]]
     BASE = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32)
 
     def test_red_flips_columns_only(self):
-        """RED: dispersion columns blue->red means a left-right flip only."""
+        # RED disperses blue->red across columns, so only a left-right flip.
         out = ImageAssembly.orient_ffi(self.BASE, "RED", 2)
         expected = np.array([[3, 2, 1], [6, 5, 4]], dtype=np.float32)
         np.testing.assert_array_equal(out, expected)
 
     def test_green_flips_both_axes(self):
-        """GREEN: raw image is inverted vs RED, so rows flip as well."""
+        # GREEN's raw image is inverted relative to RED, so rows flip as well.
         out = ImageAssembly.orient_ffi(self.BASE, "GREEN", 2)
         expected = np.array([[6, 5, 4], [3, 2, 1]], dtype=np.float32)
         np.testing.assert_array_equal(out, expected)
 
     def test_green_read_out_on_four_amps_flips_columns_only(self):
-        """4-amp GREEN arrives with its rows already running bottom-up."""
+        # 4-amp GREEN arrives with its rows already running bottom-up.
         out = ImageAssembly.orient_ffi(self.BASE, "GREEN", 4)
         np.testing.assert_array_equal(out, np.flip(self.BASE, axis=1))
 
     def test_green_is_red_plus_row_flip(self):
-        """GREEN orientation is exactly the RED orientation flipped in rows."""
         red = ImageAssembly.orient_ffi(self.BASE, "RED", 2)
         green = ImageAssembly.orient_ffi(self.BASE, "GREEN", 2)
         np.testing.assert_array_equal(green, np.flip(red, axis=0))
 
     def test_chip_name_is_case_insensitive(self):
-        """Lowercase / mixed-case chip names orient identically to uppercase."""
         for name in ("green", "Green", "GREEN"):
             np.testing.assert_array_equal(
                 ImageAssembly.orient_ffi(self.BASE, name, 2),
@@ -331,22 +316,19 @@ class TestOrientFFI:
             )
 
     def test_does_not_mutate_input(self):
-        """orient_ffi must not modify the caller's array in place."""
         original = self.BASE.copy()
         ImageAssembly.orient_ffi(self.BASE, "GREEN", 2)
         np.testing.assert_array_equal(self.BASE, original)
 
     def test_double_application_is_identity(self):
-        """Flips are involutions: orienting twice returns the original."""
         for chip in ("GREEN", "RED"):
             once = ImageAssembly.orient_ffi(self.BASE, chip, 2)
             twice = ImageAssembly.orient_ffi(once, chip, 2)
             np.testing.assert_array_equal(twice, self.BASE)
 
     def test_flux_and_wave_are_co_oriented(self):
-        """The load-bearing property: two distinct frames of the same shape
-        (e.g. flux and its wavelength/variance counterpart) receive the
-        identical index remapping, so they stay pixel-aligned afterwards."""
+        # The load-bearing property: frames of the same shape get the identical
+        # index remapping, so flux and its wave/var counterpart stay aligned.
         flux = np.arange(12, dtype=np.float32).reshape(3, 4)
         # Index markers track where each (row, col) lands under the transform.
         rows = np.broadcast_to(np.arange(3)[:, None], (3, 4)).astype(np.float32)
@@ -356,22 +338,19 @@ class TestOrientFFI:
             f = ImageAssembly.orient_ffi(flux, chip, 2)
             r = ImageAssembly.orient_ffi(rows, chip, 2)
             c = ImageAssembly.orient_ffi(cols, chip, 2)
-            # For every output pixel, the flux value matches the flux that
-            # originally lived at the (row, col) the markers report.
             for i in range(3):
                 for j in range(4):
                     src_row, src_col = int(r[i, j]), int(c[i, j])
                     assert f[i, j] == flux[src_row, src_col]
 
     def test_unknown_chip_treated_as_non_green(self):
-        """Any non-GREEN chip (incl. unexpected names) flips columns only."""
         out = ImageAssembly.orient_ffi(self.BASE, "BLUE", 2)
         expected = np.flip(self.BASE, axis=1)
         np.testing.assert_array_equal(out, expected)
 
 
 # ---------------------------------------------------------------------------
-# Expmeter wavelength unit conversion (nm → Å at L0 → L1)
+# Expmeter wavelength unit conversion (nm -> Angstrom at L0 -> L1)
 # ---------------------------------------------------------------------------
 
 
@@ -379,32 +358,11 @@ class TestOrientFFI:
 def synthetic_4amp_l0_with_expmeter(tmp_path):
     """Synthetic 4-amp L0 with EXPMETER_SCI/SKY tables labeled in nm.
 
-    The wavelength column labels mirror real KPF expmeter native units
-    (e.g. '498.12' nm). The detector amp data is the same minimal 4-amp
-    scaffold used by `synthetic_4amp_l0`.
+    The column labels mirror real KPF expmeter native units (e.g. '498.12' nm).
     """
-    fn = str(tmp_path / "KP.20240101.00002.00.fits")
-    rng = np.random.default_rng(7)
-
-    nrow, ncol = 2070, 2094
-    bias_level = 1000.0
-
-    primary = fits.PrimaryHDU()
-    primary.header["INSTRUME"] = "KPF"
-    primary.header["OBJECT"] = "synthetic-expmeter"
-    primary.header["IMTYPE"] = "Bias"
-    primary.header["DATE-OBS"] = "2024-01-01T00:00:01"
-    primary.header["OFNAME"] = os.path.basename(fn)
-
-    hdus = [primary]
-    for chip in ["GREEN", "RED"]:
-        for amp in range(1, 5):
-            data = (bias_level + rng.normal(0, 3.0, (nrow, ncol))).astype(np.float32)
-            hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-    # EXPMETER tables: Date-Beg/Date-End + a handful of channels in nm
     wave_nm_labels = ["498.12", "604.38", "710.62", "816.88"]
     nrows = 3
+    expmeter_hdus = []
     for ext_name in ["EXPMETER_SCI", "EXPMETER_SKY"]:
         cols = [
             fits.Column(
@@ -420,14 +378,20 @@ def synthetic_4amp_l0_with_expmeter(tmp_path):
                     name=w, format="E", array=np.full(nrows, 100.0, dtype=np.float32)
                 )
             )
-        hdus.append(fits.BinTableHDU.from_columns(cols, name=ext_name))
+        expmeter_hdus.append(fits.BinTableHDU.from_columns(cols, name=ext_name))
 
-    fits.HDUList(hdus).writeto(fn, overwrite=True)
-    return fn
+    return write_amp_l0(
+        tmp_path / "KP.20240101.00002.00.fits",
+        shape=(2070, 2094),
+        bias_level=1000.0,
+        seed=7,
+        primary_cards={"OBJECT": "synthetic-expmeter"},
+        extra_hdus=expmeter_hdus,
+    )
 
 
 def _expmeter_table():
-    """Synthetic EXPMETER table: nm-labeled wavelength columns + non-numeric cols."""
+    """Synthetic EXPMETER table: nm-labeled wavelength columns plus non-numeric ones."""
     return Table(
         {
             "498.12": np.full(3, 100.0, dtype=np.float32),
@@ -441,12 +405,11 @@ def _expmeter_table():
 
 
 class TestExpmeterWavelengthConversion:
-    """L0 → L1 relabels EXPMETER_SCI/SKY wavelength columns from nm to Å.
+    """L0 -> L1 relabels EXPMETER_SCI/SKY wavelength columns from nm to Angstroms.
 
-    The conversion is a discrete static step, so it is unit-tested directly on a
-    synthetic table — a full ImageAssembly.perform() (~1s) is needless for a column
-    rename. ``test_conversion_applied_by_perform`` guards that perform() still wires
-    it in, so the science-path coverage is preserved.
+    The conversion is a discrete static step, so it is unit-tested on a synthetic
+    table rather than through a full perform() (~1s) for a column rename.
+    ``test_conversion_applied_by_perform`` guards that perform() still wires it in.
     """
 
     def _convert(self, **exts):
@@ -455,20 +418,11 @@ class TestExpmeterWavelengthConversion:
         ImageAssembly._convert_expmeter_wavelengths_to_angstroms(l1)
         return l1
 
-    def test_sci_columns_converted_to_angstroms(self):
-        # nm labels (498.12, ...) → Å (4981.2, ...).
-        cols = (
-            self._convert(EXPMETER_SCI=_expmeter_table()).data["EXPMETER_SCI"].colnames
-        )
+    @pytest.mark.parametrize("ext", ["EXPMETER_SCI", "EXPMETER_SKY"])
+    def test_columns_converted_to_angstroms(self, ext):
+        cols = self._convert(**{ext: _expmeter_table()}).data[ext].colnames
         for expected in ("4981.2", "6043.8", "7106.2", "8168.8"):
             assert expected in cols, f"missing Å column {expected!r}; got {cols}"
-
-    def test_sky_columns_converted_to_angstroms(self):
-        cols = (
-            self._convert(EXPMETER_SKY=_expmeter_table()).data["EXPMETER_SKY"].colnames
-        )
-        for expected in ("4981.2", "6043.8", "7106.2", "8168.8"):
-            assert expected in cols
 
     def test_nm_labels_removed(self):
         cols = (
@@ -485,7 +439,6 @@ class TestExpmeterWavelengthConversion:
         assert "Date-End" in cols
 
     def test_values_preserved(self):
-        # Underlying flux values shouldn't be touched by the rename.
         l1 = self._convert(EXPMETER_SCI=_expmeter_table())
         np.testing.assert_array_equal(
             np.asarray(l1.data["EXPMETER_SCI"]["4981.2"]),
@@ -493,15 +446,98 @@ class TestExpmeterWavelengthConversion:
         )
 
     def test_no_error_when_expmeter_absent(self):
-        # Missing key and an explicit None are both no-ops (biases carry no expmeter).
+        # Biases carry no expmeter: a missing key and an explicit None are no-ops.
         self._convert()
         self._convert(EXPMETER_SCI=None)
 
     def test_conversion_applied_by_perform(self, synthetic_4amp_l0_with_expmeter):
-        """Integration: perform() wires in the conversion (guards the science path)."""
         l0 = KPF0.from_fits(synthetic_4amp_l0_with_expmeter)
         l1 = ImageAssembly(l0).perform()
         assert "4981.2" in l1.data["EXPMETER_SCI"].colnames
+
+
+# ---------------------------------------------------------------------------
+# Overscan methods and the config-typo guards (synthetic, no perform())
+# ---------------------------------------------------------------------------
+
+
+class TestOverscanMethods:
+    """The three ``_oscan_*`` kernels and the OSCANSUB provenance flag.
+
+    ``rowmedian`` is the configured default, so it is the only method the
+    real-frame tests above ever run; ``median`` and ``zero`` are equally
+    selectable in production and are exercised here on a hand-built amp.
+    """
+
+    @pytest.fixture
+    def ia(self, tmp_path):
+        """ImageAssembly on a tiny 4-amp frame, with the geometry set by hand.
+
+        ``dims``/``prescan`` normally come from count_amplifiers(); setting
+        them directly keeps the overscan slicing arithmetic in view.
+        """
+        path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12))
+        module = ImageAssembly(KPF0.from_fits(path))
+        module.namp["GREEN"] = 4
+        module.dims["GREEN"] = (8, 8)
+        module.prescan = 2
+        return module
+
+    def _set_serial_overscan(self, ia, values):
+        """Write ``values`` into GREEN_AMP1's serial overscan strip (cols 10:12)."""
+        amp = np.array(ia.l0_obj.data["GREEN_AMP1"], dtype=np.float32)
+        amp[:8, 10:] = values
+        ia.l0_obj.data["GREEN_AMP1"] = amp
+
+    def test_zero_returns_scalar_zero(self, ia):
+        assert ia._oscan_zero("GREEN", 1) == 0.0
+
+    def test_median_is_the_strip_median(self, ia):
+        self._set_serial_overscan(ia, 7.0)
+        assert ia._oscan_median("GREEN", 1) == pytest.approx(7.0)
+
+    def test_rowmedian_is_per_row_and_column_shaped(self, ia):
+        # A row ramp: row i of the overscan strip holds the value i.
+        self._set_serial_overscan(ia, np.arange(8, dtype=np.float32)[:, None])
+        bias = ia._oscan_rowmedian("GREEN", 1)
+        assert bias.shape == (8, 1)
+        np.testing.assert_array_equal(bias[:, 0], np.arange(8))
+
+    def test_unsupported_method_raises(self, ia):
+        # The dispatch is getattr(self, f"_oscan_{method}"), so a config typo
+        # must name itself rather than surface as a bare AttributeError.
+        with pytest.raises(AttributeError, match="Unsupported overscan"):
+            ia.subtract_overscan("GREEN", method="rowmedain")
+
+    @pytest.mark.parametrize(
+        "method, expected", [("rowmedian", 1), ("median", 1), ("zero", 0)]
+    )
+    def test_oscansub_flag_tracks_method(self, ia, method, expected):
+        # OSCANSUB is a provenance card: 'zero' subtracts nothing and must say so.
+        ia.overscan_method = method
+        l1 = KPF1()
+        ia._set_headers(l1)
+        assert l1.headers["RECEIPT"].get("OSCANSUB") == expected
+
+
+class TestAmplifierGuards:
+    """The two fail-loud guards on an unexpected readout geometry."""
+
+    def test_one_amp_mode_raises(self, tmp_path):
+        path = write_amp_l0(
+            tmp_path / "KP.20240101.00001.00.fits", namps=1, shape=(10, 10)
+        )
+        module = ImageAssembly(KPF0.from_fits(path))
+        with pytest.raises(ValueError, match="Only 2-amp and 4-amp"):
+            module.count_amplifiers("GREEN")
+
+    def test_unexpected_flip_entry_raises(self, tmp_path):
+        path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
+        module = ImageAssembly(KPF0.from_fits(path))
+        module.count_amplifiers("GREEN")
+        module.orientation["GREEN_AMP1"] = "sideways"
+        with pytest.raises(ValueError, match="unexpected 'flip' entry"):
+            module.orient_channels("GREEN")
 
 
 # ---------------------------------------------------------------------------
@@ -510,37 +546,24 @@ class TestExpmeterWavelengthConversion:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_testdata
 class TestImageAssemblyRoundTrip:
-    """Test that L1 can be written to FITS and read back."""
+    @pytest.fixture(scope="class")
+    def assembled(self):
+        return ImageAssembly(KPF0.from_fits(L0_BIAS)).perform()
 
-    def test_write_and_read_back(self):
-        l0 = KPF0.from_fits(L0_BIAS)
-        ia = ImageAssembly(l0)
-        l1 = ia.perform()
+    def test_write_and_read_back(self, assembled, tmp_path):
+        fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
+        assembled.to_fits(fn)
+        l1_read = KPF1.from_fits(fn)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "test_l1.fits")
-            l1.to_fits(fn)
-
-            l1_read = KPF1.from_fits(fn)
-
-            assert l1_read.data["GREEN_CCD"].shape == (4080, 4080)
-            assert l1_read.data["RED_CCD"].shape == (4080, 4080)
+        for chip in ("GREEN", "RED"):
+            ext = f"{chip}_CCD"
+            assert l1_read.data[ext].shape == (4080, 4080)
             np.testing.assert_array_almost_equal(
-                l1_read.data["GREEN_CCD"], l1.data["GREEN_CCD"], decimal=4
-            )
-            np.testing.assert_array_almost_equal(
-                l1_read.data["RED_CCD"], l1.data["RED_CCD"], decimal=4
+                l1_read.data[ext], assembled.data[ext], decimal=4
             )
 
-    def test_roundtrip_preserves_header(self):
-        l0 = KPF0.from_fits(L0_BIAS)
-        ia = ImageAssembly(l0)
-        l1 = ia.perform()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fn = os.path.join(tmpdir, "test_l1.fits")
-            l1.to_fits(fn)
-
-            l1_read = KPF1.from_fits(fn)
-            assert l1_read.headers["PRIMARY"]["INSTRUME"] == "KPF"
+        # INSTRUME is guaranteed by from_fits, so it cannot catch an assembly
+        # bug; obs_id is carried by the write path this test exercises.
+        assert l1_read.obs_id == assembled.obs_id

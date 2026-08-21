@@ -22,10 +22,12 @@ from kpfpipe.quality_control.diagnostics import (
     Diagnostics,
 )
 
+from ._data_models import set_fiber_arrays
+
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-_NCOL_TEST = 8  # small, even column count for synthetic FLUX/VAR (DiagL2 reads
-# only per-fiber NaN counts and zero-flux ratios, so real detector width is moot)
+_NCOL_TEST = 8  # DiagL2 metrics are pixel aggregates, so the real detector width
+# is moot; an even count keeps the half-zeroed ZEROFRAC test exact
 
 _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
@@ -43,9 +45,9 @@ class TestDiagnosticsBase:
             data = {}
 
             def set_keyword(self, key, value):
-                # Mirror the real routing: set_keyword writes the value only
-                # (the comment comes from the registry). The base test keys are
-                # not in any registry, so the stub just lands them on PRIMARY.
+                # The real set_keyword writes the value only (the comment comes
+                # from the registry); these test keys are in no registry, so the
+                # stub just lands them on PRIMARY.
                 self.headers["PRIMARY"][key] = value
 
         return _FakeObj()
@@ -136,15 +138,14 @@ class TestDiagnosticsBase:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 with no pointing (e.g. a calibration frame) and DiagL1 with no
-# calibrations are each a clean no-op
+# DiagL1 with no calibrations is a clean no-op
 # ---------------------------------------------------------------------------
 
 
 class TestEmptyLevels:
     def test_diag_l1_runs_cleanly(self):
-        # DATE-OBS present (required) but no RECEIPT cal paths -> calibration_ages
-        # returns {} (no crash). DATE-OBS itself is now a required read.
+        # DATE-OBS present (a required read) but no RECEIPT cal paths ->
+        # calibration_ages returns {} rather than crashing.
         results = DiagL1(_make_kpf1_with_calibrations()).run()
         assert results == {}
 
@@ -181,9 +182,9 @@ def _record_at(coord, **overrides):
 
 
 def _set_catalog_record(l0, records):
-    """Write l0's CATALOG_RECORD rows + presence flags from a
-    {source: record-dict-or-None} mapping, the way perform does. A source left out of
-    the mapping gets flag 0, exactly as a gated-off one does in production."""
+    """Write l0's CATALOG_RECORD rows and presence flags from a
+    {source: record-dict-or-None} mapping, the way perform does. A source left out
+    of the mapping gets flag 0, exactly as a gated-off one does in production."""
     aq = AstroQuery(l0)
     for source, record in records.items():
         aq._write_catalog_record(source, record)
@@ -287,6 +288,10 @@ class TestDiagL0Contingency:
         assert results["TARGOFF"][0] is None
         assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
 
+    # No usable parallax means no distance on the SkyCoord, and ERFA warns that it
+    # overrode the distance while propagating -- the documented consequence of the
+    # PM=0/parallax=0 fallback under test, not a fault.
+    @pytest.mark.filterwarnings('ignore:ERFA function "pmsafe":erfa.ErfaWarning')
     @pytest.mark.parametrize("bad_plx", [None, 0.0, -5.0])
     def test_missing_or_nonpositive_parallax_falls_back(self, bad_plx, caplog):
         # Gaia DR3 reports parallax <= 0 (or none) for faint sources; the offset falls
@@ -358,9 +363,8 @@ class TestDiagL0Contingency:
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
     """A KPF1 carrying a PRIMARY DATE-OBS and RECEIPT master paths.
 
-    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has
-    written each ``{PREFIX}FILE`` to RECEIPT (via set_keyword) and to_kpf1 has
-    populated the EPRV PRIMARY (DATE-OBS).
+    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has written
+    each ``{PREFIX}FILE`` to RECEIPT and to_kpf1 has populated the EPRV PRIMARY.
     """
     l1 = KPF1()
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
@@ -435,15 +439,18 @@ class TestDiagL1CalibrationAges:
 # ---------------------------------------------------------------------------
 
 
-def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0, populate=True):
-    """Build a minimal KPF2 and populate FLUX extensions with controllable NaN
-    and zero fractions across all (chip, fiber) pairs.
+def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True):
+    """Minimal KPF2 with FLUX at controllable NaN and zero fractions.
 
-    A bare KPF2() already exposes the FLUX extensions DiagL2 reads (no FITS
-    round-trip needed -- mirrors test_qc_flags._make_kpf2_with_flux). Each FLUX
-    extension has shape (norder[chip], _NCOL_TEST), initialized to ones, then a
-    fraction replaced with NaN, then a fraction with 0.0. With populate=False no
-    FLUX arrays are set -- the "no data populated" schema cases.
+    Injects real NaN/zero PIXELS, because DiagL2 measures them. Not the same as
+    test_qc_flags.py's ``_make_kpf2_nan_headers``, which writes NaN-count/ZEROFRAC
+    HEADERS over clean arrays for QCL2 to read -- the opposite mechanism. Do not
+    merge them; each would destroy the other's test.
+
+    A bare KPF2() already exposes the FLUX extensions DiagL2 reads, so no FITS
+    round-trip is needed. Each extension is (norder[chip], _NCOL_TEST) ones, then
+    nan_frac of the pixels replaced with NaN and zero_frac with 0.0.
+    populate=False sets no FLUX arrays -- the "no data populated" schema cases.
     """
     kpf2 = KPF2()
     if not populate:
@@ -467,14 +474,14 @@ def _make_kpf2_with_flux(nan_frac=0.0, zero_frac=0.0, populate=True):
 
 class TestDiagL2NanCounts:
     def test_writes_all_five_keys_with_zero_when_clean(self):
-        kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
+        kpf2 = _make_kpf2_nan_pixels(nan_frac=0.0)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
             assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_counts_injected_nans_per_fiber(self):
-        kpf2 = _make_kpf2_with_flux(nan_frac=0.0)
+        kpf2 = _make_kpf2_nan_pixels(nan_frac=0.0)
         # Inject one NaN into GREEN_SCI1_FLUX; expect NANSCI1==1, others==0.
         kpf2.data["GREEN_SCI1_FLUX"][0, 0] = np.nan
         DiagL2(kpf2).run()
@@ -483,9 +490,8 @@ class TestDiagL2NanCounts:
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
     def test_writes_keys_even_when_no_data(self):
-        """KPF2 with no FLUX extensions populated should still write all 5
-        keys with value 0 (consistent header schema)."""
-        kpf2 = _make_kpf2_with_flux(populate=False)
+        # The header schema stays consistent: all five keys present, value 0.
+        kpf2 = _make_kpf2_nan_pixels(populate=False)
         DiagL2(kpf2).run()
         for key in _NAN_KEYS:
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
@@ -493,47 +499,32 @@ class TestDiagL2NanCounts:
 
 class TestDiagL2ZeroFlux:
     def test_zerofrac_written_when_data_present(self):
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
         assert "ZEROFRAC" in kpf2.headers["QUALITY_CONTROL"]
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.0)
 
     def test_zerofrac_one_when_all_zero(self):
-        kpf2 = _make_kpf2_with_flux(zero_frac=1.0)
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=1.0)
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
 
     def test_zerofrac_half_when_half_zero(self):
-        """Exactly half of every fiber's flux pixels zeroed → ZEROFRAC == 0.5.
-
-        Deterministic even/odd pattern (each array has an even pixel count), so
-        the result is exact and independent of array size and seed.
-        """
-        kpf2 = _make_kpf2_with_flux(zero_frac=0.0)  # all ones
+        # A deterministic even/odd pattern (every array has an even pixel count)
+        # makes ZEROFRAC exactly 0.5, independent of array size and seed.
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)  # all ones
         for chip in ("GREEN", "RED"):
             for fiber in _FIBERS:
                 arr = np.ones_like(np.asarray(kpf2.data[f"{chip}_{fiber}_FLUX"]))
-                arr.reshape(-1)[::2] = 0.0  # every other pixel → exactly 50%
+                arr.reshape(-1)[::2] = 0.0
                 kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.5)
 
     def test_zerofrac_skipped_when_no_data(self):
-        """KPF2 with no populated FLUX extensions → no ZEROFRAC key written."""
-        kpf2 = _make_kpf2_with_flux(populate=False)
+        kpf2 = _make_kpf2_nan_pixels(populate=False)
         DiagL2(kpf2).run()
         assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]
-
-
-def _set_fiber_arrays(kpf2, suffix, value, chips=("GREEN", "RED"), fibers=_FIBERS):
-    """Populate {chip}_{fiber}_{suffix} with a constant for the given fibers."""
-    norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
-    for chip in chips:
-        for fiber in fibers:
-            kpf2.set_data(
-                f"{chip}_{fiber}_{suffix}",
-                np.full((norder[chip], _NCOL_TEST), value, dtype=np.float32),
-            )
 
 
 # ---------------------------------------------------------------------------
@@ -545,18 +536,22 @@ class TestDiagL2Snr:
     _SNR_KEYS = ("GSNRSCI", "GSNRSKY", "GSNRCAL", "RSNRSCI", "RSNRSKY", "RSNRCAL")
 
     def test_keys_written_when_flux_and_var_present(self):
-        kpf2 = _make_kpf2_with_flux()  # all FLUX ones
-        _set_fiber_arrays(kpf2, "VAR", 0.25)
+        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones
+        set_fiber_arrays(kpf2, "VAR", 0.25, ncol=_NCOL_TEST)
         DiagL2(kpf2).run()
+        # FLUX = 1, VAR = 0.25 -> per-fiber SNR = 1/sqrt(0.25) = 2.0 exactly, and
+        # the three summed SCI orderlets give 3/sqrt(0.75) = 3.464.
+        qc = kpf2.headers["QUALITY_CONTROL"]
         for key in self._SNR_KEYS:
-            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
-            assert kpf2.headers["QUALITY_CONTROL"].get(key) > 0
+            assert key in qc, f"missing {key}"
+            expected = 3.464 if key.endswith("SCI") else 2.0
+            assert qc.get(key) == pytest.approx(expected, abs=0.01), key
 
     def test_single_fiber_snr_value(self):
         # SKY flux=2, var=0.04 -> SNR = 2/sqrt(0.04) = 10.0 in every pixel.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",))
-        _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",), ncol=_NCOL_TEST)
+        set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",), ncol=_NCOL_TEST)
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSKY") == pytest.approx(
             10.0, abs=0.01
@@ -568,9 +563,13 @@ class TestDiagL2Snr:
     def test_summed_sci_snr_value(self):
         # Each SCI fiber flux=2, var=0.04 -> summed flux=6, var=0.12;
         # SNR = 6/sqrt(0.12) ~= 17.32.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"))
-        _set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(
+            kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"), ncol=_NCOL_TEST
+        )
+        set_fiber_arrays(
+            kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"), ncol=_NCOL_TEST
+        )
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSCI") == pytest.approx(
             17.32, abs=0.05
@@ -579,15 +578,17 @@ class TestDiagL2Snr:
     def test_summed_sci_skipped_when_a_sci_var_missing(self):
         # VAR for SCI1/SCI2 only (SCI3 var stays empty) -> summed-SCI skipped,
         # but SKY (var present) is still computed.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(
+            kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"), ncol=_NCOL_TEST
+        )
         DiagL2(kpf2).run()
         assert "GSNRSCI" not in kpf2.headers["QUALITY_CONTROL"]
         assert "GSNRSKY" in kpf2.headers["QUALITY_CONTROL"]
 
     def test_skipped_without_var(self):
         # Default fixture leaves VAR empty -> no SNR keys at all.
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_pixels()
         DiagL2(kpf2).run()
         for key in self._SNR_KEYS:
             assert key not in kpf2.headers["QUALITY_CONTROL"]
@@ -612,7 +613,7 @@ class TestDiagL2OrderletFluxRatios:
 
     def test_keys_written_and_unity_when_uniform(self):
         # All fibers flux=1 (default) -> every inter-fiber ratio == 1.0.
-        kpf2 = _make_kpf2_with_flux()
+        kpf2 = _make_kpf2_nan_pixels()
         DiagL2(kpf2).run()
         for key in self._RATIO_KEYS:
             assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
@@ -620,8 +621,10 @@ class TestDiagL2OrderletFluxRatios:
 
     def test_ratio_value(self):
         # GREEN SCI1 flux=2 over SCI2 flux=1 -> GFR12 == 2.0.
-        kpf2 = _make_kpf2_with_flux()
-        _set_fiber_arrays(kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",))
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(
+            kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",), ncol=_NCOL_TEST
+        )
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("GFR12") == pytest.approx(2.0)
 
@@ -672,6 +675,21 @@ class TestDiagL4:
         assert qc["BJDMEAN"] == pytest.approx(15.0)
         assert qc["BJDRNG"] == pytest.approx(864000.0)
         assert qc["BERVMEAN"] == pytest.approx(0.2)
+
+    def test_all_zero_weights_skips_metrics(self):
+        # w.sum() <= 0 makes _weighted_dispersion return None and the metrics are
+        # skipped entirely. That is load-bearing: absent BERVRNG/BJDRNG make
+        # QCL4.berv_within_tolerance / bjd_within_tolerance return False on a
+        # target frame, so this producing half must stay in step with the QC half.
+        l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [0.0, 0.0])
+        assert DiagL4(l4).run() == {}
+
+    def test_non_finite_samples_dropped(self):
+        # A NaN BJD is masked out rather than poisoning the mean; the surviving
+        # order is the answer.
+        l4 = _l4_with_sci2_rv([10.0, np.nan], [0.1, 0.3], [1.0, 1.0])
+        DiagL4(l4).run()
+        assert l4.headers["QUALITY_CONTROL"]["BJDMEAN"] == pytest.approx(10.0)
 
     def test_skips_without_sci2_rv_table(self):
         # No SCI2 RV table (e.g. unilluminated science) -> no metrics written.

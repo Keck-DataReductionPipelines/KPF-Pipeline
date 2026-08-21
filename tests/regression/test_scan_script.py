@@ -1,41 +1,20 @@
 """Tests for scripts/processing/_scan.py: up-front L0 mini-db cache warming.
 
-_scan owns the in-process, parallel-by-datecode header scan the masters and
-science orchestrators run before their fan-out, so the fanned-out reduces read the
-mini-db cache read-only. These cover the per-night primitive, the generic parallel
-dispatcher (including the per-thread-FileHandler no-contamination invariant), and
-the fail-soft warm entry point.
-
-Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
+_scan owns the parallel-by-datecode header scan the masters and science
+orchestrators run before their fan-out, so the fanned-out reduces read the mini-db
+cache read-only. Frames are synthetic FITS in temp trees; no testdata is needed.
 """
 
 from pathlib import Path
 
 import pytest
-from astropy.io import fits
 
 from scripts.processing import _scan
 
+from ._scripts import write_l0_tree
+
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
-
-
-def _write_l0(data_input, datecode, seconds, obj="10700", imtype="Object"):
-    """Write one L0 frame under {data_input}/L0/{datecode}; return its obs_id."""
-    l0_dir = Path(data_input) / "L0" / datecode
-    l0_dir.mkdir(parents=True, exist_ok=True)
-    obs_id = f"KP.{datecode}.{seconds:05d}.00"
-    header = fits.Header(
-        {
-            "OBJECT": obj,
-            "IMTYPE": imtype,
-            "TARGNAME": obj,
-            "EXPTIME": 60.0,
-            "ELAPSED": 60.0,
-        }
-    )
-    fits.PrimaryHDU(header=header).writeto(l0_dir / f"{obs_id}.fits")
-    return obs_id
 
 
 def _cache_path(data_input, datecode):
@@ -49,19 +28,18 @@ def _cache_path(data_input, datecode):
 
 class TestScanNightToCache:
     def test_scans_and_writes_cache(self, tmp_path):
-        _write_l0(str(tmp_path), "20240101", 3600)
-        _write_l0(str(tmp_path), "20240101", 3700)
+        write_l0_tree(str(tmp_path), "20240101", 3600)
+        write_l0_tree(str(tmp_path), "20240101", 3700)
 
         df = _scan.scan_night_to_cache(str(tmp_path), "20240101")
 
         assert df is not None
         assert len(df) == 2
-        assert _cache_path(str(tmp_path), "20240101").is_file()  # cache="rw" wrote it
+        assert _cache_path(str(tmp_path), "20240101").is_file()  # default cache="rw"
 
     def test_read_only_mode_does_not_write(self, tmp_path):
-        # cache="r" scans in-process but writes no cache CSV (recipes read the
-        # cache; only the scripts layer writes it).
-        _write_l0(str(tmp_path), "20240101", 3600)
+        # Recipes read the cache; only the scripts layer writes it.
+        write_l0_tree(str(tmp_path), "20240101", 3600)
 
         df = _scan.scan_night_to_cache(str(tmp_path), "20240101", cache="r")
 
@@ -69,8 +47,8 @@ class TestScanNightToCache:
         assert not _cache_path(str(tmp_path), "20240101").exists()
 
     def test_empty_night_returns_none(self, tmp_path):
-        # A datecode dir with no FITS files -> ValueError inside build_mini_database,
-        # swallowed here: returns None, no cache written, no raise.
+        # An empty datecode dir raises ValueError inside build_mini_database; _scan
+        # swallows it and returns None rather than aborting the batch.
         (Path(tmp_path) / "L0" / "20240101").mkdir(parents=True)
         assert _scan.scan_night_to_cache(str(tmp_path), "20240101") is None
         assert not _cache_path(str(tmp_path), "20240101").exists()
@@ -88,7 +66,7 @@ class TestScanDatecodes:
     def test_returns_per_night_results(self, tmp_path):
         datecodes = ["20240101", "20240102", "20240103"]
         results = _scan.scan_datecodes(datecodes, jobs=3, worker=lambda dc: (dc, ""))
-        assert sorted(results) == datecodes  # one result per night, order-agnostic
+        assert sorted(results) == datecodes  # order-agnostic: the pool is unordered
 
     def test_tolerates_jobs_exceeding_datecodes(self, tmp_path):
         results = _scan.scan_datecodes(["20240101"], jobs=8, worker=lambda dc: (dc, ""))
@@ -99,12 +77,11 @@ class TestScanDatecodes:
 
     def test_threaded_scan_no_contamination(self, tmp_path):
         # Each night gets its own FileHandler inside scan_night_to_cache, so a pooled
-        # scan never collapses nights via a shared self._mini_db. Worker returns each
-        # night's obs_id set; assert every night is exact under an 8-wide pool.
-        nights = [f"202401{d:02d}" for d in range(1, 7)]  # six nights
+        # scan never collapses nights via a shared self._mini_db.
+        nights = [f"202401{d:02d}" for d in range(1, 7)]
         expected = {}
         for dc in nights:
-            ids = {_write_l0(str(tmp_path), dc, 3600 + j * 100) for j in range(4)}
+            ids = {write_l0_tree(str(tmp_path), dc, 3600 + j * 100) for j in range(4)}
             expected[dc] = ids
 
         def _worker(dc):
@@ -125,7 +102,7 @@ class TestWarmMiniDbCaches:
     def test_writes_all_and_counts(self, tmp_path):
         nights = ["20240101", "20240102"]
         for dc in nights:
-            _write_l0(str(tmp_path), dc, 3600)
+            write_l0_tree(str(tmp_path), dc, 3600)
 
         written, skipped = _scan.warm_mini_db_caches(str(tmp_path), nights, jobs=2)
 
@@ -134,11 +111,10 @@ class TestWarmMiniDbCaches:
             assert _cache_path(str(tmp_path), dc).is_file()
 
     def test_read_only_mode_skips_prescan(self, tmp_path):
-        # A read-only mode warms nothing: no cache is written and every night is
-        # reported skipped, without even scanning.
+        # A read-only mode warms nothing: every night is reported skipped, unscanned.
         nights = ["20240101", "20240102"]
         for dc in nights:
-            _write_l0(str(tmp_path), dc, 3600)
+            write_l0_tree(str(tmp_path), dc, 3600)
 
         written, skipped = _scan.warm_mini_db_caches(
             str(tmp_path), nights, jobs=2, cache="r"
@@ -149,7 +125,7 @@ class TestWarmMiniDbCaches:
             assert not _cache_path(str(tmp_path), dc).exists()
 
     def test_empty_night_counted_skipped(self, tmp_path):
-        _write_l0(str(tmp_path), "20240101", 3600)  # good
+        write_l0_tree(str(tmp_path), "20240101", 3600)  # good
         (Path(tmp_path) / "L0" / "20240102").mkdir(parents=True)  # empty
 
         written, skipped = _scan.warm_mini_db_caches(
@@ -159,8 +135,8 @@ class TestWarmMiniDbCaches:
         assert (written, skipped) == (1, 1)
 
     def test_fail_soft_on_pool_error(self, tmp_path, monkeypatch):
-        # A pool-level surprise must never abort the batch: warm swallows it and
-        # reports every night as skipped so the reduces fall back to in-process scans.
+        # A pool-level failure must never abort the batch: warm reports every night
+        # skipped so the reduces fall back to in-process scans.
         def _boom(datecodes, jobs, worker, *, label="scanning"):
             raise RuntimeError("pool exploded")
 
