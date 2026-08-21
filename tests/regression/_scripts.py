@@ -24,13 +24,14 @@ CHILD_WARNINGS = ",".join(
     (
         "error",
         "ignore:Card is too long",
-        "default::ResourceWarning",
     )
 )
 
-# A child that reaches the network (AstroQuery, astropy's IERS auto-download) can
-# block forever, so cap every run: a hang becomes a loud TimeoutExpired instead of
-# a stalled suite. Generous enough for a slow-but-working run.
+# AstroQuery is bounded now (kpfpipe.utils.network's per-request timeouts) and
+# stdin=DEVNULL below rules out a tty stop, but astropy's and barycorrpy's
+# reference-data downloads still have no bound we control. Cap every run anyway:
+# a hang becomes a loud TimeoutExpired instead of a stalled suite, which is how
+# both of the bugs above were found. Generous enough for a slow-but-working run.
 CHILD_TIMEOUT = 120
 
 
@@ -46,6 +47,10 @@ def run_script(script, *argv, timeout=CHILD_TIMEOUT):
         [sys.executable, script, *map(str, argv)],
         cwd=REPO_ROOT,
         env=env,
+        # Without this the child inherits the terminal's stdin, and a read from a
+        # background process group raises SIGTTIN -- which *stops* the process at
+        # 0% CPU, indistinguishable from a hang.
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         timeout=timeout,

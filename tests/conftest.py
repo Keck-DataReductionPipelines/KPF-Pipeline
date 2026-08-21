@@ -16,36 +16,89 @@ from astropy.io import fits
 from astropy.table import Table
 
 # ---------------------------------------------------------------------------
-# Offline guard -- deliberately module-scope, not a fixture
+# Network guard -- deliberately module-scope, not a fixture
 # ---------------------------------------------------------------------------
 #
-# The regression suite is offline by contract: every external query is mocked.
-# This makes that a rule the suite enforces rather than a claim its docstrings
-# make -- a test that reaches for the wire now fails loudly, naming the address.
+# Every catalog query the pipeline makes is mocked, and this makes that a rule
+# the suite enforces rather than a claim its docstrings make: a test that loses
+# its patch fails loudly, naming the host.
 #
-# It must run at import, not in a fixture: astroquery.gaia opens a connection to
-# the ESA archive when `kpfpipe.modules.astro_query` is imported
-# (astro_query.py:27, a filed production defect), and that import happens during
-# COLLECTION, before any fixture -- even a session-scoped autouse one -- can run.
-# Blocking it there is worth 1.4-2.7 s per worker process; astroquery survives
-# the refusal, printing "Status messages could not be retrieved" and carrying on
-# with the real `Gaia` object the tests patch.
+# It must run at import, not in a fixture. `import barycorrpy` fetches IERS_B and
+# leap seconds before it finishes executing, and that import happens during
+# COLLECTION -- before any fixture, even a session-scoped autouse one, can run.
 #
-# Loopback stays open so pytest-xdist, execnet and any local-socket test are
-# unaffected.
+# The suite is NOT strictly offline. Reference data is allowed through, because
+# there is no local cache to fall back on and no configuration that suppresses
+# the fetch. A cold machine therefore downloads ~120 MB on its first run. That is
+# the accepted price of not carrying a cache; it is paid by CI and by every fresh
+# checkout.
+
+# Mocked by every test that touches them. A connect here is a lost patch.
+_CATALOG_HOSTS = (
+    "gea.esac.esa.int",  # ESA Gaia TAP
+    "simbad.cds.unistra.fr",  # SIMBAD, and its Harvard mirror below
+    "simbad.harvard.edu",
+)
+
+# Reference data with no local alternative. Each entry is here because something
+# fetches it unconditionally at import or first use -- not for convenience.
+_REFERENCE_HOSTS = (
+    "hpiers.obspm.fr",  # IERS_B + leap seconds; barycorrpy fetches at import
+    "datacenter.iers.org",  # astropy IERS_A (Earth orientation)
+    "maia.usno.navy.mil",  # IERS_A mirror, also barycorrpy's own
+    "naif.jpl.nasa.gov",  # JPL solar-system ephemeris
+    "data.astropy.org",  # astropy's data server, and its mirror below
+    "www.astropy.org",
+)
+
+_real_getaddrinfo = socket.getaddrinfo
 _real_connect = socket.socket.connect
 
+# IPs that came back from resolving an allowed host. connect() is handed an
+# address, not a name, so this is the only way it can tell them apart.
+_allowed_addresses = set()
 
-def _no_outbound_connect(self, address, *args, **kwargs):
+
+def _is_local(host):
+    # host is None when binding; loopback must stay open or xdist/execnet die.
+    if host is None:
+        return True
+    if isinstance(host, bytes):
+        host = host.decode("ascii", "replace")
+    return isinstance(host, str) and (
+        host.startswith("127.") or host in ("::1", "localhost", "0.0.0.0", "")
+    )
+
+
+def _blocked(host):
+    why = (
+        "the suite mocks this catalog -- a test lost its patch"
+        if host in _CATALOG_HOSTS
+        else f"not a known reference-data host; allowed: {', '.join(_REFERENCE_HOSTS)}"
+    )
+    return OSError(f"tests/conftest.py blocked a connection to {host!r}: {why}")
+
+
+def _guarded_getaddrinfo(host, *args, **kwargs):
+    if _is_local(host):
+        return _real_getaddrinfo(host, *args, **kwargs)
+    if host not in _REFERENCE_HOSTS:
+        raise _blocked(host)
+    infos = _real_getaddrinfo(host, *args, **kwargs)
+    _allowed_addresses.update(info[4][0] for info in infos)
+    return infos
+
+
+def _guarded_connect(self, address, *args, **kwargs):
+    # The backstop: catches anything that reaches a bare IP without resolving it.
     host = address[0] if isinstance(address, tuple) else address
-    if isinstance(host, str) and (
-        host.startswith("127.") or host in ("::1", "localhost")
-    ):
+    if _is_local(host) or host in _allowed_addresses:
         return _real_connect(self, address, *args, **kwargs)
-    raise OSError(f"the regression suite is offline; blocked connect to {address!r}")
+    raise _blocked(host)
 
 
-socket.socket.connect = _no_outbound_connect
+socket.getaddrinfo = _guarded_getaddrinfo
+socket.socket.connect = _guarded_connect
 
 # Fixed seed so every synthetic-FITS fixture is byte-stable across runs.
 _SEED = 20240113
@@ -129,16 +182,16 @@ def _catalog_record_hdu():
     AstroQuery(l0)._write_catalog_record(
         "kpf-drp",
         {
-            "object": "Gaia_HD10700",
+            "object": "Gaia DR3 12345",
             "radec_src": "gaia",
             "plx_src": "gaia",
             "rv_src": "gaia",
-            "ra": "01:44:04.0000",
-            "dec": "-15:56:14.900",
-            "pmra": -1.7,
-            "pmdec": 0.85,
-            "parallax": 273.8,
-            "rv": -16.6,
+            "ra": "12:00:00.0000",
+            "dec": "+40:00:00.000",
+            "pmra": 0.5,
+            "pmdec": -0.3,
+            "parallax": 50.0,
+            "rv": 10.0,
             "frame": "icrs",
             "epoch": 2016.0,
             "equinox": 2000.0,
@@ -160,7 +213,7 @@ def synthetic_l0_file(tmp_path_factory):
     primary.header["MJD-OBS"] = 60322.43537  # JD_UTC source (full JD = + 2400000.5)
     primary.header["EXPTIME"] = 300.0
     primary.header["ELAPSED"] = 300.0
-    primary.header["OBJECT"] = "HD_10700"
+    primary.header["OBJECT"] = "10700"
     primary.header["IMTYPE"] = "Object"
     primary.header["GROBSERV"] = "Smith"
     primary.header["PROGNAME"] = "K123"

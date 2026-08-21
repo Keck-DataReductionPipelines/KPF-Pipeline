@@ -6,6 +6,7 @@ and lets each case assert the message as well as the exit code.
 """
 
 import os
+import subprocess
 import sys
 
 import pytest
@@ -14,7 +15,7 @@ from kpfpipe.utils.io import kpf_directory
 from scripts.quality_control import qlp
 
 from ._data_models import write_amp_l0
-from ._scripts import run_script, write_config
+from ._scripts import CHILD_TIMEOUT, REPO_ROOT, run_script, write_config
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
@@ -128,3 +129,47 @@ class TestQLPScript:
             _main(monkeypatch)
         assert exc.value.code == 2
         assert "--level" in capsys.readouterr().err
+
+
+# Drives main() the way a shell would, then reports what matplotlib settled on.
+# main() must import the renderers *after* it sets MPLBACKEND, so anything qlp.py
+# pulls in at module scope that already touches matplotlib will show up here.
+_BACKEND_PROBE = """
+import sys
+from scripts.quality_control.qlp import main
+sys.argv = ["qlp.py", "--input", sys.argv[1], "--level", "L0",
+            "--output_dir", sys.argv[2]]
+main()
+import matplotlib
+print("BACKEND", matplotlib.get_backend())
+"""
+
+
+def test_entry_point_selects_a_headless_backend(tmp_path):
+    """qlp.py must resolve matplotlib to Agg, not to a windowing backend.
+
+    The pipeline runs headless. With MPLBACKEND unset this machine resolves to
+    macosx, which needs a display -- so the entry point sets it before the first
+    matplotlib import rather than leaving it to the environment.
+
+    MPLBACKEND is scrubbed deliberately: tests/regression/conftest.py sets it, and
+    run_script hands the child a copy of os.environ, so a child that inherited it
+    would pass whether or not qlp.py did anything at all.
+    """
+    fixture = tmp_path / f"{_OBS_ID}.fits"
+    _write_l0_image_fixture(str(fixture))
+
+    env = {k: v for k, v in os.environ.items() if k != "MPLBACKEND"}
+    env["PYTHONPATH"] = REPO_ROOT
+    proc = subprocess.run(
+        [sys.executable, "-c", _BACKEND_PROBE, str(fixture), str(tmp_path / "out")],
+        cwd=REPO_ROOT,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=CHILD_TIMEOUT,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "BACKEND Agg" in proc.stdout, proc.stdout

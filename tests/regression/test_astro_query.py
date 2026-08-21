@@ -2,14 +2,16 @@
 
 Covers ``merge_catalog_records`` (gaia/simbad/wmko -> the canonical ``kpf-drp``
 row), ``read_wmko_header`` off synthetic L0 PRIMARY TARG*, and the external query
-contract. The network is never touched: ``Gaia.launch_job``/``Simbad`` are mocked
-with one-row result Tables, so parsing, the fail-soft None+warning paths, and the
-``_verify_units`` schema-drift guard all run offline. That is enforced, not just
-intended -- tests/conftest.py blocks outbound connect() for the whole suite.
+contract. The network is never touched: the ``gaia_client``/``simbad_client``
+factories are mocked to hand back one-row result Tables, so parsing, the fail-soft
+None+warning paths, and the ``_verify_units`` schema-drift guard all run offline.
+That is enforced, not just intended -- tests/conftest.py blocks connects to the
+catalog hosts for the whole suite.
 """
 
 import logging
 import re
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -522,11 +524,25 @@ def _l0_for_query(**primary):
     return l0
 
 
+@contextmanager
 def _patch_gaia(job_or_exc):
-    target = "kpfpipe.modules.astro_query.Gaia.launch_job"
+    """Patch the Gaia client factory, yielding the ``launch_job`` mock to assert on.
+
+    Production builds a client per attempt (``gaia_client().launch_job(...)``); one
+    mock client answers every call, so call_count accumulates across retries.
+    """
+    client = MagicMock()
     if isinstance(job_or_exc, Exception):
-        return patch(target, side_effect=job_or_exc)
-    return patch(target, return_value=job_or_exc)
+        client.launch_job.side_effect = job_or_exc
+    else:
+        client.launch_job.return_value = job_or_exc
+    with patch("kpfpipe.modules.astro_query.gaia_client", return_value=client):
+        yield client.launch_job
+
+
+def _patch_simbad(instance):
+    """Patch the SIMBAD client factory to return ``instance``."""
+    return patch("kpfpipe.modules.astro_query.simbad_client", return_value=instance)
 
 
 class TestExternalQueries:
@@ -673,10 +689,7 @@ class TestExternalQueries:
     def test_query_simbad_parses_and_writes(self):
         l0 = _l0_for_query(OBJECT="10700")
         aq = AstroQuery(l0)
-        with patch(
-            "kpfpipe.modules.astro_query.Simbad",
-            return_value=_simbad_instance(_simbad_table()),
-        ):
+        with _patch_simbad(_simbad_instance(_simbad_table())):
             rec = aq.query_simbad()
         assert rec is not None
         exp_ra, exp_dec = AstroQuery._sexagesimal_radec(
@@ -698,10 +711,7 @@ class TestExternalQueries:
         # A color needs both magnitudes; one unmeasured -> no color.
         l0 = _l0_for_query(OBJECT="10700")
         aq = AstroQuery(l0)
-        with patch(
-            "kpfpipe.modules.astro_query.Simbad",
-            return_value=_simbad_instance(_simbad_table({"V": float("nan")})),
-        ):
+        with _patch_simbad(_simbad_instance(_simbad_table({"V": float("nan")}))):
             rec = aq.query_simbad()
         assert rec["color"] is None and rec["color_name"] is None
 
@@ -717,7 +727,7 @@ class TestExternalQueries:
         inst = MagicMock()
         inst.query_object.side_effect = ConnectionError("simbad down")
         with (
-            patch("kpfpipe.modules.astro_query.Simbad", return_value=inst),
+            _patch_simbad(inst),
             patch("kpfpipe.utils.network.time.sleep"),
             caplog.at_level(logging.WARNING),
         ):
@@ -728,10 +738,7 @@ class TestExternalQueries:
     def test_query_simbad_no_match_returns_none(self, caplog):
         aq = AstroQuery(_l0_for_query(OBJECT="NotARealStar"))
         with (
-            patch(
-                "kpfpipe.modules.astro_query.Simbad",
-                return_value=_simbad_instance(None),
-            ),
+            _patch_simbad(_simbad_instance(None)),
             caplog.at_level(logging.WARNING),
         ):
             assert aq.query_simbad() is None
@@ -739,9 +746,8 @@ class TestExternalQueries:
 
     def test_query_simbad_unit_mismatch_raises(self):
         aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
-        with patch(
-            "kpfpipe.modules.astro_query.Simbad",
-            return_value=_simbad_instance(_simbad_table(units={"plx_value": u.arcsec})),
+        with _patch_simbad(
+            _simbad_instance(_simbad_table(units={"plx_value": u.arcsec}))
         ):
             with pytest.raises(ValueError, match="unexpected column units"):
                 aq.query_simbad()
@@ -795,10 +801,9 @@ class TestRequestMatchesParse:
     def test_simbad_votable_fields_match_parsed_columns(self):
         # ra/dec arrive in SIMBAD's default basic set, so they are not requested.
         aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
-        inst = _simbad_instance(_simbad_table())
-        with patch("kpfpipe.modules.astro_query.Simbad", return_value=inst):
+        with _patch_simbad(_simbad_instance(_simbad_table())) as simbad_client:
             aq.query_simbad()
-        requested = set(inst.add_votable_fields.call_args.args)
+        requested = set(simbad_client.call_args.args[0])
         assert requested == set(_SIMBAD_UNITS) - {"ra", "dec"}
 
 
@@ -833,10 +838,9 @@ class TestBareGaiaIdResolution:
     @staticmethod
     def _query(**kwargs):
         aq = AstroQuery(_l0_for_query(GAIAID="12345"))  # bare: no release prefix
-        with patch(
-            "kpfpipe.modules.astro_query.Gaia.launch_job",
-            side_effect=_release_aware_launch_job(**kwargs),
-        ):
+        client = MagicMock()
+        client.launch_job.side_effect = _release_aware_launch_job(**kwargs)
+        with patch("kpfpipe.modules.astro_query.gaia_client", return_value=client):
             return aq.query_gaia()
 
     def test_newest_matching_release_wins(self, caplog):
@@ -885,10 +889,7 @@ def _perform(**config):
     aq = AstroQuery(l0, config or None)
     with (
         _patch_gaia(_gaia_job(_gaia_table({"ra": 10.0}))),
-        patch(
-            "kpfpipe.modules.astro_query.Simbad",
-            return_value=_simbad_instance(_simbad_table({"ra": 20.0})),
-        ),
+        _patch_simbad(_simbad_instance(_simbad_table({"ra": 20.0}))),
     ):
         aq.perform()
     return aq, aq.l0_obj.data["CATALOG_RECORD"]

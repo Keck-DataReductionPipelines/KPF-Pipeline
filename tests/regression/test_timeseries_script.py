@@ -312,14 +312,11 @@ class TestMainDispatch:
         monkeypatch.setattr(ts, "setup_batch_logging", lambda *a, **k: "/logs/x.log")
         calls = []
 
-        class _Result:
-            returncode = 0
-
-        def _run(argv, **kwargs):
+        def _run_stage(argv):
             calls.append(argv)
-            return _Result()
+            return 0
 
-        monkeypatch.setattr(ts.subprocess, "run", _run)
+        monkeypatch.setattr(ts, "_run_stage", _run_stage)
         return calls
 
     def test_missing_log_dir_exits(self, ts, monkeypatch, tmp_path):
@@ -439,10 +436,7 @@ class TestMainDispatch:
         _write_l0(str(tmp_path), "20240101", 3600, "10700")
         self._patch(ts, monkeypatch, tmp_path)
 
-        class _Fail:
-            returncode = 1
-
-        monkeypatch.setattr(ts.subprocess, "run", lambda *a, **k: _Fail())
+        monkeypatch.setattr(ts, "_run_stage", lambda argv: 1)
         with pytest.raises(SystemExit) as exc:
             ts.main(_BASE_ARGS)
         assert exc.value.code == 1

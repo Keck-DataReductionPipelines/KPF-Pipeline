@@ -32,10 +32,10 @@ class TestToKPF4:
     def test_to_kpf4_forwards_primary_header(self):
         kpf2 = KPF2()
         kpf2.headers["PRIMARY"]["INSTRUME"] = "KPF"
-        kpf2.headers["PRIMARY"]["OBJECT"] = "HD_10700"
+        kpf2.headers["PRIMARY"]["OBJECT"] = "10700"
         kpf4 = kpf2.to_kpf4()
         assert kpf4.headers["PRIMARY"]["INSTRUME"] == "KPF"
-        assert kpf4.headers["PRIMARY"]["OBJECT"] == "HD_10700"
+        assert kpf4.headers["PRIMARY"]["OBJECT"] == "10700"
 
     def test_to_kpf4_sets_datalvl(self):
         kpf2 = KPF2()
