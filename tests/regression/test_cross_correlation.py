@@ -525,11 +525,9 @@ class TestComputeCCFPublic:
         assert not np.allclose(full, clipped)
 
     def test_clip_edge_pixels_ends_are_distinguished(self, cc_module):
-        # clip_edge_pixels is [short_wavelength_end, long_wavelength_end]; on this
-        # ascending fixture pixel 0 is the short end, so clipping one end must not
-        # produce the same CCF as clipping the other. (The descending branch at
-        # cross_correlation.py:512 is unreachable in production and is not covered
-        # here -- see the dead-code defect report.)
+        # clip_edge_pixels is [short_wavelength_end, long_wavelength_end]; WAVE is
+        # ascending, so pixel 0 is the short end and clipping one end must not
+        # produce the same CCF as clipping the other.
         blue = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[800, 0])["ccf"]
         red = cc_module.compute_ccfs("GREEN", "SCI2", clip_edge_pixels=[0, 800])["ccf"]
         assert not np.allclose(blue, red)

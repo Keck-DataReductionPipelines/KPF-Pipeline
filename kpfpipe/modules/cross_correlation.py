@@ -496,8 +496,9 @@ class CrossCorrelation:
         var = np.asarray(self.l2_obj.data[f"{chip}_{fiber}_VAR"], dtype=np.float64)
 
         # Drop the blaze-faint, low-S/N order edges (they inject CCF noise).
-        # clip_edge_pixels is [short_wavelength_end, long_wavelength_end]; map to
-        # the pixel axis via the measured dispersion direction.
+        # clip_edge_pixels is [short_wavelength_end, long_wavelength_end]; WAVE is
+        # ascending (blue->red), enforced in _compute_ccf_1d, so pixel 0 is the
+        # short-wavelength end.
         n_short, n_long = int(clip_edge_pixels[0]), int(clip_edge_pixels[1])
         if n_short or n_long:
             ncol = flux.shape[1]
@@ -506,10 +507,7 @@ class CrossCorrelation:
                     f"clip_edge_pixels {list(clip_edge_pixels)} removes all "
                     f"{ncol} pixels of {chip}_{fiber}"
                 )
-            if np.nanmedian(np.diff(wave, axis=1)) >= 0:  # pixel 0 = short wavelength
-                cols = slice(n_short, ncol - n_long)
-            else:
-                cols = slice(n_long, ncol - n_short)
+            cols = slice(n_short, ncol - n_long)
             flux = flux[:, cols]
             wave = wave[:, cols]
             var = var[:, cols]
