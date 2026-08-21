@@ -47,7 +47,16 @@ def mocked_stack(module, arrays=None):
     ``save_master`` on it); otherwise prefer ``make_mocked_master``.
     """
     value = make_l1_arrays() if arrays is None else arrays
-    with patch.object(module, "stack_frames", return_value=value):
+
+    # Real stacking records its survivors in _stacked_files (the master's
+    # INPUT_FILES); the mock stands in for that too.
+    def _stack(l0_file_list=None, **kwargs):
+        module._stacked_files = list(
+            module.l0_file_list if l0_file_list is None else l0_file_list
+        )
+        return value
+
+    with patch.object(module, "stack_frames", side_effect=_stack):
         yield module
 
 

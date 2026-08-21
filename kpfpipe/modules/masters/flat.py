@@ -108,7 +108,7 @@ class Flat(BaseMasterModule):
             cal_type="flat",
         )
 
-        self.ml1_obj = self._build_ml1_obj(l1_arrays, l0_file_list, master_type="flat")
+        self.ml1_obj = self._build_ml1_obj(l1_arrays, master_type="flat")
         self._populate_stack_info(l1_arrays)
         self._track_info()
 
