@@ -1,16 +1,29 @@
-"""Tests for the network retry helper in kpfpipe.utils.network.
+"""Tests for the network helpers in kpfpipe.utils.network.
 
-The network is never touched: every test drives ``retry_request`` with a mock
-callable and patches ``time.sleep``, so the backoff is inspected, not waited out.
+No external host is contacted. The retry tests drive ``retry_request`` with a mock
+callable and patch ``time.sleep``, so the backoff is inspected, not waited out. The
+timeout tests need a real socket that stalls, so they use a loopback listener --
+which the conftest guard allows, and which no amount of mocking could stand in for.
 """
 
+import http.client
+import json
 import logging
+import socket
+import subprocess
+import sys
+import threading
+import time
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from pyvo.dal import DALQueryError, DALServiceError
 
-from kpfpipe.utils.network import _RETRY_WAITS, retry_request
+from kpfpipe.utils.network import _RETRY_WAITS, _RETRYABLE, retry_request, simbad_client
+
+from ._scripts import REPO_ROOT
 
 
 def _patch_sleep():
@@ -92,3 +105,191 @@ class TestRetryRequest:
         assert "Gaia DR3 request failed" in caplog.text
         assert "ConnectionError" in caplog.text
         assert "retrying in" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Import purity -- witnessed in a child, because this suite's conftest hides it
+# ---------------------------------------------------------------------------
+
+# Records every outbound connect, imports the module, and reports what it saw.
+# Run through `python -c` so no conftest loads: the suite's own network guard
+# would mask exactly the connection this is here to detect.
+_IMPORT_PROBE = """
+import json, socket, sys
+hits = []
+socket.socket.connect = lambda self, addr, *a, **k: hits.append(addr)
+socket.create_connection = lambda addr, *a, **k: hits.append(addr)
+import kpfpipe.modules.astro_query
+print(json.dumps({
+    "hits": [str(h) for h in hits],
+    "astroquery": sorted(m for m in sys.modules if m.startswith("astroquery")),
+}))
+"""
+
+
+@pytest.mark.cli
+def test_importing_astro_query_touches_no_network():
+    """Importing the module must not open a connection, nor pull in a client.
+
+    ``astroquery.gaia`` builds a module-level ``GaiaClass()`` whose constructor
+    fetches ESA status messages, so importing it *is* a connection. Both client
+    imports are deferred into the factories to keep that off every code path that
+    never queries a catalog -- this is the only thing that witnesses it.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-c", _IMPORT_PROBE],
+        cwd=REPO_ROOT,
+        env={"PYTHONPATH": REPO_ROOT, "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    seen = json.loads(proc.stdout.strip().splitlines()[-1])
+
+    assert seen["hits"] == []
+    # astroquery.exceptions is imported at module scope for the retryable-error
+    # tuple; it is cheap and reaches nothing. The two client modules are what must
+    # stay out, so name them rather than the package.
+    assert "astroquery.gaia" not in seen["astroquery"]
+    assert "astroquery.simbad" not in seen["astroquery"]
+
+
+# ---------------------------------------------------------------------------
+# Timeouts -- two transports, two seams
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _stalled_listener():
+    """A loopback address that accepts a connection and then never answers.
+
+    The listen backlog completes the TCP handshake without anyone calling
+    ``accept``, so the client blocks on the read -- the shape of the hang these
+    timeouts exist to bound.
+    """
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    try:
+        yield server.getsockname()
+    finally:
+        server.close()
+
+
+def _raises_within(seconds, func):
+    """Run ``func`` in a daemon thread; return the exception it raised.
+
+    Both seams fail by *not returning*, so calling ``func`` inline would hang the
+    suite instead of failing it. The thread is abandoned on timeout -- it is stuck
+    on a loopback read and dies with the interpreter.
+    """
+    outcome = []
+    thread = threading.Thread(
+        target=lambda: outcome.append(_capture(func)), daemon=True
+    )
+    started = time.monotonic()
+    thread.start()
+    thread.join(seconds)
+    assert not thread.is_alive(), (
+        f"still blocked after {seconds:.0f}s: nothing bounds it"
+    )
+    assert time.monotonic() - started < seconds
+    return outcome[0]
+
+
+def _capture(func):
+    try:
+        func()
+    except BaseException as exc:  # noqa: BLE001 -- the exception is the result
+        return exc
+    return None
+
+
+class _FakeSimbadClass:
+    """SimbadClass stand-in: the real one validates fields over the network.
+
+    Carries the one attribute ``simbad_client`` touches, so the adapter it mounts
+    is exercised on a genuine requests.Session.
+    """
+
+    def __init__(self):
+        self._session = requests.Session()
+
+    def add_votable_fields(self, *fields):
+        pass
+
+
+class TestTimeoutBounds:
+    """The two transports are bounded by two different seams -- assert both.
+
+    ``socket.setdefaulttimeout`` bounds Gaia's ``http.client`` transport but not
+    SIMBAD's, which goes through pyvo over ``requests`` and passes an explicit
+    ``timeout=None`` down to ``sock.settimeout``. Covering only the Gaia path would
+    let the SIMBAD half regress in silence.
+    """
+
+    def test_timeout_bounds_the_http_client_transport(self):
+        with _stalled_listener() as (host, port):
+
+            def request():
+                conn = http.client.HTTPConnection(host, port)
+                try:
+                    conn.request("GET", "/")
+                    conn.getresponse()
+                finally:
+                    conn.close()
+
+            with _patch_sleep():
+                raised = _raises_within(
+                    0.5 * (len(_RETRY_WAITS) + 1) + 10,
+                    lambda: retry_request(request, "stall", timeout=0.5),
+                )
+
+        # Classification matters as much as the bound: a timeout the retry loop
+        # did not recognise would escape on the first attempt instead of retrying.
+        assert isinstance(raised, _RETRYABLE)
+
+    def test_simbad_timeout_bounds_a_requests_call(self):
+        with _stalled_listener() as (host, port):
+            with patch("astroquery.simbad.SimbadClass", _FakeSimbadClass):
+                client = simbad_client(("B",), timeout=0.5)
+
+            # The point of the separate seam: nothing here is holding a socket
+            # default, so only the mounted adapter can end this call.
+            assert socket.getdefaulttimeout() is None
+            raised = _raises_within(
+                10, lambda: client._session.get(f"http://{host}:{port}/")
+            )
+
+        assert isinstance(raised, requests.exceptions.Timeout)
+
+    def test_socket_default_restored_after_success(self):
+        socket.setdefaulttimeout(7.0)
+        try:
+            retry_request(lambda: "ok", "Service", timeout=1.0)
+            assert socket.getdefaulttimeout() == 7.0
+        finally:
+            socket.setdefaulttimeout(None)
+
+    def test_socket_default_restored_after_failure(self):
+        # The non-transient path: one attempt, then the raise escapes the loop.
+        socket.setdefaulttimeout(7.0)
+        try:
+            with pytest.raises(ValueError):
+                retry_request(_raise(ValueError("bad")), "Service", timeout=1.0)
+            assert socket.getdefaulttimeout() == 7.0
+        finally:
+            socket.setdefaulttimeout(None)
+
+    def test_none_timeout_leaves_the_default_alone(self):
+        assert socket.getdefaulttimeout() is None
+        retry_request(lambda: "ok", "Service")
+        assert socket.getdefaulttimeout() is None
+
+
+def _raise(exc):
+    def func():
+        raise exc
+
+    return func

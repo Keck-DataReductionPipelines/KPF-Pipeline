@@ -52,9 +52,7 @@ def _load_recipe():
 # ---------------------------------------------------------------------------
 #
 # The four CATALOG_RECORD rows AstroQuery returned for OBS_ID on 2026-08-20,
-# captured verbatim from one live query (Gaia DR3, SIMBAD). The frame's target
-# is 47 UMa / HD 95128; a row reading RA 01:44 / Dec -15:56 is tau Ceti, i.e.
-# the wrong star, and would corrupt the barycentric correction by tens of km/s.
+# captured verbatim from one live query (Gaia DR3, SIMBAD).
 #
 # This is an oracle -- a recording of what production emits -- not a rebuild of
 # it: the rows go in through AstroQuery's own writer, and merge_catalog_records
@@ -62,8 +60,8 @@ def _load_recipe():
 # capture rather than silently agreeing with a reimplementation.
 #
 # To recapture: run AstroQuery(KPF0.from_fits(<L0>), config).perform() in a
-# plain python script (NOT under pytest, whose conftest blocks outbound
-# sockets) and dump l0.data["CATALOG_RECORD"] row by row.
+# plain python script (NOT under pytest, whose conftest blocks the catalog
+# hosts) and dump l0.data["CATALOG_RECORD"] row by row.
 _CATALOG_CAPTURE = {
     "wmko": {
         "object": "95128",
@@ -194,7 +192,8 @@ class TestScienceRecipe:
         recipe = _load_recipe()
         # The recipe module object is built fresh by _load_recipe() and dropped
         # with this fixture, so swapping the stage in place needs no patcher.
-        # This is the suite's only live-network call site; see _CATALOG_CAPTURE.
+        # AstroQuery is the recipe's one live-network stage; _FrozenAstroQuery
+        # replays a recording of it rather than querying. See _CATALOG_CAPTURE.
         recipe.AstroQuery = _FrozenAstroQuery
         recipe.main(config, args)
 
@@ -286,6 +285,55 @@ class TestScienceRecipe:
         assert "WLSDIR" not in receipt
         assert receipt.get("WLSFILE").endswith("_master_thar_L2.fits")
         assert isinstance(qc.get("WLSAGE"), float)
+
+    def test_catalog_record_reaches_the_science_cards(self, l2):
+        """The merged catalog row is copied onto every science fiber's C*# cards.
+
+        Expectations come from the capture itself, so this checks the overlay
+        wiring -- each canonical column landing on its keyword, for all three
+        science traces -- and stays indifferent to what the record contains.
+
+        The pairs are spelled out rather than read from _CATALOG_CARD_BASES: a
+        test that imported the mapping would agree with a renamed keyword
+        instead of catching it.
+        """
+        prim = l2.headers["PRIMARY"]
+        expected = _CATALOG_CAPTURE["kpf-drp"]
+        # SCI1-3 are traces 2-4 and carry identical astrometry.
+        for column, base in (
+            ("object", "CID"),
+            ("radec_src", "CSRC"),
+            ("ra", "CRA"),
+            ("dec", "CDEC"),
+            ("pmra", "CPMR"),
+            ("pmdec", "CPMD"),
+            ("parallax", "CPLX"),
+            ("rv", "CRV"),
+            ("epoch", "CEPCH"),
+            ("equinox", "CEQNX"),
+            ("color", "CCLR"),
+            ("color_name", "CCLRN"),
+        ):
+            for trace in (2, 3, 4):
+                card = f"{base}{trace}"
+                assert prim[card] == expected[column], card
+
+    def test_l4_rv_products_are_deterministic(self, l4):
+        """The same frames and masters must reproduce the same numbers.
+
+        A reproducibility pin on the pipeline, not a claim about the target: it
+        catches numerical drift and any loss of run-to-run determinism through
+        the barycentric and CCF chain.
+
+        These values are the only ones here coupled to what goes in: the truth
+        frames, the masters, and _CATALOG_CAPTURE. If this goes red, confirm all
+        three are unchanged before reading it as a pipeline regression --
+        different input needs a deliberate re-pin, not a fix.
+        """
+        prim = l4.headers["PRIMARY"]
+        assert prim["RV"] == pytest.approx(11.29034877686747, abs=1e-6)
+        assert prim["BERV"] == pytest.approx(-18.507963847544822, abs=1e-6)
+        assert prim["BJDTDB"] == pytest.approx(2460405.9689188506, abs=1e-9)
 
     def test_provenance_keywords_set(self, l2):
         # DRPTAG stays on the L2 PRIMARY; the other provenance cards live on

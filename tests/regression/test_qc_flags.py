@@ -608,8 +608,8 @@ class TestQCL0:
         l0 = _make_kpf0(tmp_path)
         record = {
             "object": "test",
-            "ra": "01:44:04.08",
-            "dec": "-15:56:14.9",
+            "ra": "12:00:00.00",
+            "dec": "+40:00:00.0",
             "pmra": 0.1,
             "pmdec": -0.2,
             "parallax": 100.0,

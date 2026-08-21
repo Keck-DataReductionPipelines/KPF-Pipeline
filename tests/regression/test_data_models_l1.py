@@ -286,11 +286,11 @@ class TestToKpf1:
         l1 = l0.to_kpf1()
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
-        assert l1.headers["PRIMARY"]["OBJECT"] == "HD_10700"
+        assert l1.headers["PRIMARY"]["OBJECT"] == "10700"
 
     # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.
     _KPF_DRP = {
-        "object": "Gaia123",
+        "object": "Gaia DR3 12345",
         "radec_src": "gaia",
         "plx_src": "gaia",
         "rv_src": "gaia",
@@ -324,7 +324,7 @@ class TestToKpf1:
         # Direct copy of the canonical row onto every SCI fiber (2,3,4), no conversion.
         p = self._l0_with_catalog(dict(self._KPF_DRP)).to_kpf1().headers["PRIMARY"]
         for i in (2, 3, 4):
-            assert p[f"CID{i}"] == "Gaia123"
+            assert p[f"CID{i}"] == "Gaia DR3 12345"
             assert p[f"CSRC{i}"] == "gaia"
             assert p[f"CRA{i}"] == "12:00:00.0000"
             assert p[f"CDEC{i}"] == "+40:00:00.000"
@@ -519,7 +519,7 @@ class TestCatalogRecordPassthrough:
     """
 
     @staticmethod
-    def _l0_with_catalog_table(rv=-16.6):
+    def _l0_with_catalog_table(rv=10.0):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))

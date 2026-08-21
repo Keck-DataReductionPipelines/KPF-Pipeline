@@ -24,13 +24,11 @@ import numpy as np
 from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
-from astroquery.gaia import Gaia
-from astroquery.simbad import Simbad
 
 from kpfpipe import DEFAULTS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.network import retry_request
+from kpfpipe.utils.network import gaia_client, retry_request, simbad_client
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +37,7 @@ _DEFAULTS = {
     "do_gaia_query": True,
     "do_simbad_query": True,
     "astrometry_priority": ("gaia", "simbad"),
+    "query_timeout": 30,
 }
 
 # Sources that can supply a CATALOG_RECORD row, highest catalog priority first.
@@ -72,6 +71,10 @@ _SIMBAD_UNITS = {
     "B": None,
     "V": None,
 }
+
+# Votable fields asked of SIMBAD, beyond the ra/dec every query returns. Spelled out
+# rather than derived from _SIMBAD_UNITS, so the two can be seen to diverge.
+_SIMBAD_FIELDS = ("pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V")
 
 # Queryable Gaia release -> its gaia_source table, newest last. DR1 and EDR3 are
 # excluded (no radial_velocity or BP/RP photometry, and superseded, respectively).
@@ -156,7 +159,7 @@ class AstroQuery:
         OBJECT, TARG*) is read but never modified.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: do_gaia_query, do_simbad_query,
-        astrometry_priority.
+        astrometry_priority, query_timeout.
     """
 
     def __init__(self, l0_obj, config=None):
@@ -266,7 +269,9 @@ class AstroQuery:
             )
             try:
                 found = retry_request(
-                    lambda q=query: Gaia.launch_job(q).get_results(), f"Gaia {release}"
+                    lambda q=query: gaia_client().launch_job(q).get_results(),
+                    f"Gaia {release}",
+                    timeout=self.query_timeout,
                 )
             except Exception as e:
                 logger.warning(
@@ -455,7 +460,9 @@ class AstroQuery:
         logger.info("querying Gaia %s for source_id %s", release, gaia_id)
         try:
             results = retry_request(
-                lambda: Gaia.launch_job(query).get_results(), f"Gaia {release}"
+                lambda: gaia_client().launch_job(query).get_results(),
+                f"Gaia {release}",
+                timeout=self.query_timeout,
             )
         except Exception as e:
             logger.warning(
@@ -523,11 +530,13 @@ class AstroQuery:
             return None
         logger.info("querying SIMBAD for %r", name)
         try:
-            simbad = Simbad()
-            simbad.add_votable_fields(
-                "pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V"
+            result = retry_request(
+                lambda: simbad_client(_SIMBAD_FIELDS, self.query_timeout).query_object(
+                    name
+                ),
+                "SIMBAD",
+                timeout=self.query_timeout,
             )
-            result = retry_request(lambda: simbad.query_object(name), "SIMBAD")
         except Exception as e:
             logger.warning(
                 "SIMBAD query failed (%s: %s); SIMBAD astrometry unavailable",

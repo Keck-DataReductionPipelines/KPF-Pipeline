@@ -169,8 +169,7 @@ class TestGuards:
 
 class TestRecipeLoading:
     """reduce.py's recipe-loading failure branches. All in-process via main(),
-    no subprocess. None of these asserts anything about clear_stale_outputs,
-    which runs earlier at reduce.py:149 -- see the note in that module."""
+    no subprocess."""
 
     def test_missing_recipe_file_exits(self, monkeypatch, tmp_path):
         cfg = _base_cfg(tmp_path)
@@ -202,6 +201,30 @@ class TestRecipeLoading:
             red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
 
         assert "uncaught exception; pipeline aborted" in caplog.text
+
+    def test_bad_recipe_leaves_prior_products_alone(self, monkeypatch, tmp_path):
+        # A mistyped -r must not cost a night's L1/L2/L4: clearing is destructive and
+        # unconditional, so it runs only once the recipe is known to load.
+        cfg = tmp_path / "sci.toml"
+        science_root = tmp_path / "sci"
+        cfg.write_text(
+            "[DATA_DIRS]\n"
+            'KPF_DATA_INPUT = "/cfg/in"\n'
+            'KPF_MASTERS_OUTPUT = "/cfg/m"\n'
+            f'KPF_SCIENCE_OUTPUT = "{science_root}"\n'
+            "[LOGGER]\n"
+            'log_dir = "/cfg/l"\n'
+        )
+        oid = "KP.20240405.40113.57"
+        product = red.kpf_filepath(oid, "L1", data_root=str(science_root))
+        os.makedirs(os.path.dirname(product), exist_ok=True)
+        open(product, "w").close()
+
+        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        with pytest.raises(SystemExit, match="Recipe file not found"):
+            red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", oid])
+
+        assert os.path.exists(product)
 
     def test_missing_log_dir_is_a_usage_error(self, monkeypatch, tmp_path):
         # resolve_logging's ValueError must surface as a clean usage error

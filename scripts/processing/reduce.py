@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Run one recipe on one unit (the ``kpfpipe run`` leaf).
 
-Reads the config, applies CLI overrides, configures logging, clears the unit's
-stale L1/L2/L4 products (see ``clear_stale_outputs``), and execs the recipe's
-``main(config, args)``. It is both the in-process target of ``kpfpipe run`` and
-the leaf the orchestrators (``masters.py``/``science.py``) fan out as
-``python -m scripts.processing.reduce`` subprocesses.
+Reads the config, applies CLI overrides, configures logging, loads the recipe,
+clears the unit's stale L1/L2/L4 products (see ``clear_stale_outputs``), and execs
+the recipe's ``main(config, args)``. It is both the in-process target of
+``kpfpipe run`` and the leaf the orchestrators (``masters.py``/``science.py``) fan
+out as ``python -m scripts.processing.reduce`` subprocesses.
 
 Recipe + config come from ``--masters``/``--science`` (repo-relative shortcuts,
 usable from any cwd) or an explicit ``-r/-c`` pair; the shortcuts supply defaults
@@ -55,6 +55,10 @@ logger = logging.getLogger("kpfpipe.cli")
 
 
 def main(argv=None):
+    # Before the recipe is exec'd and pulls matplotlib in: this runs headless, and an
+    # unset backend resolves to macosx.
+    os.environ.setdefault("MPLBACKEND", "Agg")
+
     parser = argparse.ArgumentParser(
         prog="kpfpipe run",
         description=__doc__,
@@ -145,9 +149,6 @@ def main(argv=None):
     logger.info("data dirs: %s", config.get_params(["DATA_DIRS"]))
     logger.info("log file: %s", log_path)
 
-    # Clear prior L1/L2/L4 products so this run's outputs stand alone.
-    clear_stale_outputs(config, args)
-
     if not os.path.isfile(args.recipe):
         raise SystemExit(f"Recipe file not found: {args.recipe}")
 
@@ -156,6 +157,10 @@ def main(argv=None):
     spec.loader.exec_module(recipe)
     if not hasattr(recipe, "main"):
         raise SystemExit(f"Recipe {args.recipe!r} has no main() function")
+
+    # Clear prior L1/L2/L4 products so this run's outputs stand alone. After the load,
+    # never before: a mistyped -r must not destroy a night's products on its way out.
+    clear_stale_outputs(config, args)
 
     try:
         recipe.main(config, args)

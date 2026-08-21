@@ -106,7 +106,7 @@ class TestCatalogRecordPassthrough:
     """
 
     @staticmethod
-    def _l1_with_catalog(rv=-16.6):
+    def _l1_with_catalog(rv=10.0):
         # KPF1 creates CATALOG_RECORD only on the L0 pass-through or a read (it is
         # Required=False in L1-extensions.csv), so a bare L1 makes it explicitly.
         l1 = KPF1()

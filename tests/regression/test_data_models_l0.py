@@ -254,8 +254,8 @@ class TestCatalogRecordMissingValues:
         assert np.isnan(row["rv"])
 
     def test_present_value_reads_back_unchanged(self, tmp_path):
-        row = self._l0_written_and_read(tmp_path, rv=-16.6).data["CATALOG_RECORD"][0]
-        assert row["rv"] == pytest.approx(-16.6)
+        row = self._l0_written_and_read(tmp_path, rv=10.0).data["CATALOG_RECORD"][0]
+        assert row["rv"] == pytest.approx(10.0)
 
     def test_missing_value_leaves_catalog_card_blank(self, tmp_path):
         # The regression the normalization exists for: a masked cell defeats the
@@ -264,7 +264,7 @@ class TestCatalogRecordMissingValues:
         l0 = self._l0_written_and_read(tmp_path, rv=None)
         l1 = l0.to_kpf1()
         assert not l1.headers["PRIMARY"].get("CRV2")
-        assert l1.headers["PRIMARY"]["CRA2"] == "01:44:04.0000"
+        assert l1.headers["PRIMARY"]["CRA2"] == "12:00:00.0000"
         l1.to_fits(str(tmp_path / "kpf_L1_20240405T000000.fits"))
 
 

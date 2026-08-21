@@ -56,7 +56,7 @@ from scripts.processing._argparse import (
     pool_parser,
     resolve_dir_shortcuts,
 )
-from scripts.processing._dispatch import _default_science_jobs
+from scripts.processing._dispatch import _default_science_jobs, configure_runtime
 from scripts.processing._scan import scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
@@ -240,7 +240,36 @@ def _orchestrator_argv(module, unit_flag, units, forward, recipe=None, config=No
     return argv
 
 
+def _run_stage(argv):
+    """Run one stage subprocess to completion, tearing it down on an interrupt.
+
+    ``subprocess.run`` would SIGKILL the stage on KeyboardInterrupt, which for the
+    orchestrators means dying before their own teardown runs and orphaning their
+    fan-out. SIGTERM instead: ``configure_runtime`` routes it through the same
+    KeyboardInterrupt path, so the orchestrator reaps its children first.
+
+    The stage then gets 10 s before we escalate to SIGKILL -- longer than the
+    orchestrator's own teardown (``_terminate_all_children`` waits 5 s before
+    escalating), so we don't kill a stage mid-cleanup and orphan the very fan-out
+    it was reaping.
+    """
+    proc = subprocess.Popen(argv, cwd=kpfpipe.REPO_ROOT, stdin=subprocess.DEVNULL)
+    try:
+        return proc.wait()
+    except KeyboardInterrupt:
+        logger.warning("interrupted; terminating the running stage")
+        proc.terminate()
+        try:
+            proc.wait(timeout=10.0)
+        except subprocess.TimeoutExpired:
+            logger.warning("stage did not exit in 10s; killing it")
+            proc.kill()
+            proc.wait()
+        sys.exit(130)
+
+
 def main(argv=None):
+    configure_runtime()
     args = parse_args(argv)
     start, end = args.date_range
 
@@ -331,7 +360,7 @@ def main(argv=None):
             config=masters_config,
         )
         logger.info("dispatching masters for %d night(s)", len(datecodes))
-        masters_rc = subprocess.run(masters_argv, cwd=kpfpipe.REPO_ROOT).returncode
+        masters_rc = _run_stage(masters_argv)
     else:
         logger.info("skipping masters stage (--no-masters)")
 
@@ -349,7 +378,7 @@ def main(argv=None):
             config=science_config,
         )
         logger.info("dispatching science for %d frame(s)", len(obs_ids))
-        science_rc = subprocess.run(science_argv, cwd=kpfpipe.REPO_ROOT).returncode
+        science_rc = _run_stage(science_argv)
     else:
         logger.info("skipping science stage (--no-science)")
 
@@ -372,7 +401,7 @@ def main(argv=None):
             *obs_ids,
         ]
         logger.info("dispatching plots for %d frame(s) -> %s", len(obs_ids), plot_dir)
-        plots_rc = subprocess.run(plot_argv, cwd=kpfpipe.REPO_ROOT).returncode
+        plots_rc = _run_stage(plot_argv)
     else:
         logger.info("skipping plots stage (--no-plots)")
 

@@ -96,16 +96,18 @@ def _handle_termination_signal(signum, frame):
 
 
 def configure_runtime():
-    """Install the SIGTERM handler and pin subprocess BLAS/OpenMP to one thread.
+    """Install the SIGTERM handler, pin BLAS/OpenMP to one thread, select Agg.
 
     Call once at the start of an orchestrator's main(), not at import, so importing
     never mutates signal handlers or the environment. Routes SIGTERM through the
     KeyboardInterrupt path so `kill` tears down children like Ctrl+C. Caps the
     BLAS/OpenMP pools at 1 (via setdefault, so an explicit caller wins): we already
     run one process per job, so an inner OpenBLAS pool would be jobs x cores threads
-    and thrash.
+    and thrash. Pins matplotlib to Agg the same way: children run headless, and an
+    unset backend resolves to macosx.
     """
     signal.signal(signal.SIGTERM, _handle_termination_signal)
+    os.environ.setdefault("MPLBACKEND", "Agg")
     for var in (
         "OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
@@ -169,6 +171,7 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
     proc = subprocess.Popen(
         argv,
         cwd=kpfpipe.REPO_ROOT,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
@@ -217,9 +220,11 @@ def run_stage(
     the rest in a pool of `jobs` workers. Returns the set of failed tags.
 
     The canary runs alone (bounded by `canary_timeout`) before any fan-out, warming
-    the shared on-disk caches every job lazily builds (barycorrpy leap-seconds,
-    astropy IERS, matplotlib fonts, bytecode) so the parallel jobs don't stampede a
-    cold cache. Each fanned-out job is bounded by the shorter `job_timeout`; on
+    the shared on-disk caches the jobs lazily build so they don't stampede a cold
+    one. How much that is depends on the stage: the science recipe pulls in
+    barycorrpy leap-seconds, astropy IERS and matplotlib fonts; the masters recipe
+    imports none of them, so there it warms bytecode alone.
+    Each fanned-out job is bounded by the shorter `job_timeout`; on
     overrun (a stalled NFS read, a runaway recipe) its process group is killed and
     it returns 124, counted as a failure, so one stuck unit can't hang the batch.
 
@@ -237,7 +242,16 @@ def run_stage(
     desynchronize the lockstep disk-read phase); the canary, running first, is
     unaffected. On SIGINT/SIGTERM, cancel the queue and terminate every running
     child before exiting 130, so an interrupt leaves no orphaned subprocesses.
+
+    The module-level state is reset on entry: a leftover `_interrupted` would make
+    every `_run_one` return (130, "") without launching, so a second call in this
+    process would do nothing at all.
     """
+    _interrupted.clear()
+    with _live_lock:
+        _live_procs.clear()
+    _last_launch[0] = 0.0
+
     if not tasks:
         return set()
     logger.info(

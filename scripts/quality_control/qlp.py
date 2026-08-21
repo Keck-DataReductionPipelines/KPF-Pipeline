@@ -15,13 +15,20 @@ import sys
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.quality_control.quicklook.level0 import PlotL0
-from kpfpipe.quality_control.quicklook.level1 import PlotL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
 
 
 def main():
+    # Before anything imports matplotlib: this runs headless, and an unset backend
+    # resolves to macosx.
+    os.environ.setdefault("MPLBACKEND", "Agg")
+
+    # Deferred for that reason: these pull matplotlib in, so at module scope they
+    # would import it before the line above ran.
+    from kpfpipe.quality_control.quicklook.level0 import PlotL0
+    from kpfpipe.quality_control.quicklook.level1 import PlotL1
+
     parser = argparse.ArgumentParser(description="KPF Quicklook Plot Generator")
     parser.add_argument(
         "--obs_id", type=str, help="Observation ID (e.g. KP.20240405.03637.74)"

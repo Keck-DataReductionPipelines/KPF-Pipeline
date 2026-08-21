@@ -273,14 +273,17 @@ class TestGetNormalizedFlux:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.slow
 class TestComputeBarycorrReference:
     """The real barycorrpy handoff, pinned to a golden value.
 
     Every perform() test stubs _compute_barycorr, so this is the only guard on
     the real wiring: ICRS ra/dec/pm/parallax, the J2000 epoch, UTC->JD, the Keck
-    site, and the m/s units and sign. It may download JPL ephemeris on first run,
-    hence @slow. Golden values are pinned to barycorrpy==0.4.4.
+    site, and the m/s units and sign. Golden values are pinned to
+    barycorrpy==0.4.4.
+
+    Unmarked: it reads no truth frames, which is what ``slow`` means here. It
+    carried the marker as a hedge against a cold-cache ephemeris download, which
+    tests/conftest.py now allows through rather than blocking.
     """
 
     def test_matches_barycorrpy_reference(self):
