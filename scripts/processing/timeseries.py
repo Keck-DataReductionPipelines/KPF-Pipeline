@@ -240,12 +240,6 @@ def _orchestrator_argv(module, unit_flag, units, forward, recipe=None, config=No
     return argv
 
 
-# Longer than the orchestrator's own teardown (_terminate_all_children waits 5 s
-# before escalating), so we don't SIGKILL a stage mid-cleanup and orphan the very
-# fan-out it was reaping.
-_STAGE_GRACE = 10.0
-
-
 def _run_stage(argv):
     """Run one stage subprocess to completion, tearing it down on an interrupt.
 
@@ -253,6 +247,11 @@ def _run_stage(argv):
     orchestrators means dying before their own teardown runs and orphaning their
     fan-out. SIGTERM instead: ``configure_runtime`` routes it through the same
     KeyboardInterrupt path, so the orchestrator reaps its children first.
+
+    The stage then gets 10 s before we escalate to SIGKILL -- longer than the
+    orchestrator's own teardown (``_terminate_all_children`` waits 5 s before
+    escalating), so we don't kill a stage mid-cleanup and orphan the very fan-out
+    it was reaping.
     """
     proc = subprocess.Popen(argv, cwd=kpfpipe.REPO_ROOT, stdin=subprocess.DEVNULL)
     try:
@@ -261,9 +260,9 @@ def _run_stage(argv):
         logger.warning("interrupted; terminating the running stage")
         proc.terminate()
         try:
-            proc.wait(timeout=_STAGE_GRACE)
+            proc.wait(timeout=10.0)
         except subprocess.TimeoutExpired:
-            logger.warning("stage did not exit in %.0fs; killing it", _STAGE_GRACE)
+            logger.warning("stage did not exit in 10s; killing it")
             proc.kill()
             proc.wait()
         sys.exit(130)

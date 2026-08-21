@@ -27,7 +27,11 @@ _SLEEP = [sys.executable, "-c", "import time; time.sleep(30)"]  # a wedged job
 
 @pytest.fixture(autouse=True)
 def _clear_interrupted():
-    """Keep the module-global interrupt flag clean around each test."""
+    """Keep the module-global interrupt flag clean around each test.
+
+    run_stage resets its own state now; the tests that set the flag and call
+    `_run_one` directly still need this.
+    """
     f._interrupted.clear()
     yield
     f._interrupted.clear()
@@ -263,6 +267,16 @@ class TestRunStageInterrupt:
         assert exc.value.code == 130
         assert f._interrupted.is_set()  # stops the pool launching anything more
         assert torn_down == [1]
+
+    def test_stale_interrupt_flag_is_cleared_on_entry(self, tmp_path):
+        # `_interrupted` is module state that outlives a run, so without the reset
+        # a second run_stage in this process launches nothing at all: every
+        # _run_one short-circuits to 130 and every task is reported failed.
+        f._interrupted.set()
+        failed = f.run_stage(
+            "job", [("a", _OK), ("b", _OK)], 2, str(tmp_path), abort_on_failure=False
+        )
+        assert failed == set()
 
     def test_terminate_escalates_sigterm_then_sigkill(self, monkeypatch):
         # A child that dies on SIGTERM is left alone; one still alive after the

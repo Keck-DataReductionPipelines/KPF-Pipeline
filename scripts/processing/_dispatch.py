@@ -242,7 +242,16 @@ def run_stage(
     desynchronize the lockstep disk-read phase); the canary, running first, is
     unaffected. On SIGINT/SIGTERM, cancel the queue and terminate every running
     child before exiting 130, so an interrupt leaves no orphaned subprocesses.
+
+    The module-level state is reset on entry: a leftover `_interrupted` would make
+    every `_run_one` return (130, "") without launching, so a second call in this
+    process would do nothing at all.
     """
+    _interrupted.clear()
+    with _live_lock:
+        _live_procs.clear()
+    _last_launch[0] = 0.0
+
     if not tasks:
         return set()
     logger.info(
