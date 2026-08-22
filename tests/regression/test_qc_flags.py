@@ -542,53 +542,53 @@ class TestQCL0:
 
     def test_radec_consistent_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        for k, v in (("TARGOFF", 0.02), ("OBJOFF", 2.3), ("GAIAOFF", 2.3)):
+        for k, v in (("TCSOFF", 0.02), ("OBJOFF", 2.3), ("GAIAOFF", 2.3)):
             l0.set_keyword(k, v)  # routes to QUALITY_CONTROL
         assert QCL0(l0).radec_consistent() is True
 
     def test_radec_gaiaoff_fail(self, tmp_path):
         # The 20240816 signature: pointing/target/OBJECT fine, GAIAID ~25 deg off.
         l0 = _make_kpf0(tmp_path)
-        for k, v in (("TARGOFF", 0.02), ("OBJOFF", 2.3), ("GAIAOFF", 91004.96)):
+        for k, v in (("TCSOFF", 0.02), ("OBJOFF", 2.3), ("GAIAOFF", 91004.96)):
             l0.set_keyword(k, v)
         assert QCL0(l0).radec_consistent() is False
 
-    def test_radec_targoff_fail(self, tmp_path):
+    def test_radec_tcsoff_fail(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        l0.set_keyword("TARGOFF", 1.5)  # > 1" pointing-vs-target
+        l0.set_keyword("TCSOFF", 1.5)  # > 1" pointing-vs-target
         assert QCL0(l0).radec_consistent() is False
 
     def test_radec_objoff_fail(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        l0.set_keyword("TARGOFF", 0.02)  # internal pointing OK
+        l0.set_keyword("TCSOFF", 0.02)  # internal pointing OK
         l0.set_keyword("OBJOFF", 6.0)  # > 5" pointing-vs-OBJECT
         assert QCL0(l0).radec_consistent() is False
 
-    def test_radec_targoff_required_empty_fails(self, tmp_path):
-        # TARGOFF is internal pointing consistency: absent or present-but-empty fails.
+    def test_radec_tcsoff_required_empty_fails(self, tmp_path):
+        # TCSOFF is internal pointing consistency: absent or present-but-empty fails.
         l0 = _make_kpf0(tmp_path)
         assert QCL0(l0).radec_consistent() is False
-        l0.set_keyword("TARGOFF", None)  # present-but-empty (astrometry unavailable)
+        l0.set_keyword("TCSOFF", None)  # present-but-empty (astrometry unavailable)
         assert QCL0(l0).radec_consistent() is False
 
     def test_radec_external_offsets_optional(self, tmp_path):
-        # TARGOFF within budget; GAIAOFF/OBJOFF unavailable (empty) -> still pass.
+        # TCSOFF within budget; GAIAOFF/OBJOFF unavailable (empty) -> still pass.
         l0 = _make_kpf0(tmp_path)
-        l0.set_keyword("TARGOFF", 0.02)
+        l0.set_keyword("TCSOFF", 0.02)
         l0.set_keyword("GAIAOFF", None)
         l0.set_keyword("OBJOFF", None)
         assert QCL0(l0).radec_consistent() is True
 
     @pytest.mark.parametrize("imtype", ["Bias", "Dark", "Flatlamp", "Arclamp"])
     def test_radec_calibration_frames_pass(self, tmp_path, imtype):
-        # A calibration frame has no target, so its blank TARGOFF must not fail.
+        # A calibration frame has no target, so its blank TCSOFF must not fail.
         l0 = _make_kpf0(tmp_path, imtype=imtype)
         assert QCL0(l0).radec_consistent() is True
 
     def test_radec_calibration_ignores_offsets(self, tmp_path):
         # Even a badly-off offset on a calibration frame is not a pointing fault.
         l0 = _make_kpf0(tmp_path, imtype="Bias")
-        for k, v in (("TARGOFF", 1.5), ("OBJOFF", 6.0), ("GAIAOFF", 91004.96)):
+        for k, v in (("TCSOFF", 1.5), ("OBJOFF", 6.0), ("GAIAOFF", 91004.96)):
             l0.set_keyword(k, v)
         assert QCL0(l0).radec_consistent() is True
 

@@ -232,7 +232,7 @@ class TestAstrometryPriority:
 
     The knob exists so a catalog outage cannot silently substitute lower-precision
     telescope astrometry into the RV path: a source outside the priority still gets
-    its row (DiagL0 needs the wmko row for TARGOFF) but can never become the base.
+    its row (DiagL0 needs the wmko row for TCSOFF) but can never become the base.
     """
 
     def test_shipped_default_bars_wmko_from_anchoring(self):
@@ -432,7 +432,7 @@ class TestReadWmkoHeader:
             AstroQuery(self._l0_targ(**targ)).read_wmko_header()
 
     def test_wmko_row_built_even_when_barred_from_anchoring(self):
-        # The wmko row is unconditional (TARGOFF needs it), but with wmko outside
+        # The wmko row is unconditional (TCSOFF needs it), but with wmko outside
         # astrometry_priority and both catalogs off nothing may anchor, so the merge
         # raises rather than quietly falling back to telescope astrometry.
         aq = AstroQuery(

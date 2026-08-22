@@ -130,10 +130,10 @@ class QCL0(QC):
         Telescope pointing is only meaningful for a science frame (IMTYPE
         'Object'), so a calibration frame passes unconditionally: it has no
         target, AstroQuery never runs on it, and DiagL0 therefore leaves
-        TARGOFF/OBJOFF/GAIAOFF blank -- which would otherwise fail the required
-        TARGOFF branch below.
+        TCSOFF/OBJOFF/GAIAOFF blank -- which would otherwise fail the required
+        TCSOFF branch below.
 
-        TARGOFF (pointing vs the DCS target) is internal telescope-pointing
+        TCSOFF (pointing vs the DCS target) is internal telescope-pointing
         consistency and is required: an empty value (astrometry unavailable) or
         one >= 1" fails. OBJOFF/GAIAOFF are external catalog cross-matches with a
         looser 5" bound, checked only when present-and-valued, so a disabled or
@@ -144,8 +144,8 @@ class QCL0(QC):
             return True
 
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        targoff = self._hdr_float(hdr, "TARGOFF")
-        if targoff is None or targoff >= 1.0:
+        tcsoff = self._hdr_float(hdr, "TCSOFF")
+        if tcsoff is None or tcsoff >= 1.0:
             return False
         for key, limit in (("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
             val = self._hdr_float(hdr, key)

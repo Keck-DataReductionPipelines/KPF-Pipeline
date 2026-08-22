@@ -28,8 +28,8 @@ pytestmark = pytest.mark.cli
 
 _SCRIPT = "scripts/quality_control/qc.py"
 
-# Pointing + DCS target (identical -> TARGOFF ~ 0) so the header-native wmko
-# record supplies DiagL0's required TARGOFF with Gaia/SIMBAD disabled.
+# Pointing + DCS target (identical -> TCSOFF ~ 0) so the header-native wmko
+# record supplies DiagL0's required TCSOFF with Gaia/SIMBAD disabled.
 _TARGET_CARDS = {
     "RA": "12:00:00.00",
     "DEC": "+40:00:00.0",
@@ -73,7 +73,7 @@ def _write_astro_config(path):
 
     Disabling Gaia/SIMBAD keeps these smoke tests offline, so wmko -- the
     header-native row, the only one left -- must also be the permitted astrometric
-    base for the merge to succeed and TARGOFF to exist.
+    base for the merge to succeed and TCSOFF to exist.
     """
     path.write_text(
         "[DATA_DIRS]\n[TRACES]\n"

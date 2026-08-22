@@ -590,7 +590,7 @@ class AstroQuery:
         always FK5, so a non-FK5 or absent TARGFRAM raises rather than being coerced --
         a wrong frame would corrupt the barycentric correction. Returns None (WMKOCR=0,
         warned) when TARGRA is absent or the TARG* astrometry cannot be parsed. Always
-        run: TARGOFF needs this row even when ``astrometry_priority`` bars wmko from
+        run: TCSOFF needs this row even when ``astrometry_priority`` bars wmko from
         anchoring the position.
         """
         primary = self.l0_obj.headers["PRIMARY"]

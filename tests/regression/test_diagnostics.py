@@ -151,7 +151,7 @@ class TestEmptyLevels:
 
 
 # ---------------------------------------------------------------------------
-# DiagL0 -- pointing offsets from CATALOG_RECORD (GAIAOFF, TARGOFF, OBJOFF)
+# DiagL0 -- pointing offsets from CATALOG_RECORD (GAIAOFF, TCSOFF, OBJOFF)
 # ---------------------------------------------------------------------------
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
@@ -218,13 +218,13 @@ class TestDiagL0Offsets:
         # All three sources sit at the pointing -> every offset ~0, routed to QC.
         l0 = _make_l0_with_catalog()
         results = DiagL0(l0).run()
-        for key in ("GAIAOFF", "TARGOFF", "OBJOFF"):
+        for key in ("GAIAOFF", "TCSOFF", "OBJOFF"):
             assert results[key][0] < 0.1
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
     def test_offset_reflects_catalog_separation(self):
         # Move the Gaia record 10" north of the pointing -> GAIAOFF ~ 10", while
-        # the still-at-pointing wmko record keeps TARGOFF ~ 0.
+        # the still-at-pointing wmko record keeps TCSOFF ~ 0.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -237,13 +237,13 @@ class TestDiagL0Offsets:
         )
         results = DiagL0(l0).run()
         assert results["GAIAOFF"][0] == pytest.approx(10.0, abs=0.1)
-        assert results["TARGOFF"][0] < 0.1
+        assert results["TCSOFF"][0] < 0.1
 
 
 class TestDiagL0Contingency:
     """Unavailable astrometry -> present-but-empty offset + WARNING, no crash."""
 
-    _KEYS = ("GAIAOFF", "TARGOFF", "OBJOFF")
+    _KEYS = ("GAIAOFF", "TCSOFF", "OBJOFF")
 
     def test_no_catalog_record_all_empty(self, caplog):
         # AstroQuery not run: CATALOG_RECORD auto-created but no presence flags.
@@ -266,7 +266,7 @@ class TestDiagL0Contingency:
         with caplog.at_level(logging.WARNING):
             results = DiagL0(l0).run()
         assert results["GAIAOFF"][0] is None
-        assert results["TARGOFF"][0] < 0.1
+        assert results["TCSOFF"][0] < 0.1
         assert results["OBJOFF"][0] < 0.1
         assert "no gaia astrometry in CATALOG_RECORD" in caplog.text
 
@@ -285,7 +285,7 @@ class TestDiagL0Contingency:
         )
         with caplog.at_level(logging.WARNING):
             results = DiagL0(l0).run()
-        assert results["TARGOFF"][0] is None
+        assert results["TCSOFF"][0] is None
         assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
 
     # No usable parallax means no distance on the SkyCoord, and ERFA warns that it
@@ -351,7 +351,7 @@ class TestDiagL0Contingency:
         )
         with caplog.at_level(logging.WARNING):
             results = DiagL0(l0).run()  # must not raise
-        assert results["TARGOFF"][0] is None
+        assert results["TCSOFF"][0] is None
         assert "could not compute wmko pointing offset" in caplog.text
 
 

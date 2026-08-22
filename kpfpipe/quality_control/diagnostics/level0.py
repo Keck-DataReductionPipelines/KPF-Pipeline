@@ -136,8 +136,8 @@ class DiagL0(Diagnostics):
     gaia_ra_dec_offset._diag_name = "gaia_ra_dec_offset"
 
     def target_ra_dec_offset(self):
-        """TARGOFF: arcsec, RA/DEC pointing vs DCS target position at obs epoch."""
-        return self._tag(TARGOFF=self._offset("wmko"))
+        """TCSOFF: arcsec, RA/DEC pointing vs DCS target position at obs epoch."""
+        return self._tag(TCSOFF=self._offset("wmko"))
 
     target_ra_dec_offset._diag_name = "target_ra_dec_offset"
 
