@@ -369,7 +369,7 @@ def _make_l4(*, sci=True):
 
     The arguments are load-bearing and must not be trimmed to the defaults:
     ``jitter=1e-7`` gives the per-order BJD/BERV scatter DiagL4 measures (about
-    1 s and 0.1 m/s, well inside the BJDOK/BERVOK gates), and ``sci_obj="target"``
+    0.03 s and 3e-4 m/s, well inside the BJDOK/BERVOK gates), and ``sci_obj="target"``
     is what makes those gates apply at all. Without the jitter this stops being
     the suite's only composed DiagL4 -> QCL4 seam and becomes header-stuffing;
     passing ``bervrng=``/``bjdrng=`` instead would write the metrics directly and

@@ -13,7 +13,7 @@ _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 # Columns every science RV table must carry (RV product + per-order BJD/BERV/WEIGHT).
 _REQUIRED_RV_COLUMNS = frozenset({"RV", "BJD_TDB", "BERV", "WEIGHT"})
 # Max per-order peak-to-peak range tolerated across orders (SCI2).
-_BERV_RNG_TOL_MS = 0.1
+_BERV_RNG_TOL_MS = 0.04
 _BJD_RNG_TOL_S = 1.0
 
 

@@ -167,7 +167,7 @@ def make_l4(
     ``jitter`` is the per-order scatter applied to BJD_TDB and BERV. It defaults
     to 0 (every order identical). **A caller exercising the BJDOK/BERVOK gates
     must pass 1e-7** -- that magnitude is tuned to sit well inside those gates
-    (about 1 s in BJD, 0.1 m/s in BERV), so a good product passes; re-rolling it
+    (about 0.03 s in BJD, 3e-4 m/s in BERV), so a good product passes; re-rolling it
     larger silently turns a passing test into a failing one. Non-zero jitter also
     scatters RV itself by 1e-3 km/s, so the product looks like a real one.
 

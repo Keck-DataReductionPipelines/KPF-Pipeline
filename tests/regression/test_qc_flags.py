@@ -1372,7 +1372,7 @@ class TestQCL4:
         assert QCL4(l4).ccf_rv_present() is False
 
     def test_berv_within_tolerance_pass(self):
-        l4 = make_l4(sci_obj="target", bervrng=0.05)
+        l4 = make_l4(sci_obj="target", bervrng=0.02)
         assert QCL4(l4).berv_within_tolerance() is True
 
     def test_berv_within_tolerance_fail(self):
@@ -1388,7 +1388,7 @@ class TestQCL4:
         # CrossCorrelation requires SCI-OBJ upstream, so a frame without one is
         # malformed and must not pass as a non-target source.
         with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
-            QCL4(make_l4(bervrng=0.05)).berv_within_tolerance()
+            QCL4(make_l4(bervrng=0.02)).berv_within_tolerance()
 
     def test_berv_within_tolerance_target_absent_fails(self):
         # DiagL4 skips the metric on degenerate weights or a NaN barycorr; on a
@@ -1426,7 +1426,7 @@ class TestQCL4:
             assert QCL4(l4).required_keywords_present() is False
 
     def test_run_all_good_isgood(self):
-        l4 = make_l4(sci_obj="target", bervrng=0.05, bjdrng=0.5)
+        l4 = make_l4(sci_obj="target", bervrng=0.02, bjdrng=0.5)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
