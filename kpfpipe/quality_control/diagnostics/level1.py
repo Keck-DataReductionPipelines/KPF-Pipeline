@@ -7,6 +7,8 @@ master relative to the observation time.
 
 from datetime import datetime
 
+import numpy as np
+
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
 from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
@@ -56,3 +58,25 @@ class DiagL1(Diagnostics):
         return self._tag(**results)
 
     calibration_ages._diag_name = "calibration_ages"
+
+    def flux_percentiles(self):
+        """Flux percentiles (99/90/50/10) of each assembled CCD frame, in e-.
+
+        Skipped per chip when that CCD carries no data.
+
+        Returns
+        -------
+        dict
+            Maps each present ``{G,R}CCD{pct}P`` keyword to its ``(value, comment)``.
+        """
+        results = {}
+        for chip, prefix in (("GREEN", "GCCD"), ("RED", "RCCD")):
+            arr = self.kpf_obj.data.get(f"{chip}_CCD")
+            if arr is None or np.size(arr) == 0:
+                continue
+            percentiles = np.nanpercentile(arr, [99, 90, 50, 10])
+            for pct, value in zip([99, 90, 50, 10], percentiles, strict=True):
+                results[f"{prefix}{pct}P"] = round(float(value), 3)
+        return self._tag(**results)
+
+    flux_percentiles._diag_name = "flux_percentiles"

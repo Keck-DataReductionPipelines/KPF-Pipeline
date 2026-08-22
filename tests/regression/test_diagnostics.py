@@ -434,6 +434,39 @@ class TestDiagL1CalibrationAges:
         assert "diagnostic 'calibration_ages' raised" in caplog.text
 
 
+class TestDiagL1FluxPercentiles:
+    # 0..100 makes every percentile land exactly on its own value.
+    _RAMP = np.arange(101, dtype=float).reshape(1, 101)
+
+    def _l1(self, **ccds):
+        l1 = _make_kpf1_with_calibrations()  # real DATE-OBS, no cal paths
+        for ext, arr in ccds.items():
+            l1.data[ext] = arr
+        return l1
+
+    def test_values_written_to_quality_control(self):
+        l1 = self._l1(GREEN_CCD=self._RAMP, RED_CCD=self._RAMP * 2)
+        DiagL1(l1).run()
+        qc = l1.headers["QUALITY_CONTROL"]
+        for pct in (99, 90, 50, 10):
+            assert qc[f"GCCD{pct}P"] == pytest.approx(pct)
+            assert qc[f"RCCD{pct}P"] == pytest.approx(2 * pct)
+        assert (
+            qc.comments["GCCD99P"] == "99th percentile flux in the GREEN CCD image [e-]"
+        )
+
+    def test_nans_ignored(self):
+        ramp = self._RAMP.copy()
+        ramp[0, ::10] = np.nan
+        l1 = self._l1(GREEN_CCD=ramp)
+        results = DiagL1(l1).run()
+        assert np.isfinite(results["GCCD50P"][0])
+
+    def test_absent_chip_skipped(self):
+        results = DiagL1(self._l1(GREEN_CCD=self._RAMP)).run()
+        assert set(results) == {"GCCD99P", "GCCD90P", "GCCD50P", "GCCD10P"}
+
+
 # ---------------------------------------------------------------------------
 # DiagL2 -- NaN counts + zero-flux fraction
 # ---------------------------------------------------------------------------
