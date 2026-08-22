@@ -1,6 +1,7 @@
 """QC checks for KPF Level 0 (raw CCD) data products."""
 
 import os
+import re
 from datetime import datetime
 
 import numpy as np
@@ -64,12 +65,18 @@ class QCL0(QC):
     header_keywords_present._qc_key = "KWRDPRL0"
 
     def times_consistent(self):
-        """DATE-BEG <= DATE-MID <= DATE-END.
+        """DATE-BEG <= DATE-MID <= DATE-END, and each chip's shutter matches.
 
-        Ports v2.12 ``L2_datetime``. At L0 the raw instrument times live on the
-        WMKO-native PRIMARY (the header later snapshotted verbatim into
-        INSTRUMENT_HEADER at to_kpf1); the 0/1 flag then propagates downstream
-        on QUALITY_CONTROL.
+        Ports the header-date half of v2.12 ``L0_datetime`` (the exposure-meter
+        half is EMTIMEOK). Each per-chip shutter time must fall within 0.1 s of
+        the overall window edge it bounds; mismatched chips have different
+        photon-weighted midpoints, so one barycentric correction cannot serve
+        both. An absent card fails: it is the only evidence that chip's timing
+        was right.
+
+        At L0 the raw instrument times live on the WMKO-native PRIMARY (the
+        header later snapshotted verbatim into INSTRUMENT_HEADER at to_kpf1); the
+        0/1 flag then propagates downstream on QUALITY_CONTROL.
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         beg, mid, end = (
@@ -77,9 +84,34 @@ class QCL0(QC):
         )
         if beg is None or mid is None or end is None:
             return False
-        return beg <= mid <= end
+        if not beg <= mid <= end:
+            return False
+        for key, edge in (
+            ("GRDATE-B", beg),
+            ("GRDATE-E", end),
+            ("RDDATE-B", beg),
+            ("RDDATE-E", end),
+        ):
+            shutter = _parse_iso(hdr.get(key))
+            if shutter is None or abs((edge - shutter).total_seconds()) > 0.1:
+                return False
+        return True
 
     times_consistent._qc_key = "DATTIMOK"
+
+    def ntp_timing(self):
+        """NTP reports the host clock correct to better than 100 ms.
+
+        Ports v2.12 ``NTP_timing``. DATTIMOK and EXPTIMOK check only that the
+        exposure timestamps are self-consistent, which a uniformly offset clock
+        still satisfies. TIMEERR is free text ("NTP time correct to within
+        12.3 ms"); absent, unparseable, or at/above the limit all fail.
+        """
+        timeerr = str(self.kpf_obj.headers["PRIMARY"].get("TIMEERR"))
+        match = re.search(r"NTP time correct to within ([\d.]+) ms", timeerr)
+        return match is not None and float(match.group(1)) < 100.0
+
+    ntp_timing._qc_key = "NTPOK"
 
     def exptime_sane(self):
         """EXPTIME present, finite, non-negative, and consistent with ELAPSED.

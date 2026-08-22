@@ -427,8 +427,46 @@ class TestQCL0:
         # Raw L0 PRIMARY without DATE-BEG/MID/END -> cannot verify -> fail.
         assert QCL0(_make_kpf0(tmp_path)).times_consistent() is False
 
+    @pytest.mark.parametrize("key", ["GRDATE-B", "GRDATE-E", "RDDATE-B", "RDDATE-E"])
+    def test_times_shutter_offset_fails(self, tmp_path, key):
+        # 0.5 s off the window edge it bounds, past the 0.1 s tolerance.
+        bad = dict(GOOD_DATES, **{key: "2024-09-23T09:12:30.000"})
+        assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
+
+    @pytest.mark.parametrize("key", ["GRDATE-B", "GRDATE-E", "RDDATE-B", "RDDATE-E"])
+    def test_times_shutter_missing_fails(self, tmp_path, key):
+        missing = {k: v for k, v in GOOD_DATES.items() if k != key}
+        assert QCL0(_make_kpf0(tmp_path, dates=missing)).times_consistent() is False
+
+    def test_times_shutter_within_tolerance_passes(self, tmp_path):
+        near = dict(GOOD_DATES, **{"GRDATE-B": "2024-09-23T09:12:09.534"})  # +50 ms
+        assert QCL0(_make_kpf0(tmp_path, dates=near)).times_consistent() is True
+
     def test_timechk_key_present(self):
         assert QCL0.__dict__["times_consistent"]._qc_key == "DATTIMOK"
+
+    def test_ntp_timing_pass(self, tmp_path):
+        assert QCL0(_make_kpf0(tmp_path)).ntp_timing() is True
+
+    @pytest.mark.parametrize(
+        "timeerr",
+        [
+            "NTP time correct to within 100.0 ms",  # at the limit
+            "NTP time correct to within 250.0 ms",
+            "NTP is not synchronised",  # unparseable
+            None,  # absent
+        ],
+    )
+    def test_ntp_timing_fail(self, tmp_path, timeerr):
+        l0 = _make_kpf0(tmp_path)
+        if timeerr is None:
+            del l0.headers["PRIMARY"]["TIMEERR"]
+        else:
+            l0.headers["PRIMARY"]["TIMEERR"] = timeerr
+        assert QCL0(l0).ntp_timing() is False
+
+    def test_ntp_key_present(self):
+        assert QCL0.__dict__["ntp_timing"]._qc_key == "NTPOK"
 
     def test_exptime_sane_pass_positive(self, tmp_path):
         l0 = _make_kpf0(tmp_path, exptime=300.0)

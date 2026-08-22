@@ -39,6 +39,10 @@ GOOD_DATES = {
     "DATE-MID": "2024-09-23T09:12:15.519",
     "DATE-END": "2024-09-23T09:12:21.554",
     "ELAPSED": 12.07,
+    "GRDATE-B": "2024-09-23T09:12:09.484",
+    "GRDATE-E": "2024-09-23T09:12:21.554",
+    "RDDATE-B": "2024-09-23T09:12:09.484",
+    "RDDATE-E": "2024-09-23T09:12:21.554",
 }
 
 _DEFAULT_PRIMARY = {
@@ -47,6 +51,7 @@ _DEFAULT_PRIMARY = {
     "IMTYPE": "Bias",
     "DATE-OBS": "2024-01-01T00:00:01",
     "PROGNAME": "K123",
+    "TIMEERR": "NTP time correct to within 12.3 ms",
 }
 
 
