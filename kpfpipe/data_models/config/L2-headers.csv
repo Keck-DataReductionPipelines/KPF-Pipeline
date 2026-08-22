@@ -1,11 +1,11 @@
 Keyword,Description,Extension,DataType,PopulatedBy
-TRACFILE,Order trace full path,RECEIPT,str,SpectralExtraction
 CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
 CCD2BJD,RED photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
 CCD1BKMS,GREEN barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
 CCD2BKMS,RED barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
 CCD1BZ,GREEN barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
 CCD2BZ,RED barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
+TRACFILE,Order trace full path,RECEIPT,str,SpectralExtraction
 NANSCI1,NaN pixel count SCI1 (green+red),QUALITY_CONTROL,int,DiagL2
 NANSCI2,NaN pixel count SCI2 (green+red),QUALITY_CONTROL,int,DiagL2
 NANSCI3,NaN pixel count SCI3 (green+red),QUALITY_CONTROL,int,DiagL2

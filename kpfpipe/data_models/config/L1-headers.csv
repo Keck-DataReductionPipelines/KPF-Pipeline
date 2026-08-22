@@ -1,4 +1,12 @@
 Keyword,Description,Extension,DataType,PopulatedBy
+OSCANSUB,Overscan subtraction applied (T/F),RECEIPT,int,ImageAssembly
+BIASFILE,Master bias full path,RECEIPT,str,CalibrationAssociation
+DARKFILE,Master dark full path,RECEIPT,str,CalibrationAssociation
+FLATFILE,Master flat full path,RECEIPT,str,CalibrationAssociation
+WLSFILE,WLS master full path,RECEIPT,str,CalibrationAssociation
+BIASSUB,Bias subtraction applied (T/F),RECEIPT,int,ImageProcessing
+DARKSUB,Dark subtraction applied (T/F),RECEIPT,int,ImageProcessing
+FLATDIV,Flat division applied (reserved) (T/F),RECEIPT,int,ImageProcessing
 RNGREEN1,Read noise GREEN amp 1 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN2,Read noise GREEN amp 2 [e-],QUALITY_CONTROL,float,ImageAssembly
 RNGREEN3,Read noise GREEN amp 3 [e-],QUALITY_CONTROL,float,ImageAssembly
@@ -15,14 +23,6 @@ RNNGRD1,Non-Gaussian read noise RED amp 1,QUALITY_CONTROL,float,ImageAssembly
 RNNGRD2,Non-Gaussian read noise RED amp 2,QUALITY_CONTROL,float,ImageAssembly
 RNNGRD3,Non-Gaussian read noise RED amp 3,QUALITY_CONTROL,float,ImageAssembly
 RNNGRD4,Non-Gaussian read noise RED amp 4,QUALITY_CONTROL,float,ImageAssembly
-OSCANSUB,Overscan subtraction applied (T/F),RECEIPT,int,ImageAssembly
-BIASFILE,Master bias full path,RECEIPT,str,CalibrationAssociation
-DARKFILE,Master dark full path,RECEIPT,str,CalibrationAssociation
-FLATFILE,Master flat full path,RECEIPT,str,CalibrationAssociation
-WLSFILE,WLS master full path,RECEIPT,str,CalibrationAssociation
-BIASSUB,Bias subtraction applied (T/F),RECEIPT,int,ImageProcessing
-DARKSUB,Dark subtraction applied (T/F),RECEIPT,int,ImageProcessing
-FLATDIV,Flat division applied (reserved) (T/F),RECEIPT,int,ImageProcessing
 BIASAGE,Master bias age [days],QUALITY_CONTROL,float,DiagL1
 DARKAGE,Master dark age [days],QUALITY_CONTROL,float,DiagL1
 FLATAGE,Master flat age [days],QUALITY_CONTROL,float,DiagL1
