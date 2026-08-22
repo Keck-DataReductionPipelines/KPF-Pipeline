@@ -103,4 +103,28 @@ class QCL1(QC):
                 return False
         return True
 
-    ffi_finite._qc_key = "FFIOK"
+    ffi_finite._qc_key = "L1NANOK"
+
+    def nonzero_flux(self):
+        """Zero-flux fraction of the assembled CCD frames < 0.5."""
+        raise NotImplementedError
+
+    nonzero_flux._qc_key = "L1FLXOK"
+
+    def variance_positive(self):
+        """No negative GREEN_VAR/RED_VAR where the flux is finite."""
+        raise NotImplementedError
+
+    variance_positive._qc_key = "L1VAROK"
+
+    def negative_snr_fraction(self):
+        """Pixels below -5 sigma <= 1%, catching bias/dark over-subtraction."""
+        raise NotImplementedError
+
+    negative_snr_fraction._qc_key = "L1SNROK"
+
+    def saturated_fraction(self):
+        """Saturated / non-linear science pixel fraction within limit."""
+        raise NotImplementedError
+
+    saturated_fraction._qc_key = "L1SATOK"

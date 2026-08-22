@@ -110,3 +110,9 @@ class QCL2(QC):
         return all(np.isfinite(v) and v > _MIN_SCI_SNR for v in values)
 
     science_snr._qc_key = "L2SNROK"
+
+    def saturated_fraction(self):
+        """Saturated / non-linear extracted pixel fraction within limit."""
+        raise NotImplementedError
+
+    saturated_fraction._qc_key = "L2SATOK"

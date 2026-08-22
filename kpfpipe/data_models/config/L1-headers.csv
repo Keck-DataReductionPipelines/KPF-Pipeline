@@ -34,4 +34,8 @@ RNNGOK,QC: non-Gaussian read noise (MAD/STD) 0.8-1.5,QUALITY_CONTROL,int,QCL1
 BIASOK,QC: bias subtracted & master age <= 7 days,QUALITY_CONTROL,int,QCL1
 DARKOK,QC: dark subtracted & master age <= 14 days,QUALITY_CONTROL,int,QCL1
 FLATOK,QC: flat divided & master age <= 30 days,QUALITY_CONTROL,int,QCL1
-FFIOK,QC: GREEN/RED CCDs all finite,QUALITY_CONTROL,int,QCL1
+L1NANOK,QC: GREEN/RED CCDs all finite,QUALITY_CONTROL,int,QCL1
+L1FLXOK,QC: L1 zero-flux fraction < 0.5,QUALITY_CONTROL,int,QCL1
+L1VAROK,QC: no negative L1 variance where flux finite,QUALITY_CONTROL,int,QCL1
+L1SNROK,QC: L1 pixel fraction below -5 sigma <= 1%,QUALITY_CONTROL,int,QCL1
+L1SATOK,QC: L1 saturated/non-linear pixel fraction within limit,QUALITY_CONTROL,int,QCL1

@@ -1127,7 +1127,11 @@ class TestQCL1:
             "bias_ok": "BIASOK",
             "dark_ok": "DARKOK",
             "flat_ok": "FLATOK",
-            "ffi_finite": "FFIOK",
+            "ffi_finite": "L1NANOK",
+            "nonzero_flux": "L1FLXOK",
+            "variance_positive": "L1VAROK",
+            "negative_snr_fraction": "L1SNROK",
+            "saturated_fraction": "L1SATOK",
         }
         for method_name, key in expected.items():
             fn = QCL1.__dict__[method_name]
@@ -1160,12 +1164,18 @@ class TestQCL1Run:
             "BIASOK",
             "DARKOK",
             "FLATOK",
-            "FFIOK",
+            "L1NANOK",
         ]
         for k in qc_keys:
             v = l1.headers["QUALITY_CONTROL"].get(k)
             assert v == 1, f"{k} should be 1 but is {v}"
             assert k in results
+
+        # A placeholder check raising NotImplementedError writes no flag, so the
+        # keyword stays absent and ISGOOD is unaffected.
+        for k in ("L1FLXOK", "L1VAROK", "L1SNROK", "L1SATOK"):
+            assert l1.headers["QUALITY_CONTROL"].get(k) is None
+            assert k not in results
 
     def test_one_bad_check_isgood_0(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=False)
@@ -1318,6 +1328,7 @@ class TestQCL2:
             "nonzero_flux": "L2FLXOK",
             "variance_positive": "L2VAROK",
             "science_snr": "L2SNROK",
+            "saturated_fraction": "L2SATOK",
         }
         for method_name, key in expected.items():
             fn = QCL2.__dict__[method_name]

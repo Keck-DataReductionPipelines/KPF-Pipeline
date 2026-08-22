@@ -51,7 +51,9 @@ class QC:
         reads clearly. Resets ``self.results`` at the start so calling ``run()``
         repeatedly on the same instance is deterministic. A check that raises is
         logged at ERROR (naming it) and re-raised unchanged -- fail-fast; halting
-        is the checkpoint layer's role.
+        is the checkpoint layer's role. The exception is ``NotImplementedError``,
+        raised by a registered-but-unwritten placeholder check: it writes no flag,
+        so the keyword stays absent and ISGOOD is unaffected.
 
         Returns
         -------
@@ -77,6 +79,10 @@ class QC:
                     kw,
                     1 if passed else 0,
                     comment,
+                )
+            except NotImplementedError:
+                logger.info(
+                    "%s QC check %r is not implemented; skipped", self.LEVEL, name
                 )
             except Exception as e:
                 logger.error("%s QC check %r raised: %s", self.LEVEL, name, e)

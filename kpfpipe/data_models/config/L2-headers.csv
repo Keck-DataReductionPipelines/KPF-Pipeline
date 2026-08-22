@@ -32,3 +32,4 @@ L2NANOK,QC: L2 NaN fraction <= 1%,QUALITY_CONTROL,int,QCL2
 L2FLXOK,QC: L2 zero-flux fraction < 0.5,QUALITY_CONTROL,int,QCL2
 L2VAROK,QC: no negative L2 variance where flux finite,QUALITY_CONTROL,int,QCL2
 L2SNROK,QC: science SNR finite and above floor,QUALITY_CONTROL,int,QCL2
+L2SATOK,QC: L2 saturated/non-linear pixel fraction within limit,QUALITY_CONTROL,int,QCL2
