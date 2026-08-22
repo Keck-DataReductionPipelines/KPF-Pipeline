@@ -1,0 +1,12 @@
+Keyword,Description,Extension,DataType,PopulatedBy
+SKYSCIMS,SKY/SCI flux ratio in main spectrometer scaled from EM data,QUALITY_CONTROL,float,DiagL0
+EMSCCT48,Cumulative EM counts in SCI in 445-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT45,Cumulative EM counts in SCI in 445-551 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT56,Cumulative EM counts in SCI in 551-658 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT67,Cumulative EM counts in SCI in 658-764 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT78,Cumulative EM counts in SCI in 764-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT48,Cumulative EM counts in SKY in 445-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT45,Cumulative EM counts in SKY in 445-551 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT56,Cumulative EM counts in SKY in 551-658 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT67,Cumulative EM counts in SKY in 658-764 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT78,Cumulative EM counts in SKY in 764-870 nm (ADU),QUALITY_CONTROL,int,DiagL0

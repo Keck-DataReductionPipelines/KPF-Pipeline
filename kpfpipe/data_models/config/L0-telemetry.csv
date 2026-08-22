@@ -1,0 +1,25 @@
+Keyword,Description,Extension,DataType,PopulatedBy
+GCCDSTMP,GREEN CCD temperature offset from setpoint (mK),QUALITY_CONTROL,float,DiagL0
+RCCDSTMP,RED CCD temperature offset from setpoint (mK),QUALITY_CONTROL,float,DiagL0
+GSTMPOK,QC: GREEN CCD offset < 10 mK (legacy GRCCDT10),QUALITY_CONTROL,int,QCL0
+RSTMPOK,QC: RED CCD offset < 10 mK (legacy RDCCDT10),QUALITY_CONTROL,int,QCL0
+GDRXRMS,Guider x-coordinate RMS guiding error (mas),QUALITY_CONTROL,float,DiagL0
+GDRYRMS,Guider y-coordinate RMS guiding error (mas),QUALITY_CONTROL,float,DiagL0
+GDRRRMS,Guider r-coordinate RMS guiding error (mas),QUALITY_CONTROL,float,DiagL0
+GDRXBIAS,Guider x-coordinate bias guiding error (mas),QUALITY_CONTROL,float,DiagL0
+GDRYBIAS,Guider y-coordinate bias guiding error (mas),QUALITY_CONTROL,float,DiagL0
+GDRSEEJZ,Seeing in J+Z-band from Moffat fit (arcsec),QUALITY_CONTROL,float,DiagL0
+GDRFWMD,Guider images: median FWHM (mas),QUALITY_CONTROL,float,DiagL0
+GDRFWSTD,Guider images: std FWHM (mas),QUALITY_CONTROL,float,DiagL0
+GDRFXMD,Guider images: median flux (ADU),QUALITY_CONTROL,float,DiagL0
+GDRFXSTD,Guider images: std flux (ADU),QUALITY_CONTROL,float,DiagL0
+GDRPKMD,Guider images: median peak flux (ADU),QUALITY_CONTROL,float,DiagL0
+GDRPKSTD,Guider images: std peak flux (ADU),QUALITY_CONTROL,float,DiagL0
+GDRFRSAT,Guider: fraction of frames within 90% saturated,QUALITY_CONTROL,float,DiagL0
+GDRNSAT,Guider: num 90% saturated pix in co-added image,QUALITY_CONTROL,int,DiagL0
+GDRRMSOK,QC: guider X/Y RMS <= 50 mas (legacy GUIDGOOD),QUALITY_CONTROL,int,QCL0
+GDROFFOK,QC: guider X/Y bias offset <= 50 mas (legacy GUIDGOOD),QUALITY_CONTROL,int,QCL0
+GDRSATOK,"QC: GDRNSAT <= 3, GDRFRSAT <= 0.1 (legacy GUIDSAT)",QUALITY_CONTROL,int,QCL0
+ELEVOK,QC: Telescope elevation above 30 deg for ADC (legacy GOODEL),QUALITY_CONTROL,int,QCL0
+ETATMPOK,QC: Etalon at set temperature (legacy ETASTEMP),QUALITY_CONTROL,int,QCL0
+AGITOK,"QC: agitator running, |AGITSPD| > 1000 counts/s (legacy AGITOK)",QUALITY_CONTROL,int,QCL0
