@@ -127,9 +127,10 @@ def write_amp_l0(
     one caller deliberately writes once per module) and decides whether to
     ``from_fits`` the result.
 
-    ``bias_level=None`` fills every amp with ones -- adequate whenever the test
-    only cares that data is present. A float instead fills with seeded Gaussian
-    noise about that level, for tests that measure the assembled image.
+    ``bias_level=None`` fills every amp with a flat 1e6 D.N., a plausible raw
+    level that clears the QCL0 pixel-quality thresholds -- adequate whenever the
+    test only cares that data is present. A float instead fills with seeded
+    Gaussian noise about that level, for tests that measure the assembled image.
     ``with_data=False`` writes ``data=None`` HDUs, which KPF0 stores as
     ``array(None, dtype=object)`` and treats as absent.
     """
@@ -140,7 +141,7 @@ def write_amp_l0(
             if not with_data:
                 data = None
             elif bias_level is None:
-                data = np.ones(shape, dtype=np.float32)
+                data = np.full(shape, 1.0e6, dtype=np.float32)
             else:
                 data = (bias_level + rng.normal(0, 3.0, shape)).astype(np.float32)
             hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))

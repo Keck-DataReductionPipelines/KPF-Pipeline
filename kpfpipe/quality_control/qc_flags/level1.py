@@ -92,26 +92,25 @@ class QCL1(QC):
 
     ffi_finite._qc_key = "L1NANOK"
 
-    def nonzero_flux(self):
-        """Zero-flux fraction of the assembled CCD frames < 0.5."""
-        raise NotImplementedError
-
-    nonzero_flux._qc_key = "L1FLXOK"
-
     def variance_positive(self):
         """No negative GREEN_VAR/RED_VAR where the flux is finite."""
-        raise NotImplementedError
+        for chip in ("GREEN", "RED"):
+            flux = np.asarray(self.kpf_obj.data[f"{chip}_CCD"])
+            var = np.asarray(self.kpf_obj.data[f"{chip}_VAR"])
+            if np.any(np.isfinite(flux) & np.isfinite(var) & (var < 0)):
+                return False
+        return True
 
     variance_positive._qc_key = "L1VAROK"
 
     def negative_snr_fraction(self):
-        """Pixels below -5 sigma <= 1%, catching bias/dark over-subtraction."""
-        raise NotImplementedError
+        """Pixels below -5 sigma at most 1% on each chip (v2.12 POS2DSNR)."""
+        for chip in ("GREEN", "RED"):
+            ccd = self.kpf_obj.data[f"{chip}_CCD"]
+            var = self.kpf_obj.data[f"{chip}_VAR"]
+            snr = ccd / np.sqrt(var)
+            if np.count_nonzero(snr < -5) / snr.size > 0.01:
+                return False
+        return True
 
     negative_snr_fraction._qc_key = "L1SNROK"
-
-    def saturated_fraction(self):
-        """Saturated / non-linear science pixel fraction within limit."""
-        raise NotImplementedError
-
-    saturated_fraction._qc_key = "L1SATOK"

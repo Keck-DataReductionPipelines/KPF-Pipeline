@@ -18,6 +18,10 @@ ASTROMOK,QC: catalog epoch/equinox/rv/parallax/PM in physical range,QUALITY_CONT
 COLOROK,QC: catalog color present and in physical range,QUALITY_CONTROL,int,QCL0
 EMTIMEOK,QC: exposure meter times consistent with shutter window,QUALITY_CONTROL,int,QCL0
 EMFLUXOK,QC: exposure meter flux not saturated or negative,QUALITY_CONTROL,int,QCL0
+NOTDEADG,QC: GREEN dead pixel fraction within limit,QUALITY_CONTROL,int,QCL0
+NOTDEADR,QC: RED dead pixel fraction within limit,QUALITY_CONTROL,int,QCL0
+NOTSATG,QC: GREEN saturated pixel fraction within limit,QUALITY_CONTROL,int,QCL0
+NOTSATR,QC: RED saturated pixel fraction within limit,QUALITY_CONTROL,int,QCL0
 TCSOFF,Pointing offset from DCS target (arcsec),QUALITY_CONTROL,float,DiagL0
 OBJOFF,Pointing offset from OBJECT (SIMBAD) position (arcsec),QUALITY_CONTROL,float,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),QUALITY_CONTROL,float,DiagL0

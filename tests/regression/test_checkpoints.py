@@ -267,6 +267,10 @@ class TestCheckpointL0:
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
         assert qc["KWRDPRL0"] == 1
+        assert qc["NOTDEADG"] == 1
+        assert qc["NOTDEADR"] == 1
+        assert qc["NOTSATG"] == 1
+        assert qc["NOTSATR"] == 1
         assert qc["TCSOFF"] < 1.0
         assert qc["ISGOOD"] == 1
 

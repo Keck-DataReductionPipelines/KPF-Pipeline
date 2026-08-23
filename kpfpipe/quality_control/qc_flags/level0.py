@@ -281,3 +281,47 @@ class QCL0(QC):
         return True
 
     expmeter_flux_sane._qc_key = "EMFLUXOK"
+
+    def _amp_pixel_fraction(self, chip, compare, level):
+        """Largest fraction of any present amp on ``chip`` satisfying ``compare``.
+
+        Raw D.N., before ImageAssembly applies gain or subtracts overscan. Only the
+        amps a readout actually used carry data, so 2-amp and 4-amp frames both
+        work; the worst amp decides, mirroring v2.12's per-amp infobits.
+        """
+        fractions = []
+        for i in range(1, 5):
+            arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
+            # KPF0 stores None-data as array(None, dtype=object); skip absent.
+            if (
+                arr is None
+                or getattr(arr, "dtype", None) == np.dtype(object)
+                or np.size(arr) == 0
+            ):
+                continue
+            fractions.append(np.count_nonzero(compare(arr, level)) / arr.size)
+        return float(max(fractions))
+
+    def green_not_dead(self):
+        """At most 5% of any GREEN amp below 1.0e4 D.N. (v2.12 L0 dead infobit)."""
+        return self._amp_pixel_fraction("GREEN", np.less, 1.0e4) <= 0.05
+
+    green_not_dead._qc_key = "NOTDEADG"
+
+    def red_not_dead(self):
+        """At most 5% of any RED amp below 1.0e4 D.N. (v2.12 L0 dead infobit)."""
+        return self._amp_pixel_fraction("RED", np.less, 1.0e4) <= 0.05
+
+    red_not_dead._qc_key = "NOTDEADR"
+
+    def green_not_saturated(self):
+        """At most 15% of any GREEN amp above 5.0e8 D.N. (v2.12 L0 sat infobit)."""
+        return self._amp_pixel_fraction("GREEN", np.greater, 5.0e8) <= 0.15
+
+    green_not_saturated._qc_key = "NOTSATG"
+
+    def red_not_saturated(self):
+        """At most 15% of any RED amp above 5.0e8 D.N. (v2.12 L0 sat infobit)."""
+        return self._amp_pixel_fraction("RED", np.greater, 5.0e8) <= 0.15
+
+    red_not_saturated._qc_key = "NOTSATR"

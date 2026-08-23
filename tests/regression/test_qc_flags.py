@@ -938,6 +938,92 @@ class TestQCL0:
         assert QCL0.__dict__["expmeter_flux_sane"]._qc_key == "EMFLUXOK"
 
 
+class TestQCL0PixelQuality:
+    """Per-chip dead and saturated pixel fractions, ported from the v2.12 infobits.
+
+    ``write_amp_l0`` fills every amp with a flat 1e6 D.N., which clears both
+    thresholds, so each test drives a chosen pixel count past one bound. Each amp
+    here is 10x10 = 100 pixels, making 5% and 15% land on whole pixels.
+    """
+
+    def test_not_dead_pass(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        assert QCL0(l0).green_not_dead() is True
+        assert QCL0(l0).red_not_dead() is True
+
+    def test_not_dead_pass_at_limit(self, tmp_path):
+        # 5 of 100 pixels is exactly 5%; the fraction must exceed it to fail.
+        l0 = _make_kpf0(tmp_path)
+        l0.data["GREEN_AMP3"].flat[:5] = 0.0
+        assert QCL0(l0).green_not_dead() is True
+
+    def test_not_dead_fail_past_limit(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        l0.data["GREEN_AMP3"].flat[:6] = 0.0
+        assert QCL0(l0).green_not_dead() is False
+
+    def test_not_dead_pass_at_threshold_value(self, tmp_path):
+        # Strictly below 1.0e4 D.N. counts; a pixel exactly at it does not.
+        l0 = _make_kpf0(tmp_path)
+        l0.data["GREEN_AMP3"].flat[:50] = 1.0e4
+        assert QCL0(l0).green_not_dead() is True
+
+    def test_not_saturated_pass_at_limit(self, tmp_path):
+        # 15 of 100 pixels is exactly 15%.
+        l0 = _make_kpf0(tmp_path)
+        l0.data["RED_AMP2"].flat[:15] = 6.0e8
+        assert QCL0(l0).red_not_saturated() is True
+
+    def test_not_saturated_fail_past_limit(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        l0.data["RED_AMP2"].flat[:16] = 6.0e8
+        assert QCL0(l0).red_not_saturated() is False
+
+    def test_not_saturated_pass_at_threshold_value(self, tmp_path):
+        # Strictly above 5.0e8 D.N. counts; a pixel exactly at it does not.
+        l0 = _make_kpf0(tmp_path)
+        l0.data["RED_AMP2"].flat[:50] = 5.0e8
+        assert QCL0(l0).red_not_saturated() is True
+
+    def test_chips_judged_separately(self, tmp_path):
+        # A dead GREEN amp does not drag down the RED verdict, and vice versa.
+        l0 = _make_kpf0(tmp_path)
+        l0.data["GREEN_AMP1"].flat[:50] = 0.0
+        assert QCL0(l0).green_not_dead() is False
+        assert QCL0(l0).red_not_dead() is True
+
+    def test_worst_amp_decides(self, tmp_path):
+        # One bad amp fails its chip even though the other three are clean.
+        l0 = _make_kpf0(tmp_path)
+        l0.data["RED_AMP4"].flat[:50] = 0.0
+        assert QCL0(l0).red_not_dead() is False
+
+    def test_two_amp_readout_passes(self, tmp_path):
+        # Absent amps are skipped, so a 2-amp frame is judged on the amps it has.
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00002.00.fits", namps=2, shape=(10, 10)
+        )
+        assert QCL0(KPF0.from_fits(fn)).green_not_dead() is True
+
+    def test_no_amp_data_raises(self, tmp_path):
+        l0 = _make_kpf0(tmp_path, with_amps=False)
+        with pytest.raises(ValueError):
+            QCL0(l0).green_not_dead()
+
+    def test_qc_keys_correct(self):
+        expected = {
+            "green_not_dead": "NOTDEADG",
+            "red_not_dead": "NOTDEADR",
+            "green_not_saturated": "NOTSATG",
+            "red_not_saturated": "NOTSATR",
+        }
+        for method_name, key in expected.items():
+            fn = QCL0.__dict__[method_name]
+            assert fn._qc_key == key, (
+                f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
+            )
+
+
 # ---------------------------------------------------------------------------
 # QCL1 checks
 # ---------------------------------------------------------------------------
@@ -1120,6 +1206,66 @@ class TestQCL1:
         with pytest.raises(KeyError, match="GREEN_CCD"):
             QCL1(l1).ffi_finite()
 
+    # --- variance_positive (L1VAROK) and negative_snr_fraction (L1SNROK).
+    # _make_kpf1 writes all-ones CCD and VAR, so SNR == the CCD value and each
+    # chip is 20x20 = 400 pixels, putting the 1% limit at 4.
+
+    def test_variance_positive_pass(self, tmp_path):
+        assert QCL1(_make_kpf1(tmp_path)).variance_positive() is True
+
+    def test_variance_positive_fail_negative_var(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_VAR"][0, 0] = -1.0
+        assert QCL1(l1).variance_positive() is False
+
+    def test_variance_positive_pass_zero_var(self, tmp_path):
+        # Zero variance at a masked column is tolerated; only negative is unphysical.
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_VAR"][0, 0] = 0.0
+        assert QCL1(l1).variance_positive() is True
+
+    def test_variance_positive_pass_negative_var_under_nan_flux(self, tmp_path):
+        # Scoped to pixels whose flux is finite, matching QCL2.variance_positive.
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_CCD"][0, 0] = np.nan
+        l1.data["GREEN_VAR"][0, 0] = -1.0
+        assert QCL1(l1).variance_positive() is True
+
+    def test_negative_snr_fraction_pass(self, tmp_path):
+        assert QCL1(_make_kpf1(tmp_path)).negative_snr_fraction() is True
+
+    def test_negative_snr_fraction_pass_at_limit(self, tmp_path):
+        # 4 of 400 pixels is exactly 1%; the fraction must exceed it to fail.
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_CCD"].flat[:4] = -10.0
+        assert QCL1(l1).negative_snr_fraction() is True
+
+    def test_negative_snr_fraction_fail_past_limit(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_CCD"].flat[:5] = -10.0
+        assert QCL1(l1).negative_snr_fraction() is False
+
+    def test_negative_snr_fraction_fail_red_chip(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["RED_CCD"].flat[:5] = -10.0
+        assert QCL1(l1).negative_snr_fraction() is False
+
+    def test_negative_snr_fraction_pass_at_five_sigma(self, tmp_path):
+        # Strictly below -5 counts; a pixel exactly at -5 sigma does not.
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_CCD"].flat[:10] = -5.0
+        assert QCL1(l1).negative_snr_fraction() is True
+
+    def test_zero_variance_writes_snr_flag_zero(self, tmp_path, caplog):
+        # No errstate: a degenerate variance surfaces rather than being silenced,
+        # and QC.run records it as a failed flag.
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_VAR"][:] = 0.0
+        with caplog.at_level(logging.ERROR):
+            QCL1(l1).run()
+        assert l1.headers["QUALITY_CONTROL"]["L1SNROK"] == 0
+        assert "negative_snr_fraction" in caplog.text
+
     def test_qc_keys_correct(self):
         expected = {
             "data_present": "DATAPRL1",
@@ -1130,10 +1276,8 @@ class TestQCL1:
             "dark_ok": "DARKOK",
             "flat_ok": "FLATOK",
             "ffi_finite": "L1NANOK",
-            "nonzero_flux": "L1FLXOK",
             "variance_positive": "L1VAROK",
             "negative_snr_fraction": "L1SNROK",
-            "saturated_fraction": "L1SATOK",
         }
         for method_name, key in expected.items():
             fn = QCL1.__dict__[method_name]
@@ -1167,17 +1311,13 @@ class TestQCL1Run:
             "DARKOK",
             "FLATOK",
             "L1NANOK",
+            "L1VAROK",
+            "L1SNROK",
         ]
         for k in qc_keys:
             v = l1.headers["QUALITY_CONTROL"].get(k)
             assert v == 1, f"{k} should be 1 but is {v}"
             assert k in results
-
-        # A placeholder check raising NotImplementedError writes no flag, so the
-        # keyword stays absent and ISGOOD is unaffected.
-        for k in ("L1FLXOK", "L1VAROK", "L1SNROK", "L1SATOK"):
-            assert l1.headers["QUALITY_CONTROL"].get(k) is None
-            assert k not in results
 
     def test_one_bad_check_isgood_0(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=False)
@@ -1334,7 +1474,6 @@ class TestQCL2:
             "nonzero_flux": "L2FLXOK",
             "variance_positive": "L2VAROK",
             "science_snr": "L2SNROK",
-            "saturated_fraction": "L2SATOK",
         }
         for method_name, key in expected.items():
             fn = QCL2.__dict__[method_name]
