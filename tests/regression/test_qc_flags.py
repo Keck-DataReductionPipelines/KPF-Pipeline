@@ -418,10 +418,14 @@ class TestQCL0:
         bad = dict(GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
 
-    def test_times_ignores_elapsed(self, tmp_path):
-        # DATTIMOK checks only DATE ordering; ELAPSED is EXPTIMOK's business.
+    def test_times_elapsed_mismatch_fails(self, tmp_path):
         bad = dict(GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
-        assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is True
+        assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
+
+    def test_times_elapsed_missing_raises(self, tmp_path):
+        missing = {k: v for k, v in GOOD_DATES.items() if k != "ELAPSED"}
+        with pytest.raises(KeyError):
+            QCL0(_make_kpf0(tmp_path, dates=missing)).times_consistent()
 
     def test_times_missing_keys_fail(self, tmp_path):
         # Raw L0 PRIMARY without DATE-BEG/MID/END -> cannot verify -> fail.

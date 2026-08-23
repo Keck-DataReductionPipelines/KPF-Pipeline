@@ -65,14 +65,14 @@ class QCL0(QC):
     header_keywords_present._qc_key = "KWRDPRL0"
 
     def times_consistent(self):
-        """DATE-BEG <= DATE-MID <= DATE-END, and each chip's shutter matches.
+        """DATE-BEG <= DATE-MID <= DATE-END, matching ELAPSED and the shutters.
 
         Ports the header-date half of v2.12 ``L0_datetime`` (the exposure-meter
-        half is EMTIMEOK). Each per-chip shutter time must fall within 0.1 s of
-        the overall window edge it bounds; mismatched chips have different
-        photon-weighted midpoints, so one barycentric correction cannot serve
-        both. An absent card fails: it is the only evidence that chip's timing
-        was right.
+        half is EMTIMEOK). The shutter window must agree with ELAPSED to 0.1 s,
+        and each per-chip shutter time must fall within 0.1 s of the window edge
+        it bounds; mismatched chips have different photon-weighted midpoints, so
+        one barycentric correction cannot serve both. An absent card fails: it
+        is the only evidence that chip's timing was right.
 
         At L0 the raw instrument times live on the WMKO-native PRIMARY (the
         header later snapshotted verbatim into INSTRUMENT_HEADER at to_kpf1); the
@@ -85,6 +85,8 @@ class QCL0(QC):
         if beg is None or mid is None or end is None:
             return False
         if not beg <= mid <= end:
+            return False
+        if abs((end - beg).total_seconds() - float(hdr["ELAPSED"])) > 0.1:
             return False
         for key, edge in (
             ("GRDATE-B", beg),

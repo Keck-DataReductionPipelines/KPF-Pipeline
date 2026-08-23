@@ -11,7 +11,7 @@ DATAPRL0,QC: GREEN/RED amp extensions present/non-empty,QUALITY_CONTROL,int,QCL0
 KWRDPRL0,QC: required L0 PRIMARY keywords present,QUALITY_CONTROL,int,QCL0
 TELEPRL0,QC: TELEMETRY extension present in L0,QUALITY_CONTROL,int,QCL0
 EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",QUALITY_CONTROL,int,QCL0
-DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END),QUALITY_CONTROL,int,QCL0
+DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,int,QCL0
 NTPOK,QC: NTP clock error < 100 ms,QUALITY_CONTROL,int,QCL0
 RADECOK,QC: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,int,QCL0
 ASTROMOK,QC: catalog epoch/equinox/rv/parallax/PM in physical range,QUALITY_CONTROL,int,QCL0
