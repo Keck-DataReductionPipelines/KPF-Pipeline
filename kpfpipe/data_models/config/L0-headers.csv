@@ -7,7 +7,7 @@ DRPSTATU,DRP reduction status (DRP-RUN-20),RECEIPT,str,KPF0.from_fits
 WMKOCR,Catalog record present for DCS/TCS target,CATALOG_RECORD,int,AstroQuery
 GAIACR,Catalog record present for Gaia DR3 source,CATALOG_RECORD,int,AstroQuery
 SIMBADCR,Catalog record present for SIMBAD object,CATALOG_RECORD,int,AstroQuery
-DATAPRL0,QC: GREEN/RED amps present at readout shape,QUALITY_CONTROL,int,QCL0
+DATAPRL0,QC: GREEN/RED amps present and populated,QUALITY_CONTROL,int,QCL0
 KWRDPRL0,QC: required L0 PRIMARY keywords present,QUALITY_CONTROL,int,QCL0
 TELEPRL0,QC: TELEMETRY extension present in L0,QUALITY_CONTROL,int,QCL0
 EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",QUALITY_CONTROL,int,QCL0

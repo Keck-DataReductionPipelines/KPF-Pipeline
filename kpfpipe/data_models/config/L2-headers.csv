@@ -26,7 +26,7 @@ GFRS2,Median flux ratio SKY/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
 RFRS2,Median flux ratio SKY/SCI2 RED,QUALITY_CONTROL,float,DiagL2
 GFRC2,Median flux ratio CAL/SCI2 GREEN,QUALITY_CONTROL,float,DiagL2
 RFRC2,Median flux ratio CAL/SCI2 RED,QUALITY_CONTROL,float,DiagL2
-DATAPRL2,QC: L2 FLUX/VAR/WAVE present at order shape,QUALITY_CONTROL,int,QCL2
+DATAPRL2,QC: L2 FLUX/VAR/WAVE present and populated,QUALITY_CONTROL,int,QCL2
 KWRDPRL2,QC: required L2 PRIMARY keywords present,QUALITY_CONTROL,int,QCL2
 L2NANOK,QC: L2 NaN fraction <= 1%,QUALITY_CONTROL,int,QCL2
 L2FLXOK,QC: L2 zero-flux fraction < 0.5,QUALITY_CONTROL,int,QCL2
