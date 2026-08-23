@@ -248,9 +248,9 @@ class TestCheckpointL2:
         assert qc["ISGOOD"] == 0
 
     def test_run_raises_when_extraction_missing(self):
-        # No extracted flux: the folded DiagL2 stage runs first and has no pixels
-        # to measure, so the checkpoint fails there rather than at DATAPRL2.
-        with pytest.raises(ZeroDivisionError):
+        # No extracted flux: the folded DiagL2 and QCL2 stages log what they cannot
+        # compute and carry on, so the fatal verdict comes from DATAPRL2.
+        with pytest.raises(ValueError, match="DATAPRL2 = 0"):
             CheckpointL2(_make_l2(populate=False)).run()
 
 
@@ -324,10 +324,10 @@ class TestCheckpointL1:
         assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_ccd_data_missing(self):
-        # No assembled CCDs: DiagL1's flux percentiles run first and have no
-        # pixels to measure, so the checkpoint fails there rather than at DATAPRL1.
+        # No assembled CCDs: DiagL1's flux percentiles have no pixels to measure,
+        # but that only logs, so the fatal verdict comes from DATAPRL1.
         l1 = _make_l1(ccd=False)
-        with pytest.raises(RuntimeWarning, match="Mean of empty slice"):
+        with pytest.raises(ValueError, match="DATAPRL1 = 0"):
             CheckpointL1(l1).run()
 
     def test_run_raises_when_required_keyword_missing(self):
@@ -395,10 +395,10 @@ class TestCheckpointL4:
         assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_science_ccf_rv_missing(self):
-        # No science RV table: DiagL4 runs first and has no per-order BJD/BERV to
-        # measure, so the checkpoint fails there rather than at DATAPRL4.
+        # No science RV table: DiagL4 has no per-order BJD/BERV to measure, but that
+        # only logs, so the fatal verdict comes from DATAPRL4.
         l4 = _make_l4(sci=False)
-        with pytest.raises(KeyError, match="BJD_TDB"):
+        with pytest.raises(ValueError, match="DATAPRL4 = 0"):
             CheckpointL4(l4).run()
 
     def test_run_raises_when_required_keyword_missing(self):

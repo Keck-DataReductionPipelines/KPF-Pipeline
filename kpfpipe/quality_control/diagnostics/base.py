@@ -43,7 +43,8 @@ class Diagnostics:
 
         Resets ``self.results`` at the start so calling ``run()`` repeatedly
         is deterministic. A method that raises is logged at ERROR (naming it) and
-        re-raised unchanged -- fail-fast; halting is the checkpoint layer's role.
+        skipped: this layer is informational and never aborts the pipeline, so its
+        keywords are simply not written. Halting is the checkpoint layer's role.
 
         Returns
         -------
@@ -63,7 +64,6 @@ class Diagnostics:
                     self.kpf_obj.set_keyword(kw, value)
             except Exception as e:
                 logger.error("%s diagnostic %r raised: %s", self.LEVEL, name, e)
-                raise
 
         for kw, (value, comment) in self.results.items():
             logger.debug("%s %s = %s — %s", self.LEVEL, kw, value, comment)

@@ -29,14 +29,11 @@ class QC:
     def run(self):
         """Run all checks, write each 0/1 result, and aggregate ISGOOD.
 
-        Each result is logged as it is written -- ``DEBUG`` on a pass, ``WARNING``
-        on a fail -- both carrying the keyword's comment so the 8-char keyword
-        reads clearly. Resets ``self.results`` at the start so calling ``run()``
-        repeatedly on the same instance is deterministic. A check that raises is
-        logged at ERROR (naming it) and re-raised unchanged -- fail-fast; halting
-        is the checkpoint layer's role. The exception is ``NotImplementedError``,
-        raised by a registered-but-unwritten placeholder check: it writes no flag,
-        so the keyword stays absent and ISGOOD is unaffected.
+        Each result is logged as it is written: DEBUG on a pass, WARNING on a
+        fail, ERROR on a check that raised (counted as a fail -- this layer never
+        aborts; halting is the checkpoint layer's role). ``NotImplementedError``
+        from a placeholder check writes no flag, leaving ISGOOD unaffected.
+        ``self.results`` is reset at the start so repeated calls are deterministic.
 
         Returns
         -------
@@ -47,29 +44,30 @@ class QC:
         self.results = {}
 
         for name, fn in self._iter_checks():
+            kw = fn._qc_key
+            # Mirror the registry Description into results (the FITS comment
+            # source; see ``_tag``). The _qc_key must be registered.
+            comment = self.kpf_obj.keyword_registry.routing[kw][1]
             try:
                 passed = fn()
-                kw = fn._qc_key
-                # Mirror the registry Description into results (the FITS comment
-                # source; see ``_tag``). The _qc_key must be registered.
-                comment = self.kpf_obj.keyword_registry.routing[kw][1]
-                self.results[kw] = (passed, comment)
-                self.kpf_obj.set_keyword(kw, 1 if passed else 0)
-                logger.log(
-                    logging.DEBUG if passed else logging.WARNING,
-                    "%s %s = %s — %s",
-                    self.LEVEL,
-                    kw,
-                    1 if passed else 0,
-                    comment,
-                )
             except NotImplementedError:
                 logger.info(
                     "%s QC check %r is not implemented; skipped", self.LEVEL, name
                 )
+                continue
             except Exception as e:
                 logger.error("%s QC check %r raised: %s", self.LEVEL, name, e)
-                raise
+                passed = False
+            self.results[kw] = (passed, comment)
+            self.kpf_obj.set_keyword(kw, 1 if passed else 0)
+            logger.log(
+                logging.DEBUG if passed else logging.WARNING,
+                "%s %s = %s — %s",
+                self.LEVEL,
+                kw,
+                1 if passed else 0,
+                comment,
+            )
 
         # ISGOOD is the running aggregate: AND over every QC flag now on
         # QUALITY_CONTROL -- the flags this level just wrote PLUS those propagated

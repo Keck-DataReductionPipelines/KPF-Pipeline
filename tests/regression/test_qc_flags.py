@@ -197,7 +197,9 @@ class TestQCBase:
         present on QUALITY_CONTROL, so the stub declares the synthetic check keys
         as the QC-flag set and stores every keyword on QUALITY_CONTROL.
         """
-        qc_keys = frozenset({"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "ISGOOD"})
+        qc_keys = frozenset(
+            {"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "BOOM", "ISGOOD"}
+        )
 
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
@@ -251,7 +253,7 @@ class TestQCBase:
         assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHKFAIL"] == 0
 
-    def test_raising_check_propagates_and_logs(self, caplog):
+    def test_raising_check_writes_zero_and_continues(self, caplog):
         obj = self._make_obj()
 
         class MyQC(QC):
@@ -262,11 +264,20 @@ class TestQCBase:
 
             check_boom._qc_key = "BOOM"
 
-        # Fail-fast: the exception propagates unwrapped, logged at ERROR.
+            def check_ok(self):
+                return True
+
+            check_ok._qc_key = "CHKOK"
+
+        # Informational layer: a check that cannot run is logged at ERROR (vs the
+        # WARNING an ordinary fail gets), counted as a fail, and the run continues.
         with caplog.at_level(logging.ERROR):
-            with pytest.raises(ValueError, match="boom!"):
-                MyQC(obj).run()
+            results = MyQC(obj).run()
         assert "QC check 'check_boom' raised" in caplog.text
+        assert "boom!" in caplog.text
+        assert obj.headers["QUALITY_CONTROL"]["BOOM"] == 0
+        assert results["BOOM"][0] is False
+        assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
 
     def test_empty_subclass_isgood_1(self):
         obj = self._make_obj()

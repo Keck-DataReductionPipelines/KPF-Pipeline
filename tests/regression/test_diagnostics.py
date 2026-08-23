@@ -91,19 +91,24 @@ class TestDiagnosticsBase:
         assert results == {}
         assert obj.headers["PRIMARY"] == {}
 
-    def test_none_return_raises(self):
+    def test_none_return_logs_and_writes_nothing(self, caplog):
         obj = self._make_obj()
 
         class MyDiag(Diagnostics):
+            LEVEL = "L0"
+
             def nothing(self):
                 return None
 
             nothing._diag_name = "nothing"
 
-        with pytest.raises(AttributeError):
-            MyDiag(obj).run()
+        with caplog.at_level(logging.ERROR):
+            results = MyDiag(obj).run()
+        assert results == {}
+        assert obj.headers["PRIMARY"] == {}
+        assert "diagnostic 'nothing' raised" in caplog.text
 
-    def test_raising_method_propagates_and_logs(self, caplog):
+    def test_raising_method_logs_and_continues(self, caplog):
         obj = self._make_obj()
 
         class MyDiag(Diagnostics):
@@ -114,12 +119,19 @@ class TestDiagnosticsBase:
 
             boom._diag_name = "boom"
 
-        # Fail-fast: the original exception propagates unchanged (no RuntimeError
-        # wrap), and run() logs the offending method at ERROR.
+            def after(self):
+                return {"KEYA": (3.14, "metric a")}
+
+            after._diag_name = "after"
+
+        # Informational layer: run() logs the offender at ERROR and keeps going, so
+        # a later metric is still computed. Halting is the checkpoint layer's job.
         with caplog.at_level(logging.ERROR):
-            with pytest.raises(ValueError, match="boom!"):
-                MyDiag(obj).run()
+            results = MyDiag(obj).run()
         assert "diagnostic 'boom' raised" in caplog.text
+        assert "boom!" in caplog.text
+        assert results == {"KEYA": (3.14, "metric a")}
+        assert obj.headers["PRIMARY"]["KEYA"] == 3.14
 
     def test_repeated_run_resets_results(self):
         obj = self._make_obj()
@@ -245,7 +257,7 @@ class TestDiagL0Contingency:
     def test_no_catalog_record_raises(self):
         # AstroQuery not run: CATALOG_RECORD auto-created but no presence flags.
         with pytest.raises(KeyError, match="GAIACR"):
-            DiagL0(_make_l0_pointing()).run()
+            DiagL0(_make_l0_pointing()).gaia_ra_dec_offset()
 
     def test_unmatched_optional_source_emits_no_key(self):
         # Gaia lookup disabled/failed -> GAIACR=0 -> no GAIAOFF; others compute.
@@ -268,7 +280,7 @@ class TestDiagL0Contingency:
             l0, {"gaia": _record_at(pt), "simbad": _record_at(pt), "wmko": None}
         )
         with pytest.raises(IndexError):
-            DiagL0(l0).run()
+            DiagL0(l0).target_ra_dec_offset()
 
     def test_incomplete_record_raises(self):
         # A record present (flag 1) but missing epoch, the propagation baseline.
@@ -284,7 +296,7 @@ class TestDiagL0Contingency:
             },
         )
         with pytest.raises((TypeError, ValueError)):
-            DiagL0(l0).run()
+            DiagL0(l0).target_ra_dec_offset()
 
     # No usable parallax means no distance on the SkyCoord, and ERFA warns that it
     # overrode the distance while propagating -- the documented consequence of the
@@ -347,7 +359,7 @@ class TestDiagL0Contingency:
             },
         )
         with pytest.raises(ValueError, match="garbage"):
-            DiagL0(l0).run()
+            DiagL0(l0).target_ra_dec_offset()
 
 
 # ---------------------------------------------------------------------------
@@ -420,19 +432,16 @@ class TestDiagL1CalibrationAges:
         assert set(results) & set(_CAL_AGE_KEYS) == {"BIASAGE"}
         assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
 
-    def test_no_date_obs_raises(self, caplog):
+    def test_no_date_obs_raises(self):
         # DATE-OBS is guaranteed by the L1 checkpoint's KWRDPRL1 raise gate; if it
         # is missing anyway, calibration_ages fails loud (a broken upstream
-        # invariant). run() logs the offending method and lets the original
-        # KeyError propagate unchanged (fail-fast).
+        # invariant).
         l1 = _make_kpf1_with_calibrations(
             files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
         )
         del l1.headers["PRIMARY"]["DATE-OBS"]
-        with caplog.at_level(logging.ERROR):
-            with pytest.raises(KeyError, match="DATE-OBS"):
-                DiagL1(l1).run()
-        assert "diagnostic 'calibration_ages' raised" in caplog.text
+        with pytest.raises(KeyError, match="DATE-OBS"):
+            DiagL1(l1).calibration_ages()
 
 
 class TestDiagL1FluxPercentiles:
@@ -466,7 +475,7 @@ class TestDiagL1FluxPercentiles:
     def test_empty_chip_raises(self):
         l1 = self._l1(GREEN_CCD=self._RAMP, RED_CCD=np.array([], dtype=float))
         with pytest.raises(RuntimeWarning, match="Mean of empty slice"):
-            DiagL1(l1).run()
+            DiagL1(l1).flux_percentiles()
 
 
 # ---------------------------------------------------------------------------
@@ -557,7 +566,7 @@ class TestDiagL2ZeroFlux:
     def test_raises_when_no_data(self):
         kpf2 = _make_kpf2_nan_pixels(populate=False)
         with pytest.raises(ZeroDivisionError):
-            DiagL2(kpf2).run()
+            DiagL2(kpf2).zero_flux_fraction()
 
 
 # ---------------------------------------------------------------------------
@@ -615,12 +624,12 @@ class TestDiagL2Snr:
             kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"), ncol=_NCOL_TEST
         )
         with pytest.raises(ValueError, match="broadcast"):
-            DiagL2(kpf2).run()
+            DiagL2(kpf2).snr()
 
     def test_raises_without_var(self):
         kpf2 = _make_kpf2_nan_pixels(var=None)
         with pytest.raises(ValueError, match="broadcast"):
-            DiagL2(kpf2).run()
+            DiagL2(kpf2).snr()
 
 
 # ---------------------------------------------------------------------------
@@ -709,7 +718,7 @@ class TestDiagL4:
         # No positive total weight: the photon-weighted mean is undefined.
         l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [0.0, 0.0])
         with pytest.raises(RuntimeWarning, match="invalid value"):
-            DiagL4(l4).run()
+            DiagL4(l4).bjd_dispersion()
 
     def test_non_finite_samples_dropped(self):
         # A NaN BJD is masked out rather than poisoning the mean; the surviving
@@ -720,7 +729,7 @@ class TestDiagL4:
 
     def test_raises_without_sci2_rv_table(self):
         with pytest.raises(KeyError, match="BJD_TDB"):
-            DiagL4(KPF4()).run()
+            DiagL4(KPF4()).bjd_dispersion()
 
     def test_raises_without_weight_column(self):
         # WEIGHT column absent (pre-weights L4) -> fail loud rather than guess.
@@ -730,4 +739,4 @@ class TestDiagL4:
             Table({"ORDER_INDEX": [0, 1], "BJD_TDB": [10.0, 20.0], "BERV": [0.1, 0.3]}),
         )
         with pytest.raises(KeyError, match="WEIGHT"):
-            DiagL4(l4).run()
+            DiagL4(l4).bjd_dispersion()
