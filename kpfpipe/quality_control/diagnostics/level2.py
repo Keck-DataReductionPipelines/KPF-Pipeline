@@ -63,8 +63,7 @@ class DiagL2(Diagnostics):
         SNR = flux / sqrt(|var|); non-finite values are treated as 0 so a
         single bad pixel does not poison the percentile.
         """
-        with np.errstate(divide="ignore", invalid="ignore"):
-            snr = flux / np.sqrt(np.abs(var))
+        snr = flux / np.sqrt(np.abs(var))
         snr = np.where(np.isfinite(snr), snr, 0.0)
         per_order = np.nanpercentile(snr, 95, axis=1)
         return round(float(np.nanmedian(per_order)), 2)
@@ -108,8 +107,7 @@ class DiagL2(Diagnostics):
             for a, b, tag in pairs:
                 fa = self.kpf_obj.data[f"{chip}_{a}_FLUX"]
                 fb = self.kpf_obj.data[f"{chip}_{b}_FLUX"]
-                with np.errstate(divide="ignore", invalid="ignore"):
-                    ratio = np.nanmedian(fa, axis=1) / np.nanmedian(fb, axis=1)
+                ratio = np.nanmedian(fa, axis=1) / np.nanmedian(fb, axis=1)
                 ratio = ratio[np.isfinite(ratio)]
                 out[f"{p}{tag}"] = round(float(np.nanmedian(ratio)), 4)
         return self._tag(**out)

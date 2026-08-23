@@ -86,8 +86,7 @@ class PlotL2(Plot):
     @staticmethod
     def _snr(flux, var):
         """SNR = signal / sqrt(|variance|), elementwise (may be negative)."""
-        with np.errstate(divide="ignore", invalid="ignore"):
-            snr = flux / np.sqrt(np.abs(var))
+        snr = flux / np.sqrt(np.abs(var))
         return np.where(np.isfinite(snr), snr, 0.0)
 
     # ------------------------------------------------------------------
@@ -307,8 +306,7 @@ class PlotL2(Plot):
             if fa is None or fb is None:
                 ax.set_visible(False)
                 continue
-            with np.errstate(divide="ignore", invalid="ignore"):
-                ratio = np.nanmedian(fa, axis=1) / np.nanmedian(fb, axis=1)
+            ratio = np.nanmedian(fa, axis=1) / np.nanmedian(fb, axis=1)
             med = np.nanmedian(ratio[np.isfinite(ratio)])
             ax.plot(x, ratio, marker=".", linewidth=1)
             ax.axhline(med, color="r", linestyle="--", linewidth=0.8)
