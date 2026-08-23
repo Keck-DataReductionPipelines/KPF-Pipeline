@@ -6,6 +6,7 @@ from datetime import datetime
 
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
@@ -28,9 +29,17 @@ class QCL0(QC):
         non-empty amplifier extensions is a supported readout mode
         (``_SUPPORTED_NAMP``), mirroring ``ImageAssembly.count_amplifiers``. A
         chip with no data or a partial/invalid amp set (1 or 3) fails.
+
+        Each amp must also carry the full raw region that readout mode implies:
+        the imaging half or quarter of the detector (``ImageAssembly.dims``) plus
+        the prescan and overscan columns/rows, so a truncated or transposed
+        readout fails here rather than downstream in assembly, and hold at least
+        one finite value, so an all-NaN placeholder is not mistaken for a
+        readout.
         """
+        ccd = DETECTOR["ccd"]
         for chip in _CHIPS:
-            namp = 0
+            amps = []
             for i in range(1, 5):  # GREEN_AMP1..4 / RED_AMP1..4
                 arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
                 # KPF0 stores None-data as array(None, dtype=object); skip absent.
@@ -40,8 +49,15 @@ class QCL0(QC):
                     or np.size(arr) == 0
                 ):
                     continue
-                namp += 1
-            if namp not in _SUPPORTED_NAMP:
+                amps.append(arr)
+            if len(amps) not in _SUPPORTED_NAMP:
+                return False
+            nrow = ccd["nrow"] // (2 if len(amps) == 4 else 1) + ccd["oscan_prl"]
+            ncol = ccd["ncol"] // 2 + ccd["prescan"] + ccd["oscan_srl"]
+            if any(
+                arr.shape != (nrow, ncol) or not np.any(np.isfinite(arr))
+                for arr in amps
+            ):
                 return False
         return True
 

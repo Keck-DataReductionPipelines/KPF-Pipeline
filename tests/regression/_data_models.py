@@ -226,16 +226,19 @@ def seed_catalog_record(kpf0, record=None):
     return kpf0
 
 
-def set_fiber_arrays(kpf2, suffix, value, *, ncol, chips=CHIPS, fibers=FIBERS):
+def set_fiber_arrays(
+    kpf2, suffix, value, *, ncol, chips=CHIPS, fibers=FIBERS, dtype=np.float32
+):
     """Populate ``{chip}_{fiber}_{suffix}`` with a constant for the given fibers.
 
-    ``ncol`` is required on purpose -- see the module docstring.
+    ``ncol`` is required on purpose -- see the module docstring. ``dtype`` must be
+    float64 for ``WAVE``, whose EPRV MinBitDepth the write path enforces.
     """
     for chip in chips:
         for fiber in fibers:
             kpf2.set_data(
                 f"{chip}_{fiber}_{suffix}",
-                np.full((NORDER[chip], ncol), value, dtype=np.float32),
+                np.full((NORDER[chip], ncol), value, dtype=dtype),
             )
 
 
@@ -288,14 +291,18 @@ def make_l4(
             else:
                 rv_col = np.zeros(NORDER_TOTAL) + scatter(1e-3)
             l4.set_data(f"{fiber}_CCF", np.ones((NORDER_TOTAL, 5)))
+            l4.set_data(f"{fiber}_CCF_VAR", np.ones((NORDER_TOTAL, 5)))
             l4.set_data(
                 f"{fiber}_RV",
                 Table(
                     {
                         "ORDER_INDEX": np.arange(NORDER_TOTAL),
                         "RV": rv_col,
+                        "RV_ERR": np.full(NORDER_TOTAL, 1e-3),
                         "BJD_TDB": 2460000.0 + scatter(jitter),
                         "BERV": berv + scatter(jitter),
+                        "WAVE_START": np.full(NORDER_TOTAL, 4500.0),
+                        "WAVE_END": np.full(NORDER_TOTAL, 8700.0),
                         "WEIGHT": np.ones(NORDER_TOTAL),
                     }
                 ),

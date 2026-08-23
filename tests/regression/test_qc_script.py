@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from scripts.quality_control import qc
 
@@ -27,6 +28,17 @@ from ._scripts import CHILD_WARNINGS, REPO_ROOT, run_script, write_config
 pytestmark = pytest.mark.cli
 
 _SCRIPT = "scripts/quality_control/qc.py"
+
+# A child process reads the real detector.toml, so the one subprocess test that
+# must reach ISGOOD=1 needs amps at true readout size (~140 MB, written once);
+# the in-process tests take ``mini_detector`` instead. 4-amp geometry: half the
+# detector plus the parallel overscan rows and the prescan/serial overscan cols.
+_FULL_AMP_SHAPE = (
+    DETECTOR["ccd"]["nrow"] // 2 + DETECTOR["ccd"]["oscan_prl"],
+    DETECTOR["ccd"]["ncol"] // 2
+    + DETECTOR["ccd"]["prescan"]
+    + DETECTOR["ccd"]["oscan_srl"],
+)
 
 # Pointing + DCS target (identical -> TCSOFF ~ 0) so the header-native wmko
 # record supplies DiagL0's required TCSOFF with Gaia/SIMBAD disabled.
@@ -47,7 +59,7 @@ _TARGET_CARDS = {
 }
 
 
-def _write_l0_fixture(path, *, passing=True, imtype="Object"):
+def _write_l0_fixture(path, *, passing=True, imtype="Object", shape=(10, 10)):
     """Write a minimal L0 FITS fixture at path.
 
     passing=False injects a negative EXPTIME so EXPTIMOK fails. A non-'Object'
@@ -69,7 +81,7 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object"):
     write_amp_l0(
         path,
         namps=4,
-        shape=(10, 10),
+        shape=shape,
         primary_cards=cards,
         extra_hdus=expmeter_hdus(),
     )
@@ -106,10 +118,12 @@ def _main_qc(monkeypatch, fixture_path, level="L0", extra_args=None):
     _main(monkeypatch, "--input", fixture_path, "--level", level, *(extra_args or ()))
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestQCScript:
     def test_all_passing_exit_0_isgood_pass(self, tmp_path):
         fixture = tmp_path / "KP.20240405.00001.00.fits"
-        _write_l0_fixture(str(fixture), passing=True)
+        # Full size: this one runs in a child, out of mini_detector's reach.
+        _write_l0_fixture(str(fixture), passing=True, shape=_FULL_AMP_SHAPE)
         cfg = _write_astro_config(tmp_path / "astro.toml")
 
         result = _run_qc_script(

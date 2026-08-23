@@ -39,7 +39,7 @@ from ._data_models import (
 )
 
 _NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
-_NCOL = 8  # DiagL2 metrics are pixel aggregates; detector width is moot here
+_NCOL = 20  # matches the mini_detector ncol, which the DATAPRL2 shape check reads
 
 
 class TestUnregisteredKeywords:
@@ -82,6 +82,7 @@ class TestUnregisteredKeywords:
         CheckpointL0(l0).unregistered_keywords()  # no raise
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestQCFlags:
     def test_raise_flag_zero_raises(self):
         # DATAPRL2 is in CheckpointL2.RAISE_FLAGS, so a 0 is fatal.
@@ -142,6 +143,7 @@ class TestQCFlags:
         assert "RNOK" in caplog.text
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestRunFoldsDiagnosticsAndQC:
     """``run()`` runs the paired Diagnostics, then QC, then the checkpoint methods."""
 
@@ -218,10 +220,14 @@ def _make_l2(*, populate=True):
     if populate:
         set_fiber_arrays(l2, "FLUX", 1.0, ncol=_NCOL)
         set_fiber_arrays(l2, "VAR", 0.25, ncol=_NCOL)
+        set_fiber_arrays(l2, "WAVE", 5000.0, ncol=_NCOL, dtype=np.float64)
+        for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+            l2.set_data(ext, np.zeros(_NORDER_TOTAL, dtype=np.float64))
     seed_required_primary(l2, CheckpointL2.QC)
     return l2
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL2:
     def test_run_composes_diagnostics_into_qc(self):
         l2 = _make_l2()
@@ -254,6 +260,7 @@ class TestCheckpointL2:
             CheckpointL2(_make_l2(populate=False)).run()
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL0:
     def test_run_good_product_passes_and_writes_flags(self, tmp_path, caplog):
         # A science frame carrying everything QCL0 requires: pointing, timing,
@@ -280,7 +287,7 @@ class TestCheckpointL0:
 # ---------------------------------------------------------------------------
 
 
-def _make_l1(*, ccd=True, shape=(8, 8)):
+def _make_l1(*, ccd=True, shape=(20, 20)):
     """KPF1 good enough for CheckpointL1.run(): GREEN/RED CCD + VAR arrays, the
     applied-calibration flags on RECEIPT, and the read-noise and master-age
     keywords on QUALITY_CONTROL, all inside the ranges QCL1 accepts.
@@ -316,6 +323,7 @@ def _make_l1(*, ccd=True, shape=(8, 8)):
     return l1
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL1:
     def test_run_good_product_passes_and_writes_flags(self, caplog):
         l1 = _make_l1()

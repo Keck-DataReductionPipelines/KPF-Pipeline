@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.qc_flags.base import QC
 
@@ -12,16 +13,22 @@ class QCL1(QC):
     LEVEL = "L1"
 
     def data_present(self):
-        """GREEN_CCD and RED_CCD exist and are non-empty."""
-        for ext in ("GREEN_CCD", "RED_CCD"):
-            arr = self.kpf_obj.data.get(ext)
-            # A None-data extension is stored as array(None, dtype=object); absent.
-            if (
-                arr is None
-                or getattr(arr, "dtype", None) == np.dtype(object)
-                or np.size(arr) == 0
-            ):
-                return False
+        """Both chips carry a full-frame CCD and its paired variance.
+
+        Assembly writes the two together (``ImageAssembly.stitch_ffi``), so a
+        variance absent or shaped unlike its flux is a malformed product. The
+        expected shape is the detector's own, which subsumes the non-empty test;
+        an all-NaN frame is present but not populated, and fails too.
+        """
+        shape = (DETECTOR["ccd"]["nrow"], DETECTOR["ccd"]["ncol"])
+        for chip in ("GREEN", "RED"):
+            for suffix in ("CCD", "VAR"):
+                arr = self.kpf_obj.data.get(f"{chip}_{suffix}")
+                # A None-data extension is stored as array(None, dtype=object).
+                if arr is None or getattr(arr, "dtype", None) == np.dtype(object):
+                    return False
+                if arr.shape != shape or not np.any(np.isfinite(arr)):
+                    return False
         return True
 
     data_present._qc_key = "DATAPRL1"

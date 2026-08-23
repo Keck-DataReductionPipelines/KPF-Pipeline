@@ -33,7 +33,8 @@ from ._data_models import (
     write_amp_l0,
 )
 
-_NCOLS = 10  # small column count for fast tests
+_NCOLS = 20  # small column count for fast tests; matches the mini_detector ncol,
+# which the DATAPRL2 shape check reads
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +144,7 @@ def _make_kpf1(
     return l1
 
 
-def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
+def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
     """Minimal KPF2 with all 10 {CHIP}_{FIBER}_FLUX extensions populated.
 
     The arrays stay clean; the NaN counts and zero fraction are written as HEADERS,
@@ -153,8 +154,8 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
 
     Per-chip row counts must match NORDER_GREEN/NORDER_RED because KPF2's
     chip-prefix __setitem__ rejects any other shape. ``nan_frac`` is the fraction
-    of total pixels reported NaN via the NANSCI* headers, ``zero_frac`` the value
-    written to ZEROFRAC, and ``missing_ext`` a chip_fiber key to leave empty.
+    of total pixels reported NaN via the NANSCI* headers and ``zero_frac`` the
+    value written to ZEROFRAC.
     """
     chips = ["GREEN", "RED"]
     fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
@@ -166,12 +167,16 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1, missing_ext=None):
     for chip in chips:
         nrows = NORDER[chip]
         for fiber in fibers:
-            ext = f"{chip}_{fiber}_FLUX"
-            if ext == missing_ext:
-                continue
             arr = np.ones((nrows, ncols), dtype=np.float32)
-            kpf2.set_data(ext, arr)
+            kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
             total_pixels += nrows * ncols
+
+    # The companions DATAPRL2 requires: VAR from extraction, WAVE from the WLS
+    # (float64 per its EPRV MinBitDepth), and the per-order barycentric arrays.
+    set_fiber_arrays(kpf2, "VAR", 1.0, ncol=ncols)
+    set_fiber_arrays(kpf2, "WAVE", 5000.0, ncol=ncols, dtype=np.float64)
+    for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+        kpf2.set_data(ext, np.zeros(NORDER_TOTAL, dtype=np.float64))
 
     nan_count = int(nan_frac * total_pixels / 5)  # spread evenly across 5 nan keys
     for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
@@ -344,6 +349,7 @@ class TestQCBase:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestQCL0:
     def test_data_l0_red_green_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path, with_amps=True)
@@ -370,6 +376,7 @@ class TestQCL0:
 
     def test_data_l0_red_green_pass_two_amp(self, tmp_path):
         # 2-amp readout (AMP1/AMP2 only) is the truth-frame layout and must pass.
+        # Two amps split the detector by column alone, so each is full height.
         fn = str(tmp_path / "KP.20240405.00003.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
@@ -378,11 +385,28 @@ class TestQCL0:
         hdus = [primary]
         for chip in ["GREEN", "RED"]:
             for amp in (1, 2):
-                data = np.ones((10, 10), dtype=np.float32)
+                data = np.ones((20, 10), dtype=np.float32)
                 hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
         fits.HDUList(hdus).writeto(fn, overwrite=True)
         l0 = KPF0.from_fits(fn)
         assert QCL0(l0).data_l0_red_green() is True
+
+    def test_data_l0_red_green_fail_wrong_amp_shape(self, tmp_path):
+        # Four amps that do not tile the detector: a truncated readout.
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        l0.data["GREEN_AMP2"] = np.ones((10, 9), dtype=np.float32)
+        assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_transposed_amp(self, tmp_path):
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        l0.data["RED_AMP1"] = np.ones((20, 5), dtype=np.float32)
+        assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_all_nan_amp(self, tmp_path):
+        # Correctly shaped but carrying no readout at all.
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        l0.data["GREEN_AMP1"][:] = np.nan
+        assert QCL0(l0).data_l0_red_green() is False
 
     def test_data_l0_red_green_fail_partial_amp(self, tmp_path):
         fn = str(tmp_path / "KP.20240405.00004.00.fits")
@@ -1029,6 +1053,7 @@ class TestQCL0PixelQuality:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestQCL1:
     def test_data_present_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
@@ -1042,6 +1067,22 @@ class TestQCL1:
     def test_data_present_fail_empty(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
         l1.data["RED_CCD"] = np.array([], dtype=np.float32)
+        assert QCL1(l1).data_present() is False
+
+    def test_data_present_fail_variance_missing(self, tmp_path):
+        # Assembly writes CCD and VAR together, so a flux without its variance is
+        # a malformed product, not a lesser one.
+        l1 = _make_kpf1(tmp_path)
+        l1.data["GREEN_VAR"] = np.array([], dtype=np.float32)
+        assert QCL1(l1).data_present() is False
+
+    def test_data_present_fail_wrong_shape(self, tmp_path):
+        l1 = _make_kpf1(tmp_path, shape=(20, 10))  # half the detector width
+        assert QCL1(l1).data_present() is False
+
+    def test_data_present_fail_all_nan(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        l1.data["RED_CCD"][:] = np.nan
         assert QCL1(l1).data_present() is False
 
     def test_required_keywords_present_pass(self, tmp_path):
@@ -1291,6 +1332,7 @@ class TestQCL1:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestQCL1Run:
     def test_all_good_isgood_1(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
@@ -1343,6 +1385,7 @@ class TestQCL1Run:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestQCL2:
     def test_extraction_present_pass(self):
         kpf2 = _make_kpf2_nan_headers()
@@ -1366,6 +1409,38 @@ class TestQCL2:
         for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
             kpf2.headers["QUALITY_CONTROL"][k] = (0, k)
         kpf2.headers["QUALITY_CONTROL"]["ZEROFRAC"] = (0.0, "z")
+        assert QCL2(kpf2).extraction_present() is False
+
+    def test_extraction_present_fail_variance_missing(self):
+        kpf2 = _make_kpf2_nan_headers()
+        kpf2.set_data("SCI2_VAR", np.array([], dtype=np.float32))
+        assert QCL2(kpf2).extraction_present() is False
+
+    def test_extraction_present_fail_wavelength_missing(self):
+        # WavelengthCalibration runs before CheckpointL2, so an unattached WLS is
+        # an incomplete product.
+        kpf2 = _make_kpf2_nan_headers()
+        kpf2.set_data("SCI2_WAVE", np.array([], dtype=np.float64))
+        assert QCL2(kpf2).extraction_present() is False
+
+    def test_extraction_present_fail_barycentric_missing(self):
+        kpf2 = _make_kpf2_nan_headers()
+        kpf2.set_data("BARYCORR_Z", np.array([], dtype=np.float64))
+        assert QCL2(kpf2).extraction_present() is False
+
+    def test_extraction_present_fail_wrong_shape(self):
+        kpf2 = _make_kpf2_nan_headers()
+        kpf2.set_data(
+            "SCI2_FLUX", np.ones((NORDER_TOTAL, _NCOLS - 1), dtype=np.float32)
+        )
+        assert QCL2(kpf2).extraction_present() is False
+
+    def test_extraction_present_fail_all_nan_orderlet(self):
+        # An orderlet that never reached the detector is NaN-filled by extraction.
+        kpf2 = _make_kpf2_nan_headers()
+        kpf2.set_data(
+            "SCI2_FLUX", np.full((NORDER_TOTAL, _NCOLS), np.nan, dtype=np.float32)
+        )
         assert QCL2(kpf2).extraction_present() is False
 
     def test_extraction_present_fail_one_trace_cleared(self):
@@ -1441,9 +1516,10 @@ class TestQCL2:
         assert QCL2(kpf2).variance_positive() is False
 
     def test_variance_positive_raises_on_shape_mismatch(self):
-        # FLUX populated with VAR left at its default empty (0,) shape is a
+        # FLUX populated with VAR emptied back to its default (0,) shape is a
         # malformed product, so the shape mismatch raises rather than skipping.
-        kpf2 = _make_kpf2_nan_headers()  # no VAR populated
+        kpf2 = _make_kpf2_nan_headers()
+        kpf2.set_data("SKY_VAR", np.array([], dtype=np.float32))
         with pytest.raises(ValueError, match="could not be broadcast"):
             QCL2(kpf2).variance_positive()
 
@@ -1499,12 +1575,32 @@ class TestQCL4:
         # CCFs in place.
         assert QCL4(make_l4(rv_filled=False)).ccf_rv_present() is False
 
+    def test_ccf_rv_present_fail_when_ccf_all_nan(self):
+        # A cube of the right shape carrying no finite value is present but not
+        # populated.
+        l4 = make_l4()
+        l4.set_data("SCI2_CCF", np.full((NORDER_TOTAL, 5), np.nan))
+        assert QCL4(l4).ccf_rv_present() is False
+
+    def test_ccf_rv_present_fail_when_ccf_var_missing(self):
+        # CCF_VAR is written 1:1 with the CCF and carries the RV photon error.
+        l4 = make_l4()
+        l4.set_data("SCI2_CCF_VAR", np.array([], dtype=np.float64))
+        assert QCL4(l4).ccf_rv_present() is False
+
+    def test_ccf_rv_present_fail_when_orders_missing(self):
+        # Both the cube and the table run over every order of both chips.
+        l4 = make_l4()
+        l4.set_data("SCI2_RV", Table(l4.data["SCI2_RV"])[: NORDER_TOTAL - 1])
+        assert QCL4(l4).ccf_rv_present() is False
+
     def test_ccf_rv_present_fail_when_columns_missing(self):
-        # The per-order BJD_TDB/BERV/WEIGHT columns the DiagL4 dispersion metrics
-        # consume are absent, so the product is incomplete.
+        # The EPRV-required columns, and the per-order BJD_TDB/BERV/WEIGHT the
+        # DiagL4 dispersion metrics consume, are absent: the product is incomplete.
         l4 = KPF4()
         for fiber in ("SCI1", "SCI2", "SCI3"):
             l4.set_data(f"{fiber}_CCF", np.ones((NORDER_TOTAL, 5)))
+            l4.set_data(f"{fiber}_CCF_VAR", np.ones((NORDER_TOTAL, 5)))
             l4.set_data(
                 f"{fiber}_RV",
                 Table(

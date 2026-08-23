@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 
 _CHIPS = ["GREEN", "RED"]
@@ -14,13 +15,34 @@ class QCL2(QC):
     LEVEL = "L2"
 
     def extraction_present(self):
-        """All expected {CHIP}_{FIBER}_FLUX extensions exist and are non-empty."""
+        """Every extension the science chain writes at L2, at its expected shape.
+
+        Extraction writes FLUX and VAR, WavelengthCalibration WAVE, and
+        BarycentricCorrection the three per-order ancillaries; all four modules
+        run before CheckpointL2, so any one missing is an incomplete product.
+        ``np.shape(None)`` is ``()``, so an absent extension fails the shape
+        comparison without a separate presence test. Each array must also hold at
+        least one finite value: an orderlet that never reached the detector is
+        NaN-filled by extraction, which is present but not populated.
+
+        BLAZE and ORDER_TABLE are EPRV-required but have no producer in the
+        science chain, so they are out of scope until one exists.
+        """
+        norder = DETECTOR["norder"]
+        ncol = DETECTOR["ccd"]["ncol"]
         for chip in _CHIPS:
             for fiber in _FIBERS:
-                ext = f"{chip}_{fiber}_FLUX"
-                arr = self.kpf_obj.data.get(ext)
-                if arr is None or np.size(arr) == 0:
-                    return False
+                for suffix in ("FLUX", "VAR", "WAVE"):
+                    arr = self.kpf_obj.data.get(f"{chip}_{fiber}_{suffix}")
+                    if np.shape(arr) != (norder[chip], ncol):
+                        return False
+                    if not np.any(np.isfinite(arr)):
+                        return False
+        per_order = (norder["GREEN"] + norder["RED"],)
+        for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+            arr = self.kpf_obj.data.get(ext)
+            if np.shape(arr) != per_order or not np.any(np.isfinite(arr)):
+                return False
         return True
 
     extraction_present._qc_key = "DATAPRL2"
