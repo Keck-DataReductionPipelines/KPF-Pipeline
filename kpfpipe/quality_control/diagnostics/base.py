@@ -55,8 +55,6 @@ class Diagnostics:
         for name, fn in self._iter_methods():
             try:
                 output = fn()
-                if not output:
-                    continue
                 for kw, (value, comment) in output.items():
                     self.results[kw] = (value, comment)
                     # set_keyword routes each metric to its registry home; the FITS

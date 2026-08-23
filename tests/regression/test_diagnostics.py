@@ -91,6 +91,18 @@ class TestDiagnosticsBase:
         assert results == {}
         assert obj.headers["PRIMARY"] == {}
 
+    def test_none_return_raises(self):
+        obj = self._make_obj()
+
+        class MyDiag(Diagnostics):
+            def nothing(self):
+                return None
+
+            nothing._diag_name = "nothing"
+
+        with pytest.raises(AttributeError):
+            MyDiag(obj).run()
+
     def test_raising_method_propagates_and_logs(self, caplog):
         obj = self._make_obj()
 
@@ -134,19 +146,6 @@ class TestDiagnosticsBase:
             pass
 
         results = EmptyDiag(obj).run()
-        assert results == {}
-
-
-# ---------------------------------------------------------------------------
-# DiagL1 with no calibrations is a clean no-op
-# ---------------------------------------------------------------------------
-
-
-class TestEmptyLevels:
-    def test_diag_l1_runs_cleanly(self):
-        # DATE-OBS present (a required read) but no RECEIPT cal paths ->
-        # calibration_ages returns {} rather than crashing.
-        results = DiagL1(_make_kpf1_with_calibrations()).run()
         assert results == {}
 
 
@@ -241,38 +240,39 @@ class TestDiagL0Offsets:
 
 
 class TestDiagL0Contingency:
-    """Unavailable astrometry -> present-but-empty offset + WARNING, no crash."""
+    """Unusable astrometry raises; an unmatched optional source emits no key."""
 
-    _KEYS = ("GAIAOFF", "TCSOFF", "OBJOFF")
-
-    def test_no_catalog_record_all_empty(self, caplog):
+    def test_no_catalog_record_raises(self):
         # AstroQuery not run: CATALOG_RECORD auto-created but no presence flags.
-        l0 = _make_l0_pointing()
-        with caplog.at_level(logging.WARNING):
-            DiagL0(l0).run()
-        qc = l0.headers["QUALITY_CONTROL"]
-        # All three present (registered) but valueless (read back as None).
-        for key in self._KEYS:
-            assert key in qc and qc[key] is None
-        assert caplog.text.count("no CATALOG_RECORD flags on L0") == 3
+        with pytest.raises(KeyError, match="GAIACR"):
+            DiagL0(_make_l0_pointing()).run()
 
-    def test_source_none_emits_empty_for_that_source(self, caplog):
-        # Gaia lookup disabled/failed -> GAIACR=0 -> GAIAOFF empty; others compute.
+    def test_unmatched_optional_source_emits_no_key(self):
+        # Gaia lookup disabled/failed -> GAIACR=0 -> no GAIAOFF; others compute.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
             l0, {"gaia": None, "simbad": _record_at(pt), "wmko": _record_at(pt)}
         )
-        with caplog.at_level(logging.WARNING):
-            results = DiagL0(l0).run()
-        assert results["GAIAOFF"][0] is None
+        results = DiagL0(l0).run()
+        assert "GAIAOFF" not in results
+        assert "GAIAOFF" not in l0.headers["QUALITY_CONTROL"]
         assert results["TCSOFF"][0] < 0.1
         assert results["OBJOFF"][0] < 0.1
-        assert "no gaia astrometry in CATALOG_RECORD" in caplog.text
 
-    def test_incomplete_record_emits_empty(self, caplog):
-        # A record present (flag 1) but missing epoch, the propagation baseline ->
-        # unusable, offset empty. PM/parallax instead fall back to zero (below).
+    def test_unmatched_required_source_raises(self):
+        # The DCS target offset is required: no wmko row means no TCSOFF to emit.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0, {"gaia": _record_at(pt), "simbad": _record_at(pt), "wmko": None}
+        )
+        with pytest.raises(IndexError):
+            DiagL0(l0).run()
+
+    def test_incomplete_record_raises(self):
+        # A record present (flag 1) but missing epoch, the propagation baseline.
+        # PM/parallax instead fall back to zero (below).
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -283,10 +283,8 @@ class TestDiagL0Contingency:
                 "wmko": _record_at(pt, epoch=None),
             },
         )
-        with caplog.at_level(logging.WARNING):
-            results = DiagL0(l0).run()
-        assert results["TCSOFF"][0] is None
-        assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
+        with pytest.raises((TypeError, ValueError)):
+            DiagL0(l0).run()
 
     # No usable parallax means no distance on the SkyCoord, and ERFA warns that it
     # overrode the distance while propagating -- the documented consequence of the
@@ -336,9 +334,8 @@ class TestDiagL0Contingency:
         assert results["GAIAOFF"][0] < 0.1
         assert "using PM=0, parallax=0" in caplog.text
 
-    def test_malformed_astrometry_emits_empty(self, caplog):
-        # A record that passes the completeness check but is malformed (unparseable
-        # RA) is caught by _offset's backstop -> empty offset, not a raised frame.
+    def test_malformed_astrometry_raises(self):
+        # An unparseable RA is a malformed record, not a missing one.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -349,10 +346,8 @@ class TestDiagL0Contingency:
                 "wmko": _record_at(pt, ra="garbage"),
             },
         )
-        with caplog.at_level(logging.WARNING):
-            results = DiagL0(l0).run()  # must not raise
-        assert results["TCSOFF"][0] is None
-        assert "could not compute wmko pointing offset" in caplog.text
+        with pytest.raises(ValueError, match="garbage"):
+            DiagL0(l0).run()
 
 
 # ---------------------------------------------------------------------------
@@ -360,14 +355,20 @@ class TestDiagL0Contingency:
 # ---------------------------------------------------------------------------
 
 
+_CAL_AGE_KEYS = ("BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE")
+
+
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
-    """A KPF1 carrying a PRIMARY DATE-OBS and RECEIPT master paths.
+    """A KPF1 carrying a PRIMARY DATE-OBS, RECEIPT master paths, and assembled CCDs.
 
     Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has written
-    each ``{PREFIX}FILE`` to RECEIPT and to_kpf1 has populated the EPRV PRIMARY.
+    each ``{PREFIX}FILE`` to RECEIPT, to_kpf1 has populated the EPRV PRIMARY, and
+    ImageAssembly has filled both CCDs (flux_percentiles reads them on every run).
     """
     l1 = KPF1()
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
+    for chip in ("GREEN", "RED"):
+        l1.data[f"{chip}_CCD"] = np.ones((4, 4), dtype=float)
     for kw, path in (files or {}).items():
         l1.set_keyword(kw, path)  # *FILE routes to RECEIPT
     return l1
@@ -404,8 +405,8 @@ class TestDiagL1CalibrationAges:
             }
         )
         results = DiagL1(l1).run()
-        assert set(results) == {"BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE"}
-        for kw in results:
+        assert set(results) >= set(_CAL_AGE_KEYS)
+        for kw in _CAL_AGE_KEYS:
             assert l1.headers["QUALITY_CONTROL"][kw] == pytest.approx(
                 -0.422176, abs=1e-5
             )
@@ -416,7 +417,7 @@ class TestDiagL1CalibrationAges:
             files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
         )
         results = DiagL1(l1).run()
-        assert set(results) == {"BIASAGE"}
+        assert set(results) & set(_CAL_AGE_KEYS) == {"BIASAGE"}
         assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
 
     def test_no_date_obs_raises(self, caplog):
@@ -462,9 +463,10 @@ class TestDiagL1FluxPercentiles:
         results = DiagL1(l1).run()
         assert np.isfinite(results["GCCD50P"][0])
 
-    def test_absent_chip_skipped(self):
-        results = DiagL1(self._l1(GREEN_CCD=self._RAMP)).run()
-        assert set(results) == {"GCCD99P", "GCCD90P", "GCCD50P", "GCCD10P"}
+    def test_empty_chip_raises(self):
+        l1 = self._l1(GREEN_CCD=self._RAMP, RED_CCD=np.array([], dtype=float))
+        with pytest.raises(RuntimeWarning, match="Mean of empty slice"):
+            DiagL1(l1).run()
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +474,7 @@ class TestDiagL1FluxPercentiles:
 # ---------------------------------------------------------------------------
 
 
-def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True):
+def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True, var=0.25):
     """Minimal KPF2 with FLUX at controllable NaN and zero fractions.
 
     Injects real NaN/zero PIXELS, because DiagL2 measures them. Not the same as
@@ -482,8 +484,9 @@ def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True):
 
     A bare KPF2() already exposes the FLUX extensions DiagL2 reads, so no FITS
     round-trip is needed. Each extension is (norder[chip], _NCOL_TEST) ones, then
-    nan_frac of the pixels replaced with NaN and zero_frac with 0.0.
-    populate=False sets no FLUX arrays -- the "no data populated" schema cases.
+    nan_frac of the pixels replaced with NaN and zero_frac with 0.0. VAR is filled
+    with ``var`` (None leaves it empty) since every DiagL2 method now reads it.
+    populate=False sets no arrays at all -- the "no data populated" schema case.
     """
     kpf2 = KPF2()
     if not populate:
@@ -502,6 +505,8 @@ def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True):
                 # Zeros fall in the band [nan_frac, nan_frac+zero_frac)
                 arr[(mask >= nan_frac) & (mask < nan_frac + zero_frac)] = 0.0
             kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
+    if var is not None:
+        set_fiber_arrays(kpf2, "VAR", var, ncol=_NCOL_TEST)
     return kpf2
 
 
@@ -522,13 +527,6 @@ class TestDiagL2NanCounts:
         for key in ("NANSCI2", "NANSCI3", "NANSKY", "NANCAL"):
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
-    def test_writes_keys_even_when_no_data(self):
-        # The header schema stays consistent: all five keys present, value 0.
-        kpf2 = _make_kpf2_nan_pixels(populate=False)
-        DiagL2(kpf2).run()
-        for key in _NAN_KEYS:
-            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
-
 
 class TestDiagL2ZeroFlux:
     def test_zerofrac_written_when_data_present(self):
@@ -538,9 +536,11 @@ class TestDiagL2ZeroFlux:
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.0)
 
     def test_zerofrac_one_when_all_zero(self):
+        # Called directly: an all-zero frame has no defined orderlet flux ratio,
+        # so the full run() legitimately fails loud before reaching an assertion.
         kpf2 = _make_kpf2_nan_pixels(zero_frac=1.0)
-        DiagL2(kpf2).run()
-        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
+        result = DiagL2(kpf2).zero_flux_fraction()
+        assert result["ZEROFRAC"][0] == pytest.approx(1.0)
 
     def test_zerofrac_half_when_half_zero(self):
         # A deterministic even/odd pattern (every array has an even pixel count)
@@ -554,10 +554,10 @@ class TestDiagL2ZeroFlux:
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.5)
 
-    def test_zerofrac_skipped_when_no_data(self):
+    def test_raises_when_no_data(self):
         kpf2 = _make_kpf2_nan_pixels(populate=False)
-        DiagL2(kpf2).run()
-        assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]
+        with pytest.raises(ZeroDivisionError):
+            DiagL2(kpf2).run()
 
 
 # ---------------------------------------------------------------------------
@@ -569,8 +569,7 @@ class TestDiagL2Snr:
     _SNR_KEYS = ("GSNRSCI", "GSNRSKY", "GSNRCAL", "RSNRSCI", "RSNRSKY", "RSNRCAL")
 
     def test_keys_written_when_flux_and_var_present(self):
-        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones
-        set_fiber_arrays(kpf2, "VAR", 0.25, ncol=_NCOL_TEST)
+        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones, all VAR 0.25
         DiagL2(kpf2).run()
         # FLUX = 1, VAR = 0.25 -> per-fiber SNR = 1/sqrt(0.25) = 2.0 exactly, and
         # the three summed SCI orderlets give 3/sqrt(0.75) = 3.464.
@@ -608,23 +607,20 @@ class TestDiagL2Snr:
             17.32, abs=0.05
         )
 
-    def test_summed_sci_skipped_when_a_sci_var_missing(self):
-        # VAR for SCI1/SCI2 only (SCI3 var stays empty) -> summed-SCI skipped,
-        # but SKY (var present) is still computed.
-        kpf2 = _make_kpf2_nan_pixels()
+    def test_summed_sci_raises_when_a_sci_var_missing(self):
+        # SCI3's VAR never filled -> the summed-SCI variance cannot be formed, so
+        # the metric fails loud rather than dropping out.
+        kpf2 = _make_kpf2_nan_pixels(var=None)
         set_fiber_arrays(
             kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"), ncol=_NCOL_TEST
         )
-        DiagL2(kpf2).run()
-        assert "GSNRSCI" not in kpf2.headers["QUALITY_CONTROL"]
-        assert "GSNRSKY" in kpf2.headers["QUALITY_CONTROL"]
+        with pytest.raises(ValueError, match="broadcast"):
+            DiagL2(kpf2).run()
 
-    def test_skipped_without_var(self):
-        # Default fixture leaves VAR empty -> no SNR keys at all.
-        kpf2 = _make_kpf2_nan_pixels()
-        DiagL2(kpf2).run()
-        for key in self._SNR_KEYS:
-            assert key not in kpf2.headers["QUALITY_CONTROL"]
+    def test_raises_without_var(self):
+        kpf2 = _make_kpf2_nan_pixels(var=None)
+        with pytest.raises(ValueError, match="broadcast"):
+            DiagL2(kpf2).run()
 
 
 # ---------------------------------------------------------------------------
@@ -709,13 +705,11 @@ class TestDiagL4:
         assert qc["BJDRNG"] == pytest.approx(864000.0)
         assert qc["BERVMEAN"] == pytest.approx(0.2)
 
-    def test_all_zero_weights_skips_metrics(self):
-        # w.sum() <= 0 makes _weighted_dispersion return None and the metrics are
-        # skipped entirely. That is load-bearing: absent BERVRNG/BJDRNG make
-        # QCL4.berv_within_tolerance / bjd_within_tolerance return False on a
-        # target frame, so this producing half must stay in step with the QC half.
+    def test_all_zero_weights_raises(self):
+        # No positive total weight: the photon-weighted mean is undefined.
         l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [0.0, 0.0])
-        assert DiagL4(l4).run() == {}
+        with pytest.raises(RuntimeWarning, match="invalid value"):
+            DiagL4(l4).run()
 
     def test_non_finite_samples_dropped(self):
         # A NaN BJD is masked out rather than poisoning the mean; the surviving
@@ -724,16 +718,16 @@ class TestDiagL4:
         DiagL4(l4).run()
         assert l4.headers["QUALITY_CONTROL"]["BJDMEAN"] == pytest.approx(10.0)
 
-    def test_skips_without_sci2_rv_table(self):
-        # No SCI2 RV table (e.g. unilluminated science) -> no metrics written.
-        results = DiagL4(KPF4()).run()
-        assert results == {}
+    def test_raises_without_sci2_rv_table(self):
+        with pytest.raises(KeyError, match="BJD_TDB"):
+            DiagL4(KPF4()).run()
 
-    def test_skips_without_weight_column(self):
-        # WEIGHT column absent (pre-weights L4) -> skip rather than guess.
+    def test_raises_without_weight_column(self):
+        # WEIGHT column absent (pre-weights L4) -> fail loud rather than guess.
         l4 = KPF4()
         l4.set_data(
             "SCI2_RV",
             Table({"ORDER_INDEX": [0, 1], "BJD_TDB": [10.0, 20.0], "BERV": [0.1, 0.3]}),
         )
-        assert DiagL4(l4).run() == {}
+        with pytest.raises(KeyError, match="WEIGHT"):
+            DiagL4(l4).run()

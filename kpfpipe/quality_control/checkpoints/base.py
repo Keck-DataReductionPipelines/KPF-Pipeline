@@ -77,9 +77,7 @@ class Checkpoint:
                 continue
             if ext == "PRIMARY" and skip_primary:
                 continue
-            header = self.kpf_obj.headers.get(ext)
-            if header is None:
-                continue
+            header = self.kpf_obj.headers[ext]
             for raw_key in list(header):
                 key = str(raw_key).strip()
                 if reg.is_structural(key) or key in allowed:

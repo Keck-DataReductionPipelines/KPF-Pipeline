@@ -15,16 +15,6 @@ _CHIPS = ["GREEN", "RED"]
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 
 
-def _parse_iso(value):
-    """Parse an ISO-8601 datetime string, or None if missing/unparseable."""
-    if value is None:
-        return None
-    try:
-        return datetime.fromisoformat(str(value))
-    except ValueError:
-        return None
-
-
 class QCL0(QC):
     """QC checks for KPF Level 0 raw data products."""
 
@@ -71,8 +61,7 @@ class QCL0(QC):
         half is EMTIMEOK). The shutter window must agree with ELAPSED to 0.1 s,
         and each per-chip shutter time must fall within 0.1 s of the window edge
         it bounds; mismatched chips have different photon-weighted midpoints, so
-        one barycentric correction cannot serve both. An absent card fails: it
-        is the only evidence that chip's timing was right.
+        one barycentric correction cannot serve both.
 
         At L0 the raw instrument times live on the WMKO-native PRIMARY (the
         header later snapshotted verbatim into INSTRUMENT_HEADER at to_kpf1); the
@@ -80,10 +69,9 @@ class QCL0(QC):
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         beg, mid, end = (
-            _parse_iso(hdr.get(k)) for k in ("DATE-BEG", "DATE-MID", "DATE-END")
+            datetime.fromisoformat(str(hdr[k]))
+            for k in ("DATE-BEG", "DATE-MID", "DATE-END")
         )
-        if beg is None or mid is None or end is None:
-            return False
         if not beg <= mid <= end:
             return False
         if abs((end - beg).total_seconds() - float(hdr["ELAPSED"])) > 0.1:
@@ -94,8 +82,8 @@ class QCL0(QC):
             ("RDDATE-B", beg),
             ("RDDATE-E", end),
         ):
-            shutter = _parse_iso(hdr.get(key))
-            if shutter is None or abs((edge - shutter).total_seconds()) > 0.1:
+            shutter = datetime.fromisoformat(str(hdr[key]))
+            if abs((edge - shutter).total_seconds()) > 0.1:
                 return False
         return True
 
@@ -107,9 +95,10 @@ class QCL0(QC):
         Ports v2.12 ``NTP_timing``. DATTIMOK and EXPTIMOK check only that the
         exposure timestamps are self-consistent, which a uniformly offset clock
         still satisfies. TIMEERR is free text ("NTP time correct to within
-        12.3 ms"); absent, unparseable, or at/above the limit all fail.
+        12.3 ms"); text that does not report an error, or one at/above the limit,
+        fails.
         """
-        timeerr = str(self.kpf_obj.headers["PRIMARY"].get("TIMEERR"))
+        timeerr = str(self.kpf_obj.headers["PRIMARY"]["TIMEERR"])
         match = re.search(r"NTP time correct to within ([\d.]+) ms", timeerr)
         return match is not None and float(match.group(1)) < 100.0
 
@@ -119,25 +108,17 @@ class QCL0(QC):
         """EXPTIME present, finite, non-negative, and consistent with ELAPSED.
 
         Bias frames legitimately have EXPTIME=0, so we don't require strictly
-        positive. When the raw ELAPSED readout time is present, it must not fall
-        short of the requested EXPTIME (premature readout) or exceed it by more
-        than 0.1 s (the elapsed-vs-requested check formerly done in the masters
-        frame loader); an absent ELAPSED skips only that comparison.
+        positive. The raw ELAPSED readout time must not fall short of the
+        requested EXPTIME (premature readout) or exceed it by more than 0.1 s
+        (the elapsed-vs-requested check formerly done in the masters frame
+        loader).
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
-        if "EXPTIME" not in hdr:
-            return False
-        try:
-            exptime = float(hdr.get("EXPTIME"))
-        except (TypeError, ValueError):
-            return False
+        exptime = float(hdr["EXPTIME"])
+        elapsed = float(hdr["ELAPSED"])
         if not (np.isfinite(exptime) and exptime >= 0):
             return False
-
-        elapsed = self._hdr_float(hdr, "ELAPSED")
-        if elapsed is not None and not (0 <= elapsed - exptime <= 0.1):
-            return False
-        return True
+        return 0 <= elapsed - exptime <= 0.1
 
     exptime_sane._qc_key = "EXPTIMOK"
 
@@ -161,31 +142,16 @@ class QCL0(QC):
     def radec_consistent(self):
         """Pointing agrees with the target and catalog positions.
 
-        Telescope pointing is only meaningful for a science frame (IMTYPE
-        'Object'), so a calibration frame passes unconditionally: it has no
-        target, AstroQuery never runs on it, and DiagL0 therefore leaves
-        TCSOFF/OBJOFF/GAIAOFF blank -- which would otherwise fail the required
-        TCSOFF branch below.
-
         TCSOFF (pointing vs the DCS target) is internal telescope-pointing
-        consistency and is required: an empty value (astrometry unavailable) or
-        one >= 1" fails. OBJOFF/GAIAOFF are external catalog cross-matches with a
-        looser 5" bound, checked only when present-and-valued, so a disabled or
-        failed Gaia/SIMBAD lookup passes.
+        consistency and is required. OBJOFF/GAIAOFF are external catalog
+        cross-matches with a looser 5" bound; Gaia and SIMBAD are optional
+        sources, so DiagL0 emits their offsets only when the lookup ran and
+        matched, and each is checked only where present.
         """
-        imtype = self.kpf_obj.headers["PRIMARY"].get("IMTYPE")
-        if str(imtype).strip().lower() != "object":
-            return True
-
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        tcsoff = self._hdr_float(hdr, "TCSOFF")
-        if tcsoff is None or tcsoff >= 1.0:
+        if float(hdr["TCSOFF"]) >= 1.0:
             return False
-        for key, limit in (("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
-            val = self._hdr_float(hdr, key)
-            if val is not None and val >= limit:
-                return False
-        return True
+        return all(float(hdr[key]) < 5.0 for key in ("OBJOFF", "GAIAOFF") if key in hdr)
 
     radec_consistent._qc_key = "RADECOK"
 
@@ -204,14 +170,10 @@ class QCL0(QC):
         epoch/equinox in (1950, 2050] Julian years, |rv| <= 350 km/s, parallax in
         (0, 1000) mas, |pmra|/|pmdec| <= 15 arcsec/yr.
 
-        Passes when there is no ``kpf-drp`` row: this is value sanity, not a presence
-        check.
+        AstroQuery must have resolved the frame: an absent ``kpf-drp`` row raises.
         """
         table = self.kpf_obj.data["CATALOG_RECORD"]
-        match = table[table["source"] == "kpf-drp"] if table.colnames else table
-        if not len(match):
-            return True
-        row = match[0]
+        row = table[table["source"] == "kpf-drp"][0]
         for field in ("epoch", "equinox"):
             val = self._row_float(row, field)
             if val is not None and not (1950.0 < val <= 2050.0):
@@ -241,8 +203,8 @@ class QCL0(QC):
         the range that index spans across the Pecaut & Mamajek (2013) dwarf sequence
         -- O3V through Y4V, so a color outside it is not a stellar color.
 
-        Passes when there is no ``kpf-drp`` row, as ``catalog_astrometry_sane`` does:
-        a calibration frame has no target to have a color.
+        AstroQuery must have resolved the frame, as ``catalog_astrometry_sane``
+        requires: an absent ``kpf-drp`` row raises.
         """
         # (bluest, reddest) [mag] each index spans across the sequence, keyed by the
         # labels AstroQuery writes to color_name.
@@ -252,10 +214,7 @@ class QCL0(QC):
             "G-J": (-0.36, 5.36),
         }
         table = self.kpf_obj.data["CATALOG_RECORD"]
-        match = table[table["source"] == "kpf-drp"] if table.colnames else table
-        if not len(match):
-            return True
-        row = match[0]
+        row = table[table["source"] == "kpf-drp"][0]
         color = self._row_float(row, "color")
         bounds = limits.get(str(row["color_name"]))
         if color is None or bounds is None:
@@ -263,15 +222,6 @@ class QCL0(QC):
         return bounds[0] <= color <= bounds[1]
 
     catalog_color_sane._qc_key = "COLOROK"
-
-    def _em_table(self, ext):
-        """The exposure-meter table for ``ext``, or None when the frame has none.
-
-        Only science frames carry EM extensions; on a calibration ``data.get``
-        yields None.
-        """
-        table = self.kpf_obj.data.get(ext)
-        return table if table is not None and len(table) else None
 
     def expmeter_times_consistent(self):
         """EXPMETER_SCI brackets the shutter window to within 1 second.
@@ -282,22 +232,15 @@ class QCL0(QC):
         columns as BarycentricCorrection does. The 1 s tolerance absorbs EM dead
         time and catches only gross errors: the flux-weighted midpoint feeds the
         barycentric correction, where a 2.6 s timing error costs 10 cm/s.
-
-        Frames without EM data pass; a frame with EM data but no shutter window
-        to compare against fails.
         """
-        table = self._em_table("EXPMETER_SCI")
-        if table is None:
-            return True
+        table = self.kpf_obj.data["EXPMETER_SCI"]
         hdr = self.kpf_obj.headers["PRIMARY"]
-        beg, end = (_parse_iso(hdr.get(k)) for k in ("DATE-BEG", "DATE-END"))
-        if beg is None or end is None:
-            return False
+        beg, end = (
+            datetime.fromisoformat(str(hdr[k])) for k in ("DATE-BEG", "DATE-END")
+        )
         suffix = "-Corr" if "Date-Beg-Corr" in table.colnames else ""
-        em_beg = _parse_iso(str(table[f"Date-Beg{suffix}"][0]))
-        em_end = _parse_iso(str(table[f"Date-End{suffix}"][-1]))
-        if em_beg is None or em_end is None:
-            return False
+        em_beg = datetime.fromisoformat(str(table[f"Date-Beg{suffix}"][0]))
+        em_end = datetime.fromisoformat(str(table[f"Date-End{suffix}"][-1]))
         return (
             abs((em_beg - beg).total_seconds()) <= 1.0
             and abs((em_end - end).total_seconds()) <= 1.0
@@ -309,18 +252,14 @@ class QCL0(QC):
         """EXPMETER_SCI/SKY flux is neither saturated nor significantly negative.
 
         Merges v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, applied to
-        each fiber present. Saturation: more than 1.5 channels per reading above
+        each fiber. Saturation: more than 1.5 channels per reading above
         90% of the 1.93e6 reduced-spectrum saturation level, with the first and
         last readings dropped when there are 3+ (they are partial). Negative flux:
         20 consecutive channels whose time-summed flux is negative, the signature
         of bias over-subtraction in the raw EM images.
-
-        Frames without EM data pass; an EM table with no wavelength channel fails.
         """
         for ext in ("EXPMETER_SCI", "EXPMETER_SKY"):
-            table = self._em_table(ext)
-            if table is None:
-                continue
+            table = self.kpf_obj.data[ext]
             # Numeric column labels are the wavelength channels; Date* are not.
             channels = []
             for name in table.colnames:
@@ -329,8 +268,6 @@ class QCL0(QC):
                 except ValueError:
                     continue
                 channels.append(np.asarray(table[name], dtype=float))
-            if not channels:
-                return False
             flux = np.column_stack(channels)
 
             readings = flux[1:-1] if len(flux) >= 3 else flux

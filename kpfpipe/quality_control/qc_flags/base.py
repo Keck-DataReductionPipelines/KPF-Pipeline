@@ -26,23 +26,6 @@ class QC:
         self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (passed, comment).
 
-    @staticmethod
-    def _hdr_float(hdr, key):
-        """Return float value for a header key, or None if the card is absent/empty.
-
-        A present-but-non-numeric value is malformed, so its ValueError propagates
-        for ``QC.run`` to surface (fail loud).
-        """
-        try:
-            return float(hdr.get(key))
-        except TypeError:
-            return None
-
-    @staticmethod
-    def _hdr_bool(hdr, key):
-        """Return bool value for a header key, or False if absent."""
-        return bool(hdr.get(key, False))
-
     def run(self):
         """Run all checks, write each 0/1 result, and aggregate ISGOOD.
 
@@ -105,15 +88,11 @@ class QC:
         The level cap is the level's own number, so this runs unchanged for L1,
         L2, and L4 -- each returns the required PRIMARY keywords tagged at or
         below its own level. Read off the model's registry singleton so qc_flags
-        imports nothing from data_models. L0 (and an untagged ``LEVEL`` None)
-        yields the empty set -- raw WMKO L0 PRIMARY is not registry-governed.
+        imports nothing from data_models.
         """
-        level = str(self.LEVEL or "")
-        if not (level[:1].upper() == "L" and level[1:].isdigit()):
-            return set()
-        cap = int(level[1:])
+        cap = int(str(self.LEVEL)[1:])
         reg = self.kpf_obj.keyword_registry
-        return {k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap}
+        return {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= cap}
 
     def _iter_checks(self):
         """Yield each ``(name, method)`` tagged ``_qc_key``.

@@ -45,6 +45,40 @@ GOOD_DATES = {
     "RDDATE-E": "2024-09-23T09:12:21.554",
 }
 
+# Exposure-meter readings tiling the GOOD_DATES shutter window, and a clean flux
+# array (4 readings x 25 wavelength channels -- more than the 20-channel negative
+# run EMFLUXOK looks for).
+EM_BEGS = [
+    "2024-09-23T09:12:09.484",
+    "2024-09-23T09:12:12.484",
+    "2024-09-23T09:12:15.484",
+    "2024-09-23T09:12:18.484",
+]
+EM_ENDS = [
+    "2024-09-23T09:12:12.484",
+    "2024-09-23T09:12:15.484",
+    "2024-09-23T09:12:18.484",
+    "2024-09-23T09:12:21.554",
+]
+EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
+
+# A physically-sane merged catalog row, matching the pointing below.
+SCIENCE_POINTING = {"RA": "12:00:00.00", "DEC": "+40:00:00.0", "MJD-OBS": 60576.38}
+CATALOG_RECORD = {
+    "object": "synthetic",
+    "ra": SCIENCE_POINTING["RA"],
+    "dec": SCIENCE_POINTING["DEC"],
+    "pmra": 0.0,  # zero PM keeps the propagated position on the pointing
+    "pmdec": 0.0,
+    "parallax": 100.0,
+    "rv": 10.0,
+    "frame": "icrs",
+    "epoch": 2016.0,
+    "equinox": 2000.0,
+    "color": 0.823,
+    "color_name": "Gaia BP-RP",
+}
+
 _DEFAULT_PRIMARY = {
     "INSTRUME": "KPF",
     "OBJECT": "synthetic",
@@ -133,6 +167,62 @@ def write_minimal_l0(path, *, primary_cards=None, extra_hdus=()):
 
 
 # --- L2 in-memory -----------------------------------------------------------
+
+
+def expmeter_hdus(flux=None, sky_flux=None):
+    """EXPMETER_SCI/SKY BinTableHDUs tiling the GOOD_DATES shutter window."""
+
+    def table(values):
+        columns = {"Date-Beg": EM_BEGS, "Date-End": EM_ENDS}
+        for i in range(values.shape[1]):
+            columns[str(5000.0 + i)] = values[:, i]
+        return Table(columns)
+
+    return [
+        fits.BinTableHDU(table(EM_CLEAN_FLUX if flux is None else flux), name=name)
+        for name, flux in (
+            ("EXPMETER_SCI", flux),
+            ("EXPMETER_SKY", sky_flux),
+        )
+    ]
+
+
+def write_science_l0(path, *, primary_cards=None, **kwargs):
+    """Write an ``IMTYPE='Object'`` L0 carrying everything QCL0 requires.
+
+    A science frame, unlike the calibration default: pointing, self-consistent
+    timing, and both exposure-meter tables. ``seed_catalog_record`` supplies the
+    astrometry AstroQuery would have resolved.
+    """
+    return write_amp_l0(
+        path,
+        primary_cards={
+            "IMTYPE": "Object",
+            "EXPTIME": GOOD_DATES["ELAPSED"],
+            **SCIENCE_POINTING,
+            **GOOD_DATES,
+            **(primary_cards or {}),
+        },
+        extra_hdus=expmeter_hdus(),
+        **kwargs,
+    )
+
+
+def seed_catalog_record(kpf0, record=None):
+    """Write the wmko and merged kpf-drp CATALOG_RECORD rows and presence flags.
+
+    Stands in for a completed AstroQuery run without touching the network: the
+    DCS target row (required by DiagL0's TCSOFF) and the merged row QCL0's
+    ASTROMOK/COLOROK read, with Gaia and SIMBAD flagged unmatched.
+    """
+    from kpfpipe.modules.astro_query import AstroQuery
+
+    aq = AstroQuery(kpf0)
+    for source in ("wmko", "kpf-drp"):
+        aq._write_catalog_record(source, record or CATALOG_RECORD)
+    aq._wmko = record or CATALOG_RECORD
+    aq._set_headers(kpf0)
+    return kpf0
 
 
 def set_fiber_arrays(kpf2, suffix, value, *, ncol, chips=CHIPS, fibers=FIBERS):

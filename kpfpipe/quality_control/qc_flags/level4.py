@@ -10,11 +10,7 @@ import numpy as np
 from kpfpipe.quality_control.qc_flags.base import QC
 
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
-# Columns every science RV table must carry (RV product + per-order BJD/BERV/WEIGHT).
 _REQUIRED_RV_COLUMNS = frozenset({"RV", "BJD_TDB", "BERV", "WEIGHT"})
-# Max per-order peak-to-peak range tolerated across orders (SCI2).
-_BERV_RNG_TOL_MS = 0.04
-_BJD_RNG_TOL_S = 1.0
 
 
 class QCL4(QC):
@@ -58,41 +54,33 @@ class QCL4(QC):
 
         Every L4 frame carries SCI-OBJ (CrossCorrelation requires it upstream and
         fails loud otherwise), so an absent keyword is a malformed frame, not a
-        non-target source; raise rather than silently defaulting to not-target.
+        non-target source, and raises.
         """
-        inst = self.kpf_obj.headers.get("INSTRUMENT_HEADER", {})
-        if "SCI-OBJ" not in inst:
-            raise ValueError(
-                "SCI-OBJ not in INSTRUMENT_HEADER; cannot determine the SCI2 "
-                "illumination source for the BERV/BJD tolerance gates"
-            )
+        inst = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         return str(inst["SCI-OBJ"]).strip().lower() == "target"
 
     def berv_within_tolerance(self):
-        """BERVRNG (from DiagL4) within tolerance.
+        """BERVRNG (from DiagL4) within tolerance (4 cm/s).
 
         Only applies when SCI2 is star-illuminated (SCI-OBJ == 'target'); other
-        sources pass (no meaningful barycentric dispersion). On a target frame an
-        absent BERVRNG (non-finite barycorr / non-positive weight) fails; an
-        absent SCI-OBJ raises (see _sci2_is_target).
+        sources pass (no meaningful barycentric dispersion).
         """
         if not self._sci2_is_target():
             return True
-        rng = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BERVRNG")
-        return rng is not None and rng <= _BERV_RNG_TOL_MS
+        rng = float(self.kpf_obj.headers["QUALITY_CONTROL"]["BERVRNG"])
+        return rng <= 0.04
 
     berv_within_tolerance._qc_key = "BERVOK"
 
     def bjd_within_tolerance(self):
-        """BJDRNG (from DiagL4) within tolerance.
+        """BJDRNG (from DiagL4) within tolerance (1 sec).
 
         Only applies when SCI2 is star-illuminated (SCI-OBJ == 'target'); other
-        sources pass. On a target frame an absent BJDRNG fails; an absent SCI-OBJ
-        raises (see _sci2_is_target).
+        sources pass.
         """
         if not self._sci2_is_target():
             return True
-        rng = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "BJDRNG")
-        return rng is not None and rng <= _BJD_RNG_TOL_S
+        rng = float(self.kpf_obj.headers["QUALITY_CONTROL"]["BJDRNG"])
+        return rng <= 1.0
 
     bjd_within_tolerance._qc_key = "BJDOK"

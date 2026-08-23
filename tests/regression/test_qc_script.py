@@ -20,7 +20,7 @@ import pytest
 from kpfpipe.data_models.level0 import KPF0
 from scripts.quality_control import qc
 
-from ._data_models import GOOD_DATES, write_amp_l0
+from ._data_models import GOOD_DATES, expmeter_hdus, write_amp_l0
 from ._scripts import CHILD_WARNINGS, REPO_ROOT, run_script, write_config
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
@@ -51,7 +51,8 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object"):
     """Write a minimal L0 FITS fixture at path.
 
     passing=False injects a negative EXPTIME so EXPTIMOK fails. A non-'Object'
-    imtype carries no pointing/DCS target block, so qc.py skips AstroQuery for it.
+    imtype carries no pointing/DCS target block, so qc.py skips AstroQuery for it
+    -- and QCL0, which requires the resolved astrometry, then fails loud.
     """
     cards = {
         "DATE-OBS": "2024-04-05T01:00:37",
@@ -65,7 +66,13 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object"):
     }
     if imtype == "Object":
         cards.update(_TARGET_CARDS)
-    write_amp_l0(path, namps=4, shape=(10, 10), primary_cards=cards)
+    write_amp_l0(
+        path,
+        namps=4,
+        shape=(10, 10),
+        primary_cards=cards,
+        extra_hdus=expmeter_hdus(),
+    )
 
 
 def _write_astro_config(path):
@@ -132,20 +139,6 @@ class TestQCScript:
         # 1 is "checks ran and one failed" -- distinct from 2, "never got that far".
         assert exc.value.code == 1
         assert "ISGOOD: FAIL" in capsys.readouterr().out
-
-    def test_calibration_frame_skips_astroquery_no_exit_2(
-        self, tmp_path, monkeypatch, capsys
-    ):
-        # A cal frame stays inspectable: qc.py skips AstroQuery rather than erroring.
-        fixture = tmp_path / "KP.20240405.00005.00.fits"
-        _write_l0_fixture(str(fixture), passing=True, imtype="Bias")
-        cfg = _write_astro_config(tmp_path / "astro.toml")
-
-        with pytest.raises(SystemExit) as exc:
-            _main_qc(monkeypatch, fixture, extra_args=["--config", str(cfg)])
-
-        assert exc.value.code != 2
-        assert "Skipping AstroQuery" in capsys.readouterr().out
 
     def test_missing_file_exit_2(self, tmp_path):
         # Deliberately still a subprocess. It is the only test that witnesses a

@@ -327,19 +327,6 @@ class TestQCBase:
         # A passing flag never warns.
         assert not any("CHKOK" in r.getMessage() for r in warnings)
 
-    def test_hdr_float_absent_empty_none_corrupt_raises(self):
-        # Absent and valueless cards degrade to None so checks can skip or fail
-        # gracefully; a present-but-non-numeric card is malformed and raises.
-        hdr = fits.Header()
-        hdr["NUM"] = 3.5
-        hdr["EMPTY"] = None  # a valueless card
-        hdr["STR"] = "not-a-number"
-        assert QC._hdr_float(hdr, "NUM") == 3.5
-        assert QC._hdr_float(hdr, "MISSING") is None
-        assert QC._hdr_float(hdr, "EMPTY") is None
-        with pytest.raises(ValueError, match="could not convert string to float"):
-            QC._hdr_float(hdr, "STR")
-
 
 # ---------------------------------------------------------------------------
 # QCL0 checks
@@ -427,9 +414,10 @@ class TestQCL0:
         with pytest.raises(KeyError):
             QCL0(_make_kpf0(tmp_path, dates=missing)).times_consistent()
 
-    def test_times_missing_keys_fail(self, tmp_path):
-        # Raw L0 PRIMARY without DATE-BEG/MID/END -> cannot verify -> fail.
-        assert QCL0(_make_kpf0(tmp_path)).times_consistent() is False
+    def test_times_missing_keys_raise(self, tmp_path):
+        # Raw L0 PRIMARY without DATE-BEG/MID/END -> cannot be computed.
+        with pytest.raises(KeyError, match="DATE-BEG"):
+            QCL0(_make_kpf0(tmp_path)).times_consistent()
 
     @pytest.mark.parametrize("key", ["GRDATE-B", "GRDATE-E", "RDDATE-B", "RDDATE-E"])
     def test_times_shutter_offset_fails(self, tmp_path, key):
@@ -438,9 +426,10 @@ class TestQCL0:
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
 
     @pytest.mark.parametrize("key", ["GRDATE-B", "GRDATE-E", "RDDATE-B", "RDDATE-E"])
-    def test_times_shutter_missing_fails(self, tmp_path, key):
+    def test_times_shutter_missing_raises(self, tmp_path, key):
         missing = {k: v for k, v in GOOD_DATES.items() if k != key}
-        assert QCL0(_make_kpf0(tmp_path, dates=missing)).times_consistent() is False
+        with pytest.raises(KeyError, match=key):
+            QCL0(_make_kpf0(tmp_path, dates=missing)).times_consistent()
 
     def test_times_shutter_within_tolerance_passes(self, tmp_path):
         near = dict(GOOD_DATES, **{"GRDATE-B": "2024-09-23T09:12:09.534"})  # +50 ms
@@ -457,49 +446,52 @@ class TestQCL0:
         [
             "NTP time correct to within 100.0 ms",  # at the limit
             "NTP time correct to within 250.0 ms",
-            "NTP is not synchronised",  # unparseable
-            None,  # absent
+            "NTP is not synchronised",  # reports no error
         ],
     )
     def test_ntp_timing_fail(self, tmp_path, timeerr):
         l0 = _make_kpf0(tmp_path)
-        if timeerr is None:
-            del l0.headers["PRIMARY"]["TIMEERR"]
-        else:
-            l0.headers["PRIMARY"]["TIMEERR"] = timeerr
+        l0.headers["PRIMARY"]["TIMEERR"] = timeerr
         assert QCL0(l0).ntp_timing() is False
+
+    def test_ntp_timing_missing_raises(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        del l0.headers["PRIMARY"]["TIMEERR"]
+        with pytest.raises(KeyError, match="TIMEERR"):
+            QCL0(l0).ntp_timing()
 
     def test_ntp_key_present(self):
         assert QCL0.__dict__["ntp_timing"]._qc_key == "NTPOK"
 
     def test_exptime_sane_pass_positive(self, tmp_path):
-        l0 = _make_kpf0(tmp_path, exptime=300.0)
+        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 300.0})
         assert QCL0(l0).exptime_sane() is True
 
     def test_exptime_sane_pass_zero(self, tmp_path):
         # Bias frames legitimately have EXPTIME=0.
-        l0 = _make_kpf0(tmp_path, exptime=0.0)
+        l0 = _make_kpf0(tmp_path, exptime=0.0, dates={"ELAPSED": 0.0})
         assert QCL0(l0).exptime_sane() is True
 
     def test_exptime_sane_fail_negative(self, tmp_path):
-        l0 = _make_kpf0(tmp_path, exptime=-1.0)
+        l0 = _make_kpf0(tmp_path, exptime=-1.0, dates={"ELAPSED": -1.0})
         assert QCL0(l0).exptime_sane() is False
 
-    def test_exptime_sane_fail_missing(self, tmp_path):
-        l0 = _make_kpf0(tmp_path)
+    def test_exptime_sane_missing_raises(self, tmp_path):
+        l0 = _make_kpf0(tmp_path, dates={"ELAPSED": 60.0})
         del l0.headers["PRIMARY"]["EXPTIME"]
-        assert QCL0(l0).exptime_sane() is False
+        with pytest.raises(KeyError, match="EXPTIME"):
+            QCL0(l0).exptime_sane()
 
     def test_exptime_sane_pass_elapsed_within_tol(self, tmp_path):
         # ELAPSED may exceed the requested EXPTIME by up to the timing tolerance.
         l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 300.05})
         assert QCL0(l0).exptime_sane() is True
 
-    def test_exptime_sane_pass_elapsed_absent(self, tmp_path):
-        # No ELAPSED card -> the consistency comparison is skipped.
+    def test_exptime_sane_elapsed_absent_raises(self, tmp_path):
+        # ELAPSED is the readout evidence; without it there is nothing to compare.
         l0 = _make_kpf0(tmp_path, exptime=300.0)
-        assert "ELAPSED" not in l0.headers["PRIMARY"]
-        assert QCL0(l0).exptime_sane() is True
+        with pytest.raises(KeyError, match="ELAPSED"):
+            QCL0(l0).exptime_sane()
 
     def test_exptime_sane_fail_premature_readout(self, tmp_path):
         # ELAPSED shorter than the requested EXPTIME (premature readout).
@@ -606,32 +598,17 @@ class TestQCL0:
         l0.set_keyword("OBJOFF", 6.0)  # > 5" pointing-vs-OBJECT
         assert QCL0(l0).radec_consistent() is False
 
-    def test_radec_tcsoff_required_empty_fails(self, tmp_path):
-        # TCSOFF is internal pointing consistency: absent or present-but-empty fails.
+    def test_radec_tcsoff_required_absent_raises(self, tmp_path):
+        # TCSOFF is internal pointing consistency and DiagL0 always emits it.
         l0 = _make_kpf0(tmp_path)
-        assert QCL0(l0).radec_consistent() is False
-        l0.set_keyword("TCSOFF", None)  # present-but-empty (astrometry unavailable)
-        assert QCL0(l0).radec_consistent() is False
+        with pytest.raises(KeyError, match="TCSOFF"):
+            QCL0(l0).radec_consistent()
 
     def test_radec_external_offsets_optional(self, tmp_path):
-        # TCSOFF within budget; GAIAOFF/OBJOFF unavailable (empty) -> still pass.
+        # TCSOFF within budget; Gaia/SIMBAD unmatched, so DiagL0 emitted no
+        # GAIAOFF/OBJOFF and there is no external bound to apply.
         l0 = _make_kpf0(tmp_path)
         l0.set_keyword("TCSOFF", 0.02)
-        l0.set_keyword("GAIAOFF", None)
-        l0.set_keyword("OBJOFF", None)
-        assert QCL0(l0).radec_consistent() is True
-
-    @pytest.mark.parametrize("imtype", ["Bias", "Dark", "Flatlamp", "Arclamp"])
-    def test_radec_calibration_frames_pass(self, tmp_path, imtype):
-        # A calibration frame has no target, so its blank TCSOFF must not fail.
-        l0 = _make_kpf0(tmp_path, imtype=imtype)
-        assert QCL0(l0).radec_consistent() is True
-
-    def test_radec_calibration_ignores_offsets(self, tmp_path):
-        # Even a badly-off offset on a calibration frame is not a pointing fault.
-        l0 = _make_kpf0(tmp_path, imtype="Bias")
-        for k, v in (("TCSOFF", 1.5), ("OBJOFF", 6.0), ("GAIAOFF", 91004.96)):
-            l0.set_keyword(k, v)
         assert QCL0(l0).radec_consistent() is True
 
     def test_radecok_key_present(self):
@@ -670,12 +647,12 @@ class TestQCL0:
         l0 = self._make_kpf0_with_canonical(tmp_path)
         assert QCL0(l0).catalog_astrometry_sane() is True
 
-    def test_catalog_astrometry_sane_no_record_passes(self, tmp_path):
-        # CATALOG_RECORD is empty when AstroQuery never ran; value sanity is then
-        # N/A and presence is enforced elsewhere.
+    def test_catalog_astrometry_sane_no_record_raises(self, tmp_path):
+        # CATALOG_RECORD is empty when AstroQuery never ran: nothing to check.
         l0 = _make_kpf0(tmp_path)
         assert not l0.data["CATALOG_RECORD"].colnames
-        assert QCL0(l0).catalog_astrometry_sane() is True
+        with pytest.raises(KeyError, match="source"):
+            QCL0(l0).catalog_astrometry_sane()
 
     def test_catalog_astrometry_sane_fail_epoch_zero(self, tmp_path):
         # A WMKO TARGEPOC=0.0 placeholder clears the merge's is-not-None gate, so
@@ -765,11 +742,11 @@ class TestQCL0:
         )
         assert QCL0(l0).catalog_color_sane() is True
 
-    def test_catalog_color_sane_no_record_passes(self, tmp_path):
-        # Calibration frame: no target, so no color to check.
+    def test_catalog_color_sane_no_record_raises(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
         assert not l0.data["CATALOG_RECORD"].colnames
-        assert QCL0(l0).catalog_color_sane() is True
+        with pytest.raises(KeyError, match="source"):
+            QCL0(l0).catalog_color_sane()
 
     def test_catalog_color_sane_fail_color_absent(self, tmp_path):
         # All three catalogs lacked a usable magnitude pair -> NaN cell.
@@ -836,11 +813,11 @@ class TestQCL0:
         sky_flux=None,
         corrected=False,
     ):
-        """KPF0 carrying an EXPMETER_SCI table, plus EXPMETER_SKY when ``sky_flux``
-        is given.
+        """KPF0 carrying the EXPMETER_SCI and EXPMETER_SKY tables.
 
         Built from per-reading timestamps and an (nreading, nchannel) flux array
-        whose column labels are wavelengths.
+        whose column labels are wavelengths. ``sky_flux`` defaults to the same
+        clean flux as SCI; a real science L0 always carries both fibers.
         """
         suffix = "-Corr" if corrected else ""
 
@@ -853,20 +830,21 @@ class TestQCL0:
                 columns[str(5000.0 + i)] = values[:, i]
             return Table(columns)
 
-        extensions = {"EXPMETER_SCI": table(_EM_CLEAN_FLUX if flux is None else flux)}
-        if sky_flux is not None:
-            extensions["EXPMETER_SKY"] = table(sky_flux)
+        extensions = {
+            "EXPMETER_SCI": table(_EM_CLEAN_FLUX if flux is None else flux),
+            "EXPMETER_SKY": table(_EM_CLEAN_FLUX if sky_flux is None else sky_flux),
+        }
         return _make_kpf0(tmp_path, dates=GOOD_DATES, expmeter=extensions)
 
     def test_expmeter_times_consistent_pass(self, tmp_path):
         l0 = self._make_kpf0_with_expmeter(tmp_path)
         assert QCL0(l0).expmeter_times_consistent() is True
 
-    def test_expmeter_times_no_em_data_passes(self, tmp_path):
-        # Calibration frames carry no EM extension; there is nothing to check.
+    def test_expmeter_times_no_em_data_raises(self, tmp_path):
+        # A frame with no EM extension (e.g. a calibration) cannot be checked.
         l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
-        assert l0.data.get("EXPMETER_SCI") is None
-        assert QCL0(l0).expmeter_times_consistent() is True
+        with pytest.raises(KeyError, match="EXPMETER_SCI"):
+            QCL0(l0).expmeter_times_consistent()
 
     def test_expmeter_times_within_tolerance_passes(self, tmp_path):
         # Sub-second EM dead time is routine and must not trip the check.
@@ -890,11 +868,12 @@ class TestQCL0:
         assert "Date-Beg-Corr" in l0.data["EXPMETER_SCI"].colnames
         assert QCL0(l0).expmeter_times_consistent() is True
 
-    def test_expmeter_times_missing_shutter_window_fails(self, tmp_path):
+    def test_expmeter_times_missing_shutter_window_raises(self, tmp_path):
         # EM data present but no DATE-BEG/DATE-END to compare against.
         l0 = self._make_kpf0_with_expmeter(tmp_path)
         del l0.headers["PRIMARY"]["DATE-BEG"]
-        assert QCL0(l0).expmeter_times_consistent() is False
+        with pytest.raises(KeyError, match="DATE-BEG"):
+            QCL0(l0).expmeter_times_consistent()
 
     def test_emtimeok_key_present(self):
         assert QCL0.__dict__["expmeter_times_consistent"]._qc_key == "EMTIMEOK"
@@ -903,9 +882,10 @@ class TestQCL0:
         l0 = self._make_kpf0_with_expmeter(tmp_path, sky_flux=_EM_CLEAN_FLUX)
         assert QCL0(l0).expmeter_flux_sane() is True
 
-    def test_expmeter_flux_no_em_data_passes(self, tmp_path):
+    def test_expmeter_flux_no_em_data_raises(self, tmp_path):
         l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
-        assert QCL0(l0).expmeter_flux_sane() is True
+        with pytest.raises(KeyError, match="EXPMETER_SCI"):
+            QCL0(l0).expmeter_flux_sane()
 
     def test_expmeter_flux_saturated_fails(self, tmp_path):
         # 2 channels saturated in each of the 2 interior readings -> 4 elements,
@@ -1061,19 +1041,23 @@ class TestQCL1:
         l1 = _make_kpf1(tmp_path, biassub=False, agebias=3.0)
         assert QCL1(l1).bias_ok() is False
 
-    def test_bias_ok_fail_subtract_flag_missing(self, tmp_path):
+    def test_bias_ok_subtract_flag_missing_raises(self, tmp_path):
+        # ImageProcessing writes BIASSUB on every run, 0 or 1; an absent card is
+        # a broken upstream invariant, not a not-subtracted frame.
         l1 = _make_kpf1(tmp_path, agebias=3.0)
         del l1.headers["RECEIPT"]["BIASSUB"]
-        assert QCL1(l1).bias_ok() is False
+        with pytest.raises(KeyError, match="BIASSUB"):
+            QCL1(l1).bias_ok()
 
     def test_bias_ok_fail_too_old(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=True, agebias=10.0)
         assert QCL1(l1).bias_ok() is False
 
-    def test_bias_ok_fail_age_missing(self, tmp_path):
+    def test_bias_ok_age_missing_raises(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=True)
         del l1.headers["QUALITY_CONTROL"]["BIASAGE"]
-        assert QCL1(l1).bias_ok() is False
+        with pytest.raises(KeyError, match="BIASAGE"):
+            QCL1(l1).bias_ok()
 
     def test_dark_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, darksub=True, agedark=7.0)
@@ -1087,10 +1071,11 @@ class TestQCL1:
         l1 = _make_kpf1(tmp_path, darksub=True, agedark=20.0)
         assert QCL1(l1).dark_ok() is False
 
-    def test_dark_ok_fail_age_missing(self, tmp_path):
+    def test_dark_ok_age_missing_raises(self, tmp_path):
         l1 = _make_kpf1(tmp_path, darksub=True)
         del l1.headers["QUALITY_CONTROL"]["DARKAGE"]
-        assert QCL1(l1).dark_ok() is False
+        with pytest.raises(KeyError, match="DARKAGE"):
+            QCL1(l1).dark_ok()
 
     def test_flat_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=15.0)
@@ -1104,10 +1089,11 @@ class TestQCL1:
         l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=45.0)
         assert QCL1(l1).flat_ok() is False
 
-    def test_flat_ok_fail_age_missing(self, tmp_path):
+    def test_flat_ok_age_missing_raises(self, tmp_path):
         l1 = _make_kpf1(tmp_path, flatdiv=True)
         del l1.headers["QUALITY_CONTROL"]["FLATAGE"]
-        assert QCL1(l1).flat_ok() is False
+        with pytest.raises(KeyError, match="FLATAGE"):
+            QCL1(l1).flat_ok()
 
     def test_ffi_finite_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, finite_ccd=True)
@@ -1117,10 +1103,11 @@ class TestQCL1:
         l1 = _make_kpf1(tmp_path, finite_ccd=False)
         assert QCL1(l1).ffi_finite() is False
 
-    def test_ffi_finite_fail_missing(self, tmp_path):
+    def test_ffi_finite_missing_raises(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
-        l1.data["GREEN_CCD"] = None
-        assert QCL1(l1).ffi_finite() is False
+        del l1.data["GREEN_CCD"]
+        with pytest.raises(KeyError, match="GREEN_CCD"):
+            QCL1(l1).ffi_finite()
 
     def test_qc_keys_correct(self):
         expected = {
@@ -1249,17 +1236,19 @@ class TestQCL2:
             kpf2.headers["QUALITY_CONTROL"][k] = (200, k)
         assert QCL2(kpf2).flux_finite_fraction() is False
 
-    def test_flux_finite_fraction_fail_missing_header(self):
+    def test_flux_finite_fraction_missing_header_raises(self):
         kpf2 = _make_kpf2_nan_headers(nan_frac=0.0)
         del kpf2.headers["QUALITY_CONTROL"]["NANSCI1"]
-        assert QCL2(kpf2).flux_finite_fraction() is False
+        with pytest.raises(KeyError, match="NANSCI1"):
+            QCL2(kpf2).flux_finite_fraction()
 
-    def test_flux_finite_fraction_fail_no_extensions(self):
+    def test_flux_finite_fraction_no_extensions_raises(self):
         # No flux arrays means zero total pixels, so no fraction can be formed.
         kpf2 = KPF2()
         for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
             kpf2.headers["QUALITY_CONTROL"][k] = (0, k)
-        assert QCL2(kpf2).flux_finite_fraction() is False
+        with pytest.raises(ZeroDivisionError):
+            QCL2(kpf2).flux_finite_fraction()
 
     def test_nonzero_flux_pass(self):
         kpf2 = _make_kpf2_nan_headers(zero_frac=0.1)
@@ -1269,10 +1258,11 @@ class TestQCL2:
         kpf2 = _make_kpf2_nan_headers(zero_frac=0.75)
         assert QCL2(kpf2).nonzero_flux() is False
 
-    def test_nonzero_flux_fail_missing(self):
+    def test_nonzero_flux_missing_raises(self):
         kpf2 = _make_kpf2_nan_headers()
         del kpf2.headers["QUALITY_CONTROL"]["ZEROFRAC"]
-        assert QCL2(kpf2).nonzero_flux() is False
+        with pytest.raises(KeyError, match="ZEROFRAC"):
+            QCL2(kpf2).nonzero_flux()
 
     def test_nonzero_flux_exactly_half(self):
         # The check is strictly < 0.5.
@@ -1314,9 +1304,10 @@ class TestQCL2:
         kpf2.headers["QUALITY_CONTROL"]["RSNRSCI"] = (18.0, "r snr")
         assert QCL2(kpf2).science_snr() is True
 
-    def test_science_snr_fail_missing(self):
+    def test_science_snr_missing_raises(self):
         kpf2 = _make_kpf2_nan_headers()  # no GSNRSCI/RSNRSCI headers
-        assert QCL2(kpf2).science_snr() is False
+        with pytest.raises(KeyError, match="GSNRSCI"):
+            QCL2(kpf2).science_snr()
 
     def test_science_snr_fail_below_floor(self):
         kpf2 = _make_kpf2_nan_headers()
@@ -1391,13 +1382,13 @@ class TestQCL4:
     def test_berv_within_tolerance_raises_when_sci_obj_absent(self):
         # CrossCorrelation requires SCI-OBJ upstream, so a frame without one is
         # malformed and must not pass as a non-target source.
-        with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
+        with pytest.raises(KeyError, match="SCI-OBJ"):
             QCL4(make_l4(bervrng=0.02)).berv_within_tolerance()
 
-    def test_berv_within_tolerance_target_absent_fails(self):
-        # DiagL4 skips the metric on degenerate weights or a NaN barycorr; on a
-        # target frame that is malformed, not a vacuous pass.
-        assert QCL4(make_l4(sci_obj="target")).berv_within_tolerance() is False
+    def test_berv_within_tolerance_metric_absent_raises(self):
+        # On a target frame BERVRNG is required; DiagL4 either emits it or raises.
+        with pytest.raises(KeyError, match="BERVRNG"):
+            QCL4(make_l4(sci_obj="target")).berv_within_tolerance()
 
     def test_bjd_within_tolerance_pass(self):
         l4 = make_l4(sci_obj="target", bjdrng=0.5)
@@ -1413,11 +1404,12 @@ class TestQCL4:
         )
 
     def test_bjd_within_tolerance_raises_when_sci_obj_absent(self):
-        with pytest.raises(ValueError, match="SCI-OBJ not in INSTRUMENT_HEADER"):
+        with pytest.raises(KeyError, match="SCI-OBJ"):
             QCL4(make_l4(bjdrng=0.5)).bjd_within_tolerance()
 
-    def test_bjd_within_tolerance_target_absent_fails(self):
-        assert QCL4(make_l4(sci_obj="target")).bjd_within_tolerance() is False
+    def test_bjd_within_tolerance_metric_absent_raises(self):
+        with pytest.raises(KeyError, match="BJDRNG"):
+            QCL4(make_l4(sci_obj="target")).bjd_within_tolerance()
 
     def test_required_keywords_present(self):
         l4 = make_l4()

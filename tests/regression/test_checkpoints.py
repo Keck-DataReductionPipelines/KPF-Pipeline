@@ -31,11 +31,11 @@ from kpfpipe.quality_control.checkpoints import (
 )
 
 from ._data_models import (
-    GOOD_DATES,
     make_l4,
+    seed_catalog_record,
     seed_required_primary,
     set_fiber_arrays,
-    write_amp_l0,
+    write_science_l0,
 )
 
 _NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
@@ -248,36 +248,26 @@ class TestCheckpointL2:
         assert qc["ISGOOD"] == 0
 
     def test_run_raises_when_extraction_missing(self):
-        # DATAPRL2 is fatal (in RAISE_FLAGS): no extracted flux -> run() raises.
-        with pytest.raises(ValueError, match="DATAPRL2 = 0"):
+        # No extracted flux: the folded DiagL2 stage runs first and has no pixels
+        # to measure, so the checkpoint fails there rather than at DATAPRL2.
+        with pytest.raises(ZeroDivisionError):
             CheckpointL2(_make_l2(populate=False)).run()
 
 
 class TestCheckpointL0:
     def test_run_good_product_passes_and_writes_flags(self, tmp_path, caplog):
-        # A calibration frame: no target to resolve, so no AstroQuery and no
-        # network. This is the only in-process exercise of QCL0.run().
+        # A science frame carrying everything QCL0 requires: pointing, timing,
+        # exposure-meter tables and resolved astrometry. This is the only
+        # in-process exercise of QCL0.run().
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
-        write_amp_l0(
-            fn,
-            namps=4,
-            shape=(10, 10),
-            primary_cards={
-                "DATE-OBS": "2024-04-05T01:00:37",
-                "MJD-OBS": 60405.04,
-                "EXPTIME": 12.0,
-                "OBJECT": "synthetic",
-                "IMTYPE": "Bias",
-                "PROGNAME": None,
-                **GOOD_DATES,
-            },
-        )
-        l0 = KPF0.from_fits(fn)
+        write_science_l0(fn, namps=4, shape=(10, 10), primary_cards={"PROGNAME": None})
+        l0 = seed_catalog_record(KPF0.from_fits(fn))
         with caplog.at_level(logging.WARNING):
             CheckpointL0(l0).run()
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
         assert qc["KWRDPRL0"] == 1
+        assert qc["TCSOFF"] < 1.0
         assert qc["ISGOOD"] == 1
 
 
@@ -334,9 +324,10 @@ class TestCheckpointL1:
         assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_ccd_data_missing(self):
-        # DATAPRL1 is fatal (in RAISE_FLAGS): no GREEN/RED CCD -> run() raises.
+        # No assembled CCDs: DiagL1's flux percentiles run first and have no
+        # pixels to measure, so the checkpoint fails there rather than at DATAPRL1.
         l1 = _make_l1(ccd=False)
-        with pytest.raises(ValueError, match="DATAPRL1 = 0"):
+        with pytest.raises(RuntimeWarning, match="Mean of empty slice"):
             CheckpointL1(l1).run()
 
     def test_run_raises_when_required_keyword_missing(self):
@@ -404,9 +395,10 @@ class TestCheckpointL4:
         assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_science_ccf_rv_missing(self):
-        # DATAPRL4 is fatal (in RAISE_FLAGS): no science CCF/RV -> run() raises.
+        # No science RV table: DiagL4 runs first and has no per-order BJD/BERV to
+        # measure, so the checkpoint fails there rather than at DATAPRL4.
         l4 = _make_l4(sci=False)
-        with pytest.raises(ValueError, match="DATAPRL4 = 0"):
+        with pytest.raises(KeyError, match="BJD_TDB"):
             CheckpointL4(l4).run()
 
     def test_run_raises_when_required_keyword_missing(self):
