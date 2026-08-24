@@ -318,26 +318,25 @@ class QCL0(QC):
             fractions.append(np.count_nonzero(compare(arr, level)) / arr.size)
         return float(max(fractions))
 
-    def green_not_dead(self):
-        """At most 5% of any GREEN amp below 1.0e4 D.N. (v2.12 L0 dead infobit)."""
-        return self._amp_pixel_fraction("GREEN", np.less, 1.0e4) <= 0.05
+    def _chip_pixels_ok(self, chip):
+        """Both raw pixel-quality fractions of ``chip`` within their limits.
 
-    green_not_dead._qc_key = "NOTDEADG"
+        Ports v2.12 L0 infobits as one per-chip verdict: at most 5% of any amp
+        below 1.0e4 D.N. (dead) and at most 15% above 5.0e8 D.N. (saturated).
+        """
+        return (
+            self._amp_pixel_fraction(chip, np.less, 1.0e4) <= 0.05
+            and self._amp_pixel_fraction(chip, np.greater, 5.0e8) <= 0.15
+        )
 
-    def red_not_dead(self):
-        """At most 5% of any RED amp below 1.0e4 D.N. (v2.12 L0 dead infobit)."""
-        return self._amp_pixel_fraction("RED", np.less, 1.0e4) <= 0.05
+    def green_pixels_ok(self):
+        """GREEN raw pixel quality: neither dead nor saturated beyond the limits."""
+        return self._chip_pixels_ok("GREEN")
 
-    red_not_dead._qc_key = "NOTDEADR"
+    green_pixels_ok._qc_key = "GREENOK"
 
-    def green_not_saturated(self):
-        """At most 15% of any GREEN amp above 5.0e8 D.N. (v2.12 L0 sat infobit)."""
-        return self._amp_pixel_fraction("GREEN", np.greater, 5.0e8) <= 0.15
+    def red_pixels_ok(self):
+        """RED raw pixel quality: neither dead nor saturated beyond the limits."""
+        return self._chip_pixels_ok("RED")
 
-    green_not_saturated._qc_key = "NOTSATG"
-
-    def red_not_saturated(self):
-        """At most 15% of any RED amp above 5.0e8 D.N. (v2.12 L0 sat infobit)."""
-        return self._amp_pixel_fraction("RED", np.greater, 5.0e8) <= 0.15
-
-    red_not_saturated._qc_key = "NOTSATR"
+    red_pixels_ok._qc_key = "REDOK"

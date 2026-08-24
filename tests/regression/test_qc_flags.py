@@ -963,83 +963,87 @@ class TestQCL0:
 
 
 class TestQCL0PixelQuality:
-    """Per-chip dead and saturated pixel fractions, ported from the v2.12 infobits.
+    """Per-chip pixel quality: the two v2.12 infobits folded into one flag per chip.
 
     ``write_amp_l0`` fills every amp with a flat 1e6 D.N., which clears both
     thresholds, so each test drives a chosen pixel count past one bound. Each amp
     here is 10x10 = 100 pixels, making 5% and 15% land on whole pixels.
     """
 
-    def test_not_dead_pass(self, tmp_path):
+    def test_pixels_ok_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        assert QCL0(l0).green_not_dead() is True
-        assert QCL0(l0).red_not_dead() is True
+        assert QCL0(l0).green_pixels_ok() is True
+        assert QCL0(l0).red_pixels_ok() is True
 
-    def test_not_dead_pass_at_limit(self, tmp_path):
+    def test_dead_pass_at_limit(self, tmp_path):
         # 5 of 100 pixels is exactly 5%; the fraction must exceed it to fail.
         l0 = _make_kpf0(tmp_path)
         l0.data["GREEN_AMP3"].flat[:5] = 0.0
-        assert QCL0(l0).green_not_dead() is True
+        assert QCL0(l0).green_pixels_ok() is True
 
-    def test_not_dead_fail_past_limit(self, tmp_path):
+    def test_dead_fail_past_limit(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
         l0.data["GREEN_AMP3"].flat[:6] = 0.0
-        assert QCL0(l0).green_not_dead() is False
+        assert QCL0(l0).green_pixels_ok() is False
 
-    def test_not_dead_pass_at_threshold_value(self, tmp_path):
+    def test_dead_pass_at_threshold_value(self, tmp_path):
         # Strictly below 1.0e4 D.N. counts; a pixel exactly at it does not.
         l0 = _make_kpf0(tmp_path)
         l0.data["GREEN_AMP3"].flat[:50] = 1.0e4
-        assert QCL0(l0).green_not_dead() is True
+        assert QCL0(l0).green_pixels_ok() is True
 
-    def test_not_saturated_pass_at_limit(self, tmp_path):
+    def test_saturated_pass_at_limit(self, tmp_path):
         # 15 of 100 pixels is exactly 15%.
         l0 = _make_kpf0(tmp_path)
         l0.data["RED_AMP2"].flat[:15] = 6.0e8
-        assert QCL0(l0).red_not_saturated() is True
+        assert QCL0(l0).red_pixels_ok() is True
 
-    def test_not_saturated_fail_past_limit(self, tmp_path):
+    def test_saturated_fail_past_limit(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
         l0.data["RED_AMP2"].flat[:16] = 6.0e8
-        assert QCL0(l0).red_not_saturated() is False
+        assert QCL0(l0).red_pixels_ok() is False
 
-    def test_not_saturated_pass_at_threshold_value(self, tmp_path):
+    def test_saturated_pass_at_threshold_value(self, tmp_path):
         # Strictly above 5.0e8 D.N. counts; a pixel exactly at it does not.
         l0 = _make_kpf0(tmp_path)
         l0.data["RED_AMP2"].flat[:50] = 5.0e8
-        assert QCL0(l0).red_not_saturated() is True
+        assert QCL0(l0).red_pixels_ok() is True
 
     def test_chips_judged_separately(self, tmp_path):
         # A dead GREEN amp does not drag down the RED verdict, and vice versa.
         l0 = _make_kpf0(tmp_path)
         l0.data["GREEN_AMP1"].flat[:50] = 0.0
-        assert QCL0(l0).green_not_dead() is False
-        assert QCL0(l0).red_not_dead() is True
+        assert QCL0(l0).green_pixels_ok() is False
+        assert QCL0(l0).red_pixels_ok() is True
+
+    def test_either_fraction_fails_the_chip(self, tmp_path):
+        # Dead and saturated share one flag: either bound alone fails the chip.
+        l0 = _make_kpf0(tmp_path)
+        l0.data["RED_AMP1"].flat[:50] = 6.0e8
+        assert QCL0(l0).red_pixels_ok() is False
 
     def test_worst_amp_decides(self, tmp_path):
         # One bad amp fails its chip even though the other three are clean.
         l0 = _make_kpf0(tmp_path)
         l0.data["RED_AMP4"].flat[:50] = 0.0
-        assert QCL0(l0).red_not_dead() is False
+        assert QCL0(l0).red_pixels_ok() is False
 
     def test_two_amp_readout_passes(self, tmp_path):
         # Absent amps are skipped, so a 2-amp frame is judged on the amps it has.
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00002.00.fits", namps=2, shape=(10, 10)
         )
-        assert QCL0(KPF0.from_fits(fn)).green_not_dead() is True
+        assert QCL0(KPF0.from_fits(fn)).green_pixels_ok() is True
 
     def test_no_amp_data_raises(self, tmp_path):
         l0 = _make_kpf0(tmp_path, with_amps=False)
         with pytest.raises(ValueError):
-            QCL0(l0).green_not_dead()
+            QCL0(l0).green_pixels_ok()
 
     def test_qc_keys_correct(self):
         expected = {
-            "green_not_dead": "NOTDEADG",
-            "red_not_dead": "NOTDEADR",
-            "green_not_saturated": "NOTSATG",
-            "red_not_saturated": "NOTSATR",
+            "green_pixels_ok": "GREENOK",
+            "red_pixels_ok": "REDOK",
         }
         for method_name, key in expected.items():
             fn = QCL0.__dict__[method_name]
