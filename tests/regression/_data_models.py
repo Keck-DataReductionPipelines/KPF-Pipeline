@@ -188,12 +188,20 @@ def expmeter_hdus(flux=None, sky_flux=None):
     ]
 
 
+def telemetry_hdu(nrows=1):
+    """A TELEMETRY BinTableHDU carrying ``nrows`` instrument readings."""
+    return fits.BinTableHDU(
+        Table({"keyword": ["TEMP1"] * nrows, "average": [20.0] * nrows}),
+        name="TELEMETRY",
+    )
+
+
 def write_science_l0(path, *, primary_cards=None, **kwargs):
     """Write an ``IMTYPE='Object'`` L0 carrying everything QCL0 requires.
 
     A science frame, unlike the calibration default: pointing, self-consistent
-    timing, and both exposure-meter tables. ``seed_catalog_record`` supplies the
-    astrometry AstroQuery would have resolved.
+    timing, both exposure-meter tables and telemetry. ``seed_catalog_record``
+    supplies the astrometry AstroQuery would have resolved.
     """
     return write_amp_l0(
         path,
@@ -204,7 +212,7 @@ def write_science_l0(path, *, primary_cards=None, **kwargs):
             **GOOD_DATES,
             **(primary_cards or {}),
         },
-        extra_hdus=expmeter_hdus(),
+        extra_hdus=[*expmeter_hdus(), telemetry_hdu()],
         **kwargs,
     )
 

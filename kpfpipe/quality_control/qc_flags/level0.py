@@ -70,6 +70,17 @@ class QCL0(QC):
 
     header_keywords_present._qc_key = "KWRDPRL0"
 
+    def telemetry_present(self):
+        """TELEMETRY extension present and carrying rows.
+
+        Ports v2.12 ``telemetry_present``, tightened to require rows: the bench
+        thermal and vacuum state during the exposure is recorded nowhere else and
+        cannot be recovered once the frame is written.
+        """
+        return len(self.kpf_obj.data["TELEMETRY"]) > 0
+
+    telemetry_present._qc_key = "TELEPRL0"
+
     def times_consistent(self):
         """DATE-BEG <= DATE-MID <= DATE-END, matching ELAPSED and the shutters.
 

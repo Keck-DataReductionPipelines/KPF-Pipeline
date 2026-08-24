@@ -30,6 +30,7 @@ from ._data_models import (
     make_l4,
     seed_required_primary,
     set_fiber_arrays,
+    telemetry_hdu,
     write_amp_l0,
 )
 
@@ -431,6 +432,30 @@ class TestQCL0:
         l0 = _make_kpf0(tmp_path)
         del l0.headers["PRIMARY"]["OFNAME"]
         assert QCL0(l0).header_keywords_present() is False
+
+    def _make_kpf0_with_telemetry(self, tmp_path, nrows):
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00003.00.fits",
+            shape=(10, 10),
+            extra_hdus=[telemetry_hdu(nrows)],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_telemetry_present_pass(self, tmp_path):
+        l0 = self._make_kpf0_with_telemetry(tmp_path, nrows=1)
+        assert QCL0(l0).telemetry_present() is True
+
+    def test_telemetry_present_empty_table_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_telemetry(tmp_path, nrows=0)
+        assert QCL0(l0).telemetry_present() is False
+
+    def test_telemetry_absent_raises(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        with pytest.raises(KeyError, match="TELEMETRY"):
+            QCL0(l0).telemetry_present()
+
+    def test_teleprl0_key_present(self):
+        assert QCL0.__dict__["telemetry_present"]._qc_key == "TELEPRL0"
 
     def test_times_consistent_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)

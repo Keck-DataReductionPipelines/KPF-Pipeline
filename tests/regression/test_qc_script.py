@@ -21,7 +21,7 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from scripts.quality_control import qc
 
-from ._data_models import GOOD_DATES, expmeter_hdus, write_amp_l0
+from ._data_models import GOOD_DATES, expmeter_hdus, telemetry_hdu, write_amp_l0
 from ._scripts import CHILD_WARNINGS, REPO_ROOT, run_script, write_config
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
@@ -83,7 +83,7 @@ def _write_l0_fixture(path, *, passing=True, imtype="Object", shape=(10, 10)):
         namps=4,
         shape=shape,
         primary_cards=cards,
-        extra_hdus=expmeter_hdus(),
+        extra_hdus=[*expmeter_hdus(), telemetry_hdu()],
     )
 
 
