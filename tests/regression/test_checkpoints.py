@@ -35,6 +35,7 @@ from ._data_models import (
     seed_catalog_record,
     seed_required_primary,
     set_fiber_arrays,
+    set_wave_bands,
     write_science_l0,
 )
 
@@ -208,7 +209,7 @@ class TestRunFoldsDiagnosticsAndQC:
 # on the production path, but neither was exercised in process anywhere, so
 # QCL0.run() and QCL2.run() never ran outside a full recipe or the CLI suite that
 # `make test-fast` excludes. That left the DiagL2 -> QCL2 handshake unpinned:
-# DiagL2 writes NANSCI*/ZEROFRAC and QCL2 reads them back by name, and renaming a
+# DiagL2 writes NANSCI*/ZERO* and QCL2 reads them back by name, and renaming a
 # key on one side (QCL2 returns False for a value it cannot find) kept the whole
 # suite green while L2NANOK went to 0 on every real frame.
 
@@ -220,7 +221,7 @@ def _make_l2(*, populate=True):
     if populate:
         set_fiber_arrays(l2, "FLUX", 1.0, ncol=_NCOL)
         set_fiber_arrays(l2, "VAR", 0.25, ncol=_NCOL)
-        set_fiber_arrays(l2, "WAVE", 5000.0, ncol=_NCOL, dtype=np.float64)
+        set_wave_bands(l2, ncol=_NCOL)
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             l2.set_data(ext, np.zeros(_NORDER_TOTAL, dtype=np.float64))
     seed_required_primary(l2, CheckpointL2.QC)
@@ -235,7 +236,7 @@ class TestCheckpointL2:
         qc = l2.headers["QUALITY_CONTROL"]
         # The metrics DiagL2 measured...
         assert qc["NANSCI1"] == 0
-        assert qc["ZEROFRAC"] == pytest.approx(0.0)
+        assert qc["ZEROSCI1"] == 0
         # ...are the ones QCL2 read back, by name. This is the seam.
         assert qc["L2NANOK"] == 1
         assert qc["L2FLXOK"] == 1
@@ -370,13 +371,12 @@ def _make_l4(*, sci=True):
 
     The arguments are load-bearing and must not be trimmed to the defaults:
     ``jitter=1e-7`` gives the per-order BJD/BERV scatter DiagL4 measures (about
-    0.03 s and 3e-4 m/s, well inside the BJDOK/BERVOK gates), and ``sci_obj="target"``
-    is what makes those gates apply at all. Without the jitter this stops being
-    the suite's only composed DiagL4 -> QCL4 seam and becomes header-stuffing;
-    passing ``bervrng=``/``bjdrng=`` instead would write the metrics directly and
-    do the same damage.
+    0.03 s and 3e-4 m/s, well inside the BJDOK/BERVOK gates). Without it this
+    stops being the suite's only composed DiagL4 -> QCL4 seam and becomes
+    header-stuffing; passing ``bervrng=``/``bjdrng=`` instead would write the
+    metrics directly and do the same damage.
     """
-    l4 = make_l4(sci=sci, jitter=1e-7, berv=7.9, sci_obj="target", seed=3)
+    l4 = make_l4(sci=sci, jitter=1e-7, berv=7.9, seed=3)
     seed_required_primary(l4, CheckpointL4.QC)
     return l4
 

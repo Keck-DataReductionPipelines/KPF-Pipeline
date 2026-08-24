@@ -62,37 +62,15 @@ class QCL4(QC):
 
     required_keywords_present._qc_key = "KWRDPRL4"
 
-    def _sci2_is_target(self):
-        """Whether SCI2 is star-illuminated, from INSTRUMENT_HEADER's SCI-OBJ.
-
-        Every L4 frame carries SCI-OBJ (CrossCorrelation requires it upstream and
-        fails loud otherwise), so an absent keyword is a malformed frame, not a
-        non-target source, and raises.
-        """
-        inst = self.kpf_obj.headers["INSTRUMENT_HEADER"]
-        return str(inst["SCI-OBJ"]).strip().lower() == "target"
-
     def berv_within_tolerance(self):
-        """BERVRNG (from DiagL4) within tolerance (4 cm/s).
-
-        Only applies when SCI2 is star-illuminated (SCI-OBJ == 'target'); other
-        sources pass (no meaningful barycentric dispersion).
-        """
-        if not self._sci2_is_target():
-            return True
+        """BERVRNG (from DiagL4) within tolerance (4 cm/s)."""
         rng = float(self.kpf_obj.headers["QUALITY_CONTROL"]["BERVRNG"])
         return rng <= 0.04
 
     berv_within_tolerance._qc_key = "BERVOK"
 
     def bjd_within_tolerance(self):
-        """BJDRNG (from DiagL4) within tolerance (1 sec).
-
-        Only applies when SCI2 is star-illuminated (SCI-OBJ == 'target'); other
-        sources pass.
-        """
-        if not self._sci2_is_target():
-            return True
+        """BJDRNG (from DiagL4) within tolerance (1 sec)."""
         rng = float(self.kpf_obj.headers["QUALITY_CONTROL"]["BJDRNG"])
         return rng <= 1.0
 

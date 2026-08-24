@@ -250,6 +250,24 @@ def set_fiber_arrays(
             )
 
 
+def set_wave_bands(kpf2, *, ncol):
+    """Give every fiber a WAVE grid dividing its chip's band across the orders.
+
+    A constant WAVE satisfies the shape checks but carries no order-to-wavelength
+    map, which the DiagL2 SNR and flux-ratio metrics need. Each order takes a
+    contiguous slice of the chip's band [Angstroms], so every wavelength those
+    metrics ask for lands in exactly one order, and all fibers share the grid,
+    making the inter-fiber interpolation exact.
+    """
+    for chip, (lo, hi) in (("GREEN", (4450.0, 6000.0)), ("RED", (6000.0, 8800.0))):
+        edges = np.linspace(lo, hi, NORDER[chip] + 1)
+        wave = np.stack(
+            [np.linspace(edges[o], edges[o + 1], ncol) for o in range(NORDER[chip])]
+        )
+        for fiber in FIBERS:
+            kpf2.set_data(f"{chip}_{fiber}_WAVE", wave)
+
+
 # --- L4 in-memory -----------------------------------------------------------
 
 
@@ -259,7 +277,6 @@ def make_l4(
     rv_filled=True,
     jitter=0.0,
     berv=0.0,
-    sci_obj=None,
     bervrng=None,
     bjdrng=None,
     seed=3,
@@ -274,8 +291,7 @@ def make_l4(
     scatters RV itself by 1e-3 km/s, so the product looks like a real one.
 
     ``rv_filled=False`` seeds NaN RVs, as a CrossCorrelation-only L4 has before
-    RadialVelocity runs. ``sci_obj`` sets INSTRUMENT_HEADER SCI-OBJ, which the
-    BERV/BJD tolerance checks honour only when it is 'target'.
+    RadialVelocity runs.
 
     Does not seed the required PRIMARY keywords; call ``seed_required_primary``
     when the test needs KWRDPRL4 to pass.
@@ -319,8 +335,6 @@ def make_l4(
         l4.headers["QUALITY_CONTROL"]["BERVRNG"] = bervrng
     if bjdrng is not None:
         l4.headers["QUALITY_CONTROL"]["BJDRNG"] = bjdrng
-    if sci_obj is not None:
-        l4.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
     return l4
 
 

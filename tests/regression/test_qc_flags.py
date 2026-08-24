@@ -148,15 +148,14 @@ def _make_kpf1(
 def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
     """Minimal KPF2 with all 10 {CHIP}_{FIBER}_FLUX extensions populated.
 
-    The arrays stay clean; the NaN counts and zero fraction are written as HEADERS,
+    The arrays stay clean; the NaN and non-positive counts are written as HEADERS,
     because QCL2 reads them from the header rather than measuring pixels. Not the
     same as test_diagnostics.py's ``_make_kpf2_nan_pixels``, which injects real
     NaN/zero PIXELS for DiagL2 to measure. Do not merge them.
 
     Per-chip row counts must match NORDER_GREEN/NORDER_RED because KPF2's
-    chip-prefix __setitem__ rejects any other shape. ``nan_frac`` is the fraction
-    of total pixels reported NaN via the NANSCI* headers and ``zero_frac`` the
-    value written to ZEROFRAC.
+    chip-prefix __setitem__ rejects any other shape. ``nan_frac`` and ``zero_frac``
+    are the fractions of total pixels reported via the NAN* and ZERO* headers.
     """
     chips = ["GREEN", "RED"]
     fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
@@ -182,7 +181,9 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
     nan_count = int(nan_frac * total_pixels / 5)  # spread evenly across 5 nan keys
     for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
         kpf2.headers["QUALITY_CONTROL"][k] = (nan_count, f"NaN count {k}")
-    kpf2.headers["QUALITY_CONTROL"]["ZEROFRAC"] = (zero_frac, "Zero-flux fraction")
+    zero_count = int(zero_frac * total_pixels / 5)  # likewise across 5 zero keys
+    for k in ["ZEROSCI1", "ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL"]:
+        kpf2.headers["QUALITY_CONTROL"][k] = (zero_count, f"Non-positive count {k}")
 
     return kpf2
 
@@ -1437,7 +1438,8 @@ class TestQCL2:
         kpf2 = KPF2()
         for k in ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]:
             kpf2.headers["QUALITY_CONTROL"][k] = (0, k)
-        kpf2.headers["QUALITY_CONTROL"]["ZEROFRAC"] = (0.0, "z")
+        for k in ["ZEROSCI1", "ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL"]:
+            kpf2.headers["QUALITY_CONTROL"][k] = (0, k)
         assert QCL2(kpf2).extraction_present() is False
 
     def test_extraction_present_fail_variance_missing(self):
@@ -1515,14 +1517,21 @@ class TestQCL2:
 
     def test_nonzero_flux_missing_raises(self):
         kpf2 = _make_kpf2_nan_headers()
-        del kpf2.headers["QUALITY_CONTROL"]["ZEROFRAC"]
-        with pytest.raises(KeyError, match="ZEROFRAC"):
+        del kpf2.headers["QUALITY_CONTROL"]["ZEROSCI1"]
+        with pytest.raises(KeyError, match="ZEROSCI1"):
             QCL2(kpf2).nonzero_flux()
 
     def test_nonzero_flux_exactly_half(self):
         # The check is strictly < 0.5.
         kpf2 = _make_kpf2_nan_headers(zero_frac=0.5)
         assert QCL2(kpf2).nonzero_flux() is False
+
+    def test_nonzero_flux_no_extensions_raises(self):
+        kpf2 = KPF2()
+        for k in ["ZEROSCI1", "ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL"]:
+            kpf2.headers["QUALITY_CONTROL"][k] = (0, k)
+        with pytest.raises(ZeroDivisionError):
+            QCL2(kpf2).nonzero_flux()
 
     # --- variance_positive (L2VAROK) ---
 
@@ -1556,20 +1565,30 @@ class TestQCL2:
 
     def test_science_snr_pass(self):
         kpf2 = _make_kpf2_nan_headers()
-        kpf2.headers["QUALITY_CONTROL"]["GSNRSCI"] = (20.0, "g snr")
-        kpf2.headers["QUALITY_CONTROL"]["RSNRSCI"] = (18.0, "r snr")
+        for wavelength in (452, 548, 652, 747, 852):
+            kpf2.headers["QUALITY_CONTROL"][f"SNRSC{wavelength}"] = (20.0, "snr")
         assert QCL2(kpf2).science_snr() is True
 
     def test_science_snr_missing_raises(self):
-        kpf2 = _make_kpf2_nan_headers()  # no GSNRSCI/RSNRSCI headers
-        with pytest.raises(KeyError, match="GSNRSCI"):
+        kpf2 = _make_kpf2_nan_headers()  # no SNR* headers
+        with pytest.raises(KeyError, match="SNRSC452"):
             QCL2(kpf2).science_snr()
 
     def test_science_snr_fail_below_floor(self):
         kpf2 = _make_kpf2_nan_headers()
-        kpf2.headers["QUALITY_CONTROL"]["GSNRSCI"] = (0.5, "g snr")  # below floor
-        kpf2.headers["QUALITY_CONTROL"]["RSNRSCI"] = (18.0, "r snr")
+        for wavelength in (452, 548, 652, 747, 852):
+            kpf2.headers["QUALITY_CONTROL"][f"SNRSC{wavelength}"] = (20.0, "snr")
+        kpf2.headers["QUALITY_CONTROL"]["SNRSC852"] = (0.5, "snr")  # below floor
         assert QCL2(kpf2).science_snr() is False
+
+    def test_science_snr_ignores_sky_and_cal(self):
+        # Neither carries starlight, so neither has an SNR floor.
+        kpf2 = _make_kpf2_nan_headers()
+        for wavelength in (452, 548, 652, 747, 852):
+            kpf2.headers["QUALITY_CONTROL"][f"SNRSC{wavelength}"] = (20.0, "snr")
+            for code in ("SK", "CL"):
+                kpf2.headers["QUALITY_CONTROL"][f"SNR{code}{wavelength}"] = (0.0, "snr")
+        assert QCL2(kpf2).science_snr() is True
 
     def test_qc_keys_correct(self):
         expected = {
@@ -1642,49 +1661,29 @@ class TestQCL4:
         assert QCL4(l4).ccf_rv_present() is False
 
     def test_berv_within_tolerance_pass(self):
-        l4 = make_l4(sci_obj="target", bervrng=0.02)
+        l4 = make_l4(bervrng=0.02)
         assert QCL4(l4).berv_within_tolerance() is True
 
     def test_berv_within_tolerance_fail(self):
-        l4 = make_l4(sci_obj="target", bervrng=0.5)
+        l4 = make_l4(bervrng=0.5)
         assert QCL4(l4).berv_within_tolerance() is False
 
-    def test_berv_within_tolerance_non_target_passes(self):
-        # SCI2 is not star-illuminated, so the check is N/A however bad BERVRNG is.
-        l4 = make_l4(sci_obj="etalon", bervrng=0.5)
-        assert QCL4(l4).berv_within_tolerance() is True
-
-    def test_berv_within_tolerance_raises_when_sci_obj_absent(self):
-        # CrossCorrelation requires SCI-OBJ upstream, so a frame without one is
-        # malformed and must not pass as a non-target source.
-        with pytest.raises(KeyError, match="SCI-OBJ"):
-            QCL4(make_l4(bervrng=0.02)).berv_within_tolerance()
-
     def test_berv_within_tolerance_metric_absent_raises(self):
-        # On a target frame BERVRNG is required; DiagL4 either emits it or raises.
+        # BERVRNG is required; DiagL4 either emits it or raises.
         with pytest.raises(KeyError, match="BERVRNG"):
-            QCL4(make_l4(sci_obj="target")).berv_within_tolerance()
+            QCL4(make_l4()).berv_within_tolerance()
 
     def test_bjd_within_tolerance_pass(self):
-        l4 = make_l4(sci_obj="target", bjdrng=0.5)
+        l4 = make_l4(bjdrng=0.5)
         assert QCL4(l4).bjd_within_tolerance() is True
 
     def test_bjd_within_tolerance_fail(self):
-        l4 = make_l4(sci_obj="target", bjdrng=2.0)
+        l4 = make_l4(bjdrng=2.0)
         assert QCL4(l4).bjd_within_tolerance() is False
-
-    def test_bjd_within_tolerance_non_target_passes(self):
-        assert (
-            QCL4(make_l4(sci_obj="etalon", bjdrng=2.0)).bjd_within_tolerance() is True
-        )
-
-    def test_bjd_within_tolerance_raises_when_sci_obj_absent(self):
-        with pytest.raises(KeyError, match="SCI-OBJ"):
-            QCL4(make_l4(bjdrng=0.5)).bjd_within_tolerance()
 
     def test_bjd_within_tolerance_metric_absent_raises(self):
         with pytest.raises(KeyError, match="BJDRNG"):
-            QCL4(make_l4(sci_obj="target")).bjd_within_tolerance()
+            QCL4(make_l4()).bjd_within_tolerance()
 
     def test_required_keywords_present(self):
         l4 = make_l4()
@@ -1697,7 +1696,7 @@ class TestQCL4:
             assert QCL4(l4).required_keywords_present() is False
 
     def test_run_all_good_isgood(self):
-        l4 = make_l4(sci_obj="target", bervrng=0.02, bjdrng=0.5)
+        l4 = make_l4(bervrng=0.02, bjdrng=0.5)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
@@ -1707,8 +1706,8 @@ class TestQCL4:
         assert qc["ISGOOD"] == 1
 
     def test_run_flags_failure_in_isgood(self):
-        # no CCF/RV, and out-of-tolerance BERV/BJD ranges on a target frame
-        l4 = make_l4(sci=False, sci_obj="target", bervrng=0.5, bjdrng=2.0)
+        # no CCF/RV, and out-of-tolerance BERV/BJD ranges
+        l4 = make_l4(sci=False, bervrng=0.5, bjdrng=2.0)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
         QCL4(l4).run()

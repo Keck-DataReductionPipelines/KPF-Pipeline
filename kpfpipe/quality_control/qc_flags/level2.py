@@ -67,8 +67,15 @@ class QCL2(QC):
     flux_finite_fraction._qc_key = "L2NANOK"
 
     def nonzero_flux(self):
-        """ZEROFRAC < 0.5."""
-        return float(self.kpf_obj.headers["QUALITY_CONTROL"]["ZEROFRAC"]) < 0.5
+        """Non-positive count from headers < 50% of total L2 flux pixels."""
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        total_pixels = sum(
+            np.size(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])
+            for chip in _CHIPS
+            for fiber in _FIBERS
+        )
+        zero_total = sum(float(hdr[f"ZERO{fiber}"]) for fiber in _FIBERS)
+        return (zero_total / total_pixels) < 0.5
 
     nonzero_flux._qc_key = "L2FLXOK"
 
@@ -92,14 +99,15 @@ class QCL2(QC):
     variance_positive._qc_key = "L2VAROK"
 
     def science_snr(self):
-        """Science SNR is finite and greater than 1.
+        """Summed-SCI SNR is finite and greater than 1 at all five wavelengths.
 
-        Reads the GSNRSCI/RSNRSCI metrics written by ``DiagL2.snr`` (run DiagL2
-        before QCL2, the same Diagnostics -> QC ordering every metric-backed
-        check relies on). Guards against a silently failed extraction.
+        Reads the SNRSC* metrics written by ``DiagL2.snr`` (run DiagL2 before
+        QCL2, the same Diagnostics -> QC ordering every metric-backed check
+        relies on). Guards against a silently failed extraction. The SKY and CAL
+        metrics are excluded: neither carries starlight, so neither has a floor.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        values = [float(hdr[k]) for k in ("GSNRSCI", "RSNRSCI")]
+        values = [float(hdr[f"SNRSC{wl}"]) for wl in (452, 548, 652, 747, 852)]
         return all(np.isfinite(v) and v > 1.0 for v in values)
 
     science_snr._qc_key = "L2SNROK"

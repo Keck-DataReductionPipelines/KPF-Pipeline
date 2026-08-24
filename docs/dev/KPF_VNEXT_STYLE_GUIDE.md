@@ -288,7 +288,7 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
 
 #### Keywords
 
-- **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`); encode the level
+- **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROSCI1`); encode the level
   where needed for uniqueness (`DATAPRL0`). **Before coining a new keyword, reuse the legacy
   spelling where the science meaning matches** (`WLSFILE`, `BIASFILE`), so downstream/archival
   tools keep reading v3 products; `reference/legacy_data_format.rst` is no longer vendored, so
