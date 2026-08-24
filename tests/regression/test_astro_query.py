@@ -924,19 +924,16 @@ class TestPerform:
         assert row["rv_src"] == "gaia"
         assert row["object"] == "Gaia DR3 12345"
 
-    def test_presence_flags_written_for_every_source(self):
-        # All three flags are always written, so an absent one means AstroQuery
-        # never ran (what DiagL0 warns on). wmko is 0 here: the L0 carries no TARG*.
-        aq, _ = _perform()
-        hdr = aq.l0_obj.headers["CATALOG_RECORD"]
-        assert hdr["GAIACR"] == 1
-        assert hdr["SIMBADCR"] == 1
-        assert hdr["WMKOCR"] == 0
+    def test_row_written_for_every_resolved_source(self):
+        # A source's row is its presence record. No wmko row here: the L0 carries
+        # no TARG*.
+        _, record = _perform()
+        assert set(record["source"]) == {"gaia", "simbad", "kpf-drp"}
 
-    def test_gated_off_source_flagged_zero(self):
-        aq, _ = _perform(do_gaia_query=False)
-        assert aq.l0_obj.headers["CATALOG_RECORD"]["GAIACR"] == 0
-        assert aq.l0_obj.headers["CATALOG_RECORD"]["SIMBADCR"] == 1
+    def test_gated_off_source_gets_no_row(self):
+        _, record = _perform(do_gaia_query=False)
+        assert "gaia" not in record["source"]
+        assert "simbad" in record["source"]
 
     def test_gaia_off_falls_through_to_simbad(self):
         # The provenance must follow the merge down rather than stay "gaia".

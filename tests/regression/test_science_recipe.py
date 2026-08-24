@@ -155,12 +155,6 @@ class _FrozenAstroQuery:
         aq = self._aq
         for source, record in _CATALOG_CAPTURE.items():
             aq._write_catalog_record(source, dict(record))
-        # _set_headers reads these to write the per-source presence flags.
-        aq._wmko = _CATALOG_CAPTURE["wmko"]
-        aq._gaia = _CATALOG_CAPTURE["gaia"]
-        aq._simbad = _CATALOG_CAPTURE["simbad"]
-        aq._canonical = _CATALOG_CAPTURE["kpf-drp"]
-        aq._set_headers(aq.l0_obj)
         aq.l0_obj.receipt_add_entry("astro_query", "", "PASS")
         return aq.l0_obj
 

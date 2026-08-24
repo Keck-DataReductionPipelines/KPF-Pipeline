@@ -513,7 +513,7 @@ class TestToKpf1:
 
 
 class TestCatalogRecordPassthrough:
-    """AstroQuery's CATALOG_RECORD rows and presence flags ride L0 -> L1 unchanged.
+    """AstroQuery's CATALOG_RECORD rows ride L0 -> L1 unchanged.
 
     The L1 -> L2 and L2 -> L4 hops have the same class in test_data_models_l{2,4}.py.
     """
@@ -523,15 +523,13 @@ class TestCatalogRecordPassthrough:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
-        l0.set_keyword("GAIACR", 1)
         return l0
 
-    def test_rows_and_flags_reach_l1(self):
+    def test_rows_reach_l1(self):
         # Beyond the C*# overlay, L1 keeps every source row -- not just the merged
         # one -- so the astrometry stays auditable.
         l1 = self._l0_with_catalog_table().to_kpf1()
         assert [str(s) for s in l1.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
-        assert l1.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
         # CATALOG_RECORD is registered in L1-extensions.csv, so it reads back at
@@ -541,7 +539,6 @@ class TestCatalogRecordPassthrough:
         self._l0_with_catalog_table(rv=None).to_kpf1().to_fits(fn)
         back = KPF1.from_fits(fn)
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
-        assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
         rv = back.data["CATALOG_RECORD"][0]["rv"]
         assert rv is not np.ma.masked and np.isnan(rv)
 

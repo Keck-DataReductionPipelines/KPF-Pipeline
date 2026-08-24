@@ -76,7 +76,7 @@ class DiagL0(Diagnostics):
 
         Gaia is an optional source; an unmatched lookup emits no keyword.
         """
-        if not self.kpf_obj.headers["CATALOG_RECORD"]["GAIACR"]:
+        if "gaia" not in self.kpf_obj.data["CATALOG_RECORD"]["source"]:
             return {}
         return self._tag(GAIAOFF=self._offset("gaia"))
 
@@ -93,7 +93,7 @@ class DiagL0(Diagnostics):
 
         SIMBAD is an optional source; an unmatched lookup emits no keyword.
         """
-        if not self.kpf_obj.headers["CATALOG_RECORD"]["SIMBADCR"]:
+        if "simbad" not in self.kpf_obj.data["CATALOG_RECORD"]["source"]:
             return {}
         return self._tag(OBJOFF=self._offset("simbad"))
 

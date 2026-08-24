@@ -210,7 +210,7 @@ class TestKPF0CatalogRecord:
     AstroQuery is its sole writer."""
 
     def test_read_leaves_catalog_record_empty(self, tmp_path):
-        # TARG* is present and the extension still comes back empty and unflagged.
+        # TARG* is present and the extension still comes back empty.
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
@@ -225,7 +225,6 @@ class TestKPF0CatalogRecord:
         l0 = KPF0.from_fits(fn)
         assert "CATALOG_RECORD" in l0.extensions
         assert len(l0.data["CATALOG_RECORD"]) == 0
-        assert "WMKOCR" not in l0.headers["CATALOG_RECORD"]
 
 
 class TestCatalogRecordMissingValues:

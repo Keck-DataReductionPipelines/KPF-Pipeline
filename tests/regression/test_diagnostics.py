@@ -168,9 +168,6 @@ class TestDiagnosticsBase:
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
 
-# The flag-carrying sources; 'kpf-drp' is the merged row and has no flag.
-_CATALOG_SOURCES = ("wmko", "gaia", "simbad")
-
 
 def _record_at(coord, **overrides):
     """A catalog record at ``coord`` (zero PM, finite plx) in EPRV C*# format:
@@ -194,15 +191,12 @@ def _record_at(coord, **overrides):
 
 
 def _set_catalog_record(l0, records):
-    """Write l0's CATALOG_RECORD rows and presence flags from a
-    {source: record-dict-or-None} mapping, the way perform does. A source left out
-    of the mapping gets flag 0, exactly as a gated-off one does in production."""
+    """Write l0's CATALOG_RECORD rows from a {source: record-dict-or-None} mapping,
+    the way perform does. A None record leaves the source with no row, exactly as a
+    gated-off one does in production."""
     aq = AstroQuery(l0)
     for source, record in records.items():
         aq._write_catalog_record(source, record)
-        if source in _CATALOG_SOURCES:
-            setattr(aq, f"_{source}", record)
-    aq._set_headers(l0)
 
 
 def _make_l0_pointing():
@@ -256,12 +250,13 @@ class TestDiagL0Contingency:
     """Unusable astrometry raises; an unmatched optional source emits no key."""
 
     def test_no_catalog_record_raises(self):
-        # AstroQuery not run: CATALOG_RECORD auto-created but no presence flags.
-        with pytest.raises(KeyError, match="GAIACR"):
+        # AstroQuery not run: CATALOG_RECORD auto-created but empty, so it has no
+        # 'source' column to look a row up in.
+        with pytest.raises(KeyError, match="source"):
             DiagL0(_make_l0_pointing()).gaia_ra_dec_offset()
 
     def test_unmatched_optional_source_emits_no_key(self):
-        # Gaia lookup disabled/failed -> GAIACR=0 -> no GAIAOFF; others compute.
+        # Gaia lookup disabled/failed -> no gaia row -> no GAIAOFF; others compute.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(

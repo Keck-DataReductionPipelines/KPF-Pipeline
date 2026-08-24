@@ -218,19 +218,17 @@ def write_science_l0(path, *, primary_cards=None, **kwargs):
 
 
 def seed_catalog_record(kpf0, record=None):
-    """Write the wmko and merged kpf-drp CATALOG_RECORD rows and presence flags.
+    """Write the wmko and merged kpf-drp CATALOG_RECORD rows.
 
     Stands in for a completed AstroQuery run without touching the network: the
     DCS target row (required by DiagL0's TCSOFF) and the merged row QCL0's
-    ASTROMOK/COLOROK read, with Gaia and SIMBAD flagged unmatched.
+    ASTROMOK/COLOROK read, with Gaia and SIMBAD unmatched.
     """
     from kpfpipe.modules.astro_query import AstroQuery
 
     aq = AstroQuery(kpf0)
     for source in ("wmko", "kpf-drp"):
         aq._write_catalog_record(source, record or CATALOG_RECORD)
-    aq._wmko = record or CATALOG_RECORD
-    aq._set_headers(kpf0)
     return kpf0
 
 
