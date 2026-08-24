@@ -673,7 +673,7 @@ class TestQCL0:
         assert QCL0(l0).radec_consistent() is True
 
     def test_radecok_key_present(self):
-        assert QCL0.__dict__["radec_consistent"]._qc_key == "RADECOK"
+        assert QCL0.__dict__["radec_consistent"]._qc_key == "TARGETOK"
 
     # --- catalog_astrometry_sane (ASTROMOK): physical range of the canonical
     # CATALOG_RECORD astrometry.
@@ -1068,8 +1068,8 @@ class TestQCL0PixelQuality:
 
     def test_qc_keys_correct(self):
         expected = {
-            "green_pixels_ok": "GREENOK",
-            "red_pixels_ok": "REDOK",
+            "green_pixels_ok": "GREENCCD",
+            "red_pixels_ok": "REDCCD",
         }
         for method_name, key in expected.items():
             fn = QCL0.__dict__[method_name]
@@ -1341,7 +1341,7 @@ class TestQCL1:
         expected = {
             "data_present": "DATAPRL1",
             "required_keywords_present": "KWRDPRL1",
-            "read_noise_ok": "RNOK",
+            "read_noise_ok": "READNSOK",
             "read_noise_nongauss_ok": "RNNGOK",
             "bias_ok": "BIASOK",
             "dark_ok": "DARKOK",
@@ -1377,7 +1377,7 @@ class TestQCL1Run:
         qc_keys = [
             "DATAPRL1",
             "KWRDPRL1",
-            "RNOK",
+            "READNSOK",
             "RNNGOK",
             "BIASOK",
             "DARKOK",

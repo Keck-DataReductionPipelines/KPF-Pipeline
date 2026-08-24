@@ -16,13 +16,13 @@ TELEPRL0,QC: TELEMETRY extension present in L0,QUALITY_CONTROL,int,QCL0
 EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",QUALITY_CONTROL,int,QCL0
 DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,int,QCL0
 NTPOK,QC: NTP clock error < 100 ms,QUALITY_CONTROL,int,QCL0
-RADECOK,QC: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,int,QCL0
+TARGETOK,QC: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,int,QCL0
 ASTROMOK,QC: catalog epoch/equinox/rv/parallax/PM in physical range,QUALITY_CONTROL,int,QCL0
 COLOROK,QC: catalog color present and in physical range,QUALITY_CONTROL,int,QCL0
 EMTIMEOK,QC: exposure meter times consistent with shutter window,QUALITY_CONTROL,int,QCL0
 EMFLUXOK,QC: exposure meter flux not saturated or negative,QUALITY_CONTROL,int,QCL0
-GREENOK,QC: GREEN dead/saturated pixel fractions within limits,QUALITY_CONTROL,int,QCL0
-REDOK,QC: RED dead/saturated pixel fractions within limits,QUALITY_CONTROL,int,QCL0
+GREENCCD,QC: GREEN dead/over-exposed pixel fractions within limits,QUALITY_CONTROL,int,QCL0
+REDCCD,QC: RED dead/over-exposed pixel fractions within limits,QUALITY_CONTROL,int,QCL0
 TCSOFF,Pointing offset from DCS target (arcsec),QUALITY_CONTROL,float,DiagL0
 OBJOFF,Pointing offset from OBJECT (SIMBAD) position (arcsec),QUALITY_CONTROL,float,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),QUALITY_CONTROL,float,DiagL0

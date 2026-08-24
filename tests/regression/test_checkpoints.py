@@ -129,19 +129,19 @@ class TestQCFlags:
 
     def test_summary_lists_all_failing_flags_cross_level(self, caplog):
         # The ISGOOD summary names every failing flag on QUALITY_CONTROL,
-        # including one propagated from a lower level (RNOK from L1).
+        # including one propagated from a lower level (READNSOK from L1).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (
             1,
             "required present",
         )  # avoid raise
-        l2.headers["QUALITY_CONTROL"]["RNOK"] = (0, "L1 read noise (propagated)")
+        l2.headers["QUALITY_CONTROL"]["READNSOK"] = (0, "L1 read noise (propagated)")
         l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "L2 variance positive")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
         assert "L2VAROK" in caplog.text
-        assert "RNOK" in caplog.text
+        assert "READNSOK" in caplog.text
 
 
 @pytest.mark.usefixtures("mini_detector")
@@ -275,8 +275,8 @@ class TestCheckpointL0:
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
         assert qc["KWRDPRL0"] == 1
-        assert qc["GREENOK"] == 1
-        assert qc["REDOK"] == 1
+        assert qc["GREENCCD"] == 1
+        assert qc["REDCCD"] == 1
         assert qc["TCSOFF"] < 1.0
         assert qc["ISGOOD"] == 1
 
@@ -351,14 +351,14 @@ class TestCheckpointL1:
             CheckpointL1(l1).run()
 
     def test_run_warns_when_read_noise_out_of_range(self, caplog):
-        # RNOK is not a RAISE_FLAG, so an out-of-range amp lands in the ISGOOD
+        # READNSOK is not a RAISE_FLAG, so an out-of-range amp lands in the ISGOOD
         # summary rather than raising.
         l1 = _make_l1()
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "RN e-")
         with caplog.at_level(logging.WARNING):
             CheckpointL1(l1).run()
         assert "ISGOOD=0" in caplog.text
-        assert "RNOK" in caplog.text
+        assert "READNSOK" in caplog.text
 
 
 # ---------------------------------------------------------------------------

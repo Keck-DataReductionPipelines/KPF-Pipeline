@@ -62,10 +62,10 @@ class DiagL1(Diagnostics):
         Returns
         -------
         dict
-            Maps each ``{G,R}CCD{pct}P`` keyword to its ``(value, comment)``.
+            Maps each ``FFI{G,R}{pct}P`` keyword to its ``(value, comment)``.
         """
         results = {}
-        for chip, prefix in (("GREEN", "GCCD"), ("RED", "RCCD")):
+        for chip, prefix in (("GREEN", "FFIG"), ("RED", "FFIR")):
             arr = self.kpf_obj.data[f"{chip}_CCD"]
             percentiles = np.nanpercentile(arr, [99, 90, 50, 10])
             for pct, value in zip([99, 90, 50, 10], percentiles, strict=True):

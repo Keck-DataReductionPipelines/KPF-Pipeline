@@ -35,15 +35,15 @@ BIASAGE,Master bias age [days],QUALITY_CONTROL,float,DiagL1
 DARKAGE,Master dark age [days],QUALITY_CONTROL,float,DiagL1
 FLATAGE,Master flat age [days],QUALITY_CONTROL,float,DiagL1
 WLSAGE,WLS master age [days],QUALITY_CONTROL,float,DiagL1
-GCCD99P,99th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
-GCCD90P,90th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
-GCCD50P,50th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
-GCCD10P,10th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
-RCCD99P,99th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
-RCCD90P,90th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
-RCCD50P,50th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
-RCCD10P,10th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
-RNOK,QC: per-amp read noise 2-6 e-,QUALITY_CONTROL,int,QCL1
+FFIG99P,99th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
+FFIG90P,90th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
+FFIG50P,50th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
+FFIG10P,10th percentile flux in the GREEN CCD image [e-],QUALITY_CONTROL,float,DiagL1
+FFIR99P,99th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
+FFIR90P,90th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
+FFIR50P,50th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
+FFIR10P,10th percentile flux in the RED CCD image [e-],QUALITY_CONTROL,float,DiagL1
+READNSOK,QC: per-amp read noise 2-6 e-,QUALITY_CONTROL,int,QCL1
 RNNGOK,QC: non-Gaussian read noise (MAD/STD) 0.8-1.5,QUALITY_CONTROL,int,QCL1
 BIASOK,QC: bias subtracted & master age <= 7 days,QUALITY_CONTROL,int,QCL1
 DARKOK,QC: dark subtracted & master age <= 14 days,QUALITY_CONTROL,int,QCL1

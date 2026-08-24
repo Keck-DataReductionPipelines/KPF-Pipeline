@@ -178,9 +178,9 @@ class TestRegistryConformance:
         assert "ISGOOD" in reg.qc_flag_keywords
         assert all("ISGOOD" not in s for s in reg.qc_flag_keywords_by_level.values())
         # Representative checks live under their own level.
-        assert "RNOK" in reg.qc_flag_keywords_by_level["L1"]
+        assert "READNSOK" in reg.qc_flag_keywords_by_level["L1"]
         assert "DATAPRL2" in reg.qc_flag_keywords_by_level["L2"]
-        assert "RNOK" not in reg.qc_flag_keywords_by_level["L2"]
+        assert "READNSOK" not in reg.qc_flag_keywords_by_level["L2"]
 
     def test_per_extension_keyword_expands_across_orderlets(self):
         # A "CCF*" Extension registers the keyword on CCF1..CCF5 while staying

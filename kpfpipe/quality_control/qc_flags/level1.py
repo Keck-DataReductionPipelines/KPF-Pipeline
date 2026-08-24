@@ -55,7 +55,7 @@ class QCL1(QC):
         """Every per-amp read noise present is in [2.0, 6.0] e-."""
         return self._present_rn_in_range(0, 2.0, 6.0)
 
-    read_noise_ok._qc_key = "RNOK"
+    read_noise_ok._qc_key = "READNSOK"
 
     def read_noise_nongauss_ok(self):
         """Every per-amp non-Gaussian read noise present is in [0.8, 1.5]."""

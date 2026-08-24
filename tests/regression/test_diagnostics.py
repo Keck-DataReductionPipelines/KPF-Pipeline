@@ -455,10 +455,10 @@ class TestDiagL1FluxPercentiles:
         DiagL1(l1).run()
         qc = l1.headers["QUALITY_CONTROL"]
         for pct in (99, 90, 50, 10):
-            assert qc[f"GCCD{pct}P"] == pytest.approx(pct)
-            assert qc[f"RCCD{pct}P"] == pytest.approx(2 * pct)
+            assert qc[f"FFIG{pct}P"] == pytest.approx(pct)
+            assert qc[f"FFIR{pct}P"] == pytest.approx(2 * pct)
         assert (
-            qc.comments["GCCD99P"] == "99th percentile flux in the GREEN CCD image [e-]"
+            qc.comments["FFIG99P"] == "99th percentile flux in the GREEN CCD image [e-]"
         )
 
     def test_nans_ignored(self):
@@ -466,7 +466,7 @@ class TestDiagL1FluxPercentiles:
         ramp[0, ::10] = np.nan
         l1 = self._l1(GREEN_CCD=ramp)
         results = DiagL1(l1).run()
-        assert np.isfinite(results["GCCD50P"][0])
+        assert np.isfinite(results["FFIG50P"][0])
 
     def test_empty_chip_raises(self):
         l1 = self._l1(GREEN_CCD=self._RAMP, RED_CCD=np.array([], dtype=float))

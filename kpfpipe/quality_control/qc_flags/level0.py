@@ -180,7 +180,7 @@ class QCL0(QC):
             return False
         return all(float(hdr[key]) < 5.0 for key in ("OBJOFF", "GAIAOFF") if key in hdr)
 
-    radec_consistent._qc_key = "RADECOK"
+    radec_consistent._qc_key = "TARGETOK"
 
     @staticmethod
     def _row_float(row, field):
@@ -344,10 +344,10 @@ class QCL0(QC):
         """GREEN raw pixel quality: neither dead nor saturated beyond the limits."""
         return self._chip_pixels_ok("GREEN")
 
-    green_pixels_ok._qc_key = "GREENOK"
+    green_pixels_ok._qc_key = "GREENCCD"
 
     def red_pixels_ok(self):
         """RED raw pixel quality: neither dead nor saturated beyond the limits."""
         return self._chip_pixels_ok("RED")
 
-    red_pixels_ok._qc_key = "REDOK"
+    red_pixels_ok._qc_key = "REDCCD"
