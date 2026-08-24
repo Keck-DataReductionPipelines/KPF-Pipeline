@@ -430,11 +430,12 @@ class KeywordRegistry:
     def _kpf_rows(cls):
         """KPF-pipeline keyword rows from config/L{0,1,2,4}-headers.csv.
 
-        Level is the per-file level (one CSV per data level).
+        Level is the per-file level (one CSV per data level). ``#`` opens a
+        comment: the registries carry section banners for readers.
         """
         rows = []
         for level in (0, 1, 2, 4):
-            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv")
+            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv", comment="#")
             rows += cls._parse_kpf_keyword_config(
                 df, f"L{level}-headers.csv", lambda r, lvl=level: lvl
             )

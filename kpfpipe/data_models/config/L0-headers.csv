@@ -1,4 +1,7 @@
 Keyword,Description,Extension,DataType,PopulatedBy
+# =======
+# Science
+# =======
 ORIGID,Original L0 observation ID,RECEIPT,str,KPF0.from_fits
 KOAID,KOA archive ID (DRP-RUN-19),RECEIPT,str,KPF0.from_fits
 PROGID,WMKO program ID (DRP-RUN-19),RECEIPT,str,KPF0.from_fits
@@ -7,6 +10,9 @@ DRPSTATU,DRP reduction status (DRP-RUN-20),RECEIPT,str,KPF0.from_fits
 WMKOCR,Catalog record present for DCS/TCS target,CATALOG_RECORD,int,AstroQuery
 GAIACR,Catalog record present for Gaia DR3 source,CATALOG_RECORD,int,AstroQuery
 SIMBADCR,Catalog record present for SIMBAD object,CATALOG_RECORD,int,AstroQuery
+# ===============
+# Quality Control
+# ===============
 DATAPRL0,QC: GREEN/RED amps present and populated,QUALITY_CONTROL,int,QCL0
 KWRDPRL0,QC: required L0 PRIMARY keywords present,QUALITY_CONTROL,int,QCL0
 TELEPRL0,QC: TELEMETRY extension present in L0,QUALITY_CONTROL,int,QCL0

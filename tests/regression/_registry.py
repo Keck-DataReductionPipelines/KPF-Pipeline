@@ -18,9 +18,13 @@ _CFG = importlib.resources.files("kpfpipe.data_models.config")
 def read_kpf_header_registry():
     """Combined L0/L1/L2/L4 KPF header registry as a DataFrame.
 
-    Columns: ``Keyword, Description, Extension, DataType, PopulatedBy``.
+    Columns: ``Keyword, Description, Extension, DataType, PopulatedBy``. ``#``
+    opens a comment, as in the registries' own reader.
     """
     return pd.concat(
-        [pd.read_csv(_CFG / f"L{level}-headers.csv") for level in ("0", "1", "2", "4")],
+        [
+            pd.read_csv(_CFG / f"L{level}-headers.csv", comment="#")
+            for level in ("0", "1", "2", "4")
+        ],
         ignore_index=True,
     )
