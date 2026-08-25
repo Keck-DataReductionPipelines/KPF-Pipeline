@@ -86,14 +86,14 @@ class RadialVelocity:
         Load the CCF cubes/variances, velocity grids, and mask width from the
         (CrossCorrelation-produced) L4 into the caches the RV methods read. Only
         illuminated fibers (non-empty CCF) are loaded; the grid is reconstructed
-        from the CCF header (VELSTART/VELSTEP/VELNSTEP) and the width from VELMASK.
+        from the CCF header (VELSTART/VELSTEP/VELNSTEP) and the width from VELWIDTH.
         """
         for fiber in fibers:
             if self.l4_obj.data[f"{fiber}_CCF"].size == 0:
                 continue
             hdr = self.l4_obj.headers[f"{fiber}_CCF"]
             grid = hdr["VELSTART"] + hdr["VELSTEP"] * np.arange(hdr["VELNSTEP"])
-            self._ccf_mask_width = float(hdr["VELMASK"])
+            self._ccf_mask_width = float(hdr["VELWIDTH"])
             for chip in chips:
                 key = f"{chip}_{fiber}"
                 self._ccf[key] = np.asarray(

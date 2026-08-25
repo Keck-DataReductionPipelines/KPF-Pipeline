@@ -26,7 +26,7 @@ REDERVS1,RED SCI1 RV error [km/s],RV2,float,RadialVelocity
 REDERVS2,RED SCI2 RV error [km/s],RV3,float,RadialVelocity
 REDERVS3,RED SCI3 RV error [km/s],RV4,float,RadialVelocity
 REDERVCL,RED CAL RV error [km/s],RV5,float,RadialVelocity
-VELMASK,CCF mask hole full width [km/s],CCF*,float,RadialVelocity
+VELWIDTH,CCF mask hole full width [km/s],CCF*,float,RadialVelocity
 # ================================================
 # Quality Control
 # ================================================

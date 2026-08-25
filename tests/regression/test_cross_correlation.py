@@ -675,7 +675,7 @@ class TestPerform:
         assert ccf_hdr["VELSTEP"] == pytest.approx(0.25)
         assert ccf_hdr["VELSTART"] == pytest.approx(RANGE_KMS[0])  # center 0
         assert ccf_hdr["CCFMASK"] == "G2_espresso"  # BP-RP 0.823 -> 5770 K -> G2
-        assert ccf_hdr["VELMASK"] == pytest.approx(cc_module.ccf_mask_width)
+        assert ccf_hdr["VELWIDTH"] == pytest.approx(cc_module.ccf_mask_width)
         rv_hdr = l4.headers["SCI2_RV"]
         assert rv_hdr["CTYPE1"] == "Columns"
         assert rv_hdr["CTYPE2"] == "Order-N"

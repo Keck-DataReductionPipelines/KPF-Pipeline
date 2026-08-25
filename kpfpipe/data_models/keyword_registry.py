@@ -488,7 +488,7 @@ class KeywordRegistry:
         Write keys only: EPRV PRIMARY keywords (-> PRIMARY) and each KPF keyword
         with a single home extension; KPF wins a name collision. EPRV
         per-extension cards (RVMETHOD on RV#, CTYPE*, ...) and multi-home KPF
-        keywords (VELMASK on CCF#) have no single home, so they are excluded and
+        keywords (VELWIDTH on CCF#) have no single home, so they are excluded and
         written via set_keyword's targeted ``ext=`` path.
         """
         routing = {}

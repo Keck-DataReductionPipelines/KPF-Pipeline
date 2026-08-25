@@ -102,16 +102,16 @@ class TestSetKeyword:
         assert l4.headers["RV3"]["RVMETHOD"] == "CCF"
 
     def test_targeted_ext_writes_kpf_multi_home_card(self):
-        # VELMASK is registered as CCF* -> CCF1..5, so like the EPRV per-extension
+        # VELWIDTH is registered as CCF* -> CCF1..5, so like the EPRV per-extension
         # cards it has no routed home and is ext=-only.
         l4 = KPF4()
-        l4.set_keyword("VELMASK", 1.0, ext="SCI2_CCF")  # SCI2_CCF -> CCF3
-        assert l4.headers["CCF3"]["VELMASK"] == 1.0
+        l4.set_keyword("VELWIDTH", 1.0, ext="SCI2_CCF")  # SCI2_CCF -> CCF3
+        assert l4.headers["CCF3"]["VELWIDTH"] == 1.0
         assert (
-            l4.headers["CCF3"].comments["VELMASK"] == "CCF mask hole full width [km/s]"
+            l4.headers["CCF3"].comments["VELWIDTH"] == "CCF mask hole full width [km/s]"
         )
         with pytest.raises(KeyError, match="not registered"):
-            l4.set_keyword("VELMASK", 1.0)  # no home extension without ext=
+            l4.set_keyword("VELWIDTH", 1.0)  # no home extension without ext=
 
     def test_targeted_ext_unregistered_for_extension_raises(self):
         l4 = KPF4()
@@ -184,12 +184,12 @@ class TestRegistryConformance:
         # out of routing.
         reg = KPF1.keyword_registry
         for n in range(1, 6):
-            assert "VELMASK" in reg.allowed[f"CCF{n}"]
+            assert "VELWIDTH" in reg.allowed[f"CCF{n}"]
             assert (
-                reg.comment_for("VELMASK", f"CCF{n}")
+                reg.comment_for("VELWIDTH", f"CCF{n}")
                 == "CCF mask hole full width [km/s]"
             )
-        assert "VELMASK" not in reg.routing
+        assert "VELWIDTH" not in reg.routing
 
 
 class TestKeywordRegistry:

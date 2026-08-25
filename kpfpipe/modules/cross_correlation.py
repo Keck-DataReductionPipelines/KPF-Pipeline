@@ -633,7 +633,7 @@ class CrossCorrelation:
             l4_obj.set_keyword("VELSTEP", float(self._ccf_step_size), ext=ccf_ext)
             l4_obj.set_keyword("VELNSTEP", int(grid.size), ext=ccf_ext)
             l4_obj.set_keyword("CCFMASK", mask_name, ext=ccf_ext)
-            l4_obj.set_keyword("VELMASK", float(self._ccf_mask_width), ext=ccf_ext)
+            l4_obj.set_keyword("VELWIDTH", float(self._ccf_mask_width), ext=ccf_ext)
 
             rv_ext = f"{fiber}_RV"
             l4_obj.set_keyword("CTYPE1", "Columns", ext=rv_ext)
@@ -688,7 +688,7 @@ class CrossCorrelation:
         l4_obj : KPF4
             L4 with a CCF cube, a per-bin CCF variance cube, and a metadata-seeded
             per-order RV table per illuminated orderlet. Each CCF extension carries
-            CTYPE1/CTYPE2/VELSTART/VELSTEP/VELNSTEP/CCFMASK/VELMASK; each RV
+            CTYPE1/CTYPE2/VELSTART/VELSTEP/VELNSTEP/CCFMASK/VELWIDTH; each RV
             extension carries CTYPE1/CTYPE2. Unilluminated ('none') or
             not-yet-implemented (etalon, lfc) fibers are skipped (empty
             extensions).
