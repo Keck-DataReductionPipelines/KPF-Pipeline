@@ -464,34 +464,34 @@ class TestPerform:
         # (CCD1=GREEN, CCD2=RED; SCI2 has suffix '2' and lives on RV3).
         _, l4 = performed
         rv_hdr = l4.headers["RV3"]
-        assert rv_hdr["CCD1RV2"] == pytest.approx(V_INJECT, abs=0.1)
-        assert rv_hdr["CCD2RV2"] == pytest.approx(V_INJECT, abs=0.1)
-        assert rv_hdr["CCD1ERV2"] > 0 and rv_hdr["CCD2ERV2"] > 0
+        assert rv_hdr["GRNRVS2"] == pytest.approx(V_INJECT, abs=0.1)
+        assert rv_hdr["REDRVS2"] == pytest.approx(V_INJECT, abs=0.1)
+        assert rv_hdr["GRNERVS2"] > 0 and rv_hdr["REDERVS2"] > 0
         # The per-orderlet keywords do not leak onto PRIMARY.
-        assert "CCD1RV2" not in l4.headers["PRIMARY"]
+        assert "GRNRVS2" not in l4.headers["PRIMARY"]
 
     def test_combined_rv_populated(self, performed):
-        # PRIMARY: EPRV RV/RVERR plus the KPF SCI-combined per-CCD CCD1RV/CCD2RV.
+        # PRIMARY: EPRV RV/RVERR plus the KPF SCI-combined per-CCD RVGREEN/RVRED.
         _, l4 = performed
         prim = l4.headers["PRIMARY"]
-        assert prim["CCD1RV"] == pytest.approx(V_INJECT, abs=0.1)
-        assert prim["CCD2RV"] == pytest.approx(V_INJECT, abs=0.1)
-        assert prim["CCD1ERV"] > 0 and prim["CCD2ERV"] > 0
+        assert prim["RVGREEN"] == pytest.approx(V_INJECT, abs=0.1)
+        assert prim["RVRED"] == pytest.approx(V_INJECT, abs=0.1)
+        assert prim["ERVGREEN"] > 0 and prim["ERVRED"] > 0
         assert prim["RV"] == pytest.approx(V_INJECT, abs=0.1)
         assert prim["RVERR"] > 0
         assert prim["RVMETHOD"] == "CCF"
-        assert "CCD1RV" not in l4.headers["RV3"]
+        assert "RVGREEN" not in l4.headers["RV3"]
         assert "RV" not in l4.headers["RV3"]
 
     def test_combined_rv_is_weighted_ccd_combine(self, performed):
-        # PRIMARY RV = (CCD1RV*Wg + CCD2RV*Wr)/(Wg+Wr), Wg/Wr the summed order
+        # PRIMARY RV = (RVGREEN*Wg + RVRED*Wr)/(Wg+Wr), Wg/Wr the summed order
         # weights; RVERR = inverse-variance combination of the per-CCD errors.
         module, l4 = performed
         prim = l4.headers["PRIMARY"]
         wg = np.nansum(module._get_order_weights("GREEN", "SCI1"))
         wr = np.nansum(module._get_order_weights("RED", "SCI1"))
-        expect_rv = (prim["CCD1RV"] * wg + prim["CCD2RV"] * wr) / (wg + wr)
-        expect_err = (1.0 / prim["CCD1ERV"] ** 2 + 1.0 / prim["CCD2ERV"] ** 2) ** -0.5
+        expect_rv = (prim["RVGREEN"] * wg + prim["RVRED"] * wr) / (wg + wr)
+        expect_err = (1.0 / prim["ERVGREEN"] ** 2 + 1.0 / prim["ERVRED"] ** 2) ** -0.5
         assert prim["RV"] == pytest.approx(expect_rv, abs=1e-9)
         assert prim["RVERR"] == pytest.approx(expect_err, rel=1e-9)
 
@@ -544,7 +544,7 @@ class TestPerform:
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             l4 = rv_module.perform(chips=["GREEN"])
         prim = l4.headers["PRIMARY"]
-        assert prim["RV"] == pytest.approx(prim["CCD1RV"], abs=1e-9)
+        assert prim["RV"] == pytest.approx(prim["RVGREEN"], abs=1e-9)
         assert "only chip GREEN present" in caplog.text
 
     def test_l4_serializes_to_fits(self, rv_module, tmp_path):
@@ -555,8 +555,8 @@ class TestPerform:
         with fits.open(path) as hdul:
             rv = hdul["RV3"].header
             assert rv["RVMETHOD"] == "CCF"
-            assert rv["CCD1RV2"] == pytest.approx(V_INJECT, abs=0.1)
-            assert "CCD1RV2" not in hdul["PRIMARY"].header
+            assert rv["GRNRVS2"] == pytest.approx(V_INJECT, abs=0.1)
+            assert "GRNRVS2" not in hdul["PRIMARY"].header
             # Only the EPRV combined RV belongs on PRIMARY.
             assert hdul["PRIMARY"].header["RV"] == pytest.approx(V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
@@ -573,8 +573,8 @@ class TestPerform:
         )
         l4 = rv_module.perform(fibers=["SCI1", "SCI2", "SCI3"])
         rv_hdr = l4.headers["RV3"]  # SCI2 per-orderlet RVs -> RV3
-        assert "CCD1RV2" in rv_hdr and rv_hdr["CCD1RV2"] is None
-        assert "CCD2RV2" in rv_hdr and rv_hdr["CCD2RV2"] is None
+        assert "GRNRVS2" in rv_hdr and rv_hdr["GRNRVS2"] is None
+        assert "REDRVS2" in rv_hdr and rv_hdr["REDRVS2"] is None
 
     def test_explicit_chips_and_fibers(self, rv_module):
         l4 = rv_module.perform(chips=["GREEN"], fibers=["SCI1", "SCI2", "SCI3"])

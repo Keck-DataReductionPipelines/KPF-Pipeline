@@ -250,12 +250,12 @@ class TestScienceRecipe:
 
     def test_per_ccd_barycorr_keywords(self, l2):
         homes = {
-            "CCD1BJD": "BJD_TDB",
-            "CCD2BJD": "BJD_TDB",
-            "CCD1BKMS": "BARYCORR_KMS",
-            "CCD2BKMS": "BARYCORR_KMS",
-            "CCD1BZ": "BARYCORR_Z",
-            "CCD2BZ": "BARYCORR_Z",
+            "BJDGREEN": "BJD_TDB",
+            "BJDRED": "BJD_TDB",
+            "BVGREEN": "BARYCORR_KMS",
+            "BVRED": "BARYCORR_KMS",
+            "BZGREEN": "BARYCORR_Z",
+            "BZRED": "BARYCORR_Z",
         }
         for key, ext in homes.items():
             hdr = l2.headers[ext]

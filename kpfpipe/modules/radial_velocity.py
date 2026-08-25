@@ -26,7 +26,7 @@ _DEFAULTS = {
 }
 
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
-_RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
+_RV_SFX = {"SCI1": "S1", "SCI2": "S2", "SCI3": "S3", "CAL": "CL", "SKY": "SK"}
 
 
 class RadialVelocity:
@@ -69,7 +69,7 @@ class RadialVelocity:
         self._processed = []  # illuminated fibers written this run
         self._per_fiber = {}  # per-fiber rv/rv_err arrays and per-CCD RV/err
         self._sci_combined_ran = False  # whether a science combine was formed
-        self._sci_ccd_rv = {}  # SCI-combined per-CCD RV, for CCD{n}RV
+        self._sci_ccd_rv = {}  # SCI-combined per-CCD RV, for RV{chip}
         self._sci_ccd_err = {}
         self._combined_rv = np.nan  # PRIMARY RV
         self._combined_rverr = np.nan  # PRIMARY RVERR
@@ -568,8 +568,8 @@ class RadialVelocity:
         """
         Write all RV keywords from the perform()-filled stashes. Per
         orderlet: RVn RVMETHOD/SKYRMVD/TELLRMVD and per-fiber per-CCD
-        CCD{n}RV{sfx}/CCD{n}ERV{sfx}. On PRIMARY: RVMETHOD, and (when a science
-        combine ran) the SCI-combined CCD{n}RV/CCD{n}ERV and EPRV
+        {GRN|RED}RV{sfx}/{GRN|RED}ERV{sfx}. On PRIMARY: RVMETHOD, and (when a science
+        combine ran) the SCI-combined RV{chip}/ERV{chip} and EPRV
         RV/RVERR/BERV/BJDTDB. Non-finite values are written as None (FITS
         UNDEFINED). The RVn CTYPE cards belong to CrossCorrelation.
         """
@@ -580,13 +580,13 @@ class RadialVelocity:
             l4_obj.set_keyword("TELLRMVD", False, ext=rv_ext)
             pf = self._per_fiber[fiber]
             for chip, v in pf["ccd_rv"].items():
-                n = 1 if chip == "GREEN" else 2
+                c = "GRN" if chip == "GREEN" else "RED"
                 e = pf["ccd_rv_err"][chip]
                 l4_obj.set_keyword(
-                    f"CCD{n}RV{_RV_SFX[fiber]}", float(v) if np.isfinite(v) else None
+                    f"{c}RV{_RV_SFX[fiber]}", float(v) if np.isfinite(v) else None
                 )
                 l4_obj.set_keyword(
-                    f"CCD{n}ERV{_RV_SFX[fiber]}", float(e) if np.isfinite(e) else None
+                    f"{c}ERV{_RV_SFX[fiber]}", float(e) if np.isfinite(e) else None
                 )
 
         # PRIMARY (EPRV L4): always the RV method; the combined RV only when a
@@ -595,10 +595,9 @@ class RadialVelocity:
         if not self._sci_combined_ran:
             return
         for chip, v in self._sci_ccd_rv.items():
-            n = 1 if chip == "GREEN" else 2
             e = self._sci_ccd_err[chip]
-            l4_obj.set_keyword(f"CCD{n}RV", float(v) if np.isfinite(v) else None)
-            l4_obj.set_keyword(f"CCD{n}ERV", float(e) if np.isfinite(e) else None)
+            l4_obj.set_keyword(f"RV{chip}", float(v) if np.isfinite(v) else None)
+            l4_obj.set_keyword(f"ERV{chip}", float(e) if np.isfinite(e) else None)
         l4_obj.set_keyword(
             "RV", float(self._combined_rv) if np.isfinite(self._combined_rv) else None
         )
@@ -658,9 +657,9 @@ class RadialVelocity:
         l4_obj : KPF4
             The input L4 with per-order RV/RV_ERR filled per illuminated orderlet.
             Each RV extension carries RVMETHOD/SKYRMVD/TELLRMVD and the per-fiber
-            legacy CCD<n>RV<sfx>/CCD<n>ERV<sfx>. PRIMARY carries the final science
+            {GRN|RED}RV{sfx}/{GRN|RED}ERV{sfx}. PRIMARY carries the final science
             RV: the EPRV RVMETHOD/RV/RVERR/BERV/BJDTDB plus the KPF SCI-combined
-            per-CCD CCD<n>RV/CCD<n>ERV. Fibers with no CCF (unilluminated) are
+            per-CCD RV{chip}/ERV{chip}. Fibers with no CCF (unilluminated) are
             skipped.
         """
         if chips is None:

@@ -843,16 +843,16 @@ class TestPerform:
         bjd = kpf2.headers["BJD_TDB"]
         kms = kpf2.headers["BARYCORR_KMS"]
         z = kpf2.headers["BARYCORR_Z"]
-        for key in ("CCD1BJD", "CCD2BJD"):
+        for key in ("BJDGREEN", "BJDRED"):
             assert key in bjd, f"{key} missing from BJD_TDB"
-        for key in ("CCD1BKMS", "CCD2BKMS"):
+        for key in ("BVGREEN", "BVRED"):
             assert key in kms, f"{key} missing from BARYCORR_KMS"
-        for key in ("CCD1BZ", "CCD2BZ"):
+        for key in ("BZGREEN", "BZRED"):
             assert key in z, f"{key} missing from BARYCORR_Z"
 
         # The stub gives every order the same delta_rv, so the chip means match.
-        np.testing.assert_allclose(kms.get("CCD1BKMS"), kms.get("CCD2BKMS"))
-        np.testing.assert_allclose(z.get("CCD1BZ"), z.get("CCD2BZ"))
+        np.testing.assert_allclose(kms.get("BVGREEN"), kms.get("BVRED"))
+        np.testing.assert_allclose(z.get("BZGREEN"), z.get("BZRED"))
 
     def test_ctype1_axis_label(self, bc_monkeypatched):
         # These are 1-D per-order arrays, so CTYPE1 names the order axis and

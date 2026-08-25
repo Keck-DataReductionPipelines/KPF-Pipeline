@@ -2,12 +2,12 @@ Keyword,Description,Extension,DataType,PopulatedBy
 # ================================================
 # Processing
 # ================================================
-CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
-CCD2BJD,RED photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
-CCD1BKMS,GREEN barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
-CCD2BKMS,RED barycentric velocity [km/s],BARYCORR_KMS,float,BarycentricCorrection
-CCD1BZ,GREEN barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
-CCD2BZ,RED barycentric redshift z,BARYCORR_Z,float,BarycentricCorrection
+BJDGREEN,Photon-weighted mid-time for the GREEN CCD [BJD_TDB],BJD_TDB,float,BarycentricCorrection
+BJDRED,Photon-weighted mid-time for the RED CCD [BJD_TDB],BJD_TDB,float,BarycentricCorrection
+BVGREEN,Barycentric velocity for the GREEN CCD [km/s],BARYCORR_KMS,float,BarycentricCorrection
+BVRED,Barycentric velocity for the RED CCD [km/s],BARYCORR_KMS,float,BarycentricCorrection
+BZGREEN,Barycentric redshift for the GREEN CCD,BARYCORR_Z,float,BarycentricCorrection
+BZRED,Barycentric redshift for the RED CCD,BARYCORR_Z,float,BarycentricCorrection
 TRACFILE,Order trace full path,RECEIPT,str,SpectralExtraction
 # ================================================
 # Quality Control

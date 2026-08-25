@@ -79,17 +79,17 @@ class TestSetKeyword:
 
     def test_routes_to_barycorr_and_bjd_extensions(self):
         l2 = KPF2()
-        l2.set_keyword("CCD1BKMS", -12.3)
-        l2.set_keyword("CCD1BJD", 2460000.5)
-        assert l2.headers["BARYCORR_KMS"]["CCD1BKMS"] == -12.3
-        assert l2.headers["BJD_TDB"]["CCD1BJD"] == 2460000.5
+        l2.set_keyword("BVGREEN", -12.3)
+        l2.set_keyword("BJDGREEN", 2460000.5)
+        assert l2.headers["BARYCORR_KMS"]["BVGREEN"] == -12.3
+        assert l2.headers["BJD_TDB"]["BJDGREEN"] == 2460000.5
 
     def test_routes_l4_orderlet_rv_to_rv_table(self):
         l4 = KPF4()
-        l4.set_keyword("CCD1RV1", 1.2345)  # GREEN SCI1 -> RV2
-        l4.set_keyword("CCD1RV", 6.789)  # GREEN SCI-combined -> PRIMARY
-        assert l4.headers["RV2"]["CCD1RV1"] == 1.2345
-        assert l4.headers["PRIMARY"]["CCD1RV"] == 6.789
+        l4.set_keyword("GRNRVS1", 1.2345)  # GREEN SCI1 -> RV2
+        l4.set_keyword("RVGREEN", 6.789)  # GREEN SCI-combined -> PRIMARY
+        assert l4.headers["RV2"]["GRNRVS1"] == 1.2345
+        assert l4.headers["PRIMARY"]["RVGREEN"] == 6.789
 
     def test_targeted_ext_writes_eprv_per_extension_card(self):
         # EPRV per-extension cards (VELSTART on every CCF#, RVMETHOD on every RV#)
@@ -124,10 +124,10 @@ class TestSetKeyword:
             l1.set_keyword("BOGUSKEY", 1)
 
     def test_missing_extension_raises_valueerror(self):
-        # KPF1 has no BARYCORR_KMS extension for CCD1BKMS to route to.
+        # KPF1 has no BARYCORR_KMS extension for BVGREEN to route to.
         l1 = KPF1()
         with pytest.raises(ValueError, match="does not exist"):
-            l1.set_keyword("CCD1BKMS", 1.0)
+            l1.set_keyword("BVGREEN", 1.0)
 
 
 class TestRegistryConformance:

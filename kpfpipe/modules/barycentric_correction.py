@@ -673,12 +673,12 @@ class BarycentricCorrection:
         Reads self._ccd_bjd/_ccd_kms/_ccd_z (populated by perform()); set_keyword
         routes each to its registry home. CCD1=GREEN, CCD2=RED.
         """
-        l2_obj.set_keyword("CCD1BJD", float(self._ccd_bjd[0]))
-        l2_obj.set_keyword("CCD1BKMS", float(self._ccd_kms[0]))
-        l2_obj.set_keyword("CCD1BZ", float(self._ccd_z[0]))
-        l2_obj.set_keyword("CCD2BJD", float(self._ccd_bjd[1]))
-        l2_obj.set_keyword("CCD2BKMS", float(self._ccd_kms[1]))
-        l2_obj.set_keyword("CCD2BZ", float(self._ccd_z[1]))
+        l2_obj.set_keyword("BJDGREEN", float(self._ccd_bjd[0]))
+        l2_obj.set_keyword("BVGREEN", float(self._ccd_kms[0]))
+        l2_obj.set_keyword("BZGREEN", float(self._ccd_z[0]))
+        l2_obj.set_keyword("BJDRED", float(self._ccd_bjd[1]))
+        l2_obj.set_keyword("BVRED", float(self._ccd_kms[1]))
+        l2_obj.set_keyword("BZRED", float(self._ccd_z[1]))
         # CTYPE1 names the single (spectral-order) axis of these 1-D per-order
         # arrays -- registered content, multi-homed across the three barycorr
         # extensions, so stamped directly (set_keyword can't route a multi-home

@@ -14,9 +14,9 @@ _SCI_NORM_PCTILE = 99
 _CALSKY_NORM_PCTILE = 90
 # Vertical offset between successive orders' normalized CCFs in the grid.
 _ORDER_OFFSET = 0.5
-# Per-fiber suffix for the legacy combined-RV keyword CCD{1|2}RV{sfx}, which
+# Per-fiber suffix of the combined-RV keyword {GRN|RED}RV{sfx}, which
 # RadialVelocity homes on each fiber's own RV-table extension header.
-_RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
+_RV_SFX = {"SCI1": "S1", "SCI2": "S2", "SCI3": "S3", "CAL": "CL", "SKY": "SK"}
 
 
 class PlotL4(Plot):
@@ -85,12 +85,12 @@ class PlotL4(Plot):
     def _combined_rv(self, chip, fiber):
         """Per-CCD orderlet-combined RV [km/s], or None.
 
-        The legacy CCD{1|2}RV{sfx} keyword is routed by set_keyword to the
-        fiber's own RV-table extension header (e.g. CCD1RV2 -> RV3), so it is
-        read from there, not PRIMARY/INSTRUMENT_HEADER.
+        The {GRN|RED}RV{sfx} keyword is routed by set_keyword to the fiber's own
+        RV-table extension header (e.g. GRNRVS2 -> RV3), so it is read from
+        there, not PRIMARY/INSTRUMENT_HEADER.
         """
-        n = "1" if chip.upper() == "GREEN" else "2"
-        key = f"CCD{n}RV{_RV_SFX[fiber.upper()]}"
+        c = "GRN" if chip.upper() == "GREEN" else "RED"
+        key = f"{c}RV{_RV_SFX[fiber.upper()]}"
         val = self._ext_header(fiber, "RV").get(key)
         if val is None:
             return None

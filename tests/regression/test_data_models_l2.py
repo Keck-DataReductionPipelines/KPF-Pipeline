@@ -79,12 +79,12 @@ class TestKPF2QualityControlRoundTrip:
     def test_quality_control_and_barycorr_roundtrip(self, tmp_path):
         l2 = KPF2()
         l2.set_keyword("NANSCI1", 7)
-        l2.set_keyword("CCD1BKMS", -3.21)
+        l2.set_keyword("BVGREEN", -3.21)
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
         l2.to_fits(fn)
         back = KPF2.from_fits(fn)
         assert back.headers["QUALITY_CONTROL"]["NANSCI1"] == 7
-        assert back.headers["BARYCORR_KMS"]["CCD1BKMS"] == -3.21
+        assert back.headers["BARYCORR_KMS"]["BVGREEN"] == -3.21
 
     def test_from_fits_recovers_obs_id_from_origid(self, tmp_path):
         # An L2's timestamp-based filename does not embed the obs_id, so from_fits

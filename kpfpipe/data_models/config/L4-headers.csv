@@ -2,30 +2,30 @@ Keyword,Description,Extension,DataType,PopulatedBy
 # ================================================
 # Processing
 # ================================================
-CCD1RV,GREEN SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
-CCD2RV,RED SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
-CCD1ERV,GREEN SCI-combined RV error [km/s],PRIMARY,float,RadialVelocity
-CCD2ERV,RED SCI-combined RV error [km/s],PRIMARY,float,RadialVelocity
-CCD1RVS,GREEN SKY RV [km/s],RV1,float,RadialVelocity
-CCD1RV1,GREEN SCI1 RV [km/s],RV2,float,RadialVelocity
-CCD1RV2,GREEN SCI2 RV [km/s],RV3,float,RadialVelocity
-CCD1RV3,GREEN SCI3 RV [km/s],RV4,float,RadialVelocity
-CCD1RVC,GREEN CAL RV [km/s],RV5,float,RadialVelocity
-CCD2RVS,RED SKY RV [km/s],RV1,float,RadialVelocity
-CCD2RV1,RED SCI1 RV [km/s],RV2,float,RadialVelocity
-CCD2RV2,RED SCI2 RV [km/s],RV3,float,RadialVelocity
-CCD2RV3,RED SCI3 RV [km/s],RV4,float,RadialVelocity
-CCD2RVC,RED CAL RV [km/s],RV5,float,RadialVelocity
-CCD1ERVS,GREEN SKY RV error [km/s],RV1,float,RadialVelocity
-CCD1ERV1,GREEN SCI1 RV error [km/s],RV2,float,RadialVelocity
-CCD1ERV2,GREEN SCI2 RV error [km/s],RV3,float,RadialVelocity
-CCD1ERV3,GREEN SCI3 RV error [km/s],RV4,float,RadialVelocity
-CCD1ERVC,GREEN CAL RV error [km/s],RV5,float,RadialVelocity
-CCD2ERVS,RED SKY RV error [km/s],RV1,float,RadialVelocity
-CCD2ERV1,RED SCI1 RV error [km/s],RV2,float,RadialVelocity
-CCD2ERV2,RED SCI2 RV error [km/s],RV3,float,RadialVelocity
-CCD2ERV3,RED SCI3 RV error [km/s],RV4,float,RadialVelocity
-CCD2ERVC,RED CAL RV error [km/s],RV5,float,RadialVelocity
+RVGREEN,GREEN SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
+RVRED,RED SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
+ERVGREEN,GREEN SCI-combined RV error [km/s],PRIMARY,float,RadialVelocity
+ERVRED,RED SCI-combined RV error [km/s],PRIMARY,float,RadialVelocity
+GRNRVSK,GREEN SKY RV [km/s],RV1,float,RadialVelocity
+GRNRVS1,GREEN SCI1 RV [km/s],RV2,float,RadialVelocity
+GRNRVS2,GREEN SCI2 RV [km/s],RV3,float,RadialVelocity
+GRNRVS3,GREEN SCI3 RV [km/s],RV4,float,RadialVelocity
+GRNRVCL,GREEN CAL RV [km/s],RV5,float,RadialVelocity
+REDRVSK,RED SKY RV [km/s],RV1,float,RadialVelocity
+REDRVS1,RED SCI1 RV [km/s],RV2,float,RadialVelocity
+REDRVS2,RED SCI2 RV [km/s],RV3,float,RadialVelocity
+REDRVS3,RED SCI3 RV [km/s],RV4,float,RadialVelocity
+REDRVCL,RED CAL RV [km/s],RV5,float,RadialVelocity
+GRNERVSK,GREEN SKY RV error [km/s],RV1,float,RadialVelocity
+GRNERVS1,GREEN SCI1 RV error [km/s],RV2,float,RadialVelocity
+GRNERVS2,GREEN SCI2 RV error [km/s],RV3,float,RadialVelocity
+GRNERVS3,GREEN SCI3 RV error [km/s],RV4,float,RadialVelocity
+GRNERVCL,GREEN CAL RV error [km/s],RV5,float,RadialVelocity
+REDERVSK,RED SKY RV error [km/s],RV1,float,RadialVelocity
+REDERVS1,RED SCI1 RV error [km/s],RV2,float,RadialVelocity
+REDERVS2,RED SCI2 RV error [km/s],RV3,float,RadialVelocity
+REDERVS3,RED SCI3 RV error [km/s],RV4,float,RadialVelocity
+REDERVCL,RED CAL RV error [km/s],RV5,float,RadialVelocity
 VELMASK,CCF mask hole full width [km/s],CCF*,float,RadialVelocity
 # ================================================
 # Quality Control
