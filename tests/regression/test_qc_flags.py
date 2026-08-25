@@ -444,13 +444,34 @@ class TestQCL0:
         l0 = self._make_kpf0_with_telemetry(tmp_path, nrows=0)
         assert QCL0(l0).telemetry_present() is False
 
-    def test_telemetry_absent_raises(self, tmp_path):
-        l0 = _make_kpf0(tmp_path)
-        with pytest.raises(KeyError, match="TELEMETRY"):
-            QCL0(l0).telemetry_present()
+    def test_telemetry_absent_fails(self, tmp_path):
+        assert QCL0(_make_kpf0(tmp_path)).telemetry_present() is False
 
     def test_teleprl0_key_present(self):
         assert QCL0.__dict__["telemetry_present"]._qc_key == "TELEPRL0"
+
+    def _make_kpf0_with_cahk(self, tmp_path, shape):
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00004.00.fits",
+            shape=(10, 10),
+            extra_hdus=[fits.ImageHDU(np.ones(shape, dtype=np.float32), name="CA_HK")],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_cahk_present_pass(self, tmp_path):
+        assert (
+            QCL0(self._make_kpf0_with_cahk(tmp_path, (16, 16))).cahk_present() is True
+        )
+
+    def test_cahk_present_empty_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_cahk(tmp_path, (0,))
+        assert QCL0(l0).cahk_present() is False
+
+    def test_cahk_absent_fails(self, tmp_path):
+        assert QCL0(_make_kpf0(tmp_path)).cahk_present() is False
+
+    def test_cahkprl0_key_present(self):
+        assert QCL0.__dict__["cahk_present"]._qc_key == "CAHKPRL0"
 
     def test_times_consistent_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
@@ -557,6 +578,29 @@ class TestQCL0:
         # ELAPSED over the requested EXPTIME by more than the tolerance.
         l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 301.0})
         assert QCL0(l0).exptime_sane() is False
+
+    @pytest.mark.parametrize("elapsed", [5.9, 6.8, 300.0])
+    def test_good_readout_pass(self, tmp_path, elapsed):
+        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": elapsed})
+        assert QCL0(l0).good_readout() is True
+
+    def test_good_readout_pass_short_request(self, tmp_path):
+        # A sub-7 s request may legitimately elapse inside the smear window.
+        l0 = _make_kpf0(tmp_path, exptime=6.5, dates={"ELAPSED": 6.5})
+        assert QCL0(l0).good_readout() is True
+
+    @pytest.mark.parametrize("elapsed", [6.0, 6.35, 6.7])
+    def test_good_readout_fail_smeared(self, tmp_path, elapsed):
+        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": elapsed})
+        assert QCL0(l0).good_readout() is False
+
+    def test_good_readout_missing_raises(self, tmp_path):
+        l0 = _make_kpf0(tmp_path, exptime=300.0)
+        with pytest.raises(KeyError, match="ELAPSED"):
+            QCL0(l0).good_readout()
+
+    def test_goodread_key_present(self):
+        assert QCL0.__dict__["good_readout"]._qc_key == "READOK"
 
     # not_junk delegates all file I/O to load_junk_obs_ids, so these tests
     # monkeypatch it (no junk file is ever written to a data tree) and cover only
@@ -1062,8 +1106,8 @@ class TestQCL0PixelQuality:
 
     def test_qc_keys_correct(self):
         expected = {
-            "green_pixels_ok": "GREENCCD",
-            "red_pixels_ok": "REDCCD",
+            "green_pixels_ok": "GREENL0",
+            "red_pixels_ok": "REDL0",
         }
         for method_name, key in expected.items():
             fn = QCL0.__dict__[method_name]

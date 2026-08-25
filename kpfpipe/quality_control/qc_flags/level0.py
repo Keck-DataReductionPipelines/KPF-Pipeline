@@ -77,9 +77,20 @@ class QCL0(QC):
         thermal and vacuum state during the exposure is recorded nowhere else and
         cannot be recovered once the frame is written.
         """
-        return len(self.kpf_obj.data["TELEMETRY"]) > 0
+        return len(self.kpf_obj.data.get("TELEMETRY", [])) > 0
 
     telemetry_present._qc_key = "TELEPRL0"
+
+    def cahk_present(self):
+        """CA_HK extension present and non-empty.
+
+        Ports v2.12 ``data_2D_CaHK`` (v2.12's 2D level is vNext's L0). The Ca H&K
+        image is the only record of the chromospheric activity indicator for the
+        exposure and cannot be recovered once the frame is written.
+        """
+        return np.size(self.kpf_obj.data.get("CA_HK", [])) > 0
+
+    cahk_present._qc_key = "CAHKPRL0"
 
     def times_consistent(self):
         """DATE-BEG <= DATE-MID <= DATE-END, matching ELAPSED and the shutters.
@@ -148,6 +159,22 @@ class QCL0(QC):
         return 0 <= elapsed - exptime <= 0.1
 
     exptime_sane._qc_key = "EXPTIMOK"
+
+    def good_readout(self):
+        """The CCD read out cleanly rather than smearing.
+
+        Ports v2.12 ``L0_good_readout``. A readout that aborts partway leaves
+        ELAPSED between 6.0 and 6.7 s regardless of the requested EXPTIME,
+        smearing the frame; it happens a few times a day on both cals and stars.
+        Requests shorter than 7 s legitimately land in that window, so only
+        longer ones are judged.
+        """
+        hdr = self.kpf_obj.headers["PRIMARY"]
+        return not (
+            float(hdr["EXPTIME"]) >= 7.0 and 6.0 <= float(hdr["ELAPSED"]) <= 6.7
+        )
+
+    good_readout._qc_key = "READOK"
 
     def not_junk(self):
         """obs_id not on the observer junk list for this frame's data tree.
@@ -344,10 +371,10 @@ class QCL0(QC):
         """GREEN raw pixel quality: neither dead nor saturated beyond the limits."""
         return self._chip_pixels_ok("GREEN")
 
-    green_pixels_ok._qc_key = "GREENCCD"
+    green_pixels_ok._qc_key = "GREENL0"
 
     def red_pixels_ok(self):
         """RED raw pixel quality: neither dead nor saturated beyond the limits."""
         return self._chip_pixels_ok("RED")
 
-    red_pixels_ok._qc_key = "REDCCD"
+    red_pixels_ok._qc_key = "REDL0"
