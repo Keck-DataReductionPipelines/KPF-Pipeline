@@ -305,8 +305,8 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
 
     qc = l1.headers["QUALITY_CONTROL"]
     qc["BIASAGE"] = (1.0, "Age of bias master [days]")
-    qc["DARKAGE"] = (5.0, "Age of dark master [days]")
-    qc["FLATAGE"] = (10.0, "Age of flat master [days]")
+    qc["DARKAGE"] = (3.0, "Age of dark master [days]")
+    qc["FLATAGE"] = (3.0, "Age of flat master [days]")
     for i in range(1, 5):
         qc[f"RNGREEN{i}"] = (3.5, "RN e-")
         qc[f"RNRED{i}"] = (4.0, "RN e-")

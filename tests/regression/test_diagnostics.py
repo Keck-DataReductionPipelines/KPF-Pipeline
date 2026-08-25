@@ -361,14 +361,6 @@ class TestDiagL0Contingency:
             DiagL0(l0).target_ra_dec_offset()
 
 
-# ---------------------------------------------------------------------------
-# DiagL1 -- master calibration ages
-# ---------------------------------------------------------------------------
-
-
-_CAL_AGE_KEYS = ("BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE")
-
-
 class TestDiagL0PixelFractions:
     """Worst-amp dead/saturated pixel fractions, one pair per chip.
 
@@ -936,78 +928,17 @@ class TestDiagL0GuiderSeeing:
         assert DiagL0.__dict__["guider_seeing"]._diag_name == "guider_seeing"
 
 
-def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
-    """A KPF1 carrying a PRIMARY DATE-OBS, RECEIPT master paths, and assembled CCDs.
+def _make_kpf1(date_obs="2024-04-05T11:08:33"):
+    """A KPF1 carrying a PRIMARY DATE-OBS and both assembled CCDs.
 
-    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has written
-    each ``{PREFIX}FILE`` to RECEIPT, to_kpf1 has populated the EPRV PRIMARY, and
-    ImageAssembly has filled both CCDs (flux_percentiles reads them on every run).
+    Mirrors the finished-L1 state DiagL1 reads: to_kpf1 has populated the EPRV
+    PRIMARY and ImageAssembly has filled both CCDs.
     """
     l1 = KPF1()
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
     for chip in ("GREEN", "RED"):
         l1.data[f"{chip}_CCD"] = np.ones((4, 4), dtype=float)
-    for kw, path in (files or {}).items():
-        l1.set_keyword(kw, path)  # *FILE routes to RECEIPT
     return l1
-
-
-class TestDiagL1CalibrationAges:
-    def test_signed_age_same_day(self):
-        # Master at 2024-04-05 01:00:37 UTC vs obs 11:08:33 UTC -> -0.422176 d.
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
-        )
-        results = DiagL1(l1).run()
-        assert results["BIASAGE"][0] == pytest.approx(-0.422176, abs=1e-5)
-        # Routed to QUALITY_CONTROL with the registry comment.
-        qc = l1.headers["QUALITY_CONTROL"]
-        assert qc["BIASAGE"] == pytest.approx(-0.422176, abs=1e-5)
-        assert qc.comments["BIASAGE"] == "Master bias age [days]"
-
-    def test_signed_age_previous_day(self):
-        # Master 2024-04-04 22:00:00 UTC vs obs 2024-04-05 11:08:33 UTC.
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240404.79200.00_master_bias_L1.fits"}
-        )
-        results = DiagL1(l1).run()
-        assert results["BIASAGE"][0] == pytest.approx(-0.547604, abs=1e-5)
-
-    def test_all_cal_types(self):
-        l1 = _make_kpf1_with_calibrations(
-            files={
-                "BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits",
-                "DARKFILE": "/m/KP.20240405.03637.74_master_dark_L1.fits",
-                "FLATFILE": "/m/KP.20240405.03637.74_master_flat_L1.fits",
-                "WLSFILE": "/m/KP.20240405.03637.74_master_thar_L2.fits",
-            }
-        )
-        results = DiagL1(l1).run()
-        assert set(results) >= set(_CAL_AGE_KEYS)
-        for kw in _CAL_AGE_KEYS:
-            assert l1.headers["QUALITY_CONTROL"][kw] == pytest.approx(
-                -0.422176, abs=1e-5
-            )
-
-    def test_missing_cal_type_skipped(self):
-        # Only a bias path present -> only BIASAGE written.
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
-        )
-        results = DiagL1(l1).run()
-        assert set(results) & set(_CAL_AGE_KEYS) == {"BIASAGE"}
-        assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
-
-    def test_no_date_obs_raises(self):
-        # DATE-OBS is guaranteed by the L1 checkpoint's KWRDPRL1 raise gate; if it
-        # is missing anyway, calibration_ages fails loud (a broken upstream
-        # invariant).
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
-        )
-        del l1.headers["PRIMARY"]["DATE-OBS"]
-        with pytest.raises(KeyError, match="DATE-OBS"):
-            DiagL1(l1).calibration_ages()
 
 
 class TestDiagL1FluxPercentiles:
@@ -1015,7 +946,7 @@ class TestDiagL1FluxPercentiles:
     _RAMP = np.arange(101, dtype=float).reshape(1, 101)
 
     def _l1(self, **ccds):
-        l1 = _make_kpf1_with_calibrations()  # real DATE-OBS, no cal paths
+        l1 = _make_kpf1()
         for ext, arr in ccds.items():
             l1.data[ext] = arr
         return l1

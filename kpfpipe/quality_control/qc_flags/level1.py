@@ -64,29 +64,29 @@ class QCL1(QC):
     read_noise_nongauss_ok._qc_key = "RNNGOK"
 
     def bias_ok(self):
-        """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 7 days."""
+        """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 5 days."""
         if not self.kpf_obj.headers["RECEIPT"]["BIASSUB"]:
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["BIASAGE"])
-        return abs(age) <= 7
+        return abs(age) <= 5
 
     bias_ok._qc_key = "BIASOK"
 
     def dark_ok(self):
-        """Dark subtracted (RECEIPT DARKSUB) and master dark age <= 14 days."""
+        """Dark subtracted (RECEIPT DARKSUB) and master dark age <= 5 days."""
         if not self.kpf_obj.headers["RECEIPT"]["DARKSUB"]:
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["DARKAGE"])
-        return abs(age) <= 14
+        return abs(age) <= 5
 
     dark_ok._qc_key = "DARKOK"
 
     def flat_ok(self):
-        """Flat divided (RECEIPT FLATDIV) and master flat age <= 30 days."""
+        """Flat divided (RECEIPT FLATDIV) and master flat age <= 5 days."""
         if not self.kpf_obj.headers["RECEIPT"]["FLATDIV"]:
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["FLATAGE"])
-        return abs(age) <= 30
+        return abs(age) <= 5
 
     flat_ok._qc_key = "FLATOK"
 

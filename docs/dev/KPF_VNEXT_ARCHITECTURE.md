@@ -339,9 +339,9 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 ### Diagnostics
 
-`kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword` (DiagL2 metrics land on QUALITY_CONTROL). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+`kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword`, which routes each to its registry home — most land on QUALITY_CONTROL, but a metric registered as an EPRV PRIMARY keyword goes to PRIMARY (`DiagL2.snr` writes `SNRSC*` to QUALITY_CONTROL and mirrors the summed-SCI values to `EXSNR1-5`/`EXSNRW1-5` on PRIMARY). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
 
-**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. Metrics that can be computed from the finished product alone live in Diagnostics — including the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`), which `DiagL1` recomputes from the master paths `CalibrationAssociation` wrote to RECEIPT (`*FILE`) plus the PRIMARY `DATE-OBS` (an EPRV keyword carried to PRIMARY under its own name); the association module writes only the paths.
+**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. So does a metric a module derives from a decision it just made: `CalibrationAssociation` writes the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`) alongside the master paths it selects (`*FILE` on RECEIPT), so a path and its age cannot disagree. Metrics computable from the finished product alone live in Diagnostics.
 
 ### QC flags
 

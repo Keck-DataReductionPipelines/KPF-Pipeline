@@ -92,8 +92,8 @@ def _make_kpf1(
     darksub=True,
     flatdiv=True,
     agebias=1.0,
-    agedark=5.0,
-    ageflat=10.0,
+    agedark=3.0,
+    ageflat=3.0,
     finite_ccd=True,
     shape=(20, 20),
 ):
@@ -1437,17 +1437,17 @@ class TestQCL1:
         assert QCL1(l1).bias_ok() is True
 
     def test_bias_ok_pass_future_dated_master(self, tmp_path):
-        # DiagL1 writes a SIGNED age (master_dt - obs_dt), and the check uses
-        # abs(), so a master processed after the science frame -- routine in the
-        # masters pipeline -- is still in range. Dropping the abs() would start
-        # failing BIASOK on every same-night master.
+        # CalibrationAssociation writes a SIGNED age (master_dt - obs_dt), and the
+        # check uses abs(), so a master processed after the science frame --
+        # routine in the masters pipeline -- is still in range. Dropping the abs()
+        # would start failing BIASOK on every same-night master.
         l1 = _make_kpf1(tmp_path, biassub=True, agebias=-3.0)
         assert QCL1(l1).bias_ok() is True
 
     def test_bias_ok_boundary(self, tmp_path):
-        # 7 days exactly is inside the gate; just past it is not.
-        assert QCL1(_make_kpf1(tmp_path, agebias=7.0)).bias_ok() is True
-        assert QCL1(_make_kpf1(tmp_path, agebias=7.5)).bias_ok() is False
+        # 5 days exactly is inside the gate; just past it is not.
+        assert QCL1(_make_kpf1(tmp_path, agebias=5.0)).bias_ok() is True
+        assert QCL1(_make_kpf1(tmp_path, agebias=5.5)).bias_ok() is False
 
     def test_bias_ok_fail_not_subtracted(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=False, agebias=3.0)
@@ -1472,15 +1472,15 @@ class TestQCL1:
             QCL1(l1).bias_ok()
 
     def test_dark_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=True, agedark=7.0)
+        l1 = _make_kpf1(tmp_path, darksub=True, agedark=3.0)
         assert QCL1(l1).dark_ok() is True
 
     def test_dark_ok_fail_not_subtracted(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=False, agedark=7.0)
+        l1 = _make_kpf1(tmp_path, darksub=False, agedark=3.0)
         assert QCL1(l1).dark_ok() is False
 
     def test_dark_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=True, agedark=20.0)
+        l1 = _make_kpf1(tmp_path, darksub=True, agedark=10.0)
         assert QCL1(l1).dark_ok() is False
 
     def test_dark_ok_age_missing_raises(self, tmp_path):
@@ -1490,15 +1490,15 @@ class TestQCL1:
             QCL1(l1).dark_ok()
 
     def test_flat_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=15.0)
+        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=3.0)
         assert QCL1(l1).flat_ok() is True
 
     def test_flat_ok_fail_not_divided(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=False, ageflat=15.0)
+        l1 = _make_kpf1(tmp_path, flatdiv=False, ageflat=3.0)
         assert QCL1(l1).flat_ok() is False
 
     def test_flat_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=45.0)
+        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=10.0)
         assert QCL1(l1).flat_ok() is False
 
     def test_flat_ok_age_missing_raises(self, tmp_path):
@@ -1612,7 +1612,7 @@ class TestQCL1Run:
         l1 = _make_kpf1(tmp_path)
         results = QCL1(l1).run()
 
-        # BIASOK/DARKOK/FLATOK read the RECEIPT *SUB flags and DiagL1 *AGE values
+        # BIASOK/DARKOK/FLATOK read the RECEIPT *SUB flags and the *AGE values
         # but are themselves QUALITY_CONTROL keywords; the applied-step flags
         # (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) stay RECEIPT-only provenance.
         qc_keys = [

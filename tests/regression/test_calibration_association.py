@@ -31,11 +31,15 @@ class MockL1:
 
     def set_keyword(self, key, value):
         # Mirror the real routing: L1-headers.csv routes every {PREFIX}FILE
-        # master path to RECEIPT, and that is all CalibrationAssociation writes.
-        # Fail loud on anything else rather than inventing a PRIMARY fallback.
-        if not key.endswith("FILE"):
+        # master path to RECEIPT and every {PREFIX}AGE to QUALITY_CONTROL, and
+        # that is all CalibrationAssociation writes. Fail loud on anything else
+        # rather than inventing a PRIMARY fallback.
+        if key.endswith("FILE"):
+            self.headers["RECEIPT"][key] = value
+        elif key.endswith("AGE"):
+            self.headers["QUALITY_CONTROL"][key] = value
+        else:
             raise KeyError(f"{key!r} is not routed by this mock; extend it")
-        self.headers["RECEIPT"][key] = value
 
 
 def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):
@@ -276,18 +280,15 @@ class TestPerform:
         assert mod.l1_obj.headers["RECEIPT"].get("BIASFILE") == expected
 
     def test_sets_headers_for_dark_and_flat(self, masters_dir):
-        # {PREFIX}AGE is recomputed downstream by DiagL1 from the path this
-        # module writes (covered in test_diagnostics.py), so it must be absent
-        # here; likewise {PREFIX}DIR, since {PREFIX}FILE holds the full path.
+        # No {PREFIX}DIR: {PREFIX}FILE holds the full path.
         mod = _make_module(masters_dir)
         mod.perform(["bias", "dark", "flat"])
         for prefix in ("BIAS", "DARK", "FLAT"):
             assert f"{prefix}FILE" in mod.l1_obj.headers["RECEIPT"]
             assert f"{prefix}DIR" not in mod.l1_obj.headers["RECEIPT"]
-            assert f"{prefix}AGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
+            assert f"{prefix}AGE" in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_sets_headers_for_thar(self, masters_dir):
-        # WLSFILE holds the full path (no WLSDIR); WLSAGE comes from DiagL1.
         d = masters_dir / "masters" / "20240405"
         _stub_master(d, "KP.20240405.03637.74", "thar")
 
@@ -298,7 +299,15 @@ class TestPerform:
             d / "KP.20240405.03637.74_master_thar_L2.fits"
         )
         assert "WLSDIR" not in receipt
-        assert "WLSAGE" not in mod.l1_obj.headers["QUALITY_CONTROL"]
+        assert "WLSAGE" in mod.l1_obj.headers["QUALITY_CONTROL"]
+
+    def test_age_is_signed_master_minus_obs(self, masters_dir):
+        # Master at 2024-04-05 01:00:37 UTC vs obs 11:08:33 UTC -> -0.422176 d.
+        mod = _make_module(masters_dir)
+        mod.perform(["bias"])
+        assert mod.l1_obj.headers["QUALITY_CONTROL"]["BIASAGE"] == pytest.approx(
+            -0.422176, abs=1e-5
+        )
 
     def test_raises_on_unknown_cal_type(self, masters_dir):
         mod = _make_module(masters_dir)

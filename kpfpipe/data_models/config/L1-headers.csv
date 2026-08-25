@@ -10,10 +10,10 @@ BIASFILE,Master bias full path,RECEIPT,str,CalibrationAssociation
 DARKFILE,Master dark full path,RECEIPT,str,CalibrationAssociation
 FLATFILE,Master flat full path,RECEIPT,str,CalibrationAssociation
 WLSFILE,WLS master full path,RECEIPT,str,CalibrationAssociation
-BIASAGE,Master bias age [days],QUALITY_CONTROL,float,DiagL1
-DARKAGE,Master dark age [days],QUALITY_CONTROL,float,DiagL1
-FLATAGE,Master flat age [days],QUALITY_CONTROL,float,DiagL1
-WLSAGE,WLS master age [days],QUALITY_CONTROL,float,DiagL1
+BIASAGE,Master bias age [days],QUALITY_CONTROL,float,CalibrationAssociation
+DARKAGE,Master dark age [days],QUALITY_CONTROL,float,CalibrationAssociation
+FLATAGE,Master flat age [days],QUALITY_CONTROL,float,CalibrationAssociation
+WLSAGE,WLS master age [days],QUALITY_CONTROL,float,CalibrationAssociation
 # ================================================
 # Quality Control
 # ================================================
@@ -21,9 +21,9 @@ DATAPRL1,QC: GREEN/RED CCD+VAR present and populated,QUALITY_CONTROL,int,QCL1
 KWRDPRL1,QC: required L1 PRIMARY keywords present,QUALITY_CONTROL,int,QCL1
 RNOK,QC: per-amp read noise 2-6 e-,QUALITY_CONTROL,int,QCL1
 RNNGOK,QC: non-Gaussian read noise (MAD/STD) 0.8-1.5,QUALITY_CONTROL,int,QCL1
-BIASOK,QC: bias subtracted & master age <= 7 days,QUALITY_CONTROL,int,QCL1
-DARKOK,QC: dark subtracted & master age <= 14 days,QUALITY_CONTROL,int,QCL1
-FLATOK,QC: flat divided & master age <= 30 days,QUALITY_CONTROL,int,QCL1
+BIASOK,QC: bias subtracted & master age <= 5 days,QUALITY_CONTROL,int,QCL1
+DARKOK,QC: dark subtracted & master age <= 5 days,QUALITY_CONTROL,int,QCL1
+FLATOK,QC: flat divided & master age <= 5 days,QUALITY_CONTROL,int,QCL1
 L1NANOK,QC: GREEN/RED CCDs all finite,QUALITY_CONTROL,int,QCL1
 L1VAROK,QC: no negative L1 variance where flux finite,QUALITY_CONTROL,int,QCL1
 L1SNROK,QC: L1 pixel fraction below -5 sigma <= 1%,QUALITY_CONTROL,int,QCL1
