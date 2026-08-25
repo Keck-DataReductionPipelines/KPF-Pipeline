@@ -2,8 +2,8 @@
 
 The second of three quality-control stages (Diagnostics -> QC -> Checkpoints).
 Each QC subclass runs pass/fail check methods, writing a 0/1 flag per check to
-QUALITY_CONTROL via ``set_keyword`` and aggregating ISGOOD as the AND of all
-checks. Header validation and raising live in the separate Checkpoints layer.
+QUALITY_CONTROL via ``set_keyword``. Header validation and raising live in the
+separate Checkpoints layer.
 """
 
 import logging
@@ -27,19 +27,19 @@ class QC:
         self.results = {}  # Populated by run(): maps keyword to (passed, comment).
 
     def run(self):
-        """Run all checks, write each 0/1 result, and aggregate ISGOOD.
+        """Run all checks and write each 0/1 result.
 
         Each result is logged as it is written: DEBUG on a pass, WARNING on a
         fail, ERROR on a check that raised (counted as a fail -- this layer never
         aborts; halting is the checkpoint layer's role). ``NotImplementedError``
-        from a placeholder check writes no flag, leaving ISGOOD unaffected.
+        from a placeholder check writes no flag.
         ``self.results`` is reset at the start so repeated calls are deterministic.
 
         Returns
         -------
         dict
             Maps each FITS keyword to its ``(passed, comment)`` pair (this level's
-            checks only). ``ISGOOD`` is the cross-level aggregate (see below).
+            checks only).
         """
         self.results = {}
 
@@ -69,15 +69,6 @@ class QC:
                 comment,
             )
 
-        # ISGOOD is the running aggregate: AND over every QC flag now on
-        # QUALITY_CONTROL -- the flags this level just wrote PLUS those propagated
-        # from lower levels (QUALITY_CONTROL accumulates L0->L1->L2->L4). Reading
-        # the accumulated header makes it level-agnostic; exclude ISGOOD itself.
-        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        flags = self.kpf_obj.keyword_registry.qc_flag_keywords - {"ISGOOD"}
-        present = [hdr.get(kw) for kw in flags if hdr.get(kw) is not None]
-        is_good = all(bool(v) for v in present)
-        self.kpf_obj.set_keyword("ISGOOD", 1 if is_good else 0)
         return self.results
 
     def _required_primary_keywords(self):

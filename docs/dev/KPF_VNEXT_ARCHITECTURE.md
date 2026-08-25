@@ -176,9 +176,8 @@ The architecture invariants:
   advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
   read, so every model carries `obs_id` on every construction path.
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
-  as an **append-only history**; only `ISGOOD` (the running QC aggregate — see *QC flags*)
-  changes per level.
-- **`CATALOG_RECORD` (AstroQuery's resolved catalog rows + presence flags) also passes through
+  as an **append-only history**.
+- **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
   L0→L1→L2→L4**, and `to_kpf1` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
@@ -196,10 +195,9 @@ from a **single source-of-truth table** unioning the `L{0,1,2,4}-headers.csv` re
 keyword defs.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
-routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags + `ISGOOD`, read-noise,
+routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags, read-noise,
 calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths),
-**CATALOG_RECORD** (the L0 `WMKOCR`/`GAIACR`/`SIMBADCR` presence flags), the **barycentric** L2
-extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
+the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
 *PRIMARY holds EPRV keywords only* is the L4 SCI-combined RV keywords `CCD{1,2}RV`/`CCD{1,2}ERV` —
 KPF-registered yet homed on PRIMARY, since they are the pipeline's final RV measurements and belong
 beside the EPRV `RV`/`RVERR`. Masters register their PRIMARY keywords in per-master-type registries and
@@ -333,7 +331,7 @@ prior wrote, driven by the recipe through a **single `CheckpointL{n}(obj).run()`
   `scripts/quality_control/qc.py`). A level with no paired class skips that stage.
 
 The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags
-+ `ISGOOD` onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4
+onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4
 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END
 timing-consistency flag, is an L0 check whose result rides forward this way).
 
@@ -347,7 +345,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 ### QC flags
 
-`kpfpipe/quality_control/qc_flags/` — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL) plus the `ISGOOD` aggregate. `ISGOOD` is the **running** aggregate — the AND over every QC flag accumulated on QUALITY_CONTROL so far (this level's checks *plus* those propagated from lower levels), not just this level's checks. No validation or raising — that is the Checkpoints layer's job.
+`kpfpipe/quality_control/qc_flags/` — reads metrics (mostly from headers populated by Diagnostics or pipeline modules) and applies pass/fail thresholds. Writes **only** 0/1 keywords (via `set_keyword`, routed to QUALITY_CONTROL). No validation or raising — that is the Checkpoints layer's job.
 
 ### Checkpoints
 

@@ -174,9 +174,6 @@ class TestRegistryConformance:
         # Checkpoint behaviour, and it reaches the registry through the model
         # rather than importing data_models.keyword_registry (see _registry.py).
         reg = KPF1.keyword_registry
-        # ISGOOD is the cross-level aggregate: in the full set, in no per-level set.
-        assert "ISGOOD" in reg.qc_flag_keywords
-        assert all("ISGOOD" not in s for s in reg.qc_flag_keywords_by_level.values())
         # Representative checks live under their own level.
         assert "READNSOK" in reg.qc_flag_keywords_by_level["L1"]
         assert "DATAPRL2" in reg.qc_flag_keywords_by_level["L2"]

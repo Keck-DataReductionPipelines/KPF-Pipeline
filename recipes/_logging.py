@@ -15,15 +15,14 @@ def science_run_summary(l4, elapsed_s):
 
     A compact, greppable roll-up read off the L4 the recipe just built: obs_id
     and the master-file cards from RECEIPT, the input/product paths from the
-    RECEIPT provenance table, ISGOOD from QUALITY_CONTROL, and the combined RV
-    from PRIMARY, plus the wall-clock elapsed. ``RV``/``RVERR``/``BJDTDB`` that
+    RECEIPT provenance table, and the combined RV from PRIMARY, plus the
+    wall-clock elapsed. ``RV``/``RVERR``/``BJDTDB`` that
     are not real numbers (absent or FITS UNDEFINED, e.g. no science combine ran)
     render as ``n/a``; ``RV`` is km/s (error in m/s), ``BJDTDB`` is BJD_TDB. The
     surrounding blank lines make the block stand out by eye in the log.
     """
     receipt = l4.headers.get("RECEIPT", {})
     primary = l4.headers.get("PRIMARY", {})
-    qc = l4.headers.get("QUALITY_CONTROL", {})
 
     def base(path):
         return os.path.basename(path) if path else "n/a"
@@ -70,7 +69,6 @@ def science_run_summary(l4, elapsed_s):
         f"  inputs:   {inputs_str}",
         f"  masters:  {masters_str}",
         f"  outputs:  {outputs_str}",
-        f"  ISGOOD:   {qc.get('ISGOOD')}",
         f"  RV:       {rv_line}",
         f"  elapsed:  {elapsed_s:.1f} s",
     ]

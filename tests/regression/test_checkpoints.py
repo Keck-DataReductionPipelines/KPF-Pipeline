@@ -93,7 +93,7 @@ class TestQCFlags:
             CheckpointL2(l2).qc_flags()
 
     def test_nonraise_flag_zero_warns(self, caplog):
-        # L2VAROK is not a RAISE_FLAG, so a 0 lands in the ISGOOD summary rather
+        # L2VAROK is not a RAISE_FLAG, so a 0 lands in the warning summary rather
         # than raising (DATAPRL2/KWRDPRL2 = 1, so no fatal flag).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")
@@ -101,7 +101,7 @@ class TestQCFlags:
         l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "variance positive")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
-        assert "ISGOOD=0" in caplog.text
+        assert "failing QC flags" in caplog.text
         assert "L2VAROK" in caplog.text
 
     def test_all_pass_silent(self, caplog):
@@ -128,7 +128,7 @@ class TestQCFlags:
         assert "DATAPRL1" in caplog.text
 
     def test_summary_lists_all_failing_flags_cross_level(self, caplog):
-        # The ISGOOD summary names every failing flag on QUALITY_CONTROL,
+        # The warning summary names every failing flag on QUALITY_CONTROL,
         # including one propagated from a lower level (READNSOK from L1).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
@@ -165,7 +165,7 @@ class TestRunFoldsDiagnosticsAndQC:
 
             def run(self):
                 calls.append("qc")
-                return {"ISGOOD": (True, "")}
+                return {"DATAPRL2": (True, "")}
 
         class FakeCheckpoint(Checkpoint):
             LEVEL = "L2"
@@ -185,7 +185,7 @@ class TestRunFoldsDiagnosticsAndQC:
         assert calls[1] == "qc"
         assert "checkpoint" in calls[2:]
         # QC's result dict is captured for callers (e.g. scripts/quality_control/qc.py).
-        assert chk.qc_results == {"ISGOOD": (True, "")}
+        assert chk.qc_results == {"DATAPRL2": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self, caplog):
         # A concrete-level checkpoint with DIAGNOSTICS = QC = None: run() does the
@@ -240,7 +240,6 @@ class TestCheckpointL2:
         # ...are the ones QCL2 read back, by name. This is the seam.
         assert qc["L2NANOK"] == 1
         assert qc["L2FLXOK"] == 1
-        assert qc["ISGOOD"] == 1
 
     def test_run_detects_real_nan_pixels_through_the_seam(self):
         # Half of SCI1's pixels are NaN. DiagL2 must count them and QCL2 must
@@ -252,7 +251,6 @@ class TestCheckpointL2:
         qc = l2.headers["QUALITY_CONTROL"]
         assert qc["NANSCI1"] > 0
         assert qc["L2NANOK"] == 0
-        assert qc["ISGOOD"] == 0
 
     def test_run_raises_when_extraction_missing(self):
         # No extracted flux: the folded DiagL2 and QCL2 stages log what they cannot
@@ -278,7 +276,6 @@ class TestCheckpointL0:
         assert qc["GREENCCD"] == 1
         assert qc["REDCCD"] == 1
         assert qc["TCSOFF"] < 1.0
-        assert qc["ISGOOD"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +329,6 @@ class TestCheckpointL1:
         qc = l1.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL1"] == 1
         assert qc["KWRDPRL1"] == 1
-        assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_ccd_data_missing(self):
         # No assembled CCDs: DiagL1's flux percentiles have no pixels to measure,
@@ -351,13 +347,13 @@ class TestCheckpointL1:
             CheckpointL1(l1).run()
 
     def test_run_warns_when_read_noise_out_of_range(self, caplog):
-        # READNSOK is not a RAISE_FLAG, so an out-of-range amp lands in the ISGOOD
+        # READNSOK is not a RAISE_FLAG, so an out-of-range amp lands in the warning
         # summary rather than raising.
         l1 = _make_l1()
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "RN e-")
         with caplog.at_level(logging.WARNING):
             CheckpointL1(l1).run()
-        assert "ISGOOD=0" in caplog.text
+        assert "failing QC flags" in caplog.text
         assert "READNSOK" in caplog.text
 
 
@@ -402,7 +398,6 @@ class TestCheckpointL4:
         assert qc["BERVRNG"] > 0.0
         assert qc["BJDRNG"] > 0.0
         assert qc["DATAPRL4"] == 1
-        assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_science_ccf_rv_missing(self):
         # No science RV table: DiagL4 has no per-order BJD/BERV to measure, but that

@@ -3,10 +3,10 @@ Keyword,Description,Extension,DataType,PopulatedBy
 # Science
 # ================================================
 ORIGID,Original L0 observation ID,RECEIPT,str,KPF0.from_fits
-KOAID,KOA archive ID (DRP-RUN-19),RECEIPT,str,KPF0.from_fits
-PROGID,WMKO program ID (DRP-RUN-19),RECEIPT,str,KPF0.from_fits
-DRPVERNO,Pipeline version (DRP-RUN-11; EPRV equivalent is DRPTAG),RECEIPT,str,KPF0.from_fits
-DRPSTATU,DRP reduction status (DRP-RUN-20),RECEIPT,str,KPF0.from_fits
+KOAID,KOA archive ID (WMKO req.),RECEIPT,str,KPF0.from_fits
+PROGID,WMKO program ID (WMKO req.),RECEIPT,str,KPF0.from_fits
+DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),RECEIPT,str,KPF0.from_fits
+DRPSTATU,DRP reduction status (WMKO req.),RECEIPT,str,KPF0.from_fits
 # ================================================
 # Quality Control
 # ================================================
@@ -27,4 +27,3 @@ TCSOFF,Pointing offset from DCS target (arcsec),QUALITY_CONTROL,float,DiagL0
 OBJOFF,Pointing offset from OBJECT (SIMBAD) position (arcsec),QUALITY_CONTROL,float,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),QUALITY_CONTROL,float,DiagL0
 NOTJUNK,QC: obs_id not in junk list,QUALITY_CONTROL,int,QCL0
-ISGOOD,QC: aggregate pass/fail,QUALITY_CONTROL,int,QC

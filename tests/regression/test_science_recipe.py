@@ -634,7 +634,6 @@ class TestScienceSummary:
                 "WLSFILE": "/m/20240405/KP.20240405.63499.95_master_thar_L2.fits",
             },
             "PRIMARY": {"RV": 11.290158, "RVERR": 0.000156, "BJDTDB": 2460405.968919},
-            "QUALITY_CONTROL": {"ISGOOD": 0},
         }
         receipt = pd.DataFrame(
             [
@@ -665,7 +664,6 @@ class TestScienceSummary:
         # Masters from the RECEIPT header cards.
         assert "bias=KP.20240405.03637.74_master_bias_L1.fits" in text
         assert "thar=KP.20240405.63499.95_master_thar_L2.fits" in text
-        assert "ISGOOD:   0" in text
         # RV km/s, error m/s (0.000156 km/s -> 0.156 m/s).
         assert "+11.29016 km/s  err 0.156 m/s  @ BJD_TDB 2460405.968919" in text
         assert "elapsed:  92.4 s" in text

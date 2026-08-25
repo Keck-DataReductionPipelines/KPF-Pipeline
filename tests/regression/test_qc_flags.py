@@ -194,25 +194,21 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
 
 
 class TestQCBase:
-    """Runner behaviour: aggregation, failure, raises, empty."""
+    """Runner behaviour: writing, failure, raises, empty."""
 
     def _make_obj(self):
         """Minimal object with a headers dict and a set_keyword router.
 
-        QC.run() reads each check's comment off ``keyword_registry.routing`` and
-        derives ISGOOD as the AND over the ``keyword_registry.qc_flag_keywords``
-        present on QUALITY_CONTROL, so the stub declares the synthetic check keys
-        as the QC-flag set and stores every keyword on QUALITY_CONTROL.
+        QC.run() reads each check's comment off ``keyword_registry.routing``, so
+        the stub routes the synthetic check keys to QUALITY_CONTROL and stores
+        every keyword there.
         """
-        qc_keys = frozenset(
-            {"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "BOOM", "ISGOOD"}
-        )
+        qc_keys = frozenset({"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "BOOM"})
 
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             keyword_registry = types.SimpleNamespace(
                 routing={k: ("QUALITY_CONTROL", "") for k in qc_keys},
-                qc_flag_keywords=qc_keys,
             )
 
             def set_keyword(self, key, value):
@@ -220,7 +216,7 @@ class TestQCBase:
 
         return _FakeObj()
 
-    def test_all_passing_isgood_1(self):
+    def test_all_passing_write_1(self):
         obj = self._make_obj()
 
         class MyQC(QC):
@@ -235,13 +231,12 @@ class TestQCBase:
             check_b._qc_key = "CHECKB"
 
         results = MyQC(obj).run()
-        assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHECKA"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHECKB"] == 1
         assert results["CHECKA"][0] is True
         assert results["CHECKB"][0] is True
 
-    def test_one_failing_isgood_0(self):
+    def test_one_failing_writes_0(self):
         obj = self._make_obj()
 
         class MyQC(QC):
@@ -256,7 +251,6 @@ class TestQCBase:
             check_fail._qc_key = "CHKFAIL"
 
         MyQC(obj).run()
-        assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 0
         assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
         assert obj.headers["QUALITY_CONTROL"]["CHKFAIL"] == 0
 
@@ -286,7 +280,7 @@ class TestQCBase:
         assert results["BOOM"][0] is False
         assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
 
-    def test_empty_subclass_isgood_1(self):
+    def test_empty_subclass_writes_nothing(self):
         obj = self._make_obj()
 
         class EmptyQC(QC):
@@ -294,11 +288,11 @@ class TestQCBase:
 
         results = EmptyQC(obj).run()
         assert results == {}
-        assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
+        assert obj.headers["QUALITY_CONTROL"] == {}
 
     def test_repeated_run_resets_results(self):
         # Without the per-run reset, the first run's failed result would linger in
-        # self.results and ISGOOD would stay 0 once the check starts passing.
+        # self.results once the check starts passing.
         obj = self._make_obj()
         obj.flag = False
 
@@ -310,13 +304,13 @@ class TestQCBase:
 
         qc = MyQC(obj)
         qc.run()
-        assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 0
+        assert obj.headers["QUALITY_CONTROL"]["FLAG"] == 0
         assert list(qc.results) == ["FLAG"]
         assert qc.results["FLAG"][0] is False
 
         obj.flag = True
         qc.run()
-        assert obj.headers["QUALITY_CONTROL"]["ISGOOD"] == 1
+        assert obj.headers["QUALITY_CONTROL"]["FLAG"] == 1
         assert list(qc.results) == ["FLAG"]
         assert qc.results["FLAG"][0] is True
 
@@ -1364,12 +1358,9 @@ class TestQCL1:
 
 @pytest.mark.usefixtures("mini_detector")
 class TestQCL1Run:
-    def test_all_good_isgood_1(self, tmp_path):
+    def test_all_good_flags_1(self, tmp_path):
         l1 = _make_kpf1(tmp_path)
         results = QCL1(l1).run()
-
-        isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
-        assert isgood == 1
 
         # BIASOK/DARKOK/FLATOK read the RECEIPT *SUB flags and DiagL1 *AGE values
         # but are themselves QUALITY_CONTROL keywords; the applied-step flags
@@ -1391,23 +1382,12 @@ class TestQCL1Run:
             assert v == 1, f"{k} should be 1 but is {v}"
             assert k in results
 
-    def test_one_bad_check_isgood_0(self, tmp_path):
+    def test_one_bad_check_writes_0(self, tmp_path):
         l1 = _make_kpf1(tmp_path, biassub=False)
         QCL1(l1).run()
-        isgood = l1.headers["QUALITY_CONTROL"].get("ISGOOD")
-        assert isgood == 0
 
         # QC writes the BIASOK flag and never touches RECEIPT's BIASSUB.
         assert l1.headers["QUALITY_CONTROL"].get("BIASOK") == 0
-
-    def test_isgood_aggregates_propagated_flag(self, tmp_path):
-        # ISGOOD aggregates every QC flag on QUALITY_CONTROL, including ones
-        # propagated from a lower level, not just this level's checks.
-        l1 = _make_kpf1(tmp_path)
-        l1.headers["QUALITY_CONTROL"]["DATAPRL0"] = (0, "L0 data present (propagated)")
-        QCL1(l1).run()
-        assert l1.headers["QUALITY_CONTROL"].get("DATAPRL1") == 1
-        assert l1.headers["QUALITY_CONTROL"].get("ISGOOD") == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1695,7 +1675,7 @@ class TestQCL4:
             del l4.headers["PRIMARY"][sorted(req)[0]]
             assert QCL4(l4).required_keywords_present() is False
 
-    def test_run_all_good_isgood(self):
+    def test_run_all_good(self):
         l4 = make_l4(bervrng=0.02, bjdrng=0.5)
         for kw in QCL4(l4)._required_primary_keywords():
             l4.headers["PRIMARY"][kw] = 1.0
@@ -1703,9 +1683,8 @@ class TestQCL4:
         assert set(results) >= {"DATAPRL4", "KWRDPRL4", "BERVOK", "BJDOK"}
         qc = l4.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1 and qc["BJDOK"] == 1
-        assert qc["ISGOOD"] == 1
 
-    def test_run_flags_failure_in_isgood(self):
+    def test_run_flags_failure(self):
         # no CCF/RV, and out-of-tolerance BERV/BJD ranges
         l4 = make_l4(sci=False, bervrng=0.5, bjdrng=2.0)
         for kw in QCL4(l4)._required_primary_keywords():
@@ -1713,7 +1692,6 @@ class TestQCL4:
         QCL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0 and qc["BJDOK"] == 0
-        assert qc["ISGOOD"] == 0
 
 
 # ---------------------------------------------------------------------------
