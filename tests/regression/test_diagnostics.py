@@ -688,6 +688,215 @@ class TestDiagL0ExpmeterCounts:
         assert DiagL0.__dict__["sky_sci_flux_ratio"]._diag_name == "sky_sci_flux_ratio"
 
 
+class TestDiagL0CcdTemperatures:
+    """GREEN/RED CCD offsets from the -100 C setpoint, read off TELEMETRY."""
+
+    def _make_l0_with_telemetry(self, tmp_path, green, red):
+        table = Table(
+            {
+                "keyword": ["kpfgreen.STA_CCD_T", "kpfred.STA_CCD_T"],
+                "average": [green, red],
+            }
+        )
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[fits.BinTableHDU(table, name="TELEMETRY")],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_offset_is_signed_millikelvin(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
+        results = DiagL0(l0).ccd_temperature_offsets()
+        assert results["GCCDSTMP"][0] == pytest.approx(-4.0, abs=1e-3)
+        assert results["RCCDSTMP"][0] == pytest.approx(7.0, abs=1e-3)
+
+    def test_at_setpoint_is_zero(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.0, -100.0)
+        results = DiagL0(l0).ccd_temperature_offsets()
+        assert results["GCCDSTMP"][0] == 0.0
+        assert results["RCCDSTMP"][0] == 0.0
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
+        results = DiagL0(l0).run()
+        for key in ("GCCDSTMP", "RCCDSTMP"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_name_correct(self):
+        name = DiagL0.__dict__["ccd_temperature_offsets"]._diag_name
+        assert name == "ccd_temperature_offsets"
+
+
+class TestDiagL0Guider:
+    """Guiding error statistics and guide-camera saturation.
+
+    Twelve frames, so the centroids clear the 11-distinct-position floor below
+    which v2.12 declares the guide camera untracked.
+    """
+
+    _NFRAMES = 12
+
+    def _make_l0_with_guider(
+        self,
+        tmp_path,
+        *,
+        dx=0.0,
+        dy=0.0,
+        peak=0.0,
+        avg_level=0.0,
+        nbright=0,
+        rows=None,
+        axes=(0.0, 0.0),
+        flux=100.0,
+    ):
+        offsets = np.arange(self._NFRAMES, dtype=float)
+        columns = {
+            "timestamp": offsets + 1.0,
+            "target_x": offsets + dx,
+            "target_y": offsets * 2.0 + dy,
+            "object1_x": offsets,
+            "object1_y": offsets * 2.0,
+            "object1_flux": np.full(self._NFRAMES, flux),
+            "object1_peak": np.full(self._NFRAMES, peak),
+            "object1_a": np.full(self._NFRAMES, axes[0]),
+            "object1_b": np.full(self._NFRAMES, axes[1]),
+        }
+        if rows is not None:
+            columns = {k: v[:rows] for k, v in columns.items()}
+        avg = np.full((512, 640), avg_level)
+        avg[255, 270 : 270 + nbright] = 1e5
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.ImageHDU(avg, name="GUIDER_AVG"),
+                fits.BinTableHDU(Table(columns), name="GUIDER_CUBE_ORIGINS"),
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_constant_offset_gives_rms_and_bias(self, tmp_path):
+        # A 0.5 pixel offset in x on every frame: 0.056"/pix -> 28 mas, and with
+        # no scatter the RMS equals the bias.
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5)
+        results = DiagL0(l0).guider_errors()
+        assert results["GDRXRMS"][0] == pytest.approx(28.0)
+        assert results["GDRXBIAS"][0] == pytest.approx(28.0)
+        assert results["GDRYRMS"][0] == 0.0
+        assert results["GDRYBIAS"][0] == 0.0
+
+    def test_bias_keeps_its_sign(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, dy=-0.5)
+        results = DiagL0(l0).guider_errors()
+        assert results["GDRYBIAS"][0] == pytest.approx(-28.0)
+        assert results["GDRYRMS"][0] == pytest.approx(28.0)
+
+    def test_untracked_camera_emits_no_keyword(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5, rows=8)
+        assert DiagL0(l0).guider_errors() == {}
+
+    def test_unwritten_rows_dropped(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, peak=1.0)
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][:2] = 0.0
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:2] = 1e5
+        # The two zero-flux frames are unwritten, so their peaks do not count.
+        assert DiagL0(l0).guider_saturation()["GDRFRSAT"][0] == 0.0
+
+    def test_saturated_pixels_counted_in_central_box(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, nbright=4)
+        assert DiagL0(l0).guider_saturation()["GDRNSAT"][0] == 4
+
+    def test_pixels_outside_the_box_ignored(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path)
+        l0.data["GUIDER_AVG"][0, 0] = 1e5
+        assert DiagL0(l0).guider_saturation()["GDRNSAT"][0] == 0
+
+    def test_saturated_frame_fraction(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path)
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:3] = 1e5
+        assert DiagL0(l0).guider_saturation()["GDRFRSAT"][0] == 0.25
+
+    def test_below_saturation_threshold_not_counted(self, tmp_path):
+        # 90% of the 15830 ADU CRED-2 saturation level is the threshold.
+        l0 = self._make_l0_with_guider(tmp_path, peak=14000.0, avg_level=14000.0)
+        results = DiagL0(l0).guider_saturation()
+        assert results["GDRFRSAT"][0] == 0.0
+        assert results["GDRNSAT"][0] == 0
+
+    def test_radial_rms_combines_both_axes(self, tmp_path):
+        # A 0.5 pixel offset on each axis: R is their quadrature sum.
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5, dy=0.5)
+        results = DiagL0(l0).guider_errors()
+        assert results["GDRRRMS"][0] == pytest.approx(28.0 * 2**0.5)
+
+    def test_fwhm_from_the_fitted_gaussian_axes(self, tmp_path):
+        # sigma=(3,4) pixels -> 5 px in quadrature, x2.3548 to FWHM, x56 mas/pix.
+        l0 = self._make_l0_with_guider(tmp_path, axes=(3.0, 4.0))
+        results = DiagL0(l0).guider_image_stats()
+        assert results["GDRFWMD"][0] == pytest.approx(5 * 2.3548 * 56.0, rel=1e-4)
+        assert results["GDRFWSTD"][0] == 0.0
+
+    def test_flux_and_peak_statistics(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, flux=200.0, peak=50.0)
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][0] = 100.0
+        results = DiagL0(l0).guider_image_stats()
+        assert results["GDRFXMD"][0] == 200.0
+        assert results["GDRFXSTD"][0] > 0.0
+        assert results["GDRPKMD"][0] == 50.0
+        assert results["GDRPKSTD"][0] == 0.0
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5, nbright=2, axes=(3.0, 4.0))
+        results = DiagL0(l0).run()
+        for key in ("GDRXRMS", "GDRRRMS", "GDRYBIAS", "GDRNSAT", "GDRFRSAT", "GDRFWMD"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_names_correct(self):
+        for name in ("guider_errors", "guider_saturation", "guider_image_stats"):
+            assert DiagL0.__dict__[name]._diag_name == name
+
+
+class TestDiagL0GuiderSeeing:
+    """J+Z-band seeing from the Moffat fit to the co-added guider image."""
+
+    def _make_l0_with_moffat(self, tmp_path, alpha, *, corrupt=False):
+        y, x = np.indices((81, 81))
+        image = 100.0 * (1 + ((x - 40.0) ** 2 + (y - 40.0) ** 2) / alpha**2) ** -2.5
+        if corrupt:
+            image = np.full_like(image, np.nan)
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            primary_cards={"GCCRPIX1": 40.0, "GCCRPIX2": 40.0},
+            extra_hdus=[fits.ImageHDU(image, name="GUIDER_AVG")],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_seeing_is_alpha_in_arcsec(self, tmp_path):
+        # alpha = 8 px at the 0.056"/pix CRED-2 scale -> 0.448" seeing.
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0)
+        results = DiagL0(l0).guider_seeing()
+        assert results["GDRSEEJZ"][0] == pytest.approx(8.0 * 0.056, rel=0.05)
+
+    def test_wider_profile_gives_larger_seeing(self, tmp_path):
+        narrow = DiagL0(self._make_l0_with_moffat(tmp_path, 5.0)).guider_seeing()
+        wide = DiagL0(self._make_l0_with_moffat(tmp_path, 15.0)).guider_seeing()
+        assert wide["GDRSEEJZ"][0] > narrow["GDRSEEJZ"][0]
+
+    def test_unfittable_image_emits_no_keyword(self, tmp_path):
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
+        assert DiagL0(l0).guider_seeing() == {}
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["GDRSEEJZ"] == results["GDRSEEJZ"][0]
+
+    def test_diag_name_correct(self):
+        assert DiagL0.__dict__["guider_seeing"]._diag_name == "guider_seeing"
+
+
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
     """A KPF1 carrying a PRIMARY DATE-OBS, RECEIPT master paths, and assembled CCDs.
 

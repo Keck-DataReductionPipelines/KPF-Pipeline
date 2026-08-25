@@ -210,6 +210,95 @@ class QCL0(QC):
 
     good_readout._qc_key = "READOK"
 
+    def _ccd_temp_ok(self, key):
+        """One CCD held within 10 mK of its temperature setpoint.
+
+        Ports v2.12 ``green_ccd_10mK``/``red_ccd_10mK``. DiagL0 measures the
+        signed offset; this applies the limit to its magnitude. Detector
+        temperature drift moves the spectrum on the chip, so it bears directly on
+        RV stability.
+        """
+        return abs(float(self.kpf_obj.headers["QUALITY_CONTROL"][key])) < 10.0
+
+    def green_ccd_temp_ok(self):
+        """GREEN CCD at its temperature setpoint."""
+        return self._ccd_temp_ok("GCCDSTMP")
+
+    green_ccd_temp_ok._qc_key = "GTEMPOK"
+
+    def red_ccd_temp_ok(self):
+        """RED CCD at its temperature setpoint."""
+        return self._ccd_temp_ok("RCCDSTMP")
+
+    red_ccd_temp_ok._qc_key = "RTEMPOK"
+
+    def guiding_ok(self):
+        """Guiding tracked to spec and the guide camera was not saturated.
+
+        Merges v2.12 ``good_guiding`` and ``guider_not_saturated``: the guiding
+        error holds to 50 mas in both X/Y RMS and bias, at most 3 pixels of the
+        co-added image are saturated, and at most 10% of frames carry a saturated
+        peak. DiagL0 measures all six; this applies the limits. Bias is judged on
+        magnitude, where v2.12 tested the signed value and so let a large negative
+        offset pass.
+        """
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        if any(float(hdr[key]) > 50.0 for key in ("GDRXRMS", "GDRYRMS")):
+            return False
+        if any(abs(float(hdr[key])) > 50.0 for key in ("GDRXBIAS", "GDRYBIAS")):
+            return False
+        return int(hdr["GDRNSAT"]) <= 3 and float(hdr["GDRFRSAT"]) <= 0.1
+
+    guiding_ok._qc_key = "GUIDEROK"
+
+    def elevation_ok(self):
+        """Telescope above 30 deg, the atmospheric dispersion corrector's range.
+
+        Ports v2.12 ``not_low_elevation``. Below 30 deg the ADC runs out of
+        travel, so the fiber samples a wavelength-dependent position on the sky
+        and the measured RV is biased.
+        """
+        return float(self.kpf_obj.headers["PRIMARY"]["EL"]) >= 30.0
+
+    elevation_ok._qc_key = "ELEVOK"
+
+    def etalon_at_temp(self):
+        """Etalon chamber temperatures within 0.5 mK of their setpoints.
+
+        Ports v2.12 ``etalon_set_temp``: the inner bottom lid (ETAV1C3T) and the
+        outer chamber (ETAV1C4T), each against its own setpoint keyword, falling
+        back to the design value when the setpoint is not recorded. The etalon
+        line positions shift with temperature, so an off-setpoint chamber
+        corrupts the drift reference.
+        """
+        hdr = self.kpf_obj.headers["PRIMARY"]
+        for temp_key, set_key, design in (
+            ("ETAV1C3T", "ETAV1C3S", 23.6),
+            ("ETAV1C4T", "ETAV1C4S", 23.9),
+        ):
+            setpoint = float(hdr[set_key]) if set_key in hdr else design
+            if abs(float(hdr[temp_key]) - setpoint) > 0.0005:
+                return False
+        return True
+
+    etalon_at_temp._qc_key = "ETATMPOK"
+
+    def agitator_operating(self):
+        """Agitator running above its minimum speed.
+
+        Ports v2.12 ``agitator_operating``: AGITSTA reports Running and the
+        exposure-average kpfmot.AGITSPD exceeds 1000 counts/s. The agitator
+        scrambles the fiber's modal noise; a stalled one leaves that noise in the
+        spectrum.
+        """
+        if str(self.kpf_obj.headers["PRIMARY"]["AGITSTA"]) != "Running":
+            return False
+        table = self.kpf_obj.data["TELEMETRY"]
+        speed = table[table["keyword"] == "kpfmot.AGITSPD"]["average"][0]
+        return abs(float(speed)) > 1000.0
+
+    agitator_operating._qc_key = "AGITOK"
+
     def not_junk(self):
         """obs_id not on the observer junk list for this frame's data tree.
 

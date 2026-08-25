@@ -1151,6 +1151,160 @@ class TestQCL0PixelQuality:
             )
 
 
+class TestQCL0Telemetry:
+    """Instrument-state checks drawn from telemetry and the guide camera.
+
+    The CCD-offset and guider metrics come from DiagL0 (tested there); these cover
+    only the limits QC applies, so each test seeds QUALITY_CONTROL directly.
+    """
+
+    def _make_kpf0_with_temps(self, tmp_path, **offsets):
+        l0 = _make_kpf0(tmp_path)
+        l0.headers["QUALITY_CONTROL"].update({"GCCDSTMP": 0.0, "RCCDSTMP": 0.0})
+        l0.headers["QUALITY_CONTROL"].update(offsets)
+        return l0
+
+    def _make_kpf0_with_guider(self, tmp_path, **metrics):
+        l0 = _make_kpf0(tmp_path)
+        l0.headers["QUALITY_CONTROL"].update(
+            {
+                "GDRXRMS": 10.0,
+                "GDRYRMS": 10.0,
+                "GDRXBIAS": 1.0,
+                "GDRYBIAS": 1.0,
+                "GDRNSAT": 0,
+                "GDRFRSAT": 0.0,
+            }
+        )
+        l0.headers["QUALITY_CONTROL"].update(metrics)
+        return l0
+
+    def test_ccd_temps_pass(self, tmp_path):
+        l0 = self._make_kpf0_with_temps(tmp_path, GCCDSTMP=-9.9, RCCDSTMP=9.9)
+        assert QCL0(l0).green_ccd_temp_ok() is True
+        assert QCL0(l0).red_ccd_temp_ok() is True
+
+    def test_ccd_temp_fail_either_direction(self, tmp_path):
+        # The limit is on the magnitude, so a cold CCD fails like a warm one.
+        assert (
+            QCL0(
+                self._make_kpf0_with_temps(tmp_path, GCCDSTMP=-10.5)
+            ).green_ccd_temp_ok()
+            is False
+        )
+        assert (
+            QCL0(self._make_kpf0_with_temps(tmp_path, RCCDSTMP=10.5)).red_ccd_temp_ok()
+            is False
+        )
+
+    def test_chips_judged_separately(self, tmp_path):
+        l0 = self._make_kpf0_with_temps(tmp_path, GCCDSTMP=50.0)
+        assert QCL0(l0).green_ccd_temp_ok() is False
+        assert QCL0(l0).red_ccd_temp_ok() is True
+
+    def test_guiding_ok_pass(self, tmp_path):
+        assert QCL0(self._make_kpf0_with_guider(tmp_path)).guiding_ok() is True
+
+    def test_guiding_rms_fail(self, tmp_path):
+        l0 = self._make_kpf0_with_guider(tmp_path, GDRYRMS=51.0)
+        assert QCL0(l0).guiding_ok() is False
+
+    def test_guiding_bias_judged_on_magnitude(self, tmp_path):
+        # v2.12 compared the signed bias and let a large negative offset pass.
+        l0 = self._make_kpf0_with_guider(tmp_path, GDRXBIAS=-60.0)
+        assert QCL0(l0).guiding_ok() is False
+
+    def test_guider_saturation_fails(self, tmp_path):
+        assert (
+            QCL0(self._make_kpf0_with_guider(tmp_path, GDRNSAT=4)).guiding_ok() is False
+        )
+        assert (
+            QCL0(self._make_kpf0_with_guider(tmp_path, GDRFRSAT=0.11)).guiding_ok()
+            is False
+        )
+
+    def test_guiding_missing_metric_raises(self, tmp_path):
+        # DiagL0 emits no guiding error when the camera was not tracking.
+        with pytest.raises(KeyError, match="GDRXRMS"):
+            QCL0(_make_kpf0(tmp_path)).guiding_ok()
+
+    def test_elevation_ok(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        l0.headers["PRIMARY"]["EL"] = 30.0  # the ADC limit itself passes
+        assert QCL0(l0).elevation_ok() is True
+        l0.headers["PRIMARY"]["EL"] = 29.9
+        assert QCL0(l0).elevation_ok() is False
+
+    def _make_kpf0_with_etalon(self, tmp_path, **cards):
+        l0 = _make_kpf0(tmp_path)
+        l0.headers["PRIMARY"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
+        l0.headers["PRIMARY"].update(cards)
+        return l0
+
+    def test_etalon_at_design_setpoints(self, tmp_path):
+        # No ETAV1C3S/ETAV1C4S recorded, so the design values apply.
+        assert QCL0(self._make_kpf0_with_etalon(tmp_path)).etalon_at_temp() is True
+
+    def test_etalon_recorded_setpoint_wins(self, tmp_path):
+        l0 = self._make_kpf0_with_etalon(tmp_path, ETAV1C3T=24.0, ETAV1C3S=24.0)
+        assert QCL0(l0).etalon_at_temp() is True
+
+    def test_etalon_off_setpoint_fails(self, tmp_path):
+        for card in ({"ETAV1C3T": 23.601}, {"ETAV1C4T": 23.899}):
+            l0 = self._make_kpf0_with_etalon(tmp_path, **card)
+            assert QCL0(l0).etalon_at_temp() is False
+
+    def _make_kpf0_with_agitator(self, tmp_path, *, status="Running", speed=2000.0):
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00002.00.fits",
+            shape=(10, 10),
+            primary_cards={
+                "DATE-OBS": "2024-04-05T01:00:37",
+                "EXPTIME": 60.0,
+                "IMTYPE": "Object",
+                "AGITSTA": status,
+            },
+            extra_hdus=[
+                fits.BinTableHDU(
+                    Table({"keyword": ["kpfmot.AGITSPD"], "average": [speed]}),
+                    name="TELEMETRY",
+                )
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_agitator_running_above_minimum(self, tmp_path):
+        l0 = self._make_kpf0_with_agitator(tmp_path)
+        assert QCL0(l0).agitator_operating() is True
+
+    def test_agitator_speed_judged_on_magnitude(self, tmp_path):
+        l0 = self._make_kpf0_with_agitator(tmp_path, speed=-2000.0)
+        assert QCL0(l0).agitator_operating() is True
+
+    def test_agitator_stalled_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_agitator(tmp_path, speed=900.0)
+        assert QCL0(l0).agitator_operating() is False
+
+    def test_agitator_not_running_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_agitator(tmp_path, status="Stopped")
+        assert QCL0(l0).agitator_operating() is False
+
+    def test_qc_keys_correct(self):
+        expected = {
+            "green_ccd_temp_ok": "GTEMPOK",
+            "red_ccd_temp_ok": "RTEMPOK",
+            "guiding_ok": "GUIDEROK",
+            "elevation_ok": "ELEVOK",
+            "etalon_at_temp": "ETATMPOK",
+            "agitator_operating": "AGITOK",
+        }
+        for method_name, key in expected.items():
+            fn = QCL0.__dict__[method_name]
+            assert fn._qc_key == key, (
+                f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
+            )
+
+
 # ---------------------------------------------------------------------------
 # QCL1 checks
 # ---------------------------------------------------------------------------
