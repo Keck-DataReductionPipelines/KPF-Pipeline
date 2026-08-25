@@ -42,7 +42,6 @@ class KPFMasterL2(KPFMasterModel, KPF2):
     infers the kind from header keyword MASTYPE.
     """
 
-    _DATALVL = "ML2"
     # MASTYPE (WMKO token) -> schema kind, for from_fits. L2 masters are the WLS
     # (thar) master and the flat master.
     _MASTYPE_TO_KIND = {"thar": "wls", "flat": "flat"}
@@ -83,7 +82,7 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
-        self.set_keyword("DATALVL", self._DATALVL)
+        self.set_keyword("DATALVL", "ML2")
 
     @classmethod
     def from_fits(cls, fn, instrument=None, **kwargs):

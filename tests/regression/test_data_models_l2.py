@@ -526,9 +526,6 @@ class TestKPFMasterL2:
         m = KPFMasterL2(kind="wls")
         assert isinstance(m, KPFMasterModel)
 
-    def test_class_attributes(self):
-        assert KPFMasterL2._DATALVL == "ML2"
-
     def test_from_fits(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         assert "TRACE3_WAVE" in m.extensions

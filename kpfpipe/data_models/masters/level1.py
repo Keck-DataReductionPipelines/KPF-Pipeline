@@ -36,7 +36,6 @@ class KPFMasterL1(KPFMasterModel, KPF1):
     disk with ``KPFMasterL1.from_fits(path)``.
     """
 
-    _DATALVL = "ML1"
     _known_extensions = set(_ML1_EXTENSIONS["Name"])
 
     def __init__(self):
@@ -47,9 +46,8 @@ class KPFMasterL1(KPFMasterModel, KPF1):
             if row["Required"] and row["Name"] not in self.extensions:
                 self.create_extension(row["Name"], row["DataType"])
 
-        # Masters carry their own minimal PRIMARY (no EPRV science skeleton); stamp
-        # DATALVL so it is present in-memory, not only at to_fits.
-        self.set_keyword("DATALVL", self._DATALVL)
+        # Masters carry their own minimal PRIMARY (no EPRV science skeleton).
+        self.set_keyword("DATALVL", "ML1")
 
     def _create_hdul(self):
         """Cast MASK extensions to uint8 before building HDUs, then restore."""

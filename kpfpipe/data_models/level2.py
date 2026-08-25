@@ -9,6 +9,7 @@ KPF-friendly extension aliases, so data can be accessed by either EPRV name
 
 import importlib.resources
 import logging
+import os
 from collections import OrderedDict
 
 import numpy as np
@@ -197,6 +198,8 @@ class KPF2(KPFDataModel, RV2):
 
         self._register_aliases()
 
+        self.set_keyword("DATALVL", "L2")
+
     def _register_aliases(self):
         """Register KPF-friendly aliases from config CSVs."""
         # Simple 1:1 extension aliases (e.g., CA_HK → ANCILLARY_SPECTRUM)
@@ -238,6 +241,9 @@ class KPF2(KPFDataModel, RV2):
         """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the
         parameter to ``out_filename``. Delegate so all our call sites can keep
         passing one path (``to_fits(fn)``)."""
+        if fn is None:
+            fn = self.generate_standard_filename()
+        self.set_keyword("FILENAME", os.path.basename(fn))
         out_path = super().to_fits(out_filename=fn)
         logger.info("wrote %s to %s", type(self).__name__, out_path)
         return out_path

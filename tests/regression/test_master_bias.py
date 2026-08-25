@@ -65,9 +65,6 @@ class TestMasterBiasUnit:
         for chip in CHIPS:
             assert master_bias.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
 
-    def test_datalvl_class_attribute(self, master_bias):
-        assert master_bias._DATALVL == "ML1"
-
 
 # ---------------------------------------------------------------------------
 # info() smoke tests

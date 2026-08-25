@@ -597,9 +597,6 @@ class TestKPFMasterL1:
         m = KPFMasterL1()
         assert isinstance(m, KPFMasterModel)
 
-    def test_class_attributes(self):
-        assert KPFMasterL1._DATALVL == "ML1"
-
     def test_from_fits(self, synthetic_masters_l1_file):
         m = KPFMasterL1.from_fits(synthetic_masters_l1_file)
         assert "GREEN_IMG" in m.extensions

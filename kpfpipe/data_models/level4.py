@@ -10,6 +10,7 @@ views for the CCF cubes (``GREEN_SCI2_CCF``, ``RED_SCI2_CCF``).
 
 import importlib.resources
 import logging
+import os
 from collections import OrderedDict
 
 import numpy as np
@@ -197,6 +198,8 @@ class KPF4(KPFDataModel, RV4):
 
         self._register_aliases()
 
+        self.set_keyword("DATALVL", "L4")
+
     def _register_aliases(self):
         """Register KPF-friendly aliases from config CSVs."""
         # Simple 1:1 non-trace extension aliases (shared with L2; none apply to
@@ -238,6 +241,9 @@ class KPF4(KPFDataModel, RV4):
     def to_fits(self, fn=None):
         """Single-filepath ``to_fits`` shim; see ``KPF2.to_fits`` for the
         rationale (rvdata >=0.4.0 renamed the parameter to ``out_filename``)."""
+        if fn is None:
+            fn = self.generate_standard_filename()
+        self.set_keyword("FILENAME", os.path.basename(fn))
         out_path = super().to_fits(out_filename=fn)
         logger.info("wrote %s to %s", type(self).__name__, out_path)
         return out_path

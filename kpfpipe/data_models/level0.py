@@ -377,8 +377,7 @@ class KPF0(KPFDataModel):
             kpf1.receipt = self.receipt.copy()
         kpf1.obs_id = self.obs_id
 
-        # DATALVL is set by KPF1.__init__; _map_header no longer emits it, so no
-        # fixup is needed here.
+        kpf1.set_keyword("DATALVL", "L1")
         kpf1.receipt_add_entry("to_kpf1", "", "PASS")
         return kpf1
 

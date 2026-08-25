@@ -43,7 +43,6 @@ class KPF1(KPFDataModel):
     ``data["RED_CCD"]``).
     """
 
-    _DATALVL = "L1"
     _known_extensions = _KNOWN_L1_EXTENSIONS
 
     def __init__(self):
@@ -60,9 +59,8 @@ class KPF1(KPFDataModel):
         # values (overlaid in KPF0.to_kpf1) win over defaults.
         for kw, value in self.keyword_registry.eprv_primary_seed.items():
             self.headers["PRIMARY"][kw] = value
-        # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN"; correct it
-        # in-memory (to_kpf1 / to_fits set it too, but a fresh KPF1 should read L1).
-        self.set_keyword("DATALVL", self._DATALVL)
+        # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN".
+        self.set_keyword("DATALVL", "L1")
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """Route L1 FITS reads to ``KPF1._read``.
@@ -158,7 +156,6 @@ class KPF1(KPFDataModel):
 
         if "PRIMARY" in self.headers:
             self.set_keyword("FILENAME", os.path.basename(fn))
-            self.set_keyword("DATALVL", self._DATALVL)
 
         hdu_list = self._create_hdul()
         hdul = fits.HDUList(hdu_list)
