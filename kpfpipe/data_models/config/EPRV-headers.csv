@@ -55,6 +55,7 @@ ORGANIZA,"Organization the data belongs to, for licensing purposes",PRIMARY,stri
 ORIGIN,Entity that created this file,PRIMARY,string,KPF0.to_kpf1
 PROGRAM,Observing program name,PRIMARY,string,KPF0.to_kpf1
 ALIASES,"user defined name(s) for the object, ; separated",PRIMARY,string,KPF0.to_kpf1
+READMODE,Readout Mode,PRIMARY,string,ImageAssembly
 CPLX#,Catalog parallax for object in trace 1 to # [mas],PRIMARY,float,KPF0.to_kpf1
 CPMR#,Catalog proper motion RA for object in trace 1 to # [arcsec/yr],PRIMARY,float,KPF0.to_kpf1
 CPMD#,Catalog proper motion DEC for object in trace 1 to # [arcsec/yr],PRIMARY,float,KPF0.to_kpf1

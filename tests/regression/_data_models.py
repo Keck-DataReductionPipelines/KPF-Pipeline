@@ -86,6 +86,8 @@ _DEFAULT_PRIMARY = {
     "DATE-OBS": "2024-01-01T00:00:01",
     "PROGNAME": "K123",
     "TIMEERR": "NTP time correct to within 12.3 ms",
+    "GRACFFLN": "regular-read-green.acf",
+    "RDACFFLN": "regular-read-red.acf",
 }
 
 

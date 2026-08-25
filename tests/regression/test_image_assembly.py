@@ -135,6 +135,11 @@ class TestImageAssemblyBias:
         val = l1.headers["RECEIPT"].get("OSCANSUB")
         assert val == 1
 
+    def test_read_mode_in_header(self, l1_bias):
+        l1, _ = l1_bias
+        # The frame was read out with regular-read-{green,red}.acf.
+        assert l1.headers["PRIMARY"]["READMODE"] == "regular"
+
     def test_receipt_chain(self, l1_bias):
         l1, _ = l1_bias
         modules = l1.receipt["FUNCTION"].values
@@ -518,6 +523,44 @@ class TestOverscanMethods:
         l1 = KPF1()
         ia._set_headers(l1)
         assert l1.headers["RECEIPT"].get("OSCANSUB") == expected
+
+
+class TestReadMode:
+    """READMODE classification: the ACF filename first, readout duration after."""
+
+    def _infer(self, tmp_path, cards):
+        path = write_amp_l0(
+            tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12), primary_cards=cards
+        )
+        return ImageAssembly(KPF0.from_fits(path)).infer_read_mode()
+
+    @pytest.mark.parametrize(
+        "green_acf, red_acf, expected",
+        [
+            ("regular-read-green.acf", "regular-read-red.acf", "regular"),
+            ("fast-read-green.acf", "fast-read-red.acf", "fast"),
+            ("fast-read-green.acf", "regular-read-red.acf", "fast"),
+        ],
+    )
+    def test_acf_filename_names_the_mode(self, tmp_path, green_acf, red_acf, expected):
+        cards = {"GRACFFLN": green_acf, "RDACFFLN": red_acf}
+        assert self._infer(tmp_path, cards) == expected
+
+    @pytest.mark.parametrize("read_time, expected", [(12.0, "fast"), (48.0, "regular")])
+    def test_falls_back_to_readout_duration(self, tmp_path, read_time, expected):
+        # An ACF named after neither mode leaves the shutter-close to file-write
+        # interval as the only discriminator.
+        shutter_close = "2024-01-01T00:00:00"
+        file_write = f"2024-01-01T00:00:{read_time:04.1f}"
+        cards = {
+            "GRACFFLN": "unknown.acf",
+            "RDACFFLN": "unknown.acf",
+            "GRDATE": file_write,
+            "GRDATE-E": shutter_close,
+            "RDDATE": file_write,
+            "RDDATE-E": shutter_close,
+        }
+        assert self._infer(tmp_path, cards) == expected
 
 
 class TestAmplifierGuards:

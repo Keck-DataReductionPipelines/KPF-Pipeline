@@ -13,6 +13,7 @@ gated per file type by the masters modules.
 """
 
 import logging
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -53,6 +54,7 @@ class ImageAssembly:
       - orienting amplifier channels
       - applying gain conversion (ADU --> photo-electrons)
       - measuring read noise
+      - inferring the CCD readout mode
       - subtracting overscan bias
       - assembling full-frame images (FFI)
       - converting EXPMETER_SCI/SKY wavelengths from nm to Angstroms
@@ -477,6 +479,37 @@ class ImageAssembly:
             image = np.flip(image, axis=0)
         return image
 
+    def infer_read_mode(self):
+        """
+        Infer the CCD readout speed from the raw L0 header.
+
+        Returns
+        -------
+        read_mode : str
+            'fast' or 'regular'.
+
+        Notes
+        -----
+        The ACF waveform filenames name the mode outright, and failing that the
+        shutter-close to file-write interval separates the ~12 s fast readout
+        from the ~48 s regular one.
+        """
+        header = self.l0_obj.headers["PRIMARY"]
+        acf = f"{header['GRACFFLN']} {header['RDACFFLN']}"
+        if "fast" in acf:
+            return "fast"
+        if "regular" in acf:
+            return "regular"
+
+        read_time = min(
+            (
+                datetime.fromisoformat(header[f"{chip}DATE"])
+                - datetime.fromisoformat(header[f"{chip}DATE-E"])
+            ).total_seconds()
+            for chip in ("GR", "RD")
+        )
+        return "fast" if read_time < 20 else "regular"
+
     # ------------------------------------------------------------------
     # Private helpers - module execution
     # ------------------------------------------------------------------
@@ -503,8 +536,8 @@ class ImageAssembly:
 
     def _set_headers(self, l1_obj):
         """
-        Write read-noise metadata to ``l1_obj``: per-amplifier read noise
-        (RN_KEYS), the non-Gaussian factor, and the OSCANSUB flag.
+        Write assembly metadata to ``l1_obj``: per-amplifier read noise
+        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, and READMODE.
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
@@ -513,6 +546,7 @@ class ImageAssembly:
 
         # "zero" is the explicit no-op method (strips overscan, subtracts none).
         l1_obj.set_keyword("OSCANSUB", int(self.overscan_method != "zero"))
+        l1_obj.set_keyword("READMODE", self.infer_read_mode())
 
     # ------------------------------------------------------------------
     # Public entry point
