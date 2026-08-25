@@ -1161,6 +1161,14 @@ class TestDiagL2Snr:
             6.0 / np.sqrt(0.75), abs=0.01
         )
 
+    def test_summed_sci_mirrored_to_primary(self):
+        kpf2 = _make_kpf2_nan_pixels()
+        DiagL2(kpf2).run()
+        primary, qc = kpf2.headers["PRIMARY"], kpf2.headers["QUALITY_CONTROL"]
+        for index, wavelength in enumerate((452, 548, 652, 747, 852), start=1):
+            assert primary.get(f"EXSNR{index}") == qc.get(f"SNRSC{wavelength}")
+            assert primary.get(f"EXSNRW{index}") == wavelength * 10.0
+
     def test_raises_without_var(self):
         kpf2 = _make_kpf2_nan_pixels(var=None)
         with pytest.raises(IndexError):

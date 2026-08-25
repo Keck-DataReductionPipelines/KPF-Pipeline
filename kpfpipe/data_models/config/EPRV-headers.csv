@@ -74,21 +74,15 @@ THA#,TCS hour angle for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kp
 INHUM,relative humidity inside dome [%],PRIMARY,float,KPF0.to_kpf1
 INHUMT,INHUM timestamp [UTC],PRIMARY,string,KPF0.to_kpf1
 DRPHASH,Git commit hash,PRIMARY,string,KPF0.to_kpf1
-EXSNRW#,Wavelength at which EXTSNR1 to EXTSNR# is measured [Angstroms],PRIMARY,float,KPF0.to_kpf1
+EXSNR#,Extracted signal-to-noise at EXSNRW1 to EXSNRW# [SNR/1-D pixel],PRIMARY,float,DiagL2
+EXSNRW#,Wavelength at which EXTSNR1 to EXTSNR# is measured [Angstroms],PRIMARY,float,DiagL2
 # ================================================
 # Non-primary extension keywords
 # ================================================
-CTYPE1,Name of axis 1,BJD_TDB,string,BarycentricCorrection
-CTYPE1,Name of axis 1,BARYCORR_KMS,string,BarycentricCorrection
-CTYPE1,Name of axis 1,BARYCORR_Z,string,BarycentricCorrection
-CTYPE1,Name of axis 1,CCF*,string,CrossCorrelation
-CTYPE2,Name of axis 2,CCF*,string,CrossCorrelation
 VELSTART,Velocity Grid Start [km/s],CCF*,float,CrossCorrelation
 VELSTEP,Velocity Grid Step Size [km/s],CCF*,float,CrossCorrelation
 VELNSTEP,Number of Steps in Velocity Grid,CCF*,uint,CrossCorrelation
 CCFMASK,Mask used to generate CCF,CCF*,string,CrossCorrelation
-CTYPE1,Name of axis 1,RV*,string,CrossCorrelation
-CTYPE2,Name of axis 2,RV*,string,CrossCorrelation
 RVMETHOD,RV Derivation method,RV*,string,RadialVelocity
 SKYRMVD,Sky model removed?,RV*,boolean,RadialVelocity
 TELLRMVD,Telluric model removed?,RV*,boolean,RadialVelocity

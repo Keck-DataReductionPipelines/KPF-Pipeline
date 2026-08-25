@@ -77,7 +77,7 @@ class DiagL2(Diagnostics):
         SCI1+SCI3+SCI3, dropping SCI2).
         """
         out = {}
-        for wavelength in (452, 548, 652, 747, 852):
+        for index, wavelength in enumerate((452, 548, 652, 747, 852), start=1):
             chip, order = self._order_at(wavelength)
             for code, fibers in (
                 ("SC", ("SCI1", "SCI2", "SCI3")),
@@ -95,6 +95,8 @@ class DiagL2(Diagnostics):
                 out[f"SNR{code}{wavelength}"] = round(
                     float(np.nanpercentile(np.where(np.isfinite(snr), snr, 0.0), 95)), 3
                 )
+            out[f"EXSNR{index}"] = out[f"SNRSC{wavelength}"]
+            out[f"EXSNRW{index}"] = wavelength * 10.0
         return self._tag(**out)
 
     snr._diag_name = "snr"
