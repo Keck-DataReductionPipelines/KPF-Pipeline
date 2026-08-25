@@ -98,3 +98,41 @@ class DiagL0(Diagnostics):
         return self._tag(OBJOFF=self._offset("simbad"))
 
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
+
+    def _amp_pixel_fraction(self, chip, compare, level):
+        """Largest fraction of any present amp on ``chip`` satisfying ``compare``.
+
+        Raw D.N., before ImageAssembly applies gain or subtracts overscan. Only the
+        amps a readout actually used carry data, so 2-amp and 4-amp frames both
+        work; the worst amp decides, mirroring v2.12's per-amp infobits.
+        """
+        fractions = []
+        for i in range(1, 5):
+            arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
+            # KPF0 stores None-data as array(None, dtype=object); skip absent.
+            if (
+                arr is None
+                or getattr(arr, "dtype", None) == np.dtype(object)
+                or np.size(arr) == 0
+            ):
+                continue
+            fractions.append(np.count_nonzero(compare(arr, level)) / arr.size)
+        return round(float(max(fractions)), 6)
+
+    def dead_pixel_fractions(self):
+        """DEADPXFG/DEADPXFR: worst-amp fraction of GREEN/RED pixels under 1.0e4 D.N."""
+        return self._tag(
+            DEADPXFG=self._amp_pixel_fraction("GREEN", np.less, 1.0e4),
+            DEADPXFR=self._amp_pixel_fraction("RED", np.less, 1.0e4),
+        )
+
+    dead_pixel_fractions._diag_name = "dead_pixel_fractions"
+
+    def saturated_pixel_fractions(self):
+        """SATPXFG/SATPXFR: worst-amp fraction of GREEN/RED pixels over 5.0e8 D.N."""
+        return self._tag(
+            SATPXFG=self._amp_pixel_fraction("GREEN", np.greater, 5.0e8),
+            SATPXFR=self._amp_pixel_fraction("RED", np.greater, 5.0e8),
+        )
+
+    saturated_pixel_fractions._diag_name = "saturated_pixel_fractions"

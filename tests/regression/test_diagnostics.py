@@ -22,7 +22,7 @@ from kpfpipe.quality_control.diagnostics import (
     Diagnostics,
 )
 
-from ._data_models import set_fiber_arrays, set_wave_bands
+from ._data_models import set_fiber_arrays, set_wave_bands, write_amp_l0
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -364,6 +364,80 @@ class TestDiagL0Contingency:
 
 
 _CAL_AGE_KEYS = ("BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE")
+
+
+class TestDiagL0PixelFractions:
+    """Worst-amp dead/saturated pixel fractions, one pair per chip.
+
+    ``write_amp_l0`` fills every amp with a flat 1e6 D.N., clearing both
+    thresholds, so each test drives a chosen pixel count past one bound. Each amp
+    here is 10x10 = 100 pixels, so a count is also a percentage.
+    """
+
+    def _make_amp_l0(self, tmp_path, namps=4):
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
+        )
+        return KPF0.from_fits(fn)
+
+    def test_clean_frame_is_zero(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path)
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.0
+        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"][0] == 0.0
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP3"].flat[:6] = 0.0
+        results = DiagL0(l0).run()
+        for key in ("DEADPXFG", "DEADPXFR", "SATPXFG", "SATPXFR"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+        assert results["DEADPXFG"][0] == 0.06
+
+    def test_dead_counts_pixels_below_threshold(self, tmp_path):
+        # Strictly below 1.0e4 D.N. counts; a pixel exactly at it does not.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP3"].flat[:50] = 1.0e4
+        l0.data["GREEN_AMP3"].flat[:5] = 0.0
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.05
+
+    def test_saturated_counts_pixels_above_threshold(self, tmp_path):
+        # Strictly above 5.0e8 D.N. counts; a pixel exactly at it does not.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["RED_AMP2"].flat[:50] = 5.0e8
+        l0.data["RED_AMP2"].flat[:15] = 6.0e8
+        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"][0] == 0.15
+
+    def test_chips_measured_separately(self, tmp_path):
+        # A dead GREEN amp leaves the RED fraction at zero, and vice versa.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP1"].flat[:50] = 0.0
+        results = DiagL0(l0).dead_pixel_fractions()
+        assert results["DEADPXFG"][0] == 0.5
+        assert results["DEADPXFR"][0] == 0.0
+
+    def test_worst_amp_decides(self, tmp_path):
+        # One bad amp sets its chip's fraction even though the other three are clean.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["RED_AMP4"].flat[:50] = 0.0
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFR"][0] == 0.5
+
+    def test_two_amp_readout(self, tmp_path):
+        # Absent amps are skipped, so a 2-amp frame is measured on the amps it has.
+        l0 = self._make_amp_l0(tmp_path, namps=2)
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.0
+
+    def test_no_amp_data_raises(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path, namps=0)
+        with pytest.raises(ValueError):
+            DiagL0(l0).dead_pixel_fractions()
+
+    def test_diag_names_correct(self):
+        assert DiagL0.__dict__["dead_pixel_fractions"]._diag_name == (
+            "dead_pixel_fractions"
+        )
+        assert DiagL0.__dict__["saturated_pixel_fractions"]._diag_name == (
+            "saturated_pixel_fractions"
+        )
 
 
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):

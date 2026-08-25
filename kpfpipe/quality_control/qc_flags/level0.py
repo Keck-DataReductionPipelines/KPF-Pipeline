@@ -336,45 +336,24 @@ class QCL0(QC):
 
     expmeter_flux_sane._qc_key = "EMFLUXOK"
 
-    def _amp_pixel_fraction(self, chip, compare, level):
-        """Largest fraction of any present amp on ``chip`` satisfying ``compare``.
-
-        Raw D.N., before ImageAssembly applies gain or subtracts overscan. Only the
-        amps a readout actually used carry data, so 2-amp and 4-amp frames both
-        work; the worst amp decides, mirroring v2.12's per-amp infobits.
-        """
-        fractions = []
-        for i in range(1, 5):
-            arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
-            # KPF0 stores None-data as array(None, dtype=object); skip absent.
-            if (
-                arr is None
-                or getattr(arr, "dtype", None) == np.dtype(object)
-                or np.size(arr) == 0
-            ):
-                continue
-            fractions.append(np.count_nonzero(compare(arr, level)) / arr.size)
-        return float(max(fractions))
-
-    def _chip_pixels_ok(self, chip):
-        """Both raw pixel-quality fractions of ``chip`` within their limits.
+    def _chip_pixels_ok(self, dead_key, sat_key):
+        """Both raw pixel-quality fractions of a chip within their limits.
 
         Ports v2.12 L0 infobits as one per-chip verdict: at most 5% of any amp
         below 1.0e4 D.N. (dead) and at most 15% above 5.0e8 D.N. (saturated).
+        DiagL0 measures the fractions; this only applies the limits.
         """
-        return (
-            self._amp_pixel_fraction(chip, np.less, 1.0e4) <= 0.05
-            and self._amp_pixel_fraction(chip, np.greater, 5.0e8) <= 0.15
-        )
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        return float(hdr[dead_key]) <= 0.05 and float(hdr[sat_key]) <= 0.15
 
     def green_pixels_ok(self):
         """GREEN raw pixel quality: neither dead nor saturated beyond the limits."""
-        return self._chip_pixels_ok("GREEN")
+        return self._chip_pixels_ok("DEADPXFG", "SATPXFG")
 
     green_pixels_ok._qc_key = "GREENL0"
 
     def red_pixels_ok(self):
         """RED raw pixel quality: neither dead nor saturated beyond the limits."""
-        return self._chip_pixels_ok("RED")
+        return self._chip_pixels_ok("DEADPXFR", "SATPXFR")
 
     red_pixels_ok._qc_key = "REDL0"
