@@ -227,13 +227,13 @@ class QCL0(QC):
 
     def green_ccd_temp_ok(self):
         """GREEN CCD at its temperature setpoint."""
-        return self._ccd_temp_ok("GCCDSTMP")
+        return self._ccd_temp_ok("GTEMPOFF")
 
     green_ccd_temp_ok._qc_key = "GTEMPOK"
 
     def red_ccd_temp_ok(self):
         """RED CCD at its temperature setpoint."""
-        return self._ccd_temp_ok("RCCDSTMP")
+        return self._ccd_temp_ok("RTEMPOFF")
 
     red_ccd_temp_ok._qc_key = "RTEMPOK"
 
@@ -268,23 +268,14 @@ class QCL0(QC):
     elevation_ok._qc_key = "ELEVOK"
 
     def etalon_at_temp(self):
-        """Etalon chamber temperatures within 0.5 mK of their setpoints.
+        """Etalon chambers within 0.5 mK of their setpoints.
 
-        Ports v2.12 ``etalon_set_temp``: the inner bottom lid (ETAV1C3T) and the
-        outer chamber (ETAV1C4T), each against its own setpoint keyword, falling
-        back to the design value when the setpoint is not recorded. The etalon
-        line positions shift with temperature, so an off-setpoint chamber
-        corrupts the drift reference.
+        Ports the limit half of v2.12 ``etalon_set_temp``. DiagL0 measures the
+        signed offset of the chamber furthest from its setpoint; this applies the
+        limit to its magnitude. The etalon line positions shift with temperature,
+        so an off-setpoint chamber corrupts the drift reference.
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
-        for temp_key, set_key, design in (
-            ("ETAV1C3T", "ETAV1C3S", 23.6),
-            ("ETAV1C4T", "ETAV1C4S", 23.9),
-        ):
-            setpoint = float(hdr[set_key]) if set_key in hdr else design
-            if abs(float(hdr[temp_key]) - setpoint) > 0.0005:
-                return False
-        return True
+        return abs(float(self.kpf_obj.headers["QUALITY_CONTROL"]["ETATOFF"])) <= 0.5
 
     etalon_at_temp._qc_key = "ETATMPOK"
 

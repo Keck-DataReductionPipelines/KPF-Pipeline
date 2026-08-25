@@ -1171,7 +1171,7 @@ class TestQCL0Telemetry:
 
     def _make_kpf0_with_temps(self, tmp_path, **offsets):
         l0 = _make_kpf0(tmp_path)
-        l0.headers["QUALITY_CONTROL"].update({"GCCDSTMP": 0.0, "RCCDSTMP": 0.0})
+        l0.headers["QUALITY_CONTROL"].update({"GTEMPOFF": 0.0, "RTEMPOFF": 0.0})
         l0.headers["QUALITY_CONTROL"].update(offsets)
         return l0
 
@@ -1191,7 +1191,7 @@ class TestQCL0Telemetry:
         return l0
 
     def test_ccd_temps_pass(self, tmp_path):
-        l0 = self._make_kpf0_with_temps(tmp_path, GCCDSTMP=-9.9, RCCDSTMP=9.9)
+        l0 = self._make_kpf0_with_temps(tmp_path, GTEMPOFF=-9.9, RTEMPOFF=9.9)
         assert QCL0(l0).green_ccd_temp_ok() is True
         assert QCL0(l0).red_ccd_temp_ok() is True
 
@@ -1199,17 +1199,17 @@ class TestQCL0Telemetry:
         # The limit is on the magnitude, so a cold CCD fails like a warm one.
         assert (
             QCL0(
-                self._make_kpf0_with_temps(tmp_path, GCCDSTMP=-10.5)
+                self._make_kpf0_with_temps(tmp_path, GTEMPOFF=-10.5)
             ).green_ccd_temp_ok()
             is False
         )
         assert (
-            QCL0(self._make_kpf0_with_temps(tmp_path, RCCDSTMP=10.5)).red_ccd_temp_ok()
+            QCL0(self._make_kpf0_with_temps(tmp_path, RTEMPOFF=10.5)).red_ccd_temp_ok()
             is False
         )
 
     def test_chips_judged_separately(self, tmp_path):
-        l0 = self._make_kpf0_with_temps(tmp_path, GCCDSTMP=50.0)
+        l0 = self._make_kpf0_with_temps(tmp_path, GTEMPOFF=50.0)
         assert QCL0(l0).green_ccd_temp_ok() is False
         assert QCL0(l0).red_ccd_temp_ok() is True
 
@@ -1246,24 +1246,30 @@ class TestQCL0Telemetry:
         l0.headers["PRIMARY"]["EL"] = 29.9
         assert QCL0(l0).elevation_ok() is False
 
-    def _make_kpf0_with_etalon(self, tmp_path, **cards):
+    def _make_kpf0_with_etalon(self, tmp_path, offset):
         l0 = _make_kpf0(tmp_path)
-        l0.headers["PRIMARY"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
-        l0.headers["PRIMARY"].update(cards)
+        l0.headers["QUALITY_CONTROL"]["ETATOFF"] = offset
         return l0
 
-    def test_etalon_at_design_setpoints(self, tmp_path):
-        # No ETAV1C3S/ETAV1C4S recorded, so the design values apply.
-        assert QCL0(self._make_kpf0_with_etalon(tmp_path)).etalon_at_temp() is True
-
-    def test_etalon_recorded_setpoint_wins(self, tmp_path):
-        l0 = self._make_kpf0_with_etalon(tmp_path, ETAV1C3T=24.0, ETAV1C3S=24.0)
-        assert QCL0(l0).etalon_at_temp() is True
+    def test_etalon_at_temp_pass(self, tmp_path):
+        # 0.5 mK is the limit itself; an offset must exceed it to fail.
+        assert QCL0(self._make_kpf0_with_etalon(tmp_path, 0.5)).etalon_at_temp() is True
+        assert (
+            QCL0(self._make_kpf0_with_etalon(tmp_path, -0.5)).etalon_at_temp() is True
+        )
 
     def test_etalon_off_setpoint_fails(self, tmp_path):
-        for card in ({"ETAV1C3T": 23.601}, {"ETAV1C4T": 23.899}):
-            l0 = self._make_kpf0_with_etalon(tmp_path, **card)
-            assert QCL0(l0).etalon_at_temp() is False
+        # Judged on magnitude, so a cold chamber fails like a warm one.
+        assert (
+            QCL0(self._make_kpf0_with_etalon(tmp_path, 0.6)).etalon_at_temp() is False
+        )
+        assert (
+            QCL0(self._make_kpf0_with_etalon(tmp_path, -0.6)).etalon_at_temp() is False
+        )
+
+    def test_etalon_missing_offset_raises(self, tmp_path):
+        with pytest.raises(KeyError, match="ETATOFF"):
+            QCL0(_make_kpf0(tmp_path)).etalon_at_temp()
 
     def _make_kpf0_with_agitator(self, tmp_path, *, status="Running", speed=2000.0):
         fn = write_amp_l0(

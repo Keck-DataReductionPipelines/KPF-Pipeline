@@ -171,22 +171,43 @@ class DiagL0(Diagnostics):
         return float(table[table["keyword"] == keyword]["average"][0])
 
     def ccd_temperature_offsets(self):
-        """GCCDSTMP/RCCDSTMP: signed GREEN/RED CCD offset from setpoint [mK].
+        """GTEMPOFF/RTEMPOFF: signed GREEN/RED CCD offset from setpoint [mK].
 
         Ports the measurement half of v2.12 ``CCD_not_at_temp``: the
         exposure-average kpf{green,red}.STA_CCD_T telemetry against the -100 C
         setpoint, signed so the direction of the drift is visible.
         """
         return self._tag(
-            GCCDSTMP=round(
+            GTEMPOFF=round(
                 (self._telemetry_average("kpfgreen.STA_CCD_T") + 100.0) * 1e3, 6
             ),
-            RCCDSTMP=round(
+            RTEMPOFF=round(
                 (self._telemetry_average("kpfred.STA_CCD_T") + 100.0) * 1e3, 6
             ),
         )
 
     ccd_temperature_offsets._diag_name = "ccd_temperature_offsets"
+
+    def etalon_temperature_offset(self):
+        """ETATOFF: signed etalon offset from setpoint [mK], worst chamber.
+
+        Ports the measurement half of v2.12 ``etalon_set_temp``: the inner bottom
+        lid (ETAV1C3T) and the outer chamber (ETAV1C4T), each against its own
+        setpoint keyword, falling back to the design value when the setpoint is
+        not recorded. One keyword covers both, so the chamber furthest from its
+        setpoint is the one reported.
+        """
+        hdr = self.kpf_obj.headers["PRIMARY"]
+        offsets = []
+        for temp_key, set_key, design in (
+            ("ETAV1C3T", "ETAV1C3S", 23.6),
+            ("ETAV1C4T", "ETAV1C4S", 23.9),
+        ):
+            setpoint = float(hdr[set_key]) if set_key in hdr else design
+            offsets.append((float(hdr[temp_key]) - setpoint) * 1e3)
+        return self._tag(ETATOFF=round(max(offsets, key=abs), 6))
+
+    etalon_temperature_offset._diag_name = "etalon_temperature_offset"
 
     def _guider_frames(self):
         """GUIDER_CUBE_ORIGINS rows, the unwritten ones dropped.

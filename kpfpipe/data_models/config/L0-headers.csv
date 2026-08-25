@@ -61,8 +61,9 @@ EMSKCT45,Cumulative EM counts in SKY in 445-551 nm (ADU),QUALITY_CONTROL,int,Dia
 EMSKCT56,Cumulative EM counts in SKY in 551-658 nm (ADU),QUALITY_CONTROL,int,DiagL0
 EMSKCT67,Cumulative EM counts in SKY in 658-764 nm (ADU),QUALITY_CONTROL,int,DiagL0
 EMSKCT78,Cumulative EM counts in SKY in 764-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
-GCCDSTMP,GREEN CCD temperature offset from setpoint (mK),QUALITY_CONTROL,float,DiagL0
-RCCDSTMP,RED CCD temperature offset from setpoint (mK),QUALITY_CONTROL,float,DiagL0
+GTEMPOFF,GREEN CCD temperature offset from setpoint (mK),QUALITY_CONTROL,float,DiagL0
+RTEMPOFF,RED CCD temperature offset from setpoint (mK),QUALITY_CONTROL,float,DiagL0
+ETATOFF,Etalon chamber temperature offset from setpoint (mK),QUALITY_CONTROL,float,DiagL0
 GDRXRMS,Guider x-coordinate RMS guiding error (mas),QUALITY_CONTROL,float,DiagL0
 GDRYRMS,Guider y-coordinate RMS guiding error (mas),QUALITY_CONTROL,float,DiagL0
 GDRRRMS,Guider r-coordinate RMS guiding error (mas),QUALITY_CONTROL,float,DiagL0

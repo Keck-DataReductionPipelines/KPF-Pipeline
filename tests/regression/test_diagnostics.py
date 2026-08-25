@@ -708,24 +708,63 @@ class TestDiagL0CcdTemperatures:
     def test_offset_is_signed_millikelvin(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
         results = DiagL0(l0).ccd_temperature_offsets()
-        assert results["GCCDSTMP"][0] == pytest.approx(-4.0, abs=1e-3)
-        assert results["RCCDSTMP"][0] == pytest.approx(7.0, abs=1e-3)
+        assert results["GTEMPOFF"][0] == pytest.approx(-4.0, abs=1e-3)
+        assert results["RTEMPOFF"][0] == pytest.approx(7.0, abs=1e-3)
 
     def test_at_setpoint_is_zero(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.0, -100.0)
         results = DiagL0(l0).ccd_temperature_offsets()
-        assert results["GCCDSTMP"][0] == 0.0
-        assert results["RCCDSTMP"][0] == 0.0
+        assert results["GTEMPOFF"][0] == 0.0
+        assert results["RTEMPOFF"][0] == 0.0
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
         results = DiagL0(l0).run()
-        for key in ("GCCDSTMP", "RCCDSTMP"):
+        for key in ("GTEMPOFF", "RTEMPOFF"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
     def test_diag_name_correct(self):
         name = DiagL0.__dict__["ccd_temperature_offsets"]._diag_name
         assert name == "ccd_temperature_offsets"
+
+
+class TestDiagL0EtalonTemperature:
+    """Etalon chamber offset from setpoint, off the PRIMARY temperature cards."""
+
+    def _make_l0_with_etalon(self, **cards):
+        l0 = KPF0()
+        l0.headers["PRIMARY"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
+        l0.headers["PRIMARY"].update(cards)
+        return l0
+
+    def test_at_design_setpoints_is_zero(self):
+        # No ETAV1C3S/ETAV1C4S recorded, so the design values apply.
+        l0 = self._make_l0_with_etalon()
+        assert DiagL0(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+
+    def test_offset_is_signed_millikelvin(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
+        results = DiagL0(l0).etalon_temperature_offset()
+        assert results["ETATOFF"][0] == pytest.approx(0.4, abs=1e-3)
+
+    def test_recorded_setpoint_wins_over_design(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=24.0, ETAV1C3S=24.0)
+        assert DiagL0(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+
+    def test_worst_chamber_reported(self):
+        # The outer chamber is further off, so it is the one that survives.
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6002, ETAV1C4T=23.8993)
+        results = DiagL0(l0).etalon_temperature_offset()
+        assert results["ETATOFF"][0] == pytest.approx(-0.7, abs=1e-3)
+
+    def test_written_to_quality_control(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["ETATOFF"] == results["ETATOFF"][0]
+
+    def test_diag_name_correct(self):
+        name = DiagL0.__dict__["etalon_temperature_offset"]._diag_name
+        assert name == "etalon_temperature_offset"
 
 
 class TestDiagL0Guider:
