@@ -1585,7 +1585,7 @@ class TestQCL1:
         expected = {
             "data_present": "DATAPRL1",
             "required_keywords_present": "KWRDPRL1",
-            "read_noise_ok": "READNSOK",
+            "read_noise_ok": "RNOK",
             "read_noise_nongauss_ok": "RNNGOK",
             "bias_ok": "BIASOK",
             "dark_ok": "DARKOK",
@@ -1618,7 +1618,7 @@ class TestQCL1Run:
         qc_keys = [
             "DATAPRL1",
             "KWRDPRL1",
-            "READNSOK",
+            "RNOK",
             "RNNGOK",
             "BIASOK",
             "DARKOK",

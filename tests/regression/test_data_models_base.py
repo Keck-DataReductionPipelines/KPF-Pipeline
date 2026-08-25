@@ -175,9 +175,9 @@ class TestRegistryConformance:
         # rather than importing data_models.keyword_registry (see _registry.py).
         reg = KPF1.keyword_registry
         # Representative checks live under their own level.
-        assert "READNSOK" in reg.qc_flag_keywords_by_level["L1"]
+        assert "RNOK" in reg.qc_flag_keywords_by_level["L1"]
         assert "DATAPRL2" in reg.qc_flag_keywords_by_level["L2"]
-        assert "READNSOK" not in reg.qc_flag_keywords_by_level["L2"]
+        assert "RNOK" not in reg.qc_flag_keywords_by_level["L2"]
 
     def test_per_extension_keyword_expands_across_orderlets(self):
         # A "CCF*" Extension registers the keyword on CCF1..CCF5 while staying

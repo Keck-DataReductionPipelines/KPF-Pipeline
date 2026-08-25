@@ -129,19 +129,19 @@ class TestQCFlags:
 
     def test_summary_lists_all_failing_flags_cross_level(self, caplog):
         # The warning summary names every failing flag on QUALITY_CONTROL,
-        # including one propagated from a lower level (READNSOK from L1).
+        # including one propagated from a lower level (RNOK from L1).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (
             1,
             "required present",
         )  # avoid raise
-        l2.headers["QUALITY_CONTROL"]["READNSOK"] = (0, "L1 read noise (propagated)")
+        l2.headers["QUALITY_CONTROL"]["RNOK"] = (0, "L1 read noise (propagated)")
         l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "L2 variance positive")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
         assert "L2VAROK" in caplog.text
-        assert "READNSOK" in caplog.text
+        assert "RNOK" in caplog.text
 
 
 @pytest.mark.usefixtures("mini_detector")
@@ -347,14 +347,14 @@ class TestCheckpointL1:
             CheckpointL1(l1).run()
 
     def test_run_warns_when_read_noise_out_of_range(self, caplog):
-        # READNSOK is not a RAISE_FLAG, so an out-of-range amp lands in the warning
+        # RNOK is not a RAISE_FLAG, so an out-of-range amp lands in the warning
         # summary rather than raising.
         l1 = _make_l1()
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "RN e-")
         with caplog.at_level(logging.WARNING):
             CheckpointL1(l1).run()
         assert "failing QC flags" in caplog.text
-        assert "READNSOK" in caplog.text
+        assert "RNOK" in caplog.text
 
 
 # ---------------------------------------------------------------------------
