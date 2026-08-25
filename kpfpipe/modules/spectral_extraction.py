@@ -453,10 +453,11 @@ class SpectralExtraction:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj):
-        """Write the order trace the spectra were extracted with and the era it
-        was chosen for (inferred after ``to_kpf2`` copied the L1 PRIMARY)."""
+        """Write the order trace the spectra were extracted with (by filename --
+        it always comes from ``reference/order_traces``) and the era it was
+        chosen for (inferred after ``to_kpf2`` copied the L1 PRIMARY)."""
         if self._order_trace_path is not None:
-            l2_obj.set_keyword("TRACFILE", self._order_trace_path)
+            l2_obj.set_keyword("TRACEREF", os.path.basename(self._order_trace_path))
         if self._instera is not None:
             l2_obj.set_keyword("INSTERA", self._instera)
 

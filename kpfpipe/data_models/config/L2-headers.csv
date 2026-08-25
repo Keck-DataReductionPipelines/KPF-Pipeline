@@ -8,7 +8,7 @@ BVGREEN,Barycentric velocity for the GREEN CCD [km/s],BARYCORR_KMS,float,Barycen
 BVRED,Barycentric velocity for the RED CCD [km/s],BARYCORR_KMS,float,BarycentricCorrection
 BZGREEN,Barycentric redshift for the GREEN CCD,BARYCORR_Z,float,BarycentricCorrection
 BZRED,Barycentric redshift for the RED CCD,BARYCORR_Z,float,BarycentricCorrection
-TRACFILE,Order trace full path,RECEIPT,str,SpectralExtraction
+TRACEREF,Order trace reference filename,RECEIPT,str,SpectralExtraction
 # ================================================
 # Quality Control
 # ================================================

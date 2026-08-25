@@ -757,7 +757,7 @@ class TestOrderTraceSelection:
     def test_writes_the_trace_path_to_the_l2_receipt(
         self, minimal_l1, tmp_path, monkeypatch
     ):
-        traces = _stub_reference_tree(tmp_path, monkeypatch)
+        _stub_reference_tree(tmp_path, monkeypatch)
 
         def extract(self, chip, fibers, extraction_method, **kwargs):
             self._read_order_trace_reference()
@@ -766,9 +766,7 @@ class TestOrderTraceSelection:
         monkeypatch.setattr(SpectralExtraction, "extract_ffi", extract)
         l2 = SpectralExtraction(minimal_l1).perform(fibers=[])
 
-        assert l2.headers["RECEIPT"]["TRACFILE"] == str(
-            traces / "order_trace_20231101.csv"
-        )
+        assert l2.headers["RECEIPT"]["TRACEREF"] == "order_trace_20231101.csv"
 
     def test_writes_the_corrected_instera_to_the_l2(
         self, minimal_l1, tmp_path, monkeypatch
