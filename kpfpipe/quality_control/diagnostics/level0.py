@@ -99,14 +99,12 @@ class DiagL0(Diagnostics):
 
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
 
-    def _amp_pixel_fraction(self, chip, compare, level):
-        """Largest fraction of any present amp on ``chip`` satisfying ``compare``.
+    def _present_amps(self, chip):
+        """Yield ``(i, array)`` for each present, non-empty ``{chip}_AMP{i}``.
 
-        Raw D.N., before ImageAssembly applies gain or subtracts overscan. Only the
-        amps a readout actually used carry data, so 2-amp and 4-amp frames both
-        work; the worst amp decides, mirroring v2.12's per-amp infobits.
+        Only the amps a readout actually used carry data, so 2-amp and 4-amp
+        frames both work.
         """
-        fractions = []
         for i in range(1, 5):
             arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
             # KPF0 stores None-data as array(None, dtype=object); skip absent.
@@ -116,7 +114,18 @@ class DiagL0(Diagnostics):
                 or np.size(arr) == 0
             ):
                 continue
-            fractions.append(np.count_nonzero(compare(arr, level)) / arr.size)
+            yield i, arr
+
+    def _amp_pixel_fraction(self, chip, compare, level):
+        """Largest fraction of any present amp on ``chip`` satisfying ``compare``.
+
+        Raw D.N., before ImageAssembly applies gain or subtracts overscan; the
+        worst amp decides, mirroring v2.12's per-amp infobits.
+        """
+        fractions = [
+            np.count_nonzero(compare(arr, level)) / arr.size
+            for _, arr in self._present_amps(chip)
+        ]
         return round(float(max(fractions)), 6)
 
     def dead_pixel_fractions(self):
@@ -136,3 +145,21 @@ class DiagL0(Diagnostics):
         )
 
     saturated_pixel_fractions._diag_name = "saturated_pixel_fractions"
+
+    def amp_percentiles(self):
+        """P{16,50,84}{G,R}AMP{1-4}: raw D.N. percentiles of each amplifier image.
+
+        Ports v2.12's per-amp MEDGRN*/P16*/P84* statistics: the whole raw amp
+        image, prescan and overscan included, NaNs excluded. Absent amps emit no
+        keyword, so a 2-amp readout writes only the amps it has.
+        """
+        values = {}
+        for chip, letter in (("GREEN", "G"), ("RED", "R")):
+            for i, arr in self._present_amps(chip):
+                for pct in (16, 50, 84):
+                    values[f"P{pct}{letter}AMP{i}"] = round(
+                        float(np.nanpercentile(arr, pct)), 6
+                    )
+        return self._tag(**values)
+
+    amp_percentiles._diag_name = "amp_percentiles"

@@ -36,3 +36,27 @@ DEADPXFG,Fraction of raw GREEN pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,Dia
 DEADPXFR,Fraction of raw RED pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,DiagL0
 SATPXFG,Fraction of raw GREEN pixels above 5.0e8 D.N.,QUALITY_CONTROL,float,DiagL0
 SATPXFR,Fraction of raw RED pixels above 5.0e8 D.N.,QUALITY_CONTROL,float,DiagL0
+P16GAMP1,16th percentile of raw GREEN_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
+P16GAMP2,16th percentile of raw GREEN_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
+P16GAMP3,16th percentile of raw GREEN_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0
+P16GAMP4,16th percentile of raw GREEN_AMP4 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50GAMP1,50th percentile of raw GREEN_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50GAMP2,50th percentile of raw GREEN_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50GAMP3,50th percentile of raw GREEN_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50GAMP4,50th percentile of raw GREEN_AMP4 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84GAMP1,84th percentile of raw GREEN_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84GAMP2,84th percentile of raw GREEN_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84GAMP3,84th percentile of raw GREEN_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84GAMP4,84th percentile of raw GREEN_AMP4 (D.N.),QUALITY_CONTROL,float,DiagL0
+P16RAMP1,16th percentile of raw RED_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
+P16RAMP2,16th percentile of raw RED_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
+P16RAMP3,16th percentile of raw RED_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0
+P16RAMP4,16th percentile of raw RED_AMP4 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50RAMP1,50th percentile of raw RED_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50RAMP2,50th percentile of raw RED_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50RAMP3,50th percentile of raw RED_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0
+P50RAMP4,50th percentile of raw RED_AMP4 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84RAMP1,84th percentile of raw RED_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84RAMP2,84th percentile of raw RED_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84RAMP3,84th percentile of raw RED_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0
+P84RAMP4,84th percentile of raw RED_AMP4 (D.N.),QUALITY_CONTROL,float,DiagL0

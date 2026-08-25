@@ -440,6 +440,57 @@ class TestDiagL0PixelFractions:
         )
 
 
+class TestDiagL0AmpPercentiles:
+    """Per-amplifier raw D.N. percentiles: 2 chips x 3 percentiles x 4 amps."""
+
+    def _make_amp_l0(self, tmp_path, namps=4):
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
+        )
+        return KPF0.from_fits(fn)
+
+    def test_all_24_keywords_emitted(self, tmp_path):
+        results = DiagL0(self._make_amp_l0(tmp_path)).amp_percentiles()
+        expected = {
+            f"P{pct}{letter}AMP{i}"
+            for letter in ("G", "R")
+            for pct in (16, 50, 84)
+            for i in range(1, 5)
+        }
+        assert set(results) == expected
+
+    def test_percentiles_match_the_amp_image(self, tmp_path):
+        # A 0..99 ramp over the amp: the percentiles are of the raw image as
+        # stored, prescan and overscan included.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP2"].flat[:] = np.arange(100.0)
+        results = DiagL0(l0).amp_percentiles()
+        for pct in (16, 50, 84):
+            assert results[f"P{pct}GAMP2"][0] == pytest.approx(
+                np.percentile(np.arange(100.0), pct)
+            )
+
+    def test_nans_excluded(self, tmp_path):
+        # NaN pixels are dropped rather than poisoning the whole amp.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["RED_AMP1"].flat[:10] = np.nan
+        assert DiagL0(l0).amp_percentiles()["P50RAMP1"][0] == 1.0e6
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["P84GAMP3"] == results["P84GAMP3"][0]
+
+    def test_absent_amps_emit_no_keyword(self, tmp_path):
+        # A 2-amp readout writes only the amps it has.
+        results = DiagL0(self._make_amp_l0(tmp_path, namps=2)).amp_percentiles()
+        assert "P50GAMP1" in results
+        assert "P50GAMP3" not in results
+
+    def test_diag_name_correct(self):
+        assert DiagL0.__dict__["amp_percentiles"]._diag_name == "amp_percentiles"
+
+
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
     """A KPF1 carrying a PRIMARY DATE-OBS, RECEIPT master paths, and assembled CCDs.
 
