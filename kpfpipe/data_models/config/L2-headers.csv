@@ -1,6 +1,6 @@
 Keyword,Description,Extension,DataType,PopulatedBy
 # ================================================
-# Science
+# Processing
 # ================================================
 CCD1BJD,GREEN photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
 CCD2BJD,RED photon-weighted mid-time [BJD_TDB],BJD_TDB,float,BarycentricCorrection
@@ -14,6 +14,13 @@ TRACFILE,Order trace full path,RECEIPT,str,SpectralExtraction
 # ================================================
 DATAPRL2,QC: L2 FLUX/VAR/WAVE present and populated,QUALITY_CONTROL,int,QCL2
 KWRDPRL2,QC: required L2 PRIMARY keywords present,QUALITY_CONTROL,int,QCL2
+L2NANOK,QC: L2 NaN fraction <= 1%,QUALITY_CONTROL,int,QCL2
+L2FLXOK,QC: L2 non-positive flux fraction < 0.5,QUALITY_CONTROL,int,QCL2
+L2VAROK,QC: no negative L2 variance where flux finite,QUALITY_CONTROL,int,QCL2
+L2SNROK,QC: science SNR finite and above floor,QUALITY_CONTROL,int,QCL2
+# ================================================
+# Diagnostics
+# ================================================
 NANSCI1,NaN pixel count SCI1 (green+red),QUALITY_CONTROL,int,DiagL2
 NANSCI2,NaN pixel count SCI2 (green+red),QUALITY_CONTROL,int,DiagL2
 NANSCI3,NaN pixel count SCI3 (green+red),QUALITY_CONTROL,int,DiagL2
@@ -83,7 +90,3 @@ FRS2M852,Median SKY/SCI2 flux ratio near 852nm,QUALITY_CONTROL,float,DiagL2
 FRS2U852,Unc. of median SKY/SCI2 ratio near 852nm,QUALITY_CONTROL,float,DiagL2
 FRC2M852,Median CAL/SCI2 flux ratio near 852nm,QUALITY_CONTROL,float,DiagL2
 FRC2U852,Unc. of median CAL/SCI2 ratio near 852nm,QUALITY_CONTROL,float,DiagL2
-L2NANOK,QC: L2 NaN fraction <= 1%,QUALITY_CONTROL,int,QCL2
-L2FLXOK,QC: L2 non-positive flux fraction < 0.5,QUALITY_CONTROL,int,QCL2
-L2VAROK,QC: no negative L2 variance where flux finite,QUALITY_CONTROL,int,QCL2
-L2SNROK,QC: science SNR finite and above floor,QUALITY_CONTROL,int,QCL2

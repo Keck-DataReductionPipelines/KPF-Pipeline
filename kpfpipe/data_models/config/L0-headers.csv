@@ -1,6 +1,6 @@
 Keyword,Description,Extension,DataType,PopulatedBy
 # ================================================
-# Science
+# Processing
 # ================================================
 ORIGID,Original L0 observation ID,RECEIPT,str,KPF0.from_fits
 KOAID,KOA archive ID (WMKO req.),RECEIPT,str,KPF0.from_fits
@@ -25,11 +25,14 @@ EMTIMEOK,QC: exposure meter times consistent with shutter window,QUALITY_CONTROL
 EMFLUXOK,QC: exposure meter flux not saturated or negative,QUALITY_CONTROL,int,QCL0
 GREENL0,QC: GREEN dead/over-exposed pixel fractions within limits,QUALITY_CONTROL,int,QCL0
 REDL0,QC: RED dead/over-exposed pixel fractions within limits,QUALITY_CONTROL,int,QCL0
-TCSOFF,Pointing offset from DCS target (arcsec),QUALITY_CONTROL,float,DiagL0
-OBJOFF,Pointing offset from OBJECT (SIMBAD) position (arcsec),QUALITY_CONTROL,float,DiagL0
+NOTJUNK,QC: obs_id not in junk list,QUALITY_CONTROL,int,QCL0
+# ================================================
+# Diagnostics
+# ================================================
+TCSOFF,Pointing offset from TCS/DCS target (arcsec),QUALITY_CONTROL,float,DiagL0
+OBJOFF,Pointing offset from OBJECT SIMBAD position (arcsec),QUALITY_CONTROL,float,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),QUALITY_CONTROL,float,DiagL0
 DEADPXFG,Fraction of raw GREEN pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,DiagL0
 DEADPXFR,Fraction of raw RED pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,DiagL0
 SATPXFG,Fraction of raw GREEN pixels above 5.0e8 D.N.,QUALITY_CONTROL,float,DiagL0
 SATPXFR,Fraction of raw RED pixels above 5.0e8 D.N.,QUALITY_CONTROL,float,DiagL0
-NOTJUNK,QC: obs_id not in junk list,QUALITY_CONTROL,int,QCL0

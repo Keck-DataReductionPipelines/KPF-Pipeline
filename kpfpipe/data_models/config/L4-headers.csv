@@ -1,6 +1,6 @@
 Keyword,Description,Extension,DataType,PopulatedBy
 # ================================================
-# Science
+# Processing
 # ================================================
 CCD1RV,GREEN SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
 CCD2RV,RED SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
@@ -32,11 +32,14 @@ VELMASK,CCF mask hole full width [km/s],CCF*,float,RadialVelocity
 # ================================================
 DATAPRL4,QC: L4 CCF/CCF_VAR/RV present and populated,QUALITY_CONTROL,int,QCL4
 KWRDPRL4,QC: required L4 PRIMARY keywords present,QUALITY_CONTROL,int,QCL4
+BERVOK,QC: per-order BERV range within 0.04 m/s,QUALITY_CONTROL,int,QCL4
+BJDOK,QC: per-order BJD range within 1 s,QUALITY_CONTROL,int,QCL4
+# ================================================
+# Diagnostics
+# ================================================
 BJDMEAN,Photon-weighted mean of per-order BJD_TDB (SCI2),QUALITY_CONTROL,float,DiagL4
 BJDSTD,Photon-weighted std of per-order BJD [s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BJDRNG,Per-order BJD range [s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BERVMEAN,Photon-weighted mean of per-order BERV [km/s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BERVSTD,Photon-weighted std of per-order BERV [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
 BERVRNG,Per-order BERV range [m/s] (SCI2),QUALITY_CONTROL,float,DiagL4
-BERVOK,QC: per-order BERV range within 0.04 m/s,QUALITY_CONTROL,int,QCL4
-BJDOK,QC: per-order BJD range within 1 s,QUALITY_CONTROL,int,QCL4
