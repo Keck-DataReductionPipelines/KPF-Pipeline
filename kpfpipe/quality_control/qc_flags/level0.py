@@ -71,13 +71,18 @@ class QCL0(QC):
     header_keywords_present._qc_key = "KWRDPRL0"
 
     def telemetry_present(self):
-        """TELEMETRY extension present and carrying rows.
+        """TELEMETRY extension present and populated.
 
-        Ports v2.12 ``telemetry_present``, tightened to require rows: the bench
-        thermal and vacuum state during the exposure is recorded nowhere else and
-        cannot be recovered once the frame is written.
+        Ports v2.12 ``telemetry_present``, tightened to the DATAPRL0 standard of
+        populated: rows carrying at least one finite average, so an all-NaN
+        placeholder is not mistaken for a recording. The bench thermal and vacuum
+        state during the exposure is recorded nowhere else and cannot be
+        recovered once the frame is written.
         """
-        return len(self.kpf_obj.data.get("TELEMETRY", [])) > 0
+        table = self.kpf_obj.data.get("TELEMETRY", [])
+        if len(table) == 0:
+            return False
+        return bool(np.any(np.isfinite(np.asarray(table["average"], dtype=float))))
 
     telemetry_present._qc_key = "TELEPR"
 

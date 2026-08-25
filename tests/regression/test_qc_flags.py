@@ -444,6 +444,17 @@ class TestQCL0:
         l0 = self._make_kpf0_with_telemetry(tmp_path, nrows=0)
         assert QCL0(l0).telemetry_present() is False
 
+    def test_telemetry_all_nan_fails(self, tmp_path):
+        # A table of rows whose averages never recorded is not a recording.
+        l0 = self._make_kpf0_with_telemetry(tmp_path, nrows=2)
+        l0.data["TELEMETRY"]["average"] = np.nan
+        assert QCL0(l0).telemetry_present() is False
+
+    def test_telemetry_one_finite_average_passes(self, tmp_path):
+        l0 = self._make_kpf0_with_telemetry(tmp_path, nrows=2)
+        l0.data["TELEMETRY"]["average"] = [np.nan, 20.0]
+        assert QCL0(l0).telemetry_present() is True
+
     def test_telemetry_absent_fails(self, tmp_path):
         assert QCL0(_make_kpf0(tmp_path)).telemetry_present() is False
 
