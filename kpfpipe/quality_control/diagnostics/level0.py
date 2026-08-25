@@ -165,20 +165,22 @@ class DiagL0(Diagnostics):
     amp_percentiles._diag_name = "amp_percentiles"
 
     def _expmeter_flux(self, ext):
-        """One EM fiber's raw flux, readings x wavelength channels.
+        """One EM fiber's channel wavelengths [nm] and raw flux, readings x channels.
 
-        Numeric column labels are the wavelength channels; the Date* columns are
-        not.
+        The numeric column labels are the wavelength channels, in nm at L0 --
+        ImageAssembly renames them to Angstroms only at the L0 -> L1 boundary. The
+        Date* columns are not channels.
         """
         table = self.kpf_obj.data[ext]
-        channels = []
+        waves, channels = [], []
         for name in table.colnames:
             try:
-                float(name)
+                wave = float(name)
             except ValueError:
                 continue
+            waves.append(wave)
             channels.append(np.asarray(table[name], dtype=float))
-        return np.column_stack(channels)
+        return np.array(waves), np.column_stack(channels)
 
     @staticmethod
     def _longest_run(mask):
@@ -203,7 +205,7 @@ class DiagL0(Diagnostics):
         """
         values = {}
         for ext, fiber in (("EXPMETER_SCI", "SCI"), ("EXPMETER_SKY", "SKY")):
-            flux = self._expmeter_flux(ext)
+            _, flux = self._expmeter_flux(ext)
             interior = flux[1:-1] if len(flux) >= 3 else flux
             values[f"EM{fiber}SAT"] = round(
                 float(np.count_nonzero(interior > 0.9 * 1.93e6) / len(interior)), 6
@@ -213,3 +215,40 @@ class DiagL0(Diagnostics):
         return self._tag(**values)
 
     expmeter_channel_metrics._diag_name = "expmeter_channel_metrics"
+
+    def expmeter_counts(self):
+        """EM{SC,SK}CT{48,45,56,67,78}: cumulative EM counts [ADU] per band.
+
+        Ports v2.12 ``AnalyzeEM``: raw counts summed over every reading and over
+        the channels of each band, per fiber. The 445-870 nm total spans the EM's
+        full range and the four sub-bands partition it at v2.12's 551.25, 657.50
+        and 763.75 nm edges, so the sub-bands always add up to the total.
+        """
+        values = {}
+        for ext, fiber in (("EXPMETER_SCI", "SC"), ("EXPMETER_SKY", "SK")):
+            waves, flux = self._expmeter_flux(ext)
+            per_channel = np.nansum(flux, axis=0)
+            for band, mask in (
+                ("48", (waves >= 445.0) & (waves < 870.0)),
+                ("45", (waves >= 445.0) & (waves < 551.25)),
+                ("56", (waves >= 551.25) & (waves < 657.50)),
+                ("67", (waves >= 657.50) & (waves < 763.75)),
+                ("78", (waves >= 763.75) & (waves < 870.0)),
+            ):
+                values[f"EM{fiber}CT{band}"] = int(np.nansum(per_channel[mask]))
+        return self._tag(**values)
+
+    expmeter_counts._diag_name = "expmeter_counts"
+
+    def sky_sci_flux_ratio(self):
+        """SKYSCIMS: SKY/SCI flux ratio in the main spectrometer, scaled from EM.
+
+        Ports v2.12 ``AnalyzeEM.SKY_SCI_main_spectrometer``: total SKY counts over
+        total SCI counts, the SKY side divided by the 14.1 SKY-to-SCI flux ratio
+        measured on bright twilight observations.
+        """
+        sci = np.nansum(self._expmeter_flux("EXPMETER_SCI")[1])
+        sky = np.nansum(self._expmeter_flux("EXPMETER_SKY")[1])
+        return self._tag(SKYSCIMS=round(float(sky / 14.1 / sci), 6))
+
+    sky_sci_flux_ratio._diag_name = "sky_sci_flux_ratio"

@@ -44,6 +44,17 @@ EMSCIINF,Longest run of non-finite SCI exposure meter channels,QUALITY_CONTROL,i
 EMSKYSAT,Saturated SKY exposure meter elements per reading,QUALITY_CONTROL,float,DiagL0
 EMSKYNEG,Longest run of negative SKY exposure meter channels,QUALITY_CONTROL,int,DiagL0
 EMSKYINF,Longest run of non-finite SKY exposure meter channels,QUALITY_CONTROL,int,DiagL0
+SKYSCIMS,SKY/SCI flux ratio in main spectrometer scaled from EM data,QUALITY_CONTROL,float,DiagL0
+EMSCCT48,Cumulative EM counts in SCI in 445-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT45,Cumulative EM counts in SCI in 445-551 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT56,Cumulative EM counts in SCI in 551-658 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT67,Cumulative EM counts in SCI in 658-764 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSCCT78,Cumulative EM counts in SCI in 764-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT48,Cumulative EM counts in SKY in 445-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT45,Cumulative EM counts in SKY in 445-551 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT56,Cumulative EM counts in SKY in 551-658 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT67,Cumulative EM counts in SKY in 658-764 nm (ADU),QUALITY_CONTROL,int,DiagL0
+EMSKCT78,Cumulative EM counts in SKY in 764-870 nm (ADU),QUALITY_CONTROL,int,DiagL0
 P16GAMP1,16th percentile of raw GREEN_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
 P16GAMP2,16th percentile of raw GREEN_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
 P16GAMP3,16th percentile of raw GREEN_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0

@@ -610,6 +610,84 @@ class TestDiagL0ExpmeterChannels:
         )
 
 
+class TestDiagL0ExpmeterCounts:
+    """Cumulative EM counts per wavelength band, and the SKY/SCI ratio.
+
+    One channel per band plus a 900 nm channel outside the 445-870 nm range, so
+    an out-of-band channel is seen to be dropped everywhere. Column labels are nm:
+    ImageAssembly converts them to Angstroms only at L0 -> L1.
+    """
+
+    _WAVES = [500.0, 600.0, 700.0, 800.0, 900.0]
+
+    def _make_l0_with_expmeter(self, tmp_path, sci_counts, sky_counts):
+        def table(counts):
+            columns = {
+                "Date-Beg": ["2024-09-23T09:12:09.484", "2024-09-23T09:12:12.484"]
+            }
+            columns.update(
+                {
+                    str(w): [float(c), float(c)]
+                    for w, c in zip(self._WAVES, counts, strict=True)
+                }
+            )
+            return Table(columns)
+
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.BinTableHDU(table(sci_counts), name="EXPMETER_SCI"),
+                fits.BinTableHDU(table(sky_counts), name="EXPMETER_SKY"),
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_counts_summed_over_readings_and_bands(self, tmp_path):
+        # Two readings of each channel, so every band doubles its per-reading count.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 2, 4, 8, 16], [1, 1, 1, 1, 1])
+        results = DiagL0(l0).expmeter_counts()
+        assert results["EMSCCT45"][0] == 2  # 500 nm
+        assert results["EMSCCT56"][0] == 4  # 600 nm
+        assert results["EMSCCT67"][0] == 8  # 700 nm
+        assert results["EMSCCT78"][0] == 16  # 800 nm; the 900 nm channel is dropped
+        assert results["EMSCCT48"][0] == 30  # 445-870 nm: the four sub-bands
+
+    def test_sky_fiber_counted_separately(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [3, 0, 0, 0, 0])
+        results = DiagL0(l0).expmeter_counts()
+        assert results["EMSKCT45"][0] == 6
+        assert results["EMSCCT45"][0] == 2
+
+    def test_nans_excluded(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        l0.data["EXPMETER_SCI"]["500.0"][0] = np.nan
+        results = DiagL0(l0).expmeter_counts()
+        assert results["EMSCCT45"][0] == 1
+
+    def test_sky_sci_ratio_scaled_by_throughput(self, tmp_path):
+        # Equal SKY and SCI totals -> the ratio is 1/14.1, the twilight throughput.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        results = DiagL0(l0).sky_sci_flux_ratio()
+        assert results["SKYSCIMS"][0] == round(1 / 14.1, 6)
+
+    def test_sky_sci_ratio_uses_every_channel(self, tmp_path):
+        # The ratio is over all channels, the out-of-band 900 nm one included.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [2, 2, 2, 2, 2])
+        results = DiagL0(l0).sky_sci_flux_ratio()
+        assert results["SKYSCIMS"][0] == round(2 / 14.1, 6)
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        results = DiagL0(l0).run()
+        for key in ("SKYSCIMS", "EMSCCT48", "EMSKCT78"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_names_correct(self):
+        assert DiagL0.__dict__["expmeter_counts"]._diag_name == "expmeter_counts"
+        assert DiagL0.__dict__["sky_sci_flux_ratio"]._diag_name == "sky_sci_flux_ratio"
+
+
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
     """A KPF1 carrying a PRIMARY DATE-OBS, RECEIPT master paths, and assembled CCDs.
 
