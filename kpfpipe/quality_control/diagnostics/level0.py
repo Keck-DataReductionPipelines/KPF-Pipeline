@@ -163,3 +163,53 @@ class DiagL0(Diagnostics):
         return self._tag(**values)
 
     amp_percentiles._diag_name = "amp_percentiles"
+
+    def _expmeter_flux(self, ext):
+        """One EM fiber's raw flux, readings x wavelength channels.
+
+        Numeric column labels are the wavelength channels; the Date* columns are
+        not.
+        """
+        table = self.kpf_obj.data[ext]
+        channels = []
+        for name in table.colnames:
+            try:
+                float(name)
+            except ValueError:
+                continue
+            channels.append(np.asarray(table[name], dtype=float))
+        return np.column_stack(channels)
+
+    @staticmethod
+    def _longest_run(mask):
+        """Longest run of adjacent True values in a 1D channel mask."""
+        longest = run = 0
+        for flagged in mask:
+            run = run + 1 if flagged else 0
+            longest = max(longest, run)
+        return longest
+
+    def expmeter_channel_metrics(self):
+        """EM{SCI,SKY}{SAT,NEG,INF}: per-fiber exposure meter channel metrics.
+
+        Ports v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, which judge
+        each fiber on its own. SAT is saturated elements per reading -- elements
+        above 90% of the 1.93e6 reduced-spectrum saturation level, over the
+        interior readings (the first and last are partial and are dropped when
+        there are 3+) -- the form v2.12 gates at 1.5. NEG is the longest run of
+        adjacent channels whose time-summed flux is negative, the signature of
+        bias over-subtraction in the raw EM images; INF is the same run length for
+        channels holding a non-finite reading.
+        """
+        values = {}
+        for ext, fiber in (("EXPMETER_SCI", "SCI"), ("EXPMETER_SKY", "SKY")):
+            flux = self._expmeter_flux(ext)
+            interior = flux[1:-1] if len(flux) >= 3 else flux
+            values[f"EM{fiber}SAT"] = round(
+                float(np.count_nonzero(interior > 0.9 * 1.93e6) / len(interior)), 6
+            )
+            values[f"EM{fiber}NEG"] = self._longest_run(flux.sum(axis=0) < 0)
+            values[f"EM{fiber}INF"] = self._longest_run(~np.isfinite(flux).all(axis=0))
+        return self._tag(**values)
+
+    expmeter_channel_metrics._diag_name = "expmeter_channel_metrics"

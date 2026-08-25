@@ -448,7 +448,7 @@ class TestQCL0:
         assert QCL0(_make_kpf0(tmp_path)).telemetry_present() is False
 
     def test_teleprl0_key_present(self):
-        assert QCL0.__dict__["telemetry_present"]._qc_key == "TELEPRL0"
+        assert QCL0.__dict__["telemetry_present"]._qc_key == "TELEPR"
 
     def _make_kpf0_with_cahk(self, tmp_path, shape):
         fn = write_amp_l0(
@@ -470,8 +470,74 @@ class TestQCL0:
     def test_cahk_absent_fails(self, tmp_path):
         assert QCL0(_make_kpf0(tmp_path)).cahk_present() is False
 
+    def test_cahk_all_non_finite_fails(self, tmp_path):
+        # An all-NaN image is a placeholder, not a readout.
+        l0 = self._make_kpf0_with_cahk(tmp_path, (16, 16))
+        l0.data["CA_HK"][:] = np.nan
+        assert QCL0(l0).cahk_present() is False
+
     def test_cahkprl0_key_present(self):
-        assert QCL0.__dict__["cahk_present"]._qc_key == "CAHKPRL0"
+        assert QCL0.__dict__["cahk_present"]._qc_key == "CAHKPR"
+
+    def _make_kpf0_with_em_table(self, tmp_path, columns, ext="EXPMETER_SCI"):
+        other = "EXPMETER_SKY" if ext == "EXPMETER_SCI" else "EXPMETER_SCI"
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00007.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.BinTableHDU(Table(columns), name=ext),
+                fits.BinTableHDU(
+                    Table({"Date-Beg": ["2024-09-23T09:12:09.484"], "5000.0": [1.0]}),
+                    name=other,
+                ),
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    _EM_GOOD_COLUMNS = {
+        "Date-Beg": ["2024-09-23T09:12:09.484"],
+        "5000.0": [1000.0],
+        "5001.0": [2000.0],
+    }
+
+    def test_expmeter_present_pass(self, tmp_path):
+        l0 = self._make_kpf0_with_em_table(tmp_path, self._EM_GOOD_COLUMNS)
+        assert QCL0(l0).expmeter_sci_present() is True
+        assert QCL0(l0).expmeter_sky_present() is True
+
+    def test_expmeter_absent_fails(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        assert QCL0(l0).expmeter_sci_present() is False
+        assert QCL0(l0).expmeter_sky_present() is False
+
+    def test_expmeter_no_readings_fails(self, tmp_path):
+        columns = {k: [] for k in self._EM_GOOD_COLUMNS}
+        l0 = self._make_kpf0_with_em_table(tmp_path, columns)
+        assert QCL0(l0).expmeter_sci_present() is False
+
+    def test_expmeter_no_channel_columns_fails(self, tmp_path):
+        # Timestamps alone are not a readout.
+        columns = {"Date-Beg": ["2024-09-23T09:12:09.484"]}
+        l0 = self._make_kpf0_with_em_table(tmp_path, columns)
+        assert QCL0(l0).expmeter_sci_present() is False
+
+    def test_expmeter_all_non_finite_fails(self, tmp_path):
+        columns = dict(
+            self._EM_GOOD_COLUMNS, **{"5000.0": [np.nan], "5001.0": [np.nan]}
+        )
+        l0 = self._make_kpf0_with_em_table(tmp_path, columns)
+        assert QCL0(l0).expmeter_sci_present() is False
+
+    def test_expmeter_fibers_judged_separately(self, tmp_path):
+        # A broken SKY leaves the SCI verdict alone.
+        columns = {"Date-Beg": ["2024-09-23T09:12:09.484"]}
+        l0 = self._make_kpf0_with_em_table(tmp_path, columns, ext="EXPMETER_SKY")
+        assert QCL0(l0).expmeter_sci_present() is True
+        assert QCL0(l0).expmeter_sky_present() is False
+
+    def test_expmeter_presence_keys_present(self):
+        assert QCL0.__dict__["expmeter_sci_present"]._qc_key == "EMSCIPR"
+        assert QCL0.__dict__["expmeter_sky_present"]._qc_key == "EMSKYPR"
 
     def test_times_consistent_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
@@ -977,49 +1043,52 @@ class TestQCL0:
     def test_emtimeok_key_present(self):
         assert QCL0.__dict__["expmeter_times_consistent"]._qc_key == "EMTIMEOK"
 
+    # expmeter_flux_sane reads the DiagL0 channel metrics, so these seed them
+    # directly; the measurement itself is covered in test_diagnostics.py.
+    def _make_kpf0_with_em_metrics(self, tmp_path, **metrics):
+        l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
+        l0.headers["QUALITY_CONTROL"].update(
+            {
+                f"EM{fiber}{m}": 0
+                for fiber in ("SCI", "SKY")
+                for m in ("SAT", "NEG", "INF")
+            }
+        )
+        l0.headers["QUALITY_CONTROL"].update(metrics)
+        return l0
+
     def test_expmeter_flux_sane_pass(self, tmp_path):
-        l0 = self._make_kpf0_with_expmeter(tmp_path, sky_flux=_EM_CLEAN_FLUX)
+        l0 = self._make_kpf0_with_em_metrics(tmp_path)
         assert QCL0(l0).expmeter_flux_sane() is True
 
-    def test_expmeter_flux_no_em_data_raises(self, tmp_path):
+    def test_expmeter_flux_missing_metric_raises(self, tmp_path):
+        # DiagL0 did not run (e.g. a frame with no EM data), so nothing to judge.
         l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
-        with pytest.raises(KeyError, match="EXPMETER_SCI"):
+        with pytest.raises(KeyError, match="EMSCISAT"):
             QCL0(l0).expmeter_flux_sane()
 
-    def test_expmeter_flux_saturated_fails(self, tmp_path):
-        # 2 channels saturated in each of the 2 interior readings -> 4 elements,
-        # over the 1.5-per-reading allowance.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[1:3, :2] = 0.95 * 1.93e6
-        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
-        assert QCL0(l0).expmeter_flux_sane() is False
-
-    def test_expmeter_flux_saturated_edge_readings_pass(self, tmp_path):
-        # The first and last readings are partial, so saturation there is dropped.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[[0, -1], :] = 0.95 * 1.93e6
-        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
+    def test_expmeter_flux_pass_at_limits(self, tmp_path):
+        # 1.5 saturated elements per reading and a 19-channel run are the limits.
+        l0 = self._make_kpf0_with_em_metrics(
+            tmp_path, EMSCISAT=1.5, EMSCINEG=19, EMSCIINF=19
+        )
         assert QCL0(l0).expmeter_flux_sane() is True
+
+    def test_expmeter_flux_saturated_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_em_metrics(tmp_path, EMSCISAT=1.6)
+        assert QCL0(l0).expmeter_flux_sane() is False
 
     def test_expmeter_flux_negative_run_fails(self, tmp_path):
-        # 20 consecutive channels summing negative: bias over-subtraction.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[:, 5:25] = -1000.0
-        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
+        l0 = self._make_kpf0_with_em_metrics(tmp_path, EMSCINEG=20)
         assert QCL0(l0).expmeter_flux_sane() is False
 
-    def test_expmeter_flux_short_negative_run_passes(self, tmp_path):
-        # 19 consecutive is under the run length; isolated negatives are noise.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[:, 5:24] = -1000.0
-        l0 = self._make_kpf0_with_expmeter(tmp_path, flux=flux)
-        assert QCL0(l0).expmeter_flux_sane() is True
+    def test_expmeter_flux_non_finite_run_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_em_metrics(tmp_path, EMSCIINF=20)
+        assert QCL0(l0).expmeter_flux_sane() is False
 
     def test_expmeter_flux_checks_sky_fiber(self, tmp_path):
-        # The SKY fiber is checked too, so a bad SKY fails an otherwise clean frame.
-        sky_flux = _EM_CLEAN_FLUX.copy()
-        sky_flux[:, 5:25] = -1000.0
-        l0 = self._make_kpf0_with_expmeter(tmp_path, sky_flux=sky_flux)
+        # v2.12 fails on either fiber, so a bad SKY fails an otherwise clean frame.
+        l0 = self._make_kpf0_with_em_metrics(tmp_path, EMSKYNEG=20)
         assert QCL0(l0).expmeter_flux_sane() is False
 
     def test_emfluxok_key_present(self):

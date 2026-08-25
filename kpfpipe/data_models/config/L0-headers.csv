@@ -12,8 +12,10 @@ DRPSTATU,DRP reduction status (WMKO req.),RECEIPT,str,KPF0.from_fits
 # ================================================
 DATAPRL0,QC: GREEN/RED amps present and populated,QUALITY_CONTROL,int,QCL0
 KWRDPRL0,QC: required L0 PRIMARY keywords present,QUALITY_CONTROL,int,QCL0
-TELEPRL0,QC: TELEMETRY extension present in L0,QUALITY_CONTROL,int,QCL0
-CAHKPRL0,QC: CA_HK extension present in L0,QUALITY_CONTROL,int,QCL0
+EMSCIPR,QC: EXPMETER_SCI extension present and populated,QUALITY_CONTROL,int,QCL0
+EMSKYPR,QC: EXPMETER_SKY extension present and populated,QUALITY_CONTROL,int,QCL0
+TELEPR,QC: TELEMETRY extension present,QUALITY_CONTROL,int,QCL0
+CAHKPR,QC: CA_HK extension present and populated,QUALITY_CONTROL,int,QCL0
 DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,int,QCL0
 EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",QUALITY_CONTROL,int,QCL0
 READOK,QC: CCD read properly (not a smeared 6-6.7 s readout),QUALITY_CONTROL,int,QCL0
@@ -36,6 +38,12 @@ DEADPXFG,Fraction of raw GREEN pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,Dia
 DEADPXFR,Fraction of raw RED pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,DiagL0
 SATPXFG,Fraction of raw GREEN pixels above 5.0e8 D.N.,QUALITY_CONTROL,float,DiagL0
 SATPXFR,Fraction of raw RED pixels above 5.0e8 D.N.,QUALITY_CONTROL,float,DiagL0
+EMSCISAT,Saturated SCI exposure meter elements per reading,QUALITY_CONTROL,float,DiagL0
+EMSCINEG,Longest run of negative SCI exposure meter channels,QUALITY_CONTROL,int,DiagL0
+EMSCIINF,Longest run of non-finite SCI exposure meter channels,QUALITY_CONTROL,int,DiagL0
+EMSKYSAT,Saturated SKY exposure meter elements per reading,QUALITY_CONTROL,float,DiagL0
+EMSKYNEG,Longest run of negative SKY exposure meter channels,QUALITY_CONTROL,int,DiagL0
+EMSKYINF,Longest run of non-finite SKY exposure meter channels,QUALITY_CONTROL,int,DiagL0
 P16GAMP1,16th percentile of raw GREEN_AMP1 (D.N.),QUALITY_CONTROL,float,DiagL0
 P16GAMP2,16th percentile of raw GREEN_AMP2 (D.N.),QUALITY_CONTROL,float,DiagL0
 P16GAMP3,16th percentile of raw GREEN_AMP3 (D.N.),QUALITY_CONTROL,float,DiagL0

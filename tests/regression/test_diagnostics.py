@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from astropy import units as u
 from astropy.coordinates import SkyCoord
+from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe import DETECTOR
@@ -32,6 +33,8 @@ _NCOL_TEST = 8  # DiagL2 metrics are pixel aggregates, so the real detector widt
 _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
 _ZERO_KEYS = ("ZEROSCI1", "ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL")
+# Clean exposure-meter flux: 4 readings x 25 wavelength channels per fiber.
+_EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
 
 
 # ---------------------------------------------------------------------------
@@ -489,6 +492,122 @@ class TestDiagL0AmpPercentiles:
 
     def test_diag_name_correct(self):
         assert DiagL0.__dict__["amp_percentiles"]._diag_name == "amp_percentiles"
+
+
+class TestDiagL0ExpmeterChannels:
+    """Per-fiber EM channel metrics: saturation rate and negative/non-finite runs.
+
+    Each fiber here is 4 readings x 25 wavelength channels, so the two interior
+    readings carry the saturation count.
+    """
+
+    def _make_l0_with_expmeter(self, tmp_path, sci, sky=None):
+        def table(values):
+            columns = {"Date-Beg": ["2024-09-23T09:12:09.484"] * len(values)}
+            columns.update(
+                {str(5000.0 + i): values[:, i] for i in range(values.shape[1])}
+            )
+            return Table(columns)
+
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00005.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.BinTableHDU(table(sci), name="EXPMETER_SCI"),
+                fits.BinTableHDU(
+                    table(sci if sky is None else sky), name="EXPMETER_SKY"
+                ),
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_clean_flux_is_zero(self, tmp_path):
+        results = DiagL0(self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)).run()
+        for fiber in ("SCI", "SKY"):
+            for metric in ("SAT", "NEG", "INF"):
+                assert results[f"EM{fiber}{metric}"][0] == 0
+
+    def test_saturation_is_per_reading(self, tmp_path):
+        # 3 saturated elements over the 2 interior readings -> 1.5 per reading.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[1, :2] = 0.95 * 1.93e6
+        flux[2, 0] = 0.95 * 1.93e6
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCISAT"][0] == 1.5
+
+    def test_saturation_drops_edge_readings(self, tmp_path):
+        # The first and last readings are partial, so saturation there is dropped.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[[0, -1], :] = 0.95 * 1.93e6
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCISAT"][0] == 0.0
+
+    def test_negative_run_length(self, tmp_path):
+        # A channel counts as negative when its time-summed flux is negative.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 5:25] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 20
+
+    def test_negative_run_counts_adjacent_only(self, tmp_path):
+        # Two separated blocks of 3 and 5: the longest run is 5, not their sum.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 2:5] = -1000.0
+        flux[:, 10:15] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 5
+
+    def test_negative_needs_the_time_sum(self, tmp_path):
+        # One negative reading a channel does not make: the sum stays positive.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[0, 5:25] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 0
+
+    def test_non_finite_run_length(self, tmp_path):
+        # A channel with any non-finite reading counts, NaN or inf.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[0, 5:9] = np.nan
+        flux[2, 9] = np.inf
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCIINF"][0] == 5
+
+    def test_fibers_measured_separately(self, tmp_path):
+        # A clean SCI and a negative SKY: only the SKY keyword moves.
+        sky = _EM_CLEAN_FLUX.copy()
+        sky[:, 5:25] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX, sky=sky)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 0
+        assert results["EMSKYNEG"][0] == 20
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["EMSCISAT"] == results["EMSCISAT"][0]
+
+    def test_no_em_data_emits_no_keyword(self, tmp_path):
+        # A frame with no EM extension (e.g. a calibration): the metrics are skipped.
+        fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(10, 10))
+        assert "EMSCISAT" not in DiagL0(KPF0.from_fits(fn)).run()
+
+    def test_diag_name_correct(self):
+        assert DiagL0.__dict__["expmeter_channel_metrics"]._diag_name == (
+            "expmeter_channel_metrics"
+        )
 
 
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):

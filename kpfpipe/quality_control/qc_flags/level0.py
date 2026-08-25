@@ -79,18 +79,52 @@ class QCL0(QC):
         """
         return len(self.kpf_obj.data.get("TELEMETRY", [])) > 0
 
-    telemetry_present._qc_key = "TELEPRL0"
+    telemetry_present._qc_key = "TELEPR"
 
     def cahk_present(self):
-        """CA_HK extension present and non-empty.
+        """CA_HK extension present and populated.
 
-        Ports v2.12 ``data_2D_CaHK`` (v2.12's 2D level is vNext's L0). The Ca H&K
-        image is the only record of the chromospheric activity indicator for the
-        exposure and cannot be recovered once the frame is written.
+        Ports v2.12 ``data_2D_CaHK`` (v2.12's 2D level is vNext's L0), holding it
+        to the DATAPRL0 standard of populated: a non-empty image carrying at least
+        one finite value, so an all-NaN placeholder is not mistaken for a readout.
+        The Ca H&K image is the only record of the chromospheric activity indicator
+        for the exposure and cannot be recovered once the frame is written.
         """
-        return np.size(self.kpf_obj.data.get("CA_HK", [])) > 0
+        image = self.kpf_obj.data.get("CA_HK", [])
+        return np.size(image) > 0 and bool(np.any(np.isfinite(image)))
 
-    cahk_present._qc_key = "CAHKPRL0"
+    cahk_present._qc_key = "CAHKPR"
+
+    def _expmeter_populated(self, ext):
+        """One EM fiber table present, carrying readings and finite flux.
+
+        The wavelength channels are the numerically-labeled columns, so a table of
+        Date* columns alone, one with no readings, or one whose flux is entirely
+        non-finite is not a readout.
+        """
+        table = self.kpf_obj.data.get(ext)
+        if table is None or len(table) == 0:
+            return False
+        for name in table.colnames:
+            try:
+                float(name)
+            except ValueError:
+                continue
+            if np.any(np.isfinite(np.asarray(table[name], dtype=float))):
+                return True
+        return False
+
+    def expmeter_sci_present(self):
+        """EXPMETER_SCI present and populated."""
+        return self._expmeter_populated("EXPMETER_SCI")
+
+    expmeter_sci_present._qc_key = "EMSCIPR"
+
+    def expmeter_sky_present(self):
+        """EXPMETER_SKY present and populated."""
+        return self._expmeter_populated("EXPMETER_SKY")
+
+    expmeter_sky_present._qc_key = "EMSKYPR"
 
     def times_consistent(self):
         """DATE-BEG <= DATE-MID <= DATE-END, matching ELAPSED and the shutters.
@@ -303,34 +337,18 @@ class QCL0(QC):
     expmeter_times_consistent._qc_key = "EMTIMEOK"
 
     def expmeter_flux_sane(self):
-        """EXPMETER_SCI/SKY flux is neither saturated nor significantly negative.
+        """EXPMETER flux is neither saturated, negative, nor non-finite.
 
-        Merges v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, applied to
-        each fiber. Saturation: more than 1.5 channels per reading above
-        90% of the 1.93e6 reduced-spectrum saturation level, with the first and
-        last readings dropped when there are 3+ (they are partial). Negative flux:
-        20 consecutive channels whose time-summed flux is negative, the signature
-        of bias over-subtraction in the raw EM images.
+        Merges v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, which fail
+        on either fiber. DiagL0 measures each fiber; this applies v2.12's limits:
+        at most 1.5 saturated elements per reading, and no run of 20 adjacent
+        negative channels. Non-finite channels are gated the same way as negative.
         """
-        for ext in ("EXPMETER_SCI", "EXPMETER_SKY"):
-            table = self.kpf_obj.data[ext]
-            # Numeric column labels are the wavelength channels; Date* are not.
-            channels = []
-            for name in table.colnames:
-                try:
-                    float(name)
-                except ValueError:
-                    continue
-                channels.append(np.asarray(table[name], dtype=float))
-            flux = np.column_stack(channels)
-
-            readings = flux[1:-1] if len(flux) >= 3 else flux
-            saturated = np.count_nonzero(readings > 0.9 * 1.93e6)
-            if saturated > 1.5 * len(readings):
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        for fiber in ("SCI", "SKY"):
+            if float(hdr[f"EM{fiber}SAT"]) > 1.5:
                 return False
-
-            negative = (flux.sum(axis=0) < 0).astype(int)
-            if np.any(np.convolve(negative, np.ones(20, dtype=int), "valid") == 20):
+            if int(hdr[f"EM{fiber}NEG"]) >= 20 or int(hdr[f"EM{fiber}INF"]) >= 20:
                 return False
         return True
 
