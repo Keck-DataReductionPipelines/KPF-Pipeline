@@ -53,68 +53,38 @@ class SpectralExtraction:
 
         self._order_trace = None
         self._order_trace_path = None
-        self._instera = None
         self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _infer_instrument_era(self):
-        """Infer this frame's instrument era from ``JD_UTC``, caching its tag in
-        ``self._instera`` and returning its ``instrument_eras`` row with the
-        frame's observation time.
-
-        A frame whose ``INSTERA`` disagrees is warned about and restamped -- the
-        timestamp wins, since references are keyed to it.
-
-        Raises ``ValueError`` when the frame cannot be dated or falls outside
-        every era. Deliberately not a ``LookupError``: ``extract_ffi`` catches
-        that to fill an absent orderlet with NaN, and would bury this."""
-        primary = self.l1_obj.headers["PRIMARY"]
-        jd_utc = primary.get("JD_UTC")
-        obs_time = pd.to_datetime(jd_utc, unit="D", origin="julian")
-        if pd.isna(obs_time):
-            raise ValueError(
-                f"Cannot infer the instrument era of {self.l1_obj.obs_id}: its "
-                f"JD_UTC is {jd_utc!r}"
-            )
-
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
-        in_era = eras[
-            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
-        ]
-        if in_era.empty:
-            raise ValueError(
-                f"No KPF instrument era covers {obs_time}; the eras of "
-                f"reference/instrument_eras.csv do not span it"
-            )
-
-        era = in_era.iloc[0]
-        self._instera = str(era["INSTERA"])
-
-        if str(primary.get("INSTERA")) != self._instera:
-            logger.warning(
-                "header INSTERA %s disagrees with instrument era %s inferred from "
-                "JD_UTC; restamping INSTERA as %s",
-                primary.get("INSTERA"),
-                self._instera,
-                self._instera,
-            )
-            self.l1_obj.set_keyword("INSTERA", self._instera)
-
-        return era, obs_time
-
     def _read_order_trace_reference(self):
         """Load the vetted order trace for this frame, caching the per-chip
         tables in ``self._order_trace`` and the file in ``self._order_trace_path``.
 
         The reference is the most recent one measured before the frame within
-        the frame's instrument era, read from ``reference/order_traces``."""
-        era, obs_time = self._infer_instrument_era()
+        the frame's instrument era (``INSTERA``, stamped at ``KPF0.to_kpf1``),
+        read from ``reference/order_traces``.
+
+        Raises ``ValueError`` when no era carries the frame's ``INSTERA``.
+        Deliberately not a ``LookupError``: ``extract_ffi`` catches that to fill
+        an absent orderlet with NaN, and would bury this."""
+        primary = self.l1_obj.headers["PRIMARY"]
+        instera = str(primary["INSTERA"])
+        obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
+
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        match = eras[eras["INSTERA"].astype(str) == instera]
+        if match.empty:
+            raise ValueError(
+                f"reference/instrument_eras.csv carries no instrument era "
+                f"{instera!r}, the INSTERA of {self.l1_obj.obs_id}"
+            )
+        era = match.iloc[0]
 
         # Trace geometry moves whenever the instrument is opened, so only a
         # reference measured earlier in this era describes this frame.
@@ -128,7 +98,7 @@ class SpectralExtraction:
         if not in_era:
             raise FileNotFoundError(
                 f"No order trace measured before {obs_time} within KPF instrument "
-                f"era {self._instera}"
+                f"era {instera}"
             )
 
         filepath = in_era[max(in_era)]
@@ -452,14 +422,13 @@ class SpectralExtraction:
             lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
-    def _set_headers(self, l2_obj):
-        """Write the order trace the spectra were extracted with (by filename --
-        it always comes from ``reference/order_traces``) and the era it was
-        chosen for (inferred after ``to_kpf2`` copied the L1 PRIMARY)."""
+    def _set_headers(self, l2_obj, extraction_method):
+        """Write the extraction method and the order trace the spectra were
+        extracted with (by filename -- it always comes from
+        ``reference/order_traces``)."""
+        l2_obj.set_keyword("EXTRACT", extraction_method)
         if self._order_trace_path is not None:
             l2_obj.set_keyword("TRACEREF", os.path.basename(self._order_trace_path))
-        if self._instera is not None:
-            l2_obj.set_keyword("INSTERA", self._instera)
         # CTYPEn is FITS axis order, the reverse of the numpy shape (Norder, Mpix):
         # axis 1 is the dispersion axis (NAXIS1 = Mpix), axis 2 the order axis
         # (NAXIS2 = Norder). Same pair CrossCorrelation writes on CCF#/RV#.
@@ -514,7 +483,7 @@ class SpectralExtraction:
                 )
                 l2_obj.set_data(f"{chip}_{fiber}_VAR", l2_arrays[f"{chip}_{fiber}_VAR"])
 
-        self._set_headers(l2_obj)
+        self._set_headers(l2_obj, extraction_method)
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 

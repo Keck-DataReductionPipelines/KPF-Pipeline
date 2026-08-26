@@ -17,7 +17,7 @@ from astropy.table import Table
 from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 from rvdata.core.tools.headers import parse_value_to_datatype
 
-from kpfpipe import OBSERVATORY, __version__
+from kpfpipe import OBSERVATORY, REPO_ROOT, __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.keyword_registry import SCI_TRACES
 from kpfpipe.data_models.level1 import KPF1
@@ -331,7 +331,9 @@ class KPF0(KPFDataModel):
         immutable INSTRUMENT_HEADER. DRP-RUN provenance lives on RECEIPT (stamped
         at read) and reaches L1 via the header forward below. The observatory
         cards (GEOSYS/OBSLON/OBSLAT/OBSALT) come from the OBSERVATORY config, not
-        from the raw header.
+        from the raw header, and INSTERA from the mapped JD_UTC against
+        ``reference/instrument_eras.csv`` -- a frame that cannot be dated, or that
+        no era covers, has no reference calibrations and raises here.
 
         Returns a KPF1 with EPRV PRIMARY, INSTRUMENT_HEADER, pass-through
         extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG,
@@ -383,6 +385,28 @@ class KPF0(KPFDataModel):
         if self.receipt is not None and not self.receipt.empty:
             kpf1.receipt = self.receipt.copy()
         kpf1.obs_id = self.obs_id
+
+        obs_time = pd.to_datetime(
+            kpf1.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
+        )
+        if pd.isna(obs_time):
+            raise ValueError(
+                f"Cannot infer the instrument era of {self.obs_id}: its JD_UTC is "
+                f"{kpf1.headers['PRIMARY']['JD_UTC']!r}"
+            )
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        in_era = eras[
+            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
+        ]
+        if in_era.empty:
+            raise ValueError(
+                f"No KPF instrument era covers {obs_time}; the eras of "
+                f"reference/instrument_eras.csv do not span it"
+            )
+        kpf1.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
 
         kpf1.set_keyword("GEOSYS", OBSERVATORY["geosys"])
         kpf1.set_keyword("OBSLON", OBSERVATORY["longitude"])

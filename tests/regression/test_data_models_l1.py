@@ -347,6 +347,7 @@ class TestToKpf1:
 
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         AstroQuery(l0)._write_catalog_record("kpf-drp", record)
         return l0
 
@@ -391,6 +392,7 @@ class TestToKpf1:
         # to_kpf1 succeeds with blank SCI C*# cards but warns about the downstream fail.
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         with caplog.at_level(logging.WARNING):
             p = l0.to_kpf1().headers["PRIMARY"]
         assert "CATALOG_RECORD is empty" in caplog.text
@@ -403,6 +405,7 @@ class TestToKpf1:
         # CATALOG_RECORD is expected: to_kpf1 succeeds with blank SCI C*# cards.
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         p = l0.to_kpf1().headers["PRIMARY"]
         for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
             assert not p.get(kw)
@@ -456,6 +459,7 @@ class TestToKpf1:
         p.header["INSTRUME"] = "KPF"
         p.header["OFNAME"] = "KP.20240113.00009.00.fits"
         p.header["PROGNAME"] = "K123"
+        p.header["MJD-OBS"] = 60310.0
         p.header["PARANTEL"] = 108.03  # header_map maps PARANTEL -> non-standard PARANG
         fits.HDUList([p]).writeto(fn)
         l1 = KPF0.from_fits(fn).to_kpf1()
@@ -514,6 +518,25 @@ class TestToKpf1:
         assert "CA_HK" not in l1.extensions
         assert "TELEMETRY" not in l1.extensions
 
+    def test_to_kpf1_stamps_the_instrument_era(self):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0  # 2024-01-01, era 1.0
+        assert l0.to_kpf1().headers["PRIMARY"]["INSTERA"] == "1.0"
+
+    def test_to_kpf1_rejects_an_undated_frame(self):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        with pytest.raises(ValueError, match="Cannot infer the instrument era"):
+            l0.to_kpf1()
+
+    def test_to_kpf1_rejects_a_frame_between_eras(self):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60355.0  # 2024-02-15, eras 1.5 -> 2.0 gap
+        with pytest.raises(ValueError, match="No KPF instrument era covers"):
+            l0.to_kpf1()
+
     def test_to_kpf1_leaves_ccd_empty(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         l1 = l0.to_kpf1()
@@ -552,6 +575,7 @@ class TestCatalogRecordPassthrough:
     def _l0_with_catalog_table(rv=10.0):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         return l0
 

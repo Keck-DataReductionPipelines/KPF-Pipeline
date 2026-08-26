@@ -1214,11 +1214,13 @@ class TestRealData:
         tables = {chip: combined[combined["Chip"] == chip] for chip in ("GREEN", "RED")}
 
         # Resolve the reference through the same era lookup extraction uses. A
-        # masters product carries no JD_UTC, so date the flat from its filename.
+        # masters product goes through no to_kpf1, so it carries neither JD_UTC
+        # nor INSTERA: date the flat from its filename and stamp its era.
         datecode = masters[0].name.split(".")[1]
         tracer._master_flat.set_keyword(
             "JD_UTC", pd.Timestamp(datecode).to_julian_date()
         )
+        tracer._master_flat.set_keyword("INSTERA", "2.0")
         extractor = SpectralExtraction(tracer._master_flat)
         extractor._read_order_trace_reference()
         vetted = pd.read_csv(extractor._order_trace_path)

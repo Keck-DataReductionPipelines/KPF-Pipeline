@@ -84,6 +84,7 @@ _DEFAULT_PRIMARY = {
     "OBJECT": "synthetic",
     "IMTYPE": "Bias",
     "DATE-OBS": "2024-01-01T00:00:01",
+    "MJD-OBS": 60310.0,
     "PROGNAME": "K123",
     "TIMEERR": "NTP time correct to within 12.3 ms",
     "GRACFFLN": "regular-read-green.acf",

@@ -243,6 +243,7 @@ class TestCatalogRecordMissingValues:
         l0.headers["PRIMARY"]["OFNAME"] = "KP.20240405.00002.00.fits"
         l0.headers["PRIMARY"]["PROGNAME"] = "K123"
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60405.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         l0.to_fits(fn)
         return KPF0.from_fits(fn)

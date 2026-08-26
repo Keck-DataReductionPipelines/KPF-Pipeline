@@ -346,6 +346,7 @@ class TestQualityControlPropagation:
 
     def test_propagation_l0_to_l1_to_l2(self):
         l0 = KPF0()
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         # QCL0 routes L0 QC flags to QUALITY_CONTROL.
         l0.set_keyword("NOTJUNK", 1)
         l1 = l0.to_kpf1()
