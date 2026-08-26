@@ -373,6 +373,9 @@ class KPF0(KPFDataModel):
         # to_kpf2/to_kpf4. (PRIMARY is converted via _map_header above, not copied.)
         self._forward_headers(kpf1, ("QUALITY_CONTROL", "RECEIPT"))
 
+        if "GDRSEEV" in kpf1.headers["QUALITY_CONTROL"]:
+            kpf1.set_keyword("SEEING", kpf1.headers["QUALITY_CONTROL"]["GDRSEEV"])
+
         if self.receipt is not None and not self.receipt.empty:
             kpf1.receipt = self.receipt.copy()
         kpf1.obs_id = self.obs_id

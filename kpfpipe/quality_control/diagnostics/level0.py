@@ -284,13 +284,15 @@ class DiagL0(Diagnostics):
     guider_image_stats._diag_name = "guider_image_stats"
 
     def guider_seeing(self):
-        """GDRSEEJZ: J+Z-band seeing [arcsec] from a Moffat fit to GUIDER_AVG.
+        """GDRSEEJZ, GDRSEEV: seeing [arcsec] from a Moffat fit to GUIDER_AVG.
 
         Ports v2.12 ``AnalyzeGuider.measure_seeing``: a 2D Moffat profile fit to
         the median-subtracted co-added guider image, whose alpha is the seeing at
         the guide camera's 950-1200 nm band. The fit is seeded at three widths
         spanning 0.4-2.5 arcsec, centred on the guider reference pixel, and the
         smallest-residual seed wins; a fit that never converges emits no keyword.
+        GDRSEEV rescales that alpha from the band midpoint to V by the Kolmogorov
+        lambda^(1/5) law, both cards deriving from the unrounded fit.
         """
         image = self.kpf_obj.data["GUIDER_AVG"]
         flat = np.asarray(image, dtype=float).ravel()
@@ -318,7 +320,11 @@ class DiagL0(Diagnostics):
                 best, smallest = popt, residuals
         if best is None:
             return {}
-        return self._tag(GDRSEEJZ=round(abs(float(best[3])) * 0.056, 6))
+        seeing = abs(float(best[3])) * 0.056
+        return self._tag(
+            GDRSEEJZ=round(seeing, 6),
+            GDRSEEV=round(seeing * ((1200 + 950) / 2 / 550) ** 0.2, 6),
+        )
 
     guider_seeing._diag_name = "guider_seeing"
 

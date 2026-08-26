@@ -20,7 +20,8 @@ DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END/ELAPSED),QUALITY_CONTROL,i
 EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",QUALITY_CONTROL,int,QCL0
 READOK,QC: CCD read properly (not a smeared 6-6.7 s readout),QUALITY_CONTROL,int,QCL0
 NTPOK,QC: NTP clock error < 100 ms,QUALITY_CONTROL,int,QCL0
-GUIDEROK,QC: guider RMS/bias within 50 mas and not saturated,QUALITY_CONTROL,int,QCL0
+GUIDEROK,QC: guider not saturated and RMS/bias within 50 mas,QUALITY_CONTROL,int,QCL0
+SEEINGOK,QC: V-band seeing < 1 arcsec,QUALITY_CONTROL,int,QCL0
 ELEVOK,QC: telescope elevation above 30 deg (ADC working range),QUALITY_CONTROL,int,QCL0
 TARGETOK,QC: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,int,QCL0
 ASTROMOK,QC: catalog epoch/equinox/rv/parallax/PM in physical range,QUALITY_CONTROL,int,QCL0
@@ -72,6 +73,7 @@ GDRYBIAS,Guider y-coordinate bias guiding error (mas),QUALITY_CONTROL,float,Diag
 GDRFRSAT,Guider: fraction of frames within 90% saturated,QUALITY_CONTROL,float,DiagL0
 GDRNSAT,Guider: num 90% saturated pix in co-added image,QUALITY_CONTROL,int,DiagL0
 GDRSEEJZ,Seeing in J+Z-band from Moffat fit (arcsec),QUALITY_CONTROL,float,DiagL0
+GDRSEEV,Scaled seeing in V-band from J+Z-band (arcsec),QUALITY_CONTROL,float,DiagL0
 GDRFWMD,Guider images: median FWHM (mas),QUALITY_CONTROL,float,DiagL0
 GDRFWSTD,Guider images: std FWHM (mas),QUALITY_CONTROL,float,DiagL0
 GDRFXMD,Guider images: median flux (ADU),QUALITY_CONTROL,float,DiagL0

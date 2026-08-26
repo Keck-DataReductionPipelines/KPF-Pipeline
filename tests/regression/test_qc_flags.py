@@ -1185,6 +1185,7 @@ class TestQCL0Telemetry:
                 "GDRYBIAS": 1.0,
                 "GDRNSAT": 0,
                 "GDRFRSAT": 0.0,
+                "GDRSEEV": 0.5,
             }
         )
         l0.headers["QUALITY_CONTROL"].update(metrics)
@@ -1238,6 +1239,19 @@ class TestQCL0Telemetry:
         # DiagL0 emits no guiding error when the camera was not tracking.
         with pytest.raises(KeyError, match="GDRXRMS"):
             QCL0(_make_kpf0(tmp_path)).guiding_ok()
+
+    def test_seeing_ok_pass(self, tmp_path):
+        l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=0.999)
+        assert QCL0(l0).seeing_ok() is True
+
+    def test_seeing_ok_fail_at_one_arcsec(self, tmp_path):
+        l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=1.0)
+        assert QCL0(l0).seeing_ok() is False
+
+    def test_seeing_missing_metric_raises(self, tmp_path):
+        # An unconverged guider Moffat fit emits no GDRSEEV at all.
+        with pytest.raises(KeyError, match="GDRSEEV"):
+            QCL0(_make_kpf0(tmp_path)).seeing_ok()
 
     def test_elevation_ok(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
@@ -1311,6 +1325,7 @@ class TestQCL0Telemetry:
             "green_ccd_temp_ok": "GTEMPOK",
             "red_ccd_temp_ok": "RTEMPOK",
             "guiding_ok": "GUIDEROK",
+            "seeing_ok": "SEEINGOK",
             "elevation_ok": "ELEVOK",
             "etalon_at_temp": "ETATMPOK",
             "agitator_operating": "AGITOK",

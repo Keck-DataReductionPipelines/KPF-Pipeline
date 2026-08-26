@@ -62,6 +62,7 @@ CPMD#,Catalog proper motion DEC for object in trace 1 to # [arcsec/yr],PRIMARY,f
 CZ#,Catalog Z for for object in trace 1 to #,PRIMARY,float,KPF0.to_kpf1
 CCLRN#,Catalog color 1 - color 2 name for object in trace 1 to #,PRIMARY,string,KPF0.to_kpf1
 CCLR#,Catalog color 1 - color 2 for object in trace 1 to # [mag],PRIMARY,float,KPF0.to_kpf1
+SEEING,Seeing at beginning of exposure [arcsec],PRIMARY,float,KPF0.to_kpf1
 AIRMASS,Airmass at center field at beginning of exposure [secZ],PRIMARY,float,KPF0.to_kpf1
 TTIME,TCS-data date/time [UTC],PRIMARY,string,KPF0.to_kpf1
 TEQNX,TCS equinox [yr],PRIMARY,string,KPF0.to_kpf1

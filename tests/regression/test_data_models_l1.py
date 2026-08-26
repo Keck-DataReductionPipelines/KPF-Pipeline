@@ -288,6 +288,15 @@ class TestToKpf1:
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
         assert l1.headers["PRIMARY"]["OBJECT"] == "10700"
 
+    def test_seeing_mirrors_gdrseev(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l0.set_keyword("GDRSEEV", 0.462221)
+        assert l0.to_kpf1().headers["PRIMARY"]["SEEING"] == 0.462221
+
+    def test_seeing_absent_without_gdrseev(self, synthetic_l0_file):
+        l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
+        assert "SEEING" not in l1.headers["PRIMARY"]
+
     # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.
     _KPF_DRP = {
         "object": "Gaia DR3 12345",

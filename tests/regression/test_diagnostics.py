@@ -889,7 +889,7 @@ class TestDiagL0Guider:
 
 
 class TestDiagL0GuiderSeeing:
-    """J+Z-band seeing from the Moffat fit to the co-added guider image."""
+    """J+Z-band and V-band seeing from the Moffat fit to the co-added guider image."""
 
     def _make_l0_with_moffat(self, tmp_path, alpha, *, corrupt=False):
         y, x = np.indices((81, 81))
@@ -910,6 +910,13 @@ class TestDiagL0GuiderSeeing:
         results = DiagL0(l0).guider_seeing()
         assert results["GDRSEEJZ"][0] == pytest.approx(8.0 * 0.056, rel=0.05)
 
+    def test_v_band_seeing_is_the_scaled_jz_seeing(self, tmp_path):
+        # Kolmogorov lambda^(1/5) from the 950-1200 nm band midpoint to 550 nm.
+        results = DiagL0(self._make_l0_with_moffat(tmp_path, 8.0)).guider_seeing()
+        assert results["GDRSEEV"][0] == pytest.approx(
+            results["GDRSEEJZ"][0] * 1.1434288742094985, rel=1e-5
+        )
+
     def test_wider_profile_gives_larger_seeing(self, tmp_path):
         narrow = DiagL0(self._make_l0_with_moffat(tmp_path, 5.0)).guider_seeing()
         wide = DiagL0(self._make_l0_with_moffat(tmp_path, 15.0)).guider_seeing()
@@ -922,7 +929,8 @@ class TestDiagL0GuiderSeeing:
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
         results = DiagL0(l0).run()
-        assert l0.headers["QUALITY_CONTROL"]["GDRSEEJZ"] == results["GDRSEEJZ"][0]
+        for key in ("GDRSEEJZ", "GDRSEEV"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
     def test_diag_name_correct(self):
         assert DiagL0.__dict__["guider_seeing"]._diag_name == "guider_seeing"

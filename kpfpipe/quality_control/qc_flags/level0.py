@@ -256,6 +256,16 @@ class QCL0(QC):
 
     guiding_ok._qc_key = "GUIDEROK"
 
+    def seeing_ok(self):
+        """V-band seeing under 1 arcsec.
+
+        A frame whose guider Moffat fit never converged carries no GDRSEEV and
+        fails.
+        """
+        return float(self.kpf_obj.headers["QUALITY_CONTROL"]["GDRSEEV"]) < 1.0
+
+    seeing_ok._qc_key = "SEEINGOK"
+
     def elevation_ok(self):
         """Telescope above 30 deg, the atmospheric dispersion corrector's range.
 
