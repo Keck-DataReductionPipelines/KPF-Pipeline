@@ -12,7 +12,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import bounded_polyval
 
@@ -460,6 +460,14 @@ class SpectralExtraction:
             l2_obj.set_keyword("TRACEREF", os.path.basename(self._order_trace_path))
         if self._instera is not None:
             l2_obj.set_keyword("INSTERA", self._instera)
+        # CTYPEn is FITS axis order, the reverse of the numpy shape (Norder, Mpix):
+        # axis 1 is the dispersion axis (NAXIS1 = Mpix), axis 2 the order axis
+        # (NAXIS2 = Norder). Same pair CrossCorrelation writes on CCF#/RV#.
+        for trace in range(1, DETECTOR["numtrace"] + 1):
+            for suffix in ("FLUX", "VAR", "BLAZE"):
+                ext = f"TRACE{trace}_{suffix}"
+                l2_obj.set_keyword("CTYPE1", "Pixel", ext=ext)
+                l2_obj.set_keyword("CTYPE2", "Order-N", ext=ext)
 
     # ------------------------------------------------------------------
     # Public entry point

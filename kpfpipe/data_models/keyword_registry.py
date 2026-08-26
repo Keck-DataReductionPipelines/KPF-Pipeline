@@ -180,11 +180,19 @@ class KeywordRegistry:
         "BARYCORR_KMS": (_rvdata_core_cfg / "L2-BARYCORR_KMS-keywords.csv", 2),
         "BARYCORR_Z": (_rvdata_core_cfg / "L2-BARYCORR_Z-keywords.csv", 2),
         **{
-            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4)
+            f"TRACE{i}_{suffix}": (
+                _rvdata_core_cfg / f"L2-TRACE_{suffix}-keywords.csv",
+                2,
+            )
             for i in range(1, DETECTOR["numtrace"] + 1)
+            for suffix in ("FLUX", "VAR", "BLAZE")
         },
         **{
             f"CCF{i}": (_rvdata_core_cfg / "L4-CCF1-keywords.csv", 4)
+            for i in range(1, DETECTOR["numtrace"] + 1)
+        },
+        **{
+            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4)
             for i in range(1, DETECTOR["numtrace"] + 1)
         },
     }
