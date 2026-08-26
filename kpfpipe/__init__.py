@@ -2,6 +2,7 @@
 shared defaults."""
 
 import importlib.metadata
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -15,6 +16,19 @@ except importlib.metadata.PackageNotFoundError as e:
         "was cloned but not installed. Install it into the kpfpipe conda env "
         "before importing: `pip install -e KPF-Pipeline/`."
     ) from e
+
+# The commit the pipeline runs from, resolved once beside __version__ and
+# stamped onto PRIMARY as DRPHASH. "UNKNOWN" when the installed tree is not a
+# git checkout (a released tarball or wheel), which is not an error.
+try:
+    __githash__ = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+except (subprocess.CalledProcessError, OSError):
+    __githash__ = "UNKNOWN"
 
 # By default use both CCDs and all five fibers
 DEFAULTS = {

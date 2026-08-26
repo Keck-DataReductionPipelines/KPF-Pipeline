@@ -73,11 +73,14 @@ TDEC#,TCS DEC for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kpf1
 TEL#,TCS elevation angle for telescope 1 to # [deg],PRIMARY,float,KPF0.to_kpf1
 TAZ#,TCS azimuth angle for telescope 1 to # [deg],PRIMARY,float,KPF0.to_kpf1
 THA#,TCS hour angle for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kpf1
+PARST#,Parallactic angle at exposure start for telescope 1 to # [deg],PRIMARY,float,NOT POPULATED
+PAREND#,Parallactic angle at exposure end for telescope 1 to # [deg],PRIMARY,float,NOT POPULATED
+ROTANG,Rotator angle [deg],PRIMARY,float,N/A -- KPF is fiber-fed; no rotator angle on L0
 SUNEL,Sun Elevation Angle [deg],PRIMARY,float,KPF0.to_kpf1
 MOONANG,Target-Moon Angle [deg],PRIMARY,float,KPF0.to_kpf1
 INHUM,relative humidity inside dome [%],PRIMARY,float,KPF0.to_kpf1
 INHUMT,INHUM timestamp [UTC],PRIMARY,string,KPF0.to_kpf1
-DRPHASH,Git commit hash,PRIMARY,string,KPF0.to_kpf1
+DRPHASH,Git commit hash,PRIMARY,string,KPF1.__init__
 EXSNR#,Extracted signal-to-noise at EXSNRW1 to EXSNRW# [SNR/1-D pixel],PRIMARY,float,DiagL2
 EXSNRW#,Wavelength at which EXTSNR1 to EXTSNR# is measured [Angstroms],PRIMARY,float,DiagL2
 # ================================================

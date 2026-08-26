@@ -17,6 +17,7 @@ from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
+from kpfpipe import __githash__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.io import kpf_filename
@@ -61,6 +62,25 @@ class KPF1(KPFDataModel):
             self.headers["PRIMARY"][kw] = value
         # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN".
         self.set_keyword("DATALVL", "L1")
+        # DRPHASH is EPRV-optional, so it is not in the seed; stamp it here
+        # beside DRPTAG (which the seed carries) to complete the DRP provenance.
+        self.set_keyword("DRPHASH", __githash__)
+        # The SKY (1) and CAL (5) fibers have no catalog target, so their C*#
+        # astrometry has no value at any type. Stamp the cards undefined rather
+        # than leaving them absent; _map_header still overwrites if one is mapped.
+        for base in (
+            "CRA",
+            "CDEC",
+            "CEQNX",
+            "CEPCH",
+            "CPLX",
+            "CPMR",
+            "CPMD",
+            "CCLR",
+            "CCLRN",
+        ):
+            for trace in (1, 5):
+                self.set_keyword(f"{base}{trace}", None)
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """Route L1 FITS reads to ``KPF1._read``.

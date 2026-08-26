@@ -331,6 +331,13 @@ class KeywordRegistry:
         )
         self.header_map.loc[overlay, ["INSTRUMENT", "DEFAULT"]] = np.nan
 
+        # The CAL fiber has no sky target, so label its catalog identity "cal" --
+        # mirroring the "sky" default rvdata supplies for trace 1 but omits here.
+        cal_identity = (
+            self.header_map["STANDARD"].astype(str).str.strip().isin({"CSRC5", "CID5"})
+        )
+        self.header_map.loc[cal_identity, "DEFAULT"] = "cal"
+
     def is_structural(self, key):
         """True for a FITS structural / bookkeeping card (never a registered keyword).
 
