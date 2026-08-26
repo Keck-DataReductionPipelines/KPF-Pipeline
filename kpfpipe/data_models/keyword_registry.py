@@ -113,7 +113,9 @@ class KeywordRegistry:
     # consumers: non-None values correct the table Default (NUMORDER 65->67; DRPTAG,
     # EPRVTAG, VOCLASS are runtime tags), and every key is dropped from header_map.
     # None = no static default; value set elsewhere (DATALVL by KPF1.__init__,
-    # JD_UTC by the _map_header epoch transform).
+    # JD_UTC by the _map_header epoch transform, RVMETHOD by RadialVelocity -- its
+    # header_map.csv row also puts "CCF" one column past DEFAULT, so it is dead
+    # there anyway, and RVMETHOD is a level-4 keyword the L1 map must not stamp).
     _DEFAULT_OVERRIDES = {
         "NUMORDER": str(_NUMORDER),
         "DRPTAG": __version__,
@@ -121,6 +123,7 @@ class KeywordRegistry:
         "VOCLASS": f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
         "DATALVL": None,
         "JD_UTC": None,
+        "RVMETHOD": None,
     }
 
     # Per-fiber catalog C*# keyword bases. On the SCI fibers these come from the

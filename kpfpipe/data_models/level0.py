@@ -182,10 +182,7 @@ class KPF0(KPFDataModel):
         self.check_filename_convention(fn)
 
         if "PRIMARY" in self.headers:
-            self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn),
-                "Name of the FITS file",
-            )
+            self.set_keyword("FILENAME", os.path.basename(fn))
 
         hdu_list = self._create_hdul()
         hdul = fits.HDUList(hdu_list)
@@ -353,7 +350,7 @@ class KPF0(KPFDataModel):
             # Overlay the canonical astrometry onto the SCI-fiber C*# cards -- their
             # sole writer (the raw TARG*/GAIAID mapping is blanked in the header_map).
             for key, value in self._catalog_primary_cards().items():
-                kpf1.headers["PRIMARY"][key] = value
+                kpf1.set_keyword(key, value)
 
             if "INSTRUMENT_HEADER" not in kpf1.extensions:
                 kpf1.create_extension("INSTRUMENT_HEADER", "ImageHDU")

@@ -6,6 +6,7 @@ RVGREEN,GREEN SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
 RVRED,RED SCI-combined RV [km/s],PRIMARY,float,RadialVelocity
 ERVGREEN,GREEN SCI-combined RV error [km/s],PRIMARY,float,RadialVelocity
 ERVRED,RED SCI-combined RV error [km/s],PRIMARY,float,RadialVelocity
+VELWIDTH,CCF mask hole full width [km/s],CCF*,float,CrossCorrelation
 GRNRVSK,GREEN SKY RV [km/s],RV1,float,RadialVelocity
 GRNRVS1,GREEN SCI1 RV [km/s],RV2,float,RadialVelocity
 GRNRVS2,GREEN SCI2 RV [km/s],RV3,float,RadialVelocity
@@ -26,7 +27,6 @@ REDERVS1,RED SCI1 RV error [km/s],RV2,float,RadialVelocity
 REDERVS2,RED SCI2 RV error [km/s],RV3,float,RadialVelocity
 REDERVS3,RED SCI3 RV error [km/s],RV4,float,RadialVelocity
 REDERVCL,RED CAL RV error [km/s],RV5,float,RadialVelocity
-VELWIDTH,CCF mask hole full width [km/s],CCF*,float,RadialVelocity
 # ================================================
 # Quality Control
 # ================================================

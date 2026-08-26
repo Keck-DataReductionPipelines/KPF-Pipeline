@@ -672,12 +672,9 @@ class BarycentricCorrection:
         l2_obj.set_keyword("BJDRED", float(self._ccd_bjd[1]))
         l2_obj.set_keyword("BVRED", float(self._ccd_kms[1]))
         l2_obj.set_keyword("BZRED", float(self._ccd_z[1]))
-        # CTYPE1 names the single (spectral-order) axis of these 1-D per-order
-        # arrays -- registered content, multi-homed across the three barycorr
-        # extensions, so stamped directly (set_keyword can't route a multi-home
-        # keyword). CTYPE2 is N/A: the arrays have no second axis.
+        # CTYPE1 names the single 1-D axis; CTYPE2 is N/A.
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
-            l2_obj.headers[ext]["CTYPE1"] = ("Order-N", "Name of axis 1")
+            l2_obj.set_keyword("CTYPE1", "Order-N", ext=ext)
 
     # ------------------------------------------------------------------
     # Public entry point
