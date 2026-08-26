@@ -361,6 +361,59 @@ class TestDiagL0Contingency:
             DiagL0(l0).target_ra_dec_offset()
 
 
+class TestDiagL0SolarLunarGeometry:
+    """Sun altitude and target-Moon separation at mid-exposure."""
+
+    def _make_l0(self, date_mid, ra=_PT_RA, dec=_PT_DEC):
+        l0 = _make_l0_pointing()
+        l0.headers["PRIMARY"]["RA"] = ra
+        l0.headers["PRIMARY"]["DEC"] = dec
+        l0.headers["PRIMARY"]["DATE-MID"] = date_mid
+        return l0
+
+    def test_matches_legacy_2d_product(self):
+        # KP.20240405.40113.57, whose legacy 2D carries TCSSUN = -61.60211 and
+        # TCSMOON = 54.2. TCSSUN differs in the 4th decimal: v2.12 computed sun
+        # and moon geometry from a site 647 m from the one its own barycentric
+        # correction used, which is the lineage of KECK_LOCATION.
+        l0 = self._make_l0(
+            "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
+        )
+        results = DiagL0(l0).solar_lunar_geometry()
+        assert results["TCSSUN"][0] == pytest.approx(-61.60211, abs=1e-3)
+        assert results["TCSMOON"][0] == pytest.approx(54.2, abs=0.01)
+
+    def test_sun_above_horizon_at_local_noon(self):
+        # Maunakea noon is 22:00 UT; the Sun clears the horizon by a wide margin.
+        results = DiagL0(
+            self._make_l0("2024-04-05T22:00:00.000")
+        ).solar_lunar_geometry()
+        assert results["TCSSUN"][0] > 30
+
+    def test_moon_separation_at_the_moon(self):
+        # Pointing at the Moon's own 2024-04-05T11:09 position.
+        l0 = self._make_l0(
+            "2024-04-05T11:09:11.082", ra="12:58:57.79", dec="-06:17:27.7"
+        )
+        assert DiagL0(l0).solar_lunar_geometry()["TCSMOON"][0] < 1.0
+
+    def test_written_to_quality_control(self):
+        l0 = _make_l0_with_catalog()
+        l0.headers["PRIMARY"]["DATE-MID"] = "2024-04-05T11:09:11.082"
+        results = DiagL0(l0).run()
+        for key in ("TCSSUN", "TCSMOON"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_missing_date_mid_raises(self):
+        with pytest.raises(KeyError, match="DATE-MID"):
+            DiagL0(_make_l0_pointing()).solar_lunar_geometry()
+
+    def test_diag_name_correct(self):
+        assert (
+            DiagL0.__dict__["solar_lunar_geometry"]._diag_name == "solar_lunar_geometry"
+        )
+
+
 class TestDiagL0PixelFractions:
     """Worst-amp dead/saturated pixel fractions, one pair per chip.
 

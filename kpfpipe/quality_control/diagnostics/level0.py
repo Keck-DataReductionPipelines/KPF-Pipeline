@@ -4,11 +4,12 @@ import logging
 
 import numpy as np
 from astropy import units as u
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import AltAz, SkyCoord, get_body, get_sun
 from astropy.time import Time
 from scipy.optimize import curve_fit
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
+from kpfpipe.utils.astro import KECK_LOCATION
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,26 @@ class DiagL0(Diagnostics):
         return self._tag(OBJOFF=self._offset("simbad"))
 
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
+
+    def solar_lunar_geometry(self):
+        """TCSSUN, TCSMOON: deg, Sun altitude and target-Moon separation.
+
+        Both are evaluated at mid-exposure from the WMKO site. TCSSUN is negative
+        with the Sun below the horizon.
+        """
+        hdr = self.kpf_obj.headers["PRIMARY"]
+        obs_time = Time(str(hdr["DATE-MID"]), scale="utc")
+        sun = get_sun(obs_time).transform_to(
+            AltAz(obstime=obs_time, location=KECK_LOCATION)
+        )
+        moon = get_body("moon", obs_time, KECK_LOCATION).transform_to("icrs")
+        pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
+        return self._tag(
+            TCSSUN=round(float(sun.alt.deg), 5),
+            TCSMOON=round(float(pointing.separation(moon).deg), 2),
+        )
+
+    solar_lunar_geometry._diag_name = "solar_lunar_geometry"
 
     def _present_amps(self, chip):
         """Yield ``(i, array)`` for each present, non-empty ``{chip}_AMP{i}``.

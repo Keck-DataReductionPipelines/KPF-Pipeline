@@ -17,7 +17,7 @@ import logging
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import Angle, EarthLocation
+from astropy.coordinates import Angle
 from astropy.stats import mad_std
 from astropy.time import Time
 from barycorrpy import get_BC_vel, utc_tdb
@@ -26,7 +26,7 @@ from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
 from kpfpipe import DEFAULTS
-from kpfpipe.utils.astro import compute_redshift
+from kpfpipe.utils.astro import KECK_LOCATION, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
 
@@ -61,13 +61,6 @@ class BarycentricCorrection:
     config : None | dict | ConfigHandler
         Module configuration. Recognizes no module-specific keys.
     """
-
-    # WMKO site coordinates
-    KECK_LOCATION = EarthLocation(
-        lat=19.8260 * u.deg,
-        lon=-155.474719 * u.deg,
-        height=4145.0 * u.m,
-    )
 
     def __init__(self, l2_obj, config=None):
         self.l2_obj = l2_obj
@@ -631,7 +624,7 @@ class BarycentricCorrection:
         bc_vel_mps, bjd_tdb = self._compute_barycorr(
             astrometry,
             t_fwm,
-            self.KECK_LOCATION,
+            KECK_LOCATION,
             rv_mps=rv_mps,
         )
         bary_kms = bc_vel_mps / 1000.0

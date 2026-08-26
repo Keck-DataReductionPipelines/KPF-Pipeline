@@ -17,6 +17,7 @@ from astropy.time import Time
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
+from kpfpipe.utils.astro import KECK_LOCATION
 
 from ._dtype_policy import BARYCORR, BJD, assert_dtype
 
@@ -298,7 +299,7 @@ class TestComputeBarycorrReference:
         }
         t = Time("2024-06-15T09:00:00.000", scale="utc")
         bc_vel, bjd_tdb = BarycentricCorrection._compute_barycorr(
-            astrometry, t, BarycentricCorrection.KECK_LOCATION
+            astrometry, t, KECK_LOCATION
         )
         # Physical sanity: BERV within Earth's orbital +/-30 km/s; BJD_TDB within
         # a few minutes of JD_UTC (clock + Romer light-travel delay).

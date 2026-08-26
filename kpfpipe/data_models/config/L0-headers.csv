@@ -41,6 +41,8 @@ NOTJUNK,QC: obs_id not in junk list,QUALITY_CONTROL,int,QCL0
 TCSOFF,Pointing offset from TCS/DCS target (arcsec),QUALITY_CONTROL,float,DiagL0
 OBJOFF,Pointing offset from OBJECT SIMBAD position (arcsec),QUALITY_CONTROL,float,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),QUALITY_CONTROL,float,DiagL0
+TCSSUN,Altitude of Sun; negative = below horizon (deg),QUALITY_CONTROL,float,DiagL0
+TCSMOON,Separation between Moon and target (deg),QUALITY_CONTROL,float,DiagL0
 DEADPXFG,Fraction of raw GREEN pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,DiagL0
 DEADPXFR,Fraction of raw RED pixels below 1.0e4 D.N.,QUALITY_CONTROL,float,DiagL0
 SATPXFG,Fraction of raw GREEN pixels above 5.0e8 D.N.,QUALITY_CONTROL,float,DiagL0

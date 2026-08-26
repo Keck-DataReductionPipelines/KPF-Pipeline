@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 from astropy.io import fits
 
+from kpfpipe import OBSERVATORY
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
@@ -296,6 +297,26 @@ class TestToKpf1:
     def test_seeing_absent_without_gdrseev(self, synthetic_l0_file):
         l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
         assert "SEEING" not in l1.headers["PRIMARY"]
+
+    def test_sun_and_moon_geometry_mirror_the_diagnostics(self, synthetic_l0_file):
+        l0 = KPF0.from_fits(synthetic_l0_file)
+        l0.set_keyword("TCSSUN", -61.60229)
+        l0.set_keyword("TCSMOON", 54.2)
+        primary = l0.to_kpf1().headers["PRIMARY"]
+        assert primary["SUNEL"] == -61.60229
+        assert primary["MOONANG"] == 54.2
+
+    def test_observatory_cards_from_config(self, synthetic_l0_file):
+        primary = KPF0.from_fits(synthetic_l0_file).to_kpf1().headers["PRIMARY"]
+        assert primary["GEOSYS"] == OBSERVATORY["geosys"]
+        assert primary["OBSLON"] == OBSERVATORY["longitude"]
+        assert primary["OBSLAT"] == OBSERVATORY["latitude"]
+        assert primary["OBSALT"] == OBSERVATORY["altitude"]
+
+    def test_sun_and_moon_geometry_absent_without_diagnostics(self, synthetic_l0_file):
+        l1 = KPF0.from_fits(synthetic_l0_file).to_kpf1()
+        assert "SUNEL" not in l1.headers["PRIMARY"]
+        assert "MOONANG" not in l1.headers["PRIMARY"]
 
     # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.
     _KPF_DRP = {

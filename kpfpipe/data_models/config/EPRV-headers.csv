@@ -73,6 +73,8 @@ TDEC#,TCS DEC for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kpf1
 TEL#,TCS elevation angle for telescope 1 to # [deg],PRIMARY,float,KPF0.to_kpf1
 TAZ#,TCS azimuth angle for telescope 1 to # [deg],PRIMARY,float,KPF0.to_kpf1
 THA#,TCS hour angle for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kpf1
+SUNEL,Sun Elevation Angle [deg],PRIMARY,float,KPF0.to_kpf1
+MOONANG,Target-Moon Angle [deg],PRIMARY,float,KPF0.to_kpf1
 INHUM,relative humidity inside dome [%],PRIMARY,float,KPF0.to_kpf1
 INHUMT,INHUM timestamp [UTC],PRIMARY,string,KPF0.to_kpf1
 DRPHASH,Git commit hash,PRIMARY,string,KPF0.to_kpf1

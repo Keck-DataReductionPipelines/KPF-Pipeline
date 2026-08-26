@@ -6,10 +6,17 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.constants import c
+from astropy.coordinates import EarthLocation
 
-from kpfpipe import REPO_ROOT
+from kpfpipe import OBSERVATORY, REPO_ROOT
 
 logger = logging.getLogger(__name__)
+
+KECK_LOCATION = EarthLocation(
+    lat=OBSERVATORY["latitude"] * u.deg,
+    lon=OBSERVATORY["longitude"] * u.deg,
+    height=OBSERVATORY["altitude"] * u.m,
+)
 
 
 def compute_doppler_factor(v):

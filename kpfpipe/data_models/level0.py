@@ -17,7 +17,7 @@ from astropy.table import Table
 from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 from rvdata.core.tools.headers import parse_value_to_datatype
 
-from kpfpipe import __version__
+from kpfpipe import OBSERVATORY, __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.keyword_registry import SCI_TRACES
 from kpfpipe.data_models.level1 import KPF1
@@ -332,7 +332,9 @@ class KPF0(KPFDataModel):
         The raw WMKO PRIMARY is converted to EPRV-standard names/values here (the
         single conversion site; see ``_map_header``), and preserved verbatim in the
         immutable INSTRUMENT_HEADER. DRP-RUN provenance lives on RECEIPT (stamped
-        at read) and reaches L1 via the header forward below.
+        at read) and reaches L1 via the header forward below. The observatory
+        cards (GEOSYS/OBSLON/OBSLAT/OBSALT) come from the OBSERVATORY config, not
+        from the raw header.
 
         Returns a KPF1 with EPRV PRIMARY, INSTRUMENT_HEADER, pass-through
         extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG,
@@ -373,12 +375,22 @@ class KPF0(KPFDataModel):
         # to_kpf2/to_kpf4. (PRIMARY is converted via _map_header above, not copied.)
         self._forward_headers(kpf1, ("QUALITY_CONTROL", "RECEIPT"))
 
-        if "GDRSEEV" in kpf1.headers["QUALITY_CONTROL"]:
-            kpf1.set_keyword("SEEING", kpf1.headers["QUALITY_CONTROL"]["GDRSEEV"])
+        for metric, eprv_keyword in (
+            ("GDRSEEV", "SEEING"),
+            ("TCSSUN", "SUNEL"),
+            ("TCSMOON", "MOONANG"),
+        ):
+            if metric in kpf1.headers["QUALITY_CONTROL"]:
+                kpf1.set_keyword(eprv_keyword, kpf1.headers["QUALITY_CONTROL"][metric])
 
         if self.receipt is not None and not self.receipt.empty:
             kpf1.receipt = self.receipt.copy()
         kpf1.obs_id = self.obs_id
+
+        kpf1.set_keyword("GEOSYS", OBSERVATORY["geosys"])
+        kpf1.set_keyword("OBSLON", OBSERVATORY["longitude"])
+        kpf1.set_keyword("OBSLAT", OBSERVATORY["latitude"])
+        kpf1.set_keyword("OBSALT", OBSERVATORY["altitude"])
 
         kpf1.set_keyword("DATALVL", "L1")
         kpf1.receipt_add_entry("to_kpf1", "", "PASS")

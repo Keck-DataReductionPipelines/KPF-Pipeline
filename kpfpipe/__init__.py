@@ -1,4 +1,5 @@
-"""KPF pipeline package root: version, detector config, and shared defaults."""
+"""KPF pipeline package root: version, detector and observatory config, and
+shared defaults."""
 
 import importlib.metadata
 import tomllib
@@ -48,5 +49,11 @@ def load_detector_config():
     return _detector
 
 
+def load_observatory_config():
+    path = Path(REPO_ROOT) / "reference/observatory.toml"
+    return tomllib.loads(path.read_text())
+
+
 DETECTOR = load_detector_config()
+OBSERVATORY = load_observatory_config()
 DEFAULTS.update(DETECTOR)

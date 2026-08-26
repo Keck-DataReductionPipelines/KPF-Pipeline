@@ -17,11 +17,13 @@ import numpy as np
 import pytest
 from astropy.constants import c
 
+from kpfpipe import OBSERVATORY
 from kpfpipe.utils.astro import (
     _B_V,
     _BP_RP,
     _EEM,
     _G_J,
+    KECK_LOCATION,
     air_to_vac,
     color_to_teff,
     compute_doppler_factor,
@@ -33,6 +35,21 @@ C_KMS = c.to("km/s").value
 # The tabulated G2V row, in the three colours the pipeline can be handed.
 SUN_TEFF = 5770.0
 SUN_COLORS = {"B-V": 0.650, "Gaia BP-RP": 0.823, "G-J": 4.635 - 3.60}
+
+
+class TestKeckLocation:
+    """KECK_LOCATION is derived from OBSERVATORY, never a second literal."""
+
+    def test_matches_the_observatory_config(self):
+        assert KECK_LOCATION.lat.deg == pytest.approx(OBSERVATORY["latitude"])
+        assert KECK_LOCATION.lon.deg == pytest.approx(OBSERVATORY["longitude"])
+        assert KECK_LOCATION.height.to(u.m).value == pytest.approx(
+            OBSERVATORY["altitude"]
+        )
+
+    def test_geosys_is_the_ellipsoid_astropy_assumes(self):
+        # EarthLocation defaults to WGS84, so GEOSYS must say so.
+        assert OBSERVATORY["geosys"] == "WGS84"
 
 
 class TestComputeRedshift:
