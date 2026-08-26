@@ -88,6 +88,10 @@ _DEFAULT_PRIMARY = {
     "TIMEERR": "NTP time correct to within 12.3 ms",
     "GRACFFLN": "regular-read-green.acf",
     "RDACFFLN": "regular-read-red.acf",
+    "GRDATE-E": GOOD_DATES["GRDATE-E"],
+    "RDDATE-E": GOOD_DATES["RDDATE-E"],
+    "GRDATE": "2024-09-23T09:13:08.554",
+    "RDDATE": "2024-09-23T09:13:08.554",
 }
 
 

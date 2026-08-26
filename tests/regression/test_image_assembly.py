@@ -140,6 +140,12 @@ class TestImageAssemblyBias:
         # The frame was read out with regular-read-{green,red}.acf.
         assert l1.headers["PRIMARY"]["READMODE"] == "regular"
 
+    def test_read_time_in_header(self, l1_bias):
+        l1, _ = l1_bias
+        # A regular readout takes ~48 s.
+        assert 40 < l1.headers["QUALITY_CONTROL"]["TRTGREEN"] < 60
+        assert 40 < l1.headers["QUALITY_CONTROL"]["TRTRED"] < 60
+
     def test_receipt_chain(self, l1_bias):
         l1, _ = l1_bias
         modules = l1.receipt["FUNCTION"].values
@@ -561,6 +567,27 @@ class TestReadMode:
             "RDDATE-E": shutter_close,
         }
         assert self._infer(tmp_path, cards) == expected
+
+    def test_read_time_measured_for_both_chips(self, tmp_path):
+        path = write_amp_l0(
+            tmp_path / "KP.20240101.00001.00.fits",
+            shape=(12, 12),
+            primary_cards={
+                "GRDATE-E": "2024-01-01T00:00:00",
+                "GRDATE": "2024-01-01T00:00:47.5",
+                "RDDATE-E": "2024-01-01T00:00:00",
+                "RDDATE": "2024-01-01T00:00:12.0",
+            },
+        )
+        assembly = ImageAssembly(KPF0.from_fits(path))
+        assembly.infer_read_mode()
+        assert assembly.read_time == {"GREEN": 47.5, "RED": 12.0}
+
+    def test_read_time_only_for_processed_chips(self, tmp_path):
+        path = write_amp_l0(tmp_path / "KP.20240101.00002.00.fits", shape=(12, 12))
+        assembly = ImageAssembly(KPF0.from_fits(path), config={"chips": ["GREEN"]})
+        assembly.infer_read_mode()
+        assert set(assembly.read_time) == {"GREEN"}
 
 
 class TestAmplifierGuards:

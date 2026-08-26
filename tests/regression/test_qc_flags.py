@@ -580,7 +580,7 @@ class TestQCL0:
 
     @pytest.mark.parametrize("key", ["GRDATE-B", "GRDATE-E", "RDDATE-B", "RDDATE-E"])
     def test_times_shutter_missing_raises(self, tmp_path, key):
-        missing = {k: v for k, v in GOOD_DATES.items() if k != key}
+        missing = dict(GOOD_DATES, **{key: None})
         with pytest.raises(KeyError, match=key):
             QCL0(_make_kpf0(tmp_path, dates=missing)).times_consistent()
 

@@ -54,7 +54,7 @@ class ImageAssembly:
       - orienting amplifier channels
       - applying gain conversion (ADU --> photo-electrons)
       - measuring read noise
-      - inferring the CCD readout mode
+      - inferring the CCD readout mode and read time
       - subtracting overscan bias
       - assembling full-frame images (FFI)
       - converting EXPMETER_SCI/SKY wavelengths from nm to Angstroms
@@ -91,6 +91,7 @@ class ImageAssembly:
         self.gain = {}  # amp ext -> gain; set by _parse_amplifier_reference()
         self.namp = {}  # chip -> n amps; set by count_amplifiers()
         self.dims = {}  # chip -> amp shape; set by count_amplifiers()
+        self.read_time = {}  # chip -> readout seconds; set by infer_read_mode()
         self.readnoise = {}  # channel ext -> RN std; set by measure_read_noise()
         # channel ext -> sqrt(2/pi)*std/mad; set by measure_read_noise()
         self.rn_nongauss = {}
@@ -481,7 +482,8 @@ class ImageAssembly:
 
     def infer_read_mode(self):
         """
-        Infer the CCD readout speed from the raw L0 header.
+        Infer CCD readout speed from the raw L0 header, and record each chip's
+        shutter-close to file-write readout duration in ``self.read_time``.
 
         Returns
         -------
@@ -491,24 +493,22 @@ class ImageAssembly:
         Notes
         -----
         The ACF waveform filenames name the mode outright, and failing that the
-        shutter-close to file-write interval separates the ~12 s fast readout
-        from the ~48 s regular one.
+        readout duration separates ~12 s fast readout from ~48 s regular.
         """
         header = self.l0_obj.headers["PRIMARY"]
+        for chip in self.chips:
+            prefix = {"GREEN": "GR", "RED": "RD"}[chip.upper()]
+            self.read_time[chip.upper()] = (
+                datetime.fromisoformat(header[f"{prefix}DATE"])
+                - datetime.fromisoformat(header[f"{prefix}DATE-E"])
+            ).total_seconds()
+
         acf = f"{header['GRACFFLN']} {header['RDACFFLN']}"
         if "fast" in acf:
             return "fast"
         if "regular" in acf:
             return "regular"
-
-        read_time = min(
-            (
-                datetime.fromisoformat(header[f"{chip}DATE"])
-                - datetime.fromisoformat(header[f"{chip}DATE-E"])
-            ).total_seconds()
-            for chip in ("GR", "RD")
-        )
-        return "fast" if read_time < 20 else "regular"
+        return "fast" if min(self.read_time.values()) < 20 else "regular"
 
     # ------------------------------------------------------------------
     # Private helpers - module execution
@@ -537,7 +537,8 @@ class ImageAssembly:
     def _set_headers(self, l1_obj):
         """
         Write assembly metadata to ``l1_obj``: per-amplifier read noise
-        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, and READMODE.
+        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, READMODE, and
+        the per-chip read time.
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
@@ -547,6 +548,8 @@ class ImageAssembly:
         # "zero" is the explicit no-op method (strips overscan, subtracts none).
         l1_obj.set_keyword("OSCANSUB", int(self.overscan_method != "zero"))
         l1_obj.set_keyword("READMODE", self.infer_read_mode())
+        for chip, read_time in self.read_time.items():
+            l1_obj.set_keyword(f"TRT{chip}", round(read_time, 3))
 
     # ------------------------------------------------------------------
     # Public entry point
