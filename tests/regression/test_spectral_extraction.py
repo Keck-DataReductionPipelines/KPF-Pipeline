@@ -197,7 +197,7 @@ class TestPerformShapes:
         )
         l2 = SpectralExtraction(minimal_l1).perform()
         assert l2.level == 2
-        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data["SCI2_FLUX"].shape == (DETECTOR["numorder"], NCOL)
 
     def test_every_fiber_lands_on_its_own_trace(self, minimal_l1, monkeypatch):
         # One fill value per fiber, so this sees a fiber written over another's
@@ -219,7 +219,7 @@ class TestPerformShapes:
         for fiber, fill in fills.items():
             for quantity in ("FLUX", "VAR"):
                 array = l2.data[f"{fiber}_{quantity}"]
-                assert array.shape == (NORDER_GREEN + NORDER_RED, NCOL)
+                assert array.shape == (DETECTOR["numorder"], NCOL)
                 np.testing.assert_array_equal(array, fill)
 
     def test_green_red_slices_independent(self, minimal_l1, monkeypatch):
@@ -297,7 +297,7 @@ class TestSpectralExtractionRealData:
         [
             ("GREEN_SCI2_FLUX", NORDER_GREEN),
             ("RED_SCI2_FLUX", NORDER_RED),
-            ("SCI2_FLUX", NORDER_GREEN + NORDER_RED),
+            ("SCI2_FLUX", DETECTOR["numorder"]),
         ],
     )
     def test_sci2_flux_shape(self, l2_from_flat, key, expected_rows):

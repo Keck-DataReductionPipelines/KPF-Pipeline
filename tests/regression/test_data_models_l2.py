@@ -25,7 +25,7 @@ from ._dtype_policy import FLUX, WAVE, assert_dtype, assert_roundtrip_dtype
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 
 # synthetic_l1_file fixture lives in tests/conftest.py
 
@@ -51,7 +51,7 @@ def synthetic_masters_l2_file(tmp_path_factory):
     n_pix = 64
     # WAVE is born-64 (EPRV / dtype policy); float32 would trip rvdata's
     # MinBitDepth upcast-and-warn on read.
-    wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float64)
+    wave = rng.random((DETECTOR["numorder"], n_pix)).astype(np.float64)
     trace3_wave = fits.ImageHDU(data=wave)
     trace3_wave.name = "TRACE3_WAVE"
 
@@ -366,7 +366,7 @@ class TestKPF2Aliases:
         kpf2 = KPF2()
         n_pix = 100
         rng = np.random.default_rng(42)
-        trace_data = rng.random((NORDER_GREEN + NORDER_RED, n_pix))
+        trace_data = rng.random((DETECTOR["numorder"], n_pix))
         kpf2.set_data("TRACE3_FLUX", trace_data)
 
         green = kpf2.data["GREEN_SCI2_FLUX"]
@@ -399,7 +399,7 @@ class TestKPF2Aliases:
         kpf2.set_data("RED_SCI2_FLUX", red_data)
 
         full = kpf2.data["SCI2_FLUX"]
-        assert full.shape == (NORDER_GREEN + NORDER_RED, n_pix)
+        assert full.shape == (DETECTOR["numorder"], n_pix)
         np.testing.assert_array_equal(full[:NORDER_GREEN], green_data)
         np.testing.assert_array_equal(full[NORDER_GREEN:], red_data)
 
@@ -412,7 +412,7 @@ class TestKPF2Aliases:
         green_data = np.zeros((NORDER_GREEN, n_pix), dtype=np.float32)
         kpf2.set_data("GREEN_SCI2_FLUX", green_data)
 
-        assert kpf2.data["TRACE3_FLUX"].shape == (NORDER_GREEN + NORDER_RED, n_pix)
+        assert kpf2.data["TRACE3_FLUX"].shape == (DETECTOR["numorder"], n_pix)
 
     def test_chip_prefix_write_via_set_data(self):
         kpf2 = KPF2()
@@ -506,7 +506,7 @@ class TestKPFMasterL2:
         n_pix = 32
         trace_data = (
             np.random.default_rng(42)
-            .random((NORDER_GREEN + NORDER_RED, n_pix))
+            .random((DETECTOR["numorder"], n_pix))
             .astype(np.float32)
         )
         m.data["TRACE3_WAVE"] = trace_data
@@ -529,7 +529,7 @@ class TestKPFMasterL2:
     def test_from_fits(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         assert "TRACE3_WAVE" in m.extensions
-        assert m.data["TRACE3_WAVE"].shape == (NORDER_GREEN + NORDER_RED, 64)
+        assert m.data["TRACE3_WAVE"].shape == (DETECTOR["numorder"], 64)
 
     def test_from_fits_adds_receipt_entry(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)

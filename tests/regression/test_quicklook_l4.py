@@ -18,7 +18,7 @@ pytestmark = pytest.mark.quicklook
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 NVEL = 21  # small velocity grid for fast tests
 
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]

@@ -63,15 +63,11 @@ _rvdata_inst_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
 _rvdata_core_cfg = importlib.resources.files("rvdata.core.models.config")
 _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
 
-# Number of echelle orders (green + red); the value header_map.csv gets wrong (65).
-_NUMORDER = int(DETECTOR["norder"]["GREEN"]) + int(DETECTOR["norder"]["RED"])
-
-# Number of traces/orderlets (SKY, SCI1-3, CAL); the numbered per-orderlet
-# extensions CCF#/RV#/CCF_VAR# run 1.._NUMTRACES. SCI_TRACES holds just the
-# science-fiber indices, the fibers the catalog C*# overlay targets -- the single
-# definition, imported by level0 rather than re-derived there.
+# SCI_TRACES holds the science-fiber indices, the fibers the catalog C*# overlay
+# targets -- the single definition, imported by level0 rather than re-derived
+# there. The trace count itself is DETECTOR["numtrace"]; the numbered
+# per-orderlet extensions CCF#/RV#/CCF_VAR# run 1..that.
 _TRACE_MAP = pd.read_csv(_kpf_pipe_cfg / "trace-map.csv")
-_NUMTRACES = len(_TRACE_MAP)
 SCI_TRACES = tuple(
     _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
 )
@@ -110,14 +106,15 @@ class KeywordRegistry:
     ]
 
     # header_map keys whose entry is not a genuine native->EPRV mapping. Two
-    # consumers: non-None values correct the table Default (NUMORDER 65->67; DRPTAG,
-    # EPRVTAG, VOCLASS are runtime tags), and every key is dropped from header_map.
+    # consumers: non-None values correct the table Default (NUMORDER, which
+    # header_map.csv gets wrong as 65; DRPTAG, EPRVTAG, VOCLASS are runtime
+    # tags), and every key is dropped from header_map.
     # None = no static default; value set elsewhere (DATALVL by KPF1.__init__,
     # JD_UTC by the _map_header epoch transform, RVMETHOD by RadialVelocity -- its
     # header_map.csv row also puts "CCF" one column past DEFAULT, so it is dead
     # there anyway, and RVMETHOD is a level-4 keyword the L1 map must not stamp).
     _DEFAULT_OVERRIDES = {
-        "NUMORDER": str(_NUMORDER),
+        "NUMORDER": str(DETECTOR["numorder"]),
         "DRPTAG": __version__,
         "EPRVTAG": f"v{_RVDATA_VERSION}",
         "VOCLASS": f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
@@ -154,6 +151,23 @@ class KeywordRegistry:
     # 452/852nm), DQLVL, T*.
     _FIBER_INDEXED_BASES = ("TRACE", *_CATALOG_BASES)
 
+    # Telescope-indexed "BASE1 ... BASE#" families. KPF is on one telescope, so
+    # these expand to index 1 alone; every other template family expands to
+    # DETECTOR["numtrace"] (the fiber families, and EXSNR/EXSNRW's five bands,
+    # which happen to be five as well).
+    _TELESCOPE_INDEXED_BASES = (
+        "TELEID",
+        "TLST",
+        "TRA",
+        "TDEC",
+        "TEL",
+        "TZA",
+        "TAZ",
+        "THA",
+        "PARST",
+        "PAREND",
+    )
+
     # STANDARD keys rvdata's header_map.csv maps but KPF deliberately does not
     # register (parallactic angle, not carried on KPF products). Dropped silently;
     # any *other* unregistered header_map key raises in _load_header_map.
@@ -167,11 +181,11 @@ class KeywordRegistry:
         "BARYCORR_Z": (_rvdata_core_cfg / "L2-BARYCORR_Z-keywords.csv", 2),
         **{
             f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4)
-            for i in range(1, _NUMTRACES + 1)
+            for i in range(1, DETECTOR["numtrace"] + 1)
         },
         **{
             f"CCF{i}": (_rvdata_core_cfg / "L4-CCF1-keywords.csv", 4)
-            for i in range(1, _NUMTRACES + 1)
+            for i in range(1, DETECTOR["numtrace"] + 1)
         },
     }
 
@@ -344,8 +358,9 @@ class KeywordRegistry:
         """Expand an EPRV keyword CSV into unified-registry rows.
 
         EPRV CSVs encode per-key/per-telescope families as a "BASE1 ... BASE#"
-        template; expand each to literal rows BASE1-9 (only index 1 inherits the
-        Required flag, mirroring rvdata's seed). EPRV rows carry ``"EPRV"`` in the
+        template; expand each to literal rows over that family's index range
+        (see ``_TELESCOPE_INDEXED_BASES``; only index 1 inherits the Required
+        flag, mirroring rvdata's seed). EPRV rows carry ``"EPRV"`` in the
         ``PopulatedBy`` column -- the discriminator the derived lookups use to
         tell EPRV rows from KPF rows.
         """
@@ -364,7 +379,9 @@ class KeywordRegistry:
             if "..." in name:
                 # "CDEC1 ... CDEC#" -> "CDEC" (strip the trailing index).
                 base = name.split("...")[0].strip().rstrip("0123456789")
-                for j in range(1, 10):
+                telescope = base in cls._TELESCOPE_INDEXED_BASES
+                last = 1 if telescope else DETECTOR["numtrace"]
+                for j in range(1, last + 1):
                     rows.append(
                         [
                             f"{base}{j}",
@@ -420,7 +437,7 @@ class KeywordRegistry:
             ext_field = str(r["Extension"]).strip()
             if ext_field.endswith("*"):
                 base = ext_field[:-1]
-                extensions = [f"{base}{i}" for i in range(1, _NUMTRACES + 1)]
+                extensions = [f"{base}{i}" for i in range(1, DETECTOR["numtrace"] + 1)]
             else:
                 extensions = [ext_field]
             for ext in extensions:

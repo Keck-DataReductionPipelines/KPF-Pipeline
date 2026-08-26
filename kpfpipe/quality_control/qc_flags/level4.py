@@ -36,7 +36,7 @@ class QCL4(QC):
         writes, including the BJD_TDB/BERV/WEIGHT the DiagL4 dispersion metrics
         consume.
         """
-        norder = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
+        norder = DETECTOR["numorder"]
         for fiber in _SCI_FIBERS:
             ccf = self.kpf_obj.data.get(f"{fiber}_CCF")
             rv = self.kpf_obj.data.get(f"{fiber}_RV")

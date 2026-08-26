@@ -242,7 +242,7 @@ class TestScienceRecipe:
         assert "barycentric_correction" in modules
 
     def test_barycorr_extensions_populated(self, l2):
-        norder = NORDER_GREEN + NORDER_RED
+        norder = DETECTOR["numorder"]
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             arr = np.asarray(l2.data[ext])
             assert arr.shape == (norder,), f"{ext} shape {arr.shape} != ({norder},)"

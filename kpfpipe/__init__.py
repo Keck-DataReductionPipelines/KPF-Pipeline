@@ -46,6 +46,12 @@ def load_detector_config():
 
     _detector = dict(traverse(config))
 
+    # Derived counts, so consumers read them instead of re-summing: total
+    # echelle orders across both CCDs, and the number of fibers (traces) on
+    # the slicer.
+    _detector["numorder"] = sum(_detector["norder"].values())
+    _detector["numtrace"] = len(_detector["fiber_positions"])
+
     return _detector
 
 

@@ -23,9 +23,6 @@ from kpfpipe.data_models.base import KPFDataModel, keyword_registry
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.utils.io import kpf_filename
 
-# Make rvdata's RV2._read aware of KPF's QUALITY_CONTROL and CATALOG_RECORD
-# extensions so an L2 written with them reads back (KPF2.__init__ creates the empty
-# extensions).
 keyword_registry.register_rvdata_extension(
     LEVEL2_EXTENSIONS,
     "QUALITY_CONTROL",
@@ -40,7 +37,6 @@ keyword_registry.register_rvdata_extension(
 )
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED = DETECTOR["norder"]["RED"]
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +97,7 @@ class _KPF2DataDict(AliasedOrderedDict):
             )
             if existing is None or np.size(existing) == 0:
                 full = np.zeros(
-                    (NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype
+                    (DETECTOR["numorder"], *value.shape[1:]), dtype=value.dtype
                 )
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)

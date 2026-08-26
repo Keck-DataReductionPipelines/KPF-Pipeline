@@ -23,9 +23,6 @@ from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.base import KPFDataModel, keyword_registry
 from kpfpipe.utils.io import kpf_filename
 
-# Make rvdata's RV4._read aware of KPF's QUALITY_CONTROL and CATALOG_RECORD
-# extensions so an L4 written with them reads back (QCL4 is planned; this keeps the
-# read forward-safe).
 keyword_registry.register_rvdata_extension(
     LEVEL4_EXTENSIONS,
     "QUALITY_CONTROL",
@@ -40,27 +37,19 @@ keyword_registry.register_rvdata_extension(
 )
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
-NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
 
 logger = logging.getLogger(__name__)
 
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
-# CCF and RV extensions reuse the shared trace map (CCF{n}/RV{n} <-> TRACE{n});
-# the trace-to-fiber mapping is identical for L2 and L4. aliases.csv holds only
-# the non-trace 1:1 aliases (shared with L2), matching that convention.
+
 _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 _ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Build a set of valid chip-prefix keys for fast membership testing.
 # e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"),
 #        "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
-# Each maps a chip-prefixed key -> (fiber_alias, chip). CCF and CCF_VAR cubes are
-# sliced on their order axis (axis 0) and support chip-prefix read and write; RV
-# tables are row-sliced (green = rows 0:NORDER_GREEN, red the rest) and support
-# read only -- each is written whole (one BinTable per orderlet), so a chip-prefix
-# write raises.
-_CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (fiber_alias, chip)
+# Each maps a chip-prefixed key -> (fiber_alias, chip).
+_CHIP_PREFIX_KEYS = {}
 for _, _row in _TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in ("CCF", "CCF_VAR", "RV"):
@@ -106,7 +95,7 @@ class _KPF4DataDict(AliasedOrderedDict):
             )
             if existing is None or np.size(existing) == 0:
                 full = np.zeros(
-                    (NORDER_GREEN + NORDER_RED, *value.shape[1:]), dtype=value.dtype
+                    (DETECTOR["numorder"], *value.shape[1:]), dtype=value.dtype
                 )
                 super().__setitem__(resolved, full)
             arr = super().__getitem__(resolved)

@@ -38,7 +38,7 @@ class QCL2(QC):
                         return False
                     if not np.any(np.isfinite(arr)):
                         return False
-        per_order = (norder["GREEN"] + norder["RED"],)
+        per_order = (DETECTOR["numorder"],)
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             arr = self.kpf_obj.data.get(ext)
             if np.shape(arr) != per_order or not np.any(np.isfinite(arr)):

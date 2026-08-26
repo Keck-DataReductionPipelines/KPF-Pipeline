@@ -19,7 +19,7 @@ from ._dtype_policy import BJD, CCF, RV_FLOAT, assert_dtype, assert_roundtrip_dt
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 
 
 class TestToKPF4:

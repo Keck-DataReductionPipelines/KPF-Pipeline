@@ -23,7 +23,7 @@ from ._dtype_policy import BARYCORR, BJD, assert_dtype
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 NCOL = 50  # reduced column count for speed
 
 

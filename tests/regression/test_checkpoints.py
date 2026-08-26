@@ -39,7 +39,7 @@ from ._data_models import (
     write_science_l0,
 )
 
-_NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
+_NORDER_TOTAL = DETECTOR["numorder"]
 _NCOL = 20  # matches the mini_detector ncol, which the DATAPRL2 shape check reads
 
 

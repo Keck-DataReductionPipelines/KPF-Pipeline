@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
+from kpfpipe import DETECTOR
+from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
 
@@ -33,7 +34,8 @@ from ._science import (
     make_mask,
 )
 
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
+NORDER_RED = DETECTOR["norder"]["RED"]
 # Fiber order is the module's own config-overridable default, not the canonical
 # slicer order -- spelled out so a reordering in production shows up here.
 _FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
