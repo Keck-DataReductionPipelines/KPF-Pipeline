@@ -25,9 +25,7 @@ _DEFAULTS = {
     "flat": False,  # flat division not yet implemented
 }
 
-# PRIMARY-header flag marking a calibration as applied (single source of truth
-# for these keyword names). FLATDIV is reserved for when flat division lands.
-_CALIBRATION_HEADER_KEYS = {
+_CALIBRATION_APPLIED_KEYS = {
     "bias": "BIASSUB",
     "dark": "DARKSUB",
     "flat": "FLATDIV",
@@ -73,10 +71,13 @@ class ImageProcessing:
         # is read at most once.
         self._bias_ml1 = None
         self._dark_ml1 = None
+        self._flat_ml1 = None
         self._bias_path = None
         self._dark_path = None
+        self._flat_path = None
         self._biassub = None  # applied flags for _set_headers
         self._darksub = None
+        self._flatdiv = None
         self._info = None
 
     # ------------------------------------------------------------------
@@ -248,13 +249,14 @@ class ImageProcessing:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l1_obj):
-        """Write the applied-flag keywords (BIASSUB/DARKSUB) for image processing.
+        """Write the applied-flag keywords (BIASSUB/DARKSUB/FLATDIV).
 
         Reads the flags populated by perform(); set_keyword routes them to their
-        registry home (RECEIPT).
+        registry home (RECEIPT). All three are written on every run.
         """
         l1_obj.set_keyword("BIASSUB", int(self._biassub))
         l1_obj.set_keyword("DARKSUB", int(self._darksub))
+        l1_obj.set_keyword("FLATDIV", int(self._flatdiv))
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -265,7 +267,7 @@ class ImageProcessing:
         """
         Return True if ``cal_type`` is already flagged applied on ``l1_obj``.
 
-        Reads the applied flag (``_CALIBRATION_HEADER_KEYS``: BIASSUB/DARKSUB/
+        Reads the applied flag (``_CALIBRATION_APPLIED_KEYS``: BIASSUB/DARKSUB/
         FLATDIV) from the RECEIPT header -- their registry home -- written by a
         prior ``perform``. Lets callers -- and ``perform`` itself -- avoid applying a
         calibration twice (e.g. a cached frame revisited during stacking).
@@ -282,7 +284,7 @@ class ImageProcessing:
         bool
             True if the calibration's header flag is present and truthy.
         """
-        val = l1_obj.headers["RECEIPT"].get(_CALIBRATION_HEADER_KEYS[cal_type])
+        val = l1_obj.headers["RECEIPT"].get(_CALIBRATION_APPLIED_KEYS[cal_type])
         return bool(val)
 
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):
@@ -342,6 +344,7 @@ class ImageProcessing:
         # frame (e.g. a double perform() call); checked before any mutation.
         prior_bias = self.calibration_applied(self.l1_obj, "bias")
         prior_dark = self.calibration_applied(self.l1_obj, "dark")
+        prior_flat = self.calibration_applied(self.l1_obj, "flat")
         if self.bias and prior_bias:
             raise RuntimeError("bias already subtracted from this frame (BIASSUB=True)")
         if self.dark and prior_dark:
@@ -361,6 +364,7 @@ class ImageProcessing:
         # another already recorded on the frame.
         self._biassub = bool(self.bias) or prior_bias
         self._darksub = bool(self.dark) or prior_dark
+        self._flatdiv = bool(self.flat) or prior_flat
 
         self._set_headers(self.l1_obj)
         self._track_info()

@@ -71,8 +71,8 @@ def main(config, args):
     PlotL0(l0, output_dir=l0_qlp_dir).run("all")
 
     # L0 processing complete: CheckpointL0.run() folds in Diagnostics + QC, then
-    # validates. Run before assembly on purpose -- QCL0 writes the L0 QC flags +
-    # ISGOOD onto l0's QUALITY_CONTROL, which to_kpf1 propagates downstream so the
+    # validates. Run before assembly on purpose -- QCL0 writes the L0 QC flags
+    # onto l0's QUALITY_CONTROL, which to_kpf1 propagates downstream so the
     # L1/L2/L4 products carry the full append-only QC history.
     logger.info("running L0 checkpoint for %s", obs_id)
     CheckpointL0(l0).run()
@@ -170,7 +170,7 @@ def main(config, args):
     l4.to_fits(l4_out_path)
 
     # End-of-run verdict: a compact roll-up read straight off the finished L4
-    # product (masters, inputs/outputs, ISGOOD, combined RV), plus the elapsed.
+    # product (masters, inputs/outputs, combined RV), plus the elapsed.
     logger.info(science_run_summary(l4, time.monotonic() - t0))
 
     logger.info("exiting kpf_drp_science pipeline")

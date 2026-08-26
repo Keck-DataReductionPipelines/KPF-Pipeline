@@ -2,8 +2,8 @@
 
 The second of three quality-control stages (Diagnostics -> QC -> Checkpoints).
 Each QC subclass runs pass/fail check methods, writing a 0/1 flag per check to
-QUALITY_CONTROL via ``set_keyword`` and aggregating ISGOOD as the AND of all
-checks. Header validation and raising live in the separate Checkpoints layer.
+QUALITY_CONTROL via ``set_keyword``. Header validation and raising live in the
+separate Checkpoints layer.
 """
 
 import logging
@@ -26,71 +26,49 @@ class QC:
         self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (passed, comment).
 
-    @staticmethod
-    def _hdr_float(hdr, key):
-        """Return float value for a header key, or None if the card is absent/empty.
-
-        A present-but-non-numeric value is malformed, so its ValueError propagates
-        for ``QC.run`` to surface (fail loud).
-        """
-        try:
-            return float(hdr.get(key))
-        except TypeError:
-            return None
-
-    @staticmethod
-    def _hdr_bool(hdr, key):
-        """Return bool value for a header key, or False if absent."""
-        return bool(hdr.get(key, False))
-
     def run(self):
-        """Run all checks, write each 0/1 result, and aggregate ISGOOD.
+        """Run all checks and write each 0/1 result.
 
-        Each result is logged as it is written -- ``DEBUG`` on a pass, ``WARNING``
-        on a fail -- both carrying the keyword's comment so the 8-char keyword
-        reads clearly. Resets ``self.results`` at the start so calling ``run()``
-        repeatedly on the same instance is deterministic. A check that raises is
-        logged at ERROR (naming it) and re-raised unchanged -- fail-fast; halting
-        is the checkpoint layer's role.
+        Each result is logged as it is written: DEBUG on a pass, WARNING on a
+        fail, ERROR on a check that raised (counted as a fail -- this layer never
+        aborts; halting is the checkpoint layer's role). ``NotImplementedError``
+        from a placeholder check writes no flag.
+        ``self.results`` is reset at the start so repeated calls are deterministic.
 
         Returns
         -------
         dict
             Maps each FITS keyword to its ``(passed, comment)`` pair (this level's
-            checks only). ``ISGOOD`` is the cross-level aggregate (see below).
+            checks only).
         """
         self.results = {}
 
         for name, fn in self._iter_checks():
+            kw = fn._qc_key
+            # Mirror the registry Description into results (the FITS comment
+            # source; see ``_tag``). The _qc_key must be registered.
+            comment = self.kpf_obj.keyword_registry.routing[kw][1]
             try:
                 passed = fn()
-                kw = fn._qc_key
-                # Mirror the registry Description into results (the FITS comment
-                # source; see ``_tag``). The _qc_key must be registered.
-                comment = self.kpf_obj.keyword_registry.routing[kw][1]
-                self.results[kw] = (passed, comment)
-                self.kpf_obj.set_keyword(kw, 1 if passed else 0)
-                logger.log(
-                    logging.DEBUG if passed else logging.WARNING,
-                    "%s %s = %s — %s",
-                    self.LEVEL,
-                    kw,
-                    1 if passed else 0,
-                    comment,
+            except NotImplementedError:
+                logger.info(
+                    "%s QC check %r is not implemented; skipped", self.LEVEL, name
                 )
+                continue
             except Exception as e:
                 logger.error("%s QC check %r raised: %s", self.LEVEL, name, e)
-                raise
+                passed = False
+            self.results[kw] = (passed, comment)
+            self.kpf_obj.set_keyword(kw, 1 if passed else 0)
+            logger.log(
+                logging.DEBUG if passed else logging.WARNING,
+                "%s %s = %s — %s",
+                self.LEVEL,
+                kw,
+                1 if passed else 0,
+                comment,
+            )
 
-        # ISGOOD is the running aggregate: AND over every QC flag now on
-        # QUALITY_CONTROL -- the flags this level just wrote PLUS those propagated
-        # from lower levels (QUALITY_CONTROL accumulates L0->L1->L2->L4). Reading
-        # the accumulated header makes it level-agnostic; exclude ISGOOD itself.
-        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        flags = self.kpf_obj.keyword_registry.qc_flag_keywords - {"ISGOOD"}
-        present = [hdr.get(kw) for kw in flags if hdr.get(kw) is not None]
-        is_good = all(bool(v) for v in present)
-        self.kpf_obj.set_keyword("ISGOOD", 1 if is_good else 0)
         return self.results
 
     def _required_primary_keywords(self):
@@ -99,15 +77,11 @@ class QC:
         The level cap is the level's own number, so this runs unchanged for L1,
         L2, and L4 -- each returns the required PRIMARY keywords tagged at or
         below its own level. Read off the model's registry singleton so qc_flags
-        imports nothing from data_models. L0 (and an untagged ``LEVEL`` None)
-        yields the empty set -- raw WMKO L0 PRIMARY is not registry-governed.
+        imports nothing from data_models.
         """
-        level = str(self.LEVEL or "")
-        if not (level[:1].upper() == "L" and level[1:].isdigit()):
-            return set()
-        cap = int(level[1:])
+        cap = int(str(self.LEVEL)[1:])
         reg = self.kpf_obj.keyword_registry
-        return {k for k, lvl in reg.required.get("PRIMARY", {}).items() if lvl <= cap}
+        return {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= cap}
 
     def _iter_checks(self):
         """Yield each ``(name, method)`` tagged ``_qc_key``.

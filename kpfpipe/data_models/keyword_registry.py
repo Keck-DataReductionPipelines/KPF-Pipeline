@@ -172,9 +172,9 @@ class KeywordRegistry:
         },
     }
 
-    # "PopulatedBy" values marking a QUALITY_CONTROL row as a 0/1 QC flag: "QC" tags
-    # the cross-level ISGOOD aggregate, "QCL{n}" a level-N check.
-    _QC_POPULATORS = frozenset({"QC", "QCL0", "QCL1", "QCL2", "QCL4"})
+    # "PopulatedBy" values marking a QUALITY_CONTROL row as a 0/1 QC flag: "QCL{n}"
+    # tags a level-N check.
+    _QC_POPULATORS = frozenset({"QCL0", "QCL1", "QCL2", "QCL4"})
 
     # FITS structural cards: written by the I/O layer (astropy) from the HDU's
     # structure, never authored by the pipeline -- so always permitted on any
@@ -430,11 +430,12 @@ class KeywordRegistry:
     def _kpf_rows(cls):
         """KPF-pipeline keyword rows from config/L{0,1,2,4}-headers.csv.
 
-        Level is the per-file level (one CSV per data level).
+        Level is the per-file level (one CSV per data level). ``#`` opens a
+        comment: the registries carry section banners for readers.
         """
         rows = []
         for level in (0, 1, 2, 4):
-            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv")
+            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv", comment="#")
             rows += cls._parse_kpf_keyword_config(
                 df, f"L{level}-headers.csv", lambda r, lvl=level: lvl
             )
@@ -557,12 +558,9 @@ class KeywordRegistry:
         -------
         tuple
             ``(all_flags, by_level)``. ``all_flags`` is every QUALITY_CONTROL row
-            tagged by a QC populator (used for the cross-level ISGOOD aggregate).
-            ``by_level`` maps a LEVEL tag (one per registered level, e.g.
-            "L0"/"L1"/"L2"/"L4") to that level's own ``QCL{n}`` flags (used by the
-            per-level checkpoint). The generic "QC" aggregate keyword (ISGOOD) is
-            in ``all_flags`` only -- in no per-level set, so the checkpoint never
-            warns/raises on the aggregate itself.
+            tagged by a QC populator (the cross-level L0->L4 set). ``by_level``
+            maps a LEVEL tag (one per registered level, e.g. "L0"/"L1"/"L2"/"L4")
+            to that level's own ``QCL{n}`` flags (used by the per-level checkpoint).
         """
         all_flags = set()
         by_level = {}
@@ -573,8 +571,8 @@ class KeywordRegistry:
             ):
                 continue
             all_flags.add(row.Keyword)
-            if row.PopulatedBy != "QC":  # "QCL{n}" -> "L{n}", for each registered level
-                by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
+            # "QCL{n}" -> "L{n}", for each registered level
+            by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
         return all_flags, by_level
 
     # --- rvdata extension registration ---------------------------------------

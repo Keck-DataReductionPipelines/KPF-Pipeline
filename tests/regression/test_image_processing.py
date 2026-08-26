@@ -53,11 +53,11 @@ class MockL1:
         self._receipt = []
 
     def set_keyword(self, key, value):
-        # Mirrors KPFDataModel.set_keyword routing: L1-headers.csv routes both
-        # keys ImageProcessing writes to RECEIPT. Anything else is unregistered
-        # here, so fail loud rather than inventing a PRIMARY fallback the real
-        # router would never take.
-        if key not in ("BIASSUB", "DARKSUB"):
+        # Mirrors KPFDataModel.set_keyword routing: L1-headers.csv routes all
+        # three keys ImageProcessing writes to RECEIPT. Anything else is
+        # unregistered here, so fail loud rather than inventing a PRIMARY
+        # fallback the real router would never take.
+        if key not in ("BIASSUB", "DARKSUB", "FLATDIV"):
             raise KeyError(f"{key!r} is not routed by this mock; extend it")
         self.headers["RECEIPT"][key] = value
 
@@ -348,6 +348,12 @@ class TestPerform:
     def test_darksub_header_false_when_dark_off(self, mod_with_bias):
         mod_with_bias.perform()
         assert mod_with_bias.l1_obj.headers["RECEIPT"]["DARKSUB"] == 0
+
+    def test_flatdiv_header_false_when_flat_off(self, mod_with_bias):
+        # All three applied-step flags are written on every run: QCL1 gates
+        # flat_ok on the 0 as much as on the 1.
+        mod_with_bias.perform()
+        assert mod_with_bias.l1_obj.headers["RECEIPT"]["FLATDIV"] == 0
 
     def test_flat_true_raises_not_implemented(self, mod_with_bias):
         with pytest.raises(NotImplementedError, match="flat"):

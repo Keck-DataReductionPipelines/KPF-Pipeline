@@ -6,8 +6,7 @@ L0-stage module. Given a raw L0 science frame, it resolves the target's astromet
 from Gaia (by GAIAID, whose release prefix picks the data release queried) and SIMBAD
 (by OBJECT), builds the telescope-native ``wmko`` row from the L0 PRIMARY ``TARG*``
 astrometry (no query), merges them into a canonical ``kpf-drp`` row, and writes all
-four rows to the L0 ``CATALOG_RECORD`` extension with the
-``WMKOCR``/``GAIACR``/``SIMBADCR`` presence flags.
+four rows to the L0 ``CATALOG_RECORD`` extension.
 
 CATALOG_RECORD bridges an ordering problem: the results ultimately belong on the EPRV
 PRIMARY catalog keywords (``C*#``), but that conversion does not happen until
@@ -136,9 +135,6 @@ _CATALOG_UNITS = {
     "equinox": u.yr,
     "color": u.mag,
 }
-# Per-source presence flag written to the CATALOG_RECORD header (int 0/1). DiagL0
-# keeps its own local mirror rather than importing this schema.
-_CATALOG_FLAGS = {"gaia": "GAIACR", "simbad": "SIMBADCR", "wmko": "WMKOCR"}
 
 
 class AstroQuery:
@@ -588,9 +584,9 @@ class AstroQuery:
         raw TARG* pointing sanitized to the EPRV C*# format and rotated from its native
         FK5 (J2000) to ICRS, so all three sources share one frame. KPF pointing is
         always FK5, so a non-FK5 or absent TARGFRAM raises rather than being coerced --
-        a wrong frame would corrupt the barycentric correction. Returns None (WMKOCR=0,
-        warned) when TARGRA is absent or the TARG* astrometry cannot be parsed. Always
-        run: TARGOFF needs this row even when ``astrometry_priority`` bars wmko from
+        a wrong frame would corrupt the barycentric correction. Returns None (warned,
+        no row) when TARGRA is absent or the TARG* astrometry cannot be parsed. Always
+        run: TCSOFF needs this row even when ``astrometry_priority`` bars wmko from
         anchoring the position.
         """
         primary = self.l0_obj.headers["PRIMARY"]
@@ -783,19 +779,6 @@ class AstroQuery:
         ]
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
-    def _set_headers(self, l0_obj):
-        """Sole place this module writes headers; reads instance attributes.
-
-        One presence flag per queryable source: 1 when it resolved a record, 0
-        otherwise -- absent, gated off and failed are alike, since a consumer cannot
-        act on the difference. All three are written together, so a missing flag means
-        AstroQuery did not complete (what DiagL0 warns on). The merged ``kpf-drp`` row
-        has no flag; merge_catalog_records raises instead.
-        """
-        for source in _SOURCES:
-            record = getattr(self, f"_{source}")
-            l0_obj.set_keyword(_CATALOG_FLAGS[source], 1 if record is not None else 0)
-
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
@@ -841,7 +824,6 @@ class AstroQuery:
 
         self.merge_catalog_records()
 
-        self._set_headers(self.l0_obj)
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")
 

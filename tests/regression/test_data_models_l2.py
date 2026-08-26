@@ -112,13 +112,11 @@ class TestCatalogRecordPassthrough:
         l1 = KPF1()
         l1.create_extension("CATALOG_RECORD", "BinTableHDU")
         l1.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
-        l1.headers["CATALOG_RECORD"]["GAIACR"] = (1, "Catalog record present")
         return l1
 
-    def test_rows_and_flags_reach_l2(self):
+    def test_rows_reach_l2(self):
         l2 = self._l1_with_catalog().to_kpf2()
         assert [str(s) for s in l2.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
-        assert l2.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
         # The missing rv reads back NaN, not masked -- L2 reads through rvdata's
@@ -128,7 +126,6 @@ class TestCatalogRecordPassthrough:
         l2.to_fits(fn)
         back = KPF2.from_fits(fn)
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
-        assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
         rv = back.data["CATALOG_RECORD"][0]["rv"]
         assert rv is not np.ma.masked and np.isnan(rv)
 

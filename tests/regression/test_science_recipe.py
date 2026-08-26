@@ -155,12 +155,6 @@ class _FrozenAstroQuery:
         aq = self._aq
         for source, record in _CATALOG_CAPTURE.items():
             aq._write_catalog_record(source, dict(record))
-        # _set_headers reads these to write the per-source presence flags.
-        aq._wmko = _CATALOG_CAPTURE["wmko"]
-        aq._gaia = _CATALOG_CAPTURE["gaia"]
-        aq._simbad = _CATALOG_CAPTURE["simbad"]
-        aq._canonical = _CATALOG_CAPTURE["kpf-drp"]
-        aq._set_headers(aq.l0_obj)
         aq.l0_obj.receipt_add_entry("astro_query", "", "PASS")
         return aq.l0_obj
 
@@ -640,7 +634,6 @@ class TestScienceSummary:
                 "WLSFILE": "/m/20240405/KP.20240405.63499.95_master_thar_L2.fits",
             },
             "PRIMARY": {"RV": 11.290158, "RVERR": 0.000156, "BJDTDB": 2460405.968919},
-            "QUALITY_CONTROL": {"ISGOOD": 0},
         }
         receipt = pd.DataFrame(
             [
@@ -671,7 +664,6 @@ class TestScienceSummary:
         # Masters from the RECEIPT header cards.
         assert "bias=KP.20240405.03637.74_master_bias_L1.fits" in text
         assert "thar=KP.20240405.63499.95_master_thar_L2.fits" in text
-        assert "ISGOOD:   0" in text
         # RV km/s, error m/s (0.000156 km/s -> 0.156 m/s).
         assert "+11.29016 km/s  err 0.156 m/s  @ BJD_TDB 2460405.968919" in text
         assert "elapsed:  92.4 s" in text

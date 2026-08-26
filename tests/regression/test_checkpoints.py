@@ -31,15 +31,16 @@ from kpfpipe.quality_control.checkpoints import (
 )
 
 from ._data_models import (
-    GOOD_DATES,
     make_l4,
+    seed_catalog_record,
     seed_required_primary,
     set_fiber_arrays,
-    write_amp_l0,
+    set_wave_bands,
+    write_science_l0,
 )
 
 _NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
-_NCOL = 8  # DiagL2 metrics are pixel aggregates; detector width is moot here
+_NCOL = 20  # matches the mini_detector ncol, which the DATAPRL2 shape check reads
 
 
 class TestUnregisteredKeywords:
@@ -82,6 +83,7 @@ class TestUnregisteredKeywords:
         CheckpointL0(l0).unregistered_keywords()  # no raise
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestQCFlags:
     def test_raise_flag_zero_raises(self):
         # DATAPRL2 is in CheckpointL2.RAISE_FLAGS, so a 0 is fatal.
@@ -91,7 +93,7 @@ class TestQCFlags:
             CheckpointL2(l2).qc_flags()
 
     def test_nonraise_flag_zero_warns(self, caplog):
-        # L2VAROK is not a RAISE_FLAG, so a 0 lands in the ISGOOD summary rather
+        # L2VAROK is not a RAISE_FLAG, so a 0 lands in the warning summary rather
         # than raising (DATAPRL2/KWRDPRL2 = 1, so no fatal flag).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")
@@ -99,7 +101,7 @@ class TestQCFlags:
         l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "variance positive")
         with caplog.at_level(logging.WARNING):
             CheckpointL2(l2).qc_flags()
-        assert "ISGOOD=0" in caplog.text
+        assert "failing QC flags" in caplog.text
         assert "L2VAROK" in caplog.text
 
     def test_all_pass_silent(self, caplog):
@@ -126,7 +128,7 @@ class TestQCFlags:
         assert "DATAPRL1" in caplog.text
 
     def test_summary_lists_all_failing_flags_cross_level(self, caplog):
-        # The ISGOOD summary names every failing flag on QUALITY_CONTROL,
+        # The warning summary names every failing flag on QUALITY_CONTROL,
         # including one propagated from a lower level (RNOK from L1).
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")  # avoid raise
@@ -142,6 +144,7 @@ class TestQCFlags:
         assert "RNOK" in caplog.text
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestRunFoldsDiagnosticsAndQC:
     """``run()`` runs the paired Diagnostics, then QC, then the checkpoint methods."""
 
@@ -162,7 +165,7 @@ class TestRunFoldsDiagnosticsAndQC:
 
             def run(self):
                 calls.append("qc")
-                return {"ISGOOD": (True, "")}
+                return {"DATAPRL2": (True, "")}
 
         class FakeCheckpoint(Checkpoint):
             LEVEL = "L2"
@@ -182,7 +185,7 @@ class TestRunFoldsDiagnosticsAndQC:
         assert calls[1] == "qc"
         assert "checkpoint" in calls[2:]
         # QC's result dict is captured for callers (e.g. scripts/quality_control/qc.py).
-        assert chk.qc_results == {"ISGOOD": (True, "")}
+        assert chk.qc_results == {"DATAPRL2": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self, caplog):
         # A concrete-level checkpoint with DIAGNOSTICS = QC = None: run() does the
@@ -206,7 +209,7 @@ class TestRunFoldsDiagnosticsAndQC:
 # on the production path, but neither was exercised in process anywhere, so
 # QCL0.run() and QCL2.run() never ran outside a full recipe or the CLI suite that
 # `make test-fast` excludes. That left the DiagL2 -> QCL2 handshake unpinned:
-# DiagL2 writes NANSCI*/ZEROFRAC and QCL2 reads them back by name, and renaming a
+# DiagL2 writes NANSCI*/ZERO* and QCL2 reads them back by name, and renaming a
 # key on one side (QCL2 returns False for a value it cannot find) kept the whole
 # suite green while L2NANOK went to 0 on every real frame.
 
@@ -218,10 +221,14 @@ def _make_l2(*, populate=True):
     if populate:
         set_fiber_arrays(l2, "FLUX", 1.0, ncol=_NCOL)
         set_fiber_arrays(l2, "VAR", 0.25, ncol=_NCOL)
+        set_wave_bands(l2, ncol=_NCOL)
+        for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+            l2.set_data(ext, np.zeros(_NORDER_TOTAL, dtype=np.float64))
     seed_required_primary(l2, CheckpointL2.QC)
     return l2
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL2:
     def test_run_composes_diagnostics_into_qc(self):
         l2 = _make_l2()
@@ -229,11 +236,10 @@ class TestCheckpointL2:
         qc = l2.headers["QUALITY_CONTROL"]
         # The metrics DiagL2 measured...
         assert qc["NANSCI1"] == 0
-        assert qc["ZEROFRAC"] == pytest.approx(0.0)
+        assert qc["ZEROSCI1"] == 0
         # ...are the ones QCL2 read back, by name. This is the seam.
         assert qc["L2NANOK"] == 1
         assert qc["L2FLXOK"] == 1
-        assert qc["ISGOOD"] == 1
 
     def test_run_detects_real_nan_pixels_through_the_seam(self):
         # Half of SCI1's pixels are NaN. DiagL2 must count them and QCL2 must
@@ -245,40 +251,31 @@ class TestCheckpointL2:
         qc = l2.headers["QUALITY_CONTROL"]
         assert qc["NANSCI1"] > 0
         assert qc["L2NANOK"] == 0
-        assert qc["ISGOOD"] == 0
 
     def test_run_raises_when_extraction_missing(self):
-        # DATAPRL2 is fatal (in RAISE_FLAGS): no extracted flux -> run() raises.
+        # No extracted flux: the folded DiagL2 and QCL2 stages log what they cannot
+        # compute and carry on, so the fatal verdict comes from DATAPRL2.
         with pytest.raises(ValueError, match="DATAPRL2 = 0"):
             CheckpointL2(_make_l2(populate=False)).run()
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL0:
     def test_run_good_product_passes_and_writes_flags(self, tmp_path, caplog):
-        # A calibration frame: no target to resolve, so no AstroQuery and no
-        # network. This is the only in-process exercise of QCL0.run().
+        # A science frame carrying everything QCL0 requires: pointing, timing,
+        # exposure-meter tables and resolved astrometry. This is the only
+        # in-process exercise of QCL0.run().
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
-        write_amp_l0(
-            fn,
-            namps=4,
-            shape=(10, 10),
-            primary_cards={
-                "DATE-OBS": "2024-04-05T01:00:37",
-                "MJD-OBS": 60405.04,
-                "EXPTIME": 12.0,
-                "OBJECT": "synthetic",
-                "IMTYPE": "Bias",
-                "PROGNAME": None,
-                **GOOD_DATES,
-            },
-        )
-        l0 = KPF0.from_fits(fn)
+        write_science_l0(fn, namps=4, shape=(10, 10), primary_cards={"PROGNAME": None})
+        l0 = seed_catalog_record(KPF0.from_fits(fn))
         with caplog.at_level(logging.WARNING):
             CheckpointL0(l0).run()
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
         assert qc["KWRDPRL0"] == 1
-        assert qc["ISGOOD"] == 1
+        assert qc["GREENL0"] == 1
+        assert qc["REDL0"] == 1
+        assert qc["TCSOFF"] < 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +283,7 @@ class TestCheckpointL0:
 # ---------------------------------------------------------------------------
 
 
-def _make_l1(*, ccd=True, shape=(8, 8)):
+def _make_l1(*, ccd=True, shape=(20, 20)):
     """KPF1 good enough for CheckpointL1.run(): GREEN/RED CCD + VAR arrays, the
     applied-calibration flags on RECEIPT, and the read-noise and master-age
     keywords on QUALITY_CONTROL, all inside the ranges QCL1 accepts.
@@ -322,6 +319,7 @@ def _make_l1(*, ccd=True, shape=(8, 8)):
     return l1
 
 
+@pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL1:
     def test_run_good_product_passes_and_writes_flags(self, caplog):
         l1 = _make_l1()
@@ -331,10 +329,10 @@ class TestCheckpointL1:
         qc = l1.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL1"] == 1
         assert qc["KWRDPRL1"] == 1
-        assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_ccd_data_missing(self):
-        # DATAPRL1 is fatal (in RAISE_FLAGS): no GREEN/RED CCD -> run() raises.
+        # No assembled CCDs: DiagL1's flux percentiles have no pixels to measure,
+        # but that only logs, so the fatal verdict comes from DATAPRL1.
         l1 = _make_l1(ccd=False)
         with pytest.raises(ValueError, match="DATAPRL1 = 0"):
             CheckpointL1(l1).run()
@@ -349,13 +347,13 @@ class TestCheckpointL1:
             CheckpointL1(l1).run()
 
     def test_run_warns_when_read_noise_out_of_range(self, caplog):
-        # RNOK is not a RAISE_FLAG, so an out-of-range amp lands in the ISGOOD
+        # RNOK is not a RAISE_FLAG, so an out-of-range amp lands in the warning
         # summary rather than raising.
         l1 = _make_l1()
         l1.headers["QUALITY_CONTROL"]["RNGREEN1"] = (99.0, "RN e-")
         with caplog.at_level(logging.WARNING):
             CheckpointL1(l1).run()
-        assert "ISGOOD=0" in caplog.text
+        assert "failing QC flags" in caplog.text
         assert "RNOK" in caplog.text
 
 
@@ -369,13 +367,12 @@ def _make_l4(*, sci=True):
 
     The arguments are load-bearing and must not be trimmed to the defaults:
     ``jitter=1e-7`` gives the per-order BJD/BERV scatter DiagL4 measures (about
-    1 s and 0.1 m/s, well inside the BJDOK/BERVOK gates), and ``sci_obj="target"``
-    is what makes those gates apply at all. Without the jitter this stops being
-    the suite's only composed DiagL4 -> QCL4 seam and becomes header-stuffing;
-    passing ``bervrng=``/``bjdrng=`` instead would write the metrics directly and
-    do the same damage.
+    0.03 s and 3e-4 m/s, well inside the BJDOK/BERVOK gates). Without it this
+    stops being the suite's only composed DiagL4 -> QCL4 seam and becomes
+    header-stuffing; passing ``bervrng=``/``bjdrng=`` instead would write the
+    metrics directly and do the same damage.
     """
-    l4 = make_l4(sci=sci, jitter=1e-7, berv=7.9, sci_obj="target", seed=3)
+    l4 = make_l4(sci=sci, jitter=1e-7, berv=7.9, seed=3)
     seed_required_primary(l4, CheckpointL4.QC)
     return l4
 
@@ -401,10 +398,10 @@ class TestCheckpointL4:
         assert qc["BERVRNG"] > 0.0
         assert qc["BJDRNG"] > 0.0
         assert qc["DATAPRL4"] == 1
-        assert qc["ISGOOD"] == 1
 
     def test_run_raises_when_science_ccf_rv_missing(self):
-        # DATAPRL4 is fatal (in RAISE_FLAGS): no science CCF/RV -> run() raises.
+        # No science RV table: DiagL4 has no per-order BJD/BERV to measure, but that
+        # only logs, so the fatal verdict comes from DATAPRL4.
         l4 = _make_l4(sci=False)
         with pytest.raises(ValueError, match="DATAPRL4 = 0"):
             CheckpointL4(l4).run()

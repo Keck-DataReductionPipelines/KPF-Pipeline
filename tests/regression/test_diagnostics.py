@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from astropy import units as u
 from astropy.coordinates import SkyCoord
+from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe import DETECTOR
@@ -22,15 +23,18 @@ from kpfpipe.quality_control.diagnostics import (
     Diagnostics,
 )
 
-from ._data_models import set_fiber_arrays
+from ._data_models import set_fiber_arrays, set_wave_bands, write_amp_l0
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 _NCOL_TEST = 8  # DiagL2 metrics are pixel aggregates, so the real detector width
-# is moot; an even count keeps the half-zeroed ZEROFRAC test exact
+# is moot
 
 _FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
+_ZERO_KEYS = ("ZEROSCI1", "ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL")
+# Clean exposure-meter flux: 4 readings x 25 wavelength channels per fiber.
+_EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +95,24 @@ class TestDiagnosticsBase:
         assert results == {}
         assert obj.headers["PRIMARY"] == {}
 
-    def test_raising_method_propagates_and_logs(self, caplog):
+    def test_none_return_logs_and_writes_nothing(self, caplog):
+        obj = self._make_obj()
+
+        class MyDiag(Diagnostics):
+            LEVEL = "L0"
+
+            def nothing(self):
+                return None
+
+            nothing._diag_name = "nothing"
+
+        with caplog.at_level(logging.ERROR):
+            results = MyDiag(obj).run()
+        assert results == {}
+        assert obj.headers["PRIMARY"] == {}
+        assert "diagnostic 'nothing' raised" in caplog.text
+
+    def test_raising_method_logs_and_continues(self, caplog):
         obj = self._make_obj()
 
         class MyDiag(Diagnostics):
@@ -102,12 +123,19 @@ class TestDiagnosticsBase:
 
             boom._diag_name = "boom"
 
-        # Fail-fast: the original exception propagates unchanged (no RuntimeError
-        # wrap), and run() logs the offending method at ERROR.
+            def after(self):
+                return {"KEYA": (3.14, "metric a")}
+
+            after._diag_name = "after"
+
+        # Informational layer: run() logs the offender at ERROR and keeps going, so
+        # a later metric is still computed. Halting is the checkpoint layer's job.
         with caplog.at_level(logging.ERROR):
-            with pytest.raises(ValueError, match="boom!"):
-                MyDiag(obj).run()
+            results = MyDiag(obj).run()
         assert "diagnostic 'boom' raised" in caplog.text
+        assert "boom!" in caplog.text
+        assert results == {"KEYA": (3.14, "metric a")}
+        assert obj.headers["PRIMARY"]["KEYA"] == 3.14
 
     def test_repeated_run_resets_results(self):
         obj = self._make_obj()
@@ -138,26 +166,10 @@ class TestDiagnosticsBase:
 
 
 # ---------------------------------------------------------------------------
-# DiagL1 with no calibrations is a clean no-op
-# ---------------------------------------------------------------------------
-
-
-class TestEmptyLevels:
-    def test_diag_l1_runs_cleanly(self):
-        # DATE-OBS present (a required read) but no RECEIPT cal paths ->
-        # calibration_ages returns {} rather than crashing.
-        results = DiagL1(_make_kpf1_with_calibrations()).run()
-        assert results == {}
-
-
-# ---------------------------------------------------------------------------
-# DiagL0 -- pointing offsets from CATALOG_RECORD (GAIAOFF, TARGOFF, OBJOFF)
+# DiagL0 -- pointing offsets from CATALOG_RECORD (GAIAOFF, TCSOFF, OBJOFF)
 # ---------------------------------------------------------------------------
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
-
-# The flag-carrying sources; 'kpf-drp' is the merged row and has no flag.
-_CATALOG_SOURCES = ("wmko", "gaia", "simbad")
 
 
 def _record_at(coord, **overrides):
@@ -182,15 +194,12 @@ def _record_at(coord, **overrides):
 
 
 def _set_catalog_record(l0, records):
-    """Write l0's CATALOG_RECORD rows and presence flags from a
-    {source: record-dict-or-None} mapping, the way perform does. A source left out
-    of the mapping gets flag 0, exactly as a gated-off one does in production."""
+    """Write l0's CATALOG_RECORD rows from a {source: record-dict-or-None} mapping,
+    the way perform does. A None record leaves the source with no row, exactly as a
+    gated-off one does in production."""
     aq = AstroQuery(l0)
     for source, record in records.items():
         aq._write_catalog_record(source, record)
-        if source in _CATALOG_SOURCES:
-            setattr(aq, f"_{source}", record)
-    aq._set_headers(l0)
 
 
 def _make_l0_pointing():
@@ -218,13 +227,13 @@ class TestDiagL0Offsets:
         # All three sources sit at the pointing -> every offset ~0, routed to QC.
         l0 = _make_l0_with_catalog()
         results = DiagL0(l0).run()
-        for key in ("GAIAOFF", "TARGOFF", "OBJOFF"):
+        for key in ("GAIAOFF", "TCSOFF", "OBJOFF"):
             assert results[key][0] < 0.1
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
     def test_offset_reflects_catalog_separation(self):
         # Move the Gaia record 10" north of the pointing -> GAIAOFF ~ 10", while
-        # the still-at-pointing wmko record keeps TARGOFF ~ 0.
+        # the still-at-pointing wmko record keeps TCSOFF ~ 0.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -237,42 +246,44 @@ class TestDiagL0Offsets:
         )
         results = DiagL0(l0).run()
         assert results["GAIAOFF"][0] == pytest.approx(10.0, abs=0.1)
-        assert results["TARGOFF"][0] < 0.1
+        assert results["TCSOFF"][0] < 0.1
 
 
 class TestDiagL0Contingency:
-    """Unavailable astrometry -> present-but-empty offset + WARNING, no crash."""
+    """Unusable astrometry raises; an unmatched optional source emits no key."""
 
-    _KEYS = ("GAIAOFF", "TARGOFF", "OBJOFF")
+    def test_no_catalog_record_raises(self):
+        # AstroQuery not run: CATALOG_RECORD auto-created but empty, so it has no
+        # 'source' column to look a row up in.
+        with pytest.raises(KeyError, match="source"):
+            DiagL0(_make_l0_pointing()).gaia_ra_dec_offset()
 
-    def test_no_catalog_record_all_empty(self, caplog):
-        # AstroQuery not run: CATALOG_RECORD auto-created but no presence flags.
-        l0 = _make_l0_pointing()
-        with caplog.at_level(logging.WARNING):
-            DiagL0(l0).run()
-        qc = l0.headers["QUALITY_CONTROL"]
-        # All three present (registered) but valueless (read back as None).
-        for key in self._KEYS:
-            assert key in qc and qc[key] is None
-        assert caplog.text.count("no CATALOG_RECORD flags on L0") == 3
-
-    def test_source_none_emits_empty_for_that_source(self, caplog):
-        # Gaia lookup disabled/failed -> GAIACR=0 -> GAIAOFF empty; others compute.
+    def test_unmatched_optional_source_emits_no_key(self):
+        # Gaia lookup disabled/failed -> no gaia row -> no GAIAOFF; others compute.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
             l0, {"gaia": None, "simbad": _record_at(pt), "wmko": _record_at(pt)}
         )
-        with caplog.at_level(logging.WARNING):
-            results = DiagL0(l0).run()
-        assert results["GAIAOFF"][0] is None
-        assert results["TARGOFF"][0] < 0.1
+        results = DiagL0(l0).run()
+        assert "GAIAOFF" not in results
+        assert "GAIAOFF" not in l0.headers["QUALITY_CONTROL"]
+        assert results["TCSOFF"][0] < 0.1
         assert results["OBJOFF"][0] < 0.1
-        assert "no gaia astrometry in CATALOG_RECORD" in caplog.text
 
-    def test_incomplete_record_emits_empty(self, caplog):
-        # A record present (flag 1) but missing epoch, the propagation baseline ->
-        # unusable, offset empty. PM/parallax instead fall back to zero (below).
+    def test_unmatched_required_source_raises(self):
+        # The DCS target offset is required: no wmko row means no TCSOFF to emit.
+        l0 = _make_l0_pointing()
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        _set_catalog_record(
+            l0, {"gaia": _record_at(pt), "simbad": _record_at(pt), "wmko": None}
+        )
+        with pytest.raises(IndexError):
+            DiagL0(l0).target_ra_dec_offset()
+
+    def test_incomplete_record_raises(self):
+        # A record present (flag 1) but missing epoch, the propagation baseline.
+        # PM/parallax instead fall back to zero (below).
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -283,10 +294,8 @@ class TestDiagL0Contingency:
                 "wmko": _record_at(pt, epoch=None),
             },
         )
-        with caplog.at_level(logging.WARNING):
-            results = DiagL0(l0).run()
-        assert results["TARGOFF"][0] is None
-        assert "incomplete wmko record in CATALOG_RECORD" in caplog.text
+        with pytest.raises((TypeError, ValueError)):
+            DiagL0(l0).target_ra_dec_offset()
 
     # No usable parallax means no distance on the SkyCoord, and ERFA warns that it
     # overrode the distance while propagating -- the documented consequence of the
@@ -336,9 +345,8 @@ class TestDiagL0Contingency:
         assert results["GAIAOFF"][0] < 0.1
         assert "using PM=0, parallax=0" in caplog.text
 
-    def test_malformed_astrometry_emits_empty(self, caplog):
-        # A record that passes the completeness check but is malformed (unparseable
-        # RA) is caught by _offset's backstop -> empty offset, not a raised frame.
+    def test_malformed_astrometry_raises(self):
+        # An unparseable RA is a malformed record, not a missing one.
         l0 = _make_l0_pointing()
         pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
         _set_catalog_record(
@@ -349,10 +357,8 @@ class TestDiagL0Contingency:
                 "wmko": _record_at(pt, ra="garbage"),
             },
         )
-        with caplog.at_level(logging.WARNING):
-            results = DiagL0(l0).run()  # must not raise
-        assert results["TARGOFF"][0] is None
-        assert "could not compute wmko pointing offset" in caplog.text
+        with pytest.raises(ValueError, match="garbage"):
+            DiagL0(l0).target_ra_dec_offset()
 
 
 # ---------------------------------------------------------------------------
@@ -360,14 +366,587 @@ class TestDiagL0Contingency:
 # ---------------------------------------------------------------------------
 
 
+_CAL_AGE_KEYS = ("BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE")
+
+
+class TestDiagL0PixelFractions:
+    """Worst-amp dead/saturated pixel fractions, one pair per chip.
+
+    ``write_amp_l0`` fills every amp with a flat 1e6 D.N., clearing both
+    thresholds, so each test drives a chosen pixel count past one bound. Each amp
+    here is 10x10 = 100 pixels, so a count is also a percentage.
+    """
+
+    def _make_amp_l0(self, tmp_path, namps=4):
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
+        )
+        return KPF0.from_fits(fn)
+
+    def test_clean_frame_is_zero(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path)
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.0
+        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"][0] == 0.0
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP3"].flat[:6] = 0.0
+        results = DiagL0(l0).run()
+        for key in ("DEADPXFG", "DEADPXFR", "SATPXFG", "SATPXFR"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+        assert results["DEADPXFG"][0] == 0.06
+
+    def test_dead_counts_pixels_below_threshold(self, tmp_path):
+        # Strictly below 1.0e4 D.N. counts; a pixel exactly at it does not.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP3"].flat[:50] = 1.0e4
+        l0.data["GREEN_AMP3"].flat[:5] = 0.0
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.05
+
+    def test_saturated_counts_pixels_above_threshold(self, tmp_path):
+        # Strictly above 5.0e8 D.N. counts; a pixel exactly at it does not.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["RED_AMP2"].flat[:50] = 5.0e8
+        l0.data["RED_AMP2"].flat[:15] = 6.0e8
+        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"][0] == 0.15
+
+    def test_chips_measured_separately(self, tmp_path):
+        # A dead GREEN amp leaves the RED fraction at zero, and vice versa.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP1"].flat[:50] = 0.0
+        results = DiagL0(l0).dead_pixel_fractions()
+        assert results["DEADPXFG"][0] == 0.5
+        assert results["DEADPXFR"][0] == 0.0
+
+    def test_worst_amp_decides(self, tmp_path):
+        # One bad amp sets its chip's fraction even though the other three are clean.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["RED_AMP4"].flat[:50] = 0.0
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFR"][0] == 0.5
+
+    def test_two_amp_readout(self, tmp_path):
+        # Absent amps are skipped, so a 2-amp frame is measured on the amps it has.
+        l0 = self._make_amp_l0(tmp_path, namps=2)
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.0
+
+    def test_no_amp_data_raises(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path, namps=0)
+        with pytest.raises(ValueError):
+            DiagL0(l0).dead_pixel_fractions()
+
+    def test_diag_names_correct(self):
+        assert DiagL0.__dict__["dead_pixel_fractions"]._diag_name == (
+            "dead_pixel_fractions"
+        )
+        assert DiagL0.__dict__["saturated_pixel_fractions"]._diag_name == (
+            "saturated_pixel_fractions"
+        )
+
+
+class TestDiagL0AmpPercentiles:
+    """Per-amplifier raw D.N. percentiles: 2 chips x 3 percentiles x 4 amps."""
+
+    def _make_amp_l0(self, tmp_path, namps=4):
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
+        )
+        return KPF0.from_fits(fn)
+
+    def test_all_24_keywords_emitted(self, tmp_path):
+        results = DiagL0(self._make_amp_l0(tmp_path)).amp_percentiles()
+        expected = {
+            f"P{pct}{letter}AMP{i}"
+            for letter in ("G", "R")
+            for pct in (16, 50, 84)
+            for i in range(1, 5)
+        }
+        assert set(results) == expected
+
+    def test_percentiles_match_the_amp_image(self, tmp_path):
+        # A 0..99 ramp over the amp: the percentiles are of the raw image as
+        # stored, prescan and overscan included.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["GREEN_AMP2"].flat[:] = np.arange(100.0)
+        results = DiagL0(l0).amp_percentiles()
+        for pct in (16, 50, 84):
+            assert results[f"P{pct}GAMP2"][0] == pytest.approx(
+                np.percentile(np.arange(100.0), pct)
+            )
+
+    def test_nans_excluded(self, tmp_path):
+        # NaN pixels are dropped rather than poisoning the whole amp.
+        l0 = self._make_amp_l0(tmp_path)
+        l0.data["RED_AMP1"].flat[:10] = np.nan
+        assert DiagL0(l0).amp_percentiles()["P50RAMP1"][0] == 1.0e6
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_amp_l0(tmp_path)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["P84GAMP3"] == results["P84GAMP3"][0]
+
+    def test_absent_amps_emit_no_keyword(self, tmp_path):
+        # A 2-amp readout writes only the amps it has.
+        results = DiagL0(self._make_amp_l0(tmp_path, namps=2)).amp_percentiles()
+        assert "P50GAMP1" in results
+        assert "P50GAMP3" not in results
+
+    def test_diag_name_correct(self):
+        assert DiagL0.__dict__["amp_percentiles"]._diag_name == "amp_percentiles"
+
+
+class TestDiagL0ExpmeterChannels:
+    """Per-fiber EM channel metrics: saturation rate and negative/non-finite runs.
+
+    Each fiber here is 4 readings x 25 wavelength channels, so the two interior
+    readings carry the saturation count.
+    """
+
+    def _make_l0_with_expmeter(self, tmp_path, sci, sky=None):
+        def table(values):
+            columns = {"Date-Beg": ["2024-09-23T09:12:09.484"] * len(values)}
+            columns.update(
+                {str(5000.0 + i): values[:, i] for i in range(values.shape[1])}
+            )
+            return Table(columns)
+
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00005.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.BinTableHDU(table(sci), name="EXPMETER_SCI"),
+                fits.BinTableHDU(
+                    table(sci if sky is None else sky), name="EXPMETER_SKY"
+                ),
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_clean_flux_is_zero(self, tmp_path):
+        results = DiagL0(self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)).run()
+        for fiber in ("SCI", "SKY"):
+            for metric in ("SAT", "NEG", "INF"):
+                assert results[f"EM{fiber}{metric}"][0] == 0
+
+    def test_saturation_is_per_reading(self, tmp_path):
+        # 3 saturated elements over the 2 interior readings -> 1.5 per reading.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[1, :2] = 0.95 * 1.93e6
+        flux[2, 0] = 0.95 * 1.93e6
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCISAT"][0] == 1.5
+
+    def test_saturation_drops_edge_readings(self, tmp_path):
+        # The first and last readings are partial, so saturation there is dropped.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[[0, -1], :] = 0.95 * 1.93e6
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCISAT"][0] == 0.0
+
+    def test_negative_run_length(self, tmp_path):
+        # A channel counts as negative when its time-summed flux is negative.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 5:25] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 20
+
+    def test_negative_run_counts_adjacent_only(self, tmp_path):
+        # Two separated blocks of 3 and 5: the longest run is 5, not their sum.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 2:5] = -1000.0
+        flux[:, 10:15] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 5
+
+    def test_negative_needs_the_time_sum(self, tmp_path):
+        # One negative reading a channel does not make: the sum stays positive.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[0, 5:25] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 0
+
+    def test_non_finite_run_length(self, tmp_path):
+        # A channel with any non-finite reading counts, NaN or inf.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[0, 5:9] = np.nan
+        flux[2, 9] = np.inf
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCIINF"][0] == 5
+
+    def test_fibers_measured_separately(self, tmp_path):
+        # A clean SCI and a negative SKY: only the SKY keyword moves.
+        sky = _EM_CLEAN_FLUX.copy()
+        sky[:, 5:25] = -1000.0
+        results = DiagL0(
+            self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX, sky=sky)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 0
+        assert results["EMSKYNEG"][0] == 20
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["EMSCISAT"] == results["EMSCISAT"][0]
+
+    def test_no_em_data_emits_no_keyword(self, tmp_path):
+        # A frame with no EM extension (e.g. a calibration): the metrics are skipped.
+        fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(10, 10))
+        assert "EMSCISAT" not in DiagL0(KPF0.from_fits(fn)).run()
+
+    def test_diag_name_correct(self):
+        assert DiagL0.__dict__["expmeter_channel_metrics"]._diag_name == (
+            "expmeter_channel_metrics"
+        )
+
+
+class TestDiagL0ExpmeterCounts:
+    """Cumulative EM counts per wavelength band, and the SKY/SCI ratio.
+
+    One channel per band plus a 900 nm channel outside the 445-870 nm range, so
+    an out-of-band channel is seen to be dropped everywhere. Column labels are nm:
+    ImageAssembly converts them to Angstroms only at L0 -> L1.
+    """
+
+    _WAVES = [500.0, 600.0, 700.0, 800.0, 900.0]
+
+    def _make_l0_with_expmeter(self, tmp_path, sci_counts, sky_counts):
+        def table(counts):
+            columns = {
+                "Date-Beg": ["2024-09-23T09:12:09.484", "2024-09-23T09:12:12.484"]
+            }
+            columns.update(
+                {
+                    str(w): [float(c), float(c)]
+                    for w, c in zip(self._WAVES, counts, strict=True)
+                }
+            )
+            return Table(columns)
+
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.BinTableHDU(table(sci_counts), name="EXPMETER_SCI"),
+                fits.BinTableHDU(table(sky_counts), name="EXPMETER_SKY"),
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_counts_summed_over_readings_and_bands(self, tmp_path):
+        # Two readings of each channel, so every band doubles its per-reading count.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 2, 4, 8, 16], [1, 1, 1, 1, 1])
+        results = DiagL0(l0).expmeter_counts()
+        assert results["EMSCCT45"][0] == 2  # 500 nm
+        assert results["EMSCCT56"][0] == 4  # 600 nm
+        assert results["EMSCCT67"][0] == 8  # 700 nm
+        assert results["EMSCCT78"][0] == 16  # 800 nm; the 900 nm channel is dropped
+        assert results["EMSCCT48"][0] == 30  # 445-870 nm: the four sub-bands
+
+    def test_sky_fiber_counted_separately(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [3, 0, 0, 0, 0])
+        results = DiagL0(l0).expmeter_counts()
+        assert results["EMSKCT45"][0] == 6
+        assert results["EMSCCT45"][0] == 2
+
+    def test_nans_excluded(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        l0.data["EXPMETER_SCI"]["500.0"][0] = np.nan
+        results = DiagL0(l0).expmeter_counts()
+        assert results["EMSCCT45"][0] == 1
+
+    def test_sky_sci_ratio_scaled_by_throughput(self, tmp_path):
+        # Equal SKY and SCI totals -> the ratio is 1/14.1, the twilight throughput.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        results = DiagL0(l0).sky_sci_flux_ratio()
+        assert results["SKYSCIMS"][0] == round(1 / 14.1, 6)
+
+    def test_sky_sci_ratio_uses_every_channel(self, tmp_path):
+        # The ratio is over all channels, the out-of-band 900 nm one included.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [2, 2, 2, 2, 2])
+        results = DiagL0(l0).sky_sci_flux_ratio()
+        assert results["SKYSCIMS"][0] == round(2 / 14.1, 6)
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        results = DiagL0(l0).run()
+        for key in ("SKYSCIMS", "EMSCCT48", "EMSKCT78"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_names_correct(self):
+        assert DiagL0.__dict__["expmeter_counts"]._diag_name == "expmeter_counts"
+        assert DiagL0.__dict__["sky_sci_flux_ratio"]._diag_name == "sky_sci_flux_ratio"
+
+
+class TestDiagL0CcdTemperatures:
+    """GREEN/RED CCD offsets from the -100 C setpoint, read off TELEMETRY."""
+
+    def _make_l0_with_telemetry(self, tmp_path, green, red):
+        table = Table(
+            {
+                "keyword": ["kpfgreen.STA_CCD_T", "kpfred.STA_CCD_T"],
+                "average": [green, red],
+            }
+        )
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[fits.BinTableHDU(table, name="TELEMETRY")],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_offset_is_signed_millikelvin(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
+        results = DiagL0(l0).ccd_temperature_offsets()
+        assert results["GTEMPOFF"][0] == pytest.approx(-4.0, abs=1e-3)
+        assert results["RTEMPOFF"][0] == pytest.approx(7.0, abs=1e-3)
+
+    def test_at_setpoint_is_zero(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.0, -100.0)
+        results = DiagL0(l0).ccd_temperature_offsets()
+        assert results["GTEMPOFF"][0] == 0.0
+        assert results["RTEMPOFF"][0] == 0.0
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
+        results = DiagL0(l0).run()
+        for key in ("GTEMPOFF", "RTEMPOFF"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_name_correct(self):
+        name = DiagL0.__dict__["ccd_temperature_offsets"]._diag_name
+        assert name == "ccd_temperature_offsets"
+
+
+class TestDiagL0EtalonTemperature:
+    """Etalon chamber offset from setpoint, off the PRIMARY temperature cards."""
+
+    def _make_l0_with_etalon(self, **cards):
+        l0 = KPF0()
+        l0.headers["PRIMARY"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
+        l0.headers["PRIMARY"].update(cards)
+        return l0
+
+    def test_at_design_setpoints_is_zero(self):
+        # No ETAV1C3S/ETAV1C4S recorded, so the design values apply.
+        l0 = self._make_l0_with_etalon()
+        assert DiagL0(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+
+    def test_offset_is_signed_millikelvin(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
+        results = DiagL0(l0).etalon_temperature_offset()
+        assert results["ETATOFF"][0] == pytest.approx(0.4, abs=1e-3)
+
+    def test_recorded_setpoint_wins_over_design(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=24.0, ETAV1C3S=24.0)
+        assert DiagL0(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+
+    def test_worst_chamber_reported(self):
+        # The outer chamber is further off, so it is the one that survives.
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6002, ETAV1C4T=23.8993)
+        results = DiagL0(l0).etalon_temperature_offset()
+        assert results["ETATOFF"][0] == pytest.approx(-0.7, abs=1e-3)
+
+    def test_written_to_quality_control(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["ETATOFF"] == results["ETATOFF"][0]
+
+    def test_diag_name_correct(self):
+        name = DiagL0.__dict__["etalon_temperature_offset"]._diag_name
+        assert name == "etalon_temperature_offset"
+
+
+class TestDiagL0Guider:
+    """Guiding error statistics and guide-camera saturation.
+
+    Twelve frames, so the centroids clear the 11-distinct-position floor below
+    which v2.12 declares the guide camera untracked.
+    """
+
+    _NFRAMES = 12
+
+    def _make_l0_with_guider(
+        self,
+        tmp_path,
+        *,
+        dx=0.0,
+        dy=0.0,
+        peak=0.0,
+        avg_level=0.0,
+        nbright=0,
+        rows=None,
+        axes=(0.0, 0.0),
+        flux=100.0,
+    ):
+        offsets = np.arange(self._NFRAMES, dtype=float)
+        columns = {
+            "timestamp": offsets + 1.0,
+            "target_x": offsets + dx,
+            "target_y": offsets * 2.0 + dy,
+            "object1_x": offsets,
+            "object1_y": offsets * 2.0,
+            "object1_flux": np.full(self._NFRAMES, flux),
+            "object1_peak": np.full(self._NFRAMES, peak),
+            "object1_a": np.full(self._NFRAMES, axes[0]),
+            "object1_b": np.full(self._NFRAMES, axes[1]),
+        }
+        if rows is not None:
+            columns = {k: v[:rows] for k, v in columns.items()}
+        avg = np.full((512, 640), avg_level)
+        avg[255, 270 : 270 + nbright] = 1e5
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.ImageHDU(avg, name="GUIDER_AVG"),
+                fits.BinTableHDU(Table(columns), name="GUIDER_CUBE_ORIGINS"),
+            ],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_constant_offset_gives_rms_and_bias(self, tmp_path):
+        # A 0.5 pixel offset in x on every frame: 0.056"/pix -> 28 mas, and with
+        # no scatter the RMS equals the bias.
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5)
+        results = DiagL0(l0).guider_errors()
+        assert results["GDRXRMS"][0] == pytest.approx(28.0)
+        assert results["GDRXBIAS"][0] == pytest.approx(28.0)
+        assert results["GDRYRMS"][0] == 0.0
+        assert results["GDRYBIAS"][0] == 0.0
+
+    def test_bias_keeps_its_sign(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, dy=-0.5)
+        results = DiagL0(l0).guider_errors()
+        assert results["GDRYBIAS"][0] == pytest.approx(-28.0)
+        assert results["GDRYRMS"][0] == pytest.approx(28.0)
+
+    def test_untracked_camera_emits_no_keyword(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5, rows=8)
+        assert DiagL0(l0).guider_errors() == {}
+
+    def test_unwritten_rows_dropped(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, peak=1.0)
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][:2] = 0.0
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:2] = 1e5
+        # The two zero-flux frames are unwritten, so their peaks do not count.
+        assert DiagL0(l0).guider_saturation()["GDRFRSAT"][0] == 0.0
+
+    def test_saturated_pixels_counted_in_central_box(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, nbright=4)
+        assert DiagL0(l0).guider_saturation()["GDRNSAT"][0] == 4
+
+    def test_pixels_outside_the_box_ignored(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path)
+        l0.data["GUIDER_AVG"][0, 0] = 1e5
+        assert DiagL0(l0).guider_saturation()["GDRNSAT"][0] == 0
+
+    def test_saturated_frame_fraction(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path)
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:3] = 1e5
+        assert DiagL0(l0).guider_saturation()["GDRFRSAT"][0] == 0.25
+
+    def test_below_saturation_threshold_not_counted(self, tmp_path):
+        # 90% of the 15830 ADU CRED-2 saturation level is the threshold.
+        l0 = self._make_l0_with_guider(tmp_path, peak=14000.0, avg_level=14000.0)
+        results = DiagL0(l0).guider_saturation()
+        assert results["GDRFRSAT"][0] == 0.0
+        assert results["GDRNSAT"][0] == 0
+
+    def test_radial_rms_combines_both_axes(self, tmp_path):
+        # A 0.5 pixel offset on each axis: R is their quadrature sum.
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5, dy=0.5)
+        results = DiagL0(l0).guider_errors()
+        assert results["GDRRRMS"][0] == pytest.approx(28.0 * 2**0.5)
+
+    def test_fwhm_from_the_fitted_gaussian_axes(self, tmp_path):
+        # sigma=(3,4) pixels -> 5 px in quadrature, x2.3548 to FWHM, x56 mas/pix.
+        l0 = self._make_l0_with_guider(tmp_path, axes=(3.0, 4.0))
+        results = DiagL0(l0).guider_image_stats()
+        assert results["GDRFWMD"][0] == pytest.approx(5 * 2.3548 * 56.0, rel=1e-4)
+        assert results["GDRFWSTD"][0] == 0.0
+
+    def test_flux_and_peak_statistics(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, flux=200.0, peak=50.0)
+        l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][0] = 100.0
+        results = DiagL0(l0).guider_image_stats()
+        assert results["GDRFXMD"][0] == 200.0
+        assert results["GDRFXSTD"][0] > 0.0
+        assert results["GDRPKMD"][0] == 50.0
+        assert results["GDRPKSTD"][0] == 0.0
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_guider(tmp_path, dx=0.5, nbright=2, axes=(3.0, 4.0))
+        results = DiagL0(l0).run()
+        for key in ("GDRXRMS", "GDRRRMS", "GDRYBIAS", "GDRNSAT", "GDRFRSAT", "GDRFWMD"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_names_correct(self):
+        for name in ("guider_errors", "guider_saturation", "guider_image_stats"):
+            assert DiagL0.__dict__[name]._diag_name == name
+
+
+class TestDiagL0GuiderSeeing:
+    """J+Z-band seeing from the Moffat fit to the co-added guider image."""
+
+    def _make_l0_with_moffat(self, tmp_path, alpha, *, corrupt=False):
+        y, x = np.indices((81, 81))
+        image = 100.0 * (1 + ((x - 40.0) ** 2 + (y - 40.0) ** 2) / alpha**2) ** -2.5
+        if corrupt:
+            image = np.full_like(image, np.nan)
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            primary_cards={"GCCRPIX1": 40.0, "GCCRPIX2": 40.0},
+            extra_hdus=[fits.ImageHDU(image, name="GUIDER_AVG")],
+        )
+        return KPF0.from_fits(fn)
+
+    def test_seeing_is_alpha_in_arcsec(self, tmp_path):
+        # alpha = 8 px at the 0.056"/pix CRED-2 scale -> 0.448" seeing.
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0)
+        results = DiagL0(l0).guider_seeing()
+        assert results["GDRSEEJZ"][0] == pytest.approx(8.0 * 0.056, rel=0.05)
+
+    def test_wider_profile_gives_larger_seeing(self, tmp_path):
+        narrow = DiagL0(self._make_l0_with_moffat(tmp_path, 5.0)).guider_seeing()
+        wide = DiagL0(self._make_l0_with_moffat(tmp_path, 15.0)).guider_seeing()
+        assert wide["GDRSEEJZ"][0] > narrow["GDRSEEJZ"][0]
+
+    def test_unfittable_image_emits_no_keyword(self, tmp_path):
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
+        assert DiagL0(l0).guider_seeing() == {}
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0)
+        results = DiagL0(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["GDRSEEJZ"] == results["GDRSEEJZ"][0]
+
+    def test_diag_name_correct(self):
+        assert DiagL0.__dict__["guider_seeing"]._diag_name == "guider_seeing"
+
+
 def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
-    """A KPF1 carrying a PRIMARY DATE-OBS and RECEIPT master paths.
+    """A KPF1 carrying a PRIMARY DATE-OBS, RECEIPT master paths, and assembled CCDs.
 
     Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has written
-    each ``{PREFIX}FILE`` to RECEIPT and to_kpf1 has populated the EPRV PRIMARY.
+    each ``{PREFIX}FILE`` to RECEIPT, to_kpf1 has populated the EPRV PRIMARY, and
+    ImageAssembly has filled both CCDs (flux_percentiles reads them on every run).
     """
     l1 = KPF1()
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
+    for chip in ("GREEN", "RED"):
+        l1.data[f"{chip}_CCD"] = np.ones((4, 4), dtype=float)
     for kw, path in (files or {}).items():
         l1.set_keyword(kw, path)  # *FILE routes to RECEIPT
     return l1
@@ -404,8 +983,8 @@ class TestDiagL1CalibrationAges:
             }
         )
         results = DiagL1(l1).run()
-        assert set(results) == {"BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE"}
-        for kw in results:
+        assert set(results) >= set(_CAL_AGE_KEYS)
+        for kw in _CAL_AGE_KEYS:
             assert l1.headers["QUALITY_CONTROL"][kw] == pytest.approx(
                 -0.422176, abs=1e-5
             )
@@ -416,41 +995,73 @@ class TestDiagL1CalibrationAges:
             files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
         )
         results = DiagL1(l1).run()
-        assert set(results) == {"BIASAGE"}
+        assert set(results) & set(_CAL_AGE_KEYS) == {"BIASAGE"}
         assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
 
-    def test_no_date_obs_raises(self, caplog):
+    def test_no_date_obs_raises(self):
         # DATE-OBS is guaranteed by the L1 checkpoint's KWRDPRL1 raise gate; if it
         # is missing anyway, calibration_ages fails loud (a broken upstream
-        # invariant). run() logs the offending method and lets the original
-        # KeyError propagate unchanged (fail-fast).
+        # invariant).
         l1 = _make_kpf1_with_calibrations(
             files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
         )
         del l1.headers["PRIMARY"]["DATE-OBS"]
-        with caplog.at_level(logging.ERROR):
-            with pytest.raises(KeyError, match="DATE-OBS"):
-                DiagL1(l1).run()
-        assert "diagnostic 'calibration_ages' raised" in caplog.text
+        with pytest.raises(KeyError, match="DATE-OBS"):
+            DiagL1(l1).calibration_ages()
+
+
+class TestDiagL1FluxPercentiles:
+    # 0..100 makes every percentile land exactly on its own value.
+    _RAMP = np.arange(101, dtype=float).reshape(1, 101)
+
+    def _l1(self, **ccds):
+        l1 = _make_kpf1_with_calibrations()  # real DATE-OBS, no cal paths
+        for ext, arr in ccds.items():
+            l1.data[ext] = arr
+        return l1
+
+    def test_values_written_to_quality_control(self):
+        l1 = self._l1(GREEN_CCD=self._RAMP, RED_CCD=self._RAMP * 2)
+        DiagL1(l1).run()
+        qc = l1.headers["QUALITY_CONTROL"]
+        for pct in (99, 90, 50, 10):
+            assert qc[f"FFIG{pct}P"] == pytest.approx(pct)
+            assert qc[f"FFIR{pct}P"] == pytest.approx(2 * pct)
+        assert (
+            qc.comments["FFIG99P"] == "99th percentile flux in the GREEN CCD image [e-]"
+        )
+
+    def test_nans_ignored(self):
+        ramp = self._RAMP.copy()
+        ramp[0, ::10] = np.nan
+        l1 = self._l1(GREEN_CCD=ramp)
+        results = DiagL1(l1).run()
+        assert np.isfinite(results["FFIG50P"][0])
+
+    def test_empty_chip_raises(self):
+        l1 = self._l1(GREEN_CCD=self._RAMP, RED_CCD=np.array([], dtype=float))
+        with pytest.raises(RuntimeWarning, match="Mean of empty slice"):
+            DiagL1(l1).flux_percentiles()
 
 
 # ---------------------------------------------------------------------------
-# DiagL2 -- NaN counts + zero-flux fraction
+# DiagL2 -- NaN counts + non-positive counts
 # ---------------------------------------------------------------------------
 
 
-def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True):
+def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True, var=0.25):
     """Minimal KPF2 with FLUX at controllable NaN and zero fractions.
 
     Injects real NaN/zero PIXELS, because DiagL2 measures them. Not the same as
-    test_qc_flags.py's ``_make_kpf2_nan_headers``, which writes NaN-count/ZEROFRAC
-    HEADERS over clean arrays for QCL2 to read -- the opposite mechanism. Do not
-    merge them; each would destroy the other's test.
+    test_qc_flags.py's ``_make_kpf2_nan_headers``, which writes NaN/non-positive
+    count HEADERS over clean arrays for QCL2 to read -- the opposite mechanism. Do
+    not merge them; each would destroy the other's test.
 
     A bare KPF2() already exposes the FLUX extensions DiagL2 reads, so no FITS
     round-trip is needed. Each extension is (norder[chip], _NCOL_TEST) ones, then
-    nan_frac of the pixels replaced with NaN and zero_frac with 0.0.
-    populate=False sets no FLUX arrays -- the "no data populated" schema cases.
+    nan_frac of the pixels replaced with NaN and zero_frac with 0.0. VAR is filled
+    with ``var`` (None leaves it empty) since every DiagL2 method now reads it.
+    populate=False sets no arrays at all -- the "no data populated" schema case.
     """
     kpf2 = KPF2()
     if not populate:
@@ -469,6 +1080,9 @@ def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True):
                 # Zeros fall in the band [nan_frac, nan_frac+zero_frac)
                 arr[(mask >= nan_frac) & (mask < nan_frac + zero_frac)] = 0.0
             kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
+    set_wave_bands(kpf2, ncol=_NCOL_TEST)
+    if var is not None:
+        set_fiber_arrays(kpf2, "VAR", var, ncol=_NCOL_TEST)
     return kpf2
 
 
@@ -489,109 +1103,68 @@ class TestDiagL2NanCounts:
         for key in ("NANSCI2", "NANSCI3", "NANSKY", "NANCAL"):
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
-    def test_writes_keys_even_when_no_data(self):
-        # The header schema stays consistent: all five keys present, value 0.
-        kpf2 = _make_kpf2_nan_pixels(populate=False)
+
+class TestDiagL2ZeroCounts:
+    def test_writes_all_five_keys_with_zero_when_clean(self):
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)  # all ones
         DiagL2(kpf2).run()
-        for key in _NAN_KEYS:
+        for key in _ZERO_KEYS:
+            assert key in kpf2.headers["QUALITY_CONTROL"], f"missing {key}"
+            assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
+
+    def test_counts_injected_non_positive_pixels_per_fiber(self):
+        # Negative flux counts alongside exact zeros, and both chips contribute.
+        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)
+        kpf2.data["GREEN_SCI1_FLUX"][0, 0] = 0.0
+        kpf2.data["RED_SCI1_FLUX"][0, 0] = -1.0
+        DiagL2(kpf2).run()
+        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROSCI1") == 2
+        for key in ("ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL"):
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
 
-class TestDiagL2ZeroFlux:
-    def test_zerofrac_written_when_data_present(self):
-        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)  # all ones
-        DiagL2(kpf2).run()
-        assert "ZEROFRAC" in kpf2.headers["QUALITY_CONTROL"]
-        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.0)
-
-    def test_zerofrac_one_when_all_zero(self):
-        kpf2 = _make_kpf2_nan_pixels(zero_frac=1.0)
-        DiagL2(kpf2).run()
-        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(1.0)
-
-    def test_zerofrac_half_when_half_zero(self):
-        # A deterministic even/odd pattern (every array has an even pixel count)
-        # makes ZEROFRAC exactly 0.5, independent of array size and seed.
-        kpf2 = _make_kpf2_nan_pixels(zero_frac=0.0)  # all ones
-        for chip in ("GREEN", "RED"):
-            for fiber in _FIBERS:
-                arr = np.ones_like(np.asarray(kpf2.data[f"{chip}_{fiber}_FLUX"]))
-                arr.reshape(-1)[::2] = 0.0
-                kpf2.set_data(f"{chip}_{fiber}_FLUX", arr)
-        DiagL2(kpf2).run()
-        assert kpf2.headers["QUALITY_CONTROL"].get("ZEROFRAC") == pytest.approx(0.5)
-
-    def test_zerofrac_skipped_when_no_data(self):
-        kpf2 = _make_kpf2_nan_pixels(populate=False)
-        DiagL2(kpf2).run()
-        assert "ZEROFRAC" not in kpf2.headers["QUALITY_CONTROL"]
-
-
 # ---------------------------------------------------------------------------
-# DiagL2 -- per-fiber SNR
+# DiagL2 -- per-wavelength SNR
 # ---------------------------------------------------------------------------
 
 
 class TestDiagL2Snr:
-    _SNR_KEYS = ("GSNRSCI", "GSNRSKY", "GSNRCAL", "RSNRSCI", "RSNRSKY", "RSNRCAL")
-
     def test_keys_written_when_flux_and_var_present(self):
-        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones
-        set_fiber_arrays(kpf2, "VAR", 0.25, ncol=_NCOL_TEST)
+        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones, all VAR 0.25
         DiagL2(kpf2).run()
-        # FLUX = 1, VAR = 0.25 -> per-fiber SNR = 1/sqrt(0.25) = 2.0 exactly, and
-        # the three summed SCI orderlets give 3/sqrt(0.75) = 3.464.
+        # Per fiber SNR = 1/sqrt(0.25) = 2.0; summed SCI is 3/sqrt(0.75) = 3.464.
         qc = kpf2.headers["QUALITY_CONTROL"]
-        for key in self._SNR_KEYS:
-            assert key in qc, f"missing {key}"
-            expected = 3.464 if key.endswith("SCI") else 2.0
-            assert qc.get(key) == pytest.approx(expected, abs=0.01), key
+        for wavelength in (452, 548, 652, 747, 852):
+            for code, expected in (("SC", 3.464), ("SK", 2.0), ("CL", 2.0)):
+                key = f"SNR{code}{wavelength}"
+                assert key in qc, f"missing {key}"
+                assert qc.get(key) == pytest.approx(expected, abs=0.01), key
 
-    def test_single_fiber_snr_value(self):
-        # SKY flux=2, var=0.04 -> SNR = 2/sqrt(0.04) = 10.0 in every pixel.
-        kpf2 = _make_kpf2_nan_pixels()
-        set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SKY",), ncol=_NCOL_TEST)
-        set_fiber_arrays(kpf2, "VAR", 0.04, fibers=("SKY",), ncol=_NCOL_TEST)
-        DiagL2(kpf2).run()
-        assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSKY") == pytest.approx(
-            10.0, abs=0.01
-        )
-        assert kpf2.headers["QUALITY_CONTROL"].get("RSNRSKY") == pytest.approx(
-            10.0, abs=0.01
-        )
-
-    def test_summed_sci_snr_value(self):
-        # Each SCI fiber flux=2, var=0.04 -> summed flux=6, var=0.12;
-        # SNR = 6/sqrt(0.12) ~= 17.32.
+    def test_each_wavelength_reads_its_own_chip(self):
+        # GREEN SKY flux=2 (SNR=4) carries 452/548; RED keeps the default SNR=2.
         kpf2 = _make_kpf2_nan_pixels()
         set_fiber_arrays(
-            kpf2, "FLUX", 2.0, fibers=("SCI1", "SCI2", "SCI3"), ncol=_NCOL_TEST
-        )
-        set_fiber_arrays(
-            kpf2, "VAR", 0.04, fibers=("SCI1", "SCI2", "SCI3"), ncol=_NCOL_TEST
+            kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SKY",), ncol=_NCOL_TEST
         )
         DiagL2(kpf2).run()
-        assert kpf2.headers["QUALITY_CONTROL"].get("GSNRSCI") == pytest.approx(
-            17.32, abs=0.05
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        assert qc.get("SNRSK452") == pytest.approx(4.0, abs=0.01)
+        assert qc.get("SNRSK548") == pytest.approx(4.0, abs=0.01)
+        assert qc.get("SNRSK652") == pytest.approx(2.0, abs=0.01)
+
+    def test_summed_sci_uses_all_three_orderlets(self):
+        # SCI2 flux=4 against SCI1/SCI3's 1 -> summed flux 6 over sqrt(0.75).
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(kpf2, "FLUX", 4.0, fibers=("SCI2",), ncol=_NCOL_TEST)
+        DiagL2(kpf2).run()
+        assert kpf2.headers["QUALITY_CONTROL"].get("SNRSC652") == pytest.approx(
+            6.0 / np.sqrt(0.75), abs=0.01
         )
 
-    def test_summed_sci_skipped_when_a_sci_var_missing(self):
-        # VAR for SCI1/SCI2 only (SCI3 var stays empty) -> summed-SCI skipped,
-        # but SKY (var present) is still computed.
-        kpf2 = _make_kpf2_nan_pixels()
-        set_fiber_arrays(
-            kpf2, "VAR", 0.25, fibers=("SCI1", "SCI2", "SKY", "CAL"), ncol=_NCOL_TEST
-        )
-        DiagL2(kpf2).run()
-        assert "GSNRSCI" not in kpf2.headers["QUALITY_CONTROL"]
-        assert "GSNRSKY" in kpf2.headers["QUALITY_CONTROL"]
-
-    def test_skipped_without_var(self):
-        # Default fixture leaves VAR empty -> no SNR keys at all.
-        kpf2 = _make_kpf2_nan_pixels()
-        DiagL2(kpf2).run()
-        for key in self._SNR_KEYS:
-            assert key not in kpf2.headers["QUALITY_CONTROL"]
+    def test_raises_without_var(self):
+        kpf2 = _make_kpf2_nan_pixels(var=None)
+        with pytest.raises(IndexError):
+            DiagL2(kpf2).snr()
 
 
 # ---------------------------------------------------------------------------
@@ -599,20 +1172,11 @@ class TestDiagL2Snr:
 # ---------------------------------------------------------------------------
 
 
-class TestDiagL2OrderletFluxRatios:
-    _RATIO_KEYS = (
-        "GFR12",
-        "GFR32",
-        "GFRS2",
-        "GFRC2",
-        "RFR12",
-        "RFR32",
-        "RFRS2",
-        "RFRC2",
-    )
+class TestDiagL2OrderFluxRatios:
+    _RATIO_KEYS = ("FR452652", "FR548652", "FR747652", "FR852652")
 
     def test_keys_written_and_unity_when_uniform(self):
-        # All fibers flux=1 (default) -> every inter-fiber ratio == 1.0.
+        # SCI2 flux=1 (default) at every wavelength -> every ratio == 1.0.
         kpf2 = _make_kpf2_nan_pixels()
         DiagL2(kpf2).run()
         for key in self._RATIO_KEYS:
@@ -620,13 +1184,58 @@ class TestDiagL2OrderletFluxRatios:
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == pytest.approx(1.0)
 
     def test_ratio_value(self):
-        # GREEN SCI1 flux=2 over SCI2 flux=1 -> GFR12 == 2.0.
+        # GREEN SCI2 flux=2 against RED's 1: the two green wavelengths double,
+        # the two red ones (652 is itself red) stay at unity.
         kpf2 = _make_kpf2_nan_pixels()
         set_fiber_arrays(
-            kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI1",), ncol=_NCOL_TEST
+            kpf2, "FLUX", 2.0, chips=("GREEN",), fibers=("SCI2",), ncol=_NCOL_TEST
         )
         DiagL2(kpf2).run()
-        assert kpf2.headers["QUALITY_CONTROL"].get("GFR12") == pytest.approx(2.0)
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        assert qc.get("FR452652") == pytest.approx(2.0)
+        assert qc.get("FR548652") == pytest.approx(2.0)
+        assert qc.get("FR747652") == pytest.approx(1.0)
+
+    def test_raises_when_wavelength_uncovered(self):
+        # The WAVE arrays are the order map; without one no order can be found.
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(kpf2, "WAVE", 1.0, ncol=_NCOL_TEST, dtype=np.float64)
+        with pytest.raises(LookupError, match="452 nm"):
+            DiagL2(kpf2).order_flux_ratios()
+
+
+class TestDiagL2OrderletFluxRatios:
+    def test_keys_written_and_unity_when_uniform(self):
+        # All fibers flux=1 (default) -> every median ratio == 1.0 with no scatter.
+        kpf2 = _make_kpf2_nan_pixels()
+        DiagL2(kpf2).run()
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        for code in ("FR12", "FR32", "FRS2", "FRC2"):
+            for wavelength in (452, 548, 652, 747, 852):
+                assert qc.get(f"{code}M{wavelength}") == pytest.approx(1.0)
+                assert qc.get(f"{code}U{wavelength}") == pytest.approx(0.0)
+
+    def test_ratio_value(self):
+        # SCI1 flux=2 over SCI2 flux=1 on both chips -> FR12M* == 2.0 everywhere.
+        kpf2 = _make_kpf2_nan_pixels()
+        set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1",), ncol=_NCOL_TEST)
+        DiagL2(kpf2).run()
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        for wavelength in (452, 548, 652, 747, 852):
+            assert qc.get(f"FR12M{wavelength}") == pytest.approx(2.0)
+            assert qc.get(f"FR32M{wavelength}") == pytest.approx(1.0)
+
+    def test_descending_wavelength_grid_interpolates(self):
+        # A fiber whose WAVE runs the other way carries the same spectrum, so the
+        # ratio must survive the interpolation onto SCI2's grid.
+        kpf2 = _make_kpf2_nan_pixels()
+        for chip in ("GREEN", "RED"):
+            wave = np.asarray(kpf2.data[f"{chip}_SCI1_WAVE"])
+            kpf2.set_data(f"{chip}_SCI1_WAVE", wave[:, ::-1].copy())
+            flux = np.asarray(kpf2.data[f"{chip}_SCI1_FLUX"])
+            kpf2.set_data(f"{chip}_SCI1_FLUX", flux[:, ::-1].copy())
+        DiagL2(kpf2).run()
+        assert kpf2.headers["QUALITY_CONTROL"].get("FR12M652") == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -676,13 +1285,11 @@ class TestDiagL4:
         assert qc["BJDRNG"] == pytest.approx(864000.0)
         assert qc["BERVMEAN"] == pytest.approx(0.2)
 
-    def test_all_zero_weights_skips_metrics(self):
-        # w.sum() <= 0 makes _weighted_dispersion return None and the metrics are
-        # skipped entirely. That is load-bearing: absent BERVRNG/BJDRNG make
-        # QCL4.berv_within_tolerance / bjd_within_tolerance return False on a
-        # target frame, so this producing half must stay in step with the QC half.
+    def test_all_zero_weights_raises(self):
+        # No positive total weight: the photon-weighted mean is undefined.
         l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [0.0, 0.0])
-        assert DiagL4(l4).run() == {}
+        with pytest.raises(RuntimeWarning, match="invalid value"):
+            DiagL4(l4).bjd_dispersion()
 
     def test_non_finite_samples_dropped(self):
         # A NaN BJD is masked out rather than poisoning the mean; the surviving
@@ -691,16 +1298,16 @@ class TestDiagL4:
         DiagL4(l4).run()
         assert l4.headers["QUALITY_CONTROL"]["BJDMEAN"] == pytest.approx(10.0)
 
-    def test_skips_without_sci2_rv_table(self):
-        # No SCI2 RV table (e.g. unilluminated science) -> no metrics written.
-        results = DiagL4(KPF4()).run()
-        assert results == {}
+    def test_raises_without_sci2_rv_table(self):
+        with pytest.raises(KeyError, match="BJD_TDB"):
+            DiagL4(KPF4()).bjd_dispersion()
 
-    def test_skips_without_weight_column(self):
-        # WEIGHT column absent (pre-weights L4) -> skip rather than guess.
+    def test_raises_without_weight_column(self):
+        # WEIGHT column absent (pre-weights L4) -> fail loud rather than guess.
         l4 = KPF4()
         l4.set_data(
             "SCI2_RV",
             Table({"ORDER_INDEX": [0, 1], "BJD_TDB": [10.0, 20.0], "BERV": [0.1, 0.3]}),
         )
-        assert DiagL4(l4).run() == {}
+        with pytest.raises(KeyError, match="WEIGHT"):
+            DiagL4(l4).bjd_dispersion()

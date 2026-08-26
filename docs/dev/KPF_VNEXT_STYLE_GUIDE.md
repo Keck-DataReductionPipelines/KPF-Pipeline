@@ -288,7 +288,7 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
 
 #### Keywords
 
-- **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROFRAC`); encode the level
+- **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROSCI1`); encode the level
   where needed for uniqueness (`DATAPRL0`). **Before coining a new keyword, reuse the legacy
   spelling where the science meaning matches** (`WLSFILE`, `BIASFILE`), so downstream/archival
   tools keep reading v3 products; `reference/legacy_data_format.rst` is no longer vendored, so
@@ -314,7 +314,7 @@ The four layers live in `kpfpipe/quality_control/`. Conventions for writing QC c
   ```
 - **Runners reset `self.results = {}` at entry** and wrap each method in `try/except`, re-raising as
   `RuntimeError` (loud failure, no silent suppression).
-- **QC writes `int` 0/1 plus an `ISGOOD` aggregate and does no validation**; round floats
+- **QC writes `int` 0/1 and does no validation**; round floats
   (`round(float(x), 6)`) and cast numpy scalars to Python types. The per-check comment lives once in
   the registry `Description` (QC methods carry only `_qc_key`). QC comments are namespaced `"QC: …"`;
   Diagnostics comments are bare phrases.

@@ -22,34 +22,17 @@ class DiagL4(Diagnostics):
 
     LEVEL = "L4"
 
-    def _sci_rv_table(self):
-        """Return the SCI2 per-order RV table if it carries BJD_TDB/BERV/WEIGHT.
-
-        Returns None when the orderlet has no RV table (e.g. unilluminated) or
-        predates the WEIGHT column, so the dispersion metrics are simply skipped
-        rather than guessed.
-        """
-        tab = self.kpf_obj.data.get(f"{_SCI_REF}_RV")
-        if tab is None or len(tab) == 0:
-            return None
-        if not {"BJD_TDB", "BERV", "WEIGHT"} <= set(getattr(tab, "colnames", [])):
-            return None
-        return tab
-
     @staticmethod
     def _weighted_dispersion(x, w):
         """Return (weighted mean, weighted std, peak-to-peak range) of ``x``.
 
         The mean uses all weights; the std and range use only nonzero-weight
-        entries, matching v2.12. Non-finite samples are dropped. Returns None
-        when no positive total weight remains.
+        entries, matching v2.12. Non-finite samples are dropped.
         """
         x = np.asarray(x, dtype=float)
         w = np.asarray(w, dtype=float)
         good = np.isfinite(x) & np.isfinite(w)
         x, w = x[good], w[good]
-        if w.sum() <= 0:
-            return None
         wmean = float(np.sum(w * x) / w.sum())
         std = float(np.sqrt(np.sum(w * (x - wmean) ** 2) / w.sum()))
         nz = w != 0
@@ -58,13 +41,8 @@ class DiagL4(Diagnostics):
 
     def bjd_dispersion(self):
         """Photon-weighted mean BJD_TDB and its per-order spread (SCI2)."""
-        tab = self._sci_rv_table()
-        if tab is None:
-            return {}
-        stats = self._weighted_dispersion(tab["BJD_TDB"], tab["WEIGHT"])
-        if stats is None:
-            return {}
-        mean, std, rng = stats
+        tab = self.kpf_obj.data[f"{_SCI_REF}_RV"]
+        mean, std, rng = self._weighted_dispersion(tab["BJD_TDB"], tab["WEIGHT"])
         return self._tag(
             BJDMEAN=round(mean, 6),
             BJDSTD=round(std * _SEC_PER_DAY, 4),
@@ -75,13 +53,8 @@ class DiagL4(Diagnostics):
 
     def berv_dispersion(self):
         """Weighted-mean barycentric RV correction and per-order spread (SCI2)."""
-        tab = self._sci_rv_table()
-        if tab is None:
-            return {}
-        stats = self._weighted_dispersion(tab["BERV"], tab["WEIGHT"])
-        if stats is None:
-            return {}
-        mean, std, rng = stats
+        tab = self.kpf_obj.data[f"{_SCI_REF}_RV"]
+        mean, std, rng = self._weighted_dispersion(tab["BERV"], tab["WEIGHT"])
         return self._tag(
             BERVMEAN=round(mean, 6),
             BERVSTD=round(std * _KMS_TO_MS, 4),

@@ -2,15 +2,11 @@
 
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 
 _CHIPS = ["GREEN", "RED"]
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
-
-_NAN_KEYS = ["NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL"]
-
-# Minimum plausible science SNR; a fully failed extraction yields ~0.
-_MIN_SCI_SNR = 1.0
 
 
 class QCL2(QC):
@@ -19,13 +15,34 @@ class QCL2(QC):
     LEVEL = "L2"
 
     def extraction_present(self):
-        """All expected {CHIP}_{FIBER}_FLUX extensions exist and are non-empty."""
+        """Every extension the science chain writes at L2, at its expected shape.
+
+        Extraction writes FLUX and VAR, WavelengthCalibration WAVE, and
+        BarycentricCorrection the three per-order ancillaries; all four modules
+        run before CheckpointL2, so any one missing is an incomplete product.
+        ``np.shape(None)`` is ``()``, so an absent extension fails the shape
+        comparison without a separate presence test. Each array must also hold at
+        least one finite value: an orderlet that never reached the detector is
+        NaN-filled by extraction, which is present but not populated.
+
+        BLAZE and ORDER_TABLE are EPRV-required but have no producer in the
+        science chain, so they are out of scope until one exists.
+        """
+        norder = DETECTOR["norder"]
+        ncol = DETECTOR["ccd"]["ncol"]
         for chip in _CHIPS:
             for fiber in _FIBERS:
-                ext = f"{chip}_{fiber}_FLUX"
-                arr = self.kpf_obj.data.get(ext)
-                if arr is None or np.size(arr) == 0:
-                    return False
+                for suffix in ("FLUX", "VAR", "WAVE"):
+                    arr = self.kpf_obj.data.get(f"{chip}_{fiber}_{suffix}")
+                    if np.shape(arr) != (norder[chip], ncol):
+                        return False
+                    if not np.any(np.isfinite(arr)):
+                        return False
+        per_order = (norder["GREEN"] + norder["RED"],)
+        for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
+            arr = self.kpf_obj.data.get(ext)
+            if np.shape(arr) != per_order or not np.any(np.isfinite(arr)):
+                return False
         return True
 
     extraction_present._qc_key = "DATAPRL2"
@@ -39,32 +56,26 @@ class QCL2(QC):
     def flux_finite_fraction(self):
         """NaN count from headers <= 1% of total L2 flux pixels."""
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        total_pixels = 0
-        for chip in _CHIPS:
-            for fiber in _FIBERS:
-                ext = f"{chip}_{fiber}_FLUX"
-                arr = self.kpf_obj.data.get(ext)
-                if arr is not None:
-                    total_pixels += np.size(arr)
-
-        if total_pixels == 0:
-            return False
-
-        nan_total = 0
-        for k in _NAN_KEYS:
-            v = self._hdr_float(hdr, k)
-            if v is None:
-                return False
-            nan_total += v
-
+        total_pixels = sum(
+            np.size(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])
+            for chip in _CHIPS
+            for fiber in _FIBERS
+        )
+        nan_total = sum(float(hdr[f"NAN{fiber}"]) for fiber in _FIBERS)
         return (nan_total / total_pixels) <= 0.01
 
     flux_finite_fraction._qc_key = "L2NANOK"
 
     def nonzero_flux(self):
-        """ZEROFRAC < 0.5."""
-        v = self._hdr_float(self.kpf_obj.headers["QUALITY_CONTROL"], "ZEROFRAC")
-        return v is not None and v < 0.5
+        """Non-positive count from headers < 50% of total L2 flux pixels."""
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        total_pixels = sum(
+            np.size(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])
+            for chip in _CHIPS
+            for fiber in _FIBERS
+        )
+        zero_total = sum(float(hdr[f"ZERO{fiber}"]) for fiber in _FIBERS)
+        return (zero_total / total_pixels) < 0.5
 
     nonzero_flux._qc_key = "L2FLXOK"
 
@@ -77,36 +88,26 @@ class QCL2(QC):
         whose shape disagrees with its FLUX is a malformed product, not a state to
         skip: the comparison below then raises (fail loud).
         """
-        saw_data = False
         for chip in _CHIPS:
             for fiber in _FIBERS:
-                flux = self.kpf_obj.data.get(f"{chip}_{fiber}_FLUX")
-                var = self.kpf_obj.data.get(f"{chip}_{fiber}_VAR")
-                if flux is None or var is None:
-                    continue
-                flux = np.asarray(flux)
-                var = np.asarray(var)
-                if flux.size == 0:
-                    continue
-                saw_data = True
+                flux = np.asarray(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])
+                var = np.asarray(self.kpf_obj.data[f"{chip}_{fiber}_VAR"])
                 if np.any(np.isfinite(flux) & np.isfinite(var) & (var < 0)):
                     return False
-        return saw_data
+        return True
 
     variance_positive._qc_key = "L2VAROK"
 
     def science_snr(self):
-        """Science SNR is finite and above a minimum floor.
+        """Summed-SCI SNR is finite and greater than 1 at all five wavelengths.
 
-        Reads the GSNRSCI/RSNRSCI metrics written by ``DiagL2.snr`` (run DiagL2
-        before QCL2, the same Diagnostics -> QC ordering every metric-backed
-        check relies on). Guards against a silently failed extraction.
+        Reads the SNRSC* metrics written by ``DiagL2.snr`` (run DiagL2 before
+        QCL2, the same Diagnostics -> QC ordering every metric-backed check
+        relies on). Guards against a silently failed extraction. The SKY and CAL
+        metrics are excluded: neither carries starlight, so neither has a floor.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        values = [self._hdr_float(hdr, k) for k in ("GSNRSCI", "RSNRSCI")]
-        values = [v for v in values if v is not None]
-        if not values:
-            return False
-        return all(np.isfinite(v) and v > _MIN_SCI_SNR for v in values)
+        values = [float(hdr[f"SNRSC{wl}"]) for wl in (452, 548, 652, 747, 852)]
+        return all(np.isfinite(v) and v > 1.0 for v in values)
 
     science_snr._qc_key = "L2SNROK"

@@ -232,7 +232,7 @@ class TestAstrometryPriority:
 
     The knob exists so a catalog outage cannot silently substitute lower-precision
     telescope astrometry into the RV path: a source outside the priority still gets
-    its row (DiagL0 needs the wmko row for TARGOFF) but can never become the base.
+    its row (DiagL0 needs the wmko row for TCSOFF) but can never become the base.
     """
 
     def test_shipped_default_bars_wmko_from_anchoring(self):
@@ -432,7 +432,7 @@ class TestReadWmkoHeader:
             AstroQuery(self._l0_targ(**targ)).read_wmko_header()
 
     def test_wmko_row_built_even_when_barred_from_anchoring(self):
-        # The wmko row is unconditional (TARGOFF needs it), but with wmko outside
+        # The wmko row is unconditional (TCSOFF needs it), but with wmko outside
         # astrometry_priority and both catalogs off nothing may anchor, so the merge
         # raises rather than quietly falling back to telescope astrometry.
         aq = AstroQuery(
@@ -924,19 +924,16 @@ class TestPerform:
         assert row["rv_src"] == "gaia"
         assert row["object"] == "Gaia DR3 12345"
 
-    def test_presence_flags_written_for_every_source(self):
-        # All three flags are always written, so an absent one means AstroQuery
-        # never ran (what DiagL0 warns on). wmko is 0 here: the L0 carries no TARG*.
-        aq, _ = _perform()
-        hdr = aq.l0_obj.headers["CATALOG_RECORD"]
-        assert hdr["GAIACR"] == 1
-        assert hdr["SIMBADCR"] == 1
-        assert hdr["WMKOCR"] == 0
+    def test_row_written_for_every_resolved_source(self):
+        # A source's row is its presence record. No wmko row here: the L0 carries
+        # no TARG*.
+        _, record = _perform()
+        assert set(record["source"]) == {"gaia", "simbad", "kpf-drp"}
 
-    def test_gated_off_source_flagged_zero(self):
-        aq, _ = _perform(do_gaia_query=False)
-        assert aq.l0_obj.headers["CATALOG_RECORD"]["GAIACR"] == 0
-        assert aq.l0_obj.headers["CATALOG_RECORD"]["SIMBADCR"] == 1
+    def test_gated_off_source_gets_no_row(self):
+        _, record = _perform(do_gaia_query=False)
+        assert "gaia" not in record["source"]
+        assert "simbad" in record["source"]
 
     def test_gaia_off_falls_through_to_simbad(self):
         # The provenance must follow the merge down rather than stay "gaia".

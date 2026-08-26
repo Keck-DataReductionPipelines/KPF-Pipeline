@@ -1,10 +1,12 @@
 """QC checks for KPF Level 0 (raw CCD) data products."""
 
 import os
+import re
 from datetime import datetime
 
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
@@ -12,16 +14,6 @@ _L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
 
 _CHIPS = ["GREEN", "RED"]
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
-
-
-def _parse_iso(value):
-    """Parse an ISO-8601 datetime string, or None if missing/unparseable."""
-    if value is None:
-        return None
-    try:
-        return datetime.fromisoformat(str(value))
-    except ValueError:
-        return None
 
 
 class QCL0(QC):
@@ -37,9 +29,17 @@ class QCL0(QC):
         non-empty amplifier extensions is a supported readout mode
         (``_SUPPORTED_NAMP``), mirroring ``ImageAssembly.count_amplifiers``. A
         chip with no data or a partial/invalid amp set (1 or 3) fails.
+
+        Each amp must also carry the full raw region that readout mode implies:
+        the imaging half or quarter of the detector (``ImageAssembly.dims``) plus
+        the prescan and overscan columns/rows, so a truncated or transposed
+        readout fails here rather than downstream in assembly, and hold at least
+        one finite value, so an all-NaN placeholder is not mistaken for a
+        readout.
         """
+        ccd = DETECTOR["ccd"]
         for chip in _CHIPS:
-            namp = 0
+            amps = []
             for i in range(1, 5):  # GREEN_AMP1..4 / RED_AMP1..4
                 arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
                 # KPF0 stores None-data as array(None, dtype=object); skip absent.
@@ -49,8 +49,15 @@ class QCL0(QC):
                     or np.size(arr) == 0
                 ):
                     continue
-                namp += 1
-            if namp not in _SUPPORTED_NAMP:
+                amps.append(arr)
+            if len(amps) not in _SUPPORTED_NAMP:
+                return False
+            nrow = ccd["nrow"] // (2 if len(amps) == 4 else 1) + ccd["oscan_prl"]
+            ncol = ccd["ncol"] // 2 + ccd["prescan"] + ccd["oscan_srl"]
+            if any(
+                arr.shape != (nrow, ncol) or not np.any(np.isfinite(arr))
+                for arr in amps
+            ):
                 return False
         return True
 
@@ -63,49 +70,230 @@ class QCL0(QC):
 
     header_keywords_present._qc_key = "KWRDPRL0"
 
-    def times_consistent(self):
-        """DATE-BEG <= DATE-MID <= DATE-END.
+    def telemetry_present(self):
+        """TELEMETRY extension present and populated.
 
-        Ports v2.12 ``L2_datetime``. At L0 the raw instrument times live on the
-        WMKO-native PRIMARY (the header later snapshotted verbatim into
-        INSTRUMENT_HEADER at to_kpf1); the 0/1 flag then propagates downstream
-        on QUALITY_CONTROL.
+        Ports v2.12 ``telemetry_present``, tightened to the DATAPRL0 standard of
+        populated: rows carrying at least one finite average, so an all-NaN
+        placeholder is not mistaken for a recording. The bench thermal and vacuum
+        state during the exposure is recorded nowhere else and cannot be
+        recovered once the frame is written.
+        """
+        table = self.kpf_obj.data.get("TELEMETRY", [])
+        if len(table) == 0:
+            return False
+        return bool(np.any(np.isfinite(np.asarray(table["average"], dtype=float))))
+
+    telemetry_present._qc_key = "TELEPR"
+
+    def cahk_present(self):
+        """CA_HK extension present and populated.
+
+        Ports v2.12 ``data_2D_CaHK`` (v2.12's 2D level is vNext's L0), holding it
+        to the DATAPRL0 standard of populated: a non-empty image carrying at least
+        one finite value, so an all-NaN placeholder is not mistaken for a readout.
+        The Ca H&K image is the only record of the chromospheric activity indicator
+        for the exposure and cannot be recovered once the frame is written.
+        """
+        image = self.kpf_obj.data.get("CA_HK", [])
+        return np.size(image) > 0 and bool(np.any(np.isfinite(image)))
+
+    cahk_present._qc_key = "CAHKPR"
+
+    def _expmeter_populated(self, ext):
+        """One EM fiber table present, carrying readings and finite flux.
+
+        The wavelength channels are the numerically-labeled columns, so a table of
+        Date* columns alone, one with no readings, or one whose flux is entirely
+        non-finite is not a readout.
+        """
+        table = self.kpf_obj.data.get(ext)
+        if table is None or len(table) == 0:
+            return False
+        for name in table.colnames:
+            try:
+                float(name)
+            except ValueError:
+                continue
+            if np.any(np.isfinite(np.asarray(table[name], dtype=float))):
+                return True
+        return False
+
+    def expmeter_sci_present(self):
+        """EXPMETER_SCI present and populated."""
+        return self._expmeter_populated("EXPMETER_SCI")
+
+    expmeter_sci_present._qc_key = "EMSCIPR"
+
+    def expmeter_sky_present(self):
+        """EXPMETER_SKY present and populated."""
+        return self._expmeter_populated("EXPMETER_SKY")
+
+    expmeter_sky_present._qc_key = "EMSKYPR"
+
+    def times_consistent(self):
+        """DATE-BEG <= DATE-MID <= DATE-END, matching ELAPSED and the shutters.
+
+        Ports the header-date half of v2.12 ``L0_datetime`` (the exposure-meter
+        half is EMTIMEOK). The shutter window must agree with ELAPSED to 0.1 s,
+        and each per-chip shutter time must fall within 0.1 s of the window edge
+        it bounds; mismatched chips have different photon-weighted midpoints, so
+        one barycentric correction cannot serve both.
+
+        At L0 the raw instrument times live on the WMKO-native PRIMARY (the
+        header later snapshotted verbatim into INSTRUMENT_HEADER at to_kpf1); the
+        0/1 flag then propagates downstream on QUALITY_CONTROL.
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
         beg, mid, end = (
-            _parse_iso(hdr.get(k)) for k in ("DATE-BEG", "DATE-MID", "DATE-END")
+            datetime.fromisoformat(str(hdr[k]))
+            for k in ("DATE-BEG", "DATE-MID", "DATE-END")
         )
-        if beg is None or mid is None or end is None:
+        if not beg <= mid <= end:
             return False
-        return beg <= mid <= end
+        if abs((end - beg).total_seconds() - float(hdr["ELAPSED"])) > 0.1:
+            return False
+        for key, edge in (
+            ("GRDATE-B", beg),
+            ("GRDATE-E", end),
+            ("RDDATE-B", beg),
+            ("RDDATE-E", end),
+        ):
+            shutter = datetime.fromisoformat(str(hdr[key]))
+            if abs((edge - shutter).total_seconds()) > 0.1:
+                return False
+        return True
 
     times_consistent._qc_key = "DATTIMOK"
+
+    def ntp_timing(self):
+        """NTP reports the host clock correct to better than 100 ms.
+
+        Ports v2.12 ``NTP_timing``. DATTIMOK and EXPTIMOK check only that the
+        exposure timestamps are self-consistent, which a uniformly offset clock
+        still satisfies. TIMEERR is free text ("NTP time correct to within
+        12.3 ms"); text that does not report an error, or one at/above the limit,
+        fails.
+        """
+        timeerr = str(self.kpf_obj.headers["PRIMARY"]["TIMEERR"])
+        match = re.search(r"NTP time correct to within ([\d.]+) ms", timeerr)
+        return match is not None and float(match.group(1)) < 100.0
+
+    ntp_timing._qc_key = "NTPOK"
 
     def exptime_sane(self):
         """EXPTIME present, finite, non-negative, and consistent with ELAPSED.
 
         Bias frames legitimately have EXPTIME=0, so we don't require strictly
-        positive. When the raw ELAPSED readout time is present, it must not fall
-        short of the requested EXPTIME (premature readout) or exceed it by more
-        than 0.1 s (the elapsed-vs-requested check formerly done in the masters
-        frame loader); an absent ELAPSED skips only that comparison.
+        positive. The raw ELAPSED readout time must not fall short of the
+        requested EXPTIME (premature readout) or exceed it by more than 0.1 s
+        (the elapsed-vs-requested check formerly done in the masters frame
+        loader).
         """
         hdr = self.kpf_obj.headers["PRIMARY"]
-        if "EXPTIME" not in hdr:
-            return False
-        try:
-            exptime = float(hdr.get("EXPTIME"))
-        except (TypeError, ValueError):
-            return False
+        exptime = float(hdr["EXPTIME"])
+        elapsed = float(hdr["ELAPSED"])
         if not (np.isfinite(exptime) and exptime >= 0):
             return False
-
-        elapsed = self._hdr_float(hdr, "ELAPSED")
-        if elapsed is not None and not (0 <= elapsed - exptime <= 0.1):
-            return False
-        return True
+        return 0 <= elapsed - exptime <= 0.1
 
     exptime_sane._qc_key = "EXPTIMOK"
+
+    def good_readout(self):
+        """The CCD read out cleanly rather than smearing.
+
+        Ports v2.12 ``L0_good_readout``. A readout that aborts partway leaves
+        ELAPSED between 6.0 and 6.7 s regardless of the requested EXPTIME,
+        smearing the frame; it happens a few times a day on both cals and stars.
+        Requests shorter than 7 s legitimately land in that window, so only
+        longer ones are judged.
+        """
+        hdr = self.kpf_obj.headers["PRIMARY"]
+        return not (
+            float(hdr["EXPTIME"]) >= 7.0 and 6.0 <= float(hdr["ELAPSED"]) <= 6.7
+        )
+
+    good_readout._qc_key = "READOK"
+
+    def _ccd_temp_ok(self, key):
+        """One CCD held within 10 mK of its temperature setpoint.
+
+        Ports v2.12 ``green_ccd_10mK``/``red_ccd_10mK``. DiagL0 measures the
+        signed offset; this applies the limit to its magnitude. Detector
+        temperature drift moves the spectrum on the chip, so it bears directly on
+        RV stability.
+        """
+        return abs(float(self.kpf_obj.headers["QUALITY_CONTROL"][key])) < 10.0
+
+    def green_ccd_temp_ok(self):
+        """GREEN CCD at its temperature setpoint."""
+        return self._ccd_temp_ok("GTEMPOFF")
+
+    green_ccd_temp_ok._qc_key = "GTEMPOK"
+
+    def red_ccd_temp_ok(self):
+        """RED CCD at its temperature setpoint."""
+        return self._ccd_temp_ok("RTEMPOFF")
+
+    red_ccd_temp_ok._qc_key = "RTEMPOK"
+
+    def guiding_ok(self):
+        """Guiding tracked to spec and the guide camera was not saturated.
+
+        Merges v2.12 ``good_guiding`` and ``guider_not_saturated``: the guiding
+        error holds to 50 mas in both X/Y RMS and bias, at most 3 pixels of the
+        co-added image are saturated, and at most 10% of frames carry a saturated
+        peak. DiagL0 measures all six; this applies the limits. Bias is judged on
+        magnitude, where v2.12 tested the signed value and so let a large negative
+        offset pass.
+        """
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        if any(float(hdr[key]) > 50.0 for key in ("GDRXRMS", "GDRYRMS")):
+            return False
+        if any(abs(float(hdr[key])) > 50.0 for key in ("GDRXBIAS", "GDRYBIAS")):
+            return False
+        return int(hdr["GDRNSAT"]) <= 3 and float(hdr["GDRFRSAT"]) <= 0.1
+
+    guiding_ok._qc_key = "GUIDEROK"
+
+    def elevation_ok(self):
+        """Telescope above 30 deg, the atmospheric dispersion corrector's range.
+
+        Ports v2.12 ``not_low_elevation``. Below 30 deg the ADC runs out of
+        travel, so the fiber samples a wavelength-dependent position on the sky
+        and the measured RV is biased.
+        """
+        return float(self.kpf_obj.headers["PRIMARY"]["EL"]) >= 30.0
+
+    elevation_ok._qc_key = "ELEVOK"
+
+    def etalon_at_temp(self):
+        """Etalon chambers within 0.5 mK of their setpoints.
+
+        Ports the limit half of v2.12 ``etalon_set_temp``. DiagL0 measures the
+        signed offset of the chamber furthest from its setpoint; this applies the
+        limit to its magnitude. The etalon line positions shift with temperature,
+        so an off-setpoint chamber corrupts the drift reference.
+        """
+        return abs(float(self.kpf_obj.headers["QUALITY_CONTROL"]["ETATOFF"])) <= 0.5
+
+    etalon_at_temp._qc_key = "ETATMPOK"
+
+    def agitator_operating(self):
+        """Agitator running above its minimum speed.
+
+        Ports v2.12 ``agitator_operating``: AGITSTA reports Running and the
+        exposure-average kpfmot.AGITSPD exceeds 1000 counts/s. The agitator
+        scrambles the fiber's modal noise; a stalled one leaves that noise in the
+        spectrum.
+        """
+        if str(self.kpf_obj.headers["PRIMARY"]["AGITSTA"]) != "Running":
+            return False
+        table = self.kpf_obj.data["TELEMETRY"]
+        speed = table[table["keyword"] == "kpfmot.AGITSPD"]["average"][0]
+        return abs(float(speed)) > 1000.0
+
+    agitator_operating._qc_key = "AGITOK"
 
     def not_junk(self):
         """obs_id not on the observer junk list for this frame's data tree.
@@ -127,33 +315,18 @@ class QCL0(QC):
     def radec_consistent(self):
         """Pointing agrees with the target and catalog positions.
 
-        Telescope pointing is only meaningful for a science frame (IMTYPE
-        'Object'), so a calibration frame passes unconditionally: it has no
-        target, AstroQuery never runs on it, and DiagL0 therefore leaves
-        TARGOFF/OBJOFF/GAIAOFF blank -- which would otherwise fail the required
-        TARGOFF branch below.
-
-        TARGOFF (pointing vs the DCS target) is internal telescope-pointing
-        consistency and is required: an empty value (astrometry unavailable) or
-        one >= 1" fails. OBJOFF/GAIAOFF are external catalog cross-matches with a
-        looser 5" bound, checked only when present-and-valued, so a disabled or
-        failed Gaia/SIMBAD lookup passes.
+        TCSOFF (pointing vs the DCS target) is internal telescope-pointing
+        consistency and is required. OBJOFF/GAIAOFF are external catalog
+        cross-matches with a looser 5" bound; Gaia and SIMBAD are optional
+        sources, so DiagL0 emits their offsets only when the lookup ran and
+        matched, and each is checked only where present.
         """
-        imtype = self.kpf_obj.headers["PRIMARY"].get("IMTYPE")
-        if str(imtype).strip().lower() != "object":
-            return True
-
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        targoff = self._hdr_float(hdr, "TARGOFF")
-        if targoff is None or targoff >= 1.0:
+        if float(hdr["TCSOFF"]) >= 1.0:
             return False
-        for key, limit in (("OBJOFF", 5.0), ("GAIAOFF", 5.0)):
-            val = self._hdr_float(hdr, key)
-            if val is not None and val >= limit:
-                return False
-        return True
+        return all(float(hdr[key]) < 5.0 for key in ("OBJOFF", "GAIAOFF") if key in hdr)
 
-    radec_consistent._qc_key = "RADECOK"
+    radec_consistent._qc_key = "TARGETOK"
 
     @staticmethod
     def _row_float(row, field):
@@ -170,14 +343,10 @@ class QCL0(QC):
         epoch/equinox in (1950, 2050] Julian years, |rv| <= 350 km/s, parallax in
         (0, 1000) mas, |pmra|/|pmdec| <= 15 arcsec/yr.
 
-        Passes when there is no ``kpf-drp`` row: this is value sanity, not a presence
-        check.
+        AstroQuery must have resolved the frame: an absent ``kpf-drp`` row raises.
         """
         table = self.kpf_obj.data["CATALOG_RECORD"]
-        match = table[table["source"] == "kpf-drp"] if table.colnames else table
-        if not len(match):
-            return True
-        row = match[0]
+        row = table[table["source"] == "kpf-drp"][0]
         for field in ("epoch", "equinox"):
             val = self._row_float(row, field)
             if val is not None and not (1950.0 < val <= 2050.0):
@@ -207,8 +376,8 @@ class QCL0(QC):
         the range that index spans across the Pecaut & Mamajek (2013) dwarf sequence
         -- O3V through Y4V, so a color outside it is not a stellar color.
 
-        Passes when there is no ``kpf-drp`` row, as ``catalog_astrometry_sane`` does:
-        a calibration frame has no target to have a color.
+        AstroQuery must have resolved the frame, as ``catalog_astrometry_sane``
+        requires: an absent ``kpf-drp`` row raises.
         """
         # (bluest, reddest) [mag] each index spans across the sequence, keyed by the
         # labels AstroQuery writes to color_name.
@@ -218,10 +387,7 @@ class QCL0(QC):
             "G-J": (-0.36, 5.36),
         }
         table = self.kpf_obj.data["CATALOG_RECORD"]
-        match = table[table["source"] == "kpf-drp"] if table.colnames else table
-        if not len(match):
-            return True
-        row = match[0]
+        row = table[table["source"] == "kpf-drp"][0]
         color = self._row_float(row, "color")
         bounds = limits.get(str(row["color_name"]))
         if color is None or bounds is None:
@@ -229,15 +395,6 @@ class QCL0(QC):
         return bounds[0] <= color <= bounds[1]
 
     catalog_color_sane._qc_key = "COLOROK"
-
-    def _em_table(self, ext):
-        """The exposure-meter table for ``ext``, or None when the frame has none.
-
-        Only science frames carry EM extensions; on a calibration ``data.get``
-        yields None.
-        """
-        table = self.kpf_obj.data.get(ext)
-        return table if table is not None and len(table) else None
 
     def expmeter_times_consistent(self):
         """EXPMETER_SCI brackets the shutter window to within 1 second.
@@ -248,22 +405,15 @@ class QCL0(QC):
         columns as BarycentricCorrection does. The 1 s tolerance absorbs EM dead
         time and catches only gross errors: the flux-weighted midpoint feeds the
         barycentric correction, where a 2.6 s timing error costs 10 cm/s.
-
-        Frames without EM data pass; a frame with EM data but no shutter window
-        to compare against fails.
         """
-        table = self._em_table("EXPMETER_SCI")
-        if table is None:
-            return True
+        table = self.kpf_obj.data["EXPMETER_SCI"]
         hdr = self.kpf_obj.headers["PRIMARY"]
-        beg, end = (_parse_iso(hdr.get(k)) for k in ("DATE-BEG", "DATE-END"))
-        if beg is None or end is None:
-            return False
+        beg, end = (
+            datetime.fromisoformat(str(hdr[k])) for k in ("DATE-BEG", "DATE-END")
+        )
         suffix = "-Corr" if "Date-Beg-Corr" in table.colnames else ""
-        em_beg = _parse_iso(str(table[f"Date-Beg{suffix}"][0]))
-        em_end = _parse_iso(str(table[f"Date-End{suffix}"][-1]))
-        if em_beg is None or em_end is None:
-            return False
+        em_beg = datetime.fromisoformat(str(table[f"Date-Beg{suffix}"][0]))
+        em_end = datetime.fromisoformat(str(table[f"Date-End{suffix}"][-1]))
         return (
             abs((em_beg - beg).total_seconds()) <= 1.0
             and abs((em_end - end).total_seconds()) <= 1.0
@@ -272,41 +422,41 @@ class QCL0(QC):
     expmeter_times_consistent._qc_key = "EMTIMEOK"
 
     def expmeter_flux_sane(self):
-        """EXPMETER_SCI/SKY flux is neither saturated nor significantly negative.
+        """EXPMETER flux is neither saturated, negative, nor non-finite.
 
-        Merges v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, applied to
-        each fiber present. Saturation: more than 1.5 channels per reading above
-        90% of the 1.93e6 reduced-spectrum saturation level, with the first and
-        last readings dropped when there are 3+ (they are partial). Negative flux:
-        20 consecutive channels whose time-summed flux is negative, the signature
-        of bias over-subtraction in the raw EM images.
-
-        Frames without EM data pass; an EM table with no wavelength channel fails.
+        Merges v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, which fail
+        on either fiber. DiagL0 measures each fiber; this applies v2.12's limits:
+        at most 1.5 saturated elements per reading, and no run of 20 adjacent
+        negative channels. Non-finite channels are gated the same way as negative.
         """
-        for ext in ("EXPMETER_SCI", "EXPMETER_SKY"):
-            table = self._em_table(ext)
-            if table is None:
-                continue
-            # Numeric column labels are the wavelength channels; Date* are not.
-            channels = []
-            for name in table.colnames:
-                try:
-                    float(name)
-                except ValueError:
-                    continue
-                channels.append(np.asarray(table[name], dtype=float))
-            if not channels:
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        for fiber in ("SCI", "SKY"):
+            if float(hdr[f"EM{fiber}SAT"]) > 1.5:
                 return False
-            flux = np.column_stack(channels)
-
-            readings = flux[1:-1] if len(flux) >= 3 else flux
-            saturated = np.count_nonzero(readings > 0.9 * 1.93e6)
-            if saturated > 1.5 * len(readings):
-                return False
-
-            negative = (flux.sum(axis=0) < 0).astype(int)
-            if np.any(np.convolve(negative, np.ones(20, dtype=int), "valid") == 20):
+            if int(hdr[f"EM{fiber}NEG"]) >= 20 or int(hdr[f"EM{fiber}INF"]) >= 20:
                 return False
         return True
 
     expmeter_flux_sane._qc_key = "EMFLUXOK"
+
+    def _chip_pixels_ok(self, dead_key, sat_key):
+        """Both raw pixel-quality fractions of a chip within their limits.
+
+        Ports v2.12 L0 infobits as one per-chip verdict: at most 5% of any amp
+        below 1.0e4 D.N. (dead) and at most 15% above 5.0e8 D.N. (saturated).
+        DiagL0 measures the fractions; this only applies the limits.
+        """
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        return float(hdr[dead_key]) <= 0.05 and float(hdr[sat_key]) <= 0.15
+
+    def green_pixels_ok(self):
+        """GREEN raw pixel quality: neither dead nor saturated beyond the limits."""
+        return self._chip_pixels_ok("DEADPXFG", "SATPXFG")
+
+    green_pixels_ok._qc_key = "GREENL0"
+
+    def red_pixels_ok(self):
+        """RED raw pixel quality: neither dead nor saturated beyond the limits."""
+        return self._chip_pixels_ok("DEADPXFR", "SATPXFR")
+
+    red_pixels_ok._qc_key = "REDL0"

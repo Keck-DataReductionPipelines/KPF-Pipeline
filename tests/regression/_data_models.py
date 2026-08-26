@@ -39,6 +39,44 @@ GOOD_DATES = {
     "DATE-MID": "2024-09-23T09:12:15.519",
     "DATE-END": "2024-09-23T09:12:21.554",
     "ELAPSED": 12.07,
+    "GRDATE-B": "2024-09-23T09:12:09.484",
+    "GRDATE-E": "2024-09-23T09:12:21.554",
+    "RDDATE-B": "2024-09-23T09:12:09.484",
+    "RDDATE-E": "2024-09-23T09:12:21.554",
+}
+
+# Exposure-meter readings tiling the GOOD_DATES shutter window, and a clean flux
+# array (4 readings x 25 wavelength channels -- more than the 20-channel negative
+# run EMFLUXOK looks for).
+EM_BEGS = [
+    "2024-09-23T09:12:09.484",
+    "2024-09-23T09:12:12.484",
+    "2024-09-23T09:12:15.484",
+    "2024-09-23T09:12:18.484",
+]
+EM_ENDS = [
+    "2024-09-23T09:12:12.484",
+    "2024-09-23T09:12:15.484",
+    "2024-09-23T09:12:18.484",
+    "2024-09-23T09:12:21.554",
+]
+EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
+
+# A physically-sane merged catalog row, matching the pointing below.
+SCIENCE_POINTING = {"RA": "12:00:00.00", "DEC": "+40:00:00.0", "MJD-OBS": 60576.38}
+CATALOG_RECORD = {
+    "object": "synthetic",
+    "ra": SCIENCE_POINTING["RA"],
+    "dec": SCIENCE_POINTING["DEC"],
+    "pmra": 0.0,  # zero PM keeps the propagated position on the pointing
+    "pmdec": 0.0,
+    "parallax": 100.0,
+    "rv": 10.0,
+    "frame": "icrs",
+    "epoch": 2016.0,
+    "equinox": 2000.0,
+    "color": 0.823,
+    "color_name": "Gaia BP-RP",
 }
 
 _DEFAULT_PRIMARY = {
@@ -47,6 +85,7 @@ _DEFAULT_PRIMARY = {
     "IMTYPE": "Bias",
     "DATE-OBS": "2024-01-01T00:00:01",
     "PROGNAME": "K123",
+    "TIMEERR": "NTP time correct to within 12.3 ms",
 }
 
 
@@ -88,9 +127,10 @@ def write_amp_l0(
     one caller deliberately writes once per module) and decides whether to
     ``from_fits`` the result.
 
-    ``bias_level=None`` fills every amp with ones -- adequate whenever the test
-    only cares that data is present. A float instead fills with seeded Gaussian
-    noise about that level, for tests that measure the assembled image.
+    ``bias_level=None`` fills every amp with a flat 1e6 D.N., a plausible raw
+    level that clears the QCL0 pixel-quality thresholds -- adequate whenever the
+    test only cares that data is present. A float instead fills with seeded
+    Gaussian noise about that level, for tests that measure the assembled image.
     ``with_data=False`` writes ``data=None`` HDUs, which KPF0 stores as
     ``array(None, dtype=object)`` and treats as absent.
     """
@@ -101,7 +141,7 @@ def write_amp_l0(
             if not with_data:
                 data = None
             elif bias_level is None:
-                data = np.ones(shape, dtype=np.float32)
+                data = np.full(shape, 1.0e6, dtype=np.float32)
             else:
                 data = (bias_level + rng.normal(0, 3.0, shape)).astype(np.float32)
             hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
@@ -130,17 +170,100 @@ def write_minimal_l0(path, *, primary_cards=None, extra_hdus=()):
 # --- L2 in-memory -----------------------------------------------------------
 
 
-def set_fiber_arrays(kpf2, suffix, value, *, ncol, chips=CHIPS, fibers=FIBERS):
+def expmeter_hdus(flux=None, sky_flux=None):
+    """EXPMETER_SCI/SKY BinTableHDUs tiling the GOOD_DATES shutter window."""
+
+    def table(values):
+        columns = {"Date-Beg": EM_BEGS, "Date-End": EM_ENDS}
+        for i in range(values.shape[1]):
+            columns[str(5000.0 + i)] = values[:, i]
+        return Table(columns)
+
+    return [
+        fits.BinTableHDU(table(EM_CLEAN_FLUX if flux is None else flux), name=name)
+        for name, flux in (
+            ("EXPMETER_SCI", flux),
+            ("EXPMETER_SKY", sky_flux),
+        )
+    ]
+
+
+def telemetry_hdu(nrows=1):
+    """A TELEMETRY BinTableHDU carrying ``nrows`` instrument readings."""
+    return fits.BinTableHDU(
+        Table({"keyword": ["TEMP1"] * nrows, "average": [20.0] * nrows}),
+        name="TELEMETRY",
+    )
+
+
+def write_science_l0(path, *, primary_cards=None, **kwargs):
+    """Write an ``IMTYPE='Object'`` L0 carrying everything QCL0 requires.
+
+    A science frame, unlike the calibration default: pointing, self-consistent
+    timing, both exposure-meter tables and telemetry. ``seed_catalog_record``
+    supplies the astrometry AstroQuery would have resolved.
+    """
+    return write_amp_l0(
+        path,
+        primary_cards={
+            "IMTYPE": "Object",
+            "EXPTIME": GOOD_DATES["ELAPSED"],
+            **SCIENCE_POINTING,
+            **GOOD_DATES,
+            **(primary_cards or {}),
+        },
+        extra_hdus=[*expmeter_hdus(), telemetry_hdu()],
+        **kwargs,
+    )
+
+
+def seed_catalog_record(kpf0, record=None):
+    """Write the wmko and merged kpf-drp CATALOG_RECORD rows.
+
+    Stands in for a completed AstroQuery run without touching the network: the
+    DCS target row (required by DiagL0's TCSOFF) and the merged row QCL0's
+    ASTROMOK/COLOROK read, with Gaia and SIMBAD unmatched.
+    """
+    from kpfpipe.modules.astro_query import AstroQuery
+
+    aq = AstroQuery(kpf0)
+    for source in ("wmko", "kpf-drp"):
+        aq._write_catalog_record(source, record or CATALOG_RECORD)
+    return kpf0
+
+
+def set_fiber_arrays(
+    kpf2, suffix, value, *, ncol, chips=CHIPS, fibers=FIBERS, dtype=np.float32
+):
     """Populate ``{chip}_{fiber}_{suffix}`` with a constant for the given fibers.
 
-    ``ncol`` is required on purpose -- see the module docstring.
+    ``ncol`` is required on purpose -- see the module docstring. ``dtype`` must be
+    float64 for ``WAVE``, whose EPRV MinBitDepth the write path enforces.
     """
     for chip in chips:
         for fiber in fibers:
             kpf2.set_data(
                 f"{chip}_{fiber}_{suffix}",
-                np.full((NORDER[chip], ncol), value, dtype=np.float32),
+                np.full((NORDER[chip], ncol), value, dtype=dtype),
             )
+
+
+def set_wave_bands(kpf2, *, ncol):
+    """Give every fiber a WAVE grid dividing its chip's band across the orders.
+
+    A constant WAVE satisfies the shape checks but carries no order-to-wavelength
+    map, which the DiagL2 SNR and flux-ratio metrics need. Each order takes a
+    contiguous slice of the chip's band [Angstroms], so every wavelength those
+    metrics ask for lands in exactly one order, and all fibers share the grid,
+    making the inter-fiber interpolation exact.
+    """
+    for chip, (lo, hi) in (("GREEN", (4450.0, 6000.0)), ("RED", (6000.0, 8800.0))):
+        edges = np.linspace(lo, hi, NORDER[chip] + 1)
+        wave = np.stack(
+            [np.linspace(edges[o], edges[o + 1], ncol) for o in range(NORDER[chip])]
+        )
+        for fiber in FIBERS:
+            kpf2.set_data(f"{chip}_{fiber}_WAVE", wave)
 
 
 # --- L4 in-memory -----------------------------------------------------------
@@ -152,7 +275,6 @@ def make_l4(
     rv_filled=True,
     jitter=0.0,
     berv=0.0,
-    sci_obj=None,
     bervrng=None,
     bjdrng=None,
     seed=3,
@@ -162,13 +284,12 @@ def make_l4(
     ``jitter`` is the per-order scatter applied to BJD_TDB and BERV. It defaults
     to 0 (every order identical). **A caller exercising the BJDOK/BERVOK gates
     must pass 1e-7** -- that magnitude is tuned to sit well inside those gates
-    (about 1 s in BJD, 0.1 m/s in BERV), so a good product passes; re-rolling it
+    (about 0.03 s in BJD, 3e-4 m/s in BERV), so a good product passes; re-rolling it
     larger silently turns a passing test into a failing one. Non-zero jitter also
     scatters RV itself by 1e-3 km/s, so the product looks like a real one.
 
     ``rv_filled=False`` seeds NaN RVs, as a CrossCorrelation-only L4 has before
-    RadialVelocity runs. ``sci_obj`` sets INSTRUMENT_HEADER SCI-OBJ, which the
-    BERV/BJD tolerance checks honour only when it is 'target'.
+    RadialVelocity runs.
 
     Does not seed the required PRIMARY keywords; call ``seed_required_primary``
     when the test needs KWRDPRL4 to pass.
@@ -192,14 +313,18 @@ def make_l4(
             else:
                 rv_col = np.zeros(NORDER_TOTAL) + scatter(1e-3)
             l4.set_data(f"{fiber}_CCF", np.ones((NORDER_TOTAL, 5)))
+            l4.set_data(f"{fiber}_CCF_VAR", np.ones((NORDER_TOTAL, 5)))
             l4.set_data(
                 f"{fiber}_RV",
                 Table(
                     {
                         "ORDER_INDEX": np.arange(NORDER_TOTAL),
                         "RV": rv_col,
+                        "RV_ERR": np.full(NORDER_TOTAL, 1e-3),
                         "BJD_TDB": 2460000.0 + scatter(jitter),
                         "BERV": berv + scatter(jitter),
+                        "WAVE_START": np.full(NORDER_TOTAL, 4500.0),
+                        "WAVE_END": np.full(NORDER_TOTAL, 8700.0),
                         "WEIGHT": np.ones(NORDER_TOTAL),
                     }
                 ),
@@ -208,8 +333,6 @@ def make_l4(
         l4.headers["QUALITY_CONTROL"]["BERVRNG"] = bervrng
     if bjdrng is not None:
         l4.headers["QUALITY_CONTROL"]["BJDRNG"] = bjdrng
-    if sci_obj is not None:
-        l4.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
     return l4
 
 

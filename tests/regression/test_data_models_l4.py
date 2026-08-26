@@ -114,7 +114,6 @@ class TestCatalogRecordPassthrough:
     def _l2_with_catalog():
         kpf2 = KPF2()
         kpf2.set_data("CATALOG_RECORD", catalog_record_table())
-        kpf2.headers["CATALOG_RECORD"]["GAIACR"] = (1, "Catalog record present")
         return kpf2
 
     def test_kpf4_has_catalog_record_extension(self):
@@ -122,18 +121,16 @@ class TestCatalogRecordPassthrough:
         # to_kpf4's pass-through a destination.
         assert "CATALOG_RECORD" in KPF4().extensions
 
-    def test_rows_and_flags_reach_l4(self):
-        # The rows, not just the flags, so the astrometry stays with the RV it fed.
+    def test_rows_reach_l4(self):
+        # The rows ride along, so the astrometry stays with the RV it fed.
         kpf4 = self._l2_with_catalog().to_kpf4()
         assert [str(s) for s in kpf4.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
-        assert kpf4.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
     def test_catalog_record_roundtrip(self, tmp_path):
         path = tmp_path / "kpf_SL4_20240101T000001.fits"
         self._l2_with_catalog().to_kpf4().to_fits(str(path))
         back = KPF4.from_fits(str(path))
         assert [str(s) for s in back.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
-        assert back.headers["CATALOG_RECORD"]["GAIACR"] == 1
 
 
 class TestKPF4:

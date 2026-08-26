@@ -7,12 +7,11 @@ master relative to the observation time.
 
 from datetime import datetime
 
+import numpy as np
+
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
 from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
-# Master-calibration age metrics: the RECEIPT path keyword (written by
-# CalibrationAssociation) -> the age keyword whose signed (master - obs) value
-# this diagnostic computes. (FITS comment from the registry -- see ``_tag``.)
 _CAL_AGE_KEYS = {
     "BIASFILE": "BIASAGE",
     "DARKFILE": "DARKAGE",
@@ -56,3 +55,21 @@ class DiagL1(Diagnostics):
         return self._tag(**results)
 
     calibration_ages._diag_name = "calibration_ages"
+
+    def flux_percentiles(self):
+        """Flux percentiles (99/90/50/10) of each assembled CCD frame, in e-.
+
+        Returns
+        -------
+        dict
+            Maps each ``FFI{G,R}{pct}P`` keyword to its ``(value, comment)``.
+        """
+        results = {}
+        for chip, prefix in (("GREEN", "FFIG"), ("RED", "FFIR")):
+            arr = self.kpf_obj.data[f"{chip}_CCD"]
+            percentiles = np.nanpercentile(arr, [99, 90, 50, 10])
+            for pct, value in zip([99, 90, 50, 10], percentiles, strict=True):
+                results[f"{prefix}{pct}P"] = round(float(value), 3)
+        return self._tag(**results)
+
+    flux_percentiles._diag_name = "flux_percentiles"
