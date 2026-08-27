@@ -12,10 +12,11 @@ from kpfpipe import OBSERVATORY, REPO_ROOT
 
 logger = logging.getLogger(__name__)
 
-KECK_LOCATION = EarthLocation(
+KECK_LOCATION = EarthLocation.from_geodetic(
     lat=OBSERVATORY["latitude"] * u.deg,
     lon=OBSERVATORY["longitude"] * u.deg,
     height=OBSERVATORY["altitude"] * u.m,
+    ellipsoid=OBSERVATORY["geosys"],
 )
 
 

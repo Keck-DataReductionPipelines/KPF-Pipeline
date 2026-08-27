@@ -1,6 +1,6 @@
 # WMKO observatory coordinates
 
-geosys = "WGS84"         # Geodetic reference system of the coordinates below
-longitude = -155.474718  # East-positive (degrees)
-latitude = 19.825946     # (degrees)
-altitude = 4159.58       # Height above the ellipsoid (meters)
+geosys = "GRS80"         # Geodetic reference system of the coordinates below
+longitude = -155.474719  # (degrees)
+latitude = 19.826        # (degrees)
+altitude = 4145.0        # (meters)

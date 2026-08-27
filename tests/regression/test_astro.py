@@ -47,9 +47,8 @@ class TestKeckLocation:
             OBSERVATORY["altitude"]
         )
 
-    def test_geosys_is_the_ellipsoid_astropy_assumes(self):
-        # EarthLocation defaults to WGS84, so GEOSYS must say so.
-        assert OBSERVATORY["geosys"] == "WGS84"
+    def test_geosys_is_the_ellipsoid_astropy_uses(self):
+        assert KECK_LOCATION.ellipsoid == OBSERVATORY["geosys"]
 
 
 class TestComputeRedshift:
