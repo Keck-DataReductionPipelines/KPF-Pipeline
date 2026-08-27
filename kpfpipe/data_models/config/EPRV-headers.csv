@@ -54,6 +54,8 @@ SYSVEL,Systemic Velocity subtracted from RVs [km/s],PRIMARY,float,KPF0.to_kpf1
 ORGANIZA,"Organization the data belongs to, for licensing purposes",PRIMARY,string,KPF0.to_kpf1
 ORIGIN,Entity that created this file,PRIMARY,string,KPF0.to_kpf1
 PROGRAM,Observing program name,PRIMARY,string,KPF0.to_kpf1
+PINAME,Program PI name,PRIMARY,string,NOT POPULATED
+OBSMODE,Observing mode,PRIMARY,string,NOT POPULATED
 ALIASES,"user defined name(s) for the object, ; separated",PRIMARY,string,KPF0.to_kpf1
 READMODE,Readout Mode,PRIMARY,string,ImageAssembly
 CPLX#,Catalog parallax for object in trace 1 to # [mas],PRIMARY,float,KPF0.to_kpf1
@@ -71,6 +73,7 @@ TLST#,TCS local sidereal time for telescope 1 to # [sexagesimal],PRIMARY,string,
 TRA#,TCS RA for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kpf1
 TDEC#,TCS DEC for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kpf1
 TEL#,TCS elevation angle for telescope 1 to # [deg],PRIMARY,float,KPF0.to_kpf1
+TZA#,TCS zenith angle for telescope 1 to # [deg],PRIMARY,float,NOT POPULATED
 TAZ#,TCS azimuth angle for telescope 1 to # [deg],PRIMARY,float,KPF0.to_kpf1
 THA#,TCS hour angle for telescope 1 to # [sexagesimal],PRIMARY,string,KPF0.to_kpf1
 PARST#,Parallactic angle at exposure start for telescope 1 to # [deg],PRIMARY,float,NOT POPULATED
@@ -78,9 +81,24 @@ PAREND#,Parallactic angle at exposure end for telescope 1 to # [deg],PRIMARY,flo
 ROTANG,Rotator angle [deg],PRIMARY,float,N/A -- KPF is fiber-fed; no rotator angle on L0
 SUNEL,Sun Elevation Angle [deg],PRIMARY,float,KPF0.to_kpf1
 MOONANG,Target-Moon Angle [deg],PRIMARY,float,KPF0.to_kpf1
+MOONEL,Moon Elevation Angle [deg],PRIMARY,float,NOT POPULATED
+MOONILLU,Moon illumination [%],PRIMARY,float,NOT POPULATED
+MOONRV,RV of reflected sunlight off moon [km/s],PRIMARY,float,NOT POPULATED
 INHUM,relative humidity inside dome [%],PRIMARY,float,KPF0.to_kpf1
 INHUMT,INHUM timestamp [UTC],PRIMARY,string,KPF0.to_kpf1
+OUTTMP,Outside temperature [deg C],PRIMARY,float,NOT POPULATED
+OUTTMPT,OUTTMP timestamp [UTC],PRIMARY,string,NOT POPULATED
+OUTHUM,Outside relative humidity [%],PRIMARY,float,NOT POPULATED
+OUTHUMT,OUTHUM timestamp [UTC],PRIMARY,string,NOT POPULATED
+ENVWINDS,Wind speed [m/s],PRIMARY,float,NOT POPULATED
+ENVWINDD,Wind direction [angle],PRIMARY,float,NOT POPULATED
 DRPHASH,Git commit hash,PRIMARY,string,KPF1.__init__
+EXTRACT,Type of 1D extraction (sum; flatrelative; optimal),PRIMARY,string,SpectralExtraction
+TELFLAG,Issues with observatory or telescope?,PRIMARY,string,NOT POPULATED
+INSTFLAG,Issues with instrument?,PRIMARY,string,NOT POPULATED
+DRPFLAG,Issues with pipeline?,PRIMARY,string,NOT POPULATED
+ADDFLAG,Additional team defined flag,PRIMARY,string,NOT POPULATED
+OBSFLAG,Observer pass/fail for exposure,PRIMARY,string,NOT POPULATED
 EXSNR#,Extracted signal-to-noise at EXSNRW1 to EXSNRW# [SNR/1-D pixel],PRIMARY,float,DiagL2
 EXSNRW#,Wavelength at which EXTSNR1 to EXTSNR# is measured [Angstroms],PRIMARY,float,DiagL2
 # ================================================
