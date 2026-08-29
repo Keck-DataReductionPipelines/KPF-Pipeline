@@ -9,10 +9,13 @@ KPF2/KPF4 round-trip guards live in test_data_models_l{2,4}.py.
 import pytest
 from astropy.io import fits
 
+from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.data_models.masters.level1 import KPFMasterL1
+from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
 from ._registry import (
@@ -382,3 +385,74 @@ class TestQualityControlPropagation:
         assert l2.headers["QUALITY_CONTROL"]["NOTJUNK"] == 1
         assert l2.headers["QUALITY_CONTROL"]["RNGREEN1"] == 4.0
         assert l2.headers["RECEIPT"]["OSCANSUB"] == 1
+
+
+class TestExtDescript:
+    """``EXT_DESCRIPT`` names the model's own extension set, at every level.
+
+    ``_rebuild_ext_descript`` runs off the live extension set, so the table is a
+    restatement of the manifest the model was built from -- never the science
+    set a master used to inherit.
+    """
+
+    @staticmethod
+    def _models():
+        return [
+            ("KPF2", KPF2()),
+            ("KPF4", KPF4()),
+            ("KPFMasterL1", KPFMasterL1()),
+            ("KPFMasterL2-wls", KPFMasterL2(kind="wls")),
+            ("KPFMasterL2-flat", KPFMasterL2(kind="flat")),
+        ]
+
+    def test_the_table_names_exactly_the_models_extensions(self):
+        for label, model in self._models():
+            if "EXT_DESCRIPT" not in model.extensions:
+                # ML1-extensions.csv declares no such row.
+                assert label == "KPFMasterL1", label
+                continue
+            table = model.data["EXT_DESCRIPT"]
+            assert table["Name"].tolist() == list(model.extensions), label
+
+    def test_each_description_comes_from_the_manifest(self):
+        for label, model in self._models():
+            if "EXT_DESCRIPT" not in model.extensions:
+                continue
+            manifest = dict(
+                zip(
+                    model._manifest["Name"],
+                    model._manifest["Description"],
+                    strict=True,
+                )
+            )
+            table = model.data["EXT_DESCRIPT"]
+            for name, description in zip(
+                table["Name"], table["Description"], strict=True
+            ):
+                assert description == manifest[name], (label, name)
+
+    def test_it_survives_a_round_trip(self, tmp_path):
+        l2 = KPF2()
+        before = l2.data["EXT_DESCRIPT"]["Name"].tolist()
+        out = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        l2.to_fits(out)
+        back = KPF2.from_fits(out)
+        assert [str(x) for x in back.data["EXT_DESCRIPT"]["Name"]] == before
+
+
+class TestBareModelDefaults:
+    """A standalone model carries real provenance values, not 'UNKNOWN'.
+
+    rvdata's header map defaults these to the literal string; KPF overrides them
+    in the registry, so they are already right before StandardizeDataFormat runs.
+    """
+
+    @pytest.mark.parametrize("keyword", ("EPRVTAG", "VOCLASS", "DRPTAG"))
+    @pytest.mark.parametrize("factory", (KPF2, KPF4), ids=("KPF2", "KPF4"))
+    def test_provenance_defaults_are_not_the_unknown_sentinel(self, factory, keyword):
+        assert factory().headers["PRIMARY"].get(keyword) != "UNKNOWN", keyword
+
+    def test_numorder_is_the_kpf_value(self):
+        # rvdata's header_map defaults it to 65; KPF reads 35 green + 32 red.
+        assert KPF2().headers["PRIMARY"]["NUMORDER"] == 67
+        assert DETECTOR["numorder"] == 67

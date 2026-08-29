@@ -146,6 +146,14 @@ class TestKPF4:
             assert f"CCF_VAR{n}" in kpf4.extensions
             assert f"RV{n}" in kpf4.extensions
 
+    def test_every_rv_table_carries_twelve_columns(self):
+        # A dark fiber must ship the same table shape as an illuminated one, so
+        # the skeleton comes from the manifest rather than from what was filled.
+        kpf4 = KPF4()
+        for trace in range(1, DETECTOR["numtrace"] + 1):
+            table = kpf4.data[f"RV{trace}"]
+            assert len(table.columns) == 12, (f"RV{trace}", list(table.columns))
+
     def test_trace_derived_aliases(self):
         # CCF{n}/CCF_VAR{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is 1, CAL is 5.
         kpf4 = KPF4()

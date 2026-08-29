@@ -17,7 +17,13 @@ from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 from kpfpipe.utils.kpf import get_obs_id
 
-from ._dtype_policy import MASK_MEM, WAVE, assert_dtype, assert_roundtrip_dtype
+from ._dtype_policy import (
+    MASK_MEM,
+    WAVE,
+    WLS_COEFFS,
+    assert_dtype,
+    assert_roundtrip_dtype,
+)
 from ._masters import FILE_LIST
 
 # Captured before the memoizing fixture below patches the method.
@@ -406,6 +412,7 @@ class TestMakeMasterL2:
             assert ext in ml2.extensions
             coeffs = ml2.data[ext]
             assert coeffs is not None
+            assert_dtype(coeffs, WLS_COEFFS, ext)
             assert coeffs.shape == (
                 wls.poly_degree_x + 1,
                 wls.poly_degree_m + 1,

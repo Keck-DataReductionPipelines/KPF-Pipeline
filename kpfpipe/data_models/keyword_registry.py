@@ -22,9 +22,9 @@ therefore reserved, and the CSVs carry no comment rows.
 
 Table columns: ``Keyword, Description, Extension, DataType, PopulatedBy, Level,
 Units``. A blank ``PopulatedBy`` means the keyword is registered but nothing
-writes an informative value to it yet (see ``notes/keywords/audit_20260827.md``),
-which keeps that audit machine-readable. ``ExampleValue`` is documentation only
-and is not read here.
+writes an informative value to it yet: the card ships present and blank, and the
+blank cell is the machine-readable record of which keywords are still unsourced.
+``ExampleValue`` is documentation only and is not read here.
 
 The three use-cases:
   (1) Mapping  -- ``header_map`` (``config/EPRV-header-map.csv``: WMKO-native ->

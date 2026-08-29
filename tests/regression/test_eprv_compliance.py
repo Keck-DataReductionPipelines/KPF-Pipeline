@@ -11,8 +11,9 @@ Every known divergence is one commented entry in ``EXCEPTIONS``. That dict is th
 single home for rvdata's known defects and KPF's deliberate deviations: adding a
 row is a decision, and an undocumented divergence fails.
 
-The file is built incrementally by the four keyword-refactor plans as disjoint
-top-level classes; this is plan1's share.
+The classes are grouped by what they assert against: the pinned upstream release
+and the installed header map first, then the science extension manifests, then
+the masters', then the file-level checks that keep this module itself honest.
 """
 
 import importlib.metadata
@@ -111,11 +112,10 @@ EXCEPTIONS = {
     "CRV": "CATALOG_RECORD is the sole writer of the SCI-fiber astrometry",
     "CZ": "CATALOG_RECORD is the sole writer of the SCI-fiber astrometry",
     "CCLR": "CATALOG_RECORD is the sole writer of the SCI-fiber astrometry",
-    "CCLRN": "CATALOG_RECORD is the sole writer of the SCI-fiber astrometry",
     # -- Cards that ship blank until something populates them ----------------
-    # Each is a native mapping rvdata supplies that KPF has dropped, and each is
-    # an accepted, enumerated output change (plan1 *Intended output changes* 5).
-    # Restoring them is follow-up work, tracked in notes/keywords/audit_*.md.
+    # Each is a native mapping rvdata supplies that KPF has dropped. The card is
+    # present and blank rather than absent, so an absent card can never be
+    # mistaken for "no value"; populating them is follow-up work.
     "ORGANIZA": "blank until the licensing owner is decided",
     "OBSERVER": "blank: GROBSERV is the guider observer, not the KPF observer",
     "PROGRAM": "blank: GRPROGNA is the guider program, not the KPF program",
@@ -136,13 +136,31 @@ EXCEPTIONS = {
     "TZA": "single telescope: only index 1 is registered",
     "TAZ": "single telescope: only index 1 is registered",
     "THA": "single telescope: only index 1 is registered",
-    "PARST": "single telescope: only index 1 is registered",
-    "PAREND": "single telescope: only index 1 is registered",
+    # PARST/PAREND are deliberately absent: rvdata's instrument header_map has no
+    # row for either, so there is no upstream claim to except. Their single-
+    # telescope expansion is encoded in _TELESCOPE_BASES, which _expand consumes.
+    # CCLRN is absent for the same reason -- header_map names CCLR1..5 but no
+    # CCLRN. TestExceptionsCoverage is what keeps such dead entries out.
     # -- Out of scope --------------------------------------------------------
     # The parametric wavelength-solution coefficients are a variable-length
     # family; KPF registers PVN_0/PVN_1 and writes none of them yet.
     "PVN_#": "variable-length coefficient family; KPF writes no parametric WLS",
 }
+
+# Every EXCEPTIONS key some assertion actually consulted, populated by _excepted()
+# below and checked by TestExceptionsCoverage. An entry no assertion consumes is a
+# claim about rvdata that nothing checks: it outlives the defect it documents and
+# misleads the next reader.
+_CONSUMED: set[str] = set()
+
+
+def _excepted(key):
+    """True if ``key`` is a recorded divergence, noting that it was consulted."""
+    if key in EXCEPTIONS:
+        _CONSUMED.add(key)
+        return True
+    return False
+
 
 # The telescope-indexed families above, as bare bases -- KPF registers index 1
 # only, so an rvdata "BASE1 ... BASE#" template expands to one member here.
@@ -303,6 +321,21 @@ class TestHeaderMapIsTheEprvPrimarySet:
         assert not mismatches
 
 
+# The vendored per-extension keyword tables, and the extension each describes.
+# Module-level so TestExceptionsCoverage can drive the same set; see there.
+_PER_EXTENSION_TABLES = [
+    ("L2-TRACE_FLUX-keywords.csv", "TRACE1_FLUX"),
+    ("L2-TRACE_VAR-keywords.csv", "TRACE1_VAR"),
+    ("L2-TRACE_BLAZE-keywords.csv", "TRACE1_BLAZE"),
+    ("L2-TRACE_WAVE-keywords.csv", "TRACE1_WAVE"),
+    ("L2-BJD_TDB-keywords.csv", "BJD_TDB"),
+    ("L2-BARYCORR_KMS-keywords.csv", "BARYCORR_KMS"),
+    ("L2-BARYCORR_Z-keywords.csv", "BARYCORR_Z"),
+    ("L4-CCF1-keywords.csv", "CCF1"),
+    ("L4-RV1-keywords.csv", "RV1"),
+]
+
+
 class TestKeywordsMatchRvdata:
     """The KPF EPRV rows against the vendored upstream tables."""
 
@@ -338,20 +371,7 @@ class TestKeywordsMatchRvdata:
                 mismatches.append((keyword, (units, datatype), got))
         assert not mismatches
 
-    @pytest.mark.parametrize(
-        ("filename", "extension"),
-        [
-            ("L2-TRACE_FLUX-keywords.csv", "TRACE1_FLUX"),
-            ("L2-TRACE_VAR-keywords.csv", "TRACE1_VAR"),
-            ("L2-TRACE_BLAZE-keywords.csv", "TRACE1_BLAZE"),
-            ("L2-TRACE_WAVE-keywords.csv", "TRACE1_WAVE"),
-            ("L2-BJD_TDB-keywords.csv", "BJD_TDB"),
-            ("L2-BARYCORR_KMS-keywords.csv", "BARYCORR_KMS"),
-            ("L2-BARYCORR_Z-keywords.csv", "BARYCORR_Z"),
-            ("L4-CCF1-keywords.csv", "CCF1"),
-            ("L4-RV1-keywords.csv", "RV1"),
-        ],
-    )
+    @pytest.mark.parametrize(("filename", "extension"), _PER_EXTENSION_TABLES)
     def test_per_extension_keywords_are_registered(self, filename, extension):
         registry = KPF1.keyword_registry
         allowed = registry.allowed[extension]
@@ -359,7 +379,7 @@ class TestKeywordsMatchRvdata:
             keyword = str(row["Keyword"]).strip()
             if registry.is_structural(keyword):
                 continue
-            if keyword in EXCEPTIONS:
+            if _excepted(keyword):
                 continue
             assert keyword in allowed, (extension, keyword)
             assert (
@@ -388,7 +408,7 @@ class TestInstalledHeaderMap:
         for _, row in self._rvdata_map().iterrows():
             key = str(row["STANDARD"]).strip()
             base = key.rstrip("0123456789") or key
-            if key in EXCEPTIONS or base in EXCEPTIONS:
+            if _excepted(key) or _excepted(base):
                 continue
             if key not in kpf_source:
                 mismatches.append((key, "unregistered in KPF"))
@@ -409,7 +429,7 @@ class TestInstalledHeaderMap:
         for _, row in self._rvdata_map().iterrows():
             key = str(row["STANDARD"]).strip()
             base = key.rstrip("0123456789") or key
-            if key in EXCEPTIONS or base in EXCEPTIONS or key not in kpf_default:
+            if _excepted(key) or _excepted(base) or key not in kpf_default:
                 continue
             want = _text(row["DEFAULT"])
             if kpf_default[key] != want:
@@ -507,7 +527,7 @@ class TestMinBitDepth:
         assert KPF1()._get_min_bit_depth("NOT_AN_EXTENSION") is None
 
 
-# --- plan2: the science L2/L4 extension manifests --------------------------
+# --- the science L2/L4 extension manifests ---------------------------------
 
 # rvdata rows KPF deliberately does not build. The EPRV-optional set rvdata's
 # own readers name-guessed their way through; KPF's manifest-driven read declares
@@ -599,7 +619,7 @@ class TestScienceManifestsMatchRvdata:
         assert checked, "no shared MinBitDepth rows left to check"
 
 
-# --- plan3: the master extension manifests ---------------------------------
+# --- the master extension manifests ----------------------------------------
 
 # The MinBitDepth floor each master manifest declares. config/rvdata-0.4.0/
 # vendors no master manifests -- masters are outside EPRV scope -- so there is
@@ -690,3 +710,80 @@ class TestMasterManifests:
                 science.loc[name, "MinBitDepth"],
             )
             assert (pd.isna(ours) and pd.isna(theirs)) or ours == theirs
+
+
+# --- file-level meta-assertions ---------------------------------------------
+
+
+class TestPackaging:
+    """The `pyproject.toml` package-data globs reach every shipped config table.
+
+    `config/rvdata-0.4.0/` is the vendored pinned snapshot this whole file asserts
+    against. The original glob matched only the top level of `config/`, so the
+    snapshot was absent from a non-editable install and every assertion here would
+    fail there -- on the install path, not in the repo. This check is static: a
+    config subdirectory added later without a matching glob fails here rather than
+    in someone's wheel.
+    """
+
+    @staticmethod
+    def _package_data():
+        with open(_REPO_ROOT / "pyproject.toml", "rb") as fh:
+            data = tomllib.load(fh)
+        return data["tool"]["setuptools"]["package-data"]["kpfpipe.data_models.config"]
+
+    def test_top_level_csvs_are_packaged(self):
+        assert "*.csv" in self._package_data()
+
+    def test_every_config_subdirectory_with_csvs_has_a_glob(self):
+        globs = set(self._package_data())
+        config = Path(str(_CFG))
+        missing = [
+            f"{d.name}/*.csv"
+            for d in sorted(config.iterdir())
+            if d.is_dir() and any(d.glob("*.csv")) and f"{d.name}/*.csv" not in globs
+        ]
+        assert not missing, f"config subdirectories not packaged: {missing}"
+
+
+class TestExceptionsCoverage:
+    """Every `EXCEPTIONS` entry is still exercised by some assertion above.
+
+    An exception entry that no assertion consumes is a claim about rvdata that
+    nothing checks: it outlives the defect it documents and misleads the next
+    reader into thinking a divergence is still being watched. `_excepted()` records
+    each consultation, and the test drives every consumer itself rather than
+    trusting collection order -- see `_drive_every_consumer`.
+
+    Three entries were removed when this check landed -- `CCLRN`, `PARST`, `PAREND`
+    -- because rvdata's instrument `header_map.csv` carries no row for any of them,
+    so the assertions that consume `EXCEPTIONS` could never reach them. The
+    single-telescope decision they described lives in `_TELESCOPE_BASES`.
+    """
+
+    @staticmethod
+    def _drive_every_consumer():
+        """Run every assertion that consults EXCEPTIONS, in this process.
+
+        Deliberately not a reliance on collection order. `_CONSUMED` is
+        per-process state, and `make test` runs `-n auto --dist loadscope`, which
+        can place the consuming classes on a different xdist worker than this one
+        -- under which a passive check sees a partial set and fails on entries
+        that are consumed perfectly well elsewhere. Driving them here makes the
+        coverage assertion deterministic under any distribution, and under a
+        targeted `-k` subset too.
+        """
+        installed = TestInstalledHeaderMap()
+        installed.test_native_sources_agree_outside_the_exception_list()
+        installed.test_defaults_agree_outside_the_exception_list()
+        keywords = TestKeywordsMatchRvdata()
+        for filename, extension in _PER_EXTENSION_TABLES:
+            keywords.test_per_extension_keywords_are_registered(filename, extension)
+
+    def test_every_exception_is_consumed(self):
+        self._drive_every_consumer()
+        assert _CONSUMED, "no consumer consulted EXCEPTIONS at all"
+        assert set(EXCEPTIONS) == _CONSUMED, {
+            "never consulted": sorted(set(EXCEPTIONS) - _CONSUMED),
+            "consulted but unlisted": sorted(_CONSUMED - set(EXCEPTIONS)),
+        }

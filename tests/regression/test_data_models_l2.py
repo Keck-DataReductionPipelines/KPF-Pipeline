@@ -448,6 +448,14 @@ class TestDtypeProvenance:
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path, name=name)
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path, name=name)
 
+    def test_set_data_enforces_min_bit_depth(self):
+        # The other write path: rvdata's own set_data reads the manifest floor and
+        # warns before upcasting, so a float32 WAVE cannot be stored as float32.
+        kpf2 = KPF2()
+        with pytest.warns(UserWarning, match="MinBitDepth=64"):
+            kpf2.set_data("TRACE1_WAVE", np.ones((NORDER, 8), dtype=np.float32))
+        assert_dtype(kpf2.data["TRACE1_WAVE"], WAVE, "TRACE1_WAVE after set_data")
+
     def test_chip_prefix_wave_write_enforces_min_bit_depth(self, caplog):
         # A chip-prefix write bypasses rvdata's base set_data, so check it still
         # enforces the born-64 WAVE policy (upcast plus MinBitDepth warning).
@@ -631,6 +639,18 @@ class TestKPFMasterL2:
         m2 = KPFMasterL2.from_fits(out_fn)
         assert "INPUT_FILES" in m2.extensions
         assert m2.data["INPUT_FILES"]["FILENAME"].tolist() == files
+
+    def test_seeded_but_unpopulated_cards_read_back_as_none(self, tmp_path):
+        m = KPFMasterL2(kind="wls")
+        m.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
+        m.set_input_files(["KP.20240405.63499.95.fits"], "thar")
+        out = str(tmp_path / "KP.20240405.63499.95_master_thar_L2.fits")
+        m.to_fits(out)
+
+        back = KPFMasterL2.from_fits(out)
+        assert set(back.extensions) == set(back._manifest["Name"])
+        for key in ("ROUGHWLS", "LINELIST", "POLYDEGX"):
+            assert back.headers["PRIMARY"][key] is None, key
 
     def test_warns_on_unknown_extension(self, caplog, tmp_path):
         fn = str(tmp_path / "unknown_ext_ml2.fits")

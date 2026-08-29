@@ -22,6 +22,7 @@ BJD = np.float64  # BJD_TDB (EPRV, born-64)
 BARYCORR = np.float64  # BARYCORR_KMS/_Z
 CCF = np.float64  # L4 CCF cubes
 RV_FLOAT = np.float64  # RV/RV_ERR/BERV/WAVE_START/WAVE_END (RV table)
+WLS_COEFFS = np.float64  # master {GREEN,RED}_WLS_COEFFS (Legendre coefficients)
 MASK_MEM = np.bool_  # master MASK in memory
 MASK_DISK = np.uint8  # master MASK on disk (EPRV 8-bit, BITPIX=8)
 
