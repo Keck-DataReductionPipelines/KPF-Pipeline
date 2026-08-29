@@ -1,0 +1,23 @@
+HDU,Name,DataType,MinBitDepth,Required,Description
+0,PRIMARY,PrimaryHDU,,True,EPRV standard FITS header (no data)
+1,INSTRUMENT_HEADER,ImageHDU,,True,Verbatim raw instrument (L0) PRIMARY header
+2,RECEIPT,BinTableHDU,,True,Table of operations that have been performed on this file
+3,DRP_CONFIG,BinTableHDU,,True,Pipeline config as a 2-column table (key = value)
+4,EXT_DESCRIPT,BinTableHDU,,True,Table describing contents of each extension
+5,RV1,BinTableHDU,,True,Derived radial velocity measurement for trace 1 (SKY)
+6,CCF1,ImageHDU,64,False,CCF from which RV1 was derived (SKY)
+7,CCF_VAR1,ImageHDU,64,False,Per-velocity-bin CCF photon variance for CCF1 (SKY)
+8,CCF2,ImageHDU,64,False,CCF from which RV2 was derived (SCI1)
+9,CCF_VAR2,ImageHDU,64,False,Per-velocity-bin CCF photon variance for CCF2 (SCI1)
+10,RV2,BinTableHDU,,True,Derived radial velocity measurement for trace 2 (SCI1)
+11,CCF3,ImageHDU,64,False,CCF from which RV3 was derived (SCI2)
+12,CCF_VAR3,ImageHDU,64,False,Per-velocity-bin CCF photon variance for CCF3 (SCI2)
+13,RV3,BinTableHDU,,True,Derived radial velocity measurement for trace 3 (SCI2)
+14,CCF4,ImageHDU,64,False,CCF from which RV4 was derived (SCI3)
+15,CCF_VAR4,ImageHDU,64,False,Per-velocity-bin CCF photon variance for CCF4 (SCI3)
+16,RV4,BinTableHDU,,True,Derived radial velocity measurement for trace 4 (SCI3)
+17,CCF5,ImageHDU,64,False,CCF from which RV5 was derived (CAL)
+18,CCF_VAR5,ImageHDU,64,False,Per-velocity-bin CCF photon variance for CCF5 (CAL)
+19,RV5,BinTableHDU,,True,Derived radial velocity measurement for trace 5 (CAL)
+20,QUALITY_CONTROL,BinTableHDU,,False,Quality-control booleans and diagnostic metrics
+21,CATALOG_RECORD,BinTableHDU,,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery

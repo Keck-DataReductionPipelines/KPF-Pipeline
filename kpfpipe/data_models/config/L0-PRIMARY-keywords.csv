@@ -1,0 +1,95 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+INSTRUME,Instrument name,N/A,String,KPF,StandardizeDataFormat
+ORGANIZA,Data owner organization for licensing,N/A,String,WMKO,
+ORIGIN,Entity that created this file,N/A,String,Keck,StandardizeDataFormat
+OBSERVER,Observer,N/A,String,Gilbert,
+OBSTYPE,Observation type,N/A,String,Object,StandardizeDataFormat
+OBSMODE,Observing mode,N/A,String,HR,
+OBSERVAT,Observatory name,N/A,String,Keck Observatory,StandardizeDataFormat
+TELESCOP,Telescope name,N/A,String,Keck I,StandardizeDataFormat
+OBSLON,Longitude for barycentric correction,deg,Float,-155.474719,StandardizeDataFormat
+OBSLAT,Latitude for barycentric correction,deg,Float,19.826,StandardizeDataFormat
+OBSALT,Altitude for barycentric correction,meters,Float,4145,StandardizeDataFormat
+GEOSYS,Coordinate system for the site location,N/A,String,GRS80,StandardizeDataFormat
+BINNING,Binning mode,N/A,String,1x1,StandardizeDataFormat
+READMODE,Readout mode,N/A,String,normal,ImageAssembly
+NUMTRACE,Number of object-indexed keyword families,N/A,UInt,5,StandardizeDataFormat
+NUMORDER,Number of orders,N/A,Uint,67,StandardizeDataFormat
+NUMTEL,Number of telescopes used,N/A,UInt,1,StandardizeDataFormat
+TELEID1,Telescope label as indexed in TCS keywords,N/A,String,K1,StandardizeDataFormat
+OBJECT,Primary object name,N/A,String,219134,StandardizeDataFormat
+ALIASES,User-defined object names; ';' separated,N/A,String,HD 219134,
+PROGRAM,Observing program name,N/A,String,K123,
+PINAME,Program PI name,N/A,String,Howard,
+ISSOLAR,True if the observation is of the Sun,N/A,Boolean,F,
+DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,StandardizeDataFormat
+DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,StandardizeDataFormat
+JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,StandardizeDataFormat
+EXPTIME,Exposure time,s,Float,75.022,StandardizeDataFormat
+TRACE#,Type of object in trace #,N/A,String,SCI,StandardizeDataFormat
+CLSRC#,Calibration source in trace # if used,N/A,String,EtalonFiber,
+CSRC#,Catalog source for object in trace #,N/A,String,Gaia DR3,AstroQuery
+CID#,Catalog designation for object in trace #,N/A,String,DR3 2870618101503062016,AstroQuery
+CRA#,Catalog RA for object in trace #,sexagesimal,String,23:13:16.98,AstroQuery
+CDEC#,Catalog Dec for object in trace #,sexagesimal,String,+57:10:06.1,AstroQuery
+CEQNX#,Catalog equinox for object in trace #,yr,Float,2000.0,AstroQuery
+CEPCH#,Catalog epoch for object in trace #,yr,Float,2016.0,AstroQuery
+CPLX#,Catalog parallax for object in trace #,mas,Float,152.76,AstroQuery
+CPMR#,Catalog PM in RA for trace #,arcsec/yr,Float,2.0743,AstroQuery
+CPMD#,Catalog PM in Dec for trace #,arcsec/yr,Float,0.2949,AstroQuery
+CRV#,Catalog systemic RV for trace #,km/s,Float,-18.55,AstroQuery
+CZ#,Catalog redshift Z for trace #,N/A,Float,-0.0000619,AstroQuery
+CCLR#,Catalog color 1 - color 2 for trace #,mag,Float,1.9376,AstroQuery
+CCLRN#,Catalog color 1 - color 2 name for trace #,N/A,String,Gaia BP-RP,AstroQuery
+SEEING,Seeing at beginning of exposure,arcsec,Float,0.87,DiagL0
+AIRMASS,Airmass at start of exposure,secZ,Float,1.16,
+TTIME,TCS-data date/time,UTC,String,2024-04-05T11:09:11,StandardizeDataFormat
+TEQNX,TCS equinox,yr,String,2000.0,StandardizeDataFormat
+TEPCH,TCS epoch,yr,String,2016.0,StandardizeDataFormat
+TLST1,TCS LST for telescope 1,sexagesimal,String,06:37:52.9,StandardizeDataFormat
+TRA1,TCS RA for telescope 1,sexagesimal,String,23:13:16.98,StandardizeDataFormat
+TDEC1,TCS Dec for telescope 1,sexagesimal,String,+57:10:06.1,StandardizeDataFormat
+TEL1,TCS elevation angle for telescope 1,deg,Float,59.4,StandardizeDataFormat
+TZA1,TCS zenith angle for telescope 1,deg,Float,30.6,
+TAZ1,TCS azimuth angle for telescope 1,deg,Float,41.9,StandardizeDataFormat
+THA1,TCS hour angle for telescope 1,sexagesimal,String,-16:35:24.1,StandardizeDataFormat
+PARST1,Parallactic angle at start; telescope 1,deg,Float,175.2,
+PAREND1,Parallactic angle at end; telescope 1,deg,Float,180.7,
+ROTANG,Rotator angle,deg,Float,80.3,
+SUNEL,Sun elevation angle,deg,Float,-35.6,DiagL0
+MOONANG,Target-Moon angle,deg,Float,111.3,DiagL0
+MOONEL,Moon elevation angle,deg,Float,26.8,
+MOONILLU,Moon illumination,%,Float,23.4,
+MOONRV,RV of sunlight reflected off the Moon,km/s,Float,1.3,
+INHUM,Relative humidity inside the dome,%,Float,12.4,
+INHUMT,INHUM timestamp,UTC,String,2024-04-05T11:08:33,
+OUTTMP,Outside temperature,deg C,Float,0.6,
+OUTTMPT,OUTTMP timestamp,UTC,String,2024-04-05T11:08:33,
+OUTHUM,Outside relative humidity,%,Float,18.2,
+OUTHUMT,OUTHUM timestamp,UTC,String,2024-04-05T11:08:33,
+ENVWINDS,Wind speed,m/s,Float,6.2,
+ENVWINDD,Wind direction,angle,Float,133.5,
+DATALVL,Data product base level,N/A,String,L0,StandardizeDataFormat
+FILENAME,Name of the FITS file,N/A,String,kpf_L1_20240405T110833.fits,KPF*.to_fits
+DRPTAG,RV DRP version,N/A,String,3.0.0,StandardizeDataFormat
+DRPHASH,Git commit hash,N/A,String,277e3a1d99628d9fcef494797887663119,StandardizeDataFormat
+EPRVTAG,Version of EPRV standard applied,N/A,String,v0.4.0,StandardizeDataFormat
+VOCLASS,EPRV standard release identifier,N/A,String,EPRVSTANDARD2026.06,StandardizeDataFormat
+INSTERA,Tag tracking permanent instrument changes,N/A,String,KPF-2,StandardizeDataFormat
+FULLCOMP,Is this file fully EPRV-standard compliant?,N/A,String,Yes,
+SUMMFLAG,Summary roll-up of the other flag keywords,N/A,String,Pass,
+DQLVL0,L0 quality-check bitfield,N/A,UInt,0,
+DQLVL1,L1 quality-check bitfield,N/A,UInt,0,
+DQLVL2,L2 quality-check bitfield,N/A,UInt,0,
+TELFLAG,Issues with observatory or telescope?,N/A,String,Pass,
+INSTFLAG,Issues with instrument?,N/A,String,Pass,
+DRPFLAG,Issues with pipeline?,N/A,String,Pass,
+ADDFLAG,Additional team-defined flag,N/A,String,Pass,
+OBSFLAG,Observer pass/fail for exposure,N/A,String,Pass,
+OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.817,
+OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.590,
+OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.500,
+M1TMP,Primary mirror temperature,deg C,Float,2.1,
+M1TMPT,M1TMP timestamp,UTC,String,2024-04-05T11:08:33,
+OUTPRES,Outdoor atmospheric pressure,kPa,Float,61.6,
+OUTPREST,OUTPRES timestamp,UTC,String,2024-04-05T11:08:33,

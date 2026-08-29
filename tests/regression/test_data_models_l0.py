@@ -10,6 +10,7 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe.data_models.level0 import KPF0
+from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
 from ._catalog import catalog_record_table
 from ._data_models import write_minimal_l0
@@ -36,12 +37,13 @@ class TestKPF0:
         assert l0.level == 0
         assert l0.obs_id == "KP.20240113.00001.00"
         assert "PRIMARY" in l0.extensions
-        # Every KPF0 carries QUALITY_CONTROL, RECEIPT (home of the provenance
-        # cards stamped at read) and CATALOG_RECORD (AstroQuery's astrometry).
+        # The manifest is a complete, literal statement of the level's shape, so
+        # every row exists -- empty where the file supplied nothing.
         assert "QUALITY_CONTROL" in l0.extensions
         assert "RECEIPT" in l0.extensions
         assert "CATALOG_RECORD" in l0.extensions
-        assert len(l0.extensions) == 4
+        assert "INSTRUMENT_HEADER" in l0.extensions
+        assert len(l0.extensions) == len(l0._manifest)
 
     def test_round_trip(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -259,9 +261,17 @@ class TestCatalogRecordMissingValues:
 
     def test_missing_value_leaves_catalog_card_blank(self, tmp_path):
         # The regression the normalization exists for: a masked cell defeats the
-        # 'skip missing' branch in KPF0._catalog_primary_cards, so the C*# card
-        # is written as 'nan' and the L1 write then raises.
+        # 'skip missing' branch in AstroQuery._catalog_primary_cards, so the C*#
+        # card is written as 'nan' and the L1 write then raises.
+        from kpfpipe.modules.astro_query import AstroQuery
+
         l0 = self._l0_written_and_read(tmp_path, rv=None)
+        StandardizeDataFormat(l0).perform()
+        cards = AstroQuery(l0)._catalog_primary_cards()
+        assert "CRV2" not in cards  # skipped, so the seeded blank stands
+        for keyword, value in cards.items():
+            l0.set_keyword(keyword, value)
+
         l1 = l0.to_kpf1()
         assert not l1.headers["PRIMARY"].get("CRV2")
         assert l1.headers["PRIMARY"]["CRA2"] == "12:00:00.0000"

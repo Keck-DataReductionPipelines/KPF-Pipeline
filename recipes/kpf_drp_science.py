@@ -22,6 +22,7 @@ from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.radial_velocity import RadialVelocity
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
+from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
 from kpfpipe.quality_control.checkpoints import (
     CheckpointL0,
@@ -56,6 +57,7 @@ def main(config, args):
     data_root_science = data_dirs["KPF_SCIENCE_OUTPUT"]
 
     l0 = KPF0.from_fits(kpf_filepath(obs_id, "L0", data_root=data_root_in))
+    StandardizeDataFormat(l0).perform()
 
     # Resolve Gaia/SIMBAD astrometry (plus the native wmko row off PRIMARY TARG*) into
     # l0's CATALOG_RECORD, for the L0 diagnostics and barycentric correction to consume.

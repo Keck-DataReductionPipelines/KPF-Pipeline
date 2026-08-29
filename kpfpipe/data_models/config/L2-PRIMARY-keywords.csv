@@ -1,0 +1,4 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+EXTRACT,Type of 1D extraction,N/A,String,optimal,SpectralExtraction
+EXSNR#,Extracted SNR at EXSNRW#,SNR/1-D pixel,FLOAT,245.35,DiagL2
+EXSNRW#,Wavelength for EXSNR#,Angstroms,FLOAT,5480,DiagL2

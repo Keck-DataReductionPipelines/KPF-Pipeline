@@ -10,8 +10,6 @@ from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
-_L0_REQUIRED_KEYS = ["DATE-OBS", "EXPTIME", "OBJECT", "OFNAME", "IMTYPE"]
-
 _CHIPS = ["GREEN", "RED"]
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 
@@ -64,9 +62,17 @@ class QCL0(QC):
     data_l0_red_green._qc_key = "DATAPRL0"
 
     def header_keywords_present(self):
-        """Required PRIMARY keywords exist."""
-        hdr = self.kpf_obj.headers["PRIMARY"]
-        return all(k in hdr for k in _L0_REQUIRED_KEYS)
+        """Required PRIMARY keywords exist -- not yet implemented.
+
+        The registry-derived notion of "required" this read is gone: REQUIRED is
+        a compliance label now, not a decision about what must be on a product.
+        Rebuilding the check against a KPF-owned definition is a follow-up; until
+        then it writes no flag (``QC.run`` treats NotImplementedError as "no
+        flag"), and the registry row stays so the comment lookup still resolves.
+        """
+        raise NotImplementedError(
+            "KWRDPRL0 is pending a KPF-owned definition of a required keyword"
+        )
 
     header_keywords_present._qc_key = "KWRDPRL0"
 
@@ -144,7 +150,7 @@ class QCL0(QC):
         header later snapshotted verbatim into INSTRUMENT_HEADER at to_kpf1); the
         0/1 flag then propagates downstream on QUALITY_CONTROL.
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         beg, mid, end = (
             datetime.fromisoformat(str(hdr[k]))
             for k in ("DATE-BEG", "DATE-MID", "DATE-END")
@@ -175,7 +181,7 @@ class QCL0(QC):
         12.3 ms"); text that does not report an error, or one at/above the limit,
         fails.
         """
-        timeerr = str(self.kpf_obj.headers["PRIMARY"]["TIMEERR"])
+        timeerr = str(self.kpf_obj.headers["INSTRUMENT_HEADER"]["TIMEERR"])
         match = re.search(r"NTP time correct to within ([\d.]+) ms", timeerr)
         return match is not None and float(match.group(1)) < 100.0
 
@@ -190,7 +196,7 @@ class QCL0(QC):
         (the elapsed-vs-requested check formerly done in the masters frame
         loader).
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         exptime = float(hdr["EXPTIME"])
         elapsed = float(hdr["ELAPSED"])
         if not (np.isfinite(exptime) and exptime >= 0):
@@ -208,7 +214,7 @@ class QCL0(QC):
         Requests shorter than 7 s legitimately land in that window, so only
         longer ones are judged.
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         return not (
             float(hdr["EXPTIME"]) >= 7.0 and 6.0 <= float(hdr["ELAPSED"]) <= 6.7
         )
@@ -273,7 +279,7 @@ class QCL0(QC):
         travel, so the fiber samples a wavelength-dependent position on the sky
         and the measured RV is biased.
         """
-        return float(self.kpf_obj.headers["PRIMARY"]["EL"]) >= 30.0
+        return float(self.kpf_obj.headers["INSTRUMENT_HEADER"]["EL"]) >= 30.0
 
     elevation_ok._qc_key = "ELEVOK"
 
@@ -297,7 +303,7 @@ class QCL0(QC):
         scrambles the fiber's modal noise; a stalled one leaves that noise in the
         spectrum.
         """
-        if str(self.kpf_obj.headers["PRIMARY"]["AGITSTA"]) != "Running":
+        if str(self.kpf_obj.headers["INSTRUMENT_HEADER"]["AGITSTA"]) != "Running":
             return False
         table = self.kpf_obj.data["TELEMETRY"]
         speed = table[table["keyword"] == "kpfmot.AGITSPD"]["average"][0]
@@ -417,7 +423,7 @@ class QCL0(QC):
         barycentric correction, where a 2.6 s timing error costs 10 cm/s.
         """
         table = self.kpf_obj.data["EXPMETER_SCI"]
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         beg, end = (
             datetime.fromisoformat(str(hdr[k])) for k in ("DATE-BEG", "DATE-END")
         )

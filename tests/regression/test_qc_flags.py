@@ -28,8 +28,8 @@ from ._data_models import (
     NORDER,
     NORDER_TOTAL,
     make_l4,
-    seed_required_primary,
     set_fiber_arrays,
+    standardized_l0,
     telemetry_hdu,
     write_amp_l0,
 )
@@ -75,7 +75,7 @@ def _make_kpf0(
             for name, table in (expmeter or {}).items()
         ],
     )
-    return KPF0.from_fits(fn)
+    return standardized_l0(fn)
 
 
 # Clean exposure-meter flux for the EMFLUXOK tests: 4 readings x 25 wavelength
@@ -139,9 +139,6 @@ def _make_kpf1(
             qc[f"RNNGGR{i}"] = (1.0, "RNNG")
             qc[f"RNNGRD{i}"] = (1.0, "RNNG")
 
-    # KPF1.__init__ seeds the EPRV skeleton, but KPF1._read replaces PRIMARY with
-    # the file's sparse header, so a synthetic from_fits L1 would fail KWRDPRL1.
-    seed_required_primary(l1, QCL1)
     return l1
 
 
@@ -208,7 +205,8 @@ class TestQCBase:
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             keyword_registry = types.SimpleNamespace(
-                routing={k: ("QUALITY_CONTROL", "") for k in qc_keys},
+                routing=dict.fromkeys(qc_keys, "QUALITY_CONTROL"),
+                comment_for=lambda kw, ext: "",
             )
 
             def set_keyword(self, key, value):
@@ -419,14 +417,12 @@ class TestQCL0:
         l0 = KPF0.from_fits(fn)
         assert QCL0(l0).data_l0_red_green() is False
 
-    def test_header_keywords_present_pass(self, tmp_path):
+    def test_header_keywords_present_is_stubbed(self, tmp_path):
+        # KWRDPRL0 is pending a KPF-owned definition of "required"; until then it
+        # raises NotImplementedError, which QC.run treats as "write no flag".
         l0 = _make_kpf0(tmp_path)
-        assert QCL0(l0).header_keywords_present() is True
-
-    def test_header_keywords_present_fail(self, tmp_path):
-        l0 = _make_kpf0(tmp_path)
-        del l0.headers["PRIMARY"]["OFNAME"]
-        assert QCL0(l0).header_keywords_present() is False
+        with pytest.raises(NotImplementedError, match="KWRDPRL0"):
+            QCL0(l0).header_keywords_present()
 
     def _make_kpf0_with_telemetry(self, tmp_path, nrows):
         fn = write_amp_l0(
@@ -604,12 +600,12 @@ class TestQCL0:
     )
     def test_ntp_timing_fail(self, tmp_path, timeerr):
         l0 = _make_kpf0(tmp_path)
-        l0.headers["PRIMARY"]["TIMEERR"] = timeerr
+        l0.headers["INSTRUMENT_HEADER"]["TIMEERR"] = timeerr
         assert QCL0(l0).ntp_timing() is False
 
     def test_ntp_timing_missing_raises(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        del l0.headers["PRIMARY"]["TIMEERR"]
+        del l0.headers["INSTRUMENT_HEADER"]["TIMEERR"]
         with pytest.raises(KeyError, match="TIMEERR"):
             QCL0(l0).ntp_timing()
 
@@ -631,7 +627,7 @@ class TestQCL0:
 
     def test_exptime_sane_missing_raises(self, tmp_path):
         l0 = _make_kpf0(tmp_path, dates={"ELAPSED": 60.0})
-        del l0.headers["PRIMARY"]["EXPTIME"]
+        del l0.headers["INSTRUMENT_HEADER"]["EXPTIME"]
         with pytest.raises(KeyError, match="EXPTIME"):
             QCL0(l0).exptime_sane()
 
@@ -961,7 +957,8 @@ class TestQCL0:
         fn = QCL0.__dict__["data_l0_red_green"]
         assert fn._qc_key == "DATAPRL0"
         # The comment lives in the registry Description, not on the method.
-        assert "GREEN" in KPF0.keyword_registry.routing["DATAPRL0"][1]
+        registry = KPF0.keyword_registry
+        assert "GREEN" in registry.comment_for("DATAPRL0", registry.routing["DATAPRL0"])
 
     # --- expmeter_times_consistent (EMTIMEOK) and expmeter_flux_sane (EMFLUXOK).
     # Four readings tile the GOOD_DATES shutter window.
@@ -1017,9 +1014,11 @@ class TestQCL0:
         assert QCL0(l0).expmeter_times_consistent() is True
 
     def test_expmeter_times_no_em_data_raises(self, tmp_path):
-        # A frame with no EM extension (e.g. a calibration) cannot be checked.
+        # A frame with no EM readings (e.g. a calibration) cannot be checked. The
+        # manifest creates EXPMETER_SCI on every L0, so the table is present and
+        # empty rather than absent, and the raise lands on its missing columns.
         l0 = _make_kpf0(tmp_path, dates=GOOD_DATES)
-        with pytest.raises(KeyError, match="EXPMETER_SCI"):
+        with pytest.raises(KeyError, match="Date-Beg"):
             QCL0(l0).expmeter_times_consistent()
 
     def test_expmeter_times_within_tolerance_passes(self, tmp_path):
@@ -1047,7 +1046,7 @@ class TestQCL0:
     def test_expmeter_times_missing_shutter_window_raises(self, tmp_path):
         # EM data present but no DATE-BEG/DATE-END to compare against.
         l0 = self._make_kpf0_with_expmeter(tmp_path)
-        del l0.headers["PRIMARY"]["DATE-BEG"]
+        del l0.headers["INSTRUMENT_HEADER"]["DATE-BEG"]
         with pytest.raises(KeyError, match="DATE-BEG"):
             QCL0(l0).expmeter_times_consistent()
 
@@ -1255,9 +1254,10 @@ class TestQCL0Telemetry:
 
     def test_elevation_ok(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        l0.headers["PRIMARY"]["EL"] = 30.0  # the ADC limit itself passes
+        native = l0.headers["INSTRUMENT_HEADER"]
+        native["EL"] = 30.0  # the ADC limit itself passes
         assert QCL0(l0).elevation_ok() is True
-        l0.headers["PRIMARY"]["EL"] = 29.9
+        native["EL"] = 29.9
         assert QCL0(l0).elevation_ok() is False
 
     def _make_kpf0_with_etalon(self, tmp_path, offset):
@@ -1302,7 +1302,7 @@ class TestQCL0Telemetry:
                 )
             ],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_agitator_running_above_minimum(self, tmp_path):
         l0 = self._make_kpf0_with_agitator(tmp_path)
@@ -1374,15 +1374,11 @@ class TestQCL1:
         l1.data["RED_CCD"][:] = np.nan
         assert QCL1(l1).data_present() is False
 
-    def test_required_keywords_present_pass(self, tmp_path):
-        # _make_kpf1 seeds the full required-PRIMARY set.
-        l1 = _make_kpf1(tmp_path)
-        assert QCL1(l1).required_keywords_present() is True
-
-    def test_required_keywords_present_fail_missing(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        del l1.headers["PRIMARY"]["INSTRUME"]  # a registry-required PRIMARY keyword
-        assert QCL1(l1).required_keywords_present() is False
+    def test_required_keywords_present_is_stubbed(self, tmp_path):
+        # KWRDPRL1 is pending a KPF-owned definition of "required"; until then
+        # it raises NotImplementedError, which QC.run treats as "write no flag".
+        with pytest.raises(NotImplementedError, match="KWRDPRL1"):
+            QCL1(_make_kpf1(tmp_path)).required_keywords_present()
 
     def test_read_noise_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
@@ -1630,9 +1626,9 @@ class TestQCL1Run:
         # BIASOK/DARKOK/FLATOK read the RECEIPT *SUB flags and the *AGE values
         # but are themselves QUALITY_CONTROL keywords; the applied-step flags
         # (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) stay RECEIPT-only provenance.
+        # KWRDPRL1 is absent on purpose: its check is stubbed and writes no flag.
         qc_keys = [
             "DATAPRL1",
-            "KWRDPRL1",
             "RNOK",
             "RNNGOK",
             "BIASOK",
@@ -1666,18 +1662,11 @@ class TestQCL2:
         kpf2 = _make_kpf2_nan_headers()
         assert QCL2(kpf2).extraction_present() is True
 
-    def test_required_keywords_present_pass(self):
-        # A fresh KPF2 carries only the rvdata-seeded EPRV keywords, not the KPF
-        # provenance cards.
-        kpf2 = _make_kpf2_nan_headers()
-        seed_required_primary(kpf2, QCL2)
-        assert QCL2(kpf2).required_keywords_present() is True
-
-    def test_required_keywords_present_fail_missing(self):
-        kpf2 = _make_kpf2_nan_headers()
-        seed_required_primary(kpf2, QCL2)
-        del kpf2.headers["PRIMARY"]["INSTRUME"]
-        assert QCL2(kpf2).required_keywords_present() is False
+    def test_required_keywords_present_is_stubbed(self):
+        # KWRDPRL2 is pending a KPF-owned definition of "required"; until then
+        # it raises NotImplementedError, which QC.run treats as "write no flag".
+        with pytest.raises(NotImplementedError, match="KWRDPRL2"):
+            QCL2(_make_kpf2_nan_headers()).required_keywords_present()
 
     def test_extraction_present_fail_empty_kpf2(self):
         kpf2 = KPF2()
@@ -1930,30 +1919,25 @@ class TestQCL4:
         with pytest.raises(KeyError, match="BJDRNG"):
             QCL4(make_l4()).bjd_within_tolerance()
 
-    def test_required_keywords_present(self):
-        l4 = make_l4()
-        req = QCL4(l4)._required_primary_keywords()
-        for kw in req:
-            l4.headers["PRIMARY"][kw] = 1.0
-        assert QCL4(l4).required_keywords_present() is True
-        if req:
-            del l4.headers["PRIMARY"][sorted(req)[0]]
-            assert QCL4(l4).required_keywords_present() is False
+    def test_required_keywords_present_is_stubbed(self):
+        # KWRDPRL4 is pending a KPF-owned definition of "required"; until then
+        # it raises NotImplementedError, which QC.run treats as "write no flag".
+        with pytest.raises(NotImplementedError, match="KWRDPRL4"):
+            QCL4(make_l4()).required_keywords_present()
 
     def test_run_all_good(self):
         l4 = make_l4(bervrng=0.02, bjdrng=0.5)
-        for kw in QCL4(l4)._required_primary_keywords():
-            l4.headers["PRIMARY"][kw] = 1.0
         results = QCL4(l4).run()
-        assert set(results) >= {"DATAPRL4", "KWRDPRL4", "BERVOK", "BJDOK"}
+        assert set(results) >= {"DATAPRL4", "BERVOK", "BJDOK"}
+        # The stubbed KWRDPRL4 writes no flag at all.
+        assert "KWRDPRL4" not in results
         qc = l4.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1 and qc["BJDOK"] == 1
+        assert "KWRDPRL4" not in qc
 
     def test_run_flags_failure(self):
         # no CCF/RV, and out-of-tolerance BERV/BJD ranges
         l4 = make_l4(sci=False, bervrng=0.5, bjdrng=2.0)
-        for kw in QCL4(l4)._required_primary_keywords():
-            l4.headers["PRIMARY"][kw] = 1.0
         QCL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0 and qc["BJDOK"] == 0
@@ -1989,7 +1973,7 @@ class TestQCKeyRegistration:
         assert tagged, f"{qc_cls.__name__} exposes no tagged checks"
         for key in sorted(tagged):
             assert key in registry.routing, (
-                f"{qc_cls.__name__} writes {key}, which no config/L*-headers.csv "
+                f"{qc_cls.__name__} writes {key}, which no config/*-keywords.csv "
                 "row registers"
             )
             assert key in registry.qc_flag_keywords_by_level[level], (

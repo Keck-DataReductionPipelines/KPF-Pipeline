@@ -6,27 +6,19 @@ readouts. GREEN and RED CCDs are stored in separate extensions. Also
 used for FFI masters calibrations (bias, dark, flat).
 """
 
-import importlib.resources
 import logging
 import os
 import re
 
 import numpy as np
-import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
-from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
-from kpfpipe import __githash__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.utils.io import kpf_filename
 
 logger = logging.getLogger(__name__)
-
-_config_path = importlib.resources.files("kpfpipe.data_models.config")
-_L1_EXTENSIONS = pd.read_csv(_config_path / "L1-extensions.csv")
-_KNOWN_L1_EXTENSIONS = set(_L1_EXTENSIONS["Name"].tolist())
 
 # EPRV-like L1 filename, but with L1 instead of the EPRV SL#: the EPRV regex
 # only accepts SL2/SL3/SL4, so KPF L1 uses kpf_L1_YYYYMMDDThhmmss.fits.
@@ -44,99 +36,19 @@ class KPF1(KPFDataModel):
     ``data["RED_CCD"]``).
     """
 
-    _known_extensions = _KNOWN_L1_EXTENSIONS
-
     def __init__(self):
         super().__init__()
         self.level = 1
 
-        for _, row in _L1_EXTENSIONS.iterrows():
-            if row["Required"] and row["Name"] not in self.extensions:
-                self.create_extension(row["Name"], row["DataType"])
-
-        # Seed PRIMARY with the EPRV Required keyword skeleton (typed defaults +
-        # comments). L1 is not an EPRV level, so KPF1 has no RV1 to inherit this
-        # from; stamp it from the registry so KWRDPRL1 is meaningful and native
-        # values (overlaid in KPF0.to_kpf1) win over defaults.
-        for kw, value in self.keyword_registry.eprv_primary_seed.items():
-            self.headers["PRIMARY"][kw] = value
-        # DATALVL is EPRV-Required, so the seed defaults it to "UNKNOWN".
+        self._create_manifest_extensions()
+        # Seed PRIMARY with the registry's typed L1 skeleton (defaults +
+        # comments). L1 is not an EPRV level, so the skeleton is stamped here;
+        # the values StandardizeDataFormat wrote at L0 are forwarded over it by
+        # KPF0.to_kpf1.
+        self._seed_primary()
+        # DATALVL's seeded value is the L0 default; restamp it for this level.
         self.set_keyword("DATALVL", "L1")
-        # DRPHASH is EPRV-optional, so it is not in the seed; stamp it here
-        # beside DRPTAG (which the seed carries) to complete the DRP provenance.
-        self.set_keyword("DRPHASH", __githash__)
-        # The SKY (1) and CAL (5) fibers have no catalog target, so their C*#
-        # astrometry has no value at any type. Stamp the cards undefined rather
-        # than leaving them absent; _map_header still overwrites if one is mapped.
-        for base in (
-            "CRA",
-            "CDEC",
-            "CEQNX",
-            "CEPCH",
-            "CPLX",
-            "CPMR",
-            "CPMD",
-            "CCLR",
-            "CCLRN",
-        ):
-            for trace in (1, 5):
-                self.set_keyword(f"{base}{trace}", None)
-
-    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Route L1 FITS reads to ``KPF1._read``.
-
-        Needed for the same reason as the L0 override; see ``KPF0.read`` for the
-        canonical rationale (``RVDataModel.read`` has no lvl==1 dispatch branch,
-        so the inherited ``from_fits`` would never call into ``_read``).
-        """
-        self._read(hdul)
-
-    def _read(self, hdul):
-        """Read all extensions from an L1 FITS HDUList.
-
-        Handles known extensions from the CSV definition and rejects any
-        non-standard extension by raising (matching rvdata's read contract).
-        """
-        for hdu in hdul:
-            ext_name = hdu.name
-
-            if isinstance(hdu, fits.PrimaryHDU):
-                fits_type = "PrimaryHDU"
-            elif isinstance(hdu, (fits.ImageHDU, fits.CompImageHDU)):
-                fits_type = "ImageHDU"
-            elif isinstance(hdu, fits.BinTableHDU):
-                fits_type = "BinTableHDU"
-            else:
-                continue
-
-            if ext_name not in self.extensions:
-                if ext_name != "PRIMARY":
-                    if ext_name not in self._known_extensions:
-                        raise ValueError(
-                            f"Non-standard extension {ext_name!r} in L1 file"
-                        )
-                    self.create_extension(ext_name, fits_type)
-
-            if ext_name == "PRIMARY":
-                pass
-            elif ext_name == "RECEIPT":
-                t = Table.read(hdu)
-                df = t.to_pandas()
-                receipt_columns = BASE_RECEIPT_COLUMNS["Name"].tolist()
-                if df.empty:
-                    df = pd.DataFrame(columns=receipt_columns)
-                else:
-                    all_cols = df.columns.union(receipt_columns, sort=False)
-                    df = df.reindex(columns=all_cols).fillna("")
-                self.receipt = df
-            elif fits_type == "ImageHDU":
-                # Materialize the memmap before from_fits closes the file
-                # (np.array, not asarray); see KPF0._read for the full rationale.
-                self.set_data(ext_name, np.array(hdu.data))
-            elif fits_type == "BinTableHDU":
-                self.set_data(ext_name, Table.read(hdu))
-
-            self.set_header(ext_name, hdu.header)
+        self._set_ext_descript()
 
     def check_filename_convention(self, filename):
         """KPF L1 uses an EPRV-like name with L1 (not SL#): kpf_L1_YYYYMMDDThhmmss.fits.
@@ -187,7 +99,7 @@ class KPF1(KPFDataModel):
         logger.info("wrote %s to %s", type(self).__name__, fn)
         return fn
 
-    # Mapping of L1 extension names → KPF2/RV2 extension names for pass-through.
+    # Mapping of L1 extension names → KPF2 extension names for pass-through.
     # CA_HK is excluded: it is a raw 2D CCD image, not an extracted spectrum.
     # ANCILLARY_SPECTRUM (BinTableHDU) should be populated after Ca HK extraction.
     _L1_TO_L2_PASSTHROUGH = {

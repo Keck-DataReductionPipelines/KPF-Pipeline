@@ -47,7 +47,8 @@ class QC:
             kw = fn._qc_key
             # Mirror the registry Description into results (the FITS comment
             # source; see ``_tag``). The _qc_key must be registered.
-            comment = self.kpf_obj.keyword_registry.routing[kw][1]
+            registry = self.kpf_obj.keyword_registry
+            comment = registry.comment_for(kw, registry.routing[kw])
             try:
                 passed = fn()
             except NotImplementedError:
@@ -70,18 +71,6 @@ class QC:
             )
 
         return self.results
-
-    def _required_primary_keywords(self):
-        """Registry EPRV ``Required`` PRIMARY keywords at or below this level.
-
-        The level cap is the level's own number, so this runs unchanged for L1,
-        L2, and L4 -- each returns the required PRIMARY keywords tagged at or
-        below its own level. Read off the model's registry singleton so qc_flags
-        imports nothing from data_models.
-        """
-        cap = int(str(self.LEVEL)[1:])
-        reg = self.kpf_obj.keyword_registry
-        return {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= cap}
 
     def _iter_checks(self):
         """Yield each ``(name, method)`` tagged ``_qc_key``.

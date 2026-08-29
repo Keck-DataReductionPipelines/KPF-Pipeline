@@ -331,6 +331,9 @@ class TestSpectrumOrientation:
         from kpfpipe.modules.image_assembly import ImageAssembly
         from kpfpipe.modules.image_processing import ImageProcessing
         from kpfpipe.modules.spectral_extraction import SpectralExtraction
+        from kpfpipe.modules.standardize_data_format import (
+            StandardizeDataFormat,
+        )
         from kpfpipe.utils.io import kpf_filepath
 
         config = {
@@ -339,6 +342,7 @@ class TestSpectrumOrientation:
             "fibers": _SCI_FIBERS,
         }
         l0 = KPF0.from_fits(kpf_filepath(OBS_ID, "L0", data_root=str(TESTDATA_DIR)))
+        StandardizeDataFormat(l0).perform()
         l1 = ImageAssembly(l0, config).perform()
         l1 = CalibrationAssociation(l1, config).perform(
             ["bias", "dark", "flat", "thar"]

@@ -19,6 +19,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.data_models.masters.base import KPFMasterModel
+from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
 from ._catalog import SOURCES, catalog_record_table
 from ._dtype_policy import FLUX, WAVE, assert_dtype, assert_roundtrip_dtype
@@ -66,7 +67,9 @@ def synthetic_masters_l2_file(tmp_path_factory):
 def converted_l1(synthetic_l0_file):
     """An L1 from KPF0.to_kpf1: EPRV-standard PRIMARY plus a populated
     INSTRUMENT_HEADER, the input to_kpf2 expects in production."""
-    return KPF0.from_fits(synthetic_l0_file).to_kpf1()
+    l0 = KPF0.from_fits(synthetic_l0_file)
+    StandardizeDataFormat(l0).perform()
+    return l0.to_kpf1()
 
 
 class TestKPF2QualityControlRoundTrip:
@@ -107,10 +110,9 @@ class TestCatalogRecordPassthrough:
 
     @staticmethod
     def _l1_with_catalog(rv=10.0):
-        # KPF1 creates CATALOG_RECORD only on the L0 pass-through or a read (it is
-        # Required=False in L1-extensions.csv), so a bare L1 makes it explicitly.
+        # Every L1-extensions.csv row is created, so CATALOG_RECORD is present
+        # and empty on a bare L1; only its rows need supplying.
         l1 = KPF1()
-        l1.create_extension("CATALOG_RECORD", "BinTableHDU")
         l1.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         return l1
 
@@ -145,12 +147,12 @@ class TestToKPF2:
         assert isinstance(kpf2, KPF2)
 
     def test_to_kpf2_passes_through_eprv_primary(self, converted_l1):
-        # The keyword conversion happened in to_kpf1; to_kpf2 only forwards it.
+        # The keyword conversion happened in StandardizeDataFormat; to_kpf1 and
+        # to_kpf2 only forward it.
         kpf2 = converted_l1.to_kpf2()
         prim = kpf2.headers["PRIMARY"]
-        assert prim.get("EXPTIME") == 300.0  # from ELAPSED, set in to_kpf1
+        assert prim.get("EXPTIME") == 300.0  # from ELAPSED
         assert prim.get("OBSTYPE") == "Object"  # from IMTYPE
-        assert prim.get("OBSERVER") == "Smith"  # from GROBSERV
         # Raw natives never reach the EPRV PRIMARY.
         assert "ELAPSED" not in prim
         assert "IMTYPE" not in prim

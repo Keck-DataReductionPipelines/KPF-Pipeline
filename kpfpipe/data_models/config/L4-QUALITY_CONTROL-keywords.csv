@@ -1,0 +1,11 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+DATAPRL4,QC: L4 CCF/CCF_VAR/RV present and populated,,int,1,QCL4
+KWRDPRL4,QC: required L4 PRIMARY keywords present,,int,1,QCL4
+BERVOK,QC: per-order BERV range within 0.04 m/s,,int,1,QCL4
+BJDOK,QC: per-order BJD range within 1 s,,int,1,QCL4
+BJDMEAN,Photon-weighted mean of per-order BJD_TDB (SCI2),,float,2460405.96456,DiagL4
+BJDSTD,Photon-weighted std of per-order BJD [s] (SCI2),,float,0.021,DiagL4
+BJDRNG,Per-order BJD range [s] (SCI2),,float,0.084,DiagL4
+BERVMEAN,Photon-weighted mean of per-order BERV [km/s] (SCI2),,float,12.4431,DiagL4
+BERVSTD,Photon-weighted std of per-order BERV [m/s] (SCI2),,float,0.0031,DiagL4
+BERVRNG,Per-order BERV range [m/s] (SCI2),,float,0.0124,DiagL4

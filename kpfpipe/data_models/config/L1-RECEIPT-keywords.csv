@@ -1,0 +1,9 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+OSCANSUB,Overscan subtraction applied (T/F),,int,1,ImageAssembly
+BIASSUB,Bias subtraction applied (T/F),,int,1,ImageProcessing
+DARKSUB,Dark subtraction applied (T/F),,int,1,ImageProcessing
+FLATDIV,Flat division applied (reserved) (T/F),,int,0,ImageProcessing
+BIASFILE,Master bias full path,,str,masters/20240405/kpf_20240405_master_bias.fits,CalibrationAssociation
+DARKFILE,Master dark full path,,str,masters/20240405/kpf_20240405_master_dark.fits,CalibrationAssociation
+FLATFILE,Master flat full path,,str,masters/20240405/kpf_20240405_master_flat.fits,
+WLSFILE,WLS master full path,,str,masters/20240405/kpf_20240405_master_WLS.fits,CalibrationAssociation

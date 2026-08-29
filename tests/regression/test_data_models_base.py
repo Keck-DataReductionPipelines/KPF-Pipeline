@@ -13,8 +13,13 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
-from ._registry import read_kpf_header_registry
+from ._registry import (
+    expected_comment,
+    expected_routing,
+    read_kpf_header_registry,
+)
 
 
 class TestHeaderStorage:
@@ -98,7 +103,7 @@ class TestSetKeyword:
         l4.set_keyword("VELSTART", -100.0, ext="SCI2_CCF")  # SCI2_CCF -> CCF3
         l4.set_keyword("RVMETHOD", "CCF", ext="SCI2_RV")  # SCI2_RV -> RV3
         assert l4.headers["CCF3"]["VELSTART"] == -100.0
-        assert l4.headers["CCF3"].comments["VELSTART"] == "Velocity Grid Start"
+        assert l4.headers["CCF3"].comments["VELSTART"] == "Velocity grid start [km/s]"
         assert l4.headers["RV3"]["RVMETHOD"] == "CCF"
 
     def test_targeted_ext_writes_kpf_multi_home_card(self):
@@ -131,43 +136,45 @@ class TestSetKeyword:
 
 
 class TestRegistryConformance:
-    """The routing table the model exposes agrees with the registry CSV column.
+    """The routing table the model exposes agrees with the registry CSVs.
 
-    Oracle: ``read_kpf_header_registry`` reads config/L*-headers.csv directly,
-    independent of the code under test.
+    Oracle: ``_registry`` reads config/*-keywords.csv directly and re-derives the
+    routing rule by hand, independent of the code under test.
     """
 
-    def test_routing_matches_extension_column(self):
+    def test_routing_matches_the_csv_homes(self):
         routing = KPF1.keyword_registry.routing
-        mismatches = []
-        for _, row in read_kpf_header_registry().iterrows():
-            want = str(row["Extension"]).strip()
-            if want.endswith("*"):
-                continue
-            kw = str(row["Keyword"]).strip()
-            got = routing.get(kw, (None,))[0]
-            if got != want:
-                mismatches.append((kw, want, got))
-        assert not mismatches, f"routing != registry Extension column: {mismatches}"
+        expected = expected_routing()
+        mismatches = [
+            (kw, want, routing.get(kw))
+            for kw, want in expected.items()
+            if routing.get(kw) != want
+        ]
+        assert not mismatches, f"routing != CSV homes: {mismatches}"
 
-    def test_single_home_routable_per_extension_not(self):
-        # Per-extension keywords (Extension "CCF*") are ext=-only, so they are
-        # excluded from routing; every single-home keyword is in it.
+    def test_multi_home_keywords_are_not_routed(self):
+        # A keyword on several extensions and on none of them PRIMARY (CTYPE1 on
+        # every trace, VELWIDTH on every CCF#) is ext=-only.
         routing = KPF1.keyword_registry.routing
-        for _, row in read_kpf_header_registry().iterrows():
-            kw = str(row["Keyword"]).strip()
-            if str(row["Extension"]).strip().endswith("*"):
-                assert kw not in routing, f"per-extension {kw} must not be routed"
+        table = read_kpf_header_registry()
+        homes = table.groupby("Keyword")["Extension"].apply(set)
+        for keyword, extensions in homes.items():
+            if len(extensions) > 1 and "PRIMARY" not in extensions:
+                assert keyword not in routing, f"multi-home {keyword} must not route"
             else:
-                assert kw in routing, f"{kw} missing from routing table"
+                assert keyword in routing, f"{keyword} missing from routing table"
 
-    def test_comment_is_registry_description(self):
-        routing = KPF1.keyword_registry.routing
+    def test_comment_is_description_and_units(self):
+        reg = KPF1.keyword_registry
         for _, row in read_kpf_header_registry().iterrows():
-            if str(row["Extension"]).strip().endswith("*"):
-                continue
-            kw = str(row["Keyword"]).strip()
-            assert routing[kw][1] == str(row["Description"]).strip()
+            got = reg.comment_for(row["Keyword"], row["Extension"])
+            assert got == expected_comment(row["Description"], row["Units"])
+
+    def test_datatype_matches_the_csv(self):
+        reg = KPF1.keyword_registry
+        for _, row in read_kpf_header_registry().iterrows():
+            got = reg.datatype_for(row["Keyword"], row["Extension"])
+            assert got == row["DataType"]
 
     def test_qc_flag_keyword_sets_are_scoped_by_level(self):
         # Relocated from test_checkpoints.py: this is registry scoping, not
@@ -193,7 +200,7 @@ class TestRegistryConformance:
 
 
 class TestKeywordRegistry:
-    """The unified registry table and its derived validation lookups."""
+    """The unified registry table and its derived lookups."""
 
     def test_columns(self):
         assert list(KPF1.keyword_registry.table.columns) == [
@@ -202,32 +209,24 @@ class TestKeywordRegistry:
             "Extension",
             "DataType",
             "PopulatedBy",
-            "Required",
             "Level",
-            "Default",
             "Units",
         ]
 
-    def test_unions_kpf_and_eprv(self):
+    def test_unions_every_profile(self):
         keys = KPF1.keyword_registry.registered
-        assert "RNGREEN1" in keys and "RV" in keys
+        assert "RNGREEN1" in keys and "RV" in keys and "MASTYPE" in keys
 
-    def test_non_registry_headermap_keys_absent(self):
-        # PARANG/PARANG2 are header_map STANDARD names that aren't EPRV keywords;
-        # they must NOT be in the registry (so _map_header drops them).
+    def test_unregistered_header_map_targets_are_absent(self):
+        # PARANG/PARANG2 are rvdata header_map names KPF does not carry; the KPF
+        # header map must not name them either, and _load_header_map would raise
+        # if it did.
         assert "PARANG" not in KPF1.keyword_registry.registered
         assert "PARANG2" not in KPF1.keyword_registry.registered
 
     def test_primary_allowed_not_level_gated(self):
-        # An EPRV-L4 keyword (RV) is allowed on PRIMARY regardless of product level.
+        # An L4 keyword (RV) is allowed on PRIMARY regardless of product level.
         assert "RV" in KPF1.keyword_registry.allowed["PRIMARY"]
-
-    def test_required_keyed_by_minimal_level(self):
-        # required maps keyword -> the minimal Level it is Required at; the EPRV
-        # L2 PRIMARY set is tagged Level 1 because KPF requires it from L1.
-        primary_required = KPF1.keyword_registry.required["PRIMARY"]
-        assert primary_required.get("RV") == 4  # L4-only required
-        assert primary_required.get("INSTRUME") == 1  # required from L1
 
     def test_is_structural_only_fits_cards(self):
         # Structural = FITS cards astropy writes from the HDU structure, never
@@ -253,75 +252,98 @@ class TestKeywordRegistry:
             assert not reg.is_structural(kw), kw
 
     def test_registered_and_structural_are_disjoint(self):
-        # Build-time invariant: structural cards (astropy-authored) are never
-        # registered. rvdata redundantly declares XTENSION/EXTNAME as per-extension
-        # keywords; the _build_registry sanitizer drops them.
+        # The KPF CSVs register no structural card: rvdata declares XTENSION and
+        # EXTNAME as per-extension keywords, and they are not carried over.
         reg = KPF1.keyword_registry
         assert not [k for k in reg.registered if reg.is_structural(k)]
         assert "XTENSION" not in reg.registered
         assert "EXTNAME" not in reg.registered
 
-    def test_default_units_populated_for_eprv_blank_for_kpf(self):
-        # Default and Units carry the EPRV CSV values for EPRV rows, "" for KPF.
-        table = KPF1.keyword_registry.table.set_index("Keyword")
-        assert table.loc["INSTRUME", "Default"] == "UNKNOWN"  # EPRV row
-        assert table.loc["RNGREEN1", "Default"] == ""  # KPF row
-        assert table.loc["RNGREEN1", "Units"] == ""
+    def test_units_populated_for_eprv_rows_blank_for_unitless(self):
+        table = KPF1.keyword_registry.table
 
-    def test_eprv_primary_seed_is_typed_required_set(self):
-        # The seed is the EPRV Required PRIMARY set (Level <= 1), pre-typed as
-        # (value, comment) tuples ready to drop into a header.
+        def units(keyword, extension):
+            match = table[
+                (table["Keyword"] == keyword) & (table["Extension"] == extension)
+            ]
+            return match.iloc[0]["Units"]
+
+        assert units("EXPTIME", "PRIMARY") == "s"
+        assert units("RNGREEN1", "QUALITY_CONTROL") == "e-"
+        assert units("DATAPRL1", "QUALITY_CONTROL") == ""
+
+    def test_primary_seed_is_cumulative_by_level(self):
+        # L0 and L1 share the 154-card science skeleton; L2 adds the extraction
+        # SNR cards and L4 the RV summary.
         reg = KPF1.keyword_registry
-        required = {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= 1}
-        assert set(reg.eprv_primary_seed) == required
-        value, comment = reg.eprv_primary_seed["ISSOLAR"]
-        assert value is False and comment  # Boolean parsed, comment present
+        l0, l1, l2, l4 = (reg.primary_seed(p) for p in ("L0", "L1", "L2", "L4"))
+        assert set(l0) == set(l1)
+        assert set(l0) < set(l2) < set(l4)
+        assert set(l2) - set(l0) == {"EXTRACT"} | {f"EXSNR{i}" for i in range(1, 6)} | {
+            f"EXSNRW{i}" for i in range(1, 6)
+        }
+        assert set(l4) - set(l2) == {
+            "BJDTDB",
+            "RV",
+            "RVERR",
+            "BERV",
+            "RVMETHOD",
+            "SYSVEL",
+            "SYSACC",
+        }
 
-    def test_eprv_primary_datatypes_cover_emitted_keywords(self):
-        # Datatypes use rvdata vocab so parse_value_to_datatype works, and cover
-        # the keywords _map_header emits.
-        dt = KPF1.keyword_registry.eprv_primary_datatypes
-        assert dt["INSTRUME"] == "String" and dt["NUMTRACE"] == "UInt"
-        assert "RNGREEN1" not in dt  # KPF keyword, not EPRV PRIMARY
+    def test_primary_seed_is_typed_and_commented(self):
+        seed = KPF1.keyword_registry.primary_seed("L0")
+        assert seed["NUMTRACE"] == (5, "Number of object-indexed keyword families")
+        assert seed["OBSALT"][0] == 4145.0  # injected from kpfpipe.OBSERVATORY
+        assert seed["AIRMASS"] == (None, "Airmass at start of exposure [secZ]")
 
-    def test_header_map_sanitized_on_load(self):
-        # header_map holds only static native->EPRV mappings: unregistered targets
-        # (PARANG) and non-native keywords are dropped, so _map_header needs no
-        # filter or per-keyword correction.
-        std = set(KPF1.keyword_registry.header_map["STANDARD"].astype(str).str.strip())
-        assert not ({"PARANG", "PARANG2"} & std)
-        assert not ({"NUMORDER", "DATALVL", "DRPTAG", "JD_UTC"} & std)
+    def test_primary_seed_covers_every_member_of_a_family(self):
+        # The five-trace rule at the header level: no Required filter, so every
+        # index of every # family is seeded.
+        seed = KPF1.keyword_registry.primary_seed("L0")
+        for base in ("TRACE", "CRA", "CDEC", "CSRC", "CID", "CZ", "CCLR"):
+            for i in range(1, 6):
+                assert f"{base}{i}" in seed
 
-    def test_default_overrides_sanitize_the_table(self):
-        # NUMORDER/DRPTAG are corrected once, on the table Default, so both the
-        # table and the seed derived from it carry the corrected values.
-        import importlib.metadata
-
+    def test_masters_seed_is_the_master_s_own_rows(self):
+        # Masters are outside EPRV scope: they do not inherit the science skeleton.
         reg = KPF1.keyword_registry
-        version = importlib.metadata.version("kpfpipe")
-        table = reg.table.set_index("Keyword")
-        # Table Defaults are strings (like every other Default); the seed types them.
-        assert table.loc["NUMORDER", "Default"] == "67"
-        assert table.loc["DRPTAG", "Default"] == version
-        assert reg.eprv_primary_seed["NUMORDER"][0] == 67
-        assert reg.eprv_primary_seed["DRPTAG"][0] == version
-        # DATALVL is not overridden -- KPF1.__init__ sets it from the data level.
-        assert table.loc["DATALVL", "Default"] == "UNKNOWN"
-        assert reg.eprv_primary_seed["DATALVL"][0] == "UNKNOWN"
+        assert set(reg.primary_seed("ML1")) == {"MASTYPE"}
+        assert "POLYDEGX" in reg.primary_seed("ML2-wls")
+        assert "INSTRUME" not in reg.primary_seed("ML2-wls")
 
-    def test_kpf_row_may_not_claim_the_eprv_sentinel(self):
-        # 'EPRV' is the discriminator every derived lookup keys on, so a KPF CSV
-        # row claiming it would silently misclassify itself as EPRV-sourced --
-        # a KPF keyword routed to PRIMARY, or a corrupted L1 seed.
-        import pandas as pd
+    def test_unknown_profile_raises(self):
+        with pytest.raises(ValueError, match="unknown keyword profile"):
+            KPF1.keyword_registry.primary_seed("L3")
 
-        from kpfpipe.data_models.keyword_registry import KeywordRegistry
+    def test_datatype_for_scopes_by_extension(self):
+        reg = KPF1.keyword_registry
+        assert reg.datatype_for("INSTRUME", "PRIMARY") == "String"
+        assert reg.datatype_for("NUMTRACE", "PRIMARY") == "UInt"
+        assert reg.datatype_for("INSTRUME", "QUALITY_CONTROL") is None
 
-        df = pd.DataFrame(
-            [{"Keyword": "FOO", "Description": "d", "PopulatedBy": "EPRV"}]
-        )
-        with pytest.raises(ValueError, match="reserved as the EPRV-row discriminator"):
-            KeywordRegistry._parse_kpf_keyword_config(df, "fake.csv", lambda r: "L0")
+    def test_header_map_keys_are_registered_on_primary(self):
+        # The two authorities cannot drift: _load_header_map raises otherwise.
+        reg = KPF1.keyword_registry
+        keys = set(reg.header_map["EPRV_KEY"].astype(str).str.strip())
+        assert keys <= reg.allowed["PRIMARY"]
+        assert len(keys) == len(reg.header_map)
+
+    def test_parse_value_has_no_sentinel_rule(self):
+        # SCI-OBJ/SKY-OBJ carry the literal value "Unknown" on real frames;
+        # blanking it would silently empty TRACE1..TRACE4.
+        reg = KPF1.keyword_registry
+        assert reg._parse_value("TRACE2", "String", "Unknown") == "Unknown"
+        assert reg._parse_value("TRACE2", "String", "") is None
+        assert reg._parse_value("ISSOLAR", "Boolean", "F") is False
+        assert reg._parse_value("NUMTRACE", "UInt", "5") == 5
+        # A blank DataType passes the value through unchanged.
+        assert reg._parse_value("ANY", "", "as-is") == "as-is"
+
+    def test_parse_value_rejects_an_unknown_datatype(self):
+        with pytest.raises(ValueError, match="unknown DataType"):
+            KPF1.keyword_registry._parse_value("FOO", "complex", "1")
 
 
 class TestQualityControlPropagation:
@@ -347,6 +369,7 @@ class TestQualityControlPropagation:
     def test_propagation_l0_to_l1_to_l2(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
+        StandardizeDataFormat(l0).perform()
         # QCL0 routes L0 QC flags to QUALITY_CONTROL.
         l0.set_keyword("NOTJUNK", 1)
         l1 = l0.to_kpf1()

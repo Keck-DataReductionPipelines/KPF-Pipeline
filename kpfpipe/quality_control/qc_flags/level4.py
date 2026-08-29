@@ -57,8 +57,17 @@ class QCL4(QC):
     ccf_rv_present._qc_key = "DATAPRL4"
 
     def required_keywords_present(self):
-        """Every registry-required PRIMARY keyword for L4 is present (presence only)."""
-        return self._required_primary_keywords() <= set(self.kpf_obj.headers["PRIMARY"])
+        """Every required PRIMARY keyword is present -- not yet implemented.
+
+        The registry-derived notion of "required" this read is gone: REQUIRED is
+        a compliance label now, not a decision about what must be on a product.
+        Rebuilding the check against a KPF-owned definition is a follow-up; until
+        then it writes no flag (``QC.run`` treats NotImplementedError as "no
+        flag"), and the registry row stays so the comment lookup still resolves.
+        """
+        raise NotImplementedError(
+            "KWRDPRL4 is pending a KPF-owned definition of a required keyword"
+        )
 
     required_keywords_present._qc_key = "KWRDPRL4"
 

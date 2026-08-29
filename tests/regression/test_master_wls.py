@@ -455,7 +455,7 @@ class TestMakeMasterL2:
 
         ml2 = WLS(FILE_LIST).make_master_l2()
         assert ml2.headers["PRIMARY"].get("DATALVL") == "ML2"
-        seeded = set(ml2.keyword_registry.eprv_primary_seed)
+        seeded = set(ml2.keyword_registry.primary_seed("L2"))
         assert not (seeded & set(ml2.headers["PRIMARY"])) - {"DATALVL"}
 
         out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"

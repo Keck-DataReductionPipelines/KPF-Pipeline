@@ -25,6 +25,7 @@ from astropy.table import Table
 from astropy.time import Time
 
 from kpfpipe import DEFAULTS
+from kpfpipe.data_models.keyword_registry import SCI_TRACES
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import gaia_client, retry_request, simbad_client
@@ -161,7 +162,7 @@ class AstroQuery:
     def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
 
-        imtype = l0_obj.headers["PRIMARY"].get("IMTYPE")
+        imtype = l0_obj.headers["INSTRUMENT_HEADER"].get("IMTYPE")
         if str(imtype).strip().lower() != "object":
             raise ValueError(
                 f"AstroQuery runs only on science frames (IMTYPE 'Object'); got "
@@ -221,7 +222,7 @@ class AstroQuery:
         for ``_resolve_gaia_release``. None when GAIAID is absent or blank, the trailing
         token is not all digits, or the release is not in ``_GAIA_TABLES``.
         """
-        raw = self.l0_obj.headers["PRIMARY"].get("GAIAID")
+        raw = self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID")
         if raw is None:
             return None
         tokens = str(raw).strip().split()
@@ -294,7 +295,7 @@ class AstroQuery:
         KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
         SIMBAD resolves only with an 'HD ' prefix; named targets pass through.
         """
-        obj = self.l0_obj.headers["PRIMARY"].get("OBJECT")
+        obj = self.l0_obj.headers["INSTRUMENT_HEADER"].get("OBJECT")
         if obj is None:
             return None
         obj = str(obj).strip()
@@ -436,7 +437,7 @@ class AstroQuery:
             logger.warning(
                 "no usable GAIAID on L0 PRIMARY (%r); Gaia astrometry unavailable "
                 "(queryable releases: %s)",
-                self.l0_obj.headers["PRIMARY"].get("GAIAID"),
+                self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID"),
                 ", ".join(sorted(_GAIA_TABLES)),
             )
             return None
@@ -444,7 +445,7 @@ class AstroQuery:
         if release is None:
             logger.warning(
                 "GAIAID %r carries no data release; querying Gaia to identify it",
-                self.l0_obj.headers["PRIMARY"].get("GAIAID"),
+                self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID"),
             )
             release = self._resolve_gaia_release(gaia_id)
         query = f"""
@@ -589,7 +590,7 @@ class AstroQuery:
         run: TCSOFF needs this row even when ``astrometry_priority`` bars wmko from
         anchoring the position.
         """
-        primary = self.l0_obj.headers["PRIMARY"]
+        primary = self.l0_obj.headers["INSTRUMENT_HEADER"]
         if primary.get("TARGRA") is None:
             return None
         targfram = str(primary.get("TARGFRAM") or "").strip()
@@ -715,7 +716,9 @@ class AstroQuery:
         rv_value = base_record["rv"]
         rv_source = base_source
         if rv_value is None:
-            rv_value = self._scalar(self.l0_obj.headers["PRIMARY"].get("TARGRADV"))
+            rv_value = self._scalar(
+                self.l0_obj.headers["INSTRUMENT_HEADER"].get("TARGRADV")
+            )
             rv_source = "wmko" if rv_value is not None else ""
             if rv_value is not None:
                 logger.warning(
@@ -761,6 +764,65 @@ class AstroQuery:
         self._write_catalog_record("kpf-drp", record)
         return record
 
+    # CATALOG_RECORD canonical column -> EPRV C*# keyword base. The row is stored in
+    # EPRV C*# format already, so the overlay is a direct copy (no conversion).
+    _CATALOG_CARD_BASES = {
+        "object": "CID",
+        "radec_src": "CSRC",
+        "ra": "CRA",
+        "dec": "CDEC",
+        "pmra": "CPMR",
+        "pmdec": "CPMD",
+        "parallax": "CPLX",
+        "rv": "CRV",
+        "z": "CZ",
+        "epoch": "CEPCH",
+        "equinox": "CEQNX",
+        "color": "CCLR",
+        "color_name": "CCLRN",
+    }
+
+    def _catalog_primary_cards(self):
+        """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
+
+        Returns ``{C-keyword: value}`` for every science fiber (``SCI_TRACES``) -- a
+        direct copy of the canonical row's already-EPRV-format cells, skipping any
+        missing value (NaN / "") so the card keeps the blank the seed stamped rather
+        than carrying 'nan'. Warns when the canonical astrometry was assembled from
+        more than one catalog.
+        """
+        table = self.l0_obj.data["CATALOG_RECORD"]
+        row = table[table["source"] == "kpf-drp"][0]
+
+        provenance = {
+            str(row[col]).strip()
+            for col in ("radec_src", "plx_src", "rv_src")
+            if str(row[col]).strip()
+        }
+        if len(provenance) > 1:
+            logger.warning(
+                "PRIMARY catalog keywords assembled from mixed sources "
+                "(radec=%s, parallax=%s, rv=%s); C*# astrometry is not "
+                "internally single-source",
+                row["radec_src"],
+                str(row["plx_src"]) or '""',
+                str(row["rv_src"]) or '""',
+            )
+
+        cards = {}
+        for col, base in self._CATALOG_CARD_BASES.items():
+            value = row[col]
+            if isinstance(value, str):
+                if value.strip() == "":
+                    continue
+            else:
+                if np.isnan(value):
+                    continue
+                value = float(value)
+            for i in SCI_TRACES:
+                cards[f"{base}{i}"] = value
+        return cards
+
     # ------------------------------------------------------------------
     # Private helpers - module execution
     # ------------------------------------------------------------------
@@ -799,10 +861,11 @@ class AstroQuery:
         Returns
         -------
         l0_obj : KPF0
-            The input L0 (PRIMARY unchanged), with the ``wmko``/``gaia``/``simbad`` and
-            merged ``kpf-drp`` rows written to ``CATALOG_RECORD``, plus an 'astro_query'
-            receipt entry. Unusually for a pipeline module this returns an L0, not the
-            next level -- AstroQuery runs before assembly.
+            The input L0, with the ``wmko``/``gaia``/``simbad`` and merged ``kpf-drp``
+            rows written to ``CATALOG_RECORD``, the canonical astrometry overlaid onto
+            the SCI-fiber ``C*#`` PRIMARY cards, plus an 'astro_query' receipt entry.
+            Unusually for a pipeline module this returns an L0, not the next level --
+            AstroQuery runs before assembly.
 
         Raises
         ------
@@ -823,6 +886,12 @@ class AstroQuery:
         self._simbad = self.query_simbad() if self.do_simbad_query else None
 
         self.merge_catalog_records()
+
+        # Overlay the canonical astrometry onto the SCI-fiber C*# cards. The seed
+        # has already stamped every member of each family, so this is pure
+        # enrichment: a card with no catalog value stays present and blank.
+        for keyword, value in self._catalog_primary_cards().items():
+            self.l0_obj.set_keyword(keyword, value)
 
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")

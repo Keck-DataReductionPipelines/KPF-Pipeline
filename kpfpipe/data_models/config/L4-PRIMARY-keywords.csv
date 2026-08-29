@@ -1,0 +1,12 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+BJDTDB,Barycentric Julian Day in TDB,JD,double,2460405.96456,RadialVelocity
+RV,RV value recommended by team,km/s,float,-18.553,RadialVelocity
+RVERR,Error on RV,km/s,float,0.0012,RadialVelocity
+BERV,Barycentric RV,km/s,float,12.4431,RadialVelocity
+RVMETHOD,RV derivation method (CCF; SERVAL; etc),N/A,string,CCF,RadialVelocity
+SYSVEL,Systemic velocity subtracted from RVs,km/s,float,-18.55,
+SYSACC,Acceleration of the systemic velocity,m/s/s,float,0.0,
+RVGREEN,GREEN SCI-combined RV,km/s,float,-18.551,RadialVelocity
+RVRED,RED SCI-combined RV,km/s,float,-18.554,RadialVelocity
+ERVGREEN,GREEN SCI-combined RV error,km/s,float,0.0015,RadialVelocity
+ERVRED,RED SCI-combined RV error,km/s,float,0.0014,RadialVelocity

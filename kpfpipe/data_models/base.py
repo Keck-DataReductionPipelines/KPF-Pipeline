@@ -18,12 +18,15 @@ For example, "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", so reading
 ``d["SCI2_FLUX"]`` returns the same object stored under "TRACE3_FLUX".
 """
 
+import importlib.resources
 import logging
 
 import numpy as np
+import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
+from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
 # The keyword registry lives in its own module as a single KeywordRegistry
 # instance; base.py is its only importer, and re-exports it (below) so sibling
@@ -33,12 +36,21 @@ from kpfpipe.utils.kpf import is_obs_id
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules -- excluded from DRPSTATU so it names the last real stage.
-# ``read``/``from_fits`` are here too: reading a product back must not clobber
-# the status the writer stamped (rvdata >=0.4.0 logs a ``read`` receipt via its
-# ``@receipt_logged`` decorator on ``RVDataModel.read``).
+# ``from_fits`` is here too: reading a product back must not clobber the status
+# the writer stamped.
 _INTERNAL_RECEIPTS = frozenset(
-    {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits", "read"}
+    {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"}
 )
+
+_config_path = importlib.resources.files("kpfpipe.data_models.config")
+
+# The authoritative extension manifest for each level: the complete, literal
+# statement of that level's shape. Every row is created (there is no Required
+# gate), so no model class declares its own manifest.
+_MANIFESTS = {
+    level: pd.read_csv(_config_path / f"{level}-extensions.csv")
+    for level in ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
+}
 
 # Re-exported for sibling data_models modules: KPF2/KPF4 call
 # keyword_registry.register_rvdata_extension at import. Listed in __all__ so the
@@ -55,14 +67,147 @@ class KPFDataModel(RVDataModel):
     """Shared base for every KPF data model (L0, L1, L2, L4)."""
 
     # The keyword registry singleton, surfaced as a class attribute so anything
-    # handed a KPF data model (the checkpoints validator, level0's WMKO->EPRV
-    # mapping, tests) reaches it via kpf.keyword_registry.
+    # handed a KPF data model (the checkpoints validator, the WMKO->EPRV
+    # standardization, tests) reaches it via kpf.keyword_registry.
     keyword_registry = keyword_registry
+
+    # Unknown extension on read raises, matching rvdata's read contract.
+    _strict_read = True
 
     def __init__(self):
         super().__init__()
         self.obs_id = None
         self.dirname = None
+
+    @property
+    def _manifest(self):
+        """This model's extension manifest, named by its data level.
+
+        The masters override this: their tables are ``ML{level}``.
+        """
+        return _MANIFESTS[f"L{self.level}"]
+
+    def _create_manifest_extensions(self):
+        """Create every extension this level's manifest declares.
+
+        No ``Required`` gate: that column is a compliance label, so the manifest
+        is a complete and literal statement of the level's shape and every row is
+        created (empty) here.
+        """
+        for _, row in self._manifest.iterrows():
+            if row["Name"] not in self.extensions:
+                self.create_extension(row["Name"], row["DataType"])
+
+    def _seed_primary(self):
+        """Stamp the registry's typed PRIMARY skeleton for this profile.
+
+        Every keyword registered on PRIMARY for this level, with its header-map
+        default where it has one and blank where it does not, each carrying the
+        registry comment. Later writers overlay what they know. Science levels
+        only: the masters carry their own minimal PRIMARY and never seed.
+        """
+        seed = self.keyword_registry.primary_seed(f"L{self.level}")
+        for keyword, value in seed.items():
+            self.headers["PRIMARY"][keyword] = value
+
+    def _set_ext_descript(self):
+        """Rebuild EXT_DESCRIPT from the live extension set.
+
+        A no-op for the levels whose manifest declares no such extension (L0, L1
+        and the ML1 masters), so it can be called last in every ``__init__``.
+        """
+        if "EXT_DESCRIPT" not in self.extensions:
+            return
+        descriptions = dict(
+            zip(self._manifest["Name"], self._manifest["Description"], strict=True)
+        )
+        self.set_data(
+            "EXT_DESCRIPT",
+            pd.DataFrame(
+                [(name, descriptions.get(name, "")) for name in self.extensions],
+                columns=["Name", "Description"],
+            ),
+        )
+
+    def _get_min_bit_depth(self, ext_name):
+        """The manifest's MinBitDepth floor for ``ext_name``, or None.
+
+        None when the cell is blank or the extension is absent from the manifest.
+        ``set_data`` enforces the floor (ImageHDU arrays only); the manifest
+        declares it.
+        """
+        row = self._manifest[self._manifest["Name"] == ext_name]
+        if row.empty:
+            return None
+        value = row.iloc[0]["MinBitDepth"]
+        return None if pd.isna(value) else int(value)
+
+    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+        """Read an EPRV-standard FITS HDUList into this model.
+
+        One read path at every level. ``RVDataModel.read`` dispatches L2/L4 to
+        ``RV2._read``/``RV4._read`` through a hardcoded class reference keyed on
+        ``self.level`` rather than through the MRO, so this override -- not the
+        class bases -- is what detaches rvdata's name-guessing readers. It also
+        drops rvdata's ``@receipt_logged`` ``read`` row and its read-time PRIMARY
+        recast, so a product reads back exactly as written.
+        """
+        if instrument is not None:
+            raise ValueError(
+                f"{type(self).__name__}.read reads EPRV-standard FITS only; "
+                f"instrument={instrument!r} is not supported"
+            )
+        self._read(hdul)
+
+    def _read(self, hdul):
+        """Read every extension from an EPRV-standard FITS HDUList.
+
+        The FITS type comes from the astropy HDU class, and the manifest supplies
+        the known-extension gate; an unknown extension raises when
+        ``_strict_read`` (the default) and warns otherwise.
+        """
+        known = set(self._manifest["Name"])
+        for hdu in hdul:
+            ext_name = hdu.name
+
+            if isinstance(hdu, fits.PrimaryHDU):
+                fits_type = "PrimaryHDU"
+            elif isinstance(hdu, (fits.ImageHDU, fits.CompImageHDU)):
+                fits_type = "ImageHDU"
+            elif isinstance(hdu, fits.BinTableHDU):
+                fits_type = "BinTableHDU"
+            else:
+                continue
+
+            if ext_name != "PRIMARY" and ext_name not in self.extensions:
+                if ext_name not in known:
+                    message = (
+                        f"Non-standard extension {ext_name!r} in L{self.level} file"
+                    )
+                    if self._strict_read:
+                        raise ValueError(message)
+                    logger.warning("%s", message)
+                self.create_extension(ext_name, fits_type)
+
+            if ext_name == "PRIMARY":
+                pass
+            elif ext_name == "RECEIPT":
+                df = Table.read(hdu).to_pandas()
+                receipt_columns = BASE_RECEIPT_COLUMNS["Name"].tolist()
+                if df.empty:
+                    df = pd.DataFrame(columns=receipt_columns)
+                else:
+                    all_cols = df.columns.union(receipt_columns, sort=False)
+                    df = df.reindex(columns=all_cols).fillna("")
+                self.receipt = df
+            elif fits_type == "ImageHDU":
+                # np.array (not asarray) materializes the memmapped HDU into RAM
+                # before from_fits closes the file; a view would dangle afterward.
+                self.set_data(ext_name, np.array(hdu.data))
+            elif fits_type == "BinTableHDU":
+                self.set_data(ext_name, Table.read(hdu))
+
+            self.set_header(ext_name, hdu.header)
 
     @classmethod
     def from_fits(cls, fn, instrument=None, **kwargs):
@@ -70,7 +215,7 @@ class KPFDataModel(RVDataModel):
 
         The single read chokepoint for every KPF data model: one INFO record
         per FITS read, naming the concrete class and the path, then delegate
-        to the inherited reader (rvdata's for L2/L4 via RV2/RV4 in the MRO).
+        to ``read`` -> ``_read``, the one manifest-driven reader.
 
         Ensures ``obs_id`` is carried in memory after the read. L0 (and any
         product whose filename embeds the obs_id) resolves it during ``read``;
@@ -82,8 +227,8 @@ class KPFDataModel(RVDataModel):
         CATALOG_RECORD is normalized here for every level: astropy's FITS reader
         returns a missing (NaN) cell masked, and a masked cell is not NaN
         (``np.isnan`` on one is falsy), so a missing-value check would read it as
-        present. This sits at the chokepoint rather than in each ``_read`` because
-        L2/L4 read through rvdata's readers.
+        present. It sits at the chokepoint, after the read, rather than inside
+        ``_read``.
         """
         logger.info("reading %s from %s", cls.__name__, fn)
         obj = super().from_fits(fn, instrument=instrument, **kwargs)
@@ -132,12 +277,12 @@ class KPFDataModel(RVDataModel):
     def set_keyword(self, key, value, ext=None):
         """Write a registered keyword to its home extension header.
 
-        Looks ``key`` up in the merged KPF + EPRV keyword registry
-        (``config/L{0,1,2,4}-headers.csv`` plus the EPRV PRIMARY keywords) and
-        writes ``value`` to the extension named there, with the registry
-        Description as the FITS comment. This is the single write path for
-        registered keywords, so a keyword always lands on the same extension with
-        the same comment -- callers never name a comment.
+        Looks ``key`` up in the keyword registry (the
+        ``config/{prefix}-{EXTENSION}-keywords.csv`` tables) and writes ``value``
+        to the extension named there, with the registry comment
+        (``Description [Units]``) as the FITS comment. This is the single write
+        path for registered keywords, so a keyword always lands on the same
+        extension with the same comment -- callers never name a comment.
 
         ``ext`` targets a specific extension for EPRV per-extension cards that
         have no single routed home because they recur on every orderlet's
@@ -151,20 +296,22 @@ class KPFDataModel(RVDataModel):
         KeyError
             If ``key`` is registered nowhere (default), or not registered for
             ``ext`` (targeted); register it in the appropriate
-            ``config/L{level}-headers.csv`` before writing it.
+            ``config/{prefix}-{EXTENSION}-keywords.csv`` before writing it.
         ValueError
             If the target extension does not exist on this object (a config
             error -- the extension must be created before the write).
         """
         name = str(key).strip()
         if ext is None:
-            route = self.keyword_registry.routing.get(name)
-            if route is None:
+            ext = self.keyword_registry.routing.get(name)
+            if ext is None:
                 raise KeyError(
-                    f"keyword {name!r} is not registered; add it to "
-                    "config/L{0,1,2,4}-headers.csv before writing it"
+                    f"keyword {name!r} is not registered; add it to the "
+                    "appropriate config/{prefix}-{EXTENSION}-keywords.csv before "
+                    "writing it"
                 )
-            ext, comment = route
+            # A routed home is a real registry row, so the comment cannot miss.
+            comment = self.keyword_registry.comment_for(name, ext)
         else:
             if hasattr(self.extensions, "_resolve"):
                 ext = self.extensions._resolve(ext)
@@ -172,8 +319,8 @@ class KPFDataModel(RVDataModel):
             if comment is None:
                 raise KeyError(
                     f"keyword {name!r} is not registered for extension {ext!r}; "
-                    "register it in the appropriate config/L{0,1,2,4}-headers.csv "
-                    "before writing it"
+                    "register it in the appropriate "
+                    "config/{prefix}-{EXTENSION}-keywords.csv before writing it"
                 )
         if ext not in self.extensions:
             raise ValueError(
@@ -220,7 +367,7 @@ class KPFDataModel(RVDataModel):
         """Upcast ``data`` to satisfy ``canonical_ext``'s MinBitDepth, mirroring
         rvdata's ``set_data`` enforcement (and its warning) for the chip-prefix
         write path that bypasses it. A no-op with no requirement, an empty array,
-        or data already at depth (and for KPF4, whose MinBitDepth is None).
+        or data already at depth.
         """
         min_depth = self._get_min_bit_depth(canonical_ext)
         if (

@@ -1,0 +1,2 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+MASTYPE,Master calibration type,,str,bias,KPFMasterModel.set_input_files

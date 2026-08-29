@@ -1,0 +1,35 @@
+HDU,Name,DataType,MinBitDepth,Required,Description
+0,PRIMARY,PrimaryHDU,,True,EPRV standard FITS header (no data)
+1,INSTRUMENT_HEADER,ImageHDU,,True,Verbatim raw instrument (L0) PRIMARY header
+2,RECEIPT,BinTableHDU,,True,Table of operations that have been performed on this file
+3,DRP_CONFIG,BinTableHDU,,True,Pipeline config as a 2-column table (key = value)
+4,EXT_DESCRIPT,BinTableHDU,,True,Table describing contents of each extension
+5,ORDER_TABLE,BinTableHDU,,True,Table capturing the wavelength extent of each order in Trace 1
+6,TRACE1_FLUX,ImageHDU,32,True,Flux in trace 1 (SKY)
+7,TRACE1_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 1 (SKY)
+8,TRACE1_VAR,ImageHDU,32,True,Variance for trace 1 (SKY)
+9,TRACE1_BLAZE,ImageHDU,32,True,Blaze for trace 1 (SKY)
+10,BARYCORR_KMS,ImageHDU,64,True,Barycentric correction in km/s
+11,BARYCORR_Z,ImageHDU,64,True,Barycentric correction in redshift
+12,BJD_TDB,ImageHDU,64,True,Photon-weighted midpoint in BJD_TDB
+13,TRACE2_FLUX,ImageHDU,32,True,Flux in trace 2 (SCI1)
+14,TRACE2_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 2 (SCI1)
+15,TRACE2_VAR,ImageHDU,32,True,Variance for trace 2 (SCI1)
+16,TRACE2_BLAZE,ImageHDU,32,True,Blaze for trace 2 (SCI1)
+17,TRACE3_FLUX,ImageHDU,32,True,Flux in trace 3 (SCI2)
+18,TRACE3_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 3 (SCI2)
+19,TRACE3_VAR,ImageHDU,32,True,Variance for trace 3 (SCI2)
+20,TRACE3_BLAZE,ImageHDU,32,True,Blaze for trace 3 (SCI2)
+21,TRACE4_FLUX,ImageHDU,32,True,Flux in trace 4 (SCI3)
+22,TRACE4_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 4 (SCI3)
+23,TRACE4_VAR,ImageHDU,32,True,Variance for trace 4 (SCI3)
+24,TRACE4_BLAZE,ImageHDU,32,True,Blaze for trace 4 (SCI3)
+25,TRACE5_FLUX,ImageHDU,32,True,Flux in trace 5 (CAL)
+26,TRACE5_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 5 (CAL)
+27,TRACE5_VAR,ImageHDU,32,True,Variance for trace 5 (CAL)
+28,TRACE5_BLAZE,ImageHDU,32,True,Blaze for trace 5 (CAL)
+29,ANCILLARY_SPECTRUM,BinTableHDU,,False,Ancillary spectra (Ca H&K); a KPF BinTableHDU deviation
+30,EXPMETER,BinTableHDU,,False,Table of exposure meter counts over the exposure
+31,TELEMETRY,BinTableHDU,,False,Table of telemetry collected during the exposure
+32,QUALITY_CONTROL,BinTableHDU,,False,Quality-control booleans and diagnostic metrics
+33,CATALOG_RECORD,BinTableHDU,,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery

@@ -155,6 +155,8 @@ class _FrozenAstroQuery:
         aq = self._aq
         for source, record in _CATALOG_CAPTURE.items():
             aq._write_catalog_record(source, dict(record))
+        for keyword, value in aq._catalog_primary_cards().items():
+            aq.l0_obj.set_keyword(keyword, value)
         aq.l0_obj.receipt_add_entry("astro_query", "", "PASS")
         return aq.l0_obj
 
@@ -472,6 +474,7 @@ def _wire_science_recipe(tmp_path, monkeypatch):
 
     monkeypatch.setattr(recipe, "KPF0", StubKPF0)
     for name, produces in [
+        ("StandardizeDataFormat", "l0"),
         ("AstroQuery", "l0"),
         ("ImageAssembly", "l1"),
         ("CalibrationAssociation", "l1"),
@@ -518,10 +521,13 @@ class TestScienceRecipeWiring:
         return record
 
     def test_stages_run_in_order(self, run):
-        # CheckpointL0 runs BEFORE ImageAssembly on purpose: QCL0 writes the L0
-        # QC flags that to_kpf1 propagates into the L1/L2/L4 products.
+        # StandardizeDataFormat runs first, on the line after the load: every
+        # stage after it reads one PRIMARY, the EPRV one. CheckpointL0 runs
+        # BEFORE ImageAssembly on purpose: QCL0 writes the L0 QC flags that
+        # to_kpf1 propagates into the L1/L2/L4 products.
         assert [call[0] for call in run["calls"]] == [
             "from_fits",
+            "StandardizeDataFormat",
             "AstroQuery",
             "PlotL0",
             "CheckpointL0",

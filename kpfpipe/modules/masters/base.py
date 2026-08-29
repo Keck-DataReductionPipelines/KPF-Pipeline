@@ -14,6 +14,7 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
+from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from kpfpipe.quality_control.diagnostics import DiagL0
 from kpfpipe.quality_control.qc_flags import QCL0
 from kpfpipe.utils.config import ConfigHandler
@@ -72,10 +73,13 @@ class BaseMasterModule:
         "flat": "electrons",
     }
 
-    # QCL0 flags a frame must pass to enter a stack: data present, required
-    # keywords present, sane exptime, and not observer-junk. A frame failing
-    # any is dropped in ``_load_frame`` and counted as a load failure.
-    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "KWRDPRL0", "EXPTIMOK", "NOTJUNK")
+    # QCL0 flags a frame must pass to enter a stack: data present and not
+    # observer-junk. A frame failing either is dropped in ``_load_frame`` and
+    # counted as a load failure. Deliberately loosened while the QC suite is
+    # overhauled: KWRDPRL0 writes no card (its check is stubbed) and EXPTIMOK
+    # leaves the tuple with it, since a flag with no card raises a bare KeyError
+    # at the `qc[kw][0]` read below rather than rejecting the frame.
+    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
 
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
     # the stats methods: a frame whose exposure is <= this counts as zero
@@ -203,6 +207,7 @@ class BaseMasterModule:
 
         try:
             l0_obj = KPF0.from_fits(fn)
+            StandardizeDataFormat(l0_obj).perform()
 
             DiagL0(l0_obj).run()
             qc = QCL0(l0_obj).run()

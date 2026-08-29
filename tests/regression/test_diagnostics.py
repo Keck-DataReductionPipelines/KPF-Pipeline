@@ -15,6 +15,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.astro_query import AstroQuery
+from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from kpfpipe.quality_control.diagnostics import (
     DiagL0,
     DiagL1,
@@ -23,7 +24,12 @@ from kpfpipe.quality_control.diagnostics import (
     Diagnostics,
 )
 
-from ._data_models import set_fiber_arrays, set_wave_bands, write_amp_l0
+from ._data_models import (
+    set_fiber_arrays,
+    set_wave_bands,
+    standardized_l0,
+    write_amp_l0,
+)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -203,13 +209,15 @@ def _set_catalog_record(l0, records):
 
 
 def _make_l0_pointing():
-    """A KPF0 with just an L0 PRIMARY pointing (RA/DEC/MJD-OBS), no catalog yet.
-    IMTYPE 'Object' so AstroQuery accepts it."""
+    """A KPF0 with just a native instrument pointing (RA/DEC/MJD-OBS), no catalog
+    yet. The cards go on INSTRUMENT_HEADER, where every L0 module reads them once
+    StandardizeDataFormat has run. IMTYPE 'Object' so AstroQuery accepts it."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "Object"
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
+    StandardizeDataFormat(l0).perform()
     return l0
 
 
@@ -366,9 +374,10 @@ class TestDiagL0SolarLunarGeometry:
 
     def _make_l0(self, date_mid, ra=_PT_RA, dec=_PT_DEC):
         l0 = _make_l0_pointing()
-        l0.headers["PRIMARY"]["RA"] = ra
-        l0.headers["PRIMARY"]["DEC"] = dec
-        l0.headers["PRIMARY"]["DATE-MID"] = date_mid
+        native = l0.headers["INSTRUMENT_HEADER"]
+        native["RA"] = ra
+        native["DEC"] = dec
+        native["DATE-MID"] = date_mid
         return l0
 
     def test_matches_legacy_2d_product(self):
@@ -399,7 +408,7 @@ class TestDiagL0SolarLunarGeometry:
 
     def test_written_to_quality_control(self):
         l0 = _make_l0_with_catalog()
-        l0.headers["PRIMARY"]["DATE-MID"] = "2024-04-05T11:09:11.082"
+        l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
         results = DiagL0(l0).run()
         for key in ("TCSSUN", "TCSMOON"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
@@ -414,6 +423,34 @@ class TestDiagL0SolarLunarGeometry:
         )
 
 
+class TestDiagL0PrimaryMirror:
+    """DiagL0 also writes the three EPRV PRIMARY cards whose source is a
+    diagnostic rather than a native instrument card.
+
+    ``EPRV-header-map.csv`` gives SEEING/SUNEL/MOONANG ``KPF_EXT=QUALITY_CONTROL``,
+    and QUALITY_CONTROL is still empty when StandardizeDataFormat runs, so the
+    tabular fill cannot supply them; DiagL0 stamps them alongside the metrics it
+    already writes. The seed has stamped all three blank, so this is enrichment.
+    """
+
+    def test_metrics_are_mirrored_onto_primary(self):
+        l0 = _make_l0_with_catalog()
+        l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
+        results = DiagL0(l0).run()
+        primary = l0.headers["PRIMARY"]
+        assert primary["SUNEL"] == results["TCSSUN"][0]
+        assert primary["MOONANG"] == results["TCSMOON"][0]
+
+    def test_unwritten_metric_leaves_the_card_blank(self):
+        # GDRSEEV needs a converged guider Moffat fit; without one the diagnostic
+        # emits nothing and SEEING keeps the blank the seed stamped.
+        l0 = _make_l0_with_catalog()
+        results = DiagL0(l0).run()
+        assert "GDRSEEV" not in results
+        assert "SEEING" in l0.headers["PRIMARY"]
+        assert not l0.headers["PRIMARY"]["SEEING"]
+
+
 class TestDiagL0PixelFractions:
     """Worst-amp dead/saturated pixel fractions, one pair per chip.
 
@@ -426,7 +463,7 @@ class TestDiagL0PixelFractions:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_clean_frame_is_zero(self, tmp_path):
         l0 = self._make_amp_l0(tmp_path)
@@ -495,7 +532,7 @@ class TestDiagL0AmpPercentiles:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_all_24_keywords_emitted(self, tmp_path):
         results = DiagL0(self._make_amp_l0(tmp_path)).amp_percentiles()
@@ -564,7 +601,7 @@ class TestDiagL0ExpmeterChannels:
                 ),
             ],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_clean_flux_is_zero(self, tmp_path):
         results = DiagL0(self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)).run()
@@ -647,7 +684,7 @@ class TestDiagL0ExpmeterChannels:
     def test_no_em_data_emits_no_keyword(self, tmp_path):
         # A frame with no EM extension (e.g. a calibration): the metrics are skipped.
         fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(10, 10))
-        assert "EMSCISAT" not in DiagL0(KPF0.from_fits(fn)).run()
+        assert "EMSCISAT" not in DiagL0(standardized_l0(fn)).run()
 
     def test_diag_name_correct(self):
         assert DiagL0.__dict__["expmeter_channel_metrics"]._diag_name == (
@@ -686,7 +723,7 @@ class TestDiagL0ExpmeterCounts:
                 fits.BinTableHDU(table(sky_counts), name="EXPMETER_SKY"),
             ],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_counts_summed_over_readings_and_bands(self, tmp_path):
         # Two readings of each channel, so every band doubles its per-reading count.
@@ -748,7 +785,7 @@ class TestDiagL0CcdTemperatures:
             shape=(10, 10),
             extra_hdus=[fits.BinTableHDU(table, name="TELEMETRY")],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_offset_is_signed_millikelvin(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
@@ -778,8 +815,8 @@ class TestDiagL0EtalonTemperature:
 
     def _make_l0_with_etalon(self, **cards):
         l0 = KPF0()
-        l0.headers["PRIMARY"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
-        l0.headers["PRIMARY"].update(cards)
+        l0.headers["INSTRUMENT_HEADER"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
+        l0.headers["INSTRUMENT_HEADER"].update(cards)
         return l0
 
     def test_at_design_setpoints_is_zero(self):
@@ -858,7 +895,7 @@ class TestDiagL0Guider:
                 fits.BinTableHDU(Table(columns), name="GUIDER_CUBE_ORIGINS"),
             ],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_constant_offset_gives_rms_and_bias(self, tmp_path):
         # A 0.5 pixel offset in x on every frame: 0.056"/pix -> 28 mas, and with
@@ -955,7 +992,7 @@ class TestDiagL0GuiderSeeing:
             primary_cards={"GCCRPIX1": 40.0, "GCCRPIX2": 40.0},
             extra_hdus=[fits.ImageHDU(image, name="GUIDER_AVG")],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_seeing_is_alpha_in_arcsec(self, tmp_path):
         # alpha = 8 px at the 0.056"/pix CRED-2 scale -> 0.448" seeing.

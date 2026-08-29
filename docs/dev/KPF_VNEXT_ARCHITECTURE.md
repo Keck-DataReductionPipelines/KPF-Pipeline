@@ -153,24 +153,26 @@ Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are co
 
 ### Header standardization
 
-The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** — `KPF0.to_kpf1()`
-via **`KPF0._map_header()`** — which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
+The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** — the
+`StandardizeDataFormat` module, which runs on the line after every raw-L0 load and also snapshots the
+raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
 The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
 The architecture invariants:
 
-- **PRIMARY holds EPRV-registered keywords only** from L1 onward (EPRV keyword names + FITS structural
-  cards — no KPF-registered keywords, no raw natives). `KPF1.__init__` seeds the EPRV Required PRIMARY
-  skeleton; `to_kpf1` overlays native values on top (native wins), and a QC flag (`KWRDPRL{1,2,4}`)
-  checks the required keywords are present. (One keyword-homing exception is noted under
-  *Keyword registry*.)
+- **PRIMARY holds EPRV-registered keywords only** from L0-after-standardization onward (EPRV keyword
+  names + FITS structural cards — no KPF-registered keywords, no raw natives). `StandardizeDataFormat`
+  seeds the whole registered PRIMARY skeleton for the level, then fills it from
+  `EPRV-header-map.csv`; every card is present, blank where nothing supplied a value. (One
+  keyword-homing exception is noted under *Keyword registry*.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
-  written once in `to_kpf1` and never again.
-- **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`.** `_map_header` carries only some natives to
-  PRIMARY, mostly under renamed EPRV keys — so read a native from PRIMARY when it survives there under
-  its own name (e.g. `DATE-OBS`, `OBJECT`), and from `INSTRUMENT_HEADER` when it never reaches PRIMARY or
-  when a coherent block of related natives reads more clearly together (e.g. the raw `DATE-BEG`/`DATE-END`
-  pair `barycentric_correction` extrapolates the exposure meter against; its *target astrometry*, by
-  contrast, comes off the PRIMARY `C*#` cards, which `to_kpf1` fills from `CATALOG_RECORD`).
+  written once by `StandardizeDataFormat` and never again.
+- **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`** — at L0 too, now that standardization runs
+  at load. The map carries only some natives to PRIMARY, mostly under renamed EPRV keys — so read a
+  native from PRIMARY when it survives there under its own name (e.g. `DATE-OBS`, `OBJECT`), and from
+  `INSTRUMENT_HEADER` when it never reaches PRIMARY or when a coherent block of related natives reads
+  more clearly together (e.g. the raw `DATE-BEG`/`DATE-END` pair `barycentric_correction` extrapolates
+  the exposure meter against; its *target astrometry*, by contrast, comes off the PRIMARY `C*#` cards,
+  which `AstroQuery` fills from `CATALOG_RECORD`).
 - **DRP provenance is stamped at read** onto RECEIPT (`KPF0.from_fits` → `_stamp_wmko_tracking`, not
   `to_kpf1`): `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`. It rides RECEIPT forward, with `DRPSTATU`
   advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
@@ -178,7 +180,7 @@ The architecture invariants:
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
   as an **append-only history**.
 - **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
-  L0→L1→L2→L4**, and `to_kpf1` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
+  L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
   structural card, else it raises.
@@ -191,8 +193,8 @@ The architecture invariants:
 The keyword registry (`kpfpipe/data_models/keyword_registry.py`) is a single `KeywordRegistry` class
 with one module singleton `keyword_registry`, imported **only** by `data_models/base.py` and surfaced as
 the `KPFDataModel.keyword_registry` class attribute. It derives its mapping/validation/routing lookups
-from a **single source-of-truth table** unioning the `L{0,1,2,4}-headers.csv` registries with the EPRV
-keyword defs.
+from a **single source-of-truth table** unioning the
+`config/{prefix}-{EXTENSION}-keywords.csv` registries, one file per extension per level.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags, read-noise,
@@ -219,8 +221,8 @@ the science keyword conventions where possible:
   Edit the CSV(s) to change a master's schema.
 - **PRIMARY keywords are registered like the science models.** `MASTYPE` (every master file) and
   the WLS metadata (`ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYDEG{X,M,F}`, WLS only) are registered in
-  the **per-master-type** `config/{ML1,ML2-flat,ML2-wls}-headers.csv` registries and unioned into
-  the global registry table (`keyword_registry._masters_rows`); `set_keyword` routes them as usual
+  the **per-master-type** `config/{ML1,ML2-flat,ML2-wls}-PRIMARY-keywords.csv` registries and
+  unioned into the global registry table; `set_keyword` routes them as usual
   (see *Keyword registry*). `BUNIT` (on each `{chip}_IMG`) is structural, not registered.
 - **QC/RECEIPT present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT`
   extensions for later wiring, but no masters QC checks or DRP-provenance stamping exist yet.

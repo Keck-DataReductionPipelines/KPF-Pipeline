@@ -30,7 +30,7 @@ class MockL1:
         self._receipt.append((name, args, status))
 
     def set_keyword(self, key, value):
-        # Mirror the real routing: L1-headers.csv routes every {PREFIX}FILE
+        # Mirror the real routing: L1-RECEIPT-keywords.csv routes every {PREFIX}FILE
         # master path to RECEIPT and every {PREFIX}AGE to QUALITY_CONTROL, and
         # that is all CalibrationAssociation writes. Fail loud on anything else
         # rather than inventing a PRIMARY fallback.

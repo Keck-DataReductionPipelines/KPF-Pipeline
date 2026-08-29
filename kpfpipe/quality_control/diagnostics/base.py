@@ -35,8 +35,11 @@ class Diagnostics:
         emitted keyword must be registered; an unregistered one raises rather than
         getting a blank comment.
         """
-        routing = self.kpf_obj.keyword_registry.routing
-        return {kw: (value, routing[kw][1]) for kw, value in values.items()}
+        registry = self.kpf_obj.keyword_registry
+        return {
+            kw: (value, registry.comment_for(kw, registry.routing[kw]))
+            for kw, value in values.items()
+        }
 
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.
