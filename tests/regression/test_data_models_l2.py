@@ -480,6 +480,11 @@ class TestKPFMasterL2:
             assert f"TRACE{n}_WAVE" in m.extensions
             for suffix in ("FLUX", "VAR", "BLAZE"):
                 assert f"TRACE{n}_{suffix}" not in m.extensions
+        # ML2-wls-extensions.csv is the whole inventory: no science L2 row it
+        # omits survives, and both coefficient extensions are built.
+        assert len(m.extensions) == 14
+        assert "GREEN_WLS_COEFFS" in m.extensions
+        assert "RED_WLS_COEFFS" in m.extensions
 
     def test_flat_extensions_created(self):
         m = KPFMasterL2(kind="flat")
@@ -489,6 +494,36 @@ class TestKPFMasterL2:
             for suffix in ("FLUX", "VAR", "BLAZE"):
                 assert f"TRACE{n}_{suffix}" in m.extensions
             assert f"TRACE{n}_WAVE" not in m.extensions
+        assert len(m.extensions) == 22
+
+    @pytest.mark.parametrize("kind", ("wls", "flat"))
+    def test_ext_descript_is_the_master_own_extension_set(self, kind):
+        # The master builds its own manifest, so EXT_DESCRIPT (written last)
+        # names exactly what it carries -- not the science L2 set.
+        m = KPFMasterL2(kind=kind)
+        assert m.data["EXT_DESCRIPT"]["Name"].tolist() == list(m.extensions)
+
+    @pytest.mark.parametrize("kind", ("wls", "flat"))
+    def test_primary_is_seeded_from_the_master_profile(self, kind):
+        m = KPFMasterL2(kind=kind)
+        seed = m.keyword_registry.primary_seed(f"ML2-{kind}")
+        assert set(seed) <= set(m.headers["PRIMARY"])
+        assert m.headers["PRIMARY"]["DATALVL"] == "ML2"
+        # The EPRV science skeleton is not inherited.
+        science = set(m.keyword_registry.primary_seed("L2"))
+        assert not (science & set(m.headers["PRIMARY"])) - {"DATALVL"}
+
+    def test_min_bit_depth_from_the_master_manifest(self):
+        assert KPFMasterL2(kind="wls")._get_min_bit_depth("TRACE1_WAVE") == 64
+        assert KPFMasterL2(kind="wls")._get_min_bit_depth("GREEN_WLS_COEFFS") == 64
+        assert KPFMasterL2(kind="flat")._get_min_bit_depth("TRACE1_FLUX") == 32
+        assert KPFMasterL2(kind="wls")._get_min_bit_depth("RECEIPT") is None
+
+    def test_reads_through_the_one_base_reader(self):
+        # KPFMasterL2 declares no read/_read of its own: KPFDataModel.read is
+        # what detaches rvdata's level-keyed dispatch, once, for every level.
+        assert "read" not in vars(KPFMasterL2)
+        assert "_read" not in vars(KPFMasterL2)
 
     def test_kind_required_and_validated(self):
         with pytest.raises(TypeError):

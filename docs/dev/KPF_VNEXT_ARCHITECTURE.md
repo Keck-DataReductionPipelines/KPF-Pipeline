@@ -213,8 +213,10 @@ which subclass the science models (`KPFMasterModel` precedes them in the MRO, so
 and so inherit the alias system and keyword machinery. Masters are *not* EPRV-governed but follow
 the science keyword conventions where possible:
 
-- **Minimal PRIMARY.** `KPFMasterL1`/`L2` stamp `DATALVL` `"ML1"`/`"ML2"` and do **not** seed the
-  EPRV science skeleton (see *Header standardization*).
+- **Their own PRIMARY.** `KPFMasterL1`/`L2` seed the master's own profile — every keyword its
+  `config/{ML1,ML2-flat,ML2-wls}-PRIMARY-keywords.csv` registers, blank where unpopulated — and
+  stamp `DATALVL` `"ML1"`/`"ML2"` over it. Masters are outside EPRV scope, so they do **not**
+  inherit the EPRV science skeleton (see *Header standardization*).
 - **Extension schemas are CSV-driven, per master type.** `ML1-extensions.csv` builds ML1
   directly, while `KPFMasterL2(kind=…)` reads `ML2-{kind}-extensions.csv` for its required `kind`
   (`"wls"` carries `TRACE*_WAVE` + `*_WLS_COEFFS`; `"flat"` carries `TRACE*_FLUX`/`VAR`/`BLAZE`).

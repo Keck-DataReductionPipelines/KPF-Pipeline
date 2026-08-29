@@ -6,16 +6,10 @@ masters-specific extension names (GREEN_IMG, GREEN_SNR, GREEN_MASK and the
 red-chip equivalents) that reflect the calibration normalization.
 """
 
-import importlib.resources
-
 import numpy as np
-import pandas as pd
 
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters.base import KPFMasterModel
-
-_config_path = importlib.resources.files("kpfpipe.data_models.config")
-_ML1_EXTENSIONS = pd.read_csv(_config_path / "ML1-extensions.csv")
 
 
 class KPFMasterL1(KPFMasterModel, KPF1):
@@ -36,17 +30,10 @@ class KPFMasterL1(KPFMasterModel, KPF1):
     disk with ``KPFMasterL1.from_fits(path)``.
     """
 
-    _known_extensions = set(_ML1_EXTENSIONS["Name"])
-
     def __init__(self):
-        KPFMasterModel.__init__(self)
-        self.level = 1
-
-        for _, row in _ML1_EXTENSIONS.iterrows():
-            if row["Required"] and row["Name"] not in self.extensions:
-                self.create_extension(row["Name"], row["DataType"])
-
-        # Masters carry their own minimal PRIMARY (no EPRV science skeleton).
+        # KPF1.__init__ builds the extensions and seeds PRIMARY off the ML1
+        # profile: KPFMasterModel redirects both to the masters' tables.
+        super().__init__()
         self.set_keyword("DATALVL", "ML1")
 
     def _create_hdul(self):

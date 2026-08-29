@@ -69,10 +69,14 @@ class TestPrimarySeed:
     def test_datalvl_is_the_model_level(self):
         assert KPF1().headers["PRIMARY"]["DATALVL"] == "L1"
 
-    def test_master_l1_is_not_seeded_with_the_science_skeleton(self):
-        # Masters are outside EPRV scope and carry their own minimal PRIMARY.
-        prim = set(KPFMasterL1().headers["PRIMARY"])
-        assert prim == {"DATALVL"}
+    def test_master_l1_is_seeded_from_its_own_profile(self):
+        # Masters are outside EPRV scope: they seed ML1-PRIMARY-keywords.csv,
+        # never the science header-map skeleton.
+        master = KPFMasterL1()
+        prim = set(master.headers["PRIMARY"])
+        assert set(master.keyword_registry.primary_seed("ML1")) <= prim
+        science = set(master.keyword_registry.primary_seed("L1"))
+        assert not (science & prim) - {"DATALVL"}
 
 
 class TestStandardizedPrimary:

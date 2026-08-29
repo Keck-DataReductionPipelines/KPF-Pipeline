@@ -597,3 +597,96 @@ class TestScienceManifestsMatchRvdata:
             assert ours[row["Name"]] >= row["MinBitDepth"]
             checked += 1
         assert checked, "no shared MinBitDepth rows left to check"
+
+
+# --- plan3: the master extension manifests ---------------------------------
+
+# The MinBitDepth floor each master manifest declares. config/rvdata-0.4.0/
+# vendors no master manifests -- masters are outside EPRV scope -- so there is
+# no upstream table to compare against; this is the statement of record.
+_MASTER_DEPTHS = {
+    "ML1": {
+        f"{chip}_{kind}": 32 for chip in ("GREEN", "RED") for kind in ("IMG", "SNR")
+    }
+    | {f"{chip}_MASK": 8 for chip in ("GREEN", "RED")},
+    "ML2-wls": {f"TRACE{n}_WAVE": 64 for n in _INDICES}
+    | {f"{chip}_WLS_COEFFS": 64 for chip in ("GREEN", "RED")},
+    "ML2-flat": {
+        f"TRACE{n}_{kind}": 32 for n in _INDICES for kind in ("FLUX", "VAR", "BLAZE")
+    },
+}
+
+# Which science manifest each master profile shares its rows with.
+_MASTER_LEVELS = {"ML1": "L1", "ML2-wls": "L2", "ML2-flat": "L2"}
+
+
+def _master_model(profile):
+    from kpfpipe.data_models.masters.level1 import KPFMasterL1
+    from kpfpipe.data_models.masters.level2 import KPFMasterL2
+
+    if profile == "ML1":
+        return KPFMasterL1()
+    return KPFMasterL2(kind=profile.removeprefix("ML2-"))
+
+
+class TestMasterManifests:
+    """The master manifests are the masters' sole authority, as the science
+    manifests are the science levels'.
+
+    Masters are outside EPRV scope, so nothing upstream constrains these tables:
+    the floors below and the science-manifest agreement are what keep a master's
+    shape honest now that it is built from its own manifest rather than
+    subtracted from the science one.
+    """
+
+    @pytest.mark.parametrize("profile", tuple(_MASTER_DEPTHS))
+    def test_declared_depths(self, profile):
+        manifest = pd.read_csv(_CFG / f"{profile}-extensions.csv")
+        declared = {
+            row["Name"]: int(row["MinBitDepth"])
+            for _, row in manifest.iterrows()
+            if not pd.isna(row["MinBitDepth"])
+        }
+        assert declared == _MASTER_DEPTHS[profile]
+
+    @pytest.mark.parametrize("profile", tuple(_MASTER_DEPTHS))
+    def test_the_master_reads_its_own_manifest(self, profile):
+        master = _master_model(profile)
+        for name, depth in _MASTER_DEPTHS[profile].items():
+            assert master._get_min_bit_depth(name) == depth
+        assert master._get_min_bit_depth("QUALITY_CONTROL") is None
+
+    @pytest.mark.parametrize("profile", tuple(_MASTER_DEPTHS))
+    def test_the_master_builds_its_whole_manifest(self, profile):
+        master = _master_model(profile)
+        assert set(master.extensions) == set(master._manifest["Name"])
+
+    @pytest.mark.parametrize("profile", tuple(_MASTER_DEPTHS))
+    def test_no_master_carries_an_instrument_header(self, profile):
+        # A master is not a translation of a native instrument product, so it
+        # carries no verbatim instrument header. Asserted in both forms: were a
+        # manifest to gain the row, the model would start shipping the HDU.
+        manifest = pd.read_csv(_CFG / f"{profile}-extensions.csv")
+        assert "INSTRUMENT_HEADER" not in set(manifest["Name"])
+        assert "INSTRUMENT_HEADER" not in _master_model(profile).extensions
+
+    @pytest.mark.parametrize("profile", tuple(_MASTER_LEVELS))
+    def test_shared_rows_agree_with_the_science_manifest(self, profile):
+        # The duplication between a master manifest and its science level's is
+        # intentional -- each stays a complete, readable spec of one product --
+        # so a shared row must not disagree. Building from the master manifest
+        # reads these cells, so a disagreement would ship a master whose
+        # TRACE1_WAVE differed from L2's.
+        master = pd.read_csv(_CFG / f"{profile}-extensions.csv").set_index("Name")
+        science = pd.read_csv(
+            _CFG / f"{_MASTER_LEVELS[profile]}-extensions.csv"
+        ).set_index("Name")
+        shared = set(master.index) & set(science.index)
+        assert shared, f"{profile} shares no rows with {_MASTER_LEVELS[profile]}"
+        for name in shared:
+            assert master.loc[name, "DataType"] == science.loc[name, "DataType"]
+            ours, theirs = (
+                master.loc[name, "MinBitDepth"],
+                science.loc[name, "MinBitDepth"],
+            )
+            assert (pd.isna(ours) and pd.isna(theirs)) or ours == theirs

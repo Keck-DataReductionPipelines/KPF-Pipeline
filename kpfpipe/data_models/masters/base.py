@@ -1,9 +1,10 @@
 """
 KPF Masters base data model.
 
-Shared base for the masters calibration products. Extends KPFDataModel
-without creating any science-level extensions, leaving each level-specific
-subclass (KPFMasterL1/L2/L4) to install its own masters extensions.
+Shared base for the masters calibration products. Extends KPFDataModel with
+the masters' own keyword/extension profile (ML1, ML2-flat, ML2-wls), so a
+master builds its extensions and seeds its PRIMARY by exactly the same
+mechanism every science level uses -- off its own manifest.
 
 Masters products differ from science products in extension naming to
 avoid confusion (see KPFMasterL1/L2/L4)
@@ -15,7 +16,7 @@ import re
 
 import pandas as pd
 
-from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.base import _MANIFESTS, KPFDataModel
 from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
 
@@ -32,13 +33,34 @@ class KPFMasterModel(KPFDataModel):
     """
     Base class for KPF masters calibration data models.
 
-    Inherits from KPFDataModel and initializes only the base data model
-    infrastructure. Science-level extension setup is intentionally skipped
-    so that level-specific subclasses can install masters extensions instead.
+    Inherits from KPFDataModel and chains through the science level's
+    ``__init__`` like any other model; what makes it a master is the profile,
+    which redirects the manifest and the PRIMARY seed to the ML tables.
     """
 
-    def __init__(self):
-        KPFDataModel.__init__(self)
+    @property
+    def _profile(self):
+        """This master's keyword/extension profile: ``ML{level}``.
+
+        Masters share levels 1 and 2 with the science chain, so the level alone
+        does not name their tables; the ML prefix is what separates them.
+        """
+        return f"ML{self.level}"
+
+    @property
+    def _manifest(self):
+        """The master's own extension manifest, not the science level's."""
+        return _MANIFESTS[self._profile]
+
+    def _seed_primary(self):
+        """Stamp the master's own PRIMARY skeleton (``ML*-PRIMARY-keywords.csv``).
+
+        Masters are outside EPRV scope, so they seed their own profile rather
+        than inheriting the science header-map skeleton.
+        """
+        seed = self.keyword_registry.primary_seed(self._profile)
+        for keyword, value in seed.items():
+            self.headers["PRIMARY"][keyword] = value
 
     def check_filename_convention(self, filename):
         """Masters use the WMKO DRP-RUN-05 name: {KOAID}_master_{type}_L{N}.fits.

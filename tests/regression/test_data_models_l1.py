@@ -424,7 +424,7 @@ class TestDrpStatus:
 
 
 class TestKPFMasterL1:
-    def test_required_extensions_created(self):
+    def test_manifest_extensions_created(self):
         m = KPFMasterL1()
         for ext in [
             "PRIMARY",
@@ -437,6 +437,20 @@ class TestKPFMasterL1:
             "RECEIPT",
         ]:
             assert ext in m.extensions
+        # Every manifest row is built, DRP_CONFIG (Required=False) included.
+        assert len(m.extensions) == 11
+        assert "DRP_CONFIG" in m.extensions
+
+    def test_primary_is_seeded_from_the_master_profile(self):
+        m = KPFMasterL1()
+        assert set(m.keyword_registry.primary_seed("ML1")) <= set(m.headers["PRIMARY"])
+        assert m.headers["PRIMARY"]["DATALVL"] == "ML1"
+
+    def test_min_bit_depth_from_the_master_manifest(self):
+        m = KPFMasterL1()
+        assert m._get_min_bit_depth("GREEN_IMG") == 32
+        assert m._get_min_bit_depth("GREEN_MASK") == 8
+        assert m._get_min_bit_depth("RECEIPT") is None
 
     def test_no_science_extensions(self):
         m = KPFMasterL1()

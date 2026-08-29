@@ -391,6 +391,13 @@ class TestMakeMasterL2:
             name="KP.20240113.23249.10_master_thar_L2.fits",
         )
 
+    def test_coeffs_extensions_exist_before_any_fit(self):
+        # The manifest builds both chips' coefficient extensions at
+        # construction; make_master_l2 only fills them.
+        bare = KPFMasterL2(kind="wls")
+        assert "GREEN_WLS_COEFFS" in bare.extensions
+        assert "RED_WLS_COEFFS" in bare.extensions
+
     def test_coeffs_extensions_populated(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
@@ -447,16 +454,18 @@ class TestMakeMasterL2:
         assert primary["POLYDEGM"] == wls.poly_degree_m
         assert primary["POLYDEGF"] == wls.poly_degree_f
 
-    def test_ml2_datalvl_and_minimal_primary(self, mock_make_master_l2, tmp_path):
-        # Regression: ML2 must not inherit RV2's EPRV science PRIMARY skeleton, and
-        # DATALVL must be "ML2" both in memory and on disk -- rvdata's to_fits
-        # never re-stamps DATALVL.
+    def test_ml2_datalvl_and_master_primary(self, mock_make_master_l2, tmp_path):
+        # Regression: ML2 seeds its own ML2-wls PRIMARY profile, not the EPRV L2
+        # science skeleton, and DATALVL must be "ML2" both in memory and on disk
+        # -- rvdata's to_fits never re-stamps DATALVL.
         from kpfpipe.data_models.masters.level2 import KPFMasterL2
 
         ml2 = WLS(FILE_LIST).make_master_l2()
         assert ml2.headers["PRIMARY"].get("DATALVL") == "ML2"
-        seeded = set(ml2.keyword_registry.primary_seed("L2"))
-        assert not (seeded & set(ml2.headers["PRIMARY"])) - {"DATALVL"}
+        primary = set(ml2.headers["PRIMARY"])
+        assert set(ml2.keyword_registry.primary_seed("ML2-wls")) <= primary
+        science = set(ml2.keyword_registry.primary_seed("L2"))
+        assert not (science & primary) - {"DATALVL"}
 
         out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))
@@ -721,8 +730,10 @@ class TestMakeMasterL2:
             # RED stays at the schema-default zeros: it is not in self.chips.
             assert np.all(ml2.data[f"GREEN_{fiber}_WAVE"] == 5500.0)
             assert np.all(ml2.data[f"RED_{fiber}_WAVE"] == 0.0)
+        # Both coefficient extensions come from the manifest, so an unprocessed
+        # chip's ships at the schema default rather than being absent.
         assert "GREEN_WLS_COEFFS" in ml2.extensions
-        assert "RED_WLS_COEFFS" not in ml2.extensions
+        assert "RED_WLS_COEFFS" in ml2.extensions
 
     def test_info_before_make_master_l2(self, capsys):
         wls = WLS(FILE_LIST)
