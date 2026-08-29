@@ -283,7 +283,7 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
   under its own name is read there; one that never reaches PRIMARY, or that reads more clearly as a
   coherent native block, is read from `INSTRUMENT_HEADER`. No silent fallback — let a missing key
   raise.
-- **Use EPRV keyword names on PRIMARY** (`EXPTIME`, not `ELAPSED`); the L4 `CCD{1,2}RV`/`ERV` are
+- **Use EPRV keyword names on PRIMARY** (`EXPTIME`, not `ELAPSED`); the L4 `RV{GREEN,RED}`/`ERV{GREEN,RED}` are
   the one KPF-registered exception deliberately homed on PRIMARY.
 
 #### Keywords

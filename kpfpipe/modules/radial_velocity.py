@@ -26,7 +26,6 @@ _DEFAULTS = {
 }
 
 _SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
-_RV_SFX = {"SCI1": "S1", "SCI2": "S2", "SCI3": "S3", "CAL": "CL", "SKY": "SK"}
 
 
 class RadialVelocity:
@@ -568,8 +567,9 @@ class RadialVelocity:
         """
         Write all RV keywords from the perform()-filled stashes. Per
         orderlet: RVn RVMETHOD/SKYRMVD/TELLRMVD and per-fiber per-CCD
-        {GRN|RED}RV{sfx}/{GRN|RED}ERV{sfx}. On PRIMARY: RVMETHOD, and (when a science
-        combine ran) the SCI-combined RV{chip}/ERV{chip} and EPRV
+        RV{chip}/ERV{chip}, written onto that fiber's RVn table. On PRIMARY:
+        RVMETHOD, and (when a science combine ran) the SCI-combined
+        RV{chip}/ERV{chip} and EPRV
         RV/RVERR/BERV/BJDTDB. Non-finite values are written as None (FITS
         UNDEFINED). The RVn CTYPE cards belong to CrossCorrelation.
         """
@@ -580,13 +580,12 @@ class RadialVelocity:
             l4_obj.set_keyword("TELLRMVD", False, ext=rv_ext)
             pf = self._per_fiber[fiber]
             for chip, v in pf["ccd_rv"].items():
-                c = "GRN" if chip == "GREEN" else "RED"
                 e = pf["ccd_rv_err"][chip]
                 l4_obj.set_keyword(
-                    f"{c}RV{_RV_SFX[fiber]}", float(v) if np.isfinite(v) else None
+                    f"RV{chip}", float(v) if np.isfinite(v) else None, ext=rv_ext
                 )
                 l4_obj.set_keyword(
-                    f"{c}ERV{_RV_SFX[fiber]}", float(e) if np.isfinite(e) else None
+                    f"ERV{chip}", float(e) if np.isfinite(e) else None, ext=rv_ext
                 )
 
         # PRIMARY (EPRV L4): always the RV method; the combined RV only when a

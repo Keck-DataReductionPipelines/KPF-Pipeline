@@ -90,10 +90,12 @@ class TestSetKeyword:
         assert l2.headers["BJD_TDB"]["BJDGREEN"] == 2460000.5
 
     def test_routes_l4_orderlet_rv_to_rv_table(self):
+        # RVGREEN is homed on both PRIMARY and every RV# table, so the bare write
+        # takes the PRIMARY-preferring route and ext= reaches the orderlet's own.
         l4 = KPF4()
-        l4.set_keyword("GRNRVS1", 1.2345)  # GREEN SCI1 -> RV2
+        l4.set_keyword("RVGREEN", 1.2345, ext="RV2")  # GREEN SCI1 -> RV2
         l4.set_keyword("RVGREEN", 6.789)  # GREEN SCI-combined -> PRIMARY
-        assert l4.headers["RV2"]["GRNRVS1"] == 1.2345
+        assert l4.headers["RV2"]["RVGREEN"] == 1.2345
         assert l4.headers["PRIMARY"]["RVGREEN"] == 6.789
 
     def test_targeted_ext_writes_eprv_per_extension_card(self):

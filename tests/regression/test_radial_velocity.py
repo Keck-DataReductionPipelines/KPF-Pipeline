@@ -462,15 +462,15 @@ class TestPerform:
         assert l4.headers["PRIMARY"]["RVMETHOD"] == "CCF"
 
     def test_per_ccd_rv_keywords(self, performed):
-        # Per-orderlet legacy RVs route to their RV# table header as CCD<n>RV<sfx>
-        # (CCD1=GREEN, CCD2=RED; SCI2 has suffix '2' and lives on RV3).
+        # Per-orderlet RVs are written as RV{chip}/ERV{chip} onto that fiber's own
+        # RV# table header (SCI2 lives on RV3), not onto PRIMARY.
         _, l4 = performed
         rv_hdr = l4.headers["RV3"]
-        assert rv_hdr["GRNRVS2"] == pytest.approx(V_INJECT, abs=0.1)
-        assert rv_hdr["REDRVS2"] == pytest.approx(V_INJECT, abs=0.1)
-        assert rv_hdr["GRNERVS2"] > 0 and rv_hdr["REDERVS2"] > 0
-        # The per-orderlet keywords do not leak onto PRIMARY.
-        assert "GRNRVS2" not in l4.headers["PRIMARY"]
+        assert rv_hdr["RVGREEN"] == pytest.approx(V_INJECT, abs=0.1)
+        assert rv_hdr["RVRED"] == pytest.approx(V_INJECT, abs=0.1)
+        assert rv_hdr["ERVGREEN"] > 0 and rv_hdr["ERVRED"] > 0
+        # The PRIMARY card is the SCI-combined value, a separate write.
+        assert l4.headers["PRIMARY"]["RVGREEN"] != rv_hdr["RVGREEN"]
 
     def test_combined_rv_populated(self, performed):
         # PRIMARY: EPRV RV/RVERR plus the KPF SCI-combined per-CCD RVGREEN/RVRED.
@@ -482,7 +482,9 @@ class TestPerform:
         assert prim["RV"] == pytest.approx(V_INJECT, abs=0.1)
         assert prim["RVERR"] > 0
         assert prim["RVMETHOD"] == "CCF"
-        assert "RVGREEN" not in l4.headers["RV3"]
+        # RVGREEN is homed on PRIMARY and on every RV# table, so RV3 carries its
+        # own per-orderlet value; the EPRV combined RV is PRIMARY-only.
+        assert l4.headers["RV3"]["RVGREEN"] != prim["RVGREEN"]
         assert "RV" not in l4.headers["RV3"]
 
     def test_combined_rv_is_weighted_ccd_combine(self, performed):
@@ -557,8 +559,7 @@ class TestPerform:
         with fits.open(path) as hdul:
             rv = hdul["RV3"].header
             assert rv["RVMETHOD"] == "CCF"
-            assert rv["GRNRVS2"] == pytest.approx(V_INJECT, abs=0.1)
-            assert "GRNRVS2" not in hdul["PRIMARY"].header
+            assert rv["RVGREEN"] == pytest.approx(V_INJECT, abs=0.1)
             # Only the EPRV combined RV belongs on PRIMARY.
             assert hdul["PRIMARY"].header["RV"] == pytest.approx(V_INJECT, abs=0.1)
             assert hdul["PRIMARY"].header["RVERR"] > 0
@@ -575,8 +576,8 @@ class TestPerform:
         )
         l4 = rv_module.perform(fibers=["SCI1", "SCI2", "SCI3"])
         rv_hdr = l4.headers["RV3"]  # SCI2 per-orderlet RVs -> RV3
-        assert "GRNRVS2" in rv_hdr and rv_hdr["GRNRVS2"] is None
-        assert "REDRVS2" in rv_hdr and rv_hdr["REDRVS2"] is None
+        assert "RVGREEN" in rv_hdr and rv_hdr["RVGREEN"] is None
+        assert "RVRED" in rv_hdr and rv_hdr["RVRED"] is None
 
     def test_explicit_chips_and_fibers(self, rv_module):
         l4 = rv_module.perform(chips=["GREEN"], fibers=["SCI1", "SCI2", "SCI3"])

@@ -198,10 +198,11 @@ from a **single source-of-truth table** unioning the
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags, read-noise,
 calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths),
-the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
-*PRIMARY holds EPRV keywords only* is the L4 SCI-combined RV keywords `CCD{1,2}RV`/`CCD{1,2}ERV` —
-KPF-registered yet homed on PRIMARY, since they are the pipeline's final RV measurements and belong
-beside the EPRV `RV`/`RVERR`. Masters register their PRIMARY keywords in per-master-type registries and
+the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `RV{GREEN,RED}`/`ERV{GREEN,RED}`).
+The one exception to *PRIMARY holds EPRV keywords only* is those same four names, which are homed on
+PRIMARY **as well** — there they are the SCI-combined RVs, KPF-registered yet belonging beside the EPRV
+`RV`/`RVERR`. Routing prefers PRIMARY, so the bare `set_keyword` writes the combined value and the
+per-orderlet write names its table with `ext=`. Masters register their PRIMARY keywords in per-master-type registries and
 route them the same way (see *Masters data models*).
 
 ### Masters data models

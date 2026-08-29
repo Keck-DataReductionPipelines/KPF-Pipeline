@@ -27,8 +27,6 @@ _VELSTART = -10.0
 _VELSTEP = 1.0
 _OBS_ID = "KP.20240405.40113.57"
 
-_RV_SFX = {"SCI1": "S1", "SCI2": "S2", "SCI3": "S3", "CAL": "CL", "SKY": "SK"}
-
 
 def _gaussian_ccf(rng, depth=0.5):
     """A single-order CCF: a downward Gaussian dip plus noise."""
@@ -91,9 +89,11 @@ def _make_l4(
             if with_weight:
                 cols["WEIGHT"] = weight
             l4.set_data(f"{fiber}_RV", Table(cols))
-            rv_ext = l4.data._resolve(f"{fiber}_RV")
-            l4.headers[rv_ext][f"GRNRV{_RV_SFX[fiber]}"] = 0.5
-            l4.headers[rv_ext][f"REDRV{_RV_SFX[fiber]}"] = 0.6
+            # Written the way RadialVelocity writes them -- through set_keyword
+            # with an explicit ext -- so the panel is a gate on the routing, not
+            # just on the header text.
+            l4.set_keyword("RVGREEN", 0.5, ext=f"{fiber}_RV")
+            l4.set_keyword("RVRED", 0.6, ext=f"{fiber}_RV")
     return l4
 
 
@@ -184,7 +184,9 @@ class TestCcfGridAnnotations:
         # The delta-RV and weight column headers.
         assert "(this - avg)" in txt
         assert "weight" in txt
-        # Green SCI2 combined RV is GRNRVS2 = 0.5 km/s, shown to 5 dp.
+        # Green SCI2 combined RV is RVGREEN = 0.5 km/s on RV3, shown to 5 dp.
+        # A panel that failed to find it draws no value at all, so this pins the
+        # rendered number, not merely the panel.
         assert "0.50000" in txt and "km s" in txt
         # Per-order delta-RV is km/s to 4 decimals, e.g. "0.0020 km s^-1".
         assert re.search(r"\d\.\d{4}", txt)
