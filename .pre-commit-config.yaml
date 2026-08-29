@@ -20,12 +20,14 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      # reference/ holds externally-sourced data (line masks, line lists, the EEM
-      # colour/Teff table) that must not be reformatted.
+      # Externally-sourced data that must not be reformatted: reference/ (line
+      # masks, line lists, the EEM colour/Teff table) and the vendored rvdata
+      # release snapshot, which is a byte-for-byte pin the compliance test
+      # asserts the KPF keyword tables against.
       - id: trailing-whitespace
-        exclude: '^reference/'
+        exclude: '^(reference/|kpfpipe/data_models/config/rvdata-0\.4\.0/)'
       - id: end-of-file-fixer
-        exclude: '^reference/'
+        exclude: '^(reference/|kpfpipe/data_models/config/rvdata-0\.4\.0/)'
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict

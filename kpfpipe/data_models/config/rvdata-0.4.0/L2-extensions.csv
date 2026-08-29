@@ -1,0 +1,25 @@
+HDU,Name,DataType,MinBitDepth,Multiplicity,Required,Description,Comments
+0,PRIMARY,PrimaryHDU,,False,True,EPRV Standard FITS HEADER (no data),
+1,INSTRUMENT_HEADER,ImageHDU,,False,True,Inherited instrument header (no data),If this L2 file was translated from an instrument’s native data product then this header contains the original data header
+2,RECEIPT,BinTableHDU,,False,True,Table of operations that have been performed on this file,Table has columns: time; code release; branch name; commit hash; function; args; status.
+3,DRP_CONFIG,BinTableHDU,,False,True,Pipeline details (settings etc) to go from native data to L2,Table has one column where each row captures a config entry
+4,EXT_DESCRIPT,BinTableHDU,,False,True,Table describing contents of each extension,Table has two columns and each one row contains the name of an extension in the HDU and then a string description of what is in that extension
+5,ORDER_TABLE,BinTableHDU,,False,True,Table capturing the wavelength extent of each order in Trace 1,"Required columns: physical echelle order, index echelle order, start wavelength, end wavelength."
+6,TRACE1_FLUX,ImageHDU,,True,True,Flux in trace 1,Shape is NxM where N is number of orders (NUMORDER keyword in PRIMARY header) and M is the number of pixels in the dispersion direction.
+7,TRACE1_WAVE,ImageHDU,64,True,True,Wavelength solution for trace 1,Shape matches TRACE1_FLUX. Wavelengths should be in vaccuum. Set any undefined wavelength values - e.g. orders that are not currently extracted - to be NaN.
+8,TRACE1_VAR,ImageHDU,,True,True,Variance for trace 1,Shape matches TRACE1_FLUX
+9,TRACE1_BLAZE,ImageHDU,,True,True,Blaze for trace 1,Shape matches TRACE1_FLUX. Use the BLZNORM keyword in the TRACE1_BLAZE extension header to identify whether or not the blaze has been normalized.
+10,BARYCORR_KMS,ImageHDU,,False,True,barycentric correction in km/s,Shape should convey how this is applied to the wavelength solution – can be a single value in which case 1 correction for whole array; can be an array of Norders in which case there is a different correction for each order; or can be array of Nord x Mpix in which case there is a different correction for each pixel
+11,BARYCORR_Z,ImageHDU,,False,True,barycentric correction in redshift,Shape approach matches BARRYCORR_KMS
+12,BJD_TDB,ImageHDU,64,False,True,Photon weighted midpoint,Shape approach matches BARRYCORR_KMS
+13,TRACE1_DRIFT,ImageHDU,,False,False,Drift measurement map in delta lambda,Shape approach matches BARRYCORR_KMS
+14,TRACE1_QUALITY,ImageHDU,8,True,False,Quality of each pixel in trace 1,Shape matches TRACE1_FLUX. Recommend convention that 0 is the no flag value
+15,EXPMETER,BinTableHDU,,False,False,Table of exposure meter counts timeseries over the exposure,Table has number of columns equal to the number of wavelengths where the exposure counts are measured and number of rows equal to exposure time / exp meter cadence
+16,TELEMETRY,BinTableHDU,,False,False,Table of telemetry collected during the exposure,Table has 4 columns: time stamp; sensor name; value; units
+17,TRACE1_TELLURIC,ImageHDU,,True,False,Telluric model for trace 1,Shape matches TRACE1_FLUX. Generally used for Science Object traces
+18,TRACE1_SKYMODEL,ImageHDU,,True,False,Sky model for trace 1,Shape matches TRACE1_FLUX. Generally used for Science Object traces
+19,ANCILLARY_SPECTRUM,ImageHDU,,True,False,Extension(s) that store ancillary spectra,Options include Ca II H&K if separate spectrograph used
+20,IMAGE,ImageHDU,,True,False,Extension(s) that store useful support images,Options include guider cam or sky monitoring or pupil image
+21,CUSTOM1_TRACE1_FLUX,ImageHDU,,True,False,Additionally custom corrected flux for trace 1,Could include additional corrections such as telluric or sky corrections. Shape matches TRACE1_FLUX.
+22,CUSTOM1_TRACE1_WAVE,ImageHDU,64,True,False,Wavelength solution corresponding to STITCHED_CUSTOMCORR1_SCI_FLUX,Wavelength solution corresponding to CUSTOM1_TRACE1_FLUX. Shape matches TRACE1_FLUX. Wavelengths should be in vaccuum. Set any undefined wavelength values - e.g. orders that are not currently extracted - to be NaN.
+23,CUSTOM1_TRACE1_VAR,ImageHDU,,True,False,Variance corresponding to CUSTOM1_TRACE1_FLUX,Variance of the CUSTOM1_TRACE1_FLUX flux array. Shape matches TRACE1_FLUX.

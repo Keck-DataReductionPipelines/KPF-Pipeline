@@ -1,0 +1,5 @@
+Keyword,Description,Units,DataType,Example Value,Default,Required,Notes
+XTENSION,Name of the extension type,N/A,,IMAGE,UNKNOWN,True,
+EXTNAME,Extension contents,N/A,string,barycorr km/s,UNKNOWN,True,Description of what is in the extension
+CTYPE1,Name of axis 1,N/A,string,X,UNKNOWN,True,Dimensions can be single value or array of Nord or array of Nord x Mpix
+CTYPE2,Name of axis 2,N/A,string,Order-63; pixel-5,UNKNOWN,True,Dimensions can be single value or array of Nord or array of Nord x Mpix

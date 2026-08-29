@@ -1,0 +1,8 @@
+Keyword,Description,Units,DataType,Example Value,Default,Required,Notes
+XTENSION,Name of the extension type,N/A,,IMAGE,UNKNOWN,True,
+EXTNAME,Extension contents,N/A,string,traceN_RV,UNKNOWN,True,Description of what is in the extension
+CTYPE1,Name of axis 1,N/A,string,X,UNKNOWN,True,Generally pixel dimension
+CTYPE2,Name of axis 2,N/A,string,Order-63,UNKNOWN,True,Generally order dimension
+RVMETHOD,RV Derivation method,N/A,String,CCF or SERVAL or LBL,UNKNOWN,True,
+SKYRMVD,Sky model removed?,N/A,Bool,False,UNKNOWN,True,
+TELLRMVD,Telluric model removed?,N/A,Bool,False,UNKNOWN,True,

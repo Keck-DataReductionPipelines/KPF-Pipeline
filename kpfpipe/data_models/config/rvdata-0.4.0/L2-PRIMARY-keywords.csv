@@ -1,0 +1,98 @@
+﻿Keyword,Description,Units,DataType,Example Value,Default,Required,Comments
+INSTRUME,Instrument name,N/A,String,"NEID or HARPS",UNKNOWN,True,
+ORGANIZA,"Organization the data belongs to, for licensing purposes",N/A,String,"ESO or CC-0",CC-0,False,
+ORIGIN,Entity that created this file,N/A,String,"ESO or NOIRLab",UNKNOWN,False,
+DATALVL,Data Product Base Level,N/A,String,"L2 or L3",UNKNOWN,True,
+OBSERVER,Observer,N/A,String,"Bender",UNKNOWN,True,
+PROGRAM,Observing program name,N/A,String,"Bender01",UNKNOWN,False,"For data filtering and attribution; default to Unknown if it does not exist"
+PINAME,Program PI Name,N/A,String,"Bender",UNKNOWN,False,"For data filtering and attribution; default to Unknown if it does not exist"
+OBSTYPE,Observation type,N/A,String,"Sci or Eng",UNKNOWN,True,
+OBSMODE,Observing mode,N/A,String,"HR or HE",,False,
+READMODE,Readout Mode,N/A,String,"Fast; Slow; UTR; FowlerN; or CDS",,False,
+BINNING,Binning Mode,N/A,String,"1x1 or 2x2",UNKNOWN,True,
+NUMTRACE,Iterator for Number of Object related keywords,N/A,UInt,1,UNDEFINED,True,
+NUMORDER,Number of Orders,N/A,Uint,172,UNDEFINED,True,
+OBJECT,Primary Object Name,N/A,String,"HD 10700",UNKNOWN,True,"For multi-object observing this corresponds to center of field object"
+ALIASES,"user defined name(s) for the object, ; separated",N/A,String,"Tau Ceti; My Favorite Star",,False,
+FILENAME,Name of the FITS file,N/A,String,"InstL#_YYYYMMDDThhmmss.fits",UNKNOWN,True,
+DATE,Last modification date/time of this file,UTC,String,"2018-04-26T15:53:13.456",UNKNOWN,True,
+DATE-OBS,Date/time at start of exposure,UTC,String,"2018-04-26T15:53:13.456",UNKNOWN,True,
+JD_UTC,Julian date of DATE-OBS,day,Double,2450000,UNDEFINED,True,
+EXPTIME,Exposure time,s,Float,29.43664,UNDEFINED,True,
+TRACE1 ... TRACE#,Type of object in trace 1 to #,N/A,String,"SCI or CAL or SKY",UNKNOWN,True,"Can be expanded to multiple keywords indexed 1 to #"
+CLSRC1 ... CLSRC#,Name of calibration source in trace 1 to # [if used],N/A,String,"LFC or Etalon or UNe",UNKNOWN,True,"Can be expanded to multiple keywords indexed 1 to #"
+CSRC1 ... CSRC#,Catalog source for object in trace 1 to #,N/A,String,"GaiaDR2",UNKNOWN,True,"Can be expanded to multiple keywords indexed 1 to #; Should define hierarchy of catalogs"
+CID1 ... CID#,Catalog name/designation for object in trace 1 to #,N/A,String,"DR2 NNNNNNNNNNNNNNNNNNN",UNKNOWN,True,"Can be expanded to multiple keywords indexed 1 to #"
+CRA1 ... CRA#,Catalog right ascension for object in trace 1 to #,sexagesimal,String,"HH:MM:SS.sss",UNKNOWN,True,"Can be expanded to multiple keywords indexed 1 to #"
+CDEC1 ... CDEC#,Catalog declination for object in trace 1 to #,sexagesimal,String,"DD.mm.ss.sss",UNKNOWN,True,"Can be expanded to multiple keywords indexed 1 to #"
+CEQNX1 ... CEQNX#,Catalog equinox for object in trace 1 to #,yr,Float,2000,UNDEFINED,True,"Can be expanded to multiple keywords indexed 1 to #"
+CEPCH1 ... CEPCH#,Catalog epoch for object in trace 1 to #,yr,Float,2015.5,UNDEFINED,True,"Can be expanded to multiple keywords indexed 1 to #"
+CRV1 ... CRV#,Catalog Systemic RV for for object in trace 1 to #,km/s,Float,45.654,UNDEFINED,True,"Can be expanded to multiple keywords indexed 1 to #"
+CPLX1 ... CPLX#,Catalog parallax for object in trace 1 to #,mas,Float,20.45,,False,"Can be expanded to multiple keywords indexed 1 to #"
+CPMR1 ... CPMR#,Catalog proper motion RA for object in trace 1 to #,arcsec/yr,Float,0.0345,,False,"Can be expanded to multiple keywords indexed 1 to #"
+CPMD1 ... CPMD#,Catalog proper motion DEC for object in trace 1 to #,arcsec/yr,Float,0.345,,False,"Can be expanded to multiple keywords indexed 1 to #"
+CZ1 ... CZ#,Catalog Z for for object in trace 1 to #,N/A,Float,0.00000454,,False,"Can be expanded to multiple keywords indexed 1 to #"
+CCLRN1 ... CCLRN#,Catalog color 1 - color 2 name for object in trace 1 to #,N/A,String,"Gaia B-R",,False,"Can be expanded to multiple keywords indexed 1 to #"
+CCLR1 ... CCLR#,Catalog color 1 - color 2 for object in trace 1 to #,mag,Float,0.47,,False,"Can be expanded to multiple keywords indexed 1 to #"
+OBSERVAT,Observatory name,N/A,String,KPNO,UNKNOWN,True,
+TELESCOP,Telescope name,N/A,String,"ESO-VLT-U1234 WIYN or NEIDSOLARFEED",UNKNOWN,True,"For solar observations - if solarfeed has its own name use that otherwise use an instrument + solarfeed type entry"
+NUMTEL,Number of telescopes used in the observation,N/A,UInt,1,UNDEFINED,True,
+TELEID1 ... TELEID#,Labels for telescopes as indexed in TCS keywords,N/A,String,"ESO-VLT-U1",UNKNOWN,True,		
+GEOSYS,Coordinate system for observatory / telesccope location,N/A,String,"GRS80",UNKNOWN,True,																																																					
+OBSLON,Longitude used for barycentric correction,deg,Float,-111.600562,UNDEFINED,True,Recommend 6 decimal places which is ~1m accuracy
+OBSLAT,Latitude used for barycentric correction,deg,Float,31.958092,UNDEFINED,True,Recommend 6 decimal places which is ~1m accuracy
+OBSALT,Altitude used for barycentric correction,meters,Float,2091,UNDEFINED,True,Recommend 6 decimal places which is ~1m accuracy
+OBSGEO-X,Cartesian Coordinate X used for barycentric correction,meters,Float,5327395.964,,False,geocentric Cartesian triple incarnation of the traditional lat/lon/alt position on earth
+OBSGEO-Y,Cartesian Coordinate Y used for barycentric correction,meters,Float,-1719170.488,,False,geocentric Cartesian triple incarnation of the traditional lat/lon/alt position on earth
+OBSGEO-Z,Cartesian Coordinate Z used for barycentric correction,meters,Float,3051490.766,,False,geocentric Cartesian triple incarnation of the traditional lat/lon/alt position on earth
+ISSOLAR,Boolean to indicate if observation is of the sun,N/A,Boolean,FALSE,UNKNOWN,True,
+SEEING,Seeing at beginning of exposure,arcsec,Float,1.2,,False,
+AIRMASS,Airmass at center field at beginning of exposure,secZ,Float,1.3,,False,
+TTIME,TCS-data date/time,UTC,String,"2018-04-26T15:53:13",,False,
+TEQNX,TCS equinox,yr,String,"J2000",,False,
+TEPCH,TCS epoch,yr,String,"J2000",,False,
+TLST1 ... TLST#,TCS local sidereal time for telescope 1 to #,sexagesimal,String,"14:23:43",,False,"Can be expanded to multiple keywords indexed 1 to #"
+TRA1 ... TRA#,TCS RA for telescope 1 to #,sexagesimal,String,"13:43:42.3456",,False,"Can be expanded to multiple keywords indexed 1 to #"
+TDEC1 ... TDEC#,TCS DEC for telescope 1 to #,sexagesimal,String,"-13:34:12.7787",,False,"Can be expanded to multiple keywords indexed 1 to #"
+TEL1 ... TEL#,TCS elevation angle for telescope 1 to #,deg,Float,43.5,,False,"Can be expanded to multiple keywords indexed 1 to #"
+TZA1 ... TZA#,TCS zenith angle for telescope 1 to #,deg,Float,35.5435,,False,"Can be expanded to multiple keywords indexed 1 to #"
+TAZ1 ... TAZ#,TCS azimuth angle for telescope 1 to #,deg,Float,124.3,,False,"Can be expanded to multiple keywords indexed 1 to #"
+THA1 ... THA#,TCS hour angle for telescope 1 to #,sexagesimal,String,"-2:34:43.3455",,False,"Can be expanded to multiple keywords indexed 1 to #"
+PARST1 ... PARST#,Parallactic angle at exposure start for telescope 1 to #,deg,Float,175.2,,False,"Can be expanded to multiple keywords indexed 1 to #"
+PAREND1 ... PAREND#,Parallactic angle at exposure end for telescope 1 to #,deg,Float,180.7,,False,"Can be expanded to multiple keywords indexed 1 to #"
+ROTANG,Rotator angle,deg,Float,80.3,,False,
+SUNEL,Sun Elevation Angle,deg,Float,-18.5,,False,
+MOONANG,Target-Moon Angle,deg,Float,34.56,,False,
+MOONEL,Moon Elevation Angle,deg,Float,26.8,,False,
+MOONILLU,Moon illumination,%,Float,23.4,,False,
+MOONRV,RV of reflected sunlight off moon,km/s,Float,1.3,,False,
+M1TMP,Primary mirror temperature,deg C,Float,10.0,,False,
+M1TMPT,M1TMP timestamp,UTC,String,"2024-02-20T03:31:33",,False,
+INHUM,relative humidity inside dome,%,Float,56.6,,False,
+INHUMT,INHUM timestamp,UTC,String,"2024-02-20T03:31:33",,False,
+OUTTMP,Outside temperature,deg C,Float,"0.0",,False,
+OUTTMPT,OUTTMP timestamp,UTC,String,"2024-02-20T03:31:33",,False,
+OUTHUM,Outside relative humidity,%,Float,56.6,,False,
+OUTHUMT,OUTHUM timestamp,UTC,String,"2024-02-20T03:31:33",,False,
+OUTPRES,Outdoor Atmospheric Pressure,kPa,Float,80.0,,False,
+OUTPREST,OUTPRES timestamp,UTC,String,"2024-02-20T03:31:33",,False,
+ENVWINDS,Wind speed,m/s,Float,23.4,,False,"Details are obs specific and not uniform; best effort as available from the observatory"
+ENVWINDD,Wind direction,angle,Float,133.5,,False,"Details on where wind is measured (position of weather station) should be captured in documentation"
+DRPTAG,RV DRP version,N/A,String,"v1.1.0",UNKNOWN,True,
+EPRVTAG,Version of EPRV standard applied,N/A,String,"v1.1.0",UNKNOWN,True,
+VOCLASS,Version of EPRV standard applied,N/A,String,"EPRVSTANDARDv1.1.0",UNKNOWN,True,
+DRPHASH,Git commit hash,N/A,String,"a1b2c3d4e5f67890abcdef1234567890abcdef12",,False,
+INSTERA,Tag to track permanent changes to instrument,N/A,String,"v2.3.0",UNKNOWN,True,
+EXTRACT,Type of 1D extraction,N/A,String,"sum or flatrelative or optimal",,False,
+EXSNR1 ... EXSNR#,Extracted signal-to-noise at EXSNRW1 to EXSNRW#,SNR/1-D pixel,FLOAT,245.35,,False,"Can be expanded to multiple keywords indexed 1 to #; Meant to be a set of useful SNR checks, not one for every order"
+EXSNRW1 ... EXSNRW#,Wavelength at which EXTSNR1 to EXTSNR# is measured,Angstroms,FLOAT,5530,,False,"Can be expanded to multiple keywords indexed 1 to #; Meant to be a set of useful SNR checks, not one for every order"
+FULLCOMP,Is this file fully compliant with the RVSTAND EPRV standard?,N/A,String,"Yes or No",UNKNOWN,True,
+TELFLAG,Issues with observatory or telescope?,N/A,String,"Pass or Fail or Warn","PASS",False,"Default to Pass. If Fail or Warn then more detail should be provided via the bitfields"
+INSTFLAG,Issues with instrument?,N/A,String,"Pass or Fail or Warn","PASS",False,"Default to Pass. If Fail or Warn then more detail should be provided via the bitfieldsx"
+DRPFLAG,Issues with pipeline?,N/A,String,"Pass or Fail or Warn","PASS",False,"Default to Pass. If Fail or Warn then more detail should be provided via the bitfields"
+ADDFLAG,Additional team defined flag,N/A,String,"Pass or Fail or Warn",,False,"Note what this corresponds to in documentation"
+OBSFLAG,Observer pass/fail for exposure,N/A,String,"Pass or Fail",,False,
+SUMMFLAG,Summary roll up of other flag keywords,N/A,String,"Pass or Fail",UNKNOWN,True,
+DQLVL0,Quality check bitfield of N characters,N/A,UInt,0,UNDEFINED,True,"see e.g. https://neid.ipac.caltech.edu/docs/NEID-DRP/bitfields.html"
+DQLVL1,Quality check bitfield of N characters,N/A,UInt,0,UNDEFINED,True,"see e.g. https://neid.ipac.caltech.edu/docs/NEID-DRP/bitfields.html"
+DQLVL2,Quality check bitfield of N characters,N/A,UInt,0,UNDEFINED,True,"Standardize first few bits then leave remaining for instrument specific checks"
