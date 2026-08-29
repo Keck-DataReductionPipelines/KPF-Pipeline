@@ -119,13 +119,12 @@ RVDataModel (rvdata)
 └── KPFDataModel (base.py)         — shared KPF behavior (see below)
     ├── KPF0 (level0.py)                       — Raw CCD data (L0)
     ├── KPF1 (level1.py)                       — Assembled FFI (L1)
-    ├── KPF2 (KPFDataModel, RV2) (level2.py)   — Extracted spectra (L2) with aliases
-    └── KPF4 (KPFDataModel, RV4) (level4.py)   — RVs and CCFs (L4) with aliases
+    ├── KPF2 (level2.py)                       — Extracted spectra (L2) with aliases
+    └── KPF4 (level4.py)                       — RVs and CCFs (L4) with aliases
 ```
 
-**All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance
-alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while
-`RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`.
+**All four models inherit `KPFDataModel` directly.** Each declares its `level`, which names the
+`config/L{n}-extensions.csv` manifest it builds from and the keyword profile it seeds PRIMARY with.
 
 - **Shared behavior lives in `KPFDataModel`**: `obs_id`, `as_fits_header`, `create_extension`,
   alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1),
@@ -133,7 +132,7 @@ alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its ove
 - **`check_filename_convention` is the exception** — every concrete model declares it *explicitly*
   (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base
   is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV
-  `SL#` check delegated to rvdata via `RV2`/`RV4` (KPF2/KPF4), and the DRP-RUN-05 master name
+  `SL#` check delegated to `RVDataModel.check_filename_convention` (KPF2/KPF4), and the DRP-RUN-05 master name
   `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO,
   so it wins).
 - **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`.

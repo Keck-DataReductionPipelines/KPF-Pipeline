@@ -505,3 +505,95 @@ class TestMinBitDepth:
         assert KPFMasterL2(kind="flat")._get_min_bit_depth("TRACE1_FLUX") == 32
         # An extension the manifest does not declare has no floor.
         assert KPF1()._get_min_bit_depth("NOT_AN_EXTENSION") is None
+
+
+# --- plan2: the science L2/L4 extension manifests --------------------------
+
+# rvdata rows KPF deliberately does not build. The EPRV-optional set rvdata's
+# own readers name-guessed their way through; KPF's manifest-driven read declares
+# what it accepts, so an undeclared extension is rejected rather than inferred.
+_UNBUILT = {
+    "L2": {
+        "IMAGE": "EPRV-optional; KPF ships no whole-detector image at L2",
+        "TRACE1_DRIFT": "EPRV-optional; KPF has no drift product",
+        "TRACE1_QUALITY": "EPRV-optional; KPF carries QC in QUALITY_CONTROL",
+        "TRACE1_SKYMODEL": "EPRV-optional; KPF has no sky model",
+        "TRACE1_TELLURIC": "EPRV-optional; KPF does no telluric correction",
+        "CUSTOM1_TRACE1_FLUX": "EPRV CUSTOM slot; unused by KPF",
+        "CUSTOM1_TRACE1_VAR": "EPRV CUSTOM slot; unused by KPF",
+        "CUSTOM1_TRACE1_WAVE": "EPRV CUSTOM slot; unused by KPF",
+    },
+    "L4": {
+        "DIAGNOSTICS1": "EPRV-optional; KPF carries diagnostics in QUALITY_CONTROL",
+        "CUSTOM_CCF1": "EPRV CUSTOM slot; unused by KPF",
+        "CUSTOM_RV1": "EPRV CUSTOM slot; unused by KPF",
+    },
+}
+
+# Extensions whose DataType deliberately differs from the standard's.
+_DATATYPE_DEVIATIONS = {
+    "ANCILLARY_SPECTRUM": (
+        "EPRV says ImageHDU; KPF ships Ca H&K as a BinTableHDU placeholder while "
+        "extraction is WIP, and existing products encode it that way"
+    ),
+}
+
+
+def _science_manifests(level):
+    return (
+        pd.read_csv(_VENDORED / f"{level}-extensions.csv"),
+        pd.read_csv(_CFG / f"{level}-extensions.csv"),
+    )
+
+
+class TestScienceManifestsMatchRvdata:
+    """The L2/L4 manifests are now the sole authority for what KPF builds.
+
+    Until the manifests landed, the KPF models could not under-declare: rvdata's
+    ``RV2.__init__``/``RV4.__init__`` created every ``Required`` row first,
+    whatever KPF asked for. Dropping those bases removes that enforcer, so the
+    guarantee has to be asserted here instead of inherited.
+    """
+
+    @pytest.mark.parametrize("level", ("L2", "L4"))
+    def test_every_rvdata_required_extension_is_declared(self, level):
+        rvdata, kpf = _science_manifests(level)
+        required = set(rvdata[rvdata["Required"]]["Name"])
+        assert required <= set(kpf["Name"])
+
+    @pytest.mark.parametrize("level", ("L2", "L4"))
+    def test_shared_extensions_agree_on_datatype(self, level):
+        rvdata, kpf = _science_manifests(level)
+        theirs = dict(zip(rvdata["Name"], rvdata["DataType"], strict=True))
+        ours = dict(zip(kpf["Name"], kpf["DataType"], strict=True))
+        differing = {
+            name for name in set(theirs) & set(ours) if theirs[name] != ours[name]
+        }
+        assert differing <= set(_DATATYPE_DEVIATIONS)
+
+    @pytest.mark.parametrize("level", ("L2", "L4"))
+    def test_undeclared_rvdata_extensions_are_listed(self, level):
+        rvdata, kpf = _science_manifests(level)
+        assert set(rvdata["Name"]) - set(kpf["Name"]) == set(_UNBUILT[level])
+
+    def test_the_models_build_their_whole_manifest(self):
+        from kpfpipe.data_models.level2 import KPF2
+        from kpfpipe.data_models.level4 import KPF4
+
+        for model in (KPF2(), KPF4()):
+            assert set(model.extensions) == set(model._manifest["Name"])
+
+    def test_min_bit_depth_is_at_least_rvdatas(self):
+        # L2 only: rvdata's L4 manifest has no MinBitDepth column. KPF's is a
+        # superset policy, not a copy -- it adds the float32 and 8-bit rows and
+        # the whole L4 column -- so the assertion is a floor, not equality.
+        rvdata, kpf = _science_manifests("L2")
+        ours = dict(zip(kpf["Name"], kpf["MinBitDepth"], strict=True))
+        declared = rvdata[rvdata["MinBitDepth"].notna()]
+        checked = 0
+        for _, row in declared.iterrows():
+            if row["Name"] in _UNBUILT["L2"]:
+                continue
+            assert ours[row["Name"]] >= row["MinBitDepth"]
+            checked += 1
+        assert checked, "no shared MinBitDepth rows left to check"

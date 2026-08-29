@@ -52,9 +52,9 @@ _MANIFESTS = {
     for level in ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
 }
 
-# Re-exported for sibling data_models modules: KPF2/KPF4 call
-# keyword_registry.register_rvdata_extension at import. Listed in __all__ so the
-# re-export is intentional, not an accident of import.
+# Re-exported so anything importing the base also reaches the one registry
+# instance. Listed in __all__ so the re-export is intentional, not an accident
+# of import.
 __all__ = [
     "KPFDataModel",
     "keyword_registry",

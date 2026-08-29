@@ -1,9 +1,10 @@
 """
 KPF Level 4 (RVs and CCFs) data model.
 
-Radial velocities and cross-correlation functions. Extends the EPRV RV4
-model with KPF-friendly extension aliases for the CCF and RV data, following
-the same pattern as KPF2 -- data can be accessed by either EPRV name
+Radial velocities and cross-correlation functions. Built from
+``L4-extensions.csv`` and carrying KPF-friendly extension aliases for the CCF
+and RV data, following the same pattern as KPF2 -- data can be accessed by
+either EPRV name
 (``CCF3``, ``RV3``) or KPF name (``SCI2_CCF``, ``SCI2_RV``), with per-chip
 views for the CCF cubes (``GREEN_SCI2_CCF``, ``RED_SCI2_CCF``).
 """
@@ -15,26 +16,18 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from rvdata.core.models.definitions import LEVEL4_EXTENSIONS
-from rvdata.core.models.level4 import RV4
+from astropy.table import Table
+from rvdata.core.models.base import RVDataModel
+from rvdata.core.models.definitions import (
+    BASE_DRP_CONFIG_COLUMNS,
+    BASE_RECEIPT_COLUMNS,
+    LEVEL4_RV_TABLE_COLUMNS,
+)
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import KPFDataModel, keyword_registry
+from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.io import kpf_filename
-
-keyword_registry.register_rvdata_extension(
-    LEVEL4_EXTENSIONS,
-    "QUALITY_CONTROL",
-    "BinTableHDU",
-    "Quality-control booleans and diagnostic metrics",
-)
-keyword_registry.register_rvdata_extension(
-    LEVEL4_EXTENSIONS,
-    "CATALOG_RECORD",
-    "BinTableHDU",
-    "External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery",
-)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 
@@ -141,44 +134,24 @@ class _KPF4DataDict(AliasedOrderedDict):
         return aliased
 
 
-class KPF4(KPFDataModel, RV4):
+class KPF4(KPFDataModel):
     """
     KPF Level 4 RV and CCF data model.
 
-    Extends RV4 with KPF-friendly extension aliases and per-chip access for
-    the CCF cubes; EPRV-standard names (``CCF1...N``, ``RV1...N``) remain
-    canonical and aliases are transparent synonyms. Each CCF holds the green
-    and red orders concatenated (green first); a GREEN_/RED_ prefix returns a
-    numpy view of that chip's orders, while RV tables hold one row per order.
-    For example, ``data["SCI2_CCF"]`` is ``data["CCF3"]`` and
+    Built from ``L4-extensions.csv``, with KPF-friendly extension aliases and
+    per-chip access for the CCF cubes; EPRV-standard names (``CCF1...N``,
+    ``RV1...N``) remain canonical and aliases are transparent synonyms. Each CCF
+    holds the green and red orders concatenated (green first); a GREEN_/RED_
+    prefix returns a numpy view of that chip's orders, while RV tables hold one
+    row per order. For example, ``data["SCI2_CCF"]`` is ``data["CCF3"]`` and
     ``data["SCI2_RV"]`` is ``data["RV3"]``.
     """
 
     def __init__(self):
         super().__init__()
+        self.level = 4
 
-        # RV4 creates only the required CCF1 / RV1; KPF stores one CCF, one CCF
-        # variance cube, and one RV table per orderlet (CCF{n}/CCF_VAR{n}/RV{n}
-        # <-> TRACE{n}). CCF_VAR{n} is a KPF extension (not EPRV) holding the
-        # per-velocity-bin CCF photon variance, paired with CCF{n}.
-        for trace_num in range(1, 6):
-            for prefix, hdu_type in (
-                ("CCF", "ImageHDU"),
-                ("CCF_VAR", "ImageHDU"),
-                ("RV", "BinTableHDU"),
-            ):
-                ext = f"{prefix}{trace_num}"
-                if ext not in self.extensions:
-                    self.create_extension(ext, hdu_type)
-
-        # QUALITY_CONTROL holds the accumulated QC booleans + diagnostics metrics
-        # propagated from L0/L1/L2 (RV4 does not create it; registered into
-        # rvdata's LEVEL4_EXTENSIONS above so a written L4 reads back). Mirrors
-        # KPF2.__init__; to_kpf4 forwards the L2 header onto it. CATALOG_RECORD is
-        # the same story: created empty here, filled by to_kpf4's pass-through.
-        for ext in ("QUALITY_CONTROL", "CATALOG_RECORD"):
-            if ext not in self.extensions:
-                self.create_extension(ext, "BinTableHDU")
+        self._create_manifest_extensions()
 
         # Replace plain OrderedDicts with alias-aware versions
         self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)
@@ -187,7 +160,43 @@ class KPF4(KPFDataModel, RV4):
 
         self._register_aliases()
 
+        self._fill_typed_empty_tables()
+        # Seed PRIMARY with the registry's typed L4 skeleton: the header map's
+        # cumulative Level <= 4 set, defaults and comments included.
+        self._seed_primary()
+        # DATALVL's seeded value is the L0 default; restamp it for this level.
         self.set_keyword("DATALVL", "L4")
+        self._set_ext_descript()
+
+    def _fill_typed_empty_tables(self):
+        """Give the structural extensions their empty typed skeletons.
+
+        All five ``RV#`` tables get the same 12-column skeleton, so a dark fiber
+        ships the same shape as an illuminated one. See ``KPF2`` for the
+        membership gate and the direct-Table RECEIPT construction.
+        """
+        if "INSTRUMENT_HEADER" in self.extensions:
+            self.set_data("INSTRUMENT_HEADER", np.zeros((1,), dtype=np.float32))
+        if "RECEIPT" in self.extensions:
+            self.set_data(
+                "RECEIPT",
+                Table(
+                    {
+                        c: np.array([], dtype="U256")
+                        for c in BASE_RECEIPT_COLUMNS["Name"]
+                    }
+                ),
+            )
+        if "DRP_CONFIG" in self.extensions:
+            self.set_data(
+                "DRP_CONFIG",
+                pd.DataFrame(columns=BASE_DRP_CONFIG_COLUMNS["Name"].tolist()),
+            )
+        rv_columns = LEVEL4_RV_TABLE_COLUMNS["Name"].tolist()
+        for trace_num in range(1, 6):
+            ext = f"RV{trace_num}"
+            if ext in self.extensions:
+                self.set_data(ext, pd.DataFrame(columns=rv_columns))
 
     def _register_aliases(self):
         """Register KPF-friendly aliases from config CSVs."""
@@ -214,8 +223,12 @@ class KPF4(KPFDataModel, RV4):
                         d.register_alias(alias, canonical)
 
     def check_filename_convention(self, filename):
-        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's check."""
-        return RV4.check_filename_convention(self, filename)
+        """KPF L4 is EPRV-standard (SL4 name); delegate to rvdata's check.
+
+        Named explicitly rather than through ``super()``, which reaches
+        ``KPFDataModel``'s abstract raise.
+        """
+        return RVDataModel.check_filename_convention(self, filename)
 
     def generate_standard_filename(self):
         """KPF L4 standard filename (EPRV-standard SL4 name).

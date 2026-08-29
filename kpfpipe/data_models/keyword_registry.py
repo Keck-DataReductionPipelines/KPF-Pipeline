@@ -531,32 +531,6 @@ class KeywordRegistry:
             by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
         return all_flags, by_level
 
-    # --- rvdata extension registration ---------------------------------------
-
-    @staticmethod
-    def register_rvdata_extension(level_extensions, name, datatype, description):
-        """Register a KPF-custom extension into an rvdata ``LEVELn_EXTENSIONS`` table.
-
-        rvdata's ``RVn._read`` resolves each HDU's DataType by Name from its
-        ``LEVELn_EXTENSIONS`` DataFrame; a KPF-only extension (e.g. QUALITY_CONTROL)
-        is absent there, so reading an Ln product that contains it raises ``KeyError``.
-        This appends the row in-memory (idempotent). ``Required`` is False so rvdata
-        neither auto-creates it nor lists it in EXT_DESCRIPT -- the KPF model
-        ``__init__`` creates the (empty) extension explicitly.
-        """
-        if name in set(level_extensions["Name"]):
-            return
-        row = {col: "" for col in level_extensions.columns}
-        row.update(
-            HDU=int(level_extensions["HDU"].max()) + 1,
-            Name=name,
-            DataType=datatype,
-            Required=False,
-            Multiplicity=False,
-            Description=description,
-        )
-        level_extensions.loc[len(level_extensions)] = row
-
 
 # Module singleton -- the one registry instance every consumer reaches through.
 keyword_registry = KeywordRegistry()

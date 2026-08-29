@@ -1,9 +1,9 @@
 """
 KPF Level 2 (extracted spectra) data model.
 
-Extracted, wavelength-calibrated spectra. Extends the EPRV RV2 model with
-KPF-friendly extension aliases, so data can be accessed by either EPRV name
-(``TRACE3_FLUX``) or KPF name (``SCI2_FLUX``), including per-chip views
+Extracted, wavelength-calibrated spectra. Built from ``L2-extensions.csv`` and
+carrying KPF-friendly extension aliases, so data can be accessed by either EPRV
+name (``TRACE3_FLUX``) or KPF name (``SCI2_FLUX``), including per-chip views
 (``GREEN_SCI2_FLUX``, ``RED_SCI2_FLUX``).
 """
 
@@ -14,27 +14,19 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from rvdata.core.models.definitions import LEVEL2_EXTENSIONS
-from rvdata.core.models.level2 import RV2
+from astropy.table import Table
+from rvdata.core.models.base import RVDataModel
+from rvdata.core.models.definitions import (
+    BASE_DRP_CONFIG_COLUMNS,
+    BASE_ORDER_TABLE_COLUMNS,
+    BASE_RECEIPT_COLUMNS,
+)
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import KPFDataModel, keyword_registry
+from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.utils.io import kpf_filename
-
-keyword_registry.register_rvdata_extension(
-    LEVEL2_EXTENSIONS,
-    "QUALITY_CONTROL",
-    "BinTableHDU",
-    "Quality-control booleans and diagnostic metrics",
-)
-keyword_registry.register_rvdata_extension(
-    LEVEL2_EXTENSIONS,
-    "CATALOG_RECORD",
-    "BinTableHDU",
-    "External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery",
-)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 
@@ -148,44 +140,23 @@ class _KPF2DataDict(AliasedOrderedDict):
         return aliased
 
 
-class KPF2(KPFDataModel, RV2):
+class KPF2(KPFDataModel):
     """
     KPF Level 2 extracted spectra data model.
 
-    Extends RV2 with KPF-friendly extension aliases and per-chip access;
-    EPRV-standard names remain canonical and aliases are transparent
-    synonyms. Each trace holds the green and red orders concatenated (green
-    first); a GREEN_/RED_ prefix returns a numpy view of that chip's orders.
-    For example, ``data["SCI2_FLUX"]`` is ``data["TRACE3_FLUX"]`` and
+    Built from ``L2-extensions.csv``, with KPF-friendly extension aliases and
+    per-chip access; EPRV-standard names remain canonical and aliases are
+    transparent synonyms. Each trace holds the green and red orders concatenated
+    (green first); a GREEN_/RED_ prefix returns a numpy view of that chip's
+    orders. For example, ``data["SCI2_FLUX"]`` is ``data["TRACE3_FLUX"]`` and
     ``data["GREEN_SCI2_FLUX"]`` returns its green orders.
     """
 
     def __init__(self):
         super().__init__()
+        self.level = 2
 
-        # RV2 creates only TRACE1 by default; KPF uses 5 traces
-        for trace_num in range(2, 6):
-            for suffix in _TRACE_SUFFIXES:
-                ext = f"TRACE{trace_num}_{suffix}"
-                if ext not in self.extensions:
-                    self.create_extension(ext, "ImageHDU")
-
-        # Pass-through extensions not in the RV2 base. NB: the EPRV standard defines
-        # ANCILLARY_SPECTRUM (Ca H&K) as an ImageHDU, but we keep it a BinTableHDU
-        # placeholder for now -- Ca H&K extraction is WIP and existing L2/master
-        # products encode it as BinTableHDU, so flipping the type breaks reading
-        # them back (a deliberate EPRV deviation). QUALITY_CONTROL and
-        # CATALOG_RECORD are created here (L2 has no extensions CSV); RECEIPT and
-        # barycentric/RV# already exist via RV2.
-        for ext, ext_type in [
-            ("ANCILLARY_SPECTRUM", "BinTableHDU"),
-            ("EXPMETER", "BinTableHDU"),
-            ("TELEMETRY", "BinTableHDU"),
-            ("QUALITY_CONTROL", "BinTableHDU"),
-            ("CATALOG_RECORD", "BinTableHDU"),
-        ]:
-            if ext not in self.extensions:
-                self.create_extension(ext, ext_type)
+        self._create_manifest_extensions()
 
         # Replace plain OrderedDicts with alias-aware versions
         self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)
@@ -194,7 +165,45 @@ class KPF2(KPFDataModel, RV2):
 
         self._register_aliases()
 
+        self._fill_typed_empty_tables()
+        # Seed PRIMARY with the registry's typed L2 skeleton: the header map's
+        # cumulative Level <= 2 set, defaults and comments included.
+        self._seed_primary()
+        # DATALVL's seeded value is the L0 default; restamp it for this level.
         self.set_keyword("DATALVL", "L2")
+        self._set_ext_descript()
+
+    def _fill_typed_empty_tables(self):
+        """Give the structural extensions their empty typed skeletons.
+
+        Each is gated on membership because ``KPFMasterL2`` builds a master
+        manifest that omits some of them, and ``set_data`` raises on an absent
+        extension. RECEIPT is built as an astropy Table directly, not through
+        pandas: ``Table.from_pandas`` collapses empty columns to float64
+        whatever the pandas dtype.
+        """
+        if "INSTRUMENT_HEADER" in self.extensions:
+            self.set_data("INSTRUMENT_HEADER", np.zeros((1,), dtype=np.float32))
+        if "RECEIPT" in self.extensions:
+            self.set_data(
+                "RECEIPT",
+                Table(
+                    {
+                        c: np.array([], dtype="U256")
+                        for c in BASE_RECEIPT_COLUMNS["Name"]
+                    }
+                ),
+            )
+        if "DRP_CONFIG" in self.extensions:
+            self.set_data(
+                "DRP_CONFIG",
+                pd.DataFrame(columns=BASE_DRP_CONFIG_COLUMNS["Name"].tolist()),
+            )
+        if "ORDER_TABLE" in self.extensions:
+            self.set_data(
+                "ORDER_TABLE",
+                pd.DataFrame(columns=BASE_ORDER_TABLE_COLUMNS["Name"].tolist()),
+            )
 
     def _register_aliases(self):
         """Register KPF-friendly aliases from config CSVs."""
@@ -220,8 +229,12 @@ class KPF2(KPFDataModel, RV2):
                     self.data.register_alias(alias, canonical)
 
     def check_filename_convention(self, filename):
-        """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's check."""
-        return RV2.check_filename_convention(self, filename)
+        """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's check.
+
+        Named explicitly rather than through ``super()``, which reaches
+        ``KPFDataModel``'s abstract raise.
+        """
+        return RVDataModel.check_filename_convention(self, filename)
 
     def generate_standard_filename(self):
         """KPF L2 standard filename (EPRV-standard SL2 name).

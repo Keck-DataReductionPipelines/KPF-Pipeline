@@ -66,8 +66,8 @@ class TestToKPF4:
         assert "PROGID" not in l4.headers["PRIMARY"]
 
     def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
-        # KPF4 reads through rvdata's RV4._read, a different path from KPF0/1,
-        # so the L0/L1 round-trip twins cover none of this.
+        # L4 carries RECEIPT columns and a DRPSTATU card that L0/L1 do not, so the
+        # L0/L1 round-trip twins cover none of this.
         l4 = KPF2().to_kpf4()
         l4.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
         l4.receipt_add_entry("radial_velocity", "", "PASS")
@@ -81,7 +81,7 @@ class TestToKPF4:
         )
 
     def test_kpf4_has_quality_control_extension(self):
-        # KPF4 must create QUALITY_CONTROL (RV4 does not) so to_kpf4 has a
+        # QUALITY_CONTROL is an L4-extensions.csv row, so to_kpf4 has a
         # destination and the accumulated QC history reaches L4.
         assert "QUALITY_CONTROL" in KPF4().extensions
 
@@ -108,7 +108,7 @@ class TestToKPF4:
 
 
 class TestCatalogRecordPassthrough:
-    """CATALOG_RECORD rides L2 -> L4 and survives KPF4's RV4 read path."""
+    """CATALOG_RECORD rides L2 -> L4 and reads back."""
 
     @staticmethod
     def _l2_with_catalog():
@@ -117,8 +117,8 @@ class TestCatalogRecordPassthrough:
         return kpf2
 
     def test_kpf4_has_catalog_record_extension(self):
-        # Like QUALITY_CONTROL: RV4 does not create it, so KPF4 must, giving
-        # to_kpf4's pass-through a destination.
+        # Like QUALITY_CONTROL: a declared L4 row, giving to_kpf4's pass-through
+        # a destination.
         assert "CATALOG_RECORD" in KPF4().extensions
 
     def test_rows_reach_l4(self):
@@ -134,12 +134,10 @@ class TestCatalogRecordPassthrough:
 
 
 class TestKPF4:
-    def test_kpf4_inherits_rv4(self):
-        from rvdata.core.models.level4 import RV4
-
-        kpf4 = KPF4()
-        assert isinstance(kpf4, RV4)
-        assert kpf4.level == 4
+    def test_kpf4_declares_its_level(self):
+        # The level is the manifest key, so KPF4 resolving to 4 is what makes
+        # _manifest, _seed_primary and _read read the L4 tables.
+        assert KPF4().level == 4
 
     def test_ccf_rv_extensions_per_orderlet(self):
         kpf4 = KPF4()
@@ -284,3 +282,19 @@ class TestDtypeProvenance:
         table = KPF4.from_fits(path).data["SCI2_RV"]
         for column in ("RV", "RV_ERR", "WAVE_START", "WAVE_END", "BJD_TDB"):
             assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} after round-trip")
+
+
+class TestRvdataReadersAreDetached:
+    """rvdata's L4 reader never runs; see the L2 twin for why this is asserted."""
+
+    def test_rv4_read_never_fires(self, tmp_path, monkeypatch):
+        from rvdata.core.models.level4 import RV4
+
+        fired = []
+        monkeypatch.setattr(
+            RV4, "_read", lambda self, hdul: fired.append("RV4"), raising=True
+        )
+        fn = str(tmp_path / "kpf_SL4_20240101T000000.fits")
+        KPF4().to_fits(fn)
+        KPF4.from_fits(fn)
+        assert fired == []

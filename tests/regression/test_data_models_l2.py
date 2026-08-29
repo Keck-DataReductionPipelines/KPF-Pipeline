@@ -10,7 +10,6 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
@@ -73,10 +72,10 @@ def converted_l1(synthetic_l0_file):
 
 
 class TestKPF2QualityControlRoundTrip:
-    """The KPF-custom QUALITY_CONTROL extension survives KPF2's RV2 read path.
+    """The KPF-custom QUALITY_CONTROL extension round-trips through KPF2.
 
-    register_rvdata_extension teaches rvdata's definition-driven L2 reader about
-    QUALITY_CONTROL; without it, from_fits raises KeyError on that HDU.
+    It is a plain L2-extensions.csv row, so the manifest builds it and the
+    manifest-driven read accepts it back.
     """
 
     def test_quality_control_and_barycorr_roundtrip(self, tmp_path):
@@ -103,9 +102,9 @@ class TestKPF2QualityControlRoundTrip:
 
 
 class TestCatalogRecordPassthrough:
-    """CATALOG_RECORD rides L1 -> L2 and survives KPF2's RV2 read path.
+    """CATALOG_RECORD rides L1 -> L2 and reads back.
 
-    Same register_rvdata_extension mechanism as QUALITY_CONTROL above.
+    Another declared L2-extensions.csv row, like QUALITY_CONTROL above.
     """
 
     @staticmethod
@@ -121,8 +120,8 @@ class TestCatalogRecordPassthrough:
         assert [str(s) for s in l2.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
 
     def test_catalog_record_roundtrip(self, tmp_path):
-        # The missing rv reads back NaN, not masked -- L2 reads through rvdata's
-        # RV2._read, so only the from_fits chokepoint can normalize it.
+        # The missing rv reads back NaN, not masked -- only the from_fits
+        # chokepoint can normalize it.
         l2 = self._l1_with_catalog(rv=None).to_kpf2()
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
         l2.to_fits(fn)
@@ -213,8 +212,8 @@ class TestToKPF2:
         assert "to_kpf2" in kpf2.receipt["FUNCTION"].values
 
     def test_to_kpf2_receipt_updates_drpstatus(self, synthetic_l1_file):
-        # KPF2 subclasses RV2, not KPFDataModel, so it carries its own copy of the
-        # DRPSTATU receipt override.
+        # The DRPSTATU receipt override lives on KPFDataModel; assert KPF2 reaches
+        # it, since to_kpf2 is the only producer that exercises it at L2.
         kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
         kpf2.receipt_add_entry("barycentric_correction", "", "PASS")
         assert (
@@ -223,8 +222,8 @@ class TestToKPF2:
         )
 
     def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
-        # KPF2 reads through rvdata's RV2._read, a different path from KPF0/1,
-        # so the L0/L1 round-trip twins cover none of this.
+        # L2 carries RECEIPT columns and a DRPSTATU card that L0/L1 do not, so the
+        # L0/L1 round-trip twins cover none of this.
         kpf2 = KPF2()
         kpf2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
         kpf2.receipt_add_entry("spectral_extraction", "", "PASS")
@@ -327,10 +326,10 @@ class TestAliasedOrderedDict:
 
 
 class TestKPF2Aliases:
-    def test_kpf2_inherits_rv2(self):
-        kpf2 = KPF2()
-        assert isinstance(kpf2, RV2)
-        assert kpf2.level == 2
+    def test_kpf2_declares_its_level(self):
+        # The level is the manifest key, so KPF2 resolving to 2 is what makes
+        # _manifest, _seed_primary and _read read the L2 tables.
+        assert KPF2().level == 2
 
     def test_extension_alias_resolves(self):
         kpf2 = KPF2()
@@ -615,11 +614,10 @@ class TestKPFMasterL2:
 
 
 class TestKPF2HeaderStorage:
-    """KPF2-specific header storage and the KPF2._create_hdul serialization path.
+    """KPF2-specific header storage and its serialization path.
 
-    KPF2 stores headers as fits.Header like every KPF model, but overrides
-    _create_hdul via RV2 -- a distinct path from the inherited base one covered in
-    test_data_models_base.py.
+    KPF2 stores headers as fits.Header like every KPF model; these cover the L2
+    extension set, which the base twins in test_data_models_base.py do not.
     """
 
     def test_fresh_l2_headers_are_fits_headers(self):
@@ -640,3 +638,24 @@ class TestKPF2HeaderStorage:
         prim = KPF2.from_fits(fn).headers["PRIMARY"]
         assert prim.get("HDRCMNT") == "kept"
         assert prim.comments["HDRCMNT"] == "comment must survive to_fits"
+
+
+class TestRvdataReadersAreDetached:
+    """rvdata's L2 reader never runs, and the assertion is not redundant.
+
+    ``RVDataModel.read`` dispatches to ``RV2._read`` through a hardcoded class
+    reference keyed on ``self.level``, not through the MRO, so KPF2 no longer
+    subclassing RV2 is not by itself what stops it -- ``KPFDataModel.read`` is.
+    """
+
+    def test_rv2_read_never_fires(self, tmp_path, monkeypatch):
+        from rvdata.core.models.level2 import RV2
+
+        fired = []
+        monkeypatch.setattr(
+            RV2, "_read", lambda self, hdul: fired.append("RV2"), raising=True
+        )
+        fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        KPF2().to_fits(fn)
+        KPF2.from_fits(fn)
+        assert fired == []

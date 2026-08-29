@@ -1335,8 +1335,11 @@ class TestDiagL4:
         DiagL4(l4).run()
         assert l4.headers["QUALITY_CONTROL"]["BJDMEAN"] == pytest.approx(10.0)
 
-    def test_raises_without_sci2_rv_table(self):
-        with pytest.raises(KeyError, match="BJD_TDB"):
+    def test_raises_on_empty_sci2_rv_table(self):
+        # A bare KPF4 carries every RV# table with its 12-column skeleton and no
+        # rows, so the columns resolve and the weighted mean is undefined for
+        # want of samples -- not for want of a column.
+        with pytest.raises(RuntimeWarning, match="invalid value"):
             DiagL4(KPF4()).bjd_dispersion()
 
     def test_raises_without_weight_column(self):
