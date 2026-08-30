@@ -3,6 +3,7 @@
 import glob
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime
 
@@ -55,6 +56,9 @@ _OBJECT_MAP = {
 # (build_calibration_stacks) and master-product filenames (kpf_filename) validate
 # against the same set and cannot drift.
 _CAL_TYPES = tuple(_OBJECT_MAP)
+
+# A KOAID/obs_id as it appears in a filename, for check_filename_convention.
+_OBS_ID_PATTERN = r"KP\.\d{8}\.\d{5}\.\d{2}"
 
 # How build_calibration_stacks groups a cal_type's frames into stacks:
 # 'time_of_day' (per observing session, gap-split), 'hst_day' (per HST calendar
@@ -604,6 +608,53 @@ def kpf_filename(obs_id, level, *, master=None):
     # L2/L4 use the EPRV "kpf_SL{N}" prefix.
     prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
     return f"{prefix}_{eprv_ts}.fits"
+
+
+def check_filename_convention(filename, level, *, master=False):
+    """Warn-only check that ``filename`` follows the naming rule for ``level``.
+
+    ``kpf_filename`` read backwards: a basename this accepts is one that builder
+    could have produced. Advisory by design, matching rvdata's contract -- a
+    non-compliant name warns and returns False, and the caller writes it anyway.
+    ``<model>.check_filename_convention()`` is the object-side entry point.
+
+    Parameters
+    ----------
+    filename : str
+        Filename or path; only the basename is examined.
+    level : str
+        Data level 'L0'/'L1'/'L2'/'L4' (masters: 'L1'/'L2'/'L4').
+    master : bool, optional
+        True for a master calibration product, whose DRP-RUN-05 name carries any
+        of the four ``_CAL_TYPES`` tokens.
+
+    Returns
+    -------
+    bool
+        True if the basename follows the convention.
+    """
+    if master:
+        convention = "{KOAID}_master_{" + ",".join(_CAL_TYPES) + "}_" + f"{level}.fits"
+        pattern = rf"{_OBS_ID_PATTERN}_master_({'|'.join(_CAL_TYPES)})_{level}\.fits"
+    elif level == "L0":
+        convention = "KP.YYYYMMDD.NNNNN.NN.fits"
+        pattern = rf"{_OBS_ID_PATTERN}\.fits"
+    else:
+        # The prefix rule kpf_filename applies: L1 has no EPRV standard.
+        prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
+        convention = f"{prefix}_YYYYMMDDThhmmss.fits"
+        pattern = rf"{prefix}_\d{{8}}T\d{{6}}\.fits"
+
+    basename = os.path.basename(filename)
+    if re.fullmatch(pattern, basename):
+        return True
+    logger.warning(
+        "Filename '%s' does not follow the KPF %s naming convention (%s)",
+        basename,
+        "masters" if master else level,
+        convention,
+    )
+    return False
 
 
 _DIRECTORY_KINDS = ("science", "masters", "QLP", "cal_stack")

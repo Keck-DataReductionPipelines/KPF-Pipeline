@@ -1,0 +1,5 @@
+Name,BitDepth,Required,Description
+ECHELLE_ORDER,,True,physical Echelle order
+ORDER_INDEX,,True,array index from 0
+WAVE_START,64,True,start wavelength of order
+WAVE_END,64,True,end wavelength of order

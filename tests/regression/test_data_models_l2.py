@@ -841,3 +841,11 @@ class TestEPRVCompliance:
         assert not shared.empty
         for _, row in shared.iterrows():
             assert ours[row["Name"]] >= row["MinBitDepth"], row["Name"]
+
+    def test_the_order_table_carries_every_eprv_column(self):
+        # rvdata's BASE table declares no Required or MinBitDepth column, so
+        # every row it names is required and the widths are KPF's own.
+        theirs = set(rvdata_table("BASE-ORDER_TABLE-columns")["Name"])
+        ours = kpf_table("L2-ORDER_TABLE-columns").set_index("Name")
+        assert theirs <= set(ours.index)
+        assert set(KPF2().data["ORDER_TABLE"].columns) == set(ours.index)

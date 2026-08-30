@@ -14,19 +14,11 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from astropy.table import Table
-from rvdata.core.models.base import RVDataModel
-from rvdata.core.models.definitions import (
-    BASE_DRP_CONFIG_COLUMNS,
-    BASE_ORDER_TABLE_COLUMNS,
-    BASE_RECEIPT_COLUMNS,
-)
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level4 import KPF4
-from kpfpipe.utils.io import kpf_filename
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 
@@ -35,6 +27,7 @@ logger = logging.getLogger(__name__)
 _config_path = importlib.resources.files("kpfpipe.data_models.config")
 _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 _ALIASES = pd.read_csv(_config_path / "aliases.csv")
+_ORDER_TABLE_COLUMNS = pd.read_csv(_config_path / "L2-ORDER_TABLE-columns.csv")
 
 # Extension name suffixes for each trace (e.g., TRACE3_FLUX, TRACE3_WAVE)
 _TRACE_SUFFIXES = ["FLUX", "WAVE", "VAR", "BLAZE"]
@@ -174,35 +167,17 @@ class KPF2(KPFDataModel):
         self._set_ext_descript()
 
     def _fill_typed_empty_tables(self):
-        """Give the structural extensions their empty typed skeletons.
+        """Add L2's own empty table to the base skeletons.
 
-        Each is gated on membership because ``KPFMasterL2`` builds a master
-        manifest that omits some of them, and ``set_data`` raises on an absent
-        extension. RECEIPT is built as an astropy Table directly, not through
-        pandas: ``Table.from_pandas`` collapses empty columns to float64
-        whatever the pandas dtype.
+        ORDER_TABLE takes its columns from ``config/L2-ORDER_TABLE-columns.csv``,
+        as the ``RV#`` tables take theirs at L4. The membership gate is there
+        because ``KPFMasterL2`` builds a manifest that omits it.
         """
-        if "INSTRUMENT_HEADER" in self.extensions:
-            self.set_data("INSTRUMENT_HEADER", np.zeros((1,), dtype=np.float32))
-        if "RECEIPT" in self.extensions:
-            self.set_data(
-                "RECEIPT",
-                Table(
-                    {
-                        c: np.array([], dtype="U256")
-                        for c in BASE_RECEIPT_COLUMNS["Name"]
-                    }
-                ),
-            )
-        if "DRP_CONFIG" in self.extensions:
-            self.set_data(
-                "DRP_CONFIG",
-                pd.DataFrame(columns=BASE_DRP_CONFIG_COLUMNS["Name"].tolist()),
-            )
+        super()._fill_typed_empty_tables()
         if "ORDER_TABLE" in self.extensions:
             self.set_data(
                 "ORDER_TABLE",
-                pd.DataFrame(columns=BASE_ORDER_TABLE_COLUMNS["Name"].tolist()),
+                pd.DataFrame(columns=_ORDER_TABLE_COLUMNS["Name"].tolist()),
             )
 
     def _register_aliases(self):
@@ -227,24 +202,6 @@ class KPF2(KPFDataModel):
                     self.extensions.register_alias(alias, canonical)
                     self.headers.register_alias(alias, canonical)
                     self.data.register_alias(alias, canonical)
-
-    def check_filename_convention(self, filename):
-        """KPF L2 is EPRV-standard (SL2 name); delegate to rvdata's check.
-
-        Named explicitly rather than through ``super()``, which reaches
-        ``KPFDataModel``'s abstract raise.
-        """
-        return RVDataModel.check_filename_convention(self, filename)
-
-    def generate_standard_filename(self):
-        """KPF L2 standard filename (EPRV-standard SL2 name).
-
-        Raises
-        ------
-        ValueError
-            If ``obs_id`` is unset or invalid.
-        """
-        return kpf_filename(self.obs_id, "L2")
 
     def to_fits(self, fn=None):
         """KPF keeps a single-filepath ``to_fits``; rvdata >=0.4.0 renamed the

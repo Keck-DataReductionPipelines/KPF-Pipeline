@@ -100,8 +100,7 @@ def assert_roundtrip_dtype(
     which is bool in memory but uint8 on disk.
 
     ``name`` overrides the output filename; it defaults to this model's entry in
-    ``_ROUNDTRIP_NAMES`` because every level warns on an off-convention write
-    (L2/L4 via rvdata, the rest via check_filename_convention).
+    ``_ROUNDTRIP_NAMES`` because every level warns on an off-convention write.
     """
     expected_disk = expected if expected_disk is None else expected_disk
     if name is None:

@@ -25,13 +25,17 @@ import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
-from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
+from rvdata.core.models.definitions import (
+    BASE_DRP_CONFIG_COLUMNS,
+    BASE_RECEIPT_COLUMNS,
+)
 
 # The keyword and extension reference data each live in their own module as a
 # single instance, re-exported below so sibling data_models files (level2/4)
 # import the same singletons from base.
 from kpfpipe.data_models.extension_manifest import extension_manifest
 from kpfpipe.data_models.keyword_registry import keyword_registry
+from kpfpipe.utils.io import check_filename_convention, kpf_filename
 from kpfpipe.utils.kpf import is_obs_id
 
 # Receipt names that are data-model conversions / serialization rather than
@@ -101,6 +105,35 @@ class KPFDataModel(RVDataModel):
         seed = self.keyword_registry.primary_seed(self._data_model)
         for keyword, value in seed.items():
             self.headers["PRIMARY"][keyword] = value
+
+    def _fill_typed_empty_tables(self):
+        """Give the structural extensions their empty typed skeletons.
+
+        The three any manifest may declare: INSTRUMENT_HEADER's placeholder array
+        (its payload is the header, not the data), and the RECEIPT and DRP_CONFIG
+        column sets, which are the EPRV standard's. Each is gated on membership,
+        since not every level declares all three and ``set_data`` raises on an
+        absent extension. RECEIPT is built as an astropy Table directly, not
+        through pandas: ``Table.from_pandas`` collapses empty columns to float64
+        whatever the pandas dtype. L2 and L4 extend this with their own tables.
+        """
+        if "INSTRUMENT_HEADER" in self.extensions:
+            self.set_data("INSTRUMENT_HEADER", np.zeros((1,), dtype=np.float32))
+        if "RECEIPT" in self.extensions:
+            self.set_data(
+                "RECEIPT",
+                Table(
+                    {
+                        c: np.array([], dtype="U256")
+                        for c in BASE_RECEIPT_COLUMNS["Name"]
+                    }
+                ),
+            )
+        if "DRP_CONFIG" in self.extensions:
+            self.set_data(
+                "DRP_CONFIG",
+                pd.DataFrame(columns=BASE_DRP_CONFIG_COLUMNS["Name"].tolist()),
+            )
 
     def _set_ext_descript(self):
         """Rebuild EXT_DESCRIPT from the live extension set.
@@ -428,21 +461,15 @@ class KPFDataModel(RVDataModel):
         return super()._create_hdul()
 
     def generate_standard_filename(self):
-        """Abstract: every concrete KPF model builds its own standard filename.
+        """This product's standard basename, built from ``obs_id`` and its level.
 
-        KPFDataModel is never instantiated directly -- only inherited -- so reaching
-        this means a subclass failed to define the method.
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} must define generate_standard_filename"
-        )
+        return kpf_filename(self.obs_id, f"L{self.level}")
 
     def check_filename_convention(self, filename):
-        """Abstract: every concrete KPF model declares its own filename convention.
-
-        KPFDataModel is never instantiated directly -- only inherited -- so reaching
-        this means a subclass failed to define the method.
-        """
-        raise NotImplementedError(
-            f"{type(self).__name__} must define check_filename_convention"
-        )
+        """Warn-only check of ``filename`` against this level's naming rule."""
+        return check_filename_convention(filename, f"L{self.level}")

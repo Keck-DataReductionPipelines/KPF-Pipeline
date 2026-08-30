@@ -7,7 +7,6 @@ meter, guide camera, telemetry, and telescope metadata.
 
 import logging
 import os
-import re
 
 import numpy as np
 from astropy.io import fits
@@ -16,17 +15,9 @@ from astropy.table import Table
 from kpfpipe import __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
 
 logger = logging.getLogger(__name__)
-
-# WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
-_L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
-
-# Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
-# Each module overwrites it via the receipt_add_entry override (see base.py).
-_DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
 
 
 class KPF0(KPFDataModel):
@@ -48,6 +39,7 @@ class KPF0(KPFDataModel):
         # and a KPF0 read from disk must reflect the unaltered file.
         # StandardizeDataFormat seeds it once, after the read.
         self._create_manifest_extensions()
+        self._fill_typed_empty_tables()
         self._set_ext_descript()
 
     @property
@@ -56,7 +48,7 @@ class KPF0(KPFDataModel):
 
         The receipt is the pipeline's existing, explicit, persisted answer to
         "which steps have run", so it -- not the header or extension structure --
-        is the discriminator. A fresh ``KPF0()`` has a zero-column receipt, hence
+        is the discriminator. A fresh ``KPF0()`` has a zero-row receipt, hence
         the ``not r.empty`` guard.
         """
         r = self.receipt
@@ -104,7 +96,7 @@ class KPF0(KPFDataModel):
         with a warning; a missing OFNAME (the archive obs_id) raises.
         """
         self.set_keyword("DRPVERNO", __version__)
-        self.set_keyword("DRPSTATU", _DRPSTATU_DEFAULT)
+        self.set_keyword("DRPSTATU", "File ingested into KPF-DRP")
         self.set_keyword("ORIGID", self.obs_id)
         primary = self._native_header
 
@@ -120,28 +112,6 @@ class KPF0(KPFDataModel):
             )
             progname = "UNKNOWN"
         self.set_keyword("PROGID", progname)
-
-    def check_filename_convention(self, filename):
-        """KPF L0 uses the WMKO-native KP.YYYYMMDD.NNNNN.NN.fits name."""
-        basename = os.path.basename(filename)
-        if not _L0_FILENAME_PATTERN.fullmatch(basename):
-            logger.warning(
-                "Filename '%s' does not follow the KPF L0 naming "
-                "convention (KP.YYYYMMDD.NNNNN.NN.fits)",
-                basename,
-            )
-            return False
-        return True
-
-    def generate_standard_filename(self):
-        """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern.
-
-        Raises
-        ------
-        ValueError
-            If ``obs_id`` is unset or invalid.
-        """
-        return kpf_filename(self.obs_id, "L0")
 
     def to_fits(self, fn=None):
         """Write L0 data to a FITS file (plain ImageHDU, no compression)."""

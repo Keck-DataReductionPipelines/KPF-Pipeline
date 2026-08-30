@@ -8,7 +8,6 @@ used for FFI masters calibrations (bias, dark, flat).
 
 import logging
 import os
-import re
 
 import numpy as np
 from astropy.io import fits
@@ -16,13 +15,8 @@ from astropy.table import Table
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
-from kpfpipe.utils.io import kpf_filename
 
 logger = logging.getLogger(__name__)
-
-# EPRV-like L1 filename, but with L1 instead of the EPRV SL#: the EPRV regex
-# only accepts SL2/SL3/SL4, so KPF L1 uses kpf_L1_YYYYMMDDThhmmss.fits.
-_L1_FILENAME_PATTERN = re.compile(r"kpf_L1_\d{8}T\d{6}\.fits")
 
 
 class KPF1(KPFDataModel):
@@ -41,6 +35,7 @@ class KPF1(KPFDataModel):
         self.level = 1
 
         self._create_manifest_extensions()
+        self._fill_typed_empty_tables()
         # Seed PRIMARY with the registry's typed L1 skeleton (defaults +
         # comments). L1 is not an EPRV level, so the skeleton is stamped here;
         # the values StandardizeDataFormat wrote at L0 are forwarded over it by
@@ -49,31 +44,6 @@ class KPF1(KPFDataModel):
         # DATALVL's seeded value is the L0 default; restamp it for this level.
         self.set_keyword("DATALVL", "L1")
         self._set_ext_descript()
-
-    def check_filename_convention(self, filename):
-        """KPF L1 uses an EPRV-like name with L1 (not SL#): kpf_L1_YYYYMMDDThhmmss.fits.
-
-        The EPRV regex only accepts SL2/SL3/SL4, so L1 has its own convention.
-        """
-        basename = os.path.basename(filename)
-        if not _L1_FILENAME_PATTERN.fullmatch(basename):
-            logger.warning(
-                "Filename '%s' does not follow the KPF L1 naming "
-                "convention (kpf_L1_YYYYMMDDThhmmss.fits)",
-                basename,
-            )
-            return False
-        return True
-
-    def generate_standard_filename(self):
-        """KPF L1 filenames follow the kpf_L1_YYYYMMDDThhmmss.fits convention.
-
-        Raises
-        ------
-        ValueError
-            If ``obs_id`` is unset or invalid.
-        """
-        return kpf_filename(self.obs_id, "L1")
 
     def to_fits(self, fn=None):
         """Write L1 data to a FITS file."""

@@ -10,23 +10,11 @@ Masters products differ from science products in extension naming to
 avoid confusion (see KPFMasterL1/L2/L4)
 """
 
-import logging
-import os
-import re
-
 import pandas as pd
 
 from kpfpipe.data_models.base import KPFDataModel
-from kpfpipe.utils.io import kpf_filename
+from kpfpipe.utils.io import check_filename_convention, kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
-
-logger = logging.getLogger(__name__)
-
-# WMKO DRP-RUN-05 master name: {KOAID}_master_{type}_L{N}.fits, where KOAID is a
-# KP.YYYYMMDD.NNNNN.NN obs_id, type is bias/dark/flat/thar, and N is 1/2/4.
-_MASTER_FILENAME_PATTERN = re.compile(
-    r"KP\.\d{8}\.\d{5}\.\d{2}_master_(bias|dark|flat|thar)_L[124]\.fits"
-)
 
 
 class KPFMasterModel(KPFDataModel):
@@ -51,17 +39,9 @@ class KPFMasterModel(KPFDataModel):
         """Masters use the WMKO DRP-RUN-05 name: {KOAID}_master_{type}_L{N}.fits.
 
         Defined on KPFMasterModel (which precedes KPF1/KPF2/KPF4 in every masters
-        MRO) so the master convention wins over the per-level science checks.
+        MRO) so the master convention wins over the per-level science check.
         """
-        basename = os.path.basename(filename)
-        if not _MASTER_FILENAME_PATTERN.fullmatch(basename):
-            logger.warning(
-                "Filename '%s' does not follow the KPF masters naming "
-                "convention ({KOAID}_master_{bias,dark,flat,thar}_L{1,2,4}.fits)",
-                basename,
-            )
-            return False
-        return True
+        return check_filename_convention(filename, f"L{self.level}", master=True)
 
     def set_input_files(self, file_list, master_type):
         """
