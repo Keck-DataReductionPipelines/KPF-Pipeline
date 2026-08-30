@@ -727,7 +727,7 @@ class TestPerform:
             assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
             assert rv_table["ECHELLE_ORDER"][0] == 137
             # The per-bin CCF variance cube round-trips as an image extension.
-            assert hdul["CCF_VAR3"].data.shape == (NORDER, NVEL)
+            assert hdul["CCF3_VAR"].data.shape == (NORDER, NVEL)
 
 
 class TestConstructor:

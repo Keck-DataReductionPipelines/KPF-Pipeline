@@ -187,14 +187,14 @@ class KPF4(KPFDataModel):
                     d.register_alias(alias, canonical)
 
         # Per-orderlet CCF/CCF_VAR/RV aliases derived from the trace map
-        # (CCF{n}/CCF_VAR{n}/RV{n} ↔ TRACE{n}): e.g. SCI2_CCF → CCF3,
-        # SCI2_CCF_VAR → CCF_VAR3, SCI2_RV → RV3.
+        # (CCF{n}/CCF{n}_VAR/RV{n} ↔ TRACE{n}): e.g. SCI2_CCF → CCF3,
+        # SCI2_CCF_VAR → CCF3_VAR, SCI2_RV → RV3.
         for _, row in _TRACE_MAP.iterrows():
             trace_num = int(row["Trace"])
             fiber = str(row["Fiber"]).strip()
-            for prefix in ("CCF", "CCF_VAR", "RV"):
-                canonical = f"{prefix}{trace_num}"
-                alias = f"{fiber}_{prefix}"
+            for template in ("CCF#", "CCF#_VAR", "RV#"):
+                canonical = template.replace("#", str(trace_num))
+                alias = f"{fiber}_{template.replace('#', '')}"
                 if canonical in self.extensions:
                     for d in (self.extensions, self.headers, self.data):
                         d.register_alias(alias, canonical)

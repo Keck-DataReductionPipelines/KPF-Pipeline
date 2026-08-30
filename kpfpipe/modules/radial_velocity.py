@@ -35,7 +35,7 @@ class RadialVelocity:
     Parameters
     ----------
     l4_obj : KPF4
-        L4 frame carrying the per-order CCFs (CCFn/CCF_VARn), the CCF velocity-grid
+        L4 frame carrying the per-order CCFs (CCFn/CCFn_VAR), the CCF velocity-grid
         and mask headers, and the metadata-seeded RVn tables produced by
         CrossCorrelation. RV/RV_ERR are filled in place.
     config : None | dict | ConfigHandler

@@ -144,7 +144,7 @@ class TestKPF4:
         kpf4 = KPF4()
         for n in range(1, 6):
             assert f"CCF{n}" in kpf4.extensions
-            assert f"CCF_VAR{n}" in kpf4.extensions
+            assert f"CCF{n}_VAR" in kpf4.extensions
             assert f"RV{n}" in kpf4.extensions
 
     def test_every_rv_table_carries_twelve_columns(self):
@@ -156,13 +156,13 @@ class TestKPF4:
             assert len(table.columns) == 12, (f"RV{trace}", list(table.columns))
 
     def test_trace_derived_aliases(self):
-        # CCF{n}/CCF_VAR{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is 1, CAL is 5.
+        # CCF{n}/CCF{n}_VAR/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is 1, CAL is 5.
         kpf4 = KPF4()
         assert kpf4.data._resolve("SCI2_CCF") == "CCF3"
-        assert kpf4.data._resolve("SCI2_CCF_VAR") == "CCF_VAR3"
+        assert kpf4.data._resolve("SCI2_CCF_VAR") == "CCF3_VAR"
         assert kpf4.data._resolve("SCI2_RV") == "RV3"
         assert kpf4.data._resolve("CAL_CCF") == "CCF5"
-        assert kpf4.data._resolve("CAL_CCF_VAR") == "CCF_VAR5"
+        assert kpf4.data._resolve("CAL_CCF_VAR") == "CCF5_VAR"
         assert kpf4.data._resolve("SKY_RV") == "RV1"
         # bare RV is not an alias (RV is trace-mapped, not a 1:1 alias)
         assert kpf4.data._resolve("RV") == "RV"
@@ -187,7 +187,7 @@ class TestKPF4:
         path = tmp_path / "kpf_SL4_20240101T000002.fits"
         kpf4.to_fits(str(path))
         back = KPF4.from_fits(str(path))
-        assert "CCF_VAR3" in back.extensions
+        assert "CCF3_VAR" in back.extensions
         np.testing.assert_allclose(np.asarray(back.data["SCI2_CCF_VAR"]), var)
         np.testing.assert_allclose(np.asarray(back.data["SCI2_CCF"]), ccf)
 

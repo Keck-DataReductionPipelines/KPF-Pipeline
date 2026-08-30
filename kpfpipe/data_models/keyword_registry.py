@@ -59,7 +59,7 @@ _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
 # SCI_TRACES holds the science-fiber indices, the fibers the catalog C*# overlay
 # targets -- the single definition, imported by astro_query rather than
 # re-derived there. The trace count itself is DETECTOR["numtrace"]; the numbered
-# per-orderlet extensions CCF#/RV#/CCF_VAR# run 1..that.
+# per-orderlet extensions CCF#/CCF#_VAR/RV# run 1..that.
 _TRACE_MAP = pd.read_csv(_kpf_pipe_cfg / "trace-map.csv")
 SCI_TRACES = tuple(
     _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
@@ -215,7 +215,7 @@ class KeywordRegistry:
         The field either *is* a literal extension name in that data model's
         manifest, or is a family stem: insert an index at every position and
         accept the single candidate whose full expansion the manifest contains
-        (``CCF_VAR`` -> ``CCF_VAR1..5``, not ``CCF1_VAR``; ``TRACE_FLUX`` ->
+        (``CCF_VAR`` -> ``CCF1_VAR..``, not ``CCF_VAR1``; ``TRACE_FLUX`` ->
         ``TRACE1_FLUX..``, not ``TRACE_FLUX1``). Zero or two qualifying positions
         raise -- a typo must not resolve.
         """
