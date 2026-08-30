@@ -15,6 +15,7 @@ from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from ._catalog import catalog_record_table
 from ._data_models import standardized_l0, write_minimal_l0
 from ._dtype_policy import assert_not_float64
+from ._eprv import kpf_table
 
 # synthetic_l0_file and synthetic_l0_minimal fixtures live in tests/conftest.py
 
@@ -43,7 +44,7 @@ class TestKPF0:
         assert "RECEIPT" in l0.extensions
         assert "CATALOG_RECORD" in l0.extensions
         assert "INSTRUMENT_HEADER" in l0.extensions
-        assert len(l0.extensions) == len(l0._manifest)
+        assert len(l0.extensions) == len(kpf_table("L0-extensions"))
 
     def test_round_trip(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -322,4 +323,4 @@ class TestEPRVCompliance:
 
     def test_the_model_builds_its_whole_manifest(self):
         model = KPF0()
-        assert set(model.extensions) == set(model._manifest["Name"])
+        assert set(model.extensions) == set(kpf_table("L0-extensions")["Name"])

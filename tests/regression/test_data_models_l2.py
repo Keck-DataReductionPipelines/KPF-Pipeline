@@ -330,7 +330,7 @@ class TestAliasedOrderedDict:
 class TestKPF2Aliases:
     def test_kpf2_declares_its_level(self):
         # The level is the manifest key, so KPF2 resolving to 2 is what makes
-        # _manifest, _seed_primary and _read read the L2 tables.
+        # _data_model, _seed_primary and _read read the L2 tables.
         assert KPF2().level == 2
 
     def test_extension_alias_resolves(self):
@@ -524,7 +524,9 @@ class TestKPFMasterL2:
     @pytest.mark.parametrize("kind", ("flat", "wls"))
     def test_the_master_builds_its_whole_manifest(self, kind):
         master = KPFMasterL2(kind=kind)
-        assert set(master.extensions) == set(master._manifest["Name"])
+        assert set(master.extensions) == set(
+            kpf_table(f"ML2-{kind}-extensions")["Name"]
+        )
         # A master is not a translation of a native instrument product, so it
         # carries no verbatim instrument header.
         assert "INSTRUMENT_HEADER" not in master.extensions
@@ -545,10 +547,11 @@ class TestKPFMasterL2:
             assert (pd.isna(ours) and pd.isna(theirs)) or ours == theirs, name
 
     def test_bit_depth_from_the_master_manifest(self):
-        assert KPFMasterL2(kind="wls")._bit_depth("TRACE1_WAVE") == 64
-        assert KPFMasterL2(kind="wls")._bit_depth("GREEN_WLS_COEFFS") == 64
-        assert KPFMasterL2(kind="flat")._bit_depth("TRACE1_FLUX") == 32
-        assert KPFMasterL2(kind="wls")._bit_depth("RECEIPT") is None
+        manifest = KPFMasterL2.extension_manifest
+        assert manifest.bit_depth("ML2-wls", "TRACE1_WAVE") == 64
+        assert manifest.bit_depth("ML2-wls", "GREEN_WLS_COEFFS") == 64
+        assert manifest.bit_depth("ML2-flat", "TRACE1_FLUX") == 32
+        assert manifest.bit_depth("ML2-wls", "RECEIPT") is None
 
     def test_reads_through_the_one_base_reader(self):
         # KPFMasterL2 declares no read/_read of its own: KPFDataModel.read is
@@ -671,7 +674,7 @@ class TestKPFMasterL2:
         m.to_fits(out)
 
         back = KPFMasterL2.from_fits(out)
-        assert set(back.extensions) == set(back._manifest["Name"])
+        assert set(back.extensions) == set(kpf_table("ML2-wls-extensions")["Name"])
         for key in ("ROUGHWLS", "LINELIST", "POLYDEGX"):
             assert back.headers["PRIMARY"][key] is None, key
 
@@ -813,7 +816,7 @@ class TestEPRVCompliance:
 
     def test_the_model_builds_its_whole_manifest(self):
         model = KPF2()
-        assert set(model.extensions) == set(model._manifest["Name"])
+        assert set(model.extensions) == set(kpf_table("L2-extensions")["Name"])
 
     def test_undeclared_rvdata_extensions_are_listed(self):
         undeclared = set(rvdata_table("L2-extensions")["Name"]) - set(

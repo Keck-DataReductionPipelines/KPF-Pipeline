@@ -137,7 +137,7 @@ class TestCatalogRecordPassthrough:
 class TestKPF4:
     def test_kpf4_declares_its_level(self):
         # The level is the manifest key, so KPF4 resolving to 4 is what makes
-        # _manifest, _seed_primary and _read read the L4 tables.
+        # _data_model, _seed_primary and _read read the L4 tables.
         assert KPF4().level == 4
 
     def test_ccf_rv_extensions_per_orderlet(self):
@@ -349,7 +349,7 @@ class TestEPRVCompliance:
 
     def test_the_model_builds_its_whole_manifest(self):
         model = KPF4()
-        assert set(model.extensions) == set(model._manifest["Name"])
+        assert set(model.extensions) == set(kpf_table("L4-extensions")["Name"])
 
     def test_undeclared_rvdata_extensions_are_listed(self):
         undeclared = set(rvdata_table("L4-extensions")["Name"]) - set(

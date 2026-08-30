@@ -16,7 +16,7 @@ import re
 
 import pandas as pd
 
-from kpfpipe.data_models.base import _MANIFESTS, KPFDataModel
+from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
 
@@ -46,21 +46,6 @@ class KPFMasterModel(KPFDataModel):
         does not name their tables; the ML prefix is what separates them.
         """
         return f"ML{self.level}"
-
-    @property
-    def _manifest(self):
-        """The master's own extension manifest, not the science level's."""
-        return _MANIFESTS[self._data_model]
-
-    def _seed_primary(self):
-        """Stamp the master's own PRIMARY skeleton (``ML*-PRIMARY-keywords.csv``).
-
-        Masters are outside EPRV scope, so they seed their own data model rather
-        than inheriting the science header-map skeleton.
-        """
-        seed = self.keyword_registry.primary_seed(self._data_model)
-        for keyword, value in seed.items():
-            self.headers["PRIMARY"][keyword] = value
 
     def check_filename_convention(self, filename):
         """Masters use the WMKO DRP-RUN-05 name: {KOAID}_master_{type}_L{N}.fits.

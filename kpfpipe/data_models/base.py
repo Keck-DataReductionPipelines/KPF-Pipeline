@@ -18,7 +18,6 @@ For example, "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", so reading
 ``d["SCI2_FLUX"]`` returns the same object stored under "TRACE3_FLUX".
 """
 
-import importlib.resources
 import logging
 
 import numpy as np
@@ -28,9 +27,10 @@ from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
 from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
 
-# The keyword registry lives in its own module as a single KeywordRegistry
-# instance; base.py is its only importer, and re-exports it (below) so sibling
-# data_models files (level2/4) import the same singleton from base.
+# The keyword and extension reference data each live in their own module as a
+# single instance, re-exported below so sibling data_models files (level2/4)
+# import the same singletons from base.
+from kpfpipe.data_models.extension_manifest import extension_manifest
 from kpfpipe.data_models.keyword_registry import keyword_registry
 from kpfpipe.utils.kpf import is_obs_id
 
@@ -42,21 +42,12 @@ _INTERNAL_RECEIPTS = frozenset(
     {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"}
 )
 
-_config_path = importlib.resources.files("kpfpipe.data_models.config")
-
-# The authoritative extension manifest for each level: the complete, literal
-# statement of that level's shape. Every row is created (there is no Required
-# gate), so no model class declares its own manifest.
-_MANIFESTS = {
-    level: pd.read_csv(_config_path / f"{level}-extensions.csv")
-    for level in ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
-}
-
-# Re-exported so anything importing the base also reaches the one registry
-# instance. Listed in __all__ so the re-export is intentional, not an accident
-# of import.
+# Re-exported so anything importing the base also reaches the one registry and
+# manifest instance. Listed in __all__ so the re-export is intentional, not an
+# accident of import.
 __all__ = [
     "KPFDataModel",
+    "extension_manifest",
     "keyword_registry",
 ]
 
@@ -66,10 +57,12 @@ logger = logging.getLogger(__name__)
 class KPFDataModel(RVDataModel):
     """Shared base for every KPF data model (L0, L1, L2, L4)."""
 
-    # The keyword registry singleton, surfaced as a class attribute so anything
+    # The reference-data singletons, surfaced as class attributes so anything
     # handed a KPF data model (the checkpoints validator, the WMKO->EPRV
-    # standardization, tests) reaches it via kpf.keyword_registry.
+    # standardization, tests) reaches them via kpf.keyword_registry /
+    # kpf.extension_manifest.
     keyword_registry = keyword_registry
+    extension_manifest = extension_manifest
 
     # Unknown extension on read raises, matching rvdata's read contract.
     _strict_read = True
@@ -80,12 +73,12 @@ class KPFDataModel(RVDataModel):
         self.dirname = None
 
     @property
-    def _manifest(self):
-        """This model's extension manifest, named by its data level.
+    def _data_model(self):
+        """This model's keyword/extension tables, named by its data level.
 
         The masters override this: their tables are ``ML{level}``.
         """
-        return _MANIFESTS[f"L{self.level}"]
+        return f"L{self.level}"
 
     def _create_manifest_extensions(self):
         """Create every extension this level's manifest declares.
@@ -94,19 +87,21 @@ class KPFDataModel(RVDataModel):
         is a complete and literal statement of the level's shape and every row is
         created (empty) here.
         """
-        for _, row in self._manifest.iterrows():
-            if row["Name"] not in self.extensions:
-                self.create_extension(row["Name"], row["DataType"])
+        for name in self.extension_manifest.names(self._data_model):
+            if name not in self.extensions:
+                self.create_extension(
+                    name, self.extension_manifest.fits_type(self._data_model, name)
+                )
 
     def _seed_primary(self):
         """Stamp the registry's typed PRIMARY skeleton for this data model.
 
-        Every keyword registered on PRIMARY for this level, with its header-map
-        default where it has one and blank where it does not, each carrying the
-        registry comment. Later writers overlay what they know. Science levels
-        only: the masters carry their own minimal PRIMARY and never seed.
+        Every keyword registered on PRIMARY for this data model, with its
+        header-map default where it has one and blank where it does not, each
+        carrying the registry comment. Later writers overlay what they know. The
+        masters land on their own minimal ``ML*`` skeleton, not the science one.
         """
-        seed = self.keyword_registry.primary_seed(f"L{self.level}")
+        seed = self.keyword_registry.primary_seed(self._data_model)
         for keyword, value in seed.items():
             self.headers["PRIMARY"][keyword] = value
 
@@ -118,30 +113,16 @@ class KPFDataModel(RVDataModel):
         """
         if "EXT_DESCRIPT" not in self.extensions:
             return
-        descriptions = dict(
-            zip(self._manifest["Name"], self._manifest["Description"], strict=True)
-        )
         self.set_data(
             "EXT_DESCRIPT",
             pd.DataFrame(
-                [(name, descriptions.get(name, "")) for name in self.extensions],
+                [
+                    (name, self.extension_manifest.description(self._data_model, name))
+                    for name in self.extensions
+                ],
                 columns=["Name", "Description"],
             ),
         )
-
-    def _bit_depth(self, ext_name):
-        """The manifest's declared BitDepth for ``ext_name``, or None.
-
-        None when the cell is blank or the extension is absent from the manifest.
-        Named off ``_get_min_bit_depth`` deliberately: that is the hook rvdata's
-        ``set_data`` calls to upcast silently, and leaving it at the inherited
-        ``None`` makes ``_assert_bit_depth`` the only enforcement.
-        """
-        row = self._manifest[self._manifest["Name"] == ext_name]
-        if row.empty:
-            return None
-        value = row.iloc[0]["BitDepth"]
-        return None if pd.isna(value) else int(value)
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """Read an EPRV-standard FITS HDUList into this model.
@@ -167,7 +148,7 @@ class KPFDataModel(RVDataModel):
         the known-extension gate; an unknown extension raises when
         ``_strict_read`` (the default) and warns otherwise.
         """
-        known = set(self._manifest["Name"])
+        known = set(self.extension_manifest.names(self._data_model))
         for hdu in hdul:
             ext_name = hdu.name
 
@@ -356,6 +337,8 @@ class KPFDataModel(RVDataModel):
         ):
             data = Table(data)
         self._assert_bit_depth(ext_name, data, ext_name)
+        # rvdata's upcast branch is unreachable: it is gated on its own
+        # _get_min_bit_depth, which KPF never overrides, so it always reads None.
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
         if ext_name == "RECEIPT" and isinstance(data, Table):
@@ -370,7 +353,7 @@ class KPFDataModel(RVDataModel):
         empty array -- every extension is born ``np.array([])``, which is 64-bit,
         and reading an unpopulated product feeds that straight back through here.
         """
-        depth = self._bit_depth(canonical_ext)
+        depth = self.extension_manifest.bit_depth(self._data_model, canonical_ext)
         if (
             depth is None
             or not isinstance(data, np.ndarray)
@@ -405,29 +388,24 @@ class KPFDataModel(RVDataModel):
                     target.headers[ext][card.keyword] = (card.value, card.comment)
 
     def receipt_add_entry(self, function, args, status):
-        """Record a processing step, and update DRPSTATU for pipeline modules.
+        """Record a processing step, and stamp DRPSTATU for pipeline modules.
 
         Signature matches rvdata >=0.4.0: ``function`` names the step, ``args``
         is a key=value provenance string (``""`` when not applicable), ``status``
         is ``"PASS"``/``"FAIL"``.
+
+        DRPSTATU becomes '<Module Name> module complete'; conversion and
+        serialization receipts (``_INTERNAL_RECEIPTS``) are skipped so it names
+        the last real stage.
         """
         super().receipt_add_entry(function, args, status)
-        if status == "PASS":
-            self._update_drpstatus(function)
-
-    def _update_drpstatus(self, function):
-        """Stamp DRPSTATU = '<Module Name> module complete' for a completed module.
-
-        Called from ``receipt_add_entry``; conversions/serialization receipts
-        (``_INTERNAL_RECEIPTS``) are skipped so DRPSTATU names the last real stage.
-        DRPSTATU's registry home is RECEIPT, so ``set_keyword`` routes it there.
-        """
-        if function in _INTERNAL_RECEIPTS:
-            return
-        if "RECEIPT" not in self.extensions:
-            return
-        label = function.replace("_", " ").title()
-        self.set_keyword("DRPSTATU", f"{label} module complete")
+        if (
+            status == "PASS"
+            and function not in _INTERNAL_RECEIPTS
+            and "RECEIPT" in self.extensions
+        ):
+            label = function.replace("_", " ").title()
+            self.set_keyword("DRPSTATU", f"{label} module complete")
 
     def _create_hdul(self):
         """Sync ``self.receipt`` into the RECEIPT extension before writing (rvdata

@@ -6,7 +6,7 @@ This module only binds readable names to those declarations, so a test can say
 ``FLUX`` rather than spelling out a manifest lookup. It states no policy of its
 own: change a ``BitDepth`` cell and these follow.
 
-The CSVs are read directly rather than through ``KPFDataModel._bit_depth`` so the
+The CSVs are read directly rather than through ``extension_manifest`` so the
 oracle stays independent of the production lookup the tests check.
 
 ``BitDepth`` deliberately encodes width, not kind -- ``np.bool_`` and ``np.uint8``

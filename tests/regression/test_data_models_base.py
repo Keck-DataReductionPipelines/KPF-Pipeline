@@ -24,7 +24,7 @@ from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
-from ._eprv import expand
+from ._eprv import expand, kpf_table
 from ._registry import expected_comment, expected_routing
 
 
@@ -423,18 +423,14 @@ class TestExtDescript:
         for label, model in self._models():
             if "EXT_DESCRIPT" not in model.extensions:
                 continue
-            manifest = dict(
-                zip(
-                    model._manifest["Name"],
-                    model._manifest["Description"],
-                    strict=True,
-                )
-            )
+            # Straight from the CSV, so the oracle is not the lookup under test.
+            manifest = kpf_table(f"{model._data_model}-extensions")
+            declared = dict(zip(manifest["Name"], manifest["Description"], strict=True))
             table = model.data["EXT_DESCRIPT"]
             for name, description in zip(
                 table["Name"], table["Description"], strict=True
             ):
-                assert description == manifest[name], (label, name)
+                assert description == declared[name], (label, name)
 
     def test_it_survives_a_round_trip(self, tmp_path):
         l2 = KPF2()

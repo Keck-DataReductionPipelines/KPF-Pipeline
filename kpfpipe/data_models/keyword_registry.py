@@ -49,6 +49,7 @@ import numpy as np
 import pandas as pd
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.extension_manifest import extension_manifest
 from kpfpipe.utils.astro import KECK_LOCATION
 
 logger = logging.getLogger(__name__)
@@ -196,21 +197,6 @@ class KeywordRegistry:
     # --- Source table construction -------------------------------------------
 
     @classmethod
-    def _manifest_names(cls):
-        """``data_model -> set of extension names`` from the extension manifests.
-
-        Read here (rather than imported from ``base.py``, which imports this
-        module) purely to resolve keyword-CSV filenames; the data models get the
-        manifests themselves from ``base._MANIFESTS``.
-        """
-        return {
-            data_model: set(
-                pd.read_csv(_kpf_pipe_cfg / f"{data_model}-extensions.csv")["Name"]
-            )
-            for data_model in cls._DATA_MODEL_LEVELS
-        }
-
-    @classmethod
     def _expand_template(cls, name):
         """Expand a ``#`` template to its ``1..DETECTOR["numtrace"]`` members.
 
@@ -255,7 +241,6 @@ class KeywordRegistry:
         Returns ``(rows, data_model_primary)``; ``data_model_primary`` maps each
         data model to the PRIMARY keywords its own CSVs contribute.
         """
-        manifest_names = cls._manifest_names()
         rows = []
         data_model_primary = {data_model: [] for data_model in cls._DATA_MODEL_LEVELS}
         paths = sorted(
@@ -272,7 +257,7 @@ class KeywordRegistry:
                 )
             level = cls._DATA_MODEL_LEVELS[data_model]
             extensions = cls._resolve_extensions(
-                extension, manifest_names[data_model], path.name
+                extension, set(extension_manifest.names(data_model)), path.name
             )
             df = pd.read_csv(path)
             for _, r in df.iterrows():

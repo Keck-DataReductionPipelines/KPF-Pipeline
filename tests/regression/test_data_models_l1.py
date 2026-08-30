@@ -428,7 +428,7 @@ class TestDrpStatus:
 class TestKPFMasterL1:
     def test_the_master_builds_its_whole_manifest(self):
         master = KPFMasterL1()
-        assert set(master.extensions) == set(master._manifest["Name"])
+        assert set(master.extensions) == set(kpf_table("ML1-extensions")["Name"])
         # A master is not a translation of a native instrument product, so it
         # carries no verbatim instrument header.
         assert "INSTRUMENT_HEADER" not in master.extensions
@@ -472,9 +472,9 @@ class TestKPFMasterL1:
 
     def test_bit_depth_from_the_master_manifest(self):
         m = KPFMasterL1()
-        assert m._bit_depth("GREEN_IMG") == 32
-        assert m._bit_depth("GREEN_MASK") == 8
-        assert m._bit_depth("RECEIPT") is None
+        assert m.extension_manifest.bit_depth("ML1", "GREEN_IMG") == 32
+        assert m.extension_manifest.bit_depth("ML1", "GREEN_MASK") == 8
+        assert m.extension_manifest.bit_depth("ML1", "RECEIPT") is None
 
     def test_no_science_extensions(self):
         m = KPFMasterL1()
@@ -570,4 +570,4 @@ class TestEPRVCompliance:
 
     def test_the_model_builds_its_whole_manifest(self):
         model = KPF1()
-        assert set(model.extensions) == set(model._manifest["Name"])
+        assert set(model.extensions) == set(kpf_table("L1-extensions")["Name"])
