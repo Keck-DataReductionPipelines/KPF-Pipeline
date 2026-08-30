@@ -21,7 +21,6 @@ from rvdata.core.models.base import RVDataModel
 from rvdata.core.models.definitions import (
     BASE_DRP_CONFIG_COLUMNS,
     BASE_RECEIPT_COLUMNS,
-    LEVEL4_RV_TABLE_COLUMNS,
 )
 
 from kpfpipe import DETECTOR
@@ -37,6 +36,7 @@ _config_path = importlib.resources.files("kpfpipe.data_models.config")
 
 _TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 _ALIASES = pd.read_csv(_config_path / "aliases.csv")
+_RV_COLUMNS = pd.read_csv(_config_path / "L4-RV-columns.csv")
 
 # Build a set of valid chip-prefix keys for fast membership testing.
 # e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"),
@@ -171,9 +171,10 @@ class KPF4(KPFDataModel):
     def _fill_typed_empty_tables(self):
         """Give the structural extensions their empty typed skeletons.
 
-        All five ``RV#`` tables get the same 12-column skeleton, so a dark fiber
-        ships the same shape as an illuminated one. See ``KPF2`` for the
-        membership gate and the direct-Table RECEIPT construction.
+        All five ``RV#`` tables get the same skeleton from
+        ``config/L4-RV-columns.csv``, so a dark fiber ships the same shape as an
+        illuminated one. See ``KPF2`` for the membership gate and the direct-Table
+        RECEIPT construction.
         """
         if "INSTRUMENT_HEADER" in self.extensions:
             self.set_data("INSTRUMENT_HEADER", np.zeros((1,), dtype=np.float32))
@@ -192,7 +193,7 @@ class KPF4(KPFDataModel):
                 "DRP_CONFIG",
                 pd.DataFrame(columns=BASE_DRP_CONFIG_COLUMNS["Name"].tolist()),
             )
-        rv_columns = LEVEL4_RV_TABLE_COLUMNS["Name"].tolist()
+        rv_columns = _RV_COLUMNS["Name"].tolist()
         for trace_num in range(1, 6):
             ext = f"RV{trace_num}"
             if ext in self.extensions:

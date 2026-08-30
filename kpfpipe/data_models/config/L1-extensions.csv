@@ -1,4 +1,4 @@
-HDU,Name,DataType,MinBitDepth,Required,Description
+HDU,Name,DataType,BitDepth,Required,Description
 0,PRIMARY,PrimaryHDU,,True,Observation metadata header
 1,GREEN_CCD,ImageHDU,32,True,Assembled green CCD frame (4080x4080)
 2,GREEN_VAR,ImageHDU,32,True,Green CCD variance frame

@@ -13,7 +13,7 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
 from ._catalog import catalog_record_table
-from ._data_models import write_minimal_l0
+from ._data_models import standardized_l0, write_minimal_l0
 from ._dtype_policy import assert_not_float64
 
 # synthetic_l0_file and synthetic_l0_minimal fixtures live in tests/conftest.py
@@ -298,3 +298,28 @@ class TestDtypeProvenance:
         reread = KPF0.from_fits(out_fn)
         for ext in ("GREEN_AMP1", "RED_AMP1"):
             assert_not_float64(reread.data[ext], f"{ext} after round-trip")
+
+
+class TestEPRVCompliance:
+    """L0 against the EPRV standard.
+
+    rvdata publishes no L0 tables -- L0 is the raw WMKO readout, not an EPRV
+    product -- so the oracle is KPF's own ``EPRV-header-map.csv``. A bare KPF0 is
+    deliberately unseeded, because ``_read`` replaces PRIMARY wholesale;
+    StandardizeDataFormat is what puts the EPRV skeleton on it.
+    """
+
+    def test_standardization_stamps_every_mapped_keyword(self, tmp_path):
+        fn = tmp_path / "KP.20240101.00001.00.fits"
+        write_minimal_l0(fn)
+        l0 = standardized_l0(fn)
+        registry = KPF0.keyword_registry
+        assert set(registry.primary_seed("L0")) <= set(l0.headers["PRIMARY"])
+
+    def test_the_seed_is_registered_on_primary(self):
+        registry = KPF0.keyword_registry
+        assert set(registry.primary_seed("L0")) <= registry.allowed["PRIMARY"]
+
+    def test_the_model_builds_its_whole_manifest(self):
+        model = KPF0()
+        assert set(model.extensions) == set(model._manifest["Name"])

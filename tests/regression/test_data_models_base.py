@@ -6,6 +6,12 @@ KPF1 is the vehicle for the contract every model inherits: extension headers are
 KPF2/KPF4 round-trip guards live in test_data_models_l{2,4}.py.
 """
 
+import importlib.metadata
+import importlib.resources
+import tomllib
+from pathlib import Path
+
+import pandas as pd
 import pytest
 from astropy.io import fits
 
@@ -18,11 +24,8 @@ from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
-from ._registry import (
-    expected_comment,
-    expected_routing,
-    read_kpf_header_registry,
-)
+from ._eprv import expand
+from ._registry import expected_comment, expected_routing
 
 
 class TestHeaderStorage:
@@ -160,9 +163,9 @@ class TestRegistryConformance:
     def test_multi_home_keywords_are_not_routed(self):
         # A keyword on several extensions and on none of them PRIMARY (CTYPE1 on
         # every trace, VELWIDTH on every CCF#) is ext=-only.
-        routing = KPF1.keyword_registry.routing
-        table = read_kpf_header_registry()
-        homes = table.groupby("Keyword")["Extension"].apply(set)
+        registry = KPF1.keyword_registry
+        routing = registry.routing
+        homes = registry.table.groupby("Keyword")["Extension"].apply(set)
         for keyword, extensions in homes.items():
             if len(extensions) > 1 and "PRIMARY" not in extensions:
                 assert keyword not in routing, f"multi-home {keyword} must not route"
@@ -170,16 +173,16 @@ class TestRegistryConformance:
                 assert keyword in routing, f"{keyword} missing from routing table"
 
     def test_comment_is_description_and_units(self):
+        # The derived comments lookup against the table it is built from.
         reg = KPF1.keyword_registry
-        for _, row in read_kpf_header_registry().iterrows():
-            got = reg.comment_for(row["Keyword"], row["Extension"])
-            assert got == expected_comment(row["Description"], row["Units"])
+        for row in reg.table.itertuples(index=False):
+            got = reg.comment_for(row.Keyword, row.Extension)
+            assert got == expected_comment(row.Description, row.Units)
 
-    def test_datatype_matches_the_csv(self):
+    def test_datatype_matches_the_table(self):
         reg = KPF1.keyword_registry
-        for _, row in read_kpf_header_registry().iterrows():
-            got = reg.datatype_for(row["Keyword"], row["Extension"])
-            assert got == row["DataType"]
+        for row in reg.table.itertuples(index=False):
+            assert reg.datatype_for(row.Keyword, row.Extension) == row.DataType
 
     def test_qc_flag_keyword_sets_are_scoped_by_level(self):
         # Relocated from test_checkpoints.py: this is registry scoping, not
@@ -456,3 +459,129 @@ class TestBareModelDefaults:
         # rvdata's header_map defaults it to 65; KPF reads 35 green + 32 red.
         assert KPF2().headers["PRIMARY"]["NUMORDER"] == 67
         assert DETECTOR["numorder"] == 67
+
+
+_CFG = importlib.resources.files("kpfpipe.data_models.config")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+_KEYWORD_COLUMNS = [
+    "Keyword",
+    "Description",
+    "Units",
+    "DataType",
+    "ExampleValue",
+    "PopulatedBy",
+]
+_MANIFEST_COLUMNS = ["HDU", "Name", "DataType", "BitDepth", "Required", "Description"]
+
+_PROFILES = ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
+
+# KPF-owned PRIMARY keywords with no EPRV header-map row: the per-CCD RVs the
+# standard has no equivalent for.
+_KPF_ONLY_PRIMARY = {"RVGREEN", "RVRED", "ERVGREEN", "ERVRED"}
+
+
+def _keyword_files():
+    return sorted(
+        (p for p in _CFG.iterdir() if p.name.endswith("-keywords.csv")),
+        key=lambda p: p.name,
+    )
+
+
+class TestPinnedRelease:
+    """Every EPRV compliance check reads the installed rvdata, so the pin the
+    exception lists were written against is asserted here, once."""
+
+    def test_the_installed_release_matches_the_pin(self):
+        pyproject = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text())
+        pins = [
+            d
+            for d in pyproject["project"]["dependencies"]
+            if d.startswith("rv-data-standard")
+        ]
+        assert pins == ["rv-data-standard==0.4.0"]
+        assert importlib.metadata.version("rv-data-standard") == "0.4.0"
+
+
+class TestConfigTables:
+    """The config tables' own shape. The filename-driven layout only works if no
+    file quietly grows or loses a column, or lands under an unknown prefix."""
+
+    def test_keyword_files_have_the_keyword_schema(self):
+        for path in _keyword_files():
+            assert list(pd.read_csv(path).columns) == _KEYWORD_COLUMNS, path.name
+
+    def test_every_profile_has_a_manifest_with_the_manifest_schema(self):
+        for profile in _PROFILES:
+            columns = list(pd.read_csv(_CFG / f"{profile}-extensions.csv").columns)
+            assert columns == _MANIFEST_COLUMNS, profile
+
+    def test_keyword_filenames_use_a_known_profile(self):
+        for path in _keyword_files():
+            profile, _, extension = path.name[: -len("-keywords.csv")].rpartition("-")
+            assert profile in _PROFILES, path.name
+            assert extension, path.name
+
+    def test_no_structural_card_is_registered(self):
+        # rvdata declares XTENSION/EXTNAME as per-extension keywords; astropy
+        # writes them from the HDU structure, so they must not be carried over.
+        registry = KPF1.keyword_registry
+        assert not [k for k in registry.registered if registry.is_structural(k)]
+
+    def test_the_config_csvs_are_packaged(self):
+        with open(_REPO_ROOT / "pyproject.toml", "rb") as fh:
+            package_data = tomllib.load(fh)["tool"]["setuptools"]["package-data"]
+        assert "*.csv" in package_data["kpfpipe.data_models.config"]
+
+
+class TestHeaderMapIsTheEprvPrimarySet:
+    """``EPRV-header-map.csv`` and the PRIMARY keyword CSVs are two authorities
+    over one set, so they are asserted equal rather than left to drift."""
+
+    @staticmethod
+    def _map():
+        return pd.read_csv(_CFG / "EPRV-header-map.csv")
+
+    def test_keys_are_unique(self):
+        keys = self._map()["EPRV_KEY"].astype(str).str.strip()
+        assert not list(keys[keys.duplicated()])
+
+    def test_keys_are_exactly_the_registered_eprv_primary_set(self):
+        mapped = set(self._map()["EPRV_KEY"].astype(str).str.strip())
+        # Scoped to the science chain: the masters PRIMARY keywords are registered
+        # but outside EPRV scope, so unmapped by construction.
+        registered = {
+            member
+            for level in ("L0", "L2", "L4")
+            for keyword in pd.read_csv(_CFG / f"{level}-PRIMARY-keywords.csv")[
+                "Keyword"
+            ]
+            for member in expand(keyword)
+        }
+        assert mapped <= registered
+        assert registered - mapped == _KPF_ONLY_PRIMARY
+
+    def test_kpf_ext_is_primary_or_quality_control(self):
+        for value in self._map()["KPF_EXT"].dropna().astype(str).str.strip():
+            assert value in ("", "PRIMARY", "QUALITY_CONTROL"), value
+
+
+class TestRouting:
+    """The refactor must not silently rehome a keyword."""
+
+    def test_routing_prefers_primary(self):
+        # PRIMARY-preference is what keeps RVMETHOD and the per-CCD RV keywords
+        # routable while they also live on RV1..5.
+        routing = KPF1.keyword_registry.routing
+        for keyword in ("RVMETHOD", *_KPF_ONLY_PRIMARY):
+            assert routing[keyword] == "PRIMARY"
+
+    def test_the_per_ccd_rv_set_is_registered_on_every_rv_extension(self):
+        registry = KPF1.keyword_registry
+        for i in range(1, DETECTOR["numtrace"] + 1):
+            assert _KPF_ONLY_PRIMARY <= registry.allowed[f"RV{i}"]
+
+    def test_multi_home_keywords_stay_unrouted(self):
+        routing = KPF1.keyword_registry.routing
+        for keyword in ("CTYPE1", "CTYPE2", "VELSTART", "VELWIDTH", "SKYRMVD"):
+            assert keyword not in routing

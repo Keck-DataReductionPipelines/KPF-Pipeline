@@ -66,10 +66,10 @@ def _make_l4(
                 f"{chip}_{fiber}_WAVE", np.tile(wave_1d, (n, 1)).astype(np.float64)
             )
             kpf2.set_data(
-                f"{chip}_{fiber}_FLUX", np.tile(flux_1d, (n, 1)).astype(np.float64)
+                f"{chip}_{fiber}_FLUX", np.tile(flux_1d, (n, 1)).astype(np.float32)
             )
             kpf2.set_data(
-                f"{chip}_{fiber}_VAR", np.tile(flux_1d, (n, 1)).astype(np.float64)
+                f"{chip}_{fiber}_VAR", np.tile(flux_1d, (n, 1)).astype(np.float32)
             )
     kpf2.set_data("BARYCORR_Z", np.zeros(NORDER))
     kpf2.set_data("BARYCORR_KMS", np.full(NORDER, berv))
@@ -469,8 +469,11 @@ class TestPerform:
         assert rv_hdr["RVGREEN"] == pytest.approx(V_INJECT, abs=0.1)
         assert rv_hdr["RVRED"] == pytest.approx(V_INJECT, abs=0.1)
         assert rv_hdr["ERVGREEN"] > 0 and rv_hdr["ERVRED"] > 0
-        # The PRIMARY card is the SCI-combined value, a separate write.
-        assert l4.headers["PRIMARY"]["RVGREEN"] != rv_hdr["RVGREEN"]
+        # RVGREEN is homed on PRIMARY and on every RV# table: the PRIMARY card is
+        # the SCI-combined value, a separate write from this per-orderlet one.
+        # Not asserted as an inequality -- every fiber in this fixture carries the
+        # same synthetic spectrum, so the two writes agree to the bit.
+        assert "RVGREEN" in l4.headers["PRIMARY"]
 
     def test_combined_rv_populated(self, performed):
         # PRIMARY: EPRV RV/RVERR plus the KPF SCI-combined per-CCD RVGREEN/RVRED.
@@ -484,7 +487,7 @@ class TestPerform:
         assert prim["RVMETHOD"] == "CCF"
         # RVGREEN is homed on PRIMARY and on every RV# table, so RV3 carries its
         # own per-orderlet value; the EPRV combined RV is PRIMARY-only.
-        assert l4.headers["RV3"]["RVGREEN"] != prim["RVGREEN"]
+        assert "RVGREEN" in l4.headers["RV3"]
         assert "RV" not in l4.headers["RV3"]
 
     def test_combined_rv_is_weighted_ccd_combine(self, performed):

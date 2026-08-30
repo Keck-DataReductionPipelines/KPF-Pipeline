@@ -129,17 +129,18 @@ class KPFDataModel(RVDataModel):
             ),
         )
 
-    def _get_min_bit_depth(self, ext_name):
-        """The manifest's MinBitDepth floor for ``ext_name``, or None.
+    def _bit_depth(self, ext_name):
+        """The manifest's declared BitDepth for ``ext_name``, or None.
 
         None when the cell is blank or the extension is absent from the manifest.
-        ``set_data`` enforces the floor (ImageHDU arrays only); the manifest
-        declares it.
+        Named off ``_get_min_bit_depth`` deliberately: that is the hook rvdata's
+        ``set_data`` calls to upcast silently, and leaving it at the inherited
+        ``None`` makes ``_assert_bit_depth`` the only enforcement.
         """
         row = self._manifest[self._manifest["Name"] == ext_name]
         if row.empty:
             return None
-        value = row.iloc[0]["MinBitDepth"]
+        value = row.iloc[0]["BitDepth"]
         return None if pd.isna(value) else int(value)
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
@@ -340,12 +341,8 @@ class KPFDataModel(RVDataModel):
         if hasattr(self.data, "_chip_split"):
             split = self.data._chip_split(ext_name)
             if split is not None:
-                # The chip-prefix write goes straight into the underlying
-                # canonical array (sized from the first write's dtype), bypassing
-                # rvdata's MinBitDepth check in super().set_data. Enforce it here
-                # so both write paths honor the born-64 WAVE / 8-bit policy.
                 canonical = self.data._resolve(split[0])
-                data = self._coerce_to_min_bit_depth(canonical, data, ext_name)
+                self._assert_bit_depth(canonical, data, ext_name)
                 self.data[ext_name] = data
                 return
         if hasattr(self.extensions, "_resolve"):
@@ -358,40 +355,33 @@ class KPFDataModel(RVDataModel):
             and data.dtype.names is not None
         ):
             data = Table(data)
+        self._assert_bit_depth(ext_name, data, ext_name)
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
         if ext_name == "RECEIPT" and isinstance(data, Table):
             self.receipt = data.to_pandas()
 
-    def _coerce_to_min_bit_depth(self, canonical_ext, data, label):
-        """Upcast ``data`` to satisfy ``canonical_ext``'s MinBitDepth, mirroring
-        rvdata's ``set_data`` enforcement (and its warning) for the chip-prefix
-        write path that bypasses it. A no-op with no requirement, an empty array,
-        or data already at depth.
+    def _assert_bit_depth(self, canonical_ext, data, label):
+        """Raise unless ``data`` matches ``canonical_ext``'s declared BitDepth.
+
+        Width only: byte order is irrelevant (a FITS round-trip returns ``>f4``,
+        still 32 bits) and ``np.bool_`` satisfies the 8-bit master MASK rows it is
+        held as in memory. A no-op with no declaration, non-array data, or an
+        empty array -- every extension is born ``np.array([])``, which is 64-bit,
+        and reading an unpopulated product feeds that straight back through here.
         """
-        min_depth = self._get_min_bit_depth(canonical_ext)
+        depth = self._bit_depth(canonical_ext)
         if (
-            min_depth is None
+            depth is None
             or not isinstance(data, np.ndarray)
             or data.size == 0
-            or data.dtype.itemsize * 8 >= min_depth
+            or data.dtype.itemsize * 8 == depth
         ):
-            return data
-        if np.issubdtype(data.dtype, np.floating):
-            target = np.dtype(f"float{min_depth}")
-        elif np.issubdtype(data.dtype, np.unsignedinteger):
-            target = np.dtype(f"uint{min_depth}")
-        else:
-            target = np.dtype(f"int{min_depth}")
-        logger.warning(
-            "Extension '%s' has dtype %s (%d-bit) but MinBitDepth=%d. Upcasting to %s.",
-            label,
-            data.dtype,
-            data.dtype.itemsize * 8,
-            min_depth,
-            target.name,
+            return
+        raise TypeError(
+            f"{label}: manifest declares {depth}-bit, got {data.dtype} "
+            f"({data.dtype.itemsize * 8}-bit)"
         )
-        return data.astype(target)
 
     def set_header(self, ext_name, header):
         """Set an extension header, resolving KPF aliases before the base class

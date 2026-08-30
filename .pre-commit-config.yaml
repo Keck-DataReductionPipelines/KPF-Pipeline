@@ -21,13 +21,11 @@ repos:
     rev: v6.0.0
     hooks:
       # Externally-sourced data that must not be reformatted: reference/ (line
-      # masks, line lists, the EEM colour/Teff table) and the vendored rvdata
-      # release snapshot, which is a byte-for-byte pin the compliance test
-      # asserts the KPF keyword tables against.
+      # masks, line lists, the EEM colour/Teff table).
       - id: trailing-whitespace
-        exclude: '^(reference/|kpfpipe/data_models/config/rvdata-0\.4\.0/)'
+        exclude: '^reference/'
       - id: end-of-file-fixer
-        exclude: '^(reference/|kpfpipe/data_models/config/rvdata-0\.4\.0/)'
+        exclude: '^reference/'
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict

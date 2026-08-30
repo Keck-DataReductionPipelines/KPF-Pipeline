@@ -1,15 +1,13 @@
-"""Read the KPF header-keyword registry CSVs independently (not a test module).
+"""Independent oracles for the keyword registry (not a test module).
 
-The conformance test needs an oracle for the keyword->extension routing that is
-*independent of the code under test*, so it reads the
-``config/{prefix}-{EXTENSION}-keywords.csv`` tables directly here and compares
-against the live table the data model exposes
-(``KPFDataModel.keyword_registry.routing``). Tests therefore never import
-``data_models.keyword_registry``: registry data reaches them through the model or
-through this helper.
+``test_data_models_base.py`` needs an answer to "where does this keyword route?"
+that is *independent of the code under test*, so the routing rule is re-derived
+here from the ``config/{prefix}-{EXTENSION}-keywords.csv`` tables rather than read
+off ``KPFDataModel.keyword_registry``. Tests therefore never import
+``data_models.keyword_registry``: registry data reaches them through the model,
+and the oracle it is checked against comes from here.
 
-Two resolution rules must be replicated for the comparison to line up, and both
-are written out by hand here rather than imported, so the rest of the oracle's
+Two resolution rules are replicated by hand rather than imported, so the
 independence is real:
 
 * a ``#`` in a keyword expands to ``1..DETECTOR["numtrace"]``;
@@ -43,83 +41,40 @@ _FAMILY_STEMS = {
 _INDICES = range(1, DETECTOR["numtrace"] + 1)
 
 
-def _extensions_for(stem):
-    """Concrete extension names for a filename's extension part."""
-    template = _FAMILY_STEMS.get(stem)
-    if template is None:
-        return [stem]
-    return [template.format(i=i) for i in _INDICES]
-
-
-def _keywords_for(keyword):
-    """Concrete keyword names for a CSV Keyword cell."""
-    if "#" not in keyword:
-        return [keyword]
-    return [keyword.replace("#", str(i)) for i in _INDICES]
-
-
-def read_kpf_header_registry():
-    """Combined L0/L1/L2/L4 KPF keyword registry as a DataFrame.
-
-    Columns: ``Keyword, Description, Units, DataType, ExampleValue, PopulatedBy,
-    Extension, Profile``. ``Keyword`` and ``Extension`` are fully expanded, so
-    one CSV row can yield several rows here.
-    """
-    rows = []
+def _homes():
+    """``{keyword: set of extensions}`` implied by the science keyword CSVs."""
+    homes = {}
     for path in sorted(_CFG.iterdir(), key=lambda p: p.name):
         if not path.name.endswith("-keywords.csv"):
             continue
         profile, _, stem = path.name[: -len("-keywords.csv")].rpartition("-")
         if profile not in _SCIENCE_PROFILES:
             continue
-        extensions = _extensions_for(stem)
-        for _, row in pd.read_csv(path).iterrows():
-            for keyword in _keywords_for(str(row["Keyword"]).strip()):
-                for extension in extensions:
-                    rows.append(
-                        {
-                            "Keyword": keyword,
-                            "Description": (
-                                ""
-                                if pd.isna(row["Description"])
-                                else str(row["Description"]).strip()
-                            ),
-                            "Units": (
-                                ""
-                                if pd.isna(row["Units"])
-                                else str(row["Units"]).strip()
-                            ),
-                            "DataType": (
-                                ""
-                                if pd.isna(row["DataType"])
-                                else str(row["DataType"]).strip()
-                            ),
-                            "ExampleValue": row["ExampleValue"],
-                            "PopulatedBy": (
-                                ""
-                                if pd.isna(row["PopulatedBy"])
-                                else str(row["PopulatedBy"]).strip()
-                            ),
-                            "Extension": extension,
-                            "Profile": profile,
-                        }
-                    )
-    return pd.DataFrame(rows)
+        template = _FAMILY_STEMS.get(stem)
+        extensions = (
+            [stem] if template is None else [template.format(i=i) for i in _INDICES]
+        )
+        for keyword in pd.read_csv(path)["Keyword"]:
+            keyword = str(keyword).strip()
+            members = (
+                [keyword.replace("#", str(i)) for i in _INDICES]
+                if "#" in keyword
+                else [keyword]
+            )
+            for member in members:
+                homes.setdefault(member, set()).update(extensions)
+    return homes
 
 
-def expected_routing(table=None):
+def expected_routing():
     """``{keyword: home extension}`` implied by the CSVs, or absent when unrouted.
 
-    The rule, restated independently: PRIMARY wins when the keyword is
-    registered there; otherwise a keyword with exactly one home routes to it and
-    a keyword with several does not route at all.
+    The rule, restated independently: PRIMARY wins when the keyword is registered
+    there; otherwise a keyword with exactly one home routes to it, and a keyword
+    with several does not route at all.
     """
-    table = read_kpf_header_registry() if table is None else table
-    homes = {}
-    for _, row in table.iterrows():
-        homes.setdefault(row["Keyword"], set()).add(row["Extension"])
     routing = {}
-    for keyword, extensions in homes.items():
+    for keyword, extensions in _homes().items():
         if "PRIMARY" in extensions:
             routing[keyword] = "PRIMARY"
         elif len(extensions) == 1:

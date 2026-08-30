@@ -169,7 +169,7 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
             total_pixels += nrows * ncols
 
     # The companions DATAPRL2 requires: VAR from extraction, WAVE from the WLS
-    # (float64 per its EPRV MinBitDepth), and the per-order barycentric arrays.
+    # (float64 per its EPRV BitDepth), and the per-order barycentric arrays.
     set_fiber_arrays(kpf2, "VAR", 1.0, ncol=ncols)
     set_fiber_arrays(kpf2, "WAVE", 5000.0, ncol=ncols, dtype=np.float64)
     for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):

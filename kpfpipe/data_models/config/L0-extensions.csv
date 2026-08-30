@@ -1,4 +1,4 @@
-HDU,Name,DataType,MinBitDepth,Required,Description
+HDU,Name,DataType,BitDepth,Required,Description
 0,PRIMARY,PrimaryHDU,,True,Observation metadata header
 1,GREEN_AMP1,ImageHDU,,False,Green CCD amplifier 1 readout
 2,GREEN_AMP2,ImageHDU,,False,Green CCD amplifier 2 readout

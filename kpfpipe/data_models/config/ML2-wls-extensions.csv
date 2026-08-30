@@ -1,4 +1,4 @@
-HDU,Name,DataType,MinBitDepth,Required,Description
+HDU,Name,DataType,BitDepth,Required,Description
 0,PRIMARY,PrimaryHDU,,True,Calibration metadata header
 1,RECEIPT,BinTableHDU,,True,Accumulated processing history
 2,DRP_CONFIG,BinTableHDU,,True,Pipeline config as a 2-column table (key = value)

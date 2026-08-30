@@ -16,6 +16,7 @@ from kpfpipe.data_models.masters import KPFMasterL4
 
 from ._catalog import SOURCES, catalog_record_table
 from ._dtype_policy import BJD, CCF, RV_FLOAT, assert_dtype, assert_roundtrip_dtype
+from ._eprv import kpf_table, rvdata_table
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -306,3 +307,74 @@ class TestRvdataReadersAreDetached:
         KPF4().to_fits(fn)
         KPF4.from_fits(fn)
         assert fired == []
+
+
+# rvdata rows KPF deliberately does not build; see the L2 twin for the rationale.
+_UNBUILT = {
+    "DIAGNOSTICS1": "EPRV-optional; KPF carries diagnostics in QUALITY_CONTROL",
+    "CUSTOM_CCF1": "EPRV CUSTOM slot; unused by KPF",
+    "CUSTOM_RV1": "EPRV CUSTOM slot; unused by KPF",
+}
+
+_PER_EXTENSION_TABLES = [("L4-CCF1-keywords", "CCF1"), ("L4-RV1-keywords", "RV1")]
+
+
+class TestEPRVCompliance:
+    """L4 against the installed rvdata tables.
+
+    Existence and shape only, as at L2. L4 is where rvdata's own tables are
+    thinnest: ``L4-extensions.csv`` declares no bit depths at all, putting the RV
+    widths in ``L4-RV_TABLE-columns.csv`` instead, which is what
+    ``config/L4-RV-columns.csv`` is checked against.
+    """
+
+    def test_every_eprv_primary_keyword_is_registered(self):
+        want = set(map(str.strip, rvdata_table("L4-PRIMARY-keywords")["Keyword"]))
+        assert not sorted(want - KPF4.keyword_registry.allowed["PRIMARY"])
+
+    @pytest.mark.parametrize(("table", "extension"), _PER_EXTENSION_TABLES)
+    def test_every_eprv_per_extension_keyword_is_registered(self, table, extension):
+        registry = KPF4.keyword_registry
+        missing = [
+            keyword
+            for keyword in map(str.strip, rvdata_table(table)["Keyword"])
+            if not registry.is_structural(keyword)
+            and keyword not in registry.allowed[extension]
+        ]
+        assert not missing
+
+    def test_every_required_extension_is_built(self):
+        rvdata = rvdata_table("L4-extensions")
+        assert set(rvdata[rvdata["Required"]]["Name"]) <= set(KPF4().extensions)
+
+    def test_the_model_builds_its_whole_manifest(self):
+        model = KPF4()
+        assert set(model.extensions) == set(model._manifest["Name"])
+
+    def test_undeclared_rvdata_extensions_are_listed(self):
+        undeclared = set(rvdata_table("L4-extensions")["Name"]) - set(
+            kpf_table("L4-extensions")["Name"]
+        )
+        assert undeclared == set(_UNBUILT)
+
+    def test_shared_extensions_agree_on_hdu_type(self):
+        rvdata = rvdata_table("L4-extensions")
+        kpf = kpf_table("L4-extensions")
+        theirs = dict(zip(rvdata["Name"], rvdata["DataType"], strict=True))
+        ours = dict(zip(kpf["Name"], kpf["DataType"], strict=True))
+        assert not {n for n in set(theirs) & set(ours) if theirs[n] != ours[n]}
+
+    def test_the_rv_table_carries_every_required_eprv_column(self):
+        theirs = rvdata_table("L4-RV_TABLE-columns")
+        ours = kpf_table("L4-RV-columns").set_index("Name")
+        required = set(theirs[theirs["Required"] == "Yes"]["Name"])
+        assert required <= set(ours.index)
+        assert set(KPF4().data["RV1"].columns) == set(ours.index)
+
+    def test_rv_column_bit_depth_meets_the_eprv_floor(self):
+        theirs = rvdata_table("L4-RV_TABLE-columns")
+        ours = kpf_table("L4-RV-columns").set_index("Name")["BitDepth"]
+        declared = theirs[theirs["MinBitDepth"].notna()]
+        assert not declared.empty
+        for _, row in declared.iterrows():
+            assert ours[row["Name"]] >= row["MinBitDepth"], row["Name"]

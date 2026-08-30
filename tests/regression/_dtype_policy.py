@@ -1,32 +1,52 @@
-"""Shared dtype-provenance policy for the test suite (not a test module).
+"""Shared dtype-provenance names for the test suite (not a test module).
 
-Single source of truth for the float32/float64/uint8/bool matrix the pipeline must
-respect in memory, in module intermediates, and on disk. EPRV mandates 64-bit for
-``*_WAVE``/``BJD_TDB``/``WAVE_START``/``WAVE_END`` and 8-bit for quality; the rest
-is KPF policy (float32 science arrays for speed, float64 for RV/CCF precision).
-Both directions matter: an upscale costs performance, a downscale costs RV accuracy.
+The widths below are *read from* ``data_models/config``, which is where the
+float32/float64/uint8 policy is declared and where the data models enforce it.
+This module only binds readable names to those declarations, so a test can say
+``FLUX`` rather than spelling out a manifest lookup. It states no policy of its
+own: change a ``BitDepth`` cell and these follow.
+
+The CSVs are read directly rather than through ``KPFDataModel._bit_depth`` so the
+oracle stays independent of the production lookup the tests check.
+
+``BitDepth`` deliberately encodes width, not kind -- ``np.bool_`` and ``np.uint8``
+are both 8-bit -- so the ``float``/``bool``/``uint8`` kind is named here.
 
 Builder helpers are assertion-free. ``_dtype_policy.py`` is the one contract module;
 if a cross-cutting contract genuinely needs assertions, promote it to a new contract
 module and justify the contract.
 """
 
+import importlib.resources
+
 import numpy as np
+import pandas as pd
 
-# --- the policy matrix -----------------------------------------------------
+_CFG = importlib.resources.files("kpfpipe.data_models.config")
 
-L1_IMAGE = np.float32  # L1 *_CCD/*_VAR, master *_IMG/*_SNR
-FLUX = np.float32  # L2 *_FLUX/*_VAR/*_BLAZE
-WAVE = np.float64  # *_WAVE everywhere (EPRV, born-64)
-BJD = np.float64  # BJD_TDB (EPRV, born-64)
-BARYCORR = np.float64  # BARYCORR_KMS/_Z
-CCF = np.float64  # L4 CCF cubes
-RV_FLOAT = np.float64  # RV/RV_ERR/BERV/WAVE_START/WAVE_END (RV table)
-WLS_COEFFS = np.float64  # master {GREEN,RED}_WLS_COEFFS (Legendre coefficients)
-MASK_MEM = np.bool_  # master MASK in memory
+
+def _float(table, name):
+    """The float dtype ``table``'s ``name`` row declares."""
+    rows = pd.read_csv(_CFG / f"{table}.csv")
+    bits = int(rows.loc[rows["Name"] == name, "BitDepth"].iloc[0])
+    return np.dtype(f"float{bits}")
+
+
+# --- the policy matrix, as declared in data_models/config ------------------
+
+L1_IMAGE = _float("L1-extensions", "GREEN_CCD")  # L1 *_CCD/*_VAR, master *_IMG/*_SNR
+FLUX = _float("L2-extensions", "TRACE1_FLUX")  # L2 *_FLUX/*_VAR/*_BLAZE
+WAVE = _float("L2-extensions", "TRACE1_WAVE")  # *_WAVE everywhere (EPRV, born-64)
+BJD = _float("L2-extensions", "BJD_TDB")  # BJD_TDB (EPRV, born-64)
+BARYCORR = _float("L2-extensions", "BARYCORR_KMS")  # BARYCORR_KMS/_Z
+CCF = _float("L4-extensions", "CCF1")  # L4 CCF cubes
+RV_FLOAT = _float("L4-RV-columns", "RV")  # RV/RV_ERR/BERV/WAVE_START/WAVE_END
+WLS_COEFFS = _float("ML2-wls-extensions", "GREEN_WLS_COEFFS")  # Legendre coefficients
+MASK_MEM = np.bool_  # master MASK in memory (8-bit, like the disk form)
 MASK_DISK = np.uint8  # master MASK on disk (EPRV 8-bit, BITPIX=8)
 
 # numpy BITPIX <-> dtype, for asserting the on-disk form after a round-trip.
+# negative BITPIX is the FITS/IEEE convention for floating point quantities
 _BITPIX = {
     np.dtype(np.float32): -32,
     np.dtype(np.float64): -64,

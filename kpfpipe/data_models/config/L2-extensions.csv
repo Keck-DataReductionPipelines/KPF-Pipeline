@@ -1,4 +1,4 @@
-HDU,Name,DataType,MinBitDepth,Required,Description
+HDU,Name,DataType,BitDepth,Required,Description
 0,PRIMARY,PrimaryHDU,,True,EPRV standard FITS header (no data)
 1,INSTRUMENT_HEADER,ImageHDU,,True,Verbatim raw instrument (L0) PRIMARY header
 2,RECEIPT,BinTableHDU,,True,Table of operations that have been performed on this file

@@ -7,6 +7,7 @@ import logging
 
 import astropy.units as u
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 
@@ -18,6 +19,7 @@ from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from kpfpipe.utils.astro import compute_redshift
 
 from ._catalog import SOURCES, catalog_record_table
+from ._eprv import kpf_table
 
 # synthetic_l0_file, synthetic_l0_minimal, synthetic_l1_file fixtures live in
 # tests/conftest.py
@@ -424,6 +426,28 @@ class TestDrpStatus:
 
 
 class TestKPFMasterL1:
+    def test_the_master_builds_its_whole_manifest(self):
+        master = KPFMasterL1()
+        assert set(master.extensions) == set(master._manifest["Name"])
+        # A master is not a translation of a native instrument product, so it
+        # carries no verbatim instrument header.
+        assert "INSTRUMENT_HEADER" not in master.extensions
+
+    @pytest.mark.parametrize("profile", ("ML1",))
+    def test_shared_rows_agree_with_the_science_manifest(self, profile):
+        # The duplication between a master manifest and its science level's is
+        # intentional -- each stays a complete spec of one product -- so a shared
+        # row must not disagree, or a master would ship a GREEN_IMG unlike
+        # L1's.
+        master = kpf_table(f"{profile}-extensions").set_index("Name")
+        science = kpf_table("L1-extensions").set_index("Name")
+        shared = set(master.index) & set(science.index)
+        assert shared
+        for name in shared:
+            assert master.loc[name, "DataType"] == science.loc[name, "DataType"], name
+            ours, theirs = master.loc[name, "BitDepth"], science.loc[name, "BitDepth"]
+            assert (pd.isna(ours) and pd.isna(theirs)) or ours == theirs, name
+
     def test_manifest_extensions_created(self):
         m = KPFMasterL1()
         for ext in [
@@ -446,11 +470,11 @@ class TestKPFMasterL1:
         assert set(m.keyword_registry.primary_seed("ML1")) <= set(m.headers["PRIMARY"])
         assert m.headers["PRIMARY"]["DATALVL"] == "ML1"
 
-    def test_min_bit_depth_from_the_master_manifest(self):
+    def test_bit_depth_from_the_master_manifest(self):
         m = KPFMasterL1()
-        assert m._get_min_bit_depth("GREEN_IMG") == 32
-        assert m._get_min_bit_depth("GREEN_MASK") == 8
-        assert m._get_min_bit_depth("RECEIPT") is None
+        assert m._bit_depth("GREEN_IMG") == 32
+        assert m._bit_depth("GREEN_MASK") == 8
+        assert m._bit_depth("RECEIPT") is None
 
     def test_no_science_extensions(self):
         m = KPFMasterL1()
@@ -525,3 +549,25 @@ class TestKPFMasterL1:
         m.set_input_files(files, "bias")
         assert m.data["INPUT_FILES"]["FILENAME"].tolist() == files
         assert m.headers["PRIMARY"]["MASTYPE"] == "bias"
+
+
+class TestEPRVCompliance:
+    """L1 against the EPRV standard.
+
+    rvdata publishes no L1 tables either -- the assembled FFI is a KPF stage
+    between the raw readout and the EPRV L2 -- so, as at L0, the oracle is KPF's
+    own header map. Unlike L0, an L1 seeds its PRIMARY at construction, so the
+    cards are asserted on a bare model.
+    """
+
+    def test_the_primary_carries_every_mapped_keyword(self):
+        registry = KPF1.keyword_registry
+        assert set(registry.primary_seed("L1")) <= set(KPF1().headers["PRIMARY"])
+
+    def test_the_seed_is_registered_on_primary(self):
+        registry = KPF1.keyword_registry
+        assert set(registry.primary_seed("L1")) <= registry.allowed["PRIMARY"]
+
+    def test_the_model_builds_its_whole_manifest(self):
+        model = KPF1()
+        assert set(model.extensions) == set(model._manifest["Name"])

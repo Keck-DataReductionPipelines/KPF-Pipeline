@@ -1,4 +1,4 @@
-HDU,Name,DataType,MinBitDepth,Required,Description
+HDU,Name,DataType,BitDepth,Required,Description
 0,PRIMARY,PrimaryHDU,,True,Calibration metadata header
 1,GREEN_IMG,ImageHDU,32,True,Stacked green CCD mean image (count rate)
 2,GREEN_SNR,ImageHDU,32,True,Green CCD signal-to-noise ratio

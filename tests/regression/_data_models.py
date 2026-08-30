@@ -261,7 +261,7 @@ def set_fiber_arrays(
     """Populate ``{chip}_{fiber}_{suffix}`` with a constant for the given fibers.
 
     ``ncol`` is required on purpose -- see the module docstring. ``dtype`` must be
-    float64 for ``WAVE``, whose EPRV MinBitDepth the write path enforces.
+    float64 for ``WAVE``, whose EPRV BitDepth the write path enforces.
     """
     for chip in chips:
         for fiber in fibers:

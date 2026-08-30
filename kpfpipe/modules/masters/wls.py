@@ -820,8 +820,8 @@ class WLS(BaseMasterModule):
             # cannot mis-route a solution (e.g. SKY's onto CAL).
             canonical = sorted(self.fibers, key=lambda fb: self.fiber_positions[fb])
             for i, fiber in enumerate(canonical):
-                # set_data, not data[...]: only set_data applies the manifest's
-                # MinBitDepth floor, which is what keeps master WAVE float64.
+                # set_data, not data[...]: only set_data checks the manifest's
+                # declared BitDepth, which is what keeps master WAVE float64.
                 self.ml2_obj.set_data(
                     f"{chip}_{fiber}_WAVE", W if W.ndim == 2 else W[:, :, i]
                 )
