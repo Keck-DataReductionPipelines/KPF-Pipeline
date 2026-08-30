@@ -27,8 +27,6 @@ NOTJUNK,QC: obs_id not in junk list,,int,1,QCL0
 TCSOFF,Pointing offset from TCS/DCS target (arcsec),,float,0.12,DiagL0
 OBJOFF,Pointing offset from OBJECT SIMBAD position (arcsec),,float,0.31,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),,float,0.28,DiagL0
-TCSSUN,Altitude of Sun; negative = below horizon (deg),,float,-35.6,DiagL0
-TCSMOON,Separation between Moon and target (deg),,float,111.3,DiagL0
 DEADPXFG,Fraction of raw GREEN pixels below 1.0e4 D.N.,,float,0.0021,DiagL0
 DEADPXFR,Fraction of raw RED pixels below 1.0e4 D.N.,,float,0.0018,DiagL0
 SATPXFG,Fraction of raw GREEN pixels above 5.0e8 D.N.,,float,0.0,DiagL0

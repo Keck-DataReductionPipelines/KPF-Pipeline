@@ -462,7 +462,7 @@ class TestMakeMasterL2:
         assert primary["POLYDEGF"] == wls.poly_degree_f
 
     def test_ml2_datalvl_and_master_primary(self, mock_make_master_l2, tmp_path):
-        # Regression: ML2 seeds its own ML2-wls PRIMARY profile, not the EPRV L2
+        # Regression: ML2 seeds its own ML2-wls PRIMARY set, not the EPRV L2
         # science skeleton, and DATALVL must be "ML2" both in memory and on disk
         # -- rvdata's to_fits never re-stamps DATALVL.
         from kpfpipe.data_models.masters.level2 import KPFMasterL2

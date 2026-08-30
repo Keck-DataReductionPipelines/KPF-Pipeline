@@ -537,13 +537,9 @@ class ImageAssembly:
     def _set_headers(self, l1_obj):
         """
         Write assembly metadata to ``l1_obj``: per-amplifier read noise
-        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, and the per-chip
-        read time.
-
-        READMODE is not written here: it is an EPRV PRIMARY keyword, so it is
-        stamped onto the L0 in ``perform`` before the conversion. The
-        ``infer_read_mode`` call stays because it is what populates
-        ``self.read_time`` for the ``TRT{chip}`` writes.
+        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, READMODE, and the
+        per-chip read time. ``infer_read_mode`` supplies both READMODE and the
+        ``self.read_time`` the ``TRT{chip}`` writes read.
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
@@ -552,7 +548,7 @@ class ImageAssembly:
 
         # "zero" is the explicit no-op method (strips overscan, subtracts none).
         l1_obj.set_keyword("OSCANSUB", int(self.overscan_method != "zero"))
-        self.infer_read_mode()
+        l1_obj.set_keyword("READMODE", self.infer_read_mode())
         for chip, read_time in self.read_time.items():
             l1_obj.set_keyword(f"TRT{chip}", round(read_time, 3))
 
@@ -604,10 +600,6 @@ class ImageAssembly:
         self.chips = chips
         self.overscan_method = overscan_method
         self.readnoise_sigma = readnoise_sigma
-
-        # READMODE is an EPRV PRIMARY keyword, so it belongs on the L0 PRIMARY,
-        # which to_kpf1 then forwards.
-        self.l0_obj.set_keyword("READMODE", self.infer_read_mode())
 
         l1_obj = self.l0_obj.to_kpf1()
 

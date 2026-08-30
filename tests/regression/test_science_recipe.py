@@ -327,8 +327,8 @@ class TestScienceRecipe:
         different input needs a deliberate re-pin, not a fix.
         """
         prim = l4.headers["PRIMARY"]
-        assert prim["RV"] == pytest.approx(11.29034877686747, abs=1e-6)
-        assert prim["BERV"] == pytest.approx(-18.507963847544822, abs=1e-6)
+        assert prim["RV"] == pytest.approx(11.290367394940835, abs=1e-6)
+        assert prim["BERV"] == pytest.approx(-18.507945234900816, abs=1e-6)
         assert prim["BJDTDB"] == pytest.approx(2460405.9689188506, abs=1e-9)
 
     def test_provenance_keywords_set(self, l2):

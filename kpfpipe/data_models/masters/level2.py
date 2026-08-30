@@ -44,16 +44,16 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             raise ValueError(
                 f"KPFMasterL2 kind must be one of {list(self._KINDS)}, got {kind!r}"
             )
-        # Set before KPF2.__init__, which reaches _manifest: the profile that
+        # Set before KPF2.__init__, which reaches _manifest: the data model that
         # picks this master's manifest and PRIMARY seed is ML2-{kind}.
         self.kind = kind
         super().__init__()
         # rvdata's to_fits never re-stamps DATALVL, so stamp the master value
-        # over the "L2" KPF2.__init__ wrote. A header value, not a profile key.
+        # over the "L2" KPF2.__init__ wrote. A header value, not a data model.
         self.set_keyword("DATALVL", "ML2")
 
     @property
-    def _profile(self):
+    def _data_model(self):
         """``ML2-flat`` or ``ML2-wls``: an L2 master's shape depends on its kind."""
         return f"ML{self.level}-{self.kind}"
 

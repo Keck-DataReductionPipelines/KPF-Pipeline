@@ -12,11 +12,12 @@ import re
 import pytest
 from astropy.io import fits
 
-from kpfpipe import DETECTOR, OBSERVATORY
+from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
+from kpfpipe.utils.astro import KECK_LOCATION
 
 from ._data_models import standardized_l0
 
@@ -69,7 +70,7 @@ class TestPrimarySeed:
     def test_datalvl_is_the_model_level(self):
         assert KPF1().headers["PRIMARY"]["DATALVL"] == "L1"
 
-    def test_master_l1_is_seeded_from_its_own_profile(self):
+    def test_master_l1_is_seeded_from_its_own_data_model(self):
         # Masters are outside EPRV scope: they seed ML1-PRIMARY-keywords.csv,
         # never the science header-map skeleton.
         master = KPFMasterL1()
@@ -99,11 +100,16 @@ class TestStandardizedPrimary:
         assert prim.comments["NUMTRACE"]  # comment survived the typed overlay
 
     def test_observatory_cards_come_from_config(self, synthetic_l0_file):
+        # Geodetic and geocentric views of the one KECK_LOCATION, to the mm.
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
-        assert prim["GEOSYS"] == OBSERVATORY["geosys"]
-        assert prim["OBSLON"] == OBSERVATORY["longitude"]
-        assert prim["OBSLAT"] == OBSERVATORY["latitude"]
-        assert prim["OBSALT"] == OBSERVATORY["altitude"]
+        assert prim["GEOSYS"] == KECK_LOCATION.ellipsoid
+        assert prim["OBSLON"] == pytest.approx(KECK_LOCATION.lon.deg)
+        assert prim["OBSLAT"] == pytest.approx(KECK_LOCATION.lat.deg)
+        assert prim["OBSALT"] == pytest.approx(KECK_LOCATION.height.to_value("m"))
+        for axis in ("X", "Y", "Z"):
+            assert prim[f"OBSGEO-{axis}"] == pytest.approx(
+                getattr(KECK_LOCATION, axis.lower()).to_value("m"), abs=1e-3
+            )
 
     def test_value_bugs_are_fixed(self, synthetic_l0_file):
         l0 = standardized_l0(synthetic_l0_file)
@@ -140,6 +146,7 @@ class TestStandardizedPrimary:
         fn = str(tmp_path / "KP.20240113.00009.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
+        primary.header["IMTYPE"] = "Object"
         primary.header["OFNAME"] = "KP.20240113.00009.00.fits"
         primary.header["PROGNAME"] = "K123"
         primary.header["MJD-OBS"] = 60310.0
@@ -162,20 +169,71 @@ class TestStandardizedPrimary:
         assert "DRPSTATU" not in native
 
     def test_instrument_era_is_stamped(self):
-        l0 = KPF0()
-        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0  # 2024-01-01, era 1.0
+        l0 = self._dated_l0(60310.0)  # 2024-01-01, era 1.0
         StandardizeDataFormat(l0).perform()
         assert l0.headers["PRIMARY"]["INSTERA"] == "1.0"
 
     def test_undated_frame_is_rejected(self):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         with pytest.raises(ValueError, match="Cannot infer the instrument era"):
-            StandardizeDataFormat(KPF0()).perform()
+            StandardizeDataFormat(l0).perform()
 
     def test_frame_between_eras_is_rejected(self):
-        l0 = KPF0()
-        l0.headers["PRIMARY"]["MJD-OBS"] = 60355.0  # 2024-02-15, eras 1.5 -> 2.0 gap
+        l0 = self._dated_l0(60355.0)  # 2024-02-15, eras 1.5 -> 2.0 gap
         with pytest.raises(ValueError, match="No KPF instrument era covers"):
             StandardizeDataFormat(l0).perform()
+
+    @staticmethod
+    def _dated_l0(mjd):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"]["MJD-OBS"] = mjd
+        return l0
+
+
+class TestObservingMode:
+    """OBSMODE and ISSOLAR, both derived from the mapped OBSTYPE.
+
+    KPF has one optical configuration, so OBSMODE restates OBSTYPE and ISSOLAR
+    as sci/cal/solar rather than naming a configuration of its own.
+    """
+
+    @staticmethod
+    def _standardize(imtype, **native):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = imtype
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
+        for key, value in native.items():
+            l0.headers["PRIMARY"][key] = value
+        return StandardizeDataFormat(l0).perform().headers["PRIMARY"]
+
+    def test_object_frame_is_sci(self, synthetic_l0_file):
+        prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
+        assert prim["OBSTYPE"] == "Object"
+        assert prim["OBSMODE"] == "sci"
+        assert prim["ISSOLAR"] is False
+
+    @pytest.mark.parametrize(
+        "imtype", ("Bias", "Dark", "Flatlamp", "Arclamp", "Etalon")
+    )
+    def test_calibration_frames_are_cal(self, imtype):
+        prim = self._standardize(imtype)
+        assert prim["OBSMODE"] == "cal"
+        assert prim["ISSOLAR"] is False
+
+    @pytest.mark.parametrize("key", ("OBJECT", "TARGNAME"))
+    def test_socal_frame_is_solar(self, key):
+        prim = self._standardize("Object", **{key: "SoCal"})
+        assert prim["OBSMODE"] == "solar"
+        assert prim["ISSOLAR"] is True
+
+    def test_socal_match_is_case_insensitive(self):
+        assert self._standardize("Object", OBJECT="socal")["ISSOLAR"] is True
+
+    def test_unrecognized_imtype_is_rejected(self):
+        with pytest.raises(ValueError, match="IMTYPE 'Sky'"):
+            self._standardize("Sky")
 
 
 class TestFiveTraceShape:

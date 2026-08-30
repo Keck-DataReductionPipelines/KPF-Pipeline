@@ -121,8 +121,8 @@ THA1,HA,PRIMARY,,False
 PARST1,,,,False
 PAREND1,,,,False
 ROTANG,,,,False
-SUNEL,TCSSUN,QUALITY_CONTROL,,False
-MOONANG,TCSMOON,QUALITY_CONTROL,,False
+SUNEL,,,,False
+MOONANG,,,,False
 MOONEL,,,,False
 MOONILLU,,,,False
 MOONRV,,,,False
@@ -164,6 +164,7 @@ SUMMFLAG,,,,True
 DQLVL0,,,,True
 DQLVL1,,,,True
 DQLVL2,,,,True
+DQLVL4,,,,False
 BJDTDB,,,,True
 RV,,,,True
 RVERR,,,,True

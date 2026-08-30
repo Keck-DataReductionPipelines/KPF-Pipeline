@@ -221,7 +221,7 @@ class TestKeywordRegistry:
             "Units",
         ]
 
-    def test_unions_every_profile(self):
+    def test_unions_every_data_model(self):
         keys = KPF1.keyword_registry.registered
         assert "RNGREEN1" in keys and "RV" in keys and "MASTYPE" in keys
 
@@ -281,15 +281,15 @@ class TestKeywordRegistry:
         assert units("DATAPRL1", "QUALITY_CONTROL") == ""
 
     def test_primary_seed_is_cumulative_by_level(self):
-        # L0 and L1 share the 154-card science skeleton; L2 adds the extraction
-        # SNR cards and L4 the RV summary.
+        # Each level adds its own DQLVL bitfield; L1 also READMODE, L2 the
+        # extraction SNR cards and L4 the RV summary.
         reg = KPF1.keyword_registry
         l0, l1, l2, l4 = (reg.primary_seed(p) for p in ("L0", "L1", "L2", "L4"))
-        assert set(l0) == set(l1)
-        assert set(l0) < set(l2) < set(l4)
-        assert set(l2) - set(l0) == {"EXTRACT"} | {f"EXSNR{i}" for i in range(1, 6)} | {
-            f"EXSNRW{i}" for i in range(1, 6)
-        }
+        assert set(l0) < set(l1) < set(l2) < set(l4)
+        assert set(l1) - set(l0) == {"DQLVL1", "READMODE"}
+        assert set(l2) - set(l1) == {"EXTRACT", "DQLVL2"} | {
+            f"EXSNR{i}" for i in range(1, 6)
+        } | {f"EXSNRW{i}" for i in range(1, 6)}
         assert set(l4) - set(l2) == {
             "BJDTDB",
             "RV",
@@ -298,12 +298,13 @@ class TestKeywordRegistry:
             "RVMETHOD",
             "SYSVEL",
             "SYSACC",
+            "DQLVL4",
         }
 
     def test_primary_seed_is_typed_and_commented(self):
         seed = KPF1.keyword_registry.primary_seed("L0")
         assert seed["NUMTRACE"] == (5, "Number of object-indexed keyword families")
-        assert seed["OBSALT"][0] == 4145.0  # injected from kpfpipe.OBSERVATORY
+        assert seed["OBSALT"][0] == 4160.0  # injected from kpfpipe.KECK_LOCATION
         assert seed["AIRMASS"] == (None, "Airmass at start of exposure [secZ]")
 
     def test_primary_seed_covers_every_member_of_a_family(self):
@@ -321,8 +322,8 @@ class TestKeywordRegistry:
         assert "POLYDEGX" in reg.primary_seed("ML2-wls")
         assert "INSTRUME" not in reg.primary_seed("ML2-wls")
 
-    def test_unknown_profile_raises(self):
-        with pytest.raises(ValueError, match="unknown keyword profile"):
+    def test_unknown_data_model_raises(self):
+        with pytest.raises(ValueError, match="unknown data model"):
             KPF1.keyword_registry.primary_seed("L3")
 
     def test_datatype_for_scopes_by_extension(self):
@@ -376,6 +377,7 @@ class TestQualityControlPropagation:
 
     def test_propagation_l0_to_l1_to_l2(self):
         l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         StandardizeDataFormat(l0).perform()
         # QCL0 routes L0 QC flags to QUALITY_CONTROL.
@@ -474,7 +476,7 @@ _KEYWORD_COLUMNS = [
 ]
 _MANIFEST_COLUMNS = ["HDU", "Name", "DataType", "BitDepth", "Required", "Description"]
 
-_PROFILES = ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
+_DATA_MODELS = ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
 
 # KPF-owned PRIMARY keywords with no EPRV header-map row: the per-CCD RVs the
 # standard has no equivalent for.
@@ -511,15 +513,17 @@ class TestConfigTables:
         for path in _keyword_files():
             assert list(pd.read_csv(path).columns) == _KEYWORD_COLUMNS, path.name
 
-    def test_every_profile_has_a_manifest_with_the_manifest_schema(self):
-        for profile in _PROFILES:
-            columns = list(pd.read_csv(_CFG / f"{profile}-extensions.csv").columns)
-            assert columns == _MANIFEST_COLUMNS, profile
+    def test_every_data_model_has_a_manifest_with_the_manifest_schema(self):
+        for data_model in _DATA_MODELS:
+            columns = list(pd.read_csv(_CFG / f"{data_model}-extensions.csv").columns)
+            assert columns == _MANIFEST_COLUMNS, data_model
 
-    def test_keyword_filenames_use_a_known_profile(self):
+    def test_keyword_filenames_use_a_known_data_model(self):
         for path in _keyword_files():
-            profile, _, extension = path.name[: -len("-keywords.csv")].rpartition("-")
-            assert profile in _PROFILES, path.name
+            data_model, _, extension = path.name[: -len("-keywords.csv")].rpartition(
+                "-"
+            )
+            assert data_model in _DATA_MODELS, path.name
             assert extension, path.name
 
     def test_no_structural_card_is_registered(self):
@@ -552,7 +556,7 @@ class TestHeaderMapIsTheEprvPrimarySet:
         # but outside EPRV scope, so unmapped by construction.
         registered = {
             member
-            for level in ("L0", "L2", "L4")
+            for level in ("L0", "L1", "L2", "L4")
             for keyword in pd.read_csv(_CFG / f"{level}-PRIMARY-keywords.csv")[
                 "Keyword"
             ]

@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 _RVDATA_VERSION = importlib.metadata.version("rv-data-standard")
 _RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
 
+# The calibration half of KPF's IMTYPE vocabulary; 'Object' is the other half.
+_CAL_OBSTYPES = frozenset({"Bias", "Dark", "Flatlamp", "Arclamp", "Etalon"})
+
 
 class StandardizeDataFormat:
     """Convert a raw L0's PRIMARY header to the EPRV standard, in place.
@@ -67,6 +70,7 @@ class StandardizeDataFormat:
         l0.headers["PRIMARY"].clear()
         l0._seed_primary()
         self._fill_from_native(l0, native)
+        self._stamp_observing_mode(l0, native)
         self._stamp_instrument_era(l0)
 
         l0.set_keyword("DATALVL", "L0")
@@ -125,6 +129,32 @@ class StandardizeDataFormat:
         mjd = native.get("MJD-OBS")
         if mjd not in (None, "", "UNKNOWN"):
             l0.set_keyword("JD_UTC", float(mjd) + 2400000.5)
+
+    @staticmethod
+    def _stamp_observing_mode(l0, native):
+        """Stamp ISSOLAR and OBSMODE from the OBSTYPE the tabular fill just mapped.
+
+        OBSMODE is redundant for KPF, which has one optical configuration: the
+        EPRV standard defines it for instruments with several (hi-res/low-res),
+        so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar. An IMTYPE
+        outside the vocabulary is a frame this DRP cannot classify, so it raises.
+        """
+        obstype = str(l0.headers["PRIMARY"]["OBSTYPE"]).strip()
+        is_solar = any(
+            str(native.get(key, "")).strip().lower() == "socal"
+            for key in ("OBJECT", "TARGNAME")
+        )
+        if obstype == "Object":
+            mode = "solar" if is_solar else "sci"
+        elif obstype in _CAL_OBSTYPES:
+            mode = "cal"
+        else:
+            raise ValueError(
+                f"{l0.obs_id} has IMTYPE {obstype!r}, which is not one of KPF's "
+                f"observation types ('Object', {', '.join(sorted(_CAL_OBSTYPES))})"
+            )
+        l0.set_keyword("ISSOLAR", is_solar)
+        l0.set_keyword("OBSMODE", mode)
 
     @staticmethod
     def _stamp_instrument_era(l0):

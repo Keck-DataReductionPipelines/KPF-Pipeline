@@ -10,3 +10,4 @@ RVGREEN,GREEN SCI-combined RV,km/s,float,-18.551,RadialVelocity
 RVRED,RED SCI-combined RV,km/s,float,-18.554,RadialVelocity
 ERVGREEN,GREEN SCI-combined RV error,km/s,float,0.0015,RadialVelocity
 ERVRED,RED SCI-combined RV error,km/s,float,0.0014,RadialVelocity
+DQLVL4,L4 quality-check bitfield,N/A,UInt,0,

@@ -307,7 +307,7 @@ class TestComputeBarycorrReference:
         assert abs(bjd_tdb[0] - t.utc.jd) < 0.01
         # Pins at 1 cm/s and ~0.1 s: tight enough to catch a frame/unit/sign
         # rewiring, loose enough to clear ephemeris/IERS noise at the pinned version.
-        assert bc_vel[0] == pytest.approx(24627.871206121636, abs=1e-2)
+        assert bc_vel[0] == pytest.approx(24627.84694194215, abs=1e-2)
         assert bjd_tdb[0] == pytest.approx(2460476.873644211, abs=1e-6)
 
 

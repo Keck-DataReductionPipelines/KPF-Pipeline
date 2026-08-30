@@ -1,0 +1,3 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+READMODE,Readout mode,N/A,String,normal,ImageAssembly
+DQLVL1,L1 quality-check bitfield,N/A,UInt,0,

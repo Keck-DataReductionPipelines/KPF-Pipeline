@@ -45,9 +45,11 @@ import importlib.resources
 import logging
 from types import MappingProxyType
 
+import numpy as np
 import pandas as pd
 
-from kpfpipe import DETECTOR, OBSERVATORY
+from kpfpipe import DETECTOR
+from kpfpipe.utils.astro import KECK_LOCATION
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,7 @@ class KeywordRegistry:
 
     # The keyword-CSV filename prefixes, and the data level each implies. Also
     # the manifest vocabulary: every model resolves its tables to one of these.
-    _PROFILE_LEVELS = {
+    _DATA_MODEL_LEVELS = {
         "L0": 0,
         "L1": 1,
         "L2": 2,
@@ -92,29 +94,6 @@ class KeywordRegistry:
         "ML1": 1,
         "ML2-flat": 2,
         "ML2-wls": 2,
-    }
-
-    # PRIMARY keywords whose seed default is the observatory config rather than a
-    # DEFAULT cell: EPRV_KEY -> kpfpipe.OBSERVATORY key.
-    _OBSERVATORY_DEFAULTS = {
-        "GEOSYS": "geosys",
-        "OBSLON": "longitude",
-        "OBSLAT": "latitude",
-        "OBSALT": "altitude",
-    }
-
-    # The CSVs' DataType vocabulary, matched case-insensitively. A blank DataType
-    # passes the value through unchanged.
-    _TYPE_PARSERS = {
-        "str": str,
-        "string": str,
-        "int": int,
-        "uint": int,
-        "float": float,
-        "float32": float,
-        "double": float,
-        "bool": lambda v: v[0].lower() == "t" if isinstance(v, str) else bool(v),
-        "boolean": lambda v: v[0].lower() == "t" if isinstance(v, str) else bool(v),
     }
 
     # "PopulatedBy" values marking a QUALITY_CONTROL row as a 0/1 QC flag: "QCL{n}"
@@ -174,14 +153,14 @@ class KeywordRegistry:
         All lookups are frozen (frozenset / MappingProxyType) against stray
         mutation, since the singleton shares them process-wide.
         """
-        rows, profile_primary = self._load_keyword_rows()
+        rows, data_model_primary = self._load_keyword_rows()
         self.table = pd.DataFrame(rows, columns=self._COLUMNS)
         self.registered = frozenset(self.table["Keyword"])
         self.structural = frozenset(self._STRUCTURAL)
-        # PRIMARY keywords contributed by each profile's own CSVs -- the seed set
-        # for the masters profiles, which are outside EPRV scope.
-        self._profile_primary = MappingProxyType(
-            {p: tuple(kws) for p, kws in profile_primary.items()}
+        # PRIMARY keywords contributed by each data model's own CSVs -- the seed
+        # set for the masters, which are outside EPRV scope.
+        self._data_model_primary = MappingProxyType(
+            {p: tuple(kws) for p, kws in data_model_primary.items()}
         )
 
         self.routing = MappingProxyType(self._routing_lookup())
@@ -218,17 +197,17 @@ class KeywordRegistry:
 
     @classmethod
     def _manifest_names(cls):
-        """``profile -> set of extension names`` from the extension manifests.
+        """``data_model -> set of extension names`` from the extension manifests.
 
         Read here (rather than imported from ``base.py``, which imports this
         module) purely to resolve keyword-CSV filenames; the data models get the
         manifests themselves from ``base._MANIFESTS``.
         """
         return {
-            profile: set(
-                pd.read_csv(_kpf_pipe_cfg / f"{profile}-extensions.csv")["Name"]
+            data_model: set(
+                pd.read_csv(_kpf_pipe_cfg / f"{data_model}-extensions.csv")["Name"]
             )
-            for profile in cls._PROFILE_LEVELS
+            for data_model in cls._DATA_MODEL_LEVELS
         }
 
     @classmethod
@@ -247,7 +226,7 @@ class KeywordRegistry:
     def _resolve_extensions(cls, extension, names, source):
         """Resolve a keyword CSV's extension field to concrete extension names.
 
-        The field either *is* a literal extension name in that profile's
+        The field either *is* a literal extension name in that data model's
         manifest, or is a family stem: insert an index at every position and
         accept the single candidate whose full expansion the manifest contains
         (``CCF_VAR`` -> ``CCF_VAR1..5``, not ``CCF1_VAR``; ``TRACE_FLUX`` ->
@@ -273,27 +252,27 @@ class KeywordRegistry:
     def _load_keyword_rows(cls):
         """Read every ``{prefix}-{EXTENSION}-keywords.csv`` into registry rows.
 
-        Returns ``(rows, profile_primary)``; ``profile_primary`` maps each
-        profile to the PRIMARY keywords its own CSVs contribute.
+        Returns ``(rows, data_model_primary)``; ``data_model_primary`` maps each
+        data model to the PRIMARY keywords its own CSVs contribute.
         """
         manifest_names = cls._manifest_names()
         rows = []
-        profile_primary = {profile: [] for profile in cls._PROFILE_LEVELS}
+        data_model_primary = {data_model: [] for data_model in cls._DATA_MODEL_LEVELS}
         paths = sorted(
             (p for p in _kpf_pipe_cfg.iterdir() if p.name.endswith("-keywords.csv")),
             key=lambda p: p.name,
         )
         for path in paths:
             stem = path.name[: -len("-keywords.csv")]
-            profile, _, extension = stem.rpartition("-")
-            if profile not in cls._PROFILE_LEVELS:
+            data_model, _, extension = stem.rpartition("-")
+            if data_model not in cls._DATA_MODEL_LEVELS:
                 raise ValueError(
-                    f"{path.name}: unrecognized keyword-CSV prefix {profile!r}; "
-                    f"expected one of {sorted(cls._PROFILE_LEVELS)}"
+                    f"{path.name}: unrecognized keyword-CSV prefix {data_model!r}; "
+                    f"expected one of {sorted(cls._DATA_MODEL_LEVELS)}"
                 )
-            level = cls._PROFILE_LEVELS[profile]
+            level = cls._DATA_MODEL_LEVELS[data_model]
             extensions = cls._resolve_extensions(
-                extension, manifest_names[profile], path.name
+                extension, manifest_names[data_model], path.name
             )
             df = pd.read_csv(path)
             for _, r in df.iterrows():
@@ -311,8 +290,8 @@ class KeywordRegistry:
                             [keyword, descr, ext, dtype, populated_by, level, units]
                         )
                         if ext == "PRIMARY":
-                            profile_primary[profile].append(keyword)
-        return rows, profile_primary
+                            data_model_primary[data_model].append(keyword)
+        return rows, data_model_primary
 
     def _load_header_map(self):
         """Read ``config/EPRV-header-map.csv``, the WMKO-native -> EPRV map.
@@ -323,8 +302,8 @@ class KeywordRegistry:
         stray key would seed a comment-less, untyped card silently. Runs after
         ``_build_registry`` -- it filters against ``self.allowed``.
 
-        The four site-coordinate keywords take their default from
-        ``kpfpipe.OBSERVATORY`` rather than a DEFAULT cell, so the observatory
+        The seven site-coordinate keywords take their default from
+        ``kpfpipe.KECK_LOCATION`` rather than a DEFAULT cell, so the observatory
         config stays their single source.
         """
         raw = pd.read_csv(_kpf_pipe_cfg / "EPRV-header-map.csv")
@@ -341,10 +320,21 @@ class KeywordRegistry:
                 f"on PRIMARY: {unregistered}. Register them in the appropriate "
                 "config/{prefix}-PRIMARY-keywords.csv before mapping them."
             )
-        for keyword, config_key in self._OBSERVATORY_DEFAULTS.items():
+        # 1e-5 deg is ~1 m, against the ~140 m a 1 cm/s barycentric correction
+        # needs (dv = omega * dx); rounding also absorbs astropy's geodetic noise.
+        site = {
+            "GEOSYS": KECK_LOCATION.ellipsoid,
+            "OBSLON": round(KECK_LOCATION.lon.deg, 5),
+            "OBSLAT": round(KECK_LOCATION.lat.deg, 5),
+            "OBSALT": round(KECK_LOCATION.height.to_value("m"), 3),
+            "OBSGEO-X": round(KECK_LOCATION.x.to_value("m"), 3),
+            "OBSGEO-Y": round(KECK_LOCATION.y.to_value("m"), 3),
+            "OBSGEO-Z": round(KECK_LOCATION.z.to_value("m"), 3),
+        }
+        for keyword, value in site.items():
             blank = (keys == keyword) & raw["DEFAULT"].isna()
             # str(): DEFAULT is a text column, and _parse_value types it on read.
-            raw.loc[blank, "DEFAULT"] = str(OBSERVATORY[config_key])
+            raw.loc[blank, "DEFAULT"] = str(value)
         self.header_map = raw
 
     # --- Accessors ------------------------------------------------------------
@@ -390,9 +380,46 @@ class KeywordRegistry:
         """
         return self.datatypes.get((str(keyword).strip(), extension))
 
+    @staticmethod
+    def _coerce(datatype, value):
+        """Convert ``value`` to ``datatype``, the CSVs' vocabulary lowercased.
+
+        Floats carry their declared width, so a ``float32`` card is written at
+        single precision rather than silently at double. Booleans accept only
+        the three spellings a header value ever has -- ``True``/``False`` in
+        memory, ``T``/``F`` on disk, ``0``/``1`` by convention -- so a truthy
+        string is a bad value, not ``True``. Raises ``KeyError`` on an unknown
+        ``datatype`` and ``TypeError``/``ValueError`` on a value that will not
+        convert; ``_parse_value`` owns what each of those means.
+        """
+        match datatype:
+            case "str" | "string":
+                return str(value)
+            case "int":
+                return int(value)
+            case "uint":
+                number = int(value)
+                if number < 0:
+                    raise ValueError(f"{value!r} is negative")
+                return number
+            case "float" | "double":
+                return np.float64(value)
+            case "float32":
+                return np.float32(value)
+            case "bool" | "boolean":
+                if isinstance(value, (bool, np.bool_)):
+                    return bool(value)
+                if isinstance(value, str) and value.strip().upper() in ("T", "F"):
+                    return value.strip().upper() == "T"
+                if isinstance(value, (int, np.integer)) and value in (0, 1):
+                    return bool(value)
+                raise ValueError(f"{value!r} is not True/False, T/F or 0/1")
+            case _:
+                raise KeyError(datatype)
+
     @classmethod
     def _parse_value(cls, keyword, datatype, value):
-        """Type ``value`` to the registry ``DataType``.
+        """Type ``value`` to the registry ``DataType`` via ``_coerce``.
 
         KPF-owned typing over the CSVs' own vocabulary, matched
         case-insensitively. An empty value is None; a blank ``DataType`` passes
@@ -411,15 +438,13 @@ class KeywordRegistry:
             return None
         if not datatype or (isinstance(datatype, float) and pd.isna(datatype)):
             return value
-        parser = cls._TYPE_PARSERS.get(str(datatype).strip().lower())
-        if parser is None:
-            raise ValueError(
-                f"keyword {keyword!r}: unknown DataType {datatype!r}; expected one "
-                f"of {sorted(cls._TYPE_PARSERS)}"
-            )
         try:
-            return parser(value)
-        except (TypeError, ValueError, IndexError):
+            return cls._coerce(str(datatype).strip().lower(), value)
+        except KeyError:
+            raise ValueError(
+                f"keyword {keyword!r}: unknown DataType {datatype!r}"
+            ) from None
+        except (TypeError, ValueError):
             logger.warning(
                 "cannot convert value %r for keyword %r to type %s",
                 value,
@@ -428,31 +453,31 @@ class KeywordRegistry:
             )
             return None
 
-    def primary_seed(self, profile):
-        """The typed PRIMARY skeleton for ``profile``: ``{keyword: (value, comment)}``.
+    def primary_seed(self, data_model):
+        """``data_model``'s typed PRIMARY skeleton: ``{keyword: (value, comment)}``.
 
-        Every keyword registered on PRIMARY for that profile, carrying its
+        Every keyword registered on PRIMARY for that data model, carrying its
         ``EPRV-header-map.csv`` default where it has one and blank where it does
         not, each with its registry comment. Nothing is filtered on ``REQUIRED``:
         that column is a compliance label, so the seed stamps a card for every
         member of every ``#`` family -- the five-trace rule at the header level.
 
         For ``L0``/``L1``/``L2``/``L4`` the set is the header-map rows at
-        ``Level <= n``, cumulative (L0 == L1 == 154 cards, L2 adds
-        ``EXTRACT``/``EXSNR#``/``EXSNRW#``, L4 the seven RV rows). For the
-        masters profiles it is that master's own ``ML*-PRIMARY-keywords.csv``
-        rows: masters are outside EPRV scope and do not inherit the science
-        skeleton.
+        ``Level <= n``, cumulative (154 cards at L0, L1 adds ``DQLVL1``, L2
+        ``EXTRACT``/``EXSNR#``/``EXSNRW#``/``DQLVL2``, L4 the seven RV rows and
+        ``DQLVL4``). For the masters it is that master's own
+        ``ML*-PRIMARY-keywords.csv`` rows: masters are outside EPRV scope and do
+        not inherit the science skeleton.
         """
-        if profile not in self._PROFILE_LEVELS:
+        if data_model not in self._DATA_MODEL_LEVELS:
             raise ValueError(
-                f"unknown keyword profile {profile!r}; expected one of "
-                f"{sorted(self._PROFILE_LEVELS)}"
+                f"unknown data model {data_model!r}; expected one of "
+                f"{sorted(self._DATA_MODEL_LEVELS)}"
             )
-        if profile.startswith("ML"):
-            defaults = [(kw, None) for kw in self._profile_primary[profile]]
+        if data_model.startswith("ML"):
+            defaults = [(kw, None) for kw in self._data_model_primary[data_model]]
         else:
-            cap = self._PROFILE_LEVELS[profile]
+            cap = self._DATA_MODEL_LEVELS[data_model]
             defaults = [
                 (str(row.EPRV_KEY).strip(), row.DEFAULT)
                 for row in self.header_map.itertuples(index=False)

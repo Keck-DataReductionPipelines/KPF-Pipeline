@@ -25,19 +25,17 @@ class DiagL0(Diagnostics):
 
     LEVEL = "L0"
 
-    # QUALITY_CONTROL metric -> the EPRV PRIMARY keyword it also answers. These
-    # three map from a diagnostic rather than a native card
-    # (``EPRV-header-map.csv`` gives them ``KPF_EXT=QUALITY_CONTROL``), and
+    # QUALITY_CONTROL metric -> the EPRV PRIMARY keyword it also answers. This
+    # one maps from a diagnostic rather than a native card
+    # (``EPRV-header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
     # QUALITY_CONTROL is still empty when StandardizeDataFormat runs, so DiagL0
-    # is their PRIMARY writer too.
+    # is its PRIMARY writer too.
     _PRIMARY_EQUIVALENTS = {
         "GDRSEEV": "SEEING",
-        "TCSSUN": "SUNEL",
-        "TCSMOON": "MOONANG",
     }
 
     def run(self):
-        """Run the L0 diagnostics, then mirror three of them onto EPRV PRIMARY."""
+        """Run the L0 diagnostics, then mirror one of them onto EPRV PRIMARY."""
         results = super().run()
         for metric, eprv_keyword in self._PRIMARY_EQUIVALENTS.items():
             if metric in results:
@@ -121,9 +119,9 @@ class DiagL0(Diagnostics):
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
 
     def solar_lunar_geometry(self):
-        """TCSSUN, TCSMOON: deg, Sun altitude and target-Moon separation.
+        """SUNEL, MOONANG: deg, Sun altitude and target-Moon separation.
 
-        Both are evaluated at mid-exposure from the WMKO site. TCSSUN is negative
+        Both are evaluated at mid-exposure from the WMKO site. SUNEL is negative
         with the Sun below the horizon.
         """
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
@@ -133,9 +131,11 @@ class DiagL0(Diagnostics):
         )
         moon = get_body("moon", obs_time, KECK_LOCATION).transform_to("icrs")
         pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
+        # EPRV-defined, so these route straight to PRIMARY rather than to the
+        # QUALITY_CONTROL extension the other diagnostics land in.
         return self._tag(
-            TCSSUN=round(float(sun.alt.deg), 5),
-            TCSMOON=round(float(pointing.separation(moon).deg), 2),
+            SUNEL=round(float(sun.alt.deg), 5),
+            MOONANG=round(float(pointing.separation(moon).deg), 2),
         )
 
     solar_lunar_geometry._diag_name = "solar_lunar_geometry"

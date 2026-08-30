@@ -32,7 +32,7 @@ class KPFMasterL1(KPFMasterModel, KPF1):
 
     def __init__(self):
         # KPF1.__init__ builds the extensions and seeds PRIMARY off the ML1
-        # profile: KPFMasterModel redirects both to the masters' tables.
+        # data model: KPFMasterModel redirects both to the masters' tables.
         super().__init__()
         self.set_keyword("DATALVL", "ML1")
 

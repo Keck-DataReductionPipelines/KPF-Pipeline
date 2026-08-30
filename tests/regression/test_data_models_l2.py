@@ -512,7 +512,7 @@ class TestKPFMasterL2:
         assert m.data["EXT_DESCRIPT"]["Name"].tolist() == list(m.extensions)
 
     @pytest.mark.parametrize("kind", ("wls", "flat"))
-    def test_primary_is_seeded_from_the_master_profile(self, kind):
+    def test_primary_is_seeded_from_the_master_data_model(self, kind):
         m = KPFMasterL2(kind=kind)
         seed = m.keyword_registry.primary_seed(f"ML2-{kind}")
         assert set(seed) <= set(m.headers["PRIMARY"])
@@ -529,13 +529,13 @@ class TestKPFMasterL2:
         # carries no verbatim instrument header.
         assert "INSTRUMENT_HEADER" not in master.extensions
 
-    @pytest.mark.parametrize("profile", ("ML2-flat", "ML2-wls"))
-    def test_shared_rows_agree_with_the_science_manifest(self, profile):
+    @pytest.mark.parametrize("data_model", ("ML2-flat", "ML2-wls"))
+    def test_shared_rows_agree_with_the_science_manifest(self, data_model):
         # The duplication between a master manifest and its science level's is
         # intentional -- each stays a complete spec of one product -- so a shared
         # row must not disagree, or a master would ship a TRACE1_WAVE unlike
         # L2's.
-        master = kpf_table(f"{profile}-extensions").set_index("Name")
+        master = kpf_table(f"{data_model}-extensions").set_index("Name")
         science = kpf_table("L2-extensions").set_index("Name")
         shared = set(master.index) & set(science.index)
         assert shared

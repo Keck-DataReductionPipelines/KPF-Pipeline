@@ -2,7 +2,7 @@
 KPF Masters base data model.
 
 Shared base for the masters calibration products. Extends KPFDataModel with
-the masters' own keyword/extension profile (ML1, ML2-flat, ML2-wls), so a
+the masters' own keyword/extension tables (ML1, ML2-flat, ML2-wls), so a
 master builds its extensions and seeds its PRIMARY by exactly the same
 mechanism every science level uses -- off its own manifest.
 
@@ -34,13 +34,13 @@ class KPFMasterModel(KPFDataModel):
     Base class for KPF masters calibration data models.
 
     Inherits from KPFDataModel and chains through the science level's
-    ``__init__`` like any other model; what makes it a master is the profile,
+    ``__init__`` like any other model; what makes it a master is the data model,
     which redirects the manifest and the PRIMARY seed to the ML tables.
     """
 
     @property
-    def _profile(self):
-        """This master's keyword/extension profile: ``ML{level}``.
+    def _data_model(self):
+        """This master's keyword/extension data model: ``ML{level}``.
 
         Masters share levels 1 and 2 with the science chain, so the level alone
         does not name their tables; the ML prefix is what separates them.
@@ -50,15 +50,15 @@ class KPFMasterModel(KPFDataModel):
     @property
     def _manifest(self):
         """The master's own extension manifest, not the science level's."""
-        return _MANIFESTS[self._profile]
+        return _MANIFESTS[self._data_model]
 
     def _seed_primary(self):
         """Stamp the master's own PRIMARY skeleton (``ML*-PRIMARY-keywords.csv``).
 
-        Masters are outside EPRV scope, so they seed their own profile rather
+        Masters are outside EPRV scope, so they seed their own data model rather
         than inheriting the science header-map skeleton.
         """
-        seed = self.keyword_registry.primary_seed(self._profile)
+        seed = self.keyword_registry.primary_seed(self._data_model)
         for keyword, value in seed.items():
             self.headers["PRIMARY"][keyword] = value
 

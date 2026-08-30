@@ -433,13 +433,13 @@ class TestKPFMasterL1:
         # carries no verbatim instrument header.
         assert "INSTRUMENT_HEADER" not in master.extensions
 
-    @pytest.mark.parametrize("profile", ("ML1",))
-    def test_shared_rows_agree_with_the_science_manifest(self, profile):
+    @pytest.mark.parametrize("data_model", ("ML1",))
+    def test_shared_rows_agree_with_the_science_manifest(self, data_model):
         # The duplication between a master manifest and its science level's is
         # intentional -- each stays a complete spec of one product -- so a shared
         # row must not disagree, or a master would ship a GREEN_IMG unlike
         # L1's.
-        master = kpf_table(f"{profile}-extensions").set_index("Name")
+        master = kpf_table(f"{data_model}-extensions").set_index("Name")
         science = kpf_table("L1-extensions").set_index("Name")
         shared = set(master.index) & set(science.index)
         assert shared
@@ -465,7 +465,7 @@ class TestKPFMasterL1:
         assert len(m.extensions) == 11
         assert "DRP_CONFIG" in m.extensions
 
-    def test_primary_is_seeded_from_the_master_profile(self):
+    def test_primary_is_seeded_from_the_master_data_model(self):
         m = KPFMasterL1()
         assert set(m.keyword_registry.primary_seed("ML1")) <= set(m.headers["PRIMARY"])
         assert m.headers["PRIMARY"]["DATALVL"] == "ML1"

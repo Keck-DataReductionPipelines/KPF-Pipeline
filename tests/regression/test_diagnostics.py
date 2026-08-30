@@ -381,37 +381,38 @@ class TestDiagL0SolarLunarGeometry:
         return l0
 
     def test_matches_legacy_2d_product(self):
-        # KP.20240405.40113.57, whose legacy 2D carries TCSSUN = -61.60211 and
-        # TCSMOON = 54.2. TCSSUN differs in the 4th decimal: v2.12 computed sun
-        # and moon geometry from a site 647 m from the one its own barycentric
-        # correction used, which is the lineage of KECK_LOCATION.
+        # KP.20240405.40113.57, whose legacy 2D carries -61.60211 deg and 54.2
+        # deg. The Sun altitude differs in the 4th decimal: v2.12 sited sun and
+        # moon geometry a few hundred metres from KECK_LOCATION.
         l0 = self._make_l0(
             "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
         )
         results = DiagL0(l0).solar_lunar_geometry()
-        assert results["TCSSUN"][0] == pytest.approx(-61.60211, abs=1e-3)
-        assert results["TCSMOON"][0] == pytest.approx(54.2, abs=0.01)
+        assert results["SUNEL"][0] == pytest.approx(-61.60211, abs=1e-3)
+        assert results["MOONANG"][0] == pytest.approx(54.2, abs=0.01)
 
     def test_sun_above_horizon_at_local_noon(self):
         # Maunakea noon is 22:00 UT; the Sun clears the horizon by a wide margin.
         results = DiagL0(
             self._make_l0("2024-04-05T22:00:00.000")
         ).solar_lunar_geometry()
-        assert results["TCSSUN"][0] > 30
+        assert results["SUNEL"][0] > 30
 
     def test_moon_separation_at_the_moon(self):
         # Pointing at the Moon's own 2024-04-05T11:09 position.
         l0 = self._make_l0(
             "2024-04-05T11:09:11.082", ra="12:58:57.79", dec="-06:17:27.7"
         )
-        assert DiagL0(l0).solar_lunar_geometry()["TCSMOON"][0] < 1.0
+        assert DiagL0(l0).solar_lunar_geometry()["MOONANG"][0] < 1.0
 
-    def test_written_to_quality_control(self):
+    def test_written_to_primary(self):
+        # EPRV-defined, so these route to PRIMARY, not QUALITY_CONTROL.
         l0 = _make_l0_with_catalog()
         l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
         results = DiagL0(l0).run()
-        for key in ("TCSSUN", "TCSMOON"):
-            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+        for key in ("SUNEL", "MOONANG"):
+            assert l0.headers["PRIMARY"][key] == results[key][0]
+            assert key not in l0.headers["QUALITY_CONTROL"]
 
     def test_missing_date_mid_raises(self):
         with pytest.raises(KeyError, match="DATE-MID"):
@@ -421,34 +422,6 @@ class TestDiagL0SolarLunarGeometry:
         assert (
             DiagL0.__dict__["solar_lunar_geometry"]._diag_name == "solar_lunar_geometry"
         )
-
-
-class TestDiagL0PrimaryMirror:
-    """DiagL0 also writes the three EPRV PRIMARY cards whose source is a
-    diagnostic rather than a native instrument card.
-
-    ``EPRV-header-map.csv`` gives SEEING/SUNEL/MOONANG ``KPF_EXT=QUALITY_CONTROL``,
-    and QUALITY_CONTROL is still empty when StandardizeDataFormat runs, so the
-    tabular fill cannot supply them; DiagL0 stamps them alongside the metrics it
-    already writes. The seed has stamped all three blank, so this is enrichment.
-    """
-
-    def test_metrics_are_mirrored_onto_primary(self):
-        l0 = _make_l0_with_catalog()
-        l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
-        results = DiagL0(l0).run()
-        primary = l0.headers["PRIMARY"]
-        assert primary["SUNEL"] == results["TCSSUN"][0]
-        assert primary["MOONANG"] == results["TCSMOON"][0]
-
-    def test_unwritten_metric_leaves_the_card_blank(self):
-        # GDRSEEV needs a converged guider Moffat fit; without one the diagnostic
-        # emits nothing and SEEING keeps the blank the seed stamped.
-        l0 = _make_l0_with_catalog()
-        results = DiagL0(l0).run()
-        assert "GDRSEEV" not in results
-        assert "SEEING" in l0.headers["PRIMARY"]
-        assert not l0.headers["PRIMARY"]["SEEING"]
 
 
 class TestDiagL0PixelFractions:
@@ -1021,6 +994,19 @@ class TestDiagL0GuiderSeeing:
         results = DiagL0(l0).run()
         for key in ("GDRSEEJZ", "GDRSEEV"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_gdrseev_is_mirrored_onto_primary_seeing(self, tmp_path):
+        # ``EPRV-header-map.csv`` gives SEEING KPF_EXT=QUALITY_CONTROL, and
+        # QUALITY_CONTROL is still empty when StandardizeDataFormat runs, so
+        # DiagL0 stamps the seeded-blank PRIMARY card itself.
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0)
+        results = DiagL0(l0).run()
+        assert l0.headers["PRIMARY"]["SEEING"] == results["GDRSEEV"][0]
+
+    def test_unfittable_image_leaves_primary_seeing_blank(self, tmp_path):
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
+        assert "GDRSEEV" not in DiagL0(l0).run()
+        assert not l0.headers["PRIMARY"]["SEEING"]
 
     def test_diag_name_correct(self):
         assert DiagL0.__dict__["guider_seeing"]._diag_name == "guider_seeing"

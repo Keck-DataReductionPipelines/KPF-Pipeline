@@ -24,9 +24,9 @@ from kpfpipe import DETECTOR
 
 _CFG = importlib.resources.files("kpfpipe.data_models.config")
 
-# The science-chain profiles. The masters profiles are deliberately out: their
+# The science-chain data models. The masters are deliberately out: their
 # keywords are not part of the science routing contract this oracle checks.
-_SCIENCE_PROFILES = ("L0", "L1", "L2", "L4")
+_SCIENCE_DATA_MODELS = ("L0", "L1", "L2", "L4")
 
 # Family stems, spelled out: filename extension part -> member template.
 _FAMILY_STEMS = {
@@ -47,8 +47,8 @@ def _homes():
     for path in sorted(_CFG.iterdir(), key=lambda p: p.name):
         if not path.name.endswith("-keywords.csv"):
             continue
-        profile, _, stem = path.name[: -len("-keywords.csv")].rpartition("-")
-        if profile not in _SCIENCE_PROFILES:
+        data_model, _, stem = path.name[: -len("-keywords.csv")].rpartition("-")
+        if data_model not in _SCIENCE_DATA_MODELS:
             continue
         template = _FAMILY_STEMS.get(stem)
         extensions = (

@@ -99,7 +99,7 @@ class KPFDataModel(RVDataModel):
                 self.create_extension(row["Name"], row["DataType"])
 
     def _seed_primary(self):
-        """Stamp the registry's typed PRIMARY skeleton for this profile.
+        """Stamp the registry's typed PRIMARY skeleton for this data model.
 
         Every keyword registered on PRIMARY for this level, with its header-map
         default where it has one and blank where it does not, each carrying the

@@ -12,6 +12,8 @@ from kpfpipe import OBSERVATORY, REPO_ROOT
 
 logger = logging.getLogger(__name__)
 
+# Lives here, not in the package root, to keep that root free of astropy. It is
+# the only reader of OBSERVATORY: everything else wants the site as a location.
 KECK_LOCATION = EarthLocation.from_geodetic(
     lat=OBSERVATORY["latitude"] * u.deg,
     lon=OBSERVATORY["longitude"] * u.deg,
