@@ -18,7 +18,6 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.data_models.masters.base import KPFMasterModel
-from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
 from ._catalog import SOURCES, catalog_record_table
 from ._dtype_policy import FLUX, WAVE, assert_dtype, assert_roundtrip_dtype
@@ -68,7 +67,7 @@ def converted_l1(synthetic_l0_file):
     """An L1 from KPF0.to_kpf1: EPRV-standard PRIMARY plus a populated
     INSTRUMENT_HEADER, the input to_kpf2 expects in production."""
     l0 = KPF0.from_fits(synthetic_l0_file)
-    StandardizeDataFormat(l0).perform()
+    l0.standardize_header_format()
     return l0.to_kpf1()
 
 
@@ -147,7 +146,7 @@ class TestToKPF2:
         assert isinstance(kpf2, KPF2)
 
     def test_to_kpf2_passes_through_eprv_primary(self, converted_l1):
-        # The keyword conversion happened in StandardizeDataFormat; to_kpf1 and
+        # The keyword conversion happened in standardize_header_format; to_kpf1 and
         # to_kpf2 only forward it.
         kpf2 = converted_l1.to_kpf2()
         prim = kpf2.headers["PRIMARY"]

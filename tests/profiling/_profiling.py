@@ -169,14 +169,14 @@ def masters_config(output_dir=None):
 
 def load_l0(config):
     from kpfpipe.data_models.level0 import KPF0
-    from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
     from kpfpipe.utils.io import kpf_filepath
 
-    l0 = KPF0.from_fits(kpf_filepath(SCIENCE_OBS_ID, "L0", data_root=str(TESTDATA_DIR)))
     # Every downstream stage reads a standardized PRIMARY, and to_kpf1 raises
-    # without it, so the harness mirrors the recipe's insert.
-    StandardizeDataFormat(l0).perform()
-    return l0
+    # without it, so the harness loads the way the recipe does.
+    return KPF0.from_fits(
+        kpf_filepath(SCIENCE_OBS_ID, "L0", data_root=str(TESTDATA_DIR)),
+        standardize=True,
+    )
 
 
 def assemble_l1(config):

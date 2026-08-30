@@ -15,7 +15,6 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.data_models.masters.base import KPFMasterModel
-from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from kpfpipe.utils.astro import compute_redshift
 
 from ._catalog import SOURCES, catalog_record_table
@@ -157,17 +156,17 @@ class TestKPF1:
 
 
 class TestToKpf1:
-    """L0 -> L1 is a pure forward once StandardizeDataFormat has run.
+    """L0 -> L1 is a pure forward once standardize_header_format has run.
 
     The native -> EPRV conversion itself is tested in
-    test_standardize_data_format.py; here the subject is what to_kpf1 carries
+    test_standardize_header_format.py; here the subject is what to_kpf1 carries
     across, and the fail-loud gate on an L0 that skipped standardization.
     """
 
     @staticmethod
     def _standardized(fn):
         l0 = KPF0.from_fits(fn)
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         return l0
 
     def test_raw_l0_is_rejected(self, synthetic_l0_file):
@@ -220,7 +219,7 @@ class TestToKpf1:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         astro_query = AstroQuery(l0)
         astro_query._write_catalog_record("kpf-drp", record)
         for keyword, value in astro_query._catalog_primary_cards().items():
@@ -269,7 +268,7 @@ class TestToKpf1:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         p = l0.to_kpf1().headers["PRIMARY"]
         for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
             assert kw in p
@@ -290,7 +289,7 @@ class TestToKpf1:
 
     def test_to_kpf1_forwards_the_instrument_header(self, synthetic_l0_file):
         # INSTRUMENT_HEADER is a verbatim copy of the raw L0 PRIMARY, written by
-        # StandardizeDataFormat and carried across as a pass-through extension.
+        # standardize_header_format and carried across as a pass-through extension.
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
         assert "INSTRUMENT_HEADER" in l1.extensions
         inst = l1.headers["INSTRUMENT_HEADER"]
@@ -313,11 +312,11 @@ class TestToKpf1:
         assert "PROGID" not in l1.headers["PRIMARY"]
 
     def test_to_kpf1_forwards_drpstatus(self, synthetic_l0_file):
-        # StandardizeDataFormat is a real module, so it advances DRPSTATU; to_kpf1
-        # is denylisted and leaves it alone.
+        # standardize_header_format is not an internal receipt, so it advances
+        # DRPSTATU; to_kpf1 is denylisted and leaves it alone.
         l0 = self._standardized(synthetic_l0_file)
         receipt = l0.to_kpf1().headers["RECEIPT"]
-        assert receipt.get("DRPSTATU") == "Standardize Data Format module complete"
+        assert receipt.get("DRPSTATU") == "Standardize Header Format module complete"
 
     def test_to_kpf1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = self._standardized(synthetic_l0_file)
@@ -345,9 +344,9 @@ class TestToKpf1:
 
     def test_to_kpf1_carries_receipt(self, synthetic_l0_file):
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
-        assert len(l1.receipt) >= 3  # from_fits + standardize_data_format + to_kpf1
+        assert len(l1.receipt) >= 3  # from_fits + standardize_header_format + to_kpf1
         assert "to_kpf1" in l1.receipt["FUNCTION"].values
-        assert "standardize_data_format" in l1.receipt["FUNCTION"].values
+        assert "standardize_header_format" in l1.receipt["FUNCTION"].values
 
     def test_to_kpf1_copies_obs_id(self, synthetic_l0_file):
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
@@ -372,7 +371,7 @@ class TestCatalogRecordPassthrough:
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         return l0
 
     def test_rows_reach_l1(self):
@@ -400,7 +399,7 @@ class TestDrpStatus:
 
     def test_module_receipt_updates_status(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("image_assembly", "", "PASS")
         status = l1.headers["RECEIPT"].get("DRPSTATU")
@@ -408,7 +407,7 @@ class TestDrpStatus:
 
     def test_master_receipt_updates_status(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("master_bias", "", "PASS")
         status = l1.headers["RECEIPT"].get("DRPSTATU")
@@ -416,7 +415,7 @@ class TestDrpStatus:
 
     def test_internal_receipts_do_not_change_status(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("radial_velocity", "", "PASS")
         for internal in ("to_kpf2", "to_kpf4", "to_fits", "from_fits"):

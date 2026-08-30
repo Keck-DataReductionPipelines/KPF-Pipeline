@@ -62,7 +62,7 @@ class Checkpoint:
         For each registry-governed extension present on the product, a card that
         is neither structural nor registered (in ``keyword_registry.allowed[ext]``)
         raises ``ValueError`` and names it. PRIMARY is validated at every level
-        including L0: StandardizeDataFormat runs at load, so the PRIMARY a
+        including L0: standardize_header_format runs at load, so the PRIMARY a
         checkpoint sees is always the EPRV one. This subsumes the old WMKO-native
         leak check: a raw instrument keyword kept in INSTRUMENT_HEADER is simply
         unregistered for an EPRV PRIMARY.

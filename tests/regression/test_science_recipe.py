@@ -468,13 +468,12 @@ def _wire_science_recipe(tmp_path, monkeypatch):
 
     class StubKPF0:
         @staticmethod
-        def from_fits(path):
-            record["calls"].append(("from_fits", path, ()))
+        def from_fits(path, standardize=False):
+            record["calls"].append(("from_fits", path, (standardize,)))
             return Product("l0")
 
     monkeypatch.setattr(recipe, "KPF0", StubKPF0)
     for name, produces in [
-        ("StandardizeDataFormat", "l0"),
         ("AstroQuery", "l0"),
         ("ImageAssembly", "l1"),
         ("CalibrationAssociation", "l1"),
@@ -521,13 +520,11 @@ class TestScienceRecipeWiring:
         return record
 
     def test_stages_run_in_order(self, run):
-        # StandardizeDataFormat runs first, on the line after the load: every
-        # stage after it reads one PRIMARY, the EPRV one. CheckpointL0 runs
-        # BEFORE ImageAssembly on purpose: QCL0 writes the L0 QC flags that
-        # to_kpf1 propagates into the L1/L2/L4 products.
+        # The load standardizes (next test), so every stage reads one PRIMARY,
+        # the EPRV one. CheckpointL0 runs BEFORE ImageAssembly on purpose: QCL0
+        # writes the L0 QC flags that to_kpf1 propagates into L1/L2/L4.
         assert [call[0] for call in run["calls"]] == [
             "from_fits",
-            "StandardizeDataFormat",
             "AstroQuery",
             "PlotL0",
             "CheckpointL0",
@@ -546,6 +543,12 @@ class TestScienceRecipeWiring:
             "PlotL4",
             "CheckpointL4",
         ]
+
+    def test_the_load_standardizes(self, run):
+        # The conversion is no longer a stage of its own; the recipe gets it by
+        # loading with standardize=True, so nothing downstream sees a native PRIMARY.
+        load = next(call for call in run["calls"] if call[0] == "from_fits")
+        assert load[2] == (True,)
 
     def test_each_stage_receives_the_previous_product(self, run):
         # A mis-wired hand-off (SpectralExtraction fed the L0, RadialVelocity fed

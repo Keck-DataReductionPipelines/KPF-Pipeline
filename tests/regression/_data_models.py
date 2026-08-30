@@ -225,7 +225,7 @@ def write_science_l0(path, *, primary_cards=None, **kwargs):
 
 
 def standardized_l0(path):
-    """Load an L0 from ``path`` and run StandardizeDataFormat on it.
+    """Load an L0 from ``path``, standardized.
 
     Every L0 module runs after standardization in production, so a fixture whose
     object reaches DiagL0/QCL0/AstroQuery/CheckpointL0/ImageAssembly/to_kpf1 must
@@ -233,11 +233,8 @@ def standardized_l0(path):
     EPRV header.
     """
     from kpfpipe.data_models.level0 import KPF0
-    from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
-    l0 = KPF0.from_fits(str(path))
-    StandardizeDataFormat(l0).perform()
-    return l0
+    return KPF0.from_fits(str(path), standardize=True)
 
 
 def seed_catalog_record(kpf0, record=None):

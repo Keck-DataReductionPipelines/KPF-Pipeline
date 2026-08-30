@@ -10,7 +10,6 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe.data_models.level0 import KPF0
-from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
 from ._catalog import catalog_record_table
 from ._data_models import standardized_l0, write_minimal_l0
@@ -267,7 +266,7 @@ class TestCatalogRecordMissingValues:
         from kpfpipe.modules.astro_query import AstroQuery
 
         l0 = self._l0_written_and_read(tmp_path, rv=None)
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         cards = AstroQuery(l0)._catalog_primary_cards()
         assert "CRV2" not in cards  # skipped, so the seeded blank stands
         for keyword, value in cards.items():
@@ -307,7 +306,7 @@ class TestEPRVCompliance:
     rvdata publishes no L0 tables -- L0 is the raw WMKO readout, not an EPRV
     product -- so the oracle is KPF's own ``EPRV-header-map.csv``. A bare KPF0 is
     deliberately unseeded, because ``_read`` replaces PRIMARY wholesale;
-    StandardizeDataFormat is what puts the EPRV skeleton on it.
+    standardize_header_format is what puts the EPRV skeleton on it.
     """
 
     def test_standardization_stamps_every_mapped_keyword(self, tmp_path):

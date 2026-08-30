@@ -1,7 +1,7 @@
 """Tests for the WMKO-native -> EPRV-standard L0 conversion.
 
-``StandardizeDataFormat`` is the single conversion site and runs on the line
-after every raw-L0 load, so this module is where the shape of the EPRV PRIMARY is
+``KPF0.standardize_header_format`` is the single conversion site and runs at
+every raw-L0 load, so this module is where the shape of the EPRV PRIMARY is
 pinned: what the registry seeds, what the header map fills, what stays blank, and
 that the whole thing is idempotent and fail-loud.
 """
@@ -16,7 +16,6 @@ from kpfpipe import DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.masters import KPFMasterL1
-from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from kpfpipe.utils.astro import KECK_LOCATION
 
 from ._data_models import standardized_l0
@@ -134,7 +133,7 @@ class TestStandardizedPrimary:
         # MJD -> JD epoch transform is the one thing the table cannot express.
         l0 = KPF0.from_fits(synthetic_l0_file)
         native = l0.as_fits_header(l0.headers["PRIMARY"])
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         assert l0.headers["PRIMARY"]["JD_UTC"] != native["MJD-OBS"]
         assert l0.headers["PRIMARY"]["JD_UTC"] == pytest.approx(
             float(native["MJD-OBS"]) + 2400000.5
@@ -170,19 +169,19 @@ class TestStandardizedPrimary:
 
     def test_instrument_era_is_stamped(self):
         l0 = self._dated_l0(60310.0)  # 2024-01-01, era 1.0
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         assert l0.headers["PRIMARY"]["INSTERA"] == "1.0"
 
     def test_undated_frame_is_rejected(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         with pytest.raises(ValueError, match="Cannot infer the instrument era"):
-            StandardizeDataFormat(l0).perform()
+            l0.standardize_header_format()
 
     def test_frame_between_eras_is_rejected(self):
         l0 = self._dated_l0(60355.0)  # 2024-02-15, eras 1.5 -> 2.0 gap
         with pytest.raises(ValueError, match="No KPF instrument era covers"):
-            StandardizeDataFormat(l0).perform()
+            l0.standardize_header_format()
 
     @staticmethod
     def _dated_l0(mjd):
@@ -206,7 +205,7 @@ class TestObservingMode:
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         for key, value in native.items():
             l0.headers["PRIMARY"][key] = value
-        return StandardizeDataFormat(l0).perform().headers["PRIMARY"]
+        return l0.standardize_header_format().headers["PRIMARY"]
 
     def test_object_frame_is_sci(self, synthetic_l0_file):
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
@@ -259,7 +258,7 @@ class TestFiveTraceShape:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = imtype
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         assert self._expected() <= set(l0.headers["PRIMARY"])
 
     @pytest.mark.parametrize("imtype", ["Object", "Bias", "Arclamp"])
@@ -267,7 +266,7 @@ class TestFiveTraceShape:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = imtype
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         assert self._expected() <= set(l0.to_kpf1().headers["PRIMARY"])
 
     def test_the_card_set_does_not_vary_with_imtype(self):
@@ -275,7 +274,7 @@ class TestFiveTraceShape:
             l0 = KPF0()
             l0.headers["PRIMARY"]["IMTYPE"] = imtype
             l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-            StandardizeDataFormat(l0).perform()
+            l0.standardize_header_format()
             return set(l0.headers["PRIMARY"])
 
         assert cards("Object") == cards("Bias") == cards("Arclamp")
@@ -310,7 +309,7 @@ class TestIdempotencyAndGate:
         native_before = dict(l0.headers["INSTRUMENT_HEADER"])
         receipts_before = list(l0.receipt["FUNCTION"])
 
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
 
         assert dict(l0.headers["PRIMARY"]) == before
         assert dict(l0.headers["INSTRUMENT_HEADER"]) == native_before
@@ -318,16 +317,16 @@ class TestIdempotencyAndGate:
 
     def test_to_kpf1_rejects_an_unstandardized_l0(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        with pytest.raises(ValueError, match="run StandardizeDataFormat"):
+        with pytest.raises(ValueError, match="call standardize_header_format"):
             l0.to_kpf1()
 
     def test_a_receipt_row_is_written(self, synthetic_l0_file):
         l0 = standardized_l0(synthetic_l0_file)
-        assert "standardize_data_format" in l0.receipt["FUNCTION"].values
+        assert "standardize_header_format" in l0.receipt["FUNCTION"].values
         # Not an internal receipt, so it advances DRPSTATU like any module.
         assert (
             l0.headers["RECEIPT"]["DRPSTATU"]
-            == "Standardize Data Format module complete"
+            == "Standardize Header Format module complete"
         )
 
 

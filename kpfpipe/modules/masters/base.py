@@ -14,7 +14,6 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 from kpfpipe.quality_control.diagnostics import DiagL0
 from kpfpipe.quality_control.qc_flags import QCL0
 from kpfpipe.utils.config import ConfigHandler
@@ -206,8 +205,7 @@ class BaseMasterModule:
             return self._l1_obj_cache[fn]
 
         try:
-            l0_obj = KPF0.from_fits(fn)
-            StandardizeDataFormat(l0_obj).perform()
+            l0_obj = KPF0.from_fits(fn, standardize=True)
 
             DiagL0(l0_obj).run()
             qc = QCL0(l0_obj).run()

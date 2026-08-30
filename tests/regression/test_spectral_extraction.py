@@ -19,7 +19,6 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.modules.standardize_data_format import StandardizeDataFormat
 
 from ._dtype_policy import FLUX, assert_dtype
 
@@ -284,7 +283,7 @@ class TestSpectralExtractionRealData:
     @pytest.fixture(scope="class")
     def l2_from_flat(self):
         l0 = KPF0.from_fits(L0_FILE)
-        StandardizeDataFormat(l0).perform()
+        l0.standardize_header_format()
         ia = ImageAssembly(l0)
         l1 = ia.perform()
         se = SpectralExtraction(l1)

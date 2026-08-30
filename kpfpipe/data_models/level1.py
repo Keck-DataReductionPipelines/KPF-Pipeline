@@ -38,7 +38,7 @@ class KPF1(KPFDataModel):
         self._fill_typed_empty_tables()
         # Seed PRIMARY with the registry's typed L1 skeleton (defaults +
         # comments). L1 is not an EPRV level, so the skeleton is stamped here;
-        # the values StandardizeDataFormat wrote at L0 are forwarded over it by
+        # the values standardize_header_format wrote at L0 are forwarded over it by
         # KPF0.to_kpf1.
         self._seed_primary()
         # DATALVL's seeded value is the L0 default; restamp it for this level.

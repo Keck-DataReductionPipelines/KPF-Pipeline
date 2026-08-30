@@ -28,7 +28,7 @@ class DiagL0(Diagnostics):
     # QUALITY_CONTROL metric -> the EPRV PRIMARY keyword it also answers. This
     # one maps from a diagnostic rather than a native card
     # (``EPRV-header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
-    # QUALITY_CONTROL is still empty when StandardizeDataFormat runs, so DiagL0
+    # QUALITY_CONTROL is still empty when standardize_header_format runs, so DiagL0
     # is its PRIMARY writer too.
     _PRIMARY_EQUIVALENTS = {
         "GDRSEEV": "SEEING",

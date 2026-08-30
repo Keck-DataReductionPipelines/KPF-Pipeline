@@ -28,7 +28,7 @@ blank cell is the machine-readable record of which keywords are still unsourced.
 
 The three use-cases:
   (1) Mapping  -- ``header_map`` (``config/EPRV-header-map.csv``: WMKO-native ->
-      EPRV-standard), consumed by ``StandardizeDataFormat``; ``datatype_for``
+      EPRV-standard), consumed by ``KPF0.standardize_header_format``; ``datatype_for``
       types the values it emits, and ``primary_seed`` stamps the skeleton it
       fills in. The map is PRIMARY-only by definition and is the definition of
       the EPRV PRIMARY keyword set: every ``EPRV_KEY`` must be registered on

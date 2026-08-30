@@ -152,19 +152,19 @@ Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are co
 
 ### Header standardization
 
-The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** — the
-`StandardizeDataFormat` module, which runs on the line after every raw-L0 load and also snapshots the
-raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
+The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** —
+`KPF0.standardize_header_format`, which every raw-L0 load runs via `from_fits(standardize=True)` and
+which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
 The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
 The architecture invariants:
 
 - **PRIMARY holds EPRV-registered keywords only** from L0-after-standardization onward (EPRV keyword
-  names + FITS structural cards — no KPF-registered keywords, no raw natives). `StandardizeDataFormat`
-  seeds the whole registered PRIMARY skeleton for the level, then fills it from
+  names + FITS structural cards — no KPF-registered keywords, no raw natives).
+  `standardize_header_format` seeds the whole registered PRIMARY skeleton for the level, then fills it from
   `EPRV-header-map.csv`; every card is present, blank where nothing supplied a value. (One
   keyword-homing exception is noted under *Keyword registry*.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
-  written once by `StandardizeDataFormat` and never again.
+  written once by `standardize_header_format` and never again.
 - **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`** — at L0 too, now that standardization runs
   at load. The map carries only some natives to PRIMARY, mostly under renamed EPRV keys — so read a
   native from PRIMARY when it survives there under its own name (e.g. `DATE-OBS`, `OBJECT`), and from

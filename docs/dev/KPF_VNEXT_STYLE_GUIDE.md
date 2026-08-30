@@ -276,9 +276,9 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
   home with the registry `Description` as comment. Never hardcode an extension/comment or write
   `headers["PRIMARY"][key] = …` for a registered keyword; the keyword must be in
   `config/{prefix}-{EXTENSION}-keywords.csv` first, or `set_keyword` raises. Never write to
-  `INSTRUMENT_HEADER` outside `StandardizeDataFormat`.
-- **The native → EPRV conversion has one home**, `StandardizeDataFormat`; never re-implement it,
-  and never read a native card off PRIMARY once it has run.
+  `INSTRUMENT_HEADER` outside `KPF0.standardize_header_format`.
+- **The native → EPRV conversion has one home**, `KPF0.standardize_header_format`; never
+  re-implement it, and never read a native card off PRIMARY once it has run.
 - **Prefer PRIMARY, fall back to `INSTRUMENT_HEADER`** for reads: a native that survives on PRIMARY
   under its own name is read there; one that never reaches PRIMARY, or that reads more clearly as a
   coherent native block, is read from `INSTRUMENT_HEADER`. No silent fallback — let a missing key

@@ -76,7 +76,7 @@ class TestUnregisteredKeywords:
         CheckpointL2(l2).unregistered_keywords()  # no raise
 
     def test_l0_primary_is_validated_too(self):
-        # StandardizeDataFormat runs at load, so the PRIMARY a checkpoint sees is
+        # standardize_header_format runs at load, so the PRIMARY a checkpoint sees is
         # the EPRV one at every level -- a native leaked onto it raises at L0
         # exactly as it does at L2.
         l0 = KPF0()

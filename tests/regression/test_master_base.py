@@ -73,11 +73,8 @@ class TestMasterBaseErrors:
         fn = FILE_LIST[0]
         qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: object()
-        )
-        monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.StandardizeDataFormat",
-            lambda l0: MagicMock(perform=lambda: l0),
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: object(),
         )
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.QCL0",
@@ -97,11 +94,8 @@ class TestMasterBaseErrors:
         raw_l0 = object()
         seen = {}
         monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: raw_l0
-        )
-        monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.StandardizeDataFormat",
-            lambda l0: MagicMock(perform=lambda: l0),
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: raw_l0,
         )
 
         def _qc(l0):

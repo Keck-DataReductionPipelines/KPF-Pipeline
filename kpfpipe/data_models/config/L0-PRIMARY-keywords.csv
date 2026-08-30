@@ -1,38 +1,38 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-INSTRUME,Instrument name,N/A,String,KPF,StandardizeDataFormat
-INSTERA,Tag tracking permanent instrument changes,N/A,String,KPF-2,StandardizeDataFormat
+INSTRUME,Instrument name,N/A,String,KPF,KPF0.standardize_header_format
+INSTERA,Tag tracking permanent instrument changes,N/A,String,KPF-2,KPF0.standardize_header_format
 FILENAME,Name of the FITS file,N/A,String,kpf_L1_20240405T110833.fits,KPF*.to_fits
-ORIGIN,Entity that created this file,N/A,String,Keck,StandardizeDataFormat
-DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,StandardizeDataFormat
-DATALVL,Data product base level,N/A,String,L0,StandardizeDataFormat
+ORIGIN,Entity that created this file,N/A,String,Keck,KPF0.standardize_header_format
+DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,KPF0.standardize_header_format
+DATALVL,Data product base level,N/A,String,L0,KPF0.standardize_header_format
 
 PROGRAM,Observing program name,N/A,String,K123,
 ORGANIZA,Data owner organization for licensing,N/A,String,WMKO,
 PINAME,Program PI name,N/A,String,Howard,
 OBSERVER,Observer,N/A,String,Isaacson,
-OBSERVAT,Observatory name,N/A,String,Keck Observatory,StandardizeDataFormat
-TELESCOP,Telescope name,N/A,String,Keck I,StandardizeDataFormat
-OBSLON,Longitude for barycentric correction,deg,Float,-155.47833333,StandardizeDataFormat
-OBSLAT,Latitude for barycentric correction,deg,Float,19.82833333,StandardizeDataFormat
-OBSALT,Altitude for barycentric correction,meters,Float,4160,StandardizeDataFormat
-GEOSYS,Coordinate system for the site location,N/A,String,WGS84,StandardizeDataFormat
-OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.818,StandardizeDataFormat
-OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.591,StandardizeDataFormat
-OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.194,StandardizeDataFormat
+OBSERVAT,Observatory name,N/A,String,Keck Observatory,KPF0.standardize_header_format
+TELESCOP,Telescope name,N/A,String,Keck I,KPF0.standardize_header_format
+OBSLON,Longitude for barycentric correction,deg,Float,-155.47833333,KPF0.standardize_header_format
+OBSLAT,Latitude for barycentric correction,deg,Float,19.82833333,KPF0.standardize_header_format
+OBSALT,Altitude for barycentric correction,meters,Float,4160,KPF0.standardize_header_format
+GEOSYS,Coordinate system for the site location,N/A,String,WGS84,KPF0.standardize_header_format
+OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.818,KPF0.standardize_header_format
+OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.591,KPF0.standardize_header_format
+OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.194,KPF0.standardize_header_format
 
-OBJECT,Primary object name,N/A,String,219134,StandardizeDataFormat
+OBJECT,Primary object name,N/A,String,219134,KPF0.standardize_header_format
 ALIASES,User-defined object names; ';' separated,N/A,String,HD 219134,
-DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,StandardizeDataFormat
-JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,StandardizeDataFormat
-OBSTYPE,Observation type,N/A,String,Object,StandardizeDataFormat
-OBSMODE,Observing mode,N/A,String,sci,StandardizeDataFormat
-ISSOLAR,True if the observation is of the Sun,N/A,Boolean,F,StandardizeDataFormat
+DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,KPF0.standardize_header_format
+JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,KPF0.standardize_header_format
+OBSTYPE,Observation type,N/A,String,Object,KPF0.standardize_header_format
+OBSMODE,Observing mode,N/A,String,sci,KPF0.standardize_header_format
+ISSOLAR,True if the observation is of the Sun,N/A,Boolean,F,KPF0.standardize_header_format
 
-EXPTIME,Exposure time,s,Float,75.022,StandardizeDataFormat
-BINNING,Binning mode,N/A,String,1x1,StandardizeDataFormat
-NUMORDER,Number of orders,N/A,Uint,67,StandardizeDataFormat
-NUMTRACE,Number of object-indexed keyword families,N/A,UInt,5,StandardizeDataFormat
-TRACE#,Type of object in trace #,N/A,String,SCI,StandardizeDataFormat
+EXPTIME,Exposure time,s,Float,75.022,KPF0.standardize_header_format
+BINNING,Binning mode,N/A,String,1x1,KPF0.standardize_header_format
+NUMORDER,Number of orders,N/A,Uint,67,KPF0.standardize_header_format
+NUMTRACE,Number of object-indexed keyword families,N/A,UInt,5,KPF0.standardize_header_format
+TRACE#,Type of object in trace #,N/A,String,SCI,KPF0.standardize_header_format
 CLSRC#,Calibration source in trace # if used,N/A,String,EtalonFiber,
 CSRC#,Catalog source for object in trace #,N/A,String,Gaia DR3,AstroQuery
 CID#,Catalog designation for object in trace #,N/A,String,DR3 2870618101503062016,AstroQuery
@@ -47,18 +47,18 @@ CRV#,Catalog systemic RV for trace #,km/s,Float,-18.55,AstroQuery
 CZ#,Catalog redshift Z for trace #,N/A,Float,-0.0000619,AstroQuery
 CCLR#,Catalog color 1 - color 2 for trace #,mag,Float,1.9376,AstroQuery
 CCLRN#,Catalog color 1 - color 2 name for trace #,N/A,String,Gaia BP-RP,AstroQuery
-NUMTEL,Number of telescopes used,N/A,UInt,1,StandardizeDataFormat
-TELEID1,Telescope label as indexed in TCS keywords,N/A,String,K1,StandardizeDataFormat
-TTIME,TCS-data date/time,UTC,String,2024-04-05T11:09:11,StandardizeDataFormat
-TEQNX,TCS equinox,yr,String,2000.0,StandardizeDataFormat
-TEPCH,TCS epoch,yr,String,2016.0,StandardizeDataFormat
-TLST1,TCS LST for telescope 1,sexagesimal,String,06:37:52.9,StandardizeDataFormat
-TRA1,TCS RA for telescope 1,sexagesimal,String,23:13:16.98,StandardizeDataFormat
-TDEC1,TCS Dec for telescope 1,sexagesimal,String,+57:10:06.1,StandardizeDataFormat
-TEL1,TCS elevation angle for telescope 1,deg,Float,59.4,StandardizeDataFormat
+NUMTEL,Number of telescopes used,N/A,UInt,1,KPF0.standardize_header_format
+TELEID1,Telescope label as indexed in TCS keywords,N/A,String,K1,KPF0.standardize_header_format
+TTIME,TCS-data date/time,UTC,String,2024-04-05T11:09:11,KPF0.standardize_header_format
+TEQNX,TCS equinox,yr,String,2000.0,KPF0.standardize_header_format
+TEPCH,TCS epoch,yr,String,2016.0,KPF0.standardize_header_format
+TLST1,TCS LST for telescope 1,sexagesimal,String,06:37:52.9,KPF0.standardize_header_format
+TRA1,TCS RA for telescope 1,sexagesimal,String,23:13:16.98,KPF0.standardize_header_format
+TDEC1,TCS Dec for telescope 1,sexagesimal,String,+57:10:06.1,KPF0.standardize_header_format
+TEL1,TCS elevation angle for telescope 1,deg,Float,59.4,KPF0.standardize_header_format
 TZA1,TCS zenith angle for telescope 1,deg,Float,30.6,
-TAZ1,TCS azimuth angle for telescope 1,deg,Float,41.9,StandardizeDataFormat
-THA1,TCS hour angle for telescope 1,sexagesimal,String,-16:35:24.1,StandardizeDataFormat
+TAZ1,TCS azimuth angle for telescope 1,deg,Float,41.9,KPF0.standardize_header_format
+THA1,TCS hour angle for telescope 1,sexagesimal,String,-16:35:24.1,KPF0.standardize_header_format
 PARST1,Parallactic angle at start; telescope 1,deg,Float,175.2,
 PAREND1,Parallactic angle at end; telescope 1,deg,Float,180.7,
 
@@ -89,9 +89,9 @@ INSTFLAG,Issues with instrument?,N/A,String,Pass,
 DRPFLAG,Issues with pipeline?,N/A,String,Pass,
 ADDFLAG,Additional team-defined flag,N/A,String,Pass,
 OBSFLAG,Observer pass/fail for exposure,N/A,String,Pass,
-DRPTAG,RV DRP version,N/A,String,3.0.0,StandardizeDataFormat
-DRPHASH,Git commit hash,N/A,String,277e3a1d99628d9fcef494797887663119,StandardizeDataFormat
-EPRVTAG,Version of EPRV standard applied,N/A,String,v0.4.0,StandardizeDataFormat
-VOCLASS,EPRV standard release identifier,N/A,String,EPRVSTANDARD2026.06,StandardizeDataFormat
+DRPTAG,RV DRP version,N/A,String,3.0.0,KPF0.standardize_header_format
+DRPHASH,Git commit hash,N/A,String,277e3a1d99628d9fcef494797887663119,KPF0.standardize_header_format
+EPRVTAG,Version of EPRV standard applied,N/A,String,v0.4.0,KPF0.standardize_header_format
+VOCLASS,EPRV standard release identifier,N/A,String,EPRVSTANDARD2026.06,KPF0.standardize_header_format
 FULLCOMP,Is this file fully EPRV-standard compliant?,N/A,String,Yes,
 DQLVL0,L0 quality-check bitfield,N/A,UInt,0,
