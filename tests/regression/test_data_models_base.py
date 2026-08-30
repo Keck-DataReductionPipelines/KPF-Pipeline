@@ -11,6 +11,7 @@ import importlib.resources
 import tomllib
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from astropy.io import fits
@@ -141,6 +142,30 @@ class TestSetKeyword:
         l1 = KPF1()
         with pytest.raises(ValueError, match="does not exist"):
             l1.set_keyword("BVGREEN", 1.0)
+
+    def test_value_is_coerced_to_the_registered_datatype(self):
+        l2 = KPF2()
+        l2.set_keyword("NUMORDER", "35")  # Uint
+        l2.set_keyword("ISSOLAR", "F")  # Boolean
+        l2.set_keyword("DATAPRL0", 1.0, ext="QUALITY_CONTROL")  # int
+        l2.set_keyword("CRVALN", 1.5, ext="TRACE1_WAVE")  # float32
+        assert l2.headers["PRIMARY"]["NUMORDER"] == 35
+        assert l2.headers["PRIMARY"]["ISSOLAR"] is False
+        assert l2.headers["QUALITY_CONTROL"]["DATAPRL0"] == 1
+        # The declared width, so the card is written at single precision.
+        assert isinstance(l2.headers["TRACE1_WAVE"]["CRVALN"], np.float32)
+
+    def test_unconvertible_value_raises_typeerror(self):
+        l1 = KPF1()
+        with pytest.raises(TypeError, match="declared Uint"):
+            l1.set_keyword("NUMORDER", -1)
+        with pytest.raises(TypeError, match="declared Boolean"):
+            l1.set_keyword("ISSOLAR", "yes")
+
+    def test_none_writes_the_blank_card_through(self):
+        l1 = KPF1()
+        l1.set_keyword("NUMORDER", None)
+        assert l1.headers["PRIMARY"]["NUMORDER"] is None
 
 
 class TestRegistryConformance:

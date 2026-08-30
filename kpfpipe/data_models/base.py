@@ -64,9 +64,6 @@ class KPFDataModel(RVDataModel):
     keyword_registry = keyword_registry
     extension_manifest = extension_manifest
 
-    # Unknown extension on read raises, matching rvdata's read contract.
-    _strict_read = True
-
     def __init__(self):
         super().__init__()
         self.obs_id = None
@@ -145,8 +142,7 @@ class KPFDataModel(RVDataModel):
         """Read every extension from an EPRV-standard FITS HDUList.
 
         The FITS type comes from the astropy HDU class, and the manifest supplies
-        the known-extension gate; an unknown extension raises when
-        ``_strict_read`` (the default) and warns otherwise.
+        the known-extension gate; an unknown extension raises.
         """
         known = set(self.extension_manifest.names(self._data_model))
         for hdu in hdul:
@@ -163,12 +159,9 @@ class KPFDataModel(RVDataModel):
 
             if ext_name != "PRIMARY" and ext_name not in self.extensions:
                 if ext_name not in known:
-                    message = (
+                    raise ValueError(
                         f"Non-standard extension {ext_name!r} in L{self.level} file"
                     )
-                    if self._strict_read:
-                        raise ValueError(message)
-                    logger.warning("%s", message)
                 self.create_extension(ext_name, fits_type)
 
             if ext_name == "PRIMARY":
@@ -266,6 +259,11 @@ class KPFDataModel(RVDataModel):
         path for registered keywords, so a keyword always lands on the same
         extension with the same comment -- callers never name a comment.
 
+        ``value`` is coerced to the registry ``DataType``, the header counterpart
+        of the manifest ``BitDepth`` check on ``set_data``: a card is written at
+        its declared width and a value that will not convert raises rather than
+        landing wrong. A None writes the blank seeded card through unchanged.
+
         ``ext`` targets a specific extension for EPRV per-extension cards that
         have no single routed home because they recur on every orderlet's
         extension (e.g. ``VELSTART`` on ``CCF1..5``, ``RVMETHOD`` on ``RV1..5``).
@@ -282,6 +280,8 @@ class KPFDataModel(RVDataModel):
         ValueError
             If the target extension does not exist on this object (a config
             error -- the extension must be created before the write).
+        TypeError
+            If ``value`` does not convert to the registered ``DataType``.
         """
         name = str(key).strip()
         if ext is None:
@@ -309,6 +309,15 @@ class KPFDataModel(RVDataModel):
                 f"cannot write {name!r}: extension {ext!r} does not exist on "
                 f"{type(self).__name__}"
             )
+        datatype = self.keyword_registry.datatype_for(name, ext)
+        if value is not None and datatype:
+            try:
+                value = self.keyword_registry.coerce(datatype.lower(), value)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise TypeError(
+                    f"keyword {name!r} on {ext!r} is declared {datatype}; "
+                    f"cannot write {value!r}: {exc}"
+                ) from None
         self.headers[ext][name] = (value, comment)
 
     def set_data(self, ext_name, data):

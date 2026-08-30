@@ -538,11 +538,6 @@ class TestKPFMasterL1:
         with pytest.raises(ValueError, match="INPUT_FILES"):
             m.generate_standard_filename()
 
-    def test_no_warning_on_known_extensions(self, caplog, synthetic_masters_l1_file):
-        with caplog.at_level(logging.WARNING):
-            KPFMasterL1.from_fits(synthetic_masters_l1_file)
-        assert "Non-standard extension" not in caplog.text
-
     def test_set_input_files(self):
         m = KPFMasterL1()
         files = ["/data/a.fits", "/data/b.fits", "/data/c.fits"]

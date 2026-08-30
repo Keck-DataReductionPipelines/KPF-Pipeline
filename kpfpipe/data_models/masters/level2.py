@@ -36,8 +36,6 @@ class KPFMasterL2(KPFMasterModel, KPF2):
     _MASTYPE_TO_KIND = {"thar": "wls", "flat": "flat"}
     # The manifest suffixes that select an L2 master's extension set.
     _KINDS = ("flat", "wls")
-    # A master read is lenient: an unknown extension warns rather than raises.
-    _strict_read = False
 
     def __init__(self, kind):
         if kind not in self._KINDS:

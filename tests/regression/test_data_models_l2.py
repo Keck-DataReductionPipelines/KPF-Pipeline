@@ -3,7 +3,6 @@ the AliasedOrderedDict extension-alias machinery, and the KPFMasterL2 calibratio
 product. Synthetic FITS fixtures only -- no real KPF data needed.
 """
 
-import logging
 from collections import OrderedDict
 
 import numpy as np
@@ -641,10 +640,9 @@ class TestKPFMasterL2:
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML2"
 
-    def test_no_warning_on_known_extensions(self, caplog, synthetic_masters_l2_file):
-        with caplog.at_level(logging.WARNING):
-            KPFMasterL2.from_fits(synthetic_masters_l2_file)
-        assert "Non-standard extension" not in caplog.text
+    def test_known_extensions_read_cleanly(self, synthetic_masters_l2_file):
+        m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
+        assert set(m.extensions) == set(kpf_table("ML2-wls-extensions")["Name"])
 
     def test_set_input_files(self):
         m = KPFMasterL2(kind="wls")
@@ -678,7 +676,7 @@ class TestKPFMasterL2:
         for key in ("ROUGHWLS", "LINELIST", "POLYDEGX"):
             assert back.headers["PRIMARY"][key] is None, key
 
-    def test_warns_on_unknown_extension(self, caplog, tmp_path):
+    def test_raises_on_unknown_extension(self, tmp_path):
         fn = str(tmp_path / "unknown_ext_ml2.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
@@ -689,9 +687,10 @@ class TestKPFMasterL2:
         hdul.writeto(fn, overwrite=True)
         hdul.close()
 
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(
+            ValueError, match="Non-standard extension 'WEIRD_EXTENSION'"
+        ):
             KPFMasterL2.from_fits(fn)
-        assert "Non-standard extension" in caplog.text
 
 
 class TestKPF2HeaderStorage:

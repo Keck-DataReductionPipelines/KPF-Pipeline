@@ -366,7 +366,7 @@ class KeywordRegistry:
         return self.datatypes.get((str(keyword).strip(), extension))
 
     @staticmethod
-    def _coerce(datatype, value):
+    def coerce(datatype, value):
         """Convert ``value`` to ``datatype``, the CSVs' vocabulary lowercased.
 
         Floats carry their declared width, so a ``float32`` card is written at
@@ -375,7 +375,8 @@ class KeywordRegistry:
         memory, ``T``/``F`` on disk, ``0``/``1`` by convention -- so a truthy
         string is a bad value, not ``True``. Raises ``KeyError`` on an unknown
         ``datatype`` and ``TypeError``/``ValueError`` on a value that will not
-        convert; ``_parse_value`` owns what each of those means.
+        convert; the callers own what each of those means -- ``_parse_value``
+        warns past a bad frame value, ``set_keyword`` raises on a bad write.
         """
         match datatype:
             case "str" | "string":
@@ -404,7 +405,7 @@ class KeywordRegistry:
 
     @classmethod
     def _parse_value(cls, keyword, datatype, value):
-        """Type ``value`` to the registry ``DataType`` via ``_coerce``.
+        """Type ``value`` to the registry ``DataType`` via ``coerce``.
 
         KPF-owned typing over the CSVs' own vocabulary, matched
         case-insensitively. An empty value is None; a blank ``DataType`` passes
@@ -424,7 +425,7 @@ class KeywordRegistry:
         if not datatype or (isinstance(datatype, float) and pd.isna(datatype)):
             return value
         try:
-            return cls._coerce(str(datatype).strip().lower(), value)
+            return cls.coerce(str(datatype).strip().lower(), value)
         except KeyError:
             raise ValueError(
                 f"keyword {keyword!r}: unknown DataType {datatype!r}"
