@@ -283,8 +283,9 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
   under its own name is read there; one that never reaches PRIMARY, or that reads more clearly as a
   coherent native block, is read from `INSTRUMENT_HEADER`. No silent fallback — let a missing key
   raise.
-- **Use EPRV keyword names on PRIMARY** (`EXPTIME`, not `ELAPSED`); the L4 `RV{GREEN,RED}`/`ERV{GREEN,RED}` are
-  the one KPF-registered exception deliberately homed on PRIMARY.
+- **Use EPRV keyword names on PRIMARY** (`EXPTIME`, not `ELAPSED`). Two KPF-registered families are
+  deliberately homed there anyway: the L4 `RV{GREEN,RED}`/`ERV{GREEN,RED}`, and the WMKO provenance
+  cards `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`, which WMKO requires on the products.
 
 #### Keywords
 

@@ -228,7 +228,7 @@ class KPFDataModel(RVDataModel):
         Ensures ``obs_id`` is carried in memory after the read. L0 (and any
         product whose filename embeds the obs_id) resolves it during ``read``;
         L1/L2/L4 filenames are timestamp-based, so a read there recovers the
-        obs_id from the ORIGID provenance card instead (see ``_obs_id_from_receipt``).
+        obs_id from the ORIGID provenance card instead (see ``_obs_id_from_primary``).
         The ``to_kpfN`` converters set ``obs_id`` directly, so this only fills the
         from_fits path.
 
@@ -241,18 +241,18 @@ class KPFDataModel(RVDataModel):
         logger.info("reading %s from %s", cls.__name__, fn)
         obj = super().from_fits(fn, instrument=instrument, **kwargs)
         if getattr(obj, "obs_id", None) is None:
-            obj.obs_id = obj._obs_id_from_receipt()
+            obj.obs_id = obj._obs_id_from_primary()
         table = obj.data.get("CATALOG_RECORD")
         if table is not None and getattr(table, "has_masked_values", False):
             obj.set_data("CATALOG_RECORD", table.filled(np.nan))
         return obj
 
-    def _obs_id_from_receipt(self):
-        """Recover the obs_id from the ORIGID card on RECEIPT (``None`` if absent
+    def _obs_id_from_primary(self):
+        """Recover the obs_id from the ORIGID card on PRIMARY (``None`` if absent
         or invalid, e.g. masters). ORIGID is stamped at L0 and forwarded on the
-        RECEIPT header, so it is the obs_id source for a from_fits'd L1/L2/L4."""
-        receipt = self.headers.get("RECEIPT")
-        origid = receipt.get("ORIGID") if receipt is not None else None
+        PRIMARY header, so it is the obs_id source for a from_fits'd L1/L2/L4."""
+        primary = self.headers.get("PRIMARY")
+        origid = primary.get("ORIGID") if primary is not None else None
         return origid if is_obs_id(origid) else None
 
     @staticmethod
@@ -436,7 +436,7 @@ class KPFDataModel(RVDataModel):
         is a key=value provenance string (``""`` when not applicable), ``status``
         is ``"PASS"``/``"FAIL"``.
 
-        DRPSTATU becomes '<Module Name> module complete'; conversion and
+        DRPSTATU becomes '<Module Name> complete'; conversion and
         serialization receipts (``_INTERNAL_RECEIPTS``) are skipped so it names
         the last real stage.
         """
@@ -447,7 +447,7 @@ class KPFDataModel(RVDataModel):
             and "RECEIPT" in self.extensions
         ):
             label = function.replace("_", " ").title()
-            self.set_keyword("DRPSTATU", f"{label} module complete")
+            self.set_keyword("DRPSTATU", f"{label} complete")
 
     def _create_hdul(self):
         """Sync ``self.receipt`` into the RECEIPT extension before writing (rvdata

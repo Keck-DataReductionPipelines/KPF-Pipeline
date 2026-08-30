@@ -1,6 +1,0 @@
-Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-ORIGID,Original L0 observation ID,,str,KP.20240405.40113.57,KPF0.from_fits
-KOAID,KOA archive ID (WMKO req.),,str,KP.20240405.40113.57.fits,KPF0.from_fits
-PROGID,WMKO program ID (WMKO req.),,str,K123,KPF0.from_fits
-DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),,str,3.0.0,KPF0.from_fits
-DRPSTATU,DRP reduction status (WMKO req.),,str,File ingested into KPF-DRP,KPF0.from_fits

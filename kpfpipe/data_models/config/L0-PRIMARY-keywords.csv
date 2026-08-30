@@ -2,9 +2,19 @@ Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
 INSTRUME,Instrument name,N/A,String,KPF,KPF0.standardize_header_format
 INSTERA,Tag tracking permanent instrument changes,N/A,String,KPF-2,KPF0.standardize_header_format
 FILENAME,Name of the FITS file,N/A,String,kpf_L1_20240405T110833.fits,KPF*.to_fits
+DATALVL,Data product base level,N/A,String,L0,KPF0.standardize_header_format
 ORIGIN,Entity that created this file,N/A,String,Keck,KPF0.standardize_header_format
 DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,KPF0.standardize_header_format
-DATALVL,Data product base level,N/A,String,L0,KPF0.standardize_header_format
+
+KOAID,KOA archive ID (WMKO req.),N/A,String,KP.20240405.40113.57.fits,KPF0.standardize_header_format
+PROGID,WMKO program ID (WMKO req.),N/A,String,K123,KPF0.standardize_header_format
+ORIGID,Original L0 observation ID,N/A,String,KP.20240405.40113.57,KPF0.standardize_header_format
+DRPSTATU,DRP reduction status (WMKO req.),N/A,String,Radial Velocity module complete,KPF0.standardize_header_format
+DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),N/A,String,3.0.0,KPF0.standardize_header_format
+DRPTAG,RV DRP version,N/A,String,3.0.0,KPF0.standardize_header_format
+DRPHASH,Git commit hash,N/A,String,277e3a1d99628d9fcef494797887663119,KPF0.standardize_header_format
+EPRVTAG,Version of EPRV standard applied,N/A,String,v0.4.0,KPF0.standardize_header_format
+VOCLASS,EPRV standard release identifier,N/A,String,EPRVSTANDARD2026.06,KPF0.standardize_header_format
 
 PROGRAM,Observing program name,N/A,String,K123,
 ORGANIZA,Data owner organization for licensing,N/A,String,WMKO,
@@ -12,13 +22,6 @@ PINAME,Program PI name,N/A,String,Howard,
 OBSERVER,Observer,N/A,String,Isaacson,
 OBSERVAT,Observatory name,N/A,String,Keck Observatory,KPF0.standardize_header_format
 TELESCOP,Telescope name,N/A,String,Keck I,KPF0.standardize_header_format
-OBSLON,Longitude for barycentric correction,deg,Float,-155.47833333,KPF0.standardize_header_format
-OBSLAT,Latitude for barycentric correction,deg,Float,19.82833333,KPF0.standardize_header_format
-OBSALT,Altitude for barycentric correction,meters,Float,4160,KPF0.standardize_header_format
-GEOSYS,Coordinate system for the site location,N/A,String,WGS84,KPF0.standardize_header_format
-OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.818,KPF0.standardize_header_format
-OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.591,KPF0.standardize_header_format
-OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.194,KPF0.standardize_header_format
 
 OBJECT,Primary object name,N/A,String,219134,KPF0.standardize_header_format
 ALIASES,User-defined object names; ';' separated,N/A,String,HD 219134,
@@ -62,6 +65,14 @@ THA1,TCS hour angle for telescope 1,sexagesimal,String,-16:35:24.1,KPF0.standard
 PARST1,Parallactic angle at start; telescope 1,deg,Float,175.2,
 PAREND1,Parallactic angle at end; telescope 1,deg,Float,180.7,
 
+OBSLON,Longitude for barycentric correction,deg,Float,-155.47833333,KPF0.standardize_header_format
+OBSLAT,Latitude for barycentric correction,deg,Float,19.82833333,KPF0.standardize_header_format
+OBSALT,Altitude for barycentric correction,meters,Float,4160,KPF0.standardize_header_format
+GEOSYS,Coordinate system for the site location,N/A,String,WGS84,KPF0.standardize_header_format
+OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.818,KPF0.standardize_header_format
+OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.591,KPF0.standardize_header_format
+OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.194,KPF0.standardize_header_format
+
 SEEING,Seeing at beginning of exposure,arcsec,Float,0.87,DiagL0
 AIRMASS,Airmass at start of exposure,secZ,Float,1.16,
 ROTANG,Rotator angle,deg,Float,80.3,
@@ -89,9 +100,5 @@ INSTFLAG,Issues with instrument?,N/A,String,Pass,
 DRPFLAG,Issues with pipeline?,N/A,String,Pass,
 ADDFLAG,Additional team-defined flag,N/A,String,Pass,
 OBSFLAG,Observer pass/fail for exposure,N/A,String,Pass,
-DRPTAG,RV DRP version,N/A,String,3.0.0,KPF0.standardize_header_format
-DRPHASH,Git commit hash,N/A,String,277e3a1d99628d9fcef494797887663119,KPF0.standardize_header_format
-EPRVTAG,Version of EPRV standard applied,N/A,String,v0.4.0,KPF0.standardize_header_format
-VOCLASS,EPRV standard release identifier,N/A,String,EPRVSTANDARD2026.06,KPF0.standardize_header_format
 FULLCOMP,Is this file fully EPRV-standard compliant?,N/A,String,Yes,
 DQLVL0,L0 quality-check bitfield,N/A,UInt,0,

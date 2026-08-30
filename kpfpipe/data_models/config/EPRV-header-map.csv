@@ -142,6 +142,11 @@ DRPTAG,,,,True
 EPRVTAG,,,,True
 VOCLASS,,,,True
 DRPHASH,,,,False
+DRPVERNO,,,,True
+DRPSTATU,,,,True
+ORIGID,,,,True
+KOAID,,,,True
+PROGID,,,,True
 INSTERA,,,,True
 EXTRACT,,,,False
 EXSNR1,,,,False

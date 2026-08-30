@@ -55,20 +55,19 @@ class TestToKPF4:
         assert len(kpf4.data["RV1"]) == 0
 
     def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
-        # PROGID/KOAID live on RECEIPT, not PRIMARY, and ride the RECEIPT forward.
+        # PROGID/KOAID are PRIMARY cards and ride the PRIMARY forward.
         l1 = KPF1.from_fits(synthetic_l1_file)
-        l1.headers["RECEIPT"]["PROGID"] = "U999"
-        l1.headers["RECEIPT"]["KOAID"] = "KP.20201122.34567.89"
+        l1.set_keyword("PROGID", "U999")
+        l1.set_keyword("KOAID", "KP.20201122.34567.89")
         l4 = l1.to_kpf2().to_kpf4()
 
-        receipt = l4.headers["RECEIPT"]
-        assert receipt.get("PROGID") == "U999"
-        assert receipt.get("KOAID") == "KP.20201122.34567.89"
-        assert "PROGID" not in l4.headers["PRIMARY"]
+        prim = l4.headers["PRIMARY"]
+        assert prim.get("PROGID") == "U999"
+        assert prim.get("KOAID") == "KP.20201122.34567.89"
 
     def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
-        # L4 carries RECEIPT columns and a DRPSTATU card that L0/L1 do not, so the
-        # L0/L1 round-trip twins cover none of this.
+        # The receipt table and the DRPSTATU card it advances have to survive
+        # separate serialization paths -- the RECEIPT BinTable and PRIMARY.
         l4 = KPF2().to_kpf4()
         l4.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
         l4.receipt_add_entry("radial_velocity", "", "PASS")
@@ -78,7 +77,7 @@ class TestToKPF4:
         back = KPF4.from_fits(fn)
         assert "radial_velocity" in back.receipt["FUNCTION"].values
         assert (
-            back.headers["RECEIPT"].get("DRPSTATU") == "Radial Velocity module complete"
+            back.headers["PRIMARY"].get("DRPSTATU") == "Radial Velocity module complete"
         )
 
     def test_kpf4_has_quality_control_extension(self):

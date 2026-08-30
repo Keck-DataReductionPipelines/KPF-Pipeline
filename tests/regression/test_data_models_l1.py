@@ -297,26 +297,25 @@ class TestToKpf1:
         assert inst["ELAPSED"] == 300.0
         assert inst["GROBSERV"] == "Smith"
         assert inst["INSTRUME"] == "KPF"
-        # Pipeline-stamped DRP provenance lives on RECEIPT, never on the raw
-        # PRIMARY snapshot, so INSTRUMENT_HEADER stays pure instrument metadata.
+        # The snapshot is taken before the DRP provenance is stamped, so
+        # INSTRUMENT_HEADER stays pure instrument metadata.
         assert "DRPVERNO" not in inst
         assert "DRPSTATU" not in inst
 
     def test_to_kpf1_forwards_program_ids(self, synthetic_l0_file):
-        # PROGID/KOAID are stamped to the L0 RECEIPT at read and forwarded to the
-        # L1 RECEIPT, never onto PRIMARY.
+        # PROGID/KOAID are stamped onto the L0 PRIMARY when it is standardized
+        # and forwarded to the L1 PRIMARY.
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
-        receipt = l1.headers["RECEIPT"]
-        assert receipt.get("PROGID") == "K123"
-        assert receipt.get("KOAID") == "KP.20240113.23249.10.fits"
-        assert "PROGID" not in l1.headers["PRIMARY"]
+        prim = l1.headers["PRIMARY"]
+        assert prim.get("PROGID") == "K123"
+        assert prim.get("KOAID") == "KP.20240113.23249.10.fits"
 
     def test_to_kpf1_forwards_drpstatus(self, synthetic_l0_file):
         # standardize_header_format is not an internal receipt, so it advances
         # DRPSTATU; to_kpf1 is denylisted and leaves it alone.
         l0 = self._standardized(synthetic_l0_file)
-        receipt = l0.to_kpf1().headers["RECEIPT"]
-        assert receipt.get("DRPSTATU") == "Standardize Header Format module complete"
+        prim = l0.to_kpf1().headers["PRIMARY"]
+        assert prim.get("DRPSTATU") == "Standardize Header Format module complete"
 
     def test_to_kpf1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = self._standardized(synthetic_l0_file)
@@ -402,7 +401,7 @@ class TestDrpStatus:
         l0.standardize_header_format()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("image_assembly", "", "PASS")
-        status = l1.headers["RECEIPT"].get("DRPSTATU")
+        status = l1.headers["PRIMARY"].get("DRPSTATU")
         assert status == "Image Assembly module complete"
 
     def test_master_receipt_updates_status(self, synthetic_l0_file):
@@ -410,7 +409,7 @@ class TestDrpStatus:
         l0.standardize_header_format()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("master_bias", "", "PASS")
-        status = l1.headers["RECEIPT"].get("DRPSTATU")
+        status = l1.headers["PRIMARY"].get("DRPSTATU")
         assert status == "Master Bias module complete"
 
     def test_internal_receipts_do_not_change_status(self, synthetic_l0_file):
@@ -420,7 +419,7 @@ class TestDrpStatus:
         l1.receipt_add_entry("radial_velocity", "", "PASS")
         for internal in ("to_kpf2", "to_kpf4", "to_fits", "from_fits"):
             l1.receipt_add_entry(internal, "", "PASS")
-        status = l1.headers["RECEIPT"].get("DRPSTATU")
+        status = l1.headers["PRIMARY"].get("DRPSTATU")
         assert status == "Radial Velocity module complete"
 
 

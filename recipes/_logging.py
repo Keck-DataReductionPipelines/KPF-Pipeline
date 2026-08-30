@@ -43,7 +43,7 @@ def science_run_summary(l4, elapsed_s):
                     out.append(value.strip())
         return out
 
-    obs_id = getattr(l4, "obs_id", None) or receipt.get("ORIGID") or "unknown"
+    obs_id = getattr(l4, "obs_id", None) or primary.get("ORIGID") or "unknown"
     masters = {
         "bias": receipt.get("BIASFILE"),
         "dark": receipt.get("DARKFILE"),

@@ -118,7 +118,7 @@ class KPF1(KPFDataModel):
             kpf2.receipt = self.receipt.copy()
 
         # Carry the obs_id through; ORIGID (stamped at L0) rides forward on the
-        # RECEIPT header above, so it is not rewritten here.
+        # PRIMARY header above, so it is not rewritten here.
         kpf2.obs_id = self.obs_id
 
         kpf2.set_keyword("DATALVL", "L2")

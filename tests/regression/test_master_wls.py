@@ -472,7 +472,9 @@ class TestMakeMasterL2:
         primary = set(ml2.headers["PRIMARY"])
         assert set(ml2.keyword_registry.primary_seed("ML2-wls")) <= primary
         science = set(ml2.keyword_registry.primary_seed("L2"))
-        assert not (science & primary) - {"DATALVL"}
+        # DATALVL and DRPSTATU are stamped, not seeded: every product carries
+        # them, masters included.
+        assert not (science & primary) - {"DATALVL", "DRPSTATU"}
 
         out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))

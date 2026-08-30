@@ -332,18 +332,15 @@ class TestScienceRecipe:
         assert prim["BJDTDB"] == pytest.approx(2460405.9689188506, abs=1e-9)
 
     def test_provenance_keywords_set(self, l2):
-        # DRPTAG stays on the L2 PRIMARY; the other provenance cards live on
-        # the L2 RECEIPT.
+        # The EPRV DRPTAG and its WMKO counterpart DRPVERNO both sit on PRIMARY,
+        # as do the rest of the provenance cards.
         prim = l2.headers["PRIMARY"]
-        receipt = l2.headers["RECEIPT"]
         version = importlib.metadata.version("kpfpipe")
         assert prim.get("DRPTAG") == version
-        assert all(k not in prim for k in ("DRPVERNO", "DRPSTATU", "PROGID", "KOAID"))
-        assert receipt.get("DRPVERNO") == version
-        assert "PROGID" in receipt
-        assert "KOAID" in receipt
+        assert prim.get("DRPVERNO") == version
+        assert prim.get("PROGID") and prim.get("KOAID")
         # BarycentricCorrection is the last module to run before the L2 write.
-        assert receipt.get("DRPSTATU") == "Barycentric Correction module complete"
+        assert prim.get("DRPSTATU") == "Barycentric Correction module complete"
 
     @pytest.mark.parametrize(
         "ext, blue_end, red_end",

@@ -90,7 +90,7 @@ class TestKPF2QualityControlRoundTrip:
 
     def test_from_fits_recovers_obs_id_from_origid(self, tmp_path):
         # An L2's timestamp-based filename does not embed the obs_id, so from_fits
-        # recovers it from RECEIPT's ORIGID; that keeps generate_standard_filename
+        # recovers it from PRIMARY's ORIGID; that keeps generate_standard_filename
         # working on the from_fits construction path.
         l2 = KPF2()
         l2.set_keyword("ORIGID", "KP.20240101.00000.00")  # 0 s of day = 00:00:00
@@ -217,13 +217,13 @@ class TestToKPF2:
         kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
         kpf2.receipt_add_entry("barycentric_correction", "", "PASS")
         assert (
-            kpf2.headers["RECEIPT"].get("DRPSTATU")
+            kpf2.headers["PRIMARY"].get("DRPSTATU")
             == "Barycentric Correction module complete"
         )
 
     def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
-        # L2 carries RECEIPT columns and a DRPSTATU card that L0/L1 do not, so the
-        # L0/L1 round-trip twins cover none of this.
+        # The receipt table and the DRPSTATU card it advances have to survive
+        # separate serialization paths -- the RECEIPT BinTable and PRIMARY.
         kpf2 = KPF2()
         kpf2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
         kpf2.receipt_add_entry("spectral_extraction", "", "PASS")
@@ -233,12 +233,12 @@ class TestToKPF2:
         back = KPF2.from_fits(fn)
         assert "spectral_extraction" in back.receipt["FUNCTION"].values
         assert (
-            back.headers["RECEIPT"].get("DRPSTATU")
+            back.headers["PRIMARY"].get("DRPSTATU")
             == "Spectral Extraction module complete"
         )
 
     def test_to_kpf2_propagates_origid(self, tmp_path):
-        # ORIGID is stamped at L0 and rides RECEIPT through to_kpf2; it is not
+        # ORIGID is stamped at L0 and rides PRIMARY through to_kpf2; it is not
         # rewritten at L2, and stays off PRIMARY.
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
         primary = fits.PrimaryHDU()
@@ -260,8 +260,7 @@ class TestToKPF2:
         # Mimic what KPF0.from_fits + to_kpf1 would have placed on the L1 RECEIPT.
         l1.set_keyword("ORIGID", "KP.20240113.23249.10")
         kpf2 = l1.to_kpf2()
-        assert kpf2.headers["RECEIPT"].get("ORIGID") == "KP.20240113.23249.10"
-        assert "ORIGID" not in kpf2.headers["PRIMARY"]
+        assert kpf2.headers["PRIMARY"].get("ORIGID") == "KP.20240113.23249.10"
 
 
 class TestAliasedOrderedDict:

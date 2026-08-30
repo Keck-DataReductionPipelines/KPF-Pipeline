@@ -449,7 +449,7 @@ class KeywordRegistry:
         member of every ``#`` family -- the five-trace rule at the header level.
 
         For ``L0``/``L1``/``L2``/``L4`` the set is the header-map rows at
-        ``Level <= n``, cumulative (154 cards at L0, L1 adds ``DQLVL1``, L2
+        ``Level <= n``, cumulative (156 cards at L0, L1 adds ``DQLVL1``, L2
         ``EXTRACT``/``EXSNR#``/``EXSNRW#``/``DQLVL2``, L4 the seven RV rows and
         ``DQLVL4``). For the masters it is that master's own
         ``ML*-PRIMARY-keywords.csv`` rows: masters are outside EPRV scope and do

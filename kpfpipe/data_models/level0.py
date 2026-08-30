@@ -84,53 +84,36 @@ class KPF0(KPFDataModel):
         )
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Read an L0 FITS HDUList, then stamp DRP provenance onto RECEIPT."""
-        super().read(hdul, instrument=instrument, overwrite=overwrite, **kwargs)
-        # Derive obs_id before stamping: _stamp_wmko_tracking writes it as the
-        # ORIGID provenance card, so it must be known by then.
-        self.obs_id = get_obs_id(self.filename)
-        if "PRIMARY" in self.headers:
-            self._stamp_wmko_tracking()
+        """Read an L0 FITS HDUList, resolving ``obs_id`` from its filename.
 
-    @property
-    def _native_header(self):
-        """The raw instrument header, wherever this L0 currently keeps it.
-
-        Before standardization that is PRIMARY; after it, INSTRUMENT_HEADER --
-        including on a re-read of a standardized L0 written back to disk, whose
-        PRIMARY is the EPRV header and carries no native card at all.
-
-        Keyed on ``standardized``, the semantic fact, not on whether
-        INSTRUMENT_HEADER holds anything: the manifest creates that extension on
-        every L0, so a raw one round-trips with a header of structural cards --
-        empty of content but not falsy.
+        The obs_id must be known before ``standardize_header_format``, which
+        writes it as the ORIGID provenance card.
         """
-        if self.standardized:
-            return self.headers["INSTRUMENT_HEADER"]
-        return self.headers["PRIMARY"]
+        super().read(hdul, instrument=instrument, overwrite=overwrite, **kwargs)
+        self.obs_id = get_obs_id(self.filename)
 
-    def _stamp_wmko_tracking(self):
-        """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
+    def _stamp_wmko_tracking(self, native):
+        """Stamp WMKO DRP-RUN provenance onto PRIMARY from ``native``.
 
-        The single population site for DRPVERNO, PROGID/KOAID, DRPSTATU, and ORIGID
-        (the original L0 obs_id), written to their registry home (RECEIPT) via
-        ``set_keyword`` and ridden forward onto L1/L2/L4 (see ``to_kpf1``).
-        DRPVERNO/DRPSTATU/ORIGID are always (re)stamped. KOAID and PROGID are not
-        EPRV keywords -- they map from the native OFNAME and PROGNAME, so they are
-        read off ``_native_header``. A missing PROGNAME defaults PROGID to UNKNOWN
-        with a warning; a missing OFNAME (the archive obs_id) raises.
+        The single population site for DRPVERNO, ORIGID (the original L0 obs_id)
+        and PROGID/KOAID, which are not EPRV keywords -- they map from the native
+        OFNAME and PROGNAME, so they are read off the snapshot rather than the
+        EPRV skeleton this is filling. A missing PROGNAME defaults PROGID to
+        UNKNOWN with a warning; a missing OFNAME (the archive obs_id) raises on
+        a frame read from disk. DRPSTATU is left to ``receipt_add_entry``, which
+        advances it per module.
         """
         self.set_keyword("DRPVERNO", __version__)
-        self.set_keyword("DRPSTATU", "File ingested into KPF-DRP")
         self.set_keyword("ORIGID", self.obs_id)
-        primary = self._native_header
 
-        koaid = primary.get("OFNAME")
-        if not koaid:
+        koaid = native.get("OFNAME")
+        # Only a frame read from disk must name itself; an in-memory L0 has no
+        # archive identity, and blanks KOAID as it blanks ORIGID above.
+        if not koaid and self.filename:
             raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
         self.set_keyword("KOAID", koaid)
 
-        progname = primary.get("PROGNAME")
+        progname = native.get("PROGNAME")
         if not progname:
             logger.warning(
                 "PROGNAME absent from L0 PRIMARY; defaulting PROGID to 'UNKNOWN'"
@@ -149,8 +132,8 @@ class KPF0(KPFDataModel):
 
         Snapshots that native header, replaces PRIMARY with the registry's typed
         EPRV skeleton, fills it from the header map, then stamps the values that
-        are computed rather than mapped (INSTERA, and the DRP/EPRV provenance
-        tags). A second call is a no-op.
+        are computed rather than mapped (INSTERA, and the WMKO/DRP/EPRV
+        provenance cards). A second call is a no-op.
 
         Returns
         -------
@@ -166,6 +149,7 @@ class KPF0(KPFDataModel):
         self.headers["PRIMARY"].clear()
         self._seed_primary()
         self._fill_from_native(native)
+        self._stamp_wmko_tracking(native)
         self._stamp_observing_mode(native)
         self._stamp_instrument_era()
 

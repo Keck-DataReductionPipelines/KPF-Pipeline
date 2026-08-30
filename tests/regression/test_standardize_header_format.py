@@ -118,9 +118,8 @@ class TestStandardizedPrimary:
         assert prim["JD_UTC"] == pytest.approx(2460322.93537, abs=1e-3)
         version = importlib.metadata.version("kpfpipe")
         assert prim["DRPTAG"] == version  # EPRV version keyword stays on PRIMARY
-        # DRPVERNO lives on RECEIPT, not PRIMARY.
-        assert prim.get("DRPVERNO") is None
-        assert l0.headers["RECEIPT"]["DRPVERNO"] == version
+        # DRPVERNO is the WMKO counterpart of DRPTAG; both sit on PRIMARY.
+        assert prim["DRPVERNO"] == version
 
     def test_compliance_tags_from_the_rvdata_pin(self, synthetic_l0_file):
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
@@ -325,7 +324,7 @@ class TestIdempotencyAndGate:
         assert "standardize_header_format" in l0.receipt["FUNCTION"].values
         # Not an internal receipt, so it advances DRPSTATU like any module.
         assert (
-            l0.headers["RECEIPT"]["DRPSTATU"]
+            l0.headers["PRIMARY"]["DRPSTATU"]
             == "Standardize Header Format module complete"
         )
 

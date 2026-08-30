@@ -158,10 +158,10 @@ which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
 The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
 The architecture invariants:
 
-- **PRIMARY holds EPRV-registered keywords only** from L0-after-standardization onward (EPRV keyword
-  names + FITS structural cards — no KPF-registered keywords, no raw natives).
+- **PRIMARY holds EPRV-registered keywords and the WMKO provenance cards** from
+  L0-after-standardization onward (EPRV keyword names + FITS structural cards — no raw natives).
   `standardize_header_format` seeds the whole registered PRIMARY skeleton for the level, then fills it from
-  `EPRV-header-map.csv`; every card is present, blank where nothing supplied a value. (One
+  `EPRV-header-map.csv`; every card is present, blank where nothing supplied a value. (The other
   keyword-homing exception is noted under *Keyword registry*.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
   written once by `standardize_header_format` and never again.
@@ -172,12 +172,15 @@ The architecture invariants:
   more clearly together (e.g. the raw `DATE-BEG`/`DATE-END` pair `barycentric_correction` extrapolates
   the exposure meter against; its *target astrometry*, by contrast, comes off the PRIMARY `C*#` cards,
   which `AstroQuery` fills from `CATALOG_RECORD`).
-- **DRP provenance is stamped at read** onto RECEIPT (`KPF0.from_fits` → `_stamp_wmko_tracking`, not
-  `to_kpf1`): `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`. It rides RECEIPT forward, with `DRPSTATU`
-  advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
-  read, so every model carries `obs_id` on every construction path.
+- **DRP provenance is stamped during standardization** onto PRIMARY
+  (`KPF0.standardize_header_format` → `_stamp_wmko_tracking`, not `to_kpf1`):
+  `DRPVERNO`/`PROGID`/`KOAID`/`ORIGID`, plus `DRPSTATU`, which `receipt_add_entry` advances per module.
+  It rides PRIMARY forward. A raw `from_fits()` carries none of it — the conversion is what stamps it.
+  `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on read, so every model
+  carries `obs_id` on every construction path.
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
-  as an **append-only history**.
+  as an **append-only history** — the RECEIPT header carrying the calibration provenance L1 and L2 add
+  (`OSCANSUB`, `BIASFILE`, `TRACEREF`).
 - **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
   L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
