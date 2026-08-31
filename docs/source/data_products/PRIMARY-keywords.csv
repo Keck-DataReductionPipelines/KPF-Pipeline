@@ -21,7 +21,7 @@ OBSERVER,Observer,,String,Isaacson,
 OBSERVAT,Observatory name,,String,Keck Observatory,KPF0.standardize_header_format
 TELESCOP,Telescope name,,String,Keck I,KPF0.standardize_header_format
 OBJECT,Primary object name,,String,219134,KPF0.standardize_header_format
-ALIASES,User-defined object names; ';' separated,,String,HD 219134,
+ALIASES,User-defined object names; ';' separated,,String,HD 219134; Gaia DR3 2870618101503062016,AstroQuery
 DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,KPF0.standardize_header_format
 JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,KPF0.standardize_header_format
 OBSTYPE,Observation type,,String,Object,KPF0.standardize_header_format
