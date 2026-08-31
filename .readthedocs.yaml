@@ -20,7 +20,10 @@ build:
       # waived here. The docs only introspect the source, they never run a
       # reduction, so the exact patch release does not matter. --no-deps: the
       # runtime dependencies are already installed from docs/requirements.txt.
-      - python -m pip install --no-deps --ignore-requires-python -e .
+      # The venv interpreter is named explicitly rather than assumed to be on
+      # PATH -- RTD does not document build.jobs commands as running with the
+      # environment activated, and each command gets a fresh shell.
+      - $READTHEDOCS_VIRTUALENV_PATH/bin/python -m pip install --no-deps --ignore-requires-python -e .
 
 python:
   install:

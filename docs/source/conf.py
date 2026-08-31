@@ -22,7 +22,8 @@ import kpfpipe
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Local Sphinx extensions (source/_ext/), importable by bare module name below.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_ext"))
+# Absolute, like _repo_root: sphinx-build changes the working directory.
+sys.path.insert(0, os.path.join(_repo_root, "docs", "source", "_ext"))
 
 
 def _find_subpackages(root):
