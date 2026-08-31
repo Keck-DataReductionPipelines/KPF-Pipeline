@@ -11,6 +11,7 @@ construction; the pages below are placeholders and will be filled in.
 
    overview/index
    quickstart/index
+   data_products/index
    dev/index
    api/index
    faq/index

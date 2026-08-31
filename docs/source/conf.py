@@ -19,6 +19,9 @@ import sys
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, _repo_root)
 
+# Local Sphinx extensions (source/_ext/), importable by bare module name below.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_ext"))
+
 
 def _find_subpackages(root):
     """Dotted names of every kpfpipe (sub)package — dirs with an __init__.py.
@@ -57,6 +60,8 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
+    # Local: derives the Data Products tables from kpfpipe/data_models/config/.
+    "kpf_tables",
 ]
 
 templates_path = ["_templates"]

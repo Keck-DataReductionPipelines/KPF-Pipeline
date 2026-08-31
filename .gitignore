@@ -230,6 +230,10 @@ kpf_drp.egg-info
 # Sphinx autosummary-generated API stub pages (regenerated each build).
 docs/source/api/_generated/
 
+# Data Products tables derived from kpfpipe/data_models/config/ at build time
+# (source/_ext/kpf_tables.py); tracked source of truth is the config CSVs.
+docs/source/data_products/_generated/
+
 # Governing docs copied from docs/dev/ into the Sphinx tree at build time
 # (conf.py _sync_guidelines); tracked source of truth is docs/dev/.
 docs/source/dev/guidelines/*.md
