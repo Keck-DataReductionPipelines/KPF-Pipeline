@@ -2,22 +2,28 @@
 #
 # KPF-DRP vNext documentation build configuration.
 #
-# The docs build does NOT install the kpfpipe package (that would demand the
-# exact "==3.14.3" interpreter pinned in pyproject.toml). Instead it puts the
-# source tree on sys.path and lets Sphinx autodoc introspect it. The package's
-# real runtime dependencies ARE installed (see docs/requirements.txt) so every
-# kpfpipe.* module imports cleanly for introspection — mocking them proved too
-# fragile for a package this size (module-level astropy-unit math,
-# importlib.metadata version lookups, etc. run at import time). The build Python
-# is matched to the project's 3.14 line (see .readthedocs.yaml).
+# The build installs kpfpipe (see the post_install job in .readthedocs.yaml,
+# which waives the exact "==3.14.3" interpreter pin) and lets Sphinx autodoc
+# import and introspect it. The package must genuinely be installed, not merely
+# on sys.path: kpfpipe/__init__.py raises unless its distribution metadata is
+# present. Its real runtime dependencies are installed too (see
+# docs/requirements.txt) — mocking them proved too fragile for a package this
+# size (module-level astropy-unit math, importlib.metadata version lookups, etc.
+# run at import time).
 
 import os
 import sys
 
+import kpfpipe
+
 # Repo root = docs/source/../.. — resolved from this file so it is independent
-# of the directory sphinx-build is invoked from.
+# of the directory sphinx-build is invoked from. Used to locate the source tree
+# and docs/dev/; kpfpipe itself is imported from its install, not from here.
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, _repo_root)
+
+# Local Sphinx extensions (source/_ext/), importable by bare module name below.
+# Absolute, like _repo_root: sphinx-build changes the working directory.
+sys.path.insert(0, os.path.join(_repo_root, "docs", "source", "_ext"))
 
 
 def _find_subpackages(root):
@@ -28,7 +34,8 @@ def _find_subpackages(root):
     drops the with-stem submodule pages. True subpackages must survive that
     collapse (e.g. kpfpipe.modules is curated, but kpfpipe.modules.masters is a
     subpackage that keeps its own page), so the template checks membership in
-    this set. Computed from the filesystem so conf.py needn't import kpfpipe.
+    this set. Walked from the source tree rather than imported, so a package
+    that fails to import is still classified correctly.
     """
     pkg_dir = os.path.join(root, "kpfpipe")
     found = set()
@@ -44,10 +51,10 @@ project = "KPF Data Reduction Pipeline (vNext)"
 author = "The KPF Team"
 copyright = "2020-2026, The KPF Team"
 
-# Placeholder while the docs are structure-only; wire to kpfpipe.__version__
-# once the build installs the package.
-version = "vNext"
-release = "vNext"
+# Taken from the installed package, so the rendered docs always name the
+# version they were built from.
+version = kpfpipe.__version__
+release = kpfpipe.__version__
 
 # -- General configuration ----------------------------------------------------
 
@@ -57,6 +64,8 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx_rtd_theme",
+    # Local: derives the Data Products tables from kpfpipe/data_models/config/.
+    "kpf_tables",
 ]
 
 templates_path = ["_templates"]
