@@ -167,7 +167,7 @@ The architecture invariants:
 - **PRIMARY holds EPRV-registered keywords and the WMKO provenance cards** from
   L0-after-standardization onward (EPRV keyword names + FITS structural cards — no raw natives).
   `standardize_header_format` seeds the whole registered PRIMARY skeleton for the level, then fills it from
-  `EPRV-header-map.csv`; every card is present, blank where nothing supplied a value. (The other
+  `header-map.csv`; every card is present, blank where nothing supplied a value. (The other
   keyword-homing exception is noted under *Keyword registry*.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
   written once by `standardize_header_format` and never again.

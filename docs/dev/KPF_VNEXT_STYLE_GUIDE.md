@@ -259,7 +259,7 @@ but its values are EPRV targets.)*
 - **CSV config tables** (`data_models/config/`) drive HDU layout and alias registration: comma-
   separated, single header row, read with `pandas.read_csv`, always ending in a `Description`
   column. Extension manifests (`L0-extensions.csv`, …) are `HDU,Name,DataType,Required,Description`;
-  mapping tables are `aliases.csv` (`KPF,EPRV,…`) and `trace-map.csv` (`Trace,Fiber,…`).
+  mapping tables are `extension-aliases.csv` (`KPF,EPRV,…`) and `trace-map.csv` (`Trace,Fiber,…`).
 - **Keep fiber names in sync** across `trace-map.csv`, `[TRACES].fibers`, and `detector.toml`.
 
 #### Headers

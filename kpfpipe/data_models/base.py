@@ -37,7 +37,7 @@ from kpfpipe.utils.kpf import is_obs_id
 
 # Trace index -> fiber name, and the 1:1 KPF -> EPRV extension synonyms.
 TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
-EXTENSION_ALIASES = pd.read_csv(_config_path / "aliases.csv")
+EXTENSION_ALIASES = pd.read_csv(_config_path / "extension-aliases.csv")
 
 # Data-model conversion/serialization receipts, excluded from DRPSTATU so it
 # names the last real pipeline stage. ``from_fits`` is here too: reading a
@@ -105,7 +105,7 @@ class KPFDataModel(RVDataModel):
     def _register_aliases(self):
         """Register this level's KPF-friendly extension aliases, from config.
 
-        Two families, both table-driven: 1:1 synonyms in ``aliases.csv`` (e.g.
+        Two families, both table-driven: 1:1 synonyms in ``extension-aliases.csv`` (e.g.
         CA_HK -> ANCILLARY_SPECTRUM), and per-trace ``_ALIAS_TEMPLATES`` keyed
         off ``trace-map.csv`` (e.g. SCI2_FLUX -> TRACE3_FLUX). An alias whose
         canonical extension this level lacks is skipped.

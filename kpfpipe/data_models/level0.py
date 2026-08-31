@@ -158,7 +158,7 @@ class KPF0(KPFDataModel):
         return self
 
     def _fill_from_native(self, native):
-        """Apply ``EPRV-header-map.csv`` to the native header, card by card.
+        """Apply ``header-map.csv`` to the native header, card by card.
 
         A pure tabular pass over the PRIMARY-targeted map rows: take the
         instrument value if the native header carries it, else the row default,

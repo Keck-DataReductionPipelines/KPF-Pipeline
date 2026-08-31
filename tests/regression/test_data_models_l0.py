@@ -336,7 +336,7 @@ class TestEPRVCompliance:
     """L0 against the EPRV standard.
 
     rvdata publishes no L0 tables -- L0 is the raw WMKO readout, not an EPRV
-    product -- so the oracle is KPF's own ``EPRV-header-map.csv``. A bare KPF0 is
+    product -- so the oracle is KPF's own ``header-map.csv``. A bare KPF0 is
     deliberately unseeded, because ``_read`` replaces PRIMARY wholesale;
     standardize_header_format is what puts the EPRV skeleton on it.
     """
@@ -432,7 +432,7 @@ class TestStandardizedPrimary:
         assert re.fullmatch(r"EPRVSTANDARD\d{4}\.\d{2}", prim["VOCLASS"])
 
     def test_jd_utc_is_the_only_non_tabular_value(self, synthetic_l0_file):
-        # Everything else is a straight application of EPRV-header-map.csv; the
+        # Everything else is a straight application of header-map.csv; the
         # MJD -> JD epoch transform is the one thing the table cannot express.
         l0 = KPF0.from_fits(synthetic_l0_file)
         native = l0.as_fits_header(l0.headers["PRIMARY"])

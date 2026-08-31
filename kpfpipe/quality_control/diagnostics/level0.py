@@ -29,7 +29,7 @@ class DiagL0(Diagnostics):
         """Run the L0 diagnostics, then mirror GDRSEEV onto EPRV PRIMARY.
 
         SEEING maps from a diagnostic rather than a native card
-        (``EPRV-header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
+        (``header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
         QUALITY_CONTROL is still empty when standardize_header_format runs, so
         DiagL0 is its PRIMARY writer too.
         """

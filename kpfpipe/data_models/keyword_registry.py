@@ -19,7 +19,7 @@ unsourced. ``ExampleValue`` is documentation only, not read here.
 
 Three use-cases:
   (1) Mapping -- ``header_map`` (WMKO-native -> EPRV-standard, from
-      ``config/EPRV-header-map.csv``), consumed by
+      ``config/header-map.csv``), consumed by
       ``KPF0.standardize_header_format``; defines the EPRV PRIMARY keyword
       set (every ``EPRV_KEY`` must be registered on PRIMARY, or the load
       raises).
@@ -280,7 +280,7 @@ class KeywordRegistry:
         return rows, data_model_primary
 
     def _load_header_map(self):
-        """Read ``config/EPRV-header-map.csv``, the WMKO-native -> EPRV map.
+        """Read ``config/header-map.csv``, the WMKO-native -> EPRV map.
 
         PRIMARY-only by definition, so also the definition of the EPRV PRIMARY
         keyword set: every ``EPRV_KEY`` must be unique and registered on
@@ -292,17 +292,17 @@ class KeywordRegistry:
         ``kpfpipe.KECK_LOCATION`` rather than a DEFAULT cell, so the
         observatory config stays their single source.
         """
-        raw = pd.read_csv(_kpf_pipe_cfg / "EPRV-header-map.csv")
+        raw = pd.read_csv(_kpf_pipe_cfg / "header-map.csv")
         keys = raw["EPRV_KEY"].astype(str).str.strip()
         duplicated = sorted(set(keys[keys.duplicated()]))
         if duplicated:
             raise ValueError(
-                f"EPRV-header-map.csv has duplicate EPRV_KEY rows: {duplicated}"
+                f"header-map.csv has duplicate EPRV_KEY rows: {duplicated}"
             )
         unregistered = sorted(set(keys) - self.allowed.get("PRIMARY", frozenset()))
         if unregistered:
             raise ValueError(
-                "EPRV-header-map.csv maps EPRV_KEY values that are not registered "
+                "header-map.csv maps EPRV_KEY values that are not registered "
                 f"on PRIMARY: {unregistered}. Register them in the appropriate "
                 "config/{prefix}-PRIMARY-keywords.csv before mapping them."
             )
@@ -455,7 +455,7 @@ class KeywordRegistry:
         """``data_model``'s typed PRIMARY skeleton: ``{keyword: (value, comment)}``.
 
         Every keyword registered on PRIMARY for that data model, with its
-        ``EPRV-header-map.csv`` default where it has one and blank otherwise,
+        ``header-map.csv`` default where it has one and blank otherwise,
         each carrying its registry comment. Nothing is filtered on
         ``REQUIRED`` -- the seed stamps a card for every member of every ``#``
         family (the five-trace rule at the header level).

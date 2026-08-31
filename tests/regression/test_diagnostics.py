@@ -995,7 +995,7 @@ class TestDiagL0GuiderSeeing:
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
     def test_gdrseev_is_mirrored_onto_primary_seeing(self, tmp_path):
-        # ``EPRV-header-map.csv`` gives SEEING KPF_EXT=QUALITY_CONTROL, and
+        # ``header-map.csv`` gives SEEING KPF_EXT=QUALITY_CONTROL, and
         # QUALITY_CONTROL is still empty when standardize_header_format runs, so
         # DiagL0 stamps the seeded-blank PRIMARY card itself.
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)

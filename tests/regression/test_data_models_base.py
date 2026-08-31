@@ -558,12 +558,12 @@ class TestConfigTables:
 
 
 class TestHeaderMapIsTheEprvPrimarySet:
-    """``EPRV-header-map.csv`` and the PRIMARY keyword CSVs are two authorities
+    """``header-map.csv`` and the PRIMARY keyword CSVs are two authorities
     over one set, so they are asserted equal rather than left to drift."""
 
     @staticmethod
     def _map():
-        return pd.read_csv(_CFG / "EPRV-header-map.csv")
+        return pd.read_csv(_CFG / "header-map.csv")
 
     def test_keys_are_unique(self):
         keys = self._map()["EPRV_KEY"].astype(str).str.strip()
