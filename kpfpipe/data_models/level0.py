@@ -7,12 +7,8 @@ meter, guide camera, telemetry, and telescope metadata.
 
 import importlib.metadata
 import logging
-import os
 
-import numpy as np
 import pandas as pd
-from astropy.io import fits
-from astropy.table import Table
 
 from kpfpipe import REPO_ROOT, __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
@@ -42,17 +38,13 @@ class KPF0(KPFDataModel):
     (e.g. ``headers["PRIMARY"]``).
     """
 
+    # A raw L0 carries the native header it was read with; see _SEEDS_PRIMARY.
+    _SEEDS_PRIMARY = False
+
     def __init__(self):
         super().__init__()
         self.level = 0
-
-        # No PRIMARY seed here: ``_read`` replaces the stored PRIMARY header
-        # wholesale, so anything stamped at construction would be discarded --
-        # and a KPF0 read from disk must reflect the unaltered file.
-        # ``standardize_header_format`` seeds it once, after the read.
-        self._create_manifest_extensions()
-        self._fill_typed_empty_tables()
-        self._set_ext_descript()
+        self._build()
 
     @classmethod
     def from_fits(cls, fn, instrument=None, standardize=False, **kwargs):
@@ -263,31 +255,11 @@ class KPF0(KPFDataModel):
             )
         self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
 
-    def to_fits(self, fn=None):
-        """Write L0 data to a FITS file (plain ImageHDU, no compression)."""
-        if fn is None:
-            fn = self.generate_standard_filename()
-        if not fn.endswith(".fits"):
-            raise NameError("Filename must end with .fits")
-
-        self.receipt_add_entry("to_fits", f"out_filepath={fn}", "PASS")
-        # Warn-only advisory (match rvdata); the write still proceeds.
-        self.check_filename_convention(fn)
-
-        # FILENAME is an EPRV PRIMARY keyword, so it is only correct to stamp it
-        # on a standardized L0; a raw one must reflect the file it came from.
-        if self.standardized:
-            self.set_keyword("FILENAME", os.path.basename(fn))
-
-        hdu_list = self._create_hdul()
-        hdul = fits.HDUList(hdu_list)
-        dirname = os.path.dirname(fn)
-        if dirname and not os.path.isdir(dirname):
-            os.makedirs(dirname, exist_ok=True)
-        hdul.writeto(fn, overwrite=True, output_verify="silentfix")
-        hdul.close()
-        logger.info("wrote %s to %s", type(self).__name__, fn)
-        return fn
+    @property
+    def _stamps_filename(self):
+        """FILENAME is an EPRV PRIMARY keyword, so it is only correct to stamp it
+        on a standardized L0; a raw one must reflect the file it came from."""
+        return self.standardized
 
     _L0_TO_L1_PASSTHROUGH = [
         "CA_HK",
@@ -349,27 +321,3 @@ class KPF0(KPFDataModel):
         kpf1.set_keyword("DATALVL", "L1")
         kpf1.receipt_add_entry("to_kpf1", "", "PASS")
         return kpf1
-
-    def info(self):
-        """Print summary of L0 data model contents."""
-        if self.filename:
-            print(f"KPF L0: {self.filename}")
-        else:
-            print("Empty KPF0 data product")
-        if self.obs_id:
-            print(f"Obs ID: {self.obs_id}")
-
-        print(f"\n{'Extension':<20s} {'Type':<15s} {'Shape/Size':<20s}")
-        print("=" * 55)
-        for name, ext_type in self.extensions.items():
-            if name == "PRIMARY":
-                n_cards = len(self.headers.get(name, {}))
-                print(f"{'PRIMARY':<20s} {'header':<15s} {n_cards} cards")
-                continue
-            ext = self.data.get(name)
-            if isinstance(ext, np.ndarray):
-                print(f"{name:<20s} {'array':<15s} {str(ext.shape):<20s}")
-            elif isinstance(ext, Table):
-                print(f"{name:<20s} {'table':<15s} {len(ext)} rows")
-            else:
-                print(f"{name:<20s} {ext_type:<15s} {'(empty)':<20s}")

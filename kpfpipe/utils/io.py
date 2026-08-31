@@ -11,6 +11,7 @@ import pandas as pd
 from astropy.io import fits
 
 from kpfpipe.utils.kpf import (
+    OBS_ID_REGEX,
     get_datecode,
     get_obs_id,
     get_timestamp,
@@ -56,9 +57,6 @@ _OBJECT_MAP = {
 # (build_calibration_stacks) and master-product filenames (kpf_filename) validate
 # against the same set and cannot drift.
 _CAL_TYPES = tuple(_OBJECT_MAP)
-
-# A KOAID/obs_id as it appears in a filename, for check_filename_convention.
-_OBS_ID_PATTERN = r"KP\.\d{8}\.\d{5}\.\d{2}"
 
 # How build_calibration_stacks groups a cal_type's frames into stacks:
 # 'time_of_day' (per observing session, gap-split), 'hst_day' (per HST calendar
@@ -635,10 +633,10 @@ def check_filename_convention(filename, level, *, master=False):
     """
     if master:
         convention = "{KOAID}_master_{" + ",".join(_CAL_TYPES) + "}_" + f"{level}.fits"
-        pattern = rf"{_OBS_ID_PATTERN}_master_({'|'.join(_CAL_TYPES)})_{level}\.fits"
+        pattern = rf"{OBS_ID_REGEX}_master_({'|'.join(_CAL_TYPES)})_{level}\.fits"
     elif level == "L0":
         convention = "KP.YYYYMMDD.NNNNN.NN.fits"
-        pattern = rf"{_OBS_ID_PATTERN}\.fits"
+        pattern = rf"{OBS_ID_REGEX}\.fits"
     else:
         # The prefix rule kpf_filename applies: L1 has no EPRV standard.
         prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"

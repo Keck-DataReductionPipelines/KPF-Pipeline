@@ -26,6 +26,16 @@ class KPFMasterModel(KPFDataModel):
     which redirects the manifest and the PRIMARY seed to the ML tables.
     """
 
+    def __init__(self):
+        """Build off the science level, then restamp DATALVL for the master.
+
+        The science ``__init__`` (KPF1/KPF2, next in the MRO) seeds DATALVL with
+        its own ``L{n}``; rvdata's ``to_fits`` never re-stamps it, so every master
+        overwrites it here rather than in each subclass.
+        """
+        super().__init__()
+        self.set_keyword("DATALVL", f"ML{self.level}")
+
     @property
     def _data_model(self):
         """This master's keyword/extension data model: ``ML{level}``.

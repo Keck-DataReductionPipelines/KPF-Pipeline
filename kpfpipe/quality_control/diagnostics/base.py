@@ -36,10 +36,7 @@ class Diagnostics:
         getting a blank comment.
         """
         registry = self.kpf_obj.keyword_registry
-        return {
-            kw: (value, registry.comment_for(kw, registry.routing[kw]))
-            for kw, value in values.items()
-        }
+        return {kw: (value, registry.comment_for(kw)) for kw, value in values.items()}
 
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.

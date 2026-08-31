@@ -30,12 +30,6 @@ class KPFMasterL1(KPFMasterModel, KPF1):
     disk with ``KPFMasterL1.from_fits(path)``.
     """
 
-    def __init__(self):
-        # KPF1.__init__ builds the extensions and seeds PRIMARY off the ML1
-        # data model: KPFMasterModel redirects both to the masters' tables.
-        super().__init__()
-        self.set_keyword("DATALVL", "ML1")
-
     def _create_hdul(self):
         """Cast MASK extensions to uint8 before building HDUs, then restore."""
         originals = {}

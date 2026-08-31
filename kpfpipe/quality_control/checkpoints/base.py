@@ -99,8 +99,8 @@ class Checkpoint:
         """
         header = self.kpf_obj.headers["QUALITY_CONTROL"]
         reg = self.kpf_obj.keyword_registry
-        for key in sorted(reg.qc_flag_keywords_by_level[self.LEVEL]):
-            if key in self.RAISE_FLAGS and header.get(key) == 0:
+        for key in sorted(self.RAISE_FLAGS):
+            if header.get(key) == 0:
                 raise ValueError(f"QC checkpoint failed: {key} = 0 ({self.LEVEL})")
         failing = sorted(key for key in reg.qc_flag_keywords if header.get(key) == 0)
         if failing:

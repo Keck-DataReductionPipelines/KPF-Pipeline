@@ -33,10 +33,18 @@ from rvdata.core.models.definitions import (
 # The keyword and extension reference data each live in their own module as a
 # single instance, re-exported below so sibling data_models files (level2/4)
 # import the same singletons from base.
+from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.config import PATH as _config_path
 from kpfpipe.data_models.extension_manifest import extension_manifest
 from kpfpipe.data_models.keyword_registry import keyword_registry
 from kpfpipe.utils.io import check_filename_convention, kpf_filename
 from kpfpipe.utils.kpf import is_obs_id
+
+# The two extension-naming tables, read once here and shared by every level that
+# registers aliases: trace index -> fiber name, and the 1:1 KPF -> EPRV
+# extension synonyms.
+TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
+EXTENSION_ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules -- excluded from DRPSTATU so it names the last real stage.
@@ -68,10 +76,74 @@ class KPFDataModel(RVDataModel):
     keyword_registry = keyword_registry
     extension_manifest = extension_manifest
 
+    # Per-trace extension aliases, as (canonical template, alias suffix) pairs:
+    # ("TRACE#_FLUX", "FLUX") makes SCI2_FLUX an alias of TRACE3_FLUX. Empty for
+    # the levels that register none (L0/L1).
+    _ALIAS_TEMPLATES = ()
+
+    # The alias-aware data dict this level stores its arrays in, or None for the
+    # unaliased levels (L0/L1). Set, the shared build swaps it in and registers
+    # the aliases.
+    _DATA_DICT = None
+
+    # Whether construction stamps the registry's PRIMARY skeleton. L0 does not:
+    # ``_read`` replaces PRIMARY wholesale, so anything stamped at construction
+    # would be discarded, and a KPF0 read from disk must reflect the unaltered
+    # file. ``standardize_header_format`` seeds it once, after the read.
+    _SEEDS_PRIMARY = True
+
     def __init__(self):
         super().__init__()
         self.obs_id = None
         self.dirname = None
+
+    def _build(self):
+        """Build this level's extensions, tables and PRIMARY skeleton.
+
+        The one construction sequence, shared by every level: create every
+        extension the manifest declares; swap in the alias-aware dicts and
+        register the aliases (aliased levels only); fill the typed empty tables;
+        seed PRIMARY and restamp DATALVL for this level; then rebuild
+        EXT_DESCRIPT from the finished extension set. A concrete model's
+        ``__init__`` sets ``self.level`` and calls this.
+        """
+        self._create_manifest_extensions()
+        if self._DATA_DICT is not None:
+            self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)
+            self.headers = AliasedOrderedDict.from_ordered_dict(self.headers)
+            self.data = self._DATA_DICT.from_ordered_dict(self.data)
+            self._register_aliases()
+        self._fill_typed_empty_tables()
+        if self._SEEDS_PRIMARY:
+            self._seed_primary()
+            # DATALVL's seeded value is the L0 default; restamp it for this level.
+            self.set_keyword("DATALVL", f"L{self.level}")
+        self._set_ext_descript()
+
+    def _register_aliases(self):
+        """Register this level's KPF-friendly extension aliases, from config.
+
+        Two families, both table-driven: the 1:1 synonyms in ``aliases.csv``
+        (e.g. CA_HK -> ANCILLARY_SPECTRUM), and the per-trace ``_ALIAS_TEMPLATES``
+        keyed off ``trace-map.csv`` (e.g. SCI2_FLUX -> TRACE3_FLUX). An alias
+        whose canonical extension this level does not declare is skipped, so one
+        table serves every level.
+        """
+        for _, row in EXTENSION_ALIASES.iterrows():
+            self._register_alias(str(row["KPF"]).strip(), str(row["EPRV"]).strip())
+        for _, row in TRACE_MAP.iterrows():
+            trace = int(row["Trace"])
+            fiber = str(row["Fiber"]).strip()
+            for template, suffix in self._ALIAS_TEMPLATES:
+                self._register_alias(
+                    f"{fiber}_{suffix}", template.replace("#", str(trace))
+                )
+
+    def _register_alias(self, alias, canonical):
+        """Register ``alias`` for ``canonical`` on all three alias-aware dicts."""
+        if canonical in self.extensions:
+            for d in (self.extensions, self.headers, self.data):
+                d.register_alias(alias, canonical)
 
     @property
     def _data_model(self):
@@ -330,13 +402,13 @@ class KPFDataModel(RVDataModel):
         else:
             if hasattr(self.extensions, "_resolve"):
                 ext = self.extensions._resolve(ext)
-            comment = self.keyword_registry.comment_for(name, ext)
-            if comment is None:
+            if not self.keyword_registry.is_registered(name, ext):
                 raise KeyError(
                     f"keyword {name!r} is not registered for extension {ext!r}; "
                     "register it in the appropriate "
                     "config/{prefix}-{EXTENSION}-keywords.csv before writing it"
                 )
+            comment = self.keyword_registry.comment_for(name, ext)
         if ext not in self.extensions:
             raise ValueError(
                 f"cannot write {name!r}: extension {ext!r} does not exist on "
@@ -436,9 +508,10 @@ class KPFDataModel(RVDataModel):
         is a key=value provenance string (``""`` when not applicable), ``status``
         is ``"PASS"``/``"FAIL"``.
 
-        DRPSTATU becomes '<Module Name> complete'; conversion and
-        serialization receipts (``_INTERNAL_RECEIPTS``) are skipped so it names
-        the last real stage.
+        DRPSTATU becomes '<Module Name> module complete' (the form
+        ``L0-PRIMARY-keywords.csv`` documents); conversion and serialization
+        receipts (``_INTERNAL_RECEIPTS``) are skipped so it names the last real
+        stage.
         """
         super().receipt_add_entry(function, args, status)
         if (
@@ -447,18 +520,92 @@ class KPFDataModel(RVDataModel):
             and "RECEIPT" in self.extensions
         ):
             label = function.replace("_", " ").title()
-            self.set_keyword("DRPSTATU", f"{label} complete")
+            self.set_keyword("DRPSTATU", f"{label} module complete")
 
     def _create_hdul(self):
         """Sync ``self.receipt`` into the RECEIPT extension before writing (rvdata
         serializes ``self.data["RECEIPT"]``, not ``self.receipt``), creating the
         extension if L0/L1 omitted it. PRIMARY comments are preserved by rvdata's
-        own ``_create_hdul``, so no PRIMARY rebuild is needed."""
+        own ``_create_hdul``, so no PRIMARY rebuild is needed.
+
+        Also the one place FILENAME can be withheld: rvdata's ``to_fits`` stamps
+        it on PRIMARY unconditionally, immediately before calling this, so a
+        product that must not carry it (see ``_stamps_filename``) drops it here,
+        between the stamp and the write.
+        """
         if self.receipt is not None and not self.receipt.empty:
             if "RECEIPT" not in self.extensions:
                 self.create_extension("RECEIPT", "BinTableHDU")
             self._sync_receipt_to_extension()
+        if not self._stamps_filename:
+            # No native WMKO key maps to FILENAME (EPRV-header-map.csv), so an
+            # unstandardized PRIMARY only ever has the card rvdata just added.
+            del self.headers["PRIMARY"]["FILENAME"]
         return super()._create_hdul()
+
+    @property
+    def _stamps_filename(self):
+        """Whether FILENAME belongs on this product's PRIMARY when it is written.
+
+        True for every EPRV-standard product. ``KPF0`` overrides it: FILENAME is
+        an EPRV PRIMARY keyword, so a raw (unstandardized) L0 must round-trip
+        with the native header it was read with.
+        """
+        return True
+
+    def to_fits(self, fn=None):
+        """Write this product to ``fn``, defaulting to its standard filename.
+
+        The single write path for every level. KPF keeps a one-filepath
+        signature, so every call site passes a single path; rvdata >=0.4.0 names
+        the parameter ``out_filename``, so this shim is what bridges the two. The
+        rvdata implementation does the rest -- receipt row, warn-only filename
+        check, FILENAME stamp, ``_create_hdul``, then ``makedirs``/``writeto``.
+        """
+        if fn is None:
+            fn = self.generate_standard_filename()
+        out_path = super().to_fits(out_filename=fn)
+        logger.info("wrote %s to %s", type(self).__name__, out_path)
+        return out_path
+
+    def info(self):
+        """Print a summary of this product's extensions.
+
+        One row per extension -- name, type, shape/size -- with an Aliases column
+        for the levels whose extensions carry KPF-friendly synonyms (L2/L4).
+        """
+        if self.filename:
+            print(f"KPF L{self.level}: {self.filename}")
+        else:
+            print(f"Empty {type(self).__name__} data product")
+        if self.obs_id:
+            print(f"Obs ID: {self.obs_id}")
+
+        aliased = hasattr(self.extensions, "aliases_for")
+        width = 25 if aliased else 20
+        header = f"\n{'Extension':<{width}s} "
+        if aliased:
+            header += f"{'Aliases':<25s} "
+        print(f"{header}{'Type':<15s} {'Shape/Size':<20s}")
+        print("=" * (85 if aliased else 55))
+
+        for name, ext_type in self.extensions.items():
+            if name == "PRIMARY":
+                kind = "header"
+                size = f"{len(self.headers.get(name, {}))} cards"
+            else:
+                ext = self.data.get(name)
+                if isinstance(ext, np.ndarray) and ext.size > 0:
+                    kind, size = "array", str(ext.shape)
+                elif hasattr(ext, "__len__") and len(ext) > 0:
+                    kind, size = "table", f"{len(ext)} rows"
+                else:
+                    kind, size = ext_type, "(empty)"
+            row = f"{name:<{width}s} "
+            if aliased:
+                aliases = () if name == "PRIMARY" else self.extensions.aliases_for(name)
+                row += f"{', '.join(sorted(aliases)):<25s} "
+            print(f"{row}{kind:<15s} {size:<20s}")
 
     def generate_standard_filename(self):
         """This product's standard basename, built from ``obs_id`` and its level.

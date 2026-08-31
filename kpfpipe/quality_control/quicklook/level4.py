@@ -3,11 +3,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.quicklook.base import Plot
 
 # Orderlet panels, left-to-right, in the canonical KPF order.
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 # Per-order CCF normalization percentile (science vs. cal/sky), matching the
 # v2.12 AnalyzeL2 convention.
 _SCI_NORM_PCTILE = 99
@@ -158,7 +158,7 @@ class PlotL4(Plot):
         unilluminated orderlet (no CCF) gets a framed 'not illuminated' note
         over the shared ``vref`` range instead of a blank default axis.
         """
-        is_sci = fiber in _SCI_FIBERS
+        is_sci = fiber in DETECTOR["sci_fibers"]
         top = norder * _ORDER_OFFSET
         ax.set_xlabel("RV (km/s)", fontsize=18)
         ax.tick_params(axis="y", which="both", left=False, right=False, labelleft=False)

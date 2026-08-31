@@ -33,12 +33,16 @@ The three use-cases:
       fills in. The map is PRIMARY-only by definition and is the definition of
       the EPRV PRIMARY keyword set: every ``EPRV_KEY`` must be registered on
       PRIMARY here, or the load raises.
-  (2) Validation -- ``allowed`` (per-extension, from the table) plus
-      ``structural`` (FITS bookkeeping cards).
+  (2) Validation -- ``is_registered`` for one card, ``allowed`` for a whole
+      extension's set, and ``is_structural`` for the FITS bookkeeping cards that
+      are permitted everywhere and registered nowhere.
   (3) Routing -- ``routing`` (keyword -> home extension name) for the default
       write, plus ``comment_for`` ((keyword, extension) -> FITS comment) for
       ``set_keyword``'s targeted (``ext=``) write of per-extension cards. Both
       consumed by ``KPFDataModel.set_keyword``.
+
+``comment_for``, ``datatype_for`` and ``is_registered`` all read one per-card
+index, ``cards``: ``(keyword, extension) -> (comment, DataType)``.
 """
 
 import importlib.resources
@@ -55,15 +59,6 @@ from kpfpipe.utils.astro import KECK_LOCATION
 logger = logging.getLogger(__name__)
 
 _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
-
-# SCI_TRACES holds the science-fiber indices, the fibers the catalog C*# overlay
-# targets -- the single definition, imported by astro_query rather than
-# re-derived there. The trace count itself is DETECTOR["numtrace"]; the numbered
-# per-orderlet extensions CCF#/CCF#_VAR/RV# run 1..that.
-_TRACE_MAP = pd.read_csv(_kpf_pipe_cfg / "trace-map.csv")
-SCI_TRACES = tuple(
-    _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
-)
 
 
 class KeywordRegistry:
@@ -85,8 +80,10 @@ class KeywordRegistry:
         "Units",
     ]
 
-    # The keyword-CSV filename prefixes, and the data level each implies. Also
-    # the manifest vocabulary: every model resolves its tables to one of these.
+    # The data level each data model implies -- the one thing a config filename
+    # does not carry. The vocabulary itself belongs to ``extension_manifest``,
+    # which discovers it from those filenames; ``__init__`` checks the two agree,
+    # so adding a model in one place and not the other is a load-time error.
     _DATA_MODEL_LEVELS = {
         "L0": 0,
         "L1": 1,
@@ -107,25 +104,27 @@ class KeywordRegistry:
     # families in _STRUCTURAL_PREFIXES. The lone exception is BUNIT: it carries
     # content (physical units) but is stamped directly on the masters images
     # rather than registered (see masters/base.py).
-    _STRUCTURAL = {
-        "SIMPLE",
-        "BITPIX",
-        "EXTEND",
-        "XTENSION",
-        "PCOUNT",
-        "GCOUNT",
-        "BSCALE",
-        "BZERO",
-        "BUNIT",
-        "COMMENT",
-        "HISTORY",
-        "CONTINUE",
-        "CHECKSUM",
-        "DATASUM",
-        "",
-        "EXTNAME",
-        "TFIELDS",
-    }
+    _STRUCTURAL = frozenset(
+        {
+            "SIMPLE",
+            "BITPIX",
+            "EXTEND",
+            "XTENSION",
+            "PCOUNT",
+            "GCOUNT",
+            "BSCALE",
+            "BZERO",
+            "BUNIT",
+            "COMMENT",
+            "HISTORY",
+            "CONTINUE",
+            "CHECKSUM",
+            "DATASUM",
+            "",
+            "EXTNAME",
+            "TFIELDS",
+        }
+    )
 
     # Structural card families (NAXIS*, bintable column descriptors); by prefix. No
     # WCS family here: KPF authors no WCS, and CTYPE is registered content (rvdata
@@ -143,6 +142,13 @@ class KeywordRegistry:
     )
 
     def __init__(self):
+        drift = set(self._DATA_MODEL_LEVELS) ^ set(extension_manifest.data_models)
+        if drift:
+            raise ValueError(
+                f"data model vocabulary has drifted: {sorted(drift)} is declared "
+                "in only one of KeywordRegistry._DATA_MODEL_LEVELS and the "
+                "config/{data_model}-extensions.csv set"
+            )
         # Order matters: _load_header_map filters against the registry
         # _build_registry produces.
         self._build_registry()
@@ -151,44 +157,55 @@ class KeywordRegistry:
     def _build_registry(self):
         """Build ``self.table`` and every read-only lookup derived from it.
 
-        All lookups are frozen (frozenset / MappingProxyType) against stray
-        mutation, since the singleton shares them process-wide.
+        One pass over the table feeds them all: ``cards`` is the per-card index
+        every accessor reads, and the rest are regroupings of the same rows. All
+        lookups are frozen (frozenset / MappingProxyType) against stray mutation,
+        since the singleton shares them process-wide.
         """
         rows, data_model_primary = self._load_keyword_rows()
         self.table = pd.DataFrame(rows, columns=self._COLUMNS)
         self.registered = frozenset(self.table["Keyword"])
-        self.structural = frozenset(self._STRUCTURAL)
         # PRIMARY keywords contributed by each data model's own CSVs -- the seed
         # set for the masters, which are outside EPRV scope.
         self._data_model_primary = MappingProxyType(
             {p: tuple(kws) for p, kws in data_model_primary.items()}
         )
 
-        self.routing = MappingProxyType(self._routing_lookup())
-        # (keyword, extension) -> FITS comment / DataType, for set_keyword's
-        # targeted (ext=) write path (per-extension cards like VELSTART on CCF#,
-        # which have no single routed home) and for typing the mapped fill.
-        self.comments = MappingProxyType(
-            {
-                (row.Keyword, row.Extension): self._compose_comment(
-                    row.Description, row.Units
+        cards = {}  # (keyword, extension) -> (comment, DataType)
+        allowed = {}  # extension -> {keyword}
+        homes = {}  # keyword -> {extension it is registered on}
+        primary_levels = {}  # keyword -> lowest Level it is on PRIMARY at
+        qc_all = set()
+        qc_by_level = {}
+        for row in self.table.itertuples(index=False):
+            cards[(row.Keyword, row.Extension)] = (
+                self._compose_comment(row.Description, row.Units),
+                row.DataType,
+            )
+            allowed.setdefault(row.Extension, set()).add(row.Keyword)
+            homes.setdefault(row.Keyword, set()).add(row.Extension)
+            if row.Extension == "PRIMARY":
+                primary_levels[row.Keyword] = min(
+                    primary_levels.get(row.Keyword, row.Level), row.Level
                 )
-                for row in self.table.itertuples(index=False)
-            }
-        )
-        self.datatypes = MappingProxyType(
-            {
-                (row.Keyword, row.Extension): row.DataType
-                for row in self.table.itertuples(index=False)
-            }
-        )
+            elif (
+                row.Extension == "QUALITY_CONTROL"
+                and row.PopulatedBy in self._QC_POPULATORS
+            ):
+                qc_all.add(row.Keyword)
+                # "QCL{n}" -> "L{n}", for each registered level
+                qc_by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
+
+        # The one per-card index: comment and DataType together, since every row
+        # carries both and every accessor wants one of them for the same key.
+        # Read through comment_for / datatype_for / is_registered.
+        self.cards = MappingProxyType(cards)
         self.allowed = MappingProxyType(
-            {ext: frozenset(kws) for ext, kws in self._allowed_lookup().items()}
+            {ext: frozenset(kws) for ext, kws in allowed.items()}
         )
-        # keyword -> the lowest Level it is registered on PRIMARY at; the level
-        # gate primary_seed applies to the header map.
-        self._primary_levels = MappingProxyType(self._primary_level_lookup())
-        qc_all, qc_by_level = self._qc_flag_sets_lookup()
+        self.routing = MappingProxyType(self._routing_lookup(homes))
+        # The level gate primary_seed applies to the header map.
+        self._primary_levels = MappingProxyType(primary_levels)
         self.qc_flag_keywords = frozenset(qc_all)
         self.qc_flag_keywords_by_level = MappingProxyType(
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
@@ -333,7 +350,7 @@ class KeywordRegistry:
         ``NAXIS2``/``TTYPE3``).
         """
         k = str(key).strip()
-        return k in self.structural or k.startswith(self._STRUCTURAL_PREFIXES)
+        return k in self._STRUCTURAL or k.startswith(self._STRUCTURAL_PREFIXES)
 
     @staticmethod
     def _compose_comment(description, units):
@@ -347,14 +364,31 @@ class KeywordRegistry:
             return description
         return f"{description} [{u}]"
 
-    def comment_for(self, keyword, extension):
+    def is_registered(self, keyword, extension):
+        """True if ``keyword`` is registered for ``extension``.
+
+        The single membership test, so "is this card allowed here?" is asked one
+        way. ``allowed[ext]`` is the same question answered set-wise, for the
+        checkpoint that sweeps a whole header.
+        """
+        return (str(keyword).strip(), extension) in self.cards
+
+    def comment_for(self, keyword, extension=None):
         """FITS comment for ``keyword`` on ``extension`` (``Description [Units]``).
 
-        Returns None when the keyword is not registered for that extension -- the
-        membership test set_keyword's targeted (``ext=``) path uses; a registered
+        With ``extension`` omitted the keyword's routed home is used -- the
+        comment ``set_keyword`` writes on a default (unrouted) write, which is
+        what the QC and diagnostics layers want when they mirror a comment into
+        their results.
+
+        Returns None when the keyword is not registered there; a registered
         keyword with an empty Description returns ``""``, distinct from None.
         """
-        return self.comments.get((str(keyword).strip(), extension))
+        name = str(keyword).strip()
+        if extension is None:
+            extension = self.routing.get(name)
+        card = self.cards.get((name, extension))
+        return None if card is None else card[0]
 
     def datatype_for(self, keyword, extension):
         """Registry ``DataType`` for ``keyword`` on ``extension``.
@@ -363,7 +397,8 @@ class KeywordRegistry:
         ``""`` when it is registered with no declared type (which
         ``_parse_value`` passes through unchanged).
         """
-        return self.datatypes.get((str(keyword).strip(), extension))
+        card = self.cards.get((str(keyword).strip(), extension))
+        return None if card is None else card[1]
 
     @staticmethod
     def coerce(datatype, value):
@@ -455,11 +490,7 @@ class KeywordRegistry:
         ``ML*-PRIMARY-keywords.csv`` rows: masters are outside EPRV scope and do
         not inherit the science skeleton.
         """
-        if data_model not in self._DATA_MODEL_LEVELS:
-            raise ValueError(
-                f"unknown data model {data_model!r}; expected one of "
-                f"{sorted(self._DATA_MODEL_LEVELS)}"
-            )
+        extension_manifest.require(data_model)
         if data_model.startswith("ML"):
             defaults = [(kw, None) for kw in self._data_model_primary[data_model]]
         else:
@@ -479,10 +510,11 @@ class KeywordRegistry:
             for keyword, default in defaults
         }
 
-    # --- Derived lookups (all read self.table) -------------------------------
+    # --- Derived lookups ------------------------------------------------------
 
-    def _routing_lookup(self):
-        """keyword -> home extension name, derived from ``self.table``.
+    @staticmethod
+    def _routing_lookup(homes):
+        """keyword -> home extension name, from ``keyword -> {extension}``.
 
         A keyword registered on PRIMARY routes to PRIMARY (``RVMETHOD`` and
         ``RVGREEN``/``RVRED``/``ERVGREEN``/``ERVRED`` are on PRIMARY *and* on
@@ -491,9 +523,6 @@ class KeywordRegistry:
         (``CTYPE1``, ``VELWIDTH``) -- has no single home and is written via
         ``set_keyword``'s targeted ``ext=`` path.
         """
-        homes = {}
-        for row in self.table.itertuples(index=False):
-            homes.setdefault(row.Keyword, set()).add(row.Extension)
         routing = {}
         for keyword, extensions in homes.items():
             if "PRIMARY" in extensions:
@@ -501,46 +530,6 @@ class KeywordRegistry:
             elif len(extensions) == 1:
                 routing[keyword] = next(iter(extensions))
         return routing
-
-    def _allowed_lookup(self):
-        """extension -> every keyword registered for it (no level gate)."""
-        allowed = {}
-        for row in self.table.itertuples(index=False):
-            allowed.setdefault(row.Extension, set()).add(row.Keyword)
-        return allowed
-
-    def _primary_level_lookup(self):
-        """keyword -> the lowest Level it is registered on PRIMARY at."""
-        levels = {}
-        for row in self.table.itertuples(index=False):
-            if row.Extension != "PRIMARY":
-                continue
-            levels[row.Keyword] = min(levels.get(row.Keyword, row.Level), row.Level)
-        return levels
-
-    def _qc_flag_sets_lookup(self):
-        """QC-flag keyword sets, derived from ``self.table``.
-
-        Returns
-        -------
-        tuple
-            ``(all_flags, by_level)``. ``all_flags`` is every QUALITY_CONTROL row
-            tagged by a QC populator (the cross-level L0->L4 set). ``by_level``
-            maps a LEVEL tag (one per registered level, e.g. "L0"/"L1"/"L2"/"L4")
-            to that level's own ``QCL{n}`` flags (used by the per-level checkpoint).
-        """
-        all_flags = set()
-        by_level = {}
-        for row in self.table.itertuples(index=False):
-            if (
-                row.Extension != "QUALITY_CONTROL"
-                or row.PopulatedBy not in self._QC_POPULATORS
-            ):
-                continue
-            all_flags.add(row.Keyword)
-            # "QCL{n}" -> "L{n}", for each registered level
-            by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
-        return all_flags, by_level
 
 
 # Module singleton -- the one registry instance every consumer reaches through.

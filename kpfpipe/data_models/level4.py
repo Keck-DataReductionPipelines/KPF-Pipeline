@@ -9,122 +9,46 @@ either EPRV name
 views for the CCF cubes (``GREEN_SCI2_CCF``, ``RED_SCI2_CCF``).
 """
 
-import importlib.resources
-import logging
-import os
-from collections import OrderedDict
-
-import numpy as np
 import pandas as pd
 
-from kpfpipe import DETECTOR
-from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.aliased_dict import (
+    NORDER_GREEN,
+    ChipPrefixDict,
+)
+from kpfpipe.data_models.base import TRACE_MAP, KPFDataModel
+from kpfpipe.data_models.config import PATH as _config_path
 
-NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+# Re-exported: NORDER_GREEN is the chip split point, defined once beside the
+# chip-prefix dict that applies it.
+__all__ = ["KPF4", "NORDER_GREEN"]
 
-logger = logging.getLogger(__name__)
-
-_config_path = importlib.resources.files("kpfpipe.data_models.config")
-
-_TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
-_ALIASES = pd.read_csv(_config_path / "aliases.csv")
 _RV_COLUMNS = pd.read_csv(_config_path / "L4-RV-columns.csv")
 
 # Build a set of valid chip-prefix keys for fast membership testing.
 # e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"),
 #        "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
 # Each maps a chip-prefixed key -> (fiber_alias, chip).
-_CHIP_PREFIX_KEYS = {}
-for _, _row in _TRACE_MAP.iterrows():
+_L4_CHIP_PREFIX_KEYS = {}
+for _, _row in TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in ("CCF", "CCF_VAR", "RV"):
         _fiber_alias = f"{_fiber}_{_suffix}"
         for _chip in ("GREEN", "RED"):
-            _CHIP_PREFIX_KEYS[f"{_chip}_{_fiber_alias}"] = (_fiber_alias, _chip)
+            _L4_CHIP_PREFIX_KEYS[f"{_chip}_{_fiber_alias}"] = (_fiber_alias, _chip)
 
 
-class _KPF4DataDict(AliasedOrderedDict):
-    """
-    Data dict supporting GREEN_/RED_ chip-prefix access for CCF cubes and
-    RV tables.
+class _KPF4DataDict(ChipPrefixDict):
+    """L4 data dict: chip-prefix views over the CCF cubes and RV tables.
 
-    Accessing ``d["GREEN_SCI2_CCF"]`` returns ``d["SCI2_CCF"][:NORDER_GREEN]``, a
-    numpy view into the first 35 orders of CCF3 (order axis is axis 0, like the
-    trace flux arrays). ``d["GREEN_SCI2_RV"]`` returns the green rows of the
-    SCI2_RV table (rows 0:NORDER_GREEN); RV chip-prefix access is read-only,
-    since each RV table is written whole.
+    ``d["GREEN_SCI2_CCF"]`` returns ``d["SCI2_CCF"][:NORDER_GREEN]``, a numpy
+    view into the first 35 orders of CCF3 (order axis is axis 0, like the trace
+    flux arrays). ``d["GREEN_SCI2_RV"]`` returns the green rows of the SCI2_RV
+    table; RV chip-prefix access is read-only, since each RV table is written
+    whole (one BinTable per orderlet).
     """
 
-    def _chip_split(self, key):
-        """If key is a chip-prefix pattern, return (fiber_alias, chip), else None."""
-        return _CHIP_PREFIX_KEYS.get(key)
-
-    def __setitem__(self, key, value):
-        split = self._chip_split(key)
-        if split is not None:
-            fiber_alias, chip = split
-            # RV tables are written whole (one BinTable per orderlet); a
-            # chip-prefixed RV key is read-only.
-            if fiber_alias.endswith("_RV"):
-                raise KeyError(
-                    f"chip-prefixed RV key {key!r} is read-only; write the full "
-                    f"table via {fiber_alias!r} (rows are green-then-red)"
-                )
-            resolved = self._resolve(fiber_alias)
-            # Allocate the full concatenated cube on first write (or if empty).
-            # value.shape[1:] keeps this correct for the (norder_chip, nvel) CCF.
-            existing = (
-                super().__getitem__(resolved)
-                if super().__contains__(resolved)
-                else None
-            )
-            if existing is None or np.size(existing) == 0:
-                full = np.zeros(
-                    (DETECTOR["numorder"], *value.shape[1:]), dtype=value.dtype
-                )
-                super().__setitem__(resolved, full)
-            arr = super().__getitem__(resolved)
-            if chip == "GREEN":
-                arr[:NORDER_GREEN] = value
-            else:
-                arr[NORDER_GREEN:] = value
-        else:
-            super().__setitem__(key, value)
-
-    def __getitem__(self, key):
-        split = self._chip_split(key)
-        if split is not None:
-            fiber_alias, chip = split
-            data = super().__getitem__(self._resolve(fiber_alias))
-            return data[:NORDER_GREEN] if chip == "GREEN" else data[NORDER_GREEN:]
-        return super().__getitem__(self._resolve(key))
-
-    def __contains__(self, key):
-        split = self._chip_split(key)
-        if split is not None:
-            fiber_alias, _ = split
-            return super().__contains__(self._resolve(fiber_alias))
-        return super().__contains__(self._resolve(key))
-
-    def get(self, key, default=None):
-        split = self._chip_split(key)
-        if split is not None:
-            fiber_alias, chip = split
-            resolved = self._resolve(fiber_alias)
-            if not super().__contains__(resolved):
-                return default
-            data = super().__getitem__(resolved)
-            return data[:NORDER_GREEN] if chip == "GREEN" else data[NORDER_GREEN:]
-        return super().get(self._resolve(key), default)
-
-    @classmethod
-    def from_ordered_dict(cls, od):
-        """Create a _KPF4DataDict from an existing OrderedDict."""
-        aliased = cls()
-        for key, value in od.items():
-            OrderedDict.__setitem__(aliased, key, value)
-        return aliased
+    _PREFIX_KEYS = _L4_CHIP_PREFIX_KEYS
+    _READONLY_BASES = ("_RV",)
 
 
 class KPF4(KPFDataModel):
@@ -140,26 +64,14 @@ class KPF4(KPFDataModel):
     ``data["SCI2_RV"]`` is ``data["RV3"]``.
     """
 
+    _ALIAS_TEMPLATES = (("CCF#", "CCF"), ("CCF#_VAR", "CCF_VAR"), ("RV#", "RV"))
+
+    _DATA_DICT = _KPF4DataDict
+
     def __init__(self):
         super().__init__()
         self.level = 4
-
-        self._create_manifest_extensions()
-
-        # Replace plain OrderedDicts with alias-aware versions
-        self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)
-        self.headers = AliasedOrderedDict.from_ordered_dict(self.headers)
-        self.data = _KPF4DataDict.from_ordered_dict(self.data)
-
-        self._register_aliases()
-
-        self._fill_typed_empty_tables()
-        # Seed PRIMARY with the registry's typed L4 skeleton: the header map's
-        # cumulative Level <= 4 set, defaults and comments included.
-        self._seed_primary()
-        # DATALVL's seeded value is the L0 default; restamp it for this level.
-        self.set_keyword("DATALVL", "L4")
-        self._set_ext_descript()
+        self._build()
 
     def _fill_typed_empty_tables(self):
         """Add L4's own empty tables to the base skeletons.
@@ -174,65 +86,3 @@ class KPF4(KPFDataModel):
             ext = f"RV{trace_num}"
             if ext in self.extensions:
                 self.set_data(ext, pd.DataFrame(columns=rv_columns))
-
-    def _register_aliases(self):
-        """Register KPF-friendly aliases from config CSVs."""
-        # Simple 1:1 non-trace extension aliases (shared with L2; none apply to
-        # L4 today, but kept for consistency with KPF2).
-        for _, row in _ALIASES.iterrows():
-            alias = str(row["KPF"]).strip()
-            canonical = str(row["EPRV"]).strip()
-            if canonical in self.extensions:
-                for d in (self.extensions, self.headers, self.data):
-                    d.register_alias(alias, canonical)
-
-        # Per-orderlet CCF/CCF_VAR/RV aliases derived from the trace map
-        # (CCF{n}/CCF{n}_VAR/RV{n} ↔ TRACE{n}): e.g. SCI2_CCF → CCF3,
-        # SCI2_CCF_VAR → CCF3_VAR, SCI2_RV → RV3.
-        for _, row in _TRACE_MAP.iterrows():
-            trace_num = int(row["Trace"])
-            fiber = str(row["Fiber"]).strip()
-            for template in ("CCF#", "CCF#_VAR", "RV#"):
-                canonical = template.replace("#", str(trace_num))
-                alias = f"{fiber}_{template.replace('#', '')}"
-                if canonical in self.extensions:
-                    for d in (self.extensions, self.headers, self.data):
-                        d.register_alias(alias, canonical)
-
-    def to_fits(self, fn=None):
-        """Single-filepath ``to_fits`` shim; see ``KPF2.to_fits`` for the
-        rationale (rvdata >=0.4.0 renamed the parameter to ``out_filename``)."""
-        if fn is None:
-            fn = self.generate_standard_filename()
-        self.set_keyword("FILENAME", os.path.basename(fn))
-        out_path = super().to_fits(out_filename=fn)
-        logger.info("wrote %s to %s", type(self).__name__, out_path)
-        return out_path
-
-    def info(self):
-        """Print summary of KPF4 data model contents."""
-        if self.filename:
-            print(f"KPF L4: {self.filename}")
-        else:
-            print("Empty KPF4 data product")
-
-        print(
-            f"\n{'Extension':<25s} {'Aliases':<25s} {'Type':<15s} {'Shape/Size':<20s}"
-        )
-        print("=" * 85)
-        for name, ext_type in self.extensions.items():
-            if name == "PRIMARY":
-                n_cards = len(self.headers.get(name, {}))
-                print(f"{'PRIMARY':<25s} {'':<25s} {'header':<15s} {n_cards} cards")
-                continue
-            aliases = self.extensions.aliases_for(name)
-            alias_str = ", ".join(sorted(aliases)) if aliases else ""
-            ext = self.data.get(name)
-            if isinstance(ext, np.ndarray) and ext.size > 0:
-                print(
-                    f"{name:<25s} {alias_str:<25s} {'array':<15s} {str(ext.shape):<20s}"
-                )
-            elif hasattr(ext, "__len__") and len(ext) > 0:
-                print(f"{name:<25s} {alias_str:<25s} {'table':<15s} {len(ext)} rows")
-            else:
-                print(f"{name:<25s} {alias_str:<25s} {ext_type:<15s} {'(empty)':<20s}")

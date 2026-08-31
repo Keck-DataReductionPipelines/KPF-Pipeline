@@ -61,13 +61,27 @@ class ExtensionManifest:
         self._bit_depths = MappingProxyType(bit_depths)
         self._descriptions = MappingProxyType(descriptions)
 
-    def names(self, data_model):
-        """``data_model``'s extension names, in manifest order."""
+    @property
+    def data_models(self):
+        """Every data model that has an extension manifest, in filename order.
+
+        The vocabulary itself: these are discovered from the config filenames, so
+        this is the one authority on which data models exist. ``keyword_registry``
+        checks its level map against this set rather than restating it.
+        """
+        return tuple(self._names)
+
+    def require(self, data_model):
+        """Raise unless ``data_model`` is one this manifest knows."""
         if data_model not in self._names:
             raise ValueError(
                 f"unknown data model {data_model!r}; expected one of "
                 f"{sorted(self._names)}"
             )
+
+    def names(self, data_model):
+        """``data_model``'s extension names, in manifest order."""
+        self.require(data_model)
         return self._names[data_model]
 
     def fits_type(self, data_model, name):

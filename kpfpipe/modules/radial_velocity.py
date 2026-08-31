@@ -14,7 +14,7 @@ import numpy as np
 from astropy.constants import c
 from astropy.stats import mad_std
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 
@@ -24,8 +24,6 @@ _DEFAULTS = {
     **DEFAULTS,
     "rv_window": [-25.0, 25.0],
 }
-
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 
 
 class RadialVelocity:
@@ -242,10 +240,10 @@ class RadialVelocity:
         chip = chip.upper()
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
-        if len(fibers) != 1 and set(fibers) != set(_SCI_FIBERS):
+        if len(fibers) != 1 and set(fibers) != set(DETECTOR["sci_fibers"]):
             raise ValueError(
                 f"fibers must be a single fiber or exactly the three science "
-                f"fibers {_SCI_FIBERS}; got {fibers}"
+                f"fibers {list(DETECTOR['sci_fibers'])}; got {fibers}"
             )
         for f in fibers:
             if f"{chip}_{f}" not in self._ccf:
@@ -436,10 +434,10 @@ class RadialVelocity:
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
 
-        if combine_fibers and set(fibers) != set(_SCI_FIBERS):
+        if combine_fibers and set(fibers) != set(DETECTOR["sci_fibers"]):
             raise ValueError(
                 f"combine_fibers=True requires the three science fibers "
-                f"{_SCI_FIBERS}; got {fibers}"
+                f"{list(DETECTOR['sci_fibers'])}; got {fibers}"
             )
         if not combine_fibers and len(fibers) != 1:
             raise ValueError(
@@ -732,7 +730,7 @@ class RadialVelocity:
         # Final science RV: sum the science orderlets' CCFs per chip, fit, then
         # combine the two CCDs at the RV level (see compute_weighted_rvs). RVs are
         # already barycentric, so the reported BERV/BJDTDB are descriptive.
-        sci_req = [f for f in fibers if f in _SCI_FIBERS]
+        sci_req = [f for f in fibers if f in DETECTOR["sci_fibers"]]
         sci = [f for f in sci_req if f in self._processed]
         if not sci_req:
             # Calibration-only run: PRIMARY RV/RVERR/BERV/BJDTDB stay UNDEFINED.

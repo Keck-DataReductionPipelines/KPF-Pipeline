@@ -196,17 +196,15 @@ class TestQCBase:
     def _make_obj(self):
         """Minimal object with a headers dict and a set_keyword router.
 
-        QC.run() reads each check's comment off ``keyword_registry.routing``, so
-        the stub routes the synthetic check keys to QUALITY_CONTROL and stores
-        every keyword there.
+        QC.run() asks the registry for each check's comment at its routed home,
+        so the stub needs only ``comment_for``; every keyword is stored on
+        QUALITY_CONTROL.
         """
-        qc_keys = frozenset({"CHECKA", "CHECKB", "CHKOK", "CHKFAIL", "FLAG", "BOOM"})
 
         class _FakeObj:
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             keyword_registry = types.SimpleNamespace(
-                routing=dict.fromkeys(qc_keys, "QUALITY_CONTROL"),
-                comment_for=lambda kw, ext: "",
+                comment_for=lambda kw, ext=None: "",
             )
 
             def set_keyword(self, key, value):

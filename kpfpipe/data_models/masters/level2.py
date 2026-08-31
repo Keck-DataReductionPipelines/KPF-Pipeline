@@ -33,22 +33,18 @@ class KPFMasterL2(KPFMasterModel, KPF2):
 
     # MASTYPE (WMKO token) -> schema kind, for from_fits. L2 masters are the WLS
     # (thar) master and the flat master.
+    # Its values are also the manifest suffixes that select an L2 master's
+    # extension set (ML2-{kind}-extensions.csv), so they are named once here.
     _MASTYPE_TO_KIND = {"thar": "wls", "flat": "flat"}
-    # The manifest suffixes that select an L2 master's extension set.
-    _KINDS = ("flat", "wls")
 
     def __init__(self, kind):
-        if kind not in self._KINDS:
-            raise ValueError(
-                f"KPFMasterL2 kind must be one of {list(self._KINDS)}, got {kind!r}"
-            )
+        kinds = sorted(set(self._MASTYPE_TO_KIND.values()))
+        if kind not in kinds:
+            raise ValueError(f"KPFMasterL2 kind must be one of {kinds}, got {kind!r}")
         # Set before KPF2.__init__, which reaches _manifest: the data model that
         # picks this master's manifest and PRIMARY seed is ML2-{kind}.
         self.kind = kind
         super().__init__()
-        # rvdata's to_fits never re-stamps DATALVL, so stamp the master value
-        # over the "L2" KPF2.__init__ wrote. A header value, not a data model.
-        self.set_keyword("DATALVL", "ML2")
 
     @property
     def _data_model(self):

@@ -47,8 +47,7 @@ class QC:
             kw = fn._qc_key
             # Mirror the registry Description into results (the FITS comment
             # source; see ``_tag``). The _qc_key must be registered.
-            registry = self.kpf_obj.keyword_registry
-            comment = registry.comment_for(kw, registry.routing[kw])
+            comment = self.kpf_obj.keyword_registry.comment_for(kw)
             try:
                 passed = fn()
             except NotImplementedError:

@@ -10,7 +10,6 @@ import numpy as np
 from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 _REQUIRED_RV_COLUMNS = frozenset(
     {"RV", "RV_ERR", "BJD_TDB", "BERV", "WAVE_START", "WAVE_END", "WEIGHT"}
 )
@@ -37,7 +36,7 @@ class QCL4(QC):
         consume.
         """
         norder = DETECTOR["numorder"]
-        for fiber in _SCI_FIBERS:
+        for fiber in DETECTOR["sci_fibers"]:
             ccf = self.kpf_obj.data.get(f"{fiber}_CCF")
             rv = self.kpf_obj.data.get(f"{fiber}_RV")
             if np.shape(ccf)[:1] != (norder,):

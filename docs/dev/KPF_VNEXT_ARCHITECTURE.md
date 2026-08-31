@@ -127,15 +127,22 @@ RVDataModel (rvdata)
 `config/L{n}-extensions.csv` manifest it builds from and the keyword profile it seeds PRIMARY with.
 
 - **Shared behavior lives in `KPFDataModel`**: `obs_id`, `as_fits_header`, `create_extension`,
-  alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1),
-  `receipt_add_entry`/`_update_drpstatus`, and `_create_hdul`/`_restore_primary_comments`.
-- **`check_filename_convention` is the exception** — every concrete model declares it *explicitly*
-  (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base
-  is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV
-  `SL#` check delegated to `RVDataModel.check_filename_convention` (KPF2/KPF4), and the DRP-RUN-05 master name
-  `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO,
-  so it wins).
-- **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`.
+  alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1), `receipt_add_entry`
+  (which stamps DRPSTATU), `_create_hdul`, and the one `read`/`_read`, `to_fits` and `info`.
+- **One construction sequence**: each model's `__init__` sets `self.level` and calls
+  `KPFDataModel._build()`, which creates the manifest extensions, swaps in the alias-aware dicts
+  and registers aliases (when the model sets `_DATA_DICT`), fills the typed empty tables, seeds
+  PRIMARY and restamps DATALVL, then rebuilds EXT_DESCRIPT. KPF0 sets `_SEEDS_PRIMARY = False`:
+  `_read` replaces PRIMARY wholesale, so `standardize_header_format` seeds it after the read
+  instead.
+- **`check_filename_convention` is shared too** — `KPFDataModel` implements it for every level,
+  delegating to `utils.io.check_filename_convention(filename, f"L{self.level}")`, which owns the
+  rules: `KP.YYYYMMDD.NNNNN.NN.fits` (L0), `kpf_L1_YYYYMMDDThhmmss.fits` (L1, which has no EPRV
+  standard), and `kpf_SL{n}_YYYYMMDDThhmmss.fits` (L2/L4). `KPFMasterModel` is the one override,
+  for the DRP-RUN-05 master name `{KOAID}_master_{type}_L{N}.fits`; it precedes KPF1/2/4 in the
+  masters MRO, so it wins.
+- **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`, registered from the
+  config tables by the shared `_register_aliases` and each level's `_ALIAS_TEMPLATES`.
 
 `KPFDataModel` overrides `set_data`/`set_header` in `base.py` (not the level classes) with a `hasattr` guard so alias resolution runs during init — the rvdata base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. Its `create_extension` override makes every extension header a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
 
@@ -146,7 +153,7 @@ RVDataModel (rvdata)
 KPF2 aliases (driven by CSV configs in `data_models/config/`):
 - **Fiber aliases**: `SCI2_FLUX` → `TRACE3_FLUX`, `SKY_WAVE` → `TRACE1_WAVE`, `CAL_WAVE` → `TRACE5_WAVE`
 - **Simple aliases**: `CA_HK` → `ANCILLARY_SPECTRUM`, `EXPMETER_SCI` → `EXPMETER`
-- **Chip-prefix access**: `GREEN_SCI2_FLUX` returns `TRACE3_FLUX[:35]` as a numpy view (sliced at `NORDER_GREEN`). Handled by `_KPF2DataDict`, a subclass of `AliasedOrderedDict`.
+- **Chip-prefix access**: `GREEN_SCI2_FLUX` returns `TRACE3_FLUX[:35]` as a numpy view (sliced at `NORDER_GREEN`). Handled by `ChipPrefixDict` (aliased_dict.py), a subclass of `AliasedOrderedDict`; L2 and L4 subclass it to supply their own `_PREFIX_KEYS` (and, at L4, the read-only `RV#` rule).
 
 Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are computed views, not separate storage.
 
@@ -217,9 +224,10 @@ and so inherit the alias system and keyword machinery. Masters are *not* EPRV-go
 the science keyword conventions where possible:
 
 - **Their own PRIMARY.** `KPFMasterL1`/`L2` seed the master's own profile — every keyword its
-  `config/{ML1,ML2-flat,ML2-wls}-PRIMARY-keywords.csv` registers, blank where unpopulated — and
-  stamp `DATALVL` `"ML1"`/`"ML2"` over it. Masters are outside EPRV scope, so they do **not**
-  inherit the EPRV science skeleton (see *Header standardization*).
+  `config/{ML1,ML2-flat,ML2-wls}-PRIMARY-keywords.csv` registers, blank where unpopulated.
+  `KPFMasterModel.__init__` then stamps `DATALVL` `"ML{level}"` over the science value the level's
+  own `__init__` seeded, once for every master rather than in each subclass. Masters are outside
+  EPRV scope, so they do **not** inherit the EPRV science skeleton (see *Header standardization*).
 - **Extension schemas are CSV-driven, per master type.** `ML1-extensions.csv` builds ML1
   directly, while `KPFMasterL2(kind=…)` reads `ML2-{kind}-extensions.csv` for its required `kind`
   (`"wls"` carries `TRACE*_WAVE` + `*_WLS_COEFFS`; `"flat"` carries `TRACE*_FLUX`/`VAR`/`BLAZE`).
@@ -356,7 +364,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 ### Checkpoints
 
-`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
+`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags`. The fatal scan is scoped to the subclass's own `RAISE_FLAGS`: a `0` there raises. The summary that follows then warns on **every** failing flag on QUALITY_CONTROL (`keyword_registry.qc_flag_keywords`, the cross-level L0→L4 accumulation), so a propagated lower-level `0` is still named. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
 
 ### Quicklook plots
 

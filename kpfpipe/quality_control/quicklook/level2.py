@@ -3,10 +3,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.quicklook.base import Plot
 
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 _SNR_PERCENTILE = 95
 _FLUX_PERCENTILE = 95
 
@@ -114,8 +114,8 @@ class PlotL2(Plot):
             per_order = np.nanpercentile(snr, _SNR_PERCENTILE, axis=1)
             ax.plot(x, per_order, marker=".", linewidth=1, label=fiber, alpha=0.8)
 
-        sci_flux = [self._flux(chip, f) for f in _SCI_FIBERS]
-        sci_var = [self._var(chip, f) for f in _SCI_FIBERS]
+        sci_flux = [self._flux(chip, f) for f in DETECTOR["sci_fibers"]]
+        sci_var = [self._var(chip, f) for f in DETECTOR["sci_fibers"]]
         if all(a is not None for a in sci_flux + sci_var):
             snr_sum = self._snr(sum(sci_flux), sum(sci_var))
             per_order = np.nanpercentile(snr_sum, _SNR_PERCENTILE, axis=1)
@@ -157,7 +157,7 @@ class PlotL2(Plot):
             per_order = np.nanpercentile(flux, _FLUX_PERCENTILE, axis=1)
             ax.plot(x, per_order, marker=".", linewidth=1, label=fiber, alpha=0.8)
 
-        sci_flux = [self._flux(chip, f) for f in _SCI_FIBERS]
+        sci_flux = [self._flux(chip, f) for f in DETECTOR["sci_fibers"]]
         if all(a is not None for a in sci_flux):
             per_order = np.nanpercentile(sum(sci_flux), _FLUX_PERCENTILE, axis=1)
             ax.plot(

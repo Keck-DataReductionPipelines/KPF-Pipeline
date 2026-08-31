@@ -24,8 +24,7 @@ from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
-from kpfpipe import DEFAULTS
-from kpfpipe.data_models.keyword_registry import SCI_TRACES
+from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import gaia_client, retry_request, simbad_client
@@ -785,7 +784,8 @@ class AstroQuery:
     def _catalog_primary_cards(self):
         """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
 
-        Returns ``{C-keyword: value}`` for every science fiber (``SCI_TRACES``) -- a
+        Returns ``{C-keyword: value}`` for every science fiber (the trace indices
+        ``DETECTOR["sci_traces"]``) -- a
         direct copy of the canonical row's already-EPRV-format cells, skipping any
         missing value (NaN / "") so the card keeps the blank the seed stamped rather
         than carrying 'nan'. Warns when the canonical astrometry was assembled from
@@ -819,7 +819,7 @@ class AstroQuery:
                 if np.isnan(value):
                     continue
                 value = float(value)
-            for i in SCI_TRACES:
+            for i in DETECTOR["sci_traces"]:
                 cards[f"{base}{i}"] = value
         return cards
 
