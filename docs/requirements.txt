@@ -1,12 +1,12 @@
 # Documentation build dependencies.
 #
-# Sphinx + theme, plus the kpfpipe *runtime* dependencies. The docs build does
-# NOT install the kpfpipe package itself (that would require the exact
-# "==3.14.3" interpreter pinned in pyproject.toml); instead conf.py puts the
-# source tree on sys.path and Sphinx autodoc imports it. For those imports to
-# succeed, the real third-party libraries must be present — mocking them is too
-# fragile for a package this size (module-level astropy-unit math,
-# importlib.metadata version lookups, etc. all run at import time).
+# Sphinx + theme, plus the kpfpipe *runtime* dependencies. kpfpipe itself is
+# installed separately, by the post_install job in .readthedocs.yaml (which
+# waives the exact "==3.14.3" interpreter pin), so it is deliberately absent
+# here. Its real third-party libraries must be present for autodoc's imports to
+# succeed — mocking them is too fragile for a package this size (module-level
+# astropy-unit math, importlib.metadata version lookups, etc. all run at import
+# time).
 #
 # The versions below MIRROR pyproject.toml [project].dependencies and must be
 # kept in sync with it (update both together).
