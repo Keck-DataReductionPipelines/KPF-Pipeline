@@ -156,9 +156,9 @@ class TestKPF1:
 class TestToKpf1:
     """L0 -> L1 is a pure forward once standardize_header_format has run.
 
-    The native -> EPRV conversion itself is tested in
-    test_standardize_header_format.py; here the subject is what to_kpf1 carries
-    across, and the fail-loud gate on an L0 that skipped standardization.
+    The native -> EPRV conversion itself is tested in test_data_models_l0.py;
+    here the subject is what to_kpf1 carries across, and the fail-loud gate on
+    an L0 that skipped standardization.
     """
 
     @staticmethod
@@ -463,8 +463,13 @@ class TestKPFMasterL1:
 
     def test_primary_is_seeded_from_the_master_data_model(self):
         m = KPFMasterL1()
-        assert set(m.keyword_registry.primary_seed("ML1")) <= set(m.headers["PRIMARY"])
+        prim = set(m.headers["PRIMARY"])
+        assert set(m.keyword_registry.primary_seed("ML1")) <= prim
         assert m.headers["PRIMARY"]["DATALVL"] == "ML1"
+        # Masters are outside EPRV scope, so the science header-map skeleton
+        # must not reach a built master, DATALVL aside.
+        science = set(m.keyword_registry.primary_seed("L1"))
+        assert not (science & prim) - {"DATALVL"}
 
     def test_bit_depth_from_the_master_manifest(self):
         m = KPFMasterL1()
