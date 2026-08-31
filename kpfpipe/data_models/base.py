@@ -511,31 +511,12 @@ class KPFDataModel(RVDataModel):
         """Sync ``self.receipt`` into the RECEIPT extension before writing
         (rvdata serializes ``self.data["RECEIPT"]``, not ``self.receipt``),
         creating the extension if L0/L1 omitted it.
-
-        Also the one place FILENAME can be withheld: rvdata's ``to_fits``
-        stamps it on PRIMARY unconditionally just before calling this, so a
-        product that must not carry it (see ``_stamps_filename``) drops it
-        here.
         """
         if self.receipt is not None and not self.receipt.empty:
             if "RECEIPT" not in self.extensions:
                 self.create_extension("RECEIPT", "BinTableHDU")
             self._sync_receipt_to_extension()
-        if not self._stamps_filename:
-            # No native WMKO key maps to FILENAME, so unstandardized PRIMARY
-            # only ever has the card rvdata just added.
-            del self.headers["PRIMARY"]["FILENAME"]
         return super()._create_hdul()
-
-    @property
-    def _stamps_filename(self):
-        """Whether FILENAME belongs on this product's PRIMARY when it is written.
-
-        True for every EPRV-standard product. ``KPF0`` overrides it: a raw
-        (unstandardized) L0 must round-trip with the native header it was
-        read with.
-        """
-        return True
 
     def to_fits(self, fn=None):
         """Write this product to ``fn``, defaulting to its standard filename.

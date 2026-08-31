@@ -255,20 +255,14 @@ class KPF0(KPFDataModel):
             )
         self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
 
-    @property
-    def _stamps_filename(self):
-        """FILENAME is an EPRV PRIMARY keyword, so it is only correct to stamp it
-        on a standardized L0; a raw one must reflect the file it came from."""
-        return self.standardized
-
     _L0_TO_L1_PASSTHROUGH = [
         "CA_HK",
         "EXPMETER_SCI",
         "EXPMETER_SKY",
         "TELEMETRY",
-        "DRP_CONFIG",
-        "CATALOG_RECORD",
         "INSTRUMENT_HEADER",
+        "CATALOG_RECORD",
+        "DRP_CONFIG",
     ]
 
     def to_kpf1(self):
