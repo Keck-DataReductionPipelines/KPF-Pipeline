@@ -36,11 +36,13 @@ class MockL1:
 
     def set_keyword(self, key, value):
         # Mirror the real routing: L1-QUALITY_CONTROL-keywords.csv routes every
-        # {PREFIX}AGE to QUALITY_CONTROL, and that is all CalibrationAssociation
-        # writes as a keyword (the master paths go to the receipt entry). Fail
-        # loud on anything else rather than inventing a PRIMARY fallback.
+        # {PREFIX}AGE to QUALITY_CONTROL and L1-PRIMARY-keywords.csv every
+        # {PREFIX}FILE to PRIMARY, which is all CalibrationAssociation writes.
+        # Fail loud on anything else rather than inventing a fallback.
         if key.endswith("AGE"):
             self.headers["QUALITY_CONTROL"][key] = value
+        elif key.endswith("FILE"):
+            self.headers["PRIMARY"][key] = value
         else:
             raise KeyError(f"{key!r} is not routed by this mock; extend it")
 
@@ -288,6 +290,22 @@ class TestPerform:
         assert entry["darkfile"] is None
         assert entry["flatfile"] is None
         assert entry["wlsfile"] is None
+
+    def test_sets_biasfile_on_primary(self, masters_dir):
+        mod = _make_module(masters_dir)
+        mod.perform(["bias"])
+        entry = mod.l1_obj.receipt_read_entry("calibration_association")
+        assert mod.l1_obj.headers["PRIMARY"]["BIASFILE"] == entry["biasfile"]
+
+    def test_unassociated_cal_types_have_no_primary_card(self, masters_dir):
+        # The mock's PRIMARY starts empty, so absence means the module did not
+        # write it; a real frame carries the other three as blank seeded cards.
+        # The receipt is the side that records all four, None where unassociated.
+        mod = _make_module(masters_dir)
+        mod.perform(["bias"])
+        primary = mod.l1_obj.headers["PRIMARY"]
+        assert "BIASFILE" in primary
+        assert not {"DARKFILE", "FLATFILE", "WLSFILE"} & set(primary)
 
     def test_sets_receipt_and_ages_for_dark_and_flat(self, masters_dir):
         mod = _make_module(masters_dir)

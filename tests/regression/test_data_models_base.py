@@ -298,12 +298,21 @@ class TestKeywordRegistry:
         assert units("DATAPRL1", "QUALITY_CONTROL") == ""
 
     def test_primary_seed_is_cumulative_by_level(self):
-        # Each level adds its own DQLVL bitfield; L1 also READMODE, L2 the
-        # extraction SNR cards and L4 the RV summary.
+        # Each level adds its own DQLVL bitfield; L1 also READMODE and the
+        # master-calibration paths, L2 the extraction SNR cards, L4 the RV
+        # summary. Membership is the registration, not the header map, so the
+        # KPF-only keywords are in these deltas too.
         reg = KPF1.keyword_registry
         l0, l1, l2, l4 = (reg.primary_seed(p) for p in ("L0", "L1", "L2", "L4"))
         assert set(l0) < set(l1) < set(l2) < set(l4)
-        assert set(l1) - set(l0) == {"DQLVL1", "READMODE"}
+        assert set(l1) - set(l0) == {
+            "DQLVL1",
+            "READMODE",
+            "BIASFILE",
+            "DARKFILE",
+            "FLATFILE",
+            "WLSFILE",
+        }
         assert set(l2) - set(l1) == {"EXTRACT", "DQLVL2"} | {
             f"EXSNR{i}" for i in range(1, 6)
         } | {f"EXSNRW{i}" for i in range(1, 6)}
@@ -316,6 +325,10 @@ class TestKeywordRegistry:
             "SYSVEL",
             "SYSACC",
             "DQLVL4",
+            "RVGREEN",
+            "RVRED",
+            "ERVGREEN",
+            "ERVRED",
         }
 
     def test_primary_seed_is_typed_and_commented(self):
@@ -489,10 +502,6 @@ _MANIFEST_COLUMNS = ["HDU", "Name", "DataType", "BitDepth", "Required", "Descrip
 
 _DATA_MODELS = ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
 
-# KPF-owned PRIMARY keywords with no EPRV header-map row: the per-CCD RVs the
-# standard has no equivalent for.
-_KPF_ONLY_PRIMARY = {"RVGREEN", "RVRED", "ERVGREEN", "ERVRED"}
-
 
 def _keyword_files():
     return sorted(
@@ -549,9 +558,9 @@ class TestConfigTables:
         assert "*.csv" in package_data["kpfpipe.data_models.config"]
 
 
-class TestHeaderMapIsTheEprvPrimarySet:
-    """``header-map.csv`` and the PRIMARY keyword CSVs are two authorities
-    over one set, so they are asserted equal rather than left to drift."""
+class TestHeaderMap:
+    """``header-map.csv`` supplies native sources and defaults for PRIMARY
+    keywords the registry already declares, so every row must name one."""
 
     @staticmethod
     def _map():
@@ -561,10 +570,12 @@ class TestHeaderMapIsTheEprvPrimarySet:
         keys = self._map()["EPRV_KEY"].astype(str).str.strip()
         assert not list(keys[keys.duplicated()])
 
-    def test_keys_are_exactly_the_registered_eprv_primary_set(self):
+    def test_every_key_is_registered_on_primary(self):
+        # One-directional: the registry decides membership and the map annotates
+        # it, so a KPF-owned keyword with no native source and no default
+        # (BIASFILE, RVGREEN) is simply absent here. Scoped to the science chain,
+        # the masters PRIMARY keywords being outside EPRV scope.
         mapped = set(self._map()["EPRV_KEY"].astype(str).str.strip())
-        # Scoped to the science chain: the masters PRIMARY keywords are registered
-        # but outside EPRV scope, so unmapped by construction.
         registered = {
             member
             for level in ("L0", "L1", "L2", "L4")
@@ -574,7 +585,6 @@ class TestHeaderMapIsTheEprvPrimarySet:
             for member in expand(keyword)
         }
         assert mapped <= registered
-        assert registered - mapped == _KPF_ONLY_PRIMARY
 
     def test_kpf_ext_is_primary_or_quality_control(self):
         for value in self._map()["KPF_EXT"].dropna().astype(str).str.strip():
@@ -588,13 +598,15 @@ class TestRouting:
         # PRIMARY-preference is what keeps RVMETHOD and the per-CCD RV keywords
         # routable while they also live on RV1..5.
         routing = KPF1.keyword_registry.routing
-        for keyword in ("RVMETHOD", *_KPF_ONLY_PRIMARY):
+        for keyword in ("RVMETHOD", "RVGREEN", "RVRED", "ERVGREEN", "ERVRED"):
             assert routing[keyword] == "PRIMARY"
 
     def test_the_per_ccd_rv_set_is_registered_on_every_rv_extension(self):
         registry = KPF1.keyword_registry
         for i in range(1, DETECTOR["numtrace"] + 1):
-            assert _KPF_ONLY_PRIMARY <= registry.allowed[f"RV{i}"]
+            assert {"RVGREEN", "RVRED", "ERVGREEN", "ERVRED"} <= registry.allowed[
+                f"RV{i}"
+            ]
 
     def test_multi_home_keywords_stay_unrouted(self):
         routing = KPF1.keyword_registry.routing

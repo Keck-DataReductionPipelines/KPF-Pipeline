@@ -158,18 +158,20 @@ class CalibrationAssociation:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l1_obj):
-        """Write the signed-age keyword for each association.
+        """Write the master-path and signed-age keywords for each association.
 
         Reads self._calibrations (from perform()); each cal type contributes
-        {PREFIX}AGE (the master's timestamp minus PRIMARY DATE-OBS, in days,
-        routed to QUALITY_CONTROL). The master paths go to the receipt entry.
+        {PREFIX}FILE (full master path, routed to PRIMARY) and {PREFIX}AGE (the
+        master's timestamp minus PRIMARY DATE-OBS, in days, routed to
+        QUALITY_CONTROL). Only associated cal types get a card; the receipt
+        entry is the one that records all four, None where unassociated.
         """
         obs_dt = datetime.fromisoformat(l1_obj.headers["PRIMARY"]["DATE-OBS"])
         for cal_type, cal in self._calibrations.items():
+            prefix = _HEADER_PREFIX[cal_type]
+            l1_obj.set_keyword(f"{prefix}FILE", cal["filepath"])
             age = kpf_timestamp_to_datetime(get_timestamp(cal["filepath"])) - obs_dt
-            l1_obj.set_keyword(
-                f"{_HEADER_PREFIX[cal_type]}AGE", age.total_seconds() / 86400.0
-            )
+            l1_obj.set_keyword(f"{prefix}AGE", age.total_seconds() / 86400.0)
 
     def _receipt_args(self):
         """The master path of every supported cal type, None where unassociated."""

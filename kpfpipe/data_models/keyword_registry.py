@@ -151,8 +151,9 @@ class KeywordRegistry:
         rows, data_model_primary = self._load_keyword_rows()
         self.table = pd.DataFrame(rows, columns=self._COLUMNS)
         self.registered = frozenset(self.table["Keyword"])
-        # PRIMARY keywords contributed by each data model's own CSVs -- the seed
-        # set for the masters, which are outside EPRV scope.
+        # PRIMARY keywords contributed by each data model's own CSVs, in file
+        # order -- what primary_seed accumulates, and what keeps the masters'
+        # registrations out of the science skeleton.
         self._data_model_primary = MappingProxyType(
             {p: tuple(kws) for p, kws in data_model_primary.items()}
         )
@@ -160,7 +161,6 @@ class KeywordRegistry:
         cards = {}  # (keyword, extension) -> (comment, DataType)
         allowed = {}  # extension -> {keyword}
         homes = {}  # keyword -> {extension it is registered on}
-        primary_levels = {}  # keyword -> lowest Level it is on PRIMARY at
         qc_all = set()
         qc_by_level = {}
         for row in self.table.itertuples(index=False):
@@ -170,11 +170,7 @@ class KeywordRegistry:
             )
             allowed.setdefault(row.Extension, set()).add(row.Keyword)
             homes.setdefault(row.Keyword, set()).add(row.Extension)
-            if row.Extension == "PRIMARY":
-                primary_levels[row.Keyword] = min(
-                    primary_levels.get(row.Keyword, row.Level), row.Level
-                )
-            elif (
+            if (
                 row.Extension == "QUALITY_CONTROL"
                 and row.PopulatedBy in self._QC_POPULATORS
             ):
@@ -189,8 +185,6 @@ class KeywordRegistry:
             {ext: frozenset(kws) for ext, kws in allowed.items()}
         )
         self.routing = MappingProxyType(self._routing_lookup(homes))
-        # The level gate primary_seed applies to the header map.
-        self._primary_levels = MappingProxyType(primary_levels)
         self.qc_flag_keywords = frozenset(qc_all)
         self.qc_flag_keywords_by_level = MappingProxyType(
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
@@ -459,22 +453,29 @@ class KeywordRegistry:
         ``REQUIRED`` -- the seed stamps a card for every member of every ``#``
         family (the five-trace rule at the header level).
 
-        For ``L0``/``L1``/``L2``/``L4`` the set is the header-map rows at
-        ``Level <= n``, cumulative (156 cards at L0, L1 adds ``DQLVL1``, L2
-        ``EXTRACT``/``EXSNR#``/``EXSNRW#``/``DQLVL2``, L4 the seven RV rows and
-        ``DQLVL4``). For the masters it is that master's own
-        ``ML*-PRIMARY-keywords.csv`` rows -- masters are outside EPRV scope and
-        do not inherit the science skeleton.
+        For ``L0``/``L1``/``L2``/``L4`` the set is every PRIMARY registration at
+        ``Level <= n``, cumulative: L1 adds ``READMODE``, the master-calibration
+        paths and ``DQLVL1``, L2 the extraction cards and ``DQLVL2``, L4 the RV
+        summary and ``DQLVL4``. The header map supplies defaults, not membership
+        -- a keyword KPF owns but the EPRV standard has no row for (``BIASFILE``,
+        ``RVGREEN``) is still seeded, blank. For the masters the set is that
+        master's own ``ML*-PRIMARY-keywords.csv`` rows -- masters are outside
+        EPRV scope and do not inherit the science skeleton.
         """
         extension_manifest.require(data_model)
         if data_model.startswith("ML"):
             defaults = [(kw, None) for kw in self._data_model_primary[data_model]]
         else:
             cap = self._DATA_MODEL_LEVELS[data_model]
-            defaults = [
-                (str(row.EPRV_KEY).strip(), row.DEFAULT)
+            mapped = {
+                str(row.EPRV_KEY).strip(): row.DEFAULT
                 for row in self.header_map.itertuples(index=False)
-                if self._primary_levels[str(row.EPRV_KEY).strip()] <= cap
+            }
+            defaults = [
+                (keyword, mapped.get(keyword))
+                for model, keywords in self._data_model_primary.items()
+                if not model.startswith("ML") and self._DATA_MODEL_LEVELS[model] <= cap
+                for keyword in keywords
             ]
         return {
             keyword: (
