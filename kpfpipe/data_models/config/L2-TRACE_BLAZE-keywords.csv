@@ -1,0 +1,4 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+CTYPE1,Name of axis 1,N/A,string,Pixel,SpectralExtraction
+CTYPE2,Name of axis 2,N/A,string,Order-N,SpectralExtraction
+BLZNORM,Is blaze normalized?,N/A,Bool,True,

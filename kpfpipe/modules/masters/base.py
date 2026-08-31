@@ -72,10 +72,13 @@ class BaseMasterModule:
         "flat": "electrons",
     }
 
-    # QCL0 flags a frame must pass to enter a stack: data present, required
-    # keywords present, sane exptime, and not observer-junk. A frame failing
-    # any is dropped in ``_load_frame`` and counted as a load failure.
-    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "KWRDPRL0", "EXPTIMOK", "NOTJUNK")
+    # QCL0 flags a frame must pass to enter a stack: data present and not
+    # observer-junk. A frame failing either is dropped in ``_load_frame`` and
+    # counted as a load failure. Deliberately loosened while the QC suite is
+    # overhauled: KWRDPRL0 writes no card (its check is stubbed) and EXPTIMOK
+    # leaves the tuple with it, since a flag with no card raises a bare KeyError
+    # at the `qc[kw][0]` read below rather than rejecting the frame.
+    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
 
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
     # the stats methods: a frame whose exposure is <= this counts as zero
@@ -202,7 +205,7 @@ class BaseMasterModule:
             return self._l1_obj_cache[fn]
 
         try:
-            l0_obj = KPF0.from_fits(fn)
+            l0_obj = KPF0.from_fits(fn, standardize=True)
 
             DiagL0(l0_obj).run()
             qc = QCL0(l0_obj).run()

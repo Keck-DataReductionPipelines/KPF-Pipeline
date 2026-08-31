@@ -119,24 +119,30 @@ RVDataModel (rvdata)
 └── KPFDataModel (base.py)         — shared KPF behavior (see below)
     ├── KPF0 (level0.py)                       — Raw CCD data (L0)
     ├── KPF1 (level1.py)                       — Assembled FFI (L1)
-    ├── KPF2 (KPFDataModel, RV2) (level2.py)   — Extracted spectra (L2) with aliases
-    └── KPF4 (KPFDataModel, RV4) (level4.py)   — RVs and CCFs (L4) with aliases
+    ├── KPF2 (level2.py)                       — Extracted spectra (L2) with aliases
+    └── KPF4 (level4.py)                       — RVs and CCFs (L4) with aliases
 ```
 
-**All four models inherit `KPFDataModel`.** L0/L1 do so directly; L2/L4 via multiple inheritance
-alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its overrides win, while
-`RV2`/`RV4`'s `_read`/`from_fits`/level-specific `_create_hdul` stay reachable through `super()`.
+**All four models inherit `KPFDataModel` directly.** Each declares its `level`, which names the
+`config/L{n}-extensions.csv` manifest it builds from and the keyword profile it seeds PRIMARY with.
 
 - **Shared behavior lives in `KPFDataModel`**: `obs_id`, `as_fits_header`, `create_extension`,
-  alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1),
-  `receipt_add_entry`/`_update_drpstatus`, and `_create_hdul`/`_restore_primary_comments`.
-- **`check_filename_convention` is the exception** — every concrete model declares it *explicitly*
-  (even bare pass-throughs), and `KPFDataModel`'s version **raises `NotImplementedError`** (the base
-  is abstract — only ever inherited). The conventions: `KP.*` (KPF0), `kpf_L1_*` (KPF1), the EPRV
-  `SL#` check delegated to rvdata via `RV2`/`RV4` (KPF2/KPF4), and the DRP-RUN-05 master name
-  `{KOAID}_master_{type}_L{N}.fits` on `KPFMasterModel` (which precedes KPF1/2/4 in the masters MRO,
-  so it wins).
-- **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`.
+  alias-aware `set_data`/`set_header` (`hasattr`-guarded, inert for L0/L1), `receipt_add_entry`
+  (which stamps DRPSTATU), `_create_hdul`, and the one `read`/`_read`, `to_fits` and `info`.
+- **One construction sequence**: each model's `__init__` sets `self.level` and calls
+  `KPFDataModel._build()`, which creates the manifest extensions, swaps in the alias-aware dicts
+  and registers aliases (when the model sets `_DATA_DICT`), fills the typed empty tables, seeds
+  PRIMARY and restamps DATALVL, then rebuilds EXT_DESCRIPT. KPF0 sets `_SEEDS_PRIMARY = False`:
+  `_read` replaces PRIMARY wholesale, so `standardize_header_format` seeds it after the read
+  instead.
+- **`check_filename_convention` is shared too** — `KPFDataModel` implements it for every level,
+  delegating to `utils.io.check_filename_convention(filename, f"L{self.level}")`, which owns the
+  rules: `KP.YYYYMMDD.NNNNN.NN.fits` (L0), `kpf_L1_YYYYMMDDThhmmss.fits` (L1, which has no EPRV
+  standard), and `kpf_SL{n}_YYYYMMDDThhmmss.fits` (L2/L4). `KPFMasterModel` is the one override,
+  for the DRP-RUN-05 master name `{KOAID}_master_{type}_L{N}.fits`; it precedes KPF1/2/4 in the
+  masters MRO, so it wins.
+- **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`, registered from the
+  config tables by the shared `_register_aliases` and each level's `_ALIAS_TEMPLATES`.
 
 `KPFDataModel` overrides `set_data`/`set_header` in `base.py` (not the level classes) with a `hasattr` guard so alias resolution runs during init — the rvdata base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. Its `create_extension` override makes every extension header a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
 
@@ -147,38 +153,43 @@ alongside rvdata's `RV2`/`RV4` — `KPFDataModel` is listed **first** so its ove
 KPF2 aliases (driven by CSV configs in `data_models/config/`):
 - **Fiber aliases**: `SCI2_FLUX` → `TRACE3_FLUX`, `SKY_WAVE` → `TRACE1_WAVE`, `CAL_WAVE` → `TRACE5_WAVE`
 - **Simple aliases**: `CA_HK` → `ANCILLARY_SPECTRUM`, `EXPMETER_SCI` → `EXPMETER`
-- **Chip-prefix access**: `GREEN_SCI2_FLUX` returns `TRACE3_FLUX[:35]` as a numpy view (sliced at `NORDER_GREEN`). Handled by `_KPF2DataDict`, a subclass of `AliasedOrderedDict`.
+- **Chip-prefix access**: `GREEN_SCI2_FLUX` returns `TRACE3_FLUX[:35]` as a numpy view (sliced at `NORDER_GREEN`). Handled by `ChipPrefixDict` (aliased_dict.py), a subclass of `AliasedOrderedDict`; L2 and L4 subclass it to supply their own `_PREFIX_KEYS` (and, at L4, the read-only `RV#` rule).
 
 Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are computed views, not separate storage.
 
 ### Header standardization
 
-The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** — `KPF0.to_kpf1()`
-via **`KPF0._map_header()`** — which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
+The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** —
+`KPF0.standardize_header_format`, which every raw-L0 load runs via `from_fits(standardize=True)` and
+which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
 The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
 The architecture invariants:
 
-- **PRIMARY holds EPRV-registered keywords only** from L1 onward (EPRV keyword names + FITS structural
-  cards — no KPF-registered keywords, no raw natives). `KPF1.__init__` seeds the EPRV Required PRIMARY
-  skeleton; `to_kpf1` overlays native values on top (native wins), and a QC flag (`KWRDPRL{1,2,4}`)
-  checks the required keywords are present. (One keyword-homing exception is noted under
-  *Keyword registry*.)
+- **PRIMARY holds EPRV-registered keywords and the WMKO provenance cards** from
+  L0-after-standardization onward (EPRV keyword names + FITS structural cards — no raw natives).
+  `standardize_header_format` seeds the whole registered PRIMARY skeleton for the level, then fills it from
+  `EPRV-header-map.csv`; every card is present, blank where nothing supplied a value. (The other
+  keyword-homing exception is noted under *Keyword registry*.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
-  written once in `to_kpf1` and never again.
-- **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`.** `_map_header` carries only some natives to
-  PRIMARY, mostly under renamed EPRV keys — so read a native from PRIMARY when it survives there under
-  its own name (e.g. `DATE-OBS`, `OBJECT`), and from `INSTRUMENT_HEADER` when it never reaches PRIMARY or
-  when a coherent block of related natives reads more clearly together (e.g. the raw `DATE-BEG`/`DATE-END`
-  pair `barycentric_correction` extrapolates the exposure meter against; its *target astrometry*, by
-  contrast, comes off the PRIMARY `C*#` cards, which `to_kpf1` fills from `CATALOG_RECORD`).
-- **DRP provenance is stamped at read** onto RECEIPT (`KPF0.from_fits` → `_stamp_wmko_tracking`, not
-  `to_kpf1`): `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`. It rides RECEIPT forward, with `DRPSTATU`
-  advanced per module. `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on
-  read, so every model carries `obs_id` on every construction path.
+  written once by `standardize_header_format` and never again.
+- **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`** — at L0 too, now that standardization runs
+  at load. The map carries only some natives to PRIMARY, mostly under renamed EPRV keys — so read a
+  native from PRIMARY when it survives there under its own name (e.g. `DATE-OBS`, `OBJECT`), and from
+  `INSTRUMENT_HEADER` when it never reaches PRIMARY or when a coherent block of related natives reads
+  more clearly together (e.g. the raw `DATE-BEG`/`DATE-END` pair `barycentric_correction` extrapolates
+  the exposure meter against; its *target astrometry*, by contrast, comes off the PRIMARY `C*#` cards,
+  which `AstroQuery` fills from `CATALOG_RECORD`).
+- **DRP provenance is stamped during standardization** onto PRIMARY
+  (`KPF0.standardize_header_format` → `_stamp_wmko_tracking`, not `to_kpf1`):
+  `DRPVERNO`/`PROGID`/`KOAID`/`ORIGID`, plus `DRPSTATU`, which `receipt_add_entry` advances per module.
+  It rides PRIMARY forward. A raw `from_fits()` carries none of it — the conversion is what stamps it.
+  `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on read, so every model
+  carries `obs_id` on every construction path.
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
-  as an **append-only history**.
+  as an **append-only history** — the RECEIPT header carrying the calibration provenance L1 and L2 add
+  (`OSCANSUB`, `BIASFILE`, `TRACEREF`).
 - **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
-  L0→L1→L2→L4**, and `to_kpf1` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
+  L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
   structural card, else it raises.
@@ -191,16 +202,17 @@ The architecture invariants:
 The keyword registry (`kpfpipe/data_models/keyword_registry.py`) is a single `KeywordRegistry` class
 with one module singleton `keyword_registry`, imported **only** by `data_models/base.py` and surfaced as
 the `KPFDataModel.keyword_registry` class attribute. It derives its mapping/validation/routing lookups
-from a **single source-of-truth table** unioning the `L{0,1,2,4}-headers.csv` registries with the EPRV
-keyword defs.
+from a **single source-of-truth table** unioning the
+`config/{prefix}-{EXTENSION}-keywords.csv` registries, one file per extension per level.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
 routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags, read-noise,
 calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths),
-the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `CCD{1,2}RV<sfx>`). The one exception to
-*PRIMARY holds EPRV keywords only* is the L4 SCI-combined RV keywords `CCD{1,2}RV`/`CCD{1,2}ERV` —
-KPF-registered yet homed on PRIMARY, since they are the pipeline's final RV measurements and belong
-beside the EPRV `RV`/`RVERR`. Masters register their PRIMARY keywords in per-master-type registries and
+the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `RV{GREEN,RED}`/`ERV{GREEN,RED}`).
+The one exception to *PRIMARY holds EPRV keywords only* is those same four names, which are homed on
+PRIMARY **as well** — there they are the SCI-combined RVs, KPF-registered yet belonging beside the EPRV
+`RV`/`RVERR`. Routing prefers PRIMARY, so the bare `set_keyword` writes the combined value and the
+per-orderlet write names its table with `ext=`. Masters register their PRIMARY keywords in per-master-type registries and
 route them the same way (see *Masters data models*).
 
 ### Masters data models
@@ -211,16 +223,19 @@ which subclass the science models (`KPFMasterModel` precedes them in the MRO, so
 and so inherit the alias system and keyword machinery. Masters are *not* EPRV-governed but follow
 the science keyword conventions where possible:
 
-- **Minimal PRIMARY.** `KPFMasterL1`/`L2` stamp `DATALVL` `"ML1"`/`"ML2"` and do **not** seed the
-  EPRV science skeleton (see *Header standardization*).
+- **Their own PRIMARY.** `KPFMasterL1`/`L2` seed the master's own profile — every keyword its
+  `config/{ML1,ML2-flat,ML2-wls}-PRIMARY-keywords.csv` registers, blank where unpopulated.
+  `KPFMasterModel.__init__` then stamps `DATALVL` `"ML{level}"` over the science value the level's
+  own `__init__` seeded, once for every master rather than in each subclass. Masters are outside
+  EPRV scope, so they do **not** inherit the EPRV science skeleton (see *Header standardization*).
 - **Extension schemas are CSV-driven, per master type.** `ML1-extensions.csv` builds ML1
   directly, while `KPFMasterL2(kind=…)` reads `ML2-{kind}-extensions.csv` for its required `kind`
   (`"wls"` carries `TRACE*_WAVE` + `*_WLS_COEFFS`; `"flat"` carries `TRACE*_FLUX`/`VAR`/`BLAZE`).
   Edit the CSV(s) to change a master's schema.
 - **PRIMARY keywords are registered like the science models.** `MASTYPE` (every master file) and
   the WLS metadata (`ROUGHWLS`/`LINELIST`/`LINEPROF`/`POLYDEG{X,M,F}`, WLS only) are registered in
-  the **per-master-type** `config/{ML1,ML2-flat,ML2-wls}-headers.csv` registries and unioned into
-  the global registry table (`keyword_registry._masters_rows`); `set_keyword` routes them as usual
+  the **per-master-type** `config/{ML1,ML2-flat,ML2-wls}-PRIMARY-keywords.csv` registries and
+  unioned into the global registry table; `set_keyword` routes them as usual
   (see *Keyword registry*). `BUNIT` (on each `{chip}_IMG`) is structural, not registered.
 - **QC/RECEIPT present, checks deferred.** Both levels carry `QUALITY_CONTROL` + `RECEIPT`
   extensions for later wiring, but no masters QC checks or DRP-provenance stamping exist yet.
@@ -349,7 +364,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 ### Checkpoints
 
-`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags` (raises a failed flag named in the per-level `RAISE_FLAGS`, warns the rest) — scoped to the **current level's own** flags (`keyword_registry.qc_flag_keywords_by_level[LEVEL]`), so a propagated lower-level `0` is not re-warned. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
+`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags`. The fatal scan is scoped to the subclass's own `RAISE_FLAGS`: a `0` there raises. The summary that follows then warns on **every** failing flag on QUALITY_CONTROL (`keyword_registry.qc_flag_keywords`, the cross-level L0→L4 accumulation), so a propagated lower-level `0` is still named. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
 
 ### Quicklook plots
 

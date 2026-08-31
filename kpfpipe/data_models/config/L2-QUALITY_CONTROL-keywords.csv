@@ -1,0 +1,76 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+DATAPRL2,QC: L2 FLUX/VAR/WAVE present and populated,,int,1,QCL2
+KWRDPRL2,QC: required L2 PRIMARY keywords present,,int,1,QCL2
+L2NANOK,QC: L2 NaN fraction <= 1%,,int,1,QCL2
+L2FLXOK,QC: L2 non-positive flux fraction < 0.5,,int,1,QCL2
+L2VAROK,QC: no negative L2 variance where flux finite,,int,1,QCL2
+L2SNROK,QC: science SNR finite and above floor,,int,1,QCL2
+NANSCI1,NaN pixel count SCI1 (green+red),,int,0,DiagL2
+NANSCI2,NaN pixel count SCI2 (green+red),,int,0,DiagL2
+NANSCI3,NaN pixel count SCI3 (green+red),,int,0,DiagL2
+NANSKY,NaN pixel count SKY (green+red),,int,0,DiagL2
+NANCAL,NaN pixel count CAL (green+red),,int,0,DiagL2
+ZEROSCI1,Non-positive pixel count SCI1 (green+red),,int,412,DiagL2
+ZEROSCI2,Non-positive pixel count SCI2 (green+red),,int,398,DiagL2
+ZEROSCI3,Non-positive pixel count SCI3 (green+red),,int,421,DiagL2
+ZEROSKY,Non-positive pixel count SKY (green+red),,int,88410,DiagL2
+ZEROCAL,Non-positive pixel count CAL (green+red),,int,102,DiagL2
+SNRSC452,95th-pctile SNR of summed SCI near 452nm,,float,112.4,DiagL2
+SNRSK452,95th-pctile SNR of SKY near 452nm,,float,1.8,DiagL2
+SNRCL452,95th-pctile SNR of CAL near 452nm,,float,84.2,DiagL2
+SNRSC548,95th-pctile SNR of summed SCI near 548nm,,float,168.9,DiagL2
+SNRSK548,95th-pctile SNR of SKY near 548nm,,float,2.4,DiagL2
+SNRCL548,95th-pctile SNR of CAL near 548nm,,float,121.7,DiagL2
+SNRSC652,95th-pctile SNR of summed SCI near 652nm,,float,203.1,DiagL2
+SNRSK652,95th-pctile SNR of SKY near 652nm,,float,2.9,DiagL2
+SNRCL652,95th-pctile SNR of CAL near 652nm,,float,144.6,DiagL2
+SNRSC747,95th-pctile SNR of summed SCI near 747nm,,float,198.3,DiagL2
+SNRSK747,95th-pctile SNR of SKY near 747nm,,float,2.7,DiagL2
+SNRCL747,95th-pctile SNR of CAL near 747nm,,float,139.8,DiagL2
+SNRSC852,95th-pctile SNR of summed SCI near 852nm,,float,171.5,DiagL2
+SNRSK852,95th-pctile SNR of SKY near 852nm,,float,2.3,DiagL2
+SNRCL852,95th-pctile SNR of CAL near 852nm,,float,118.4,DiagL2
+FR452652,Peak SCI2 flux ratio 452nm/652nm,,float,0.412,DiagL2
+FR548652,Peak SCI2 flux ratio 548nm/652nm,,float,0.718,DiagL2
+FR747652,Peak SCI2 flux ratio 747nm/652nm,,float,0.951,DiagL2
+FR852652,Peak SCI2 flux ratio 852nm/652nm,,float,0.734,DiagL2
+FR12M452,Median SCI1/SCI2 flux ratio near 452nm,,float,0.982,DiagL2
+FR12U452,Unc. of median SCI1/SCI2 ratio near 452nm,,float,0.004,DiagL2
+FR32M452,Median SCI3/SCI2 flux ratio near 452nm,,float,0.974,DiagL2
+FR32U452,Unc. of median SCI3/SCI2 ratio near 452nm,,float,0.004,DiagL2
+FRS2M452,Median SKY/SCI2 flux ratio near 452nm,,float,0.0012,DiagL2
+FRS2U452,Unc. of median SKY/SCI2 ratio near 452nm,,float,0.0002,DiagL2
+FRC2M452,Median CAL/SCI2 flux ratio near 452nm,,float,0.612,DiagL2
+FRC2U452,Unc. of median CAL/SCI2 ratio near 452nm,,float,0.008,DiagL2
+FR12M548,Median SCI1/SCI2 flux ratio near 548nm,,float,0.986,DiagL2
+FR12U548,Unc. of median SCI1/SCI2 ratio near 548nm,,float,0.003,DiagL2
+FR32M548,Median SCI3/SCI2 flux ratio near 548nm,,float,0.979,DiagL2
+FR32U548,Unc. of median SCI3/SCI2 ratio near 548nm,,float,0.003,DiagL2
+FRS2M548,Median SKY/SCI2 flux ratio near 548nm,,float,0.0013,DiagL2
+FRS2U548,Unc. of median SKY/SCI2 ratio near 548nm,,float,0.0002,DiagL2
+FRC2M548,Median CAL/SCI2 flux ratio near 548nm,,float,0.628,DiagL2
+FRC2U548,Unc. of median CAL/SCI2 ratio near 548nm,,float,0.007,DiagL2
+FR12M652,Median SCI1/SCI2 flux ratio near 652nm,,float,0.989,DiagL2
+FR12U652,Unc. of median SCI1/SCI2 ratio near 652nm,,float,0.003,DiagL2
+FR32M652,Median SCI3/SCI2 flux ratio near 652nm,,float,0.983,DiagL2
+FR32U652,Unc. of median SCI3/SCI2 ratio near 652nm,,float,0.003,DiagL2
+FRS2M652,Median SKY/SCI2 flux ratio near 652nm,,float,0.0014,DiagL2
+FRS2U652,Unc. of median SKY/SCI2 ratio near 652nm,,float,0.0002,DiagL2
+FRC2M652,Median CAL/SCI2 flux ratio near 652nm,,float,0.641,DiagL2
+FRC2U652,Unc. of median CAL/SCI2 ratio near 652nm,,float,0.006,DiagL2
+FR12M747,Median SCI1/SCI2 flux ratio near 747nm,,float,0.991,DiagL2
+FR12U747,Unc. of median SCI1/SCI2 ratio near 747nm,,float,0.003,DiagL2
+FR32M747,Median SCI3/SCI2 flux ratio near 747nm,,float,0.985,DiagL2
+FR32U747,Unc. of median SCI3/SCI2 ratio near 747nm,,float,0.003,DiagL2
+FRS2M747,Median SKY/SCI2 flux ratio near 747nm,,float,0.0015,DiagL2
+FRS2U747,Unc. of median SKY/SCI2 ratio near 747nm,,float,0.0002,DiagL2
+FRC2M747,Median CAL/SCI2 flux ratio near 747nm,,float,0.652,DiagL2
+FRC2U747,Unc. of median CAL/SCI2 ratio near 747nm,,float,0.006,DiagL2
+FR12M852,Median SCI1/SCI2 flux ratio near 852nm,,float,0.993,DiagL2
+FR12U852,Unc. of median SCI1/SCI2 ratio near 852nm,,float,0.004,DiagL2
+FR32M852,Median SCI3/SCI2 flux ratio near 852nm,,float,0.987,DiagL2
+FR32U852,Unc. of median SCI3/SCI2 ratio near 852nm,,float,0.004,DiagL2
+FRS2M852,Median SKY/SCI2 flux ratio near 852nm,,float,0.0016,DiagL2
+FRS2U852,Unc. of median SKY/SCI2 ratio near 852nm,,float,0.0003,DiagL2
+FRC2M852,Median CAL/SCI2 flux ratio near 852nm,,float,0.664,DiagL2
+FRC2U852,Unc. of median CAL/SCI2 ratio near 852nm,,float,0.007,DiagL2

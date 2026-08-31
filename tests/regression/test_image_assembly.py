@@ -13,11 +13,10 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
-from ._data_models import write_amp_l0
+from ._data_models import standardized_l0, write_amp_l0
 from ._dtype_policy import (
     L1_IMAGE,
     assert_dtype,
@@ -63,7 +62,7 @@ class TestImageAssemblyBias:
 
     @pytest.fixture(scope="class")
     def l1_bias(self):
-        l0 = KPF0.from_fits(L0_BIAS)
+        l0 = standardized_l0(L0_BIAS)
         ia = ImageAssembly(l0)
         return ia.perform(), ia
 
@@ -170,7 +169,7 @@ class TestImageAssemblyFlat:
 
     @pytest.fixture(scope="class")
     def l1_flat(self):
-        l0 = KPF0.from_fits(L0_FLAT)
+        l0 = standardized_l0(L0_FLAT)
         ia = ImageAssembly(l0)
         return ia.perform()
 
@@ -196,7 +195,7 @@ class TestImageAssembly4Amp:
 
         perform() counts the amplifiers, so ia.namp/ia.dims come back populated.
         """
-        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        l0 = standardized_l0(synthetic_4amp_l0)
         ia = ImageAssembly(l0)
         return ia.perform(), ia
 
@@ -258,7 +257,7 @@ class TestImageAssembly4Amp:
 
 class TestDtypeProvenance:
     def test_l1_ccd_var_float32_and_roundtrip(self, synthetic_4amp_l0, tmp_path):
-        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        l0 = standardized_l0(synthetic_4amp_l0)
         l1 = ImageAssembly(l0).perform()
         for ext in ("GREEN_CCD", "GREEN_VAR", "RED_CCD", "RED_VAR"):
             assert_dtype(l1.data[ext], L1_IMAGE, ext)
@@ -276,7 +275,7 @@ class TestDtypeProvenance:
         )
 
     def test_l0_amps_not_float64(self, synthetic_4amp_l0):
-        l0 = KPF0.from_fits(synthetic_4amp_l0)
+        l0 = standardized_l0(synthetic_4amp_l0)
         for ext in ("GREEN_AMP1", "RED_AMP1"):
             assert_not_float64(l0.data[ext], ext)
 
@@ -462,7 +461,7 @@ class TestExpmeterWavelengthConversion:
         self._convert(EXPMETER_SCI=None)
 
     def test_conversion_applied_by_perform(self, synthetic_4amp_l0_with_expmeter):
-        l0 = KPF0.from_fits(synthetic_4amp_l0_with_expmeter)
+        l0 = standardized_l0(synthetic_4amp_l0_with_expmeter)
         l1 = ImageAssembly(l0).perform()
         assert "4981.2" in l1.data["EXPMETER_SCI"].colnames
 
@@ -488,7 +487,7 @@ class TestOverscanMethods:
         them directly keeps the overscan slicing arithmetic in view.
         """
         path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12))
-        module = ImageAssembly(KPF0.from_fits(path))
+        module = ImageAssembly(standardized_l0(path))
         module.namp["GREEN"] = 4
         module.dims["GREEN"] = (8, 8)
         module.prescan = 2
@@ -538,7 +537,7 @@ class TestReadMode:
         path = write_amp_l0(
             tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12), primary_cards=cards
         )
-        return ImageAssembly(KPF0.from_fits(path)).infer_read_mode()
+        return ImageAssembly(standardized_l0(path)).infer_read_mode()
 
     @pytest.mark.parametrize(
         "green_acf, red_acf, expected",
@@ -579,13 +578,13 @@ class TestReadMode:
                 "RDDATE": "2024-01-01T00:00:12.0",
             },
         )
-        assembly = ImageAssembly(KPF0.from_fits(path))
+        assembly = ImageAssembly(standardized_l0(path))
         assembly.infer_read_mode()
         assert assembly.read_time == {"GREEN": 47.5, "RED": 12.0}
 
     def test_read_time_only_for_processed_chips(self, tmp_path):
         path = write_amp_l0(tmp_path / "KP.20240101.00002.00.fits", shape=(12, 12))
-        assembly = ImageAssembly(KPF0.from_fits(path), config={"chips": ["GREEN"]})
+        assembly = ImageAssembly(standardized_l0(path), config={"chips": ["GREEN"]})
         assembly.infer_read_mode()
         assert set(assembly.read_time) == {"GREEN"}
 
@@ -597,13 +596,13 @@ class TestAmplifierGuards:
         path = write_amp_l0(
             tmp_path / "KP.20240101.00001.00.fits", namps=1, shape=(10, 10)
         )
-        module = ImageAssembly(KPF0.from_fits(path))
+        module = ImageAssembly(standardized_l0(path))
         with pytest.raises(ValueError, match="Only 2-amp and 4-amp"):
             module.count_amplifiers("GREEN")
 
     def test_unexpected_flip_entry_raises(self, tmp_path):
         path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
-        module = ImageAssembly(KPF0.from_fits(path))
+        module = ImageAssembly(standardized_l0(path))
         module.count_amplifiers("GREEN")
         module.orientation["GREEN_AMP1"] = "sideways"
         with pytest.raises(ValueError, match="unexpected 'flip' entry"):
@@ -620,7 +619,7 @@ class TestAmplifierGuards:
 class TestImageAssemblyRoundTrip:
     @pytest.fixture(scope="class")
     def assembled(self):
-        return ImageAssembly(KPF0.from_fits(L0_BIAS)).perform()
+        return ImageAssembly(standardized_l0(L0_BIAS)).perform()
 
     def test_write_and_read_back(self, assembled, tmp_path):
         fn = str(tmp_path / "kpf_L1_20240113T102656.fits")
@@ -637,3 +636,31 @@ class TestImageAssemblyRoundTrip:
         # INSTRUME is guaranteed by from_fits, so it cannot catch an assembly
         # bug; obs_id is carried by the write path this test exercises.
         assert l1_read.obs_id == assembled.obs_id
+
+
+# ---------------------------------------------------------------------------
+# The INSTRUMENT_HEADER repoint gate (real data)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requires_testdata
+class TestNativeReadsUseTheInstrumentHeader:
+    """``infer_read_mode`` reads native cards, and every L0 module now runs after
+    standardization -- so PRIMARY no longer carries them.
+
+    ``EXPTIMOK`` is the direct assertion the exit checklist asks for: it left
+    ``_REQUIRED_L0_QC_FLAGS``, so a missed repoint no longer fails closed through
+    the masters loader, and this is what catches it instead.
+    """
+
+    def test_read_mode_is_inferred_from_the_native_header(self):
+        l0 = standardized_l0(L0_BIAS)
+        assert ImageAssembly(l0).infer_read_mode() in ("fast", "regular")
+
+    def test_exptimok_is_written_and_true(self):
+        from kpfpipe.quality_control.qc_flags.level0 import QCL0
+
+        l0 = standardized_l0(L0_BIAS)
+        results = QCL0(l0).run()
+        assert results["EXPTIMOK"][0] is True
+        assert l0.headers["QUALITY_CONTROL"]["EXPTIMOK"] == 1

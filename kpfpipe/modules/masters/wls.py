@@ -820,19 +820,18 @@ class WLS(BaseMasterModule):
             # cannot mis-route a solution (e.g. SKY's onto CAL).
             canonical = sorted(self.fibers, key=lambda fb: self.fiber_positions[fb])
             for i, fiber in enumerate(canonical):
-                if W.ndim == 2:
-                    self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W
-                else:
-                    self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W[:, :, i]
+                # set_data, not data[...]: only set_data checks the manifest's
+                # declared BitDepth, which is what keeps master WAVE float64.
+                self.ml2_obj.set_data(
+                    f"{chip}_{fiber}_WAVE", W if W.ndim == 2 else W[:, :, i]
+                )
 
-            coeffs_ext = f"{chip}_WLS_COEFFS"
-            if coeffs_ext not in self.ml2_obj.extensions:
-                self.ml2_obj.create_extension(coeffs_ext, "ImageHDU")
-            self.ml2_obj.set_data(coeffs_ext, coeffs_mean)
+            self.ml2_obj.set_data(f"{chip}_WLS_COEFFS", coeffs_mean)
 
         self.ml2_obj.set_input_files(self._stacked_files, "thar")
 
-        # WLS metadata is out of EPRV scope but registered in ML2-wls-headers.csv,
+        # WLS metadata is out of EPRV scope but registered in
+        # ML2-wls-PRIMARY-keywords.csv,
         # so it routes through set_keyword (-> PRIMARY, registry comments).
         self.ml2_obj.set_keyword("ROUGHWLS", self.rough_wls_file)
         self.ml2_obj.set_keyword("LINELIST", self.linelist)

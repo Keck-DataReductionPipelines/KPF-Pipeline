@@ -6,78 +6,59 @@ use-cases it serves. ``KeywordRegistry`` builds every lookup once in
 ``__init__`` from one source-of-truth table; the module exposes a single
 instance, ``keyword_registry``. ``KPFDataModel`` (data_models/base.py) is the
 only module that imports this one; it surfaces the instance as a class attribute
-so consumers handed a ``kpf_obj`` (the checkpoints validator, level0's
-WMKO->EPRV mapping, tests) reach the registry through ``kpf.keyword_registry``
-rather than importing from here.
+so consumers handed a ``kpf_obj`` (the checkpoints validator, the
+WMKO->EPRV standardization, tests) reach the registry through
+``kpf.keyword_registry`` rather than importing from here.
 
-Source of truth: ``self.table``, one DataFrame unioning the KPF
-``L{0,1,2,4}-headers.csv`` registries (plus the per-master-type
-``ML{1,2}-*-headers.csv`` registries for the out-of-EPRV-scope masters keywords,
-which still route through ``set_keyword``) with the EPRV keyword definitions
-(rvdata's ``LEVEL2/4_PRIMARY_KEYWORDS`` plus the per-extension keyword CSVs). Columns:
-``Keyword, Description, Extension, DataType, PopulatedBy, Required, Level, Default,
-Units`` (``Default``/``Units`` carry the EPRV CSV values for EPRV rows, ``""`` for
-KPF rows). The ``routing``/``allowed``/``required``/``eprv_primary_*`` lookups are
-derived from this table.
+Source of truth: ``self.table``, one DataFrame unioning every
+``config/{prefix}-{EXTENSION}-keywords.csv``. The filename carries what the rows
+do not: ``prefix`` (one of ``L0 L1 L2 L4 ML1 ML2-flat ML2-wls``) gives the
+``Level``, and ``EXTENSION`` names the extension the rows are registered on --
+either literally, or as a family stem whose ``1..DETECTOR["numtrace"]``
+expansion the level's extension manifest contains (``L2-TRACE_FLUX`` ->
+``TRACE1_FLUX`` .. ``TRACE5_FLUX``). A ``#`` in a *keyword* is the same
+template marker and expands the same way, with no family exceptions; ``#`` is
+therefore reserved, and the CSVs carry no comment rows.
+
+Table columns: ``Keyword, Description, Extension, DataType, PopulatedBy, Level,
+Units``. A blank ``PopulatedBy`` means the keyword is registered but nothing
+writes an informative value to it yet: the card ships present and blank, and the
+blank cell is the machine-readable record of which keywords are still unsourced.
+``ExampleValue`` is documentation only and is not read here.
 
 The three use-cases:
-  (1) Mapping  -- ``header_map`` (WMKO->EPRV), consumed by ``KPF0._map_header``;
-      ``eprv_primary_datatypes`` types the values it emits. ``header_map`` is
-      **sanitized on load** so it holds only genuine static native->EPRV mappings:
-      rows whose key is unregistered (PARANG/PARANG2) or handled elsewhere
-      (``_DEFAULT_OVERRIDES``) are dropped, so ``_map_header`` needs no
-      in-loop filter or per-keyword correction.
-  (2) Validation -- ``allowed`` / ``required`` (per-extension, from the table)
-      plus ``structural`` (FITS bookkeeping cards).
-  (3) Routing -- ``routing`` (keyword -> (extension, comment)) for the default
-      home-extension write, plus ``comment_for`` ((extension, keyword) ->
-      comment) for ``set_keyword``'s targeted (``ext=``) write of EPRV
-      per-extension cards. Both consumed by ``KPFDataModel.set_keyword``.
+  (1) Mapping  -- ``header_map`` (``config/EPRV-header-map.csv``: WMKO-native ->
+      EPRV-standard), consumed by ``KPF0.standardize_header_format``; ``datatype_for``
+      types the values it emits, and ``primary_seed`` stamps the skeleton it
+      fills in. The map is PRIMARY-only by definition and is the definition of
+      the EPRV PRIMARY keyword set: every ``EPRV_KEY`` must be registered on
+      PRIMARY here, or the load raises.
+  (2) Validation -- ``is_registered`` for one card, ``allowed`` for a whole
+      extension's set, and ``is_structural`` for the FITS bookkeeping cards that
+      are permitted everywhere and registered nowhere.
+  (3) Routing -- ``routing`` (keyword -> home extension name) for the default
+      write, plus ``comment_for`` ((keyword, extension) -> FITS comment) for
+      ``set_keyword``'s targeted (``ext=``) write of per-extension cards. Both
+      consumed by ``KPFDataModel.set_keyword``.
 
-It also exposes ``eprv_primary_seed`` (the typed EPRV Required PRIMARY skeleton
-``KPF1.__init__`` stamps, mirroring rvdata's ``RV2.__init__``). The header_map
-corrections live in one place each: ``NUMORDER``/``DRPTAG``/``EPRVTAG``/``VOCLASS``
-via ``_DEFAULT_OVERRIDES`` (table sanitization), ``DATALVL`` via ``KPF1.__init__``
-(the model level), and the ``JD_UTC`` epoch transform in ``_map_header`` (a
-per-frame value, not a static default).
+``comment_for``, ``datatype_for`` and ``is_registered`` all read one per-card
+index, ``cards``: ``(keyword, extension) -> (comment, DataType)``.
 """
 
-import importlib.metadata
 import importlib.resources
 import logging
 from types import MappingProxyType
 
 import numpy as np
 import pandas as pd
-from rvdata.core.models.definitions import (
-    LEVEL2_PRIMARY_KEYWORDS,
-    LEVEL4_PRIMARY_KEYWORDS,
-)
-from rvdata.core.tools.headers import parse_value_to_datatype
 
-from kpfpipe import DETECTOR, __version__
+from kpfpipe import DETECTOR
+from kpfpipe.data_models.extension_manifest import extension_manifest
+from kpfpipe.utils.astro import KECK_LOCATION
 
 logger = logging.getLogger(__name__)
 
-_rvdata_inst_cfg = importlib.resources.files("rvdata.instruments.kpf.config")
-_rvdata_core_cfg = importlib.resources.files("rvdata.core.models.config")
 _kpf_pipe_cfg = importlib.resources.files("kpfpipe.data_models.config")
-
-# SCI_TRACES holds the science-fiber indices, the fibers the catalog C*# overlay
-# targets -- the single definition, imported by level0 rather than re-derived
-# there. The trace count itself is DETECTOR["numtrace"]; the numbered
-# per-orderlet extensions CCF#/RV#/CCF_VAR# run 1..that.
-_TRACE_MAP = pd.read_csv(_kpf_pipe_cfg / "trace-map.csv")
-SCI_TRACES = tuple(
-    _TRACE_MAP.loc[_TRACE_MAP["Fiber"].isin({"SCI1", "SCI2", "SCI3"}), "Trace"]
-)
-
-# EPRV-standard compliance is pinned to the installed rv-data-standard release
-# (environment.yml pins it exactly): EPRVTAG is its version ("v0.4.0"), VOCLASS
-# the release month ("EPRVSTANDARD2026.06"). The release date is not in package
-# metadata (PyPI-only), so map it from the exact pin here; bump both together.
-_RVDATA_VERSION = importlib.metadata.version("rv-data-standard")
-_RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
 
 
 class KeywordRegistry:
@@ -88,10 +69,6 @@ class KeywordRegistry:
     three use-cases (mapping / validation / routing).
     """
 
-    # "PopulatedBy" value marking an EPRV-sourced row -- the discriminator the
-    # derived lookups use to tell EPRV rows from KPF rows.
-    _EPRV_TAG = "EPRV"
-
     # Unified-table columns; valid identifiers for itertuples attribute access.
     _COLUMNS = [
         "Keyword",
@@ -99,102 +76,22 @@ class KeywordRegistry:
         "Extension",
         "DataType",
         "PopulatedBy",
-        "Required",
         "Level",
-        "Default",
         "Units",
     ]
 
-    # header_map keys whose entry is not a genuine native->EPRV mapping. Two
-    # consumers: non-None values correct the table Default (NUMORDER, which
-    # header_map.csv gets wrong as 65; DRPTAG, EPRVTAG, VOCLASS are runtime
-    # tags), and every key is dropped from header_map.
-    # None = no static default; value set elsewhere (DATALVL by KPF1.__init__,
-    # JD_UTC by the _map_header epoch transform, RVMETHOD by RadialVelocity -- its
-    # header_map.csv row also puts "CCF" one column past DEFAULT, so it is dead
-    # there anyway, and RVMETHOD is a level-4 keyword the L1 map must not stamp).
-    _DEFAULT_OVERRIDES = {
-        "NUMORDER": str(DETECTOR["numorder"]),
-        "DRPTAG": __version__,
-        "EPRVTAG": f"v{_RVDATA_VERSION}",
-        "VOCLASS": f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
-        "DATALVL": None,
-        "JD_UTC": None,
-        "RVMETHOD": None,
-    }
-
-    # Per-fiber catalog C*# keyword bases. On the SCI fibers these come from the
-    # CATALOG_RECORD overlay in KPF0.to_kpf1, not the raw TARG*/GAIAID mapping;
-    # SKY(1)/CAL(5) keep their header_map defaults.
-    _CATALOG_BASES = (
-        "CSRC",
-        "CID",
-        "CRA",
-        "CDEC",
-        "CEQNX",
-        "CEPCH",
-        "CPLX",
-        "CPMR",
-        "CPMD",
-        "CRV",
-        "CZ",
-        "CCLR",
-        "CCLRN",
-        "CLSRC",
-    )
-
-    # rvdata's header_map numbers per-trace keywords CAL-first (trace 1=CAL .. 5=SKY),
-    # the stale translator convention; KPF is SKY-first (1=SKY .. 5=CAL, per the
-    # EPRV frame; see trace-map.csv). These are the fiber-indexed families (TRACE plus
-    # the catalog bases) whose STANDARD index _load_header_map realigns 1<->5. NOT here
-    # (also end in 1/5 but not fiber-indexed): EXSNR/EXSNRW (wavelength band
-    # 452/852nm), DQLVL, T*.
-    _FIBER_INDEXED_BASES = ("TRACE", *_CATALOG_BASES)
-
-    # Telescope-indexed "BASE1 ... BASE#" families. KPF is on one telescope, so
-    # these expand to index 1 alone; every other template family expands to
-    # DETECTOR["numtrace"] (the fiber families, and EXSNR/EXSNRW's five bands,
-    # which happen to be five as well).
-    _TELESCOPE_INDEXED_BASES = (
-        "TELEID",
-        "TLST",
-        "TRA",
-        "TDEC",
-        "TEL",
-        "TZA",
-        "TAZ",
-        "THA",
-        "PARST",
-        "PAREND",
-    )
-
-    # STANDARD keys rvdata's header_map.csv maps but KPF deliberately does not
-    # register (parallactic angle, not carried on KPF products). Dropped silently;
-    # any *other* unregistered header_map key raises in _load_header_map.
-    _INTENTIONALLY_UNREGISTERED = frozenset({"PARANG", "PARANG2"})
-
-    # Per-extension EPRV keyword CSVs (rvdata exposes no constant). RV#/CCF# share a
-    # template; BARYCORR_*/BJD_TDB are per-extension.
-    _EPRV_EXT_CSV = {
-        "BJD_TDB": (_rvdata_core_cfg / "L2-BJD_TDB-keywords.csv", 2),
-        "BARYCORR_KMS": (_rvdata_core_cfg / "L2-BARYCORR_KMS-keywords.csv", 2),
-        "BARYCORR_Z": (_rvdata_core_cfg / "L2-BARYCORR_Z-keywords.csv", 2),
-        **{
-            f"TRACE{i}_{suffix}": (
-                _rvdata_core_cfg / f"L2-TRACE_{suffix}-keywords.csv",
-                2,
-            )
-            for i in range(1, DETECTOR["numtrace"] + 1)
-            for suffix in ("FLUX", "VAR", "BLAZE")
-        },
-        **{
-            f"CCF{i}": (_rvdata_core_cfg / "L4-CCF1-keywords.csv", 4)
-            for i in range(1, DETECTOR["numtrace"] + 1)
-        },
-        **{
-            f"RV{i}": (_rvdata_core_cfg / "L4-RV1-keywords.csv", 4)
-            for i in range(1, DETECTOR["numtrace"] + 1)
-        },
+    # The data level each data model implies -- the one thing a config filename
+    # does not carry. The vocabulary itself belongs to ``extension_manifest``,
+    # which discovers it from those filenames; ``__init__`` checks the two agree,
+    # so adding a model in one place and not the other is a load-time error.
+    _DATA_MODEL_LEVELS = {
+        "L0": 0,
+        "L1": 1,
+        "L2": 2,
+        "L4": 4,
+        "ML1": 1,
+        "ML2-flat": 2,
+        "ML2-wls": 2,
     }
 
     # "PopulatedBy" values marking a QUALITY_CONTROL row as a 0/1 QC flag: "QCL{n}"
@@ -203,30 +100,31 @@ class KeywordRegistry:
 
     # FITS structural cards: written by the I/O layer (astropy) from the HDU's
     # structure, never authored by the pipeline -- so always permitted on any
-    # extension and never registered keywords (the build-time sanitizer in
-    # _build_registry enforces registered & structural == empty). Exact matches
-    # here; enumerated families in _STRUCTURAL_PREFIXES. The lone exception is
-    # BUNIT: it carries content (physical units) but is stamped directly on the
-    # masters images rather than registered (see masters/base.py).
-    _STRUCTURAL = {
-        "SIMPLE",
-        "BITPIX",
-        "EXTEND",
-        "XTENSION",
-        "PCOUNT",
-        "GCOUNT",
-        "BSCALE",
-        "BZERO",
-        "BUNIT",
-        "COMMENT",
-        "HISTORY",
-        "CONTINUE",
-        "CHECKSUM",
-        "DATASUM",
-        "",
-        "EXTNAME",
-        "TFIELDS",
-    }
+    # extension and never registered keywords. Exact matches here; enumerated
+    # families in _STRUCTURAL_PREFIXES. The lone exception is BUNIT: it carries
+    # content (physical units) but is stamped directly on the masters images
+    # rather than registered (see masters/base.py).
+    _STRUCTURAL = frozenset(
+        {
+            "SIMPLE",
+            "BITPIX",
+            "EXTEND",
+            "XTENSION",
+            "PCOUNT",
+            "GCOUNT",
+            "BSCALE",
+            "BZERO",
+            "BUNIT",
+            "COMMENT",
+            "HISTORY",
+            "CONTINUE",
+            "CHECKSUM",
+            "DATASUM",
+            "",
+            "EXTNAME",
+            "TFIELDS",
+        }
+    )
 
     # Structural card families (NAXIS*, bintable column descriptors); by prefix. No
     # WCS family here: KPF authors no WCS, and CTYPE is registered content (rvdata
@@ -244,6 +142,13 @@ class KeywordRegistry:
     )
 
     def __init__(self):
+        drift = set(self._DATA_MODEL_LEVELS) ^ set(extension_manifest.data_models)
+        if drift:
+            raise ValueError(
+                f"data model vocabulary has drifted: {sorted(drift)} is declared "
+                "in only one of KeywordRegistry._DATA_MODEL_LEVELS and the "
+                "config/{data_model}-extensions.csv set"
+            )
         # Order matters: _load_header_map filters against the registry
         # _build_registry produces.
         self._build_registry()
@@ -252,99 +157,189 @@ class KeywordRegistry:
     def _build_registry(self):
         """Build ``self.table`` and every read-only lookup derived from it.
 
-        Unions the EPRV and KPF rows (KPF wins a collision), applies the
-        ``_DEFAULT_OVERRIDES`` corrections, drops structural cards rvdata
-        redundantly registers, then derives the lookups. All are frozen (frozenset
-        / MappingProxyType) against stray mutation, since the singleton shares them
-        process-wide.
+        One pass over the table feeds them all: ``cards`` is the per-card index
+        every accessor reads, and the rest are regroupings of the same rows. All
+        lookups are frozen (frozenset / MappingProxyType) against stray mutation,
+        since the singleton shares them process-wide.
         """
-        eprv_rows, kpf_rows = self._build_rows()
-        table = pd.DataFrame(eprv_rows + kpf_rows, columns=self._COLUMNS)
-        for keyword, value in self._DEFAULT_OVERRIDES.items():
-            if value is not None:
-                table.loc[table["Keyword"] == keyword, "Default"] = value
-        # Structural cards are written by astropy, never registered: drop any that
-        # rvdata redundantly declares as keywords, so registered & structural stay
-        # disjoint. (structural is derived first so is_structural is available here.)
-        self.structural = frozenset(self._STRUCTURAL)
-        table = table[~table["Keyword"].map(self.is_structural)].reset_index(drop=True)
-        self.table = table
+        rows, data_model_primary = self._load_keyword_rows()
+        self.table = pd.DataFrame(rows, columns=self._COLUMNS)
         self.registered = frozenset(self.table["Keyword"])
-
-        self.routing = MappingProxyType(self._routing_lookup())
-        # (extension, keyword) -> Description, for set_keyword's targeted (ext=)
-        # write path (EPRV per-extension cards like VELSTART on CCF#, which have no
-        # single routed home). KPF rows come after EPRV rows, so KPF wins a clash.
-        self.comments = MappingProxyType(
-            {
-                (row.Extension, row.Keyword): row.Description
-                for row in self.table.itertuples(index=False)
-            }
+        # PRIMARY keywords contributed by each data model's own CSVs -- the seed
+        # set for the masters, which are outside EPRV scope.
+        self._data_model_primary = MappingProxyType(
+            {p: tuple(kws) for p, kws in data_model_primary.items()}
         )
-        allowed, required = self._validation_lookup()
+
+        cards = {}  # (keyword, extension) -> (comment, DataType)
+        allowed = {}  # extension -> {keyword}
+        homes = {}  # keyword -> {extension it is registered on}
+        primary_levels = {}  # keyword -> lowest Level it is on PRIMARY at
+        qc_all = set()
+        qc_by_level = {}
+        for row in self.table.itertuples(index=False):
+            cards[(row.Keyword, row.Extension)] = (
+                self._compose_comment(row.Description, row.Units),
+                row.DataType,
+            )
+            allowed.setdefault(row.Extension, set()).add(row.Keyword)
+            homes.setdefault(row.Keyword, set()).add(row.Extension)
+            if row.Extension == "PRIMARY":
+                primary_levels[row.Keyword] = min(
+                    primary_levels.get(row.Keyword, row.Level), row.Level
+                )
+            elif (
+                row.Extension == "QUALITY_CONTROL"
+                and row.PopulatedBy in self._QC_POPULATORS
+            ):
+                qc_all.add(row.Keyword)
+                # "QCL{n}" -> "L{n}", for each registered level
+                qc_by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
+
+        # The one per-card index: comment and DataType together, since every row
+        # carries both and every accessor wants one of them for the same key.
+        # Read through comment_for / datatype_for / is_registered.
+        self.cards = MappingProxyType(cards)
         self.allowed = MappingProxyType(
             {ext: frozenset(kws) for ext, kws in allowed.items()}
         )
-        self.required = MappingProxyType(
-            {ext: MappingProxyType(d) for ext, d in required.items()}
-        )
-        qc_all, qc_by_level = self._qc_flag_sets_lookup()
+        self.routing = MappingProxyType(self._routing_lookup(homes))
+        # The level gate primary_seed applies to the header map.
+        self._primary_levels = MappingProxyType(primary_levels)
         self.qc_flag_keywords = frozenset(qc_all)
         self.qc_flag_keywords_by_level = MappingProxyType(
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
         )
-        seed, datatypes = self._eprv_primary_lookup()
-        self.eprv_primary_seed = MappingProxyType(seed)
-        self.eprv_primary_datatypes = MappingProxyType(datatypes)
+
+    # --- Source table construction -------------------------------------------
+
+    @classmethod
+    def _expand_template(cls, name):
+        """Expand a ``#`` template to its ``1..DETECTOR["numtrace"]`` members.
+
+        ``#`` is the one template marker, with no family exceptions: it means
+        exactly ``1..numtrace`` wherever it appears, in a keyword or in a family
+        stem. A name without ``#`` expands to itself.
+        """
+        if "#" not in name:
+            return [name]
+        return [name.replace("#", str(i)) for i in range(1, DETECTOR["numtrace"] + 1)]
+
+    @classmethod
+    def _resolve_extensions(cls, extension, names, source):
+        """Resolve a keyword CSV's extension field to concrete extension names.
+
+        The field either *is* a literal extension name in that data model's
+        manifest, or is a family stem: insert an index at every position and
+        accept the single candidate whose full expansion the manifest contains
+        (``CCF_VAR`` -> ``CCF1_VAR..``, not ``CCF_VAR1``; ``TRACE_FLUX`` ->
+        ``TRACE1_FLUX..``, not ``TRACE_FLUX1``). Zero or two qualifying positions
+        raise -- a typo must not resolve.
+        """
+        if extension in names:
+            return [extension]
+        candidates = []
+        for pos in range(len(extension) + 1):
+            family = cls._expand_template(f"{extension[:pos]}#{extension[pos:]}")
+            if all(member in names for member in family):
+                candidates.append(family)
+        if len(candidates) != 1:
+            raise ValueError(
+                f"{source}: extension {extension!r} is neither a name in that "
+                f"level's extension manifest nor an unambiguous family stem "
+                f"({len(candidates)} qualifying index positions)"
+            )
+        return candidates[0]
+
+    @classmethod
+    def _load_keyword_rows(cls):
+        """Read every ``{prefix}-{EXTENSION}-keywords.csv`` into registry rows.
+
+        Returns ``(rows, data_model_primary)``; ``data_model_primary`` maps each
+        data model to the PRIMARY keywords its own CSVs contribute.
+        """
+        rows = []
+        data_model_primary = {data_model: [] for data_model in cls._DATA_MODEL_LEVELS}
+        paths = sorted(
+            (p for p in _kpf_pipe_cfg.iterdir() if p.name.endswith("-keywords.csv")),
+            key=lambda p: p.name,
+        )
+        for path in paths:
+            stem = path.name[: -len("-keywords.csv")]
+            data_model, _, extension = stem.rpartition("-")
+            if data_model not in cls._DATA_MODEL_LEVELS:
+                raise ValueError(
+                    f"{path.name}: unrecognized keyword-CSV prefix {data_model!r}; "
+                    f"expected one of {sorted(cls._DATA_MODEL_LEVELS)}"
+                )
+            level = cls._DATA_MODEL_LEVELS[data_model]
+            extensions = cls._resolve_extensions(
+                extension, set(extension_manifest.names(data_model)), path.name
+            )
+            df = pd.read_csv(path)
+            for _, r in df.iterrows():
+                descr = (
+                    "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
+                )
+                units = "" if pd.isna(r["Units"]) else str(r["Units"]).strip()
+                dtype = "" if pd.isna(r["DataType"]) else str(r["DataType"]).strip()
+                populated_by = (
+                    "" if pd.isna(r["PopulatedBy"]) else str(r["PopulatedBy"]).strip()
+                )
+                for keyword in cls._expand_template(str(r["Keyword"]).strip()):
+                    for ext in extensions:
+                        rows.append(
+                            [keyword, descr, ext, dtype, populated_by, level, units]
+                        )
+                        if ext == "PRIMARY":
+                            data_model_primary[data_model].append(keyword)
+        return rows, data_model_primary
 
     def _load_header_map(self):
-        """Read and sanitize rvdata's WMKO-native -> EPRV-standard ``header_map``.
+        """Read ``config/EPRV-header-map.csv``, the WMKO-native -> EPRV map.
 
-        Realigns the fiber-indexed STANDARD keys from rvdata's CAL-first to KPF's
-        SKY-first numbering (see ``_FIBER_INDEXED_BASES``), then keeps only genuine
-        static native->EPRV rows so ``KPF0._map_header`` needs no in-loop filter.
-        Drops STANDARD keys absent from the registry (``_INTENTIONALLY_UNREGISTERED``,
-        silently) and ``_DEFAULT_OVERRIDES`` keys (valued elsewhere); any *other*
-        unregistered STANDARD key raises. Runs after ``_build_registry`` -- it
-        filters against ``self.registered``.
+        The map is PRIMARY-only by definition (a per-extension EPRV keyword needs
+        no map row), so it is also the definition of the EPRV PRIMARY keyword
+        set: every ``EPRV_KEY`` must be unique and registered on PRIMARY, or a
+        stray key would seed a comment-less, untyped card silently. Runs after
+        ``_build_registry`` -- it filters against ``self.allowed``.
+
+        The seven site-coordinate keywords take their default from
+        ``kpfpipe.KECK_LOCATION`` rather than a DEFAULT cell, so the observatory
+        config stays their single source.
         """
-        raw = pd.read_csv(_rvdata_inst_cfg / "header_map.csv")
-        # Swap trace index 1<->5 for the fiber-indexed families (SKY<->CAL). A dict
-        # replace maps each value once, so the two-way exchange is atomic.
-        swap = {}
-        for base in self._FIBER_INDEXED_BASES:
-            swap[f"{base}1"], swap[f"{base}5"] = f"{base}5", f"{base}1"
-        raw["STANDARD"] = raw["STANDARD"].replace(swap)
-        eprv_keys = raw["STANDARD"].astype(str).str.strip()
-        unregistered = set(eprv_keys[raw["STANDARD"].notna()]) - self.registered - {""}
-        unexpected = sorted(unregistered - self._INTENTIONALLY_UNREGISTERED)
-        if unexpected:
+        raw = pd.read_csv(_kpf_pipe_cfg / "EPRV-header-map.csv")
+        keys = raw["EPRV_KEY"].astype(str).str.strip()
+        duplicated = sorted(set(keys[keys.duplicated()]))
+        if duplicated:
             raise ValueError(
-                "header_map.csv maps to STANDARD keys absent from the keyword "
-                f"registry and not in _INTENTIONALLY_UNREGISTERED: {unexpected}. "
-                "Register them or add to _INTENTIONALLY_UNREGISTERED."
+                f"EPRV-header-map.csv has duplicate EPRV_KEY rows: {duplicated}"
             )
-        keep = eprv_keys.isin(self.registered) & ~eprv_keys.isin(
-            self._DEFAULT_OVERRIDES.keys()
-        )
-        self.header_map = raw[keep].reset_index(drop=True)
-
-        # Blank the SCI-fiber catalog source cells so _map_header emits nothing and
-        # the CATALOG_RECORD overlay is their sole writer.
-        sci_catalog_keys = {
-            f"{base}{i}" for base in self._CATALOG_BASES for i in SCI_TRACES
+        unregistered = sorted(set(keys) - self.allowed.get("PRIMARY", frozenset()))
+        if unregistered:
+            raise ValueError(
+                "EPRV-header-map.csv maps EPRV_KEY values that are not registered "
+                f"on PRIMARY: {unregistered}. Register them in the appropriate "
+                "config/{prefix}-PRIMARY-keywords.csv before mapping them."
+            )
+        # 1e-5 deg is ~1 m, against the ~140 m a 1 cm/s barycentric correction
+        # needs (dv = omega * dx); rounding also absorbs astropy's geodetic noise.
+        site = {
+            "GEOSYS": KECK_LOCATION.ellipsoid,
+            "OBSLON": round(KECK_LOCATION.lon.deg, 5),
+            "OBSLAT": round(KECK_LOCATION.lat.deg, 5),
+            "OBSALT": round(KECK_LOCATION.height.to_value("m"), 3),
+            "OBSGEO-X": round(KECK_LOCATION.x.to_value("m"), 3),
+            "OBSGEO-Y": round(KECK_LOCATION.y.to_value("m"), 3),
+            "OBSGEO-Z": round(KECK_LOCATION.z.to_value("m"), 3),
         }
-        overlay = (
-            self.header_map["STANDARD"].astype(str).str.strip().isin(sci_catalog_keys)
-        )
-        self.header_map.loc[overlay, ["INSTRUMENT", "DEFAULT"]] = np.nan
+        for keyword, value in site.items():
+            blank = (keys == keyword) & raw["DEFAULT"].isna()
+            # str(): DEFAULT is a text column, and _parse_value types it on read.
+            raw.loc[blank, "DEFAULT"] = str(value)
+        self.header_map = raw
 
-        # The CAL fiber has no sky target, so label its catalog identity "cal" --
-        # mirroring the "sky" default rvdata supplies for trace 1 but omits here.
-        cal_identity = (
-            self.header_map["STANDARD"].astype(str).str.strip().isin({"CSRC5", "CID5"})
-        )
-        self.header_map.loc[cal_identity, "DEFAULT"] = "cal"
+    # --- Accessors ------------------------------------------------------------
 
     def is_structural(self, key):
         """True for a FITS structural / bookkeeping card (never a registered keyword).
@@ -355,286 +350,186 @@ class KeywordRegistry:
         ``NAXIS2``/``TTYPE3``).
         """
         k = str(key).strip()
-        return k in self.structural or k.startswith(self._STRUCTURAL_PREFIXES)
-
-    def comment_for(self, keyword, extension):
-        """FITS comment (registry Description) for ``keyword`` on ``extension``.
-
-        Returns None when the keyword is not registered for that extension -- the
-        membership test set_keyword's targeted (``ext=``) path uses; a registered
-        keyword with an empty Description returns ``""``, distinct from None.
-        """
-        return self.comments.get((extension, str(keyword).strip()))
-
-    # --- Source table construction -------------------------------------------
-
-    @classmethod
-    def _eprv_rows(cls, df, extension, level):
-        """Expand an EPRV keyword CSV into unified-registry rows.
-
-        EPRV CSVs encode per-key/per-telescope families as a "BASE1 ... BASE#"
-        template; expand each to literal rows over that family's index range
-        (see ``_TELESCOPE_INDEXED_BASES``; only index 1 inherits the Required
-        flag, mirroring rvdata's seed). EPRV rows carry ``"EPRV"`` in the
-        ``PopulatedBy`` column -- the discriminator the derived lookups use to
-        tell EPRV rows from KPF rows.
-        """
-        rows = []
-        req = df["Required"].astype(str).str.strip().str.lower() == "true"
-        for i, kw in enumerate(df["Keyword"]):
-            name = str(kw).strip()
-            if not name:
-                continue
-            descr = str(df["Description"].iloc[i])
-            dtype = str(df["DataType"].iloc[i])
-            # Kept raw (NaN preserved); _eprv_primary_lookup normalizes them.
-            default = df["Default"].iloc[i]
-            units = df["Units"].iloc[i]
-            required = bool(req.iloc[i])
-            if "..." in name:
-                # "CDEC1 ... CDEC#" -> "CDEC" (strip the trailing index).
-                base = name.split("...")[0].strip().rstrip("0123456789")
-                telescope = base in cls._TELESCOPE_INDEXED_BASES
-                last = 1 if telescope else DETECTOR["numtrace"]
-                for j in range(1, last + 1):
-                    rows.append(
-                        [
-                            f"{base}{j}",
-                            descr,
-                            extension,
-                            dtype,
-                            cls._EPRV_TAG,
-                            required and j == 1,
-                            level,
-                            default,
-                            units,
-                        ]
-                    )
-            else:
-                rows.append(
-                    [
-                        name,
-                        descr,
-                        extension,
-                        dtype,
-                        cls._EPRV_TAG,
-                        required,
-                        level,
-                        default,
-                        units,
-                    ]
-                )
-        return rows
-
-    @classmethod
-    def _parse_kpf_keyword_config(cls, df, source, level_of):
-        """Expand a KPF header CSV into unified-registry rows.
-
-        Shared by ``_kpf_rows`` and ``_masters_rows``. ``Required`` is always
-        False; ``PopulatedBy`` must never be the EPRV sentinel (the derived lookups
-        treat such a row as EPRV-sourced and would misclassify it), so guard against
-        it loudly. ``source`` names the CSV for that error; ``level_of(row)`` yields
-        each row's Level.
-        """
-        rows = []
-        for _, r in df.iterrows():
-            descr = "" if pd.isna(r["Description"]) else str(r["Description"]).strip()
-            populated_by = str(r["PopulatedBy"]).strip()
-            if populated_by == cls._EPRV_TAG:
-                raise ValueError(
-                    f"{source}: keyword {str(r['Keyword']).strip()!r} has "
-                    f"'PopulatedBy' == {cls._EPRV_TAG!r}, which is reserved as the "
-                    "EPRV-row discriminator; use a real populating site instead"
-                )
-            keyword = str(r["Keyword"]).strip()
-            dtype = str(r["DataType"]).strip()
-            level = level_of(r)
-            ext_field = str(r["Extension"]).strip()
-            if ext_field.endswith("*"):
-                base = ext_field[:-1]
-                extensions = [f"{base}{i}" for i in range(1, DETECTOR["numtrace"] + 1)]
-            else:
-                extensions = [ext_field]
-            for ext in extensions:
-                rows.append(
-                    [keyword, descr, ext, dtype, populated_by, False, level, "", ""]
-                )
-        return rows
-
-    @classmethod
-    def _kpf_rows(cls):
-        """KPF-pipeline keyword rows from config/L{0,1,2,4}-headers.csv.
-
-        Level is the per-file level (one CSV per data level). ``#`` opens a
-        comment: the registries carry section banners for readers.
-        """
-        rows = []
-        for level in (0, 1, 2, 4):
-            df = pd.read_csv(_kpf_pipe_cfg / f"L{level}-headers.csv", comment="#")
-            rows += cls._parse_kpf_keyword_config(
-                df, f"L{level}-headers.csv", lambda r, lvl=level: lvl
-            )
-        return rows
-
-    @classmethod
-    def _masters_rows(cls):
-        """KPF masters keyword rows from the per-master-type registries
-        config/{ML1,ML2-flat,ML2-wls}-headers.csv.
-
-        Masters are out of EPRV scope but route their PRIMARY keywords (MASTYPE +
-        WLS metadata) through ``set_keyword`` like the science models, so they are
-        registered here. Level is derived from the filename (ML1 -> 1, ML2 -> 2);
-        MASTYPE recurs harmlessly across files (it dedups in ``registered``).
-        """
-        rows = []
-        for fname, level in (
-            ("ML1-headers.csv", 1),
-            ("ML2-flat-headers.csv", 2),
-            ("ML2-wls-headers.csv", 2),
-        ):
-            df = pd.read_csv(_kpf_pipe_cfg / fname)
-            rows += cls._parse_kpf_keyword_config(df, fname, lambda r, lvl=level: lvl)
-        return rows
-
-    @classmethod
-    def _build_rows(cls):
-        """Build the EPRV and KPF row lists that union into ``self.table``."""
-        # EPRV defines no L1, so KPF holds L1 PRIMARY to the EPRV L2 PRIMARY spec:
-        # these are Required from Level 1 (what makes KWRDPRL1 meaningful). L4-only
-        # extras stay Level 4.
-        l2 = cls._eprv_rows(LEVEL2_PRIMARY_KEYWORDS, "PRIMARY", 1)
-        l2_keys = {r[0] for r in l2}
-        l4 = [
-            r
-            for r in cls._eprv_rows(LEVEL4_PRIMARY_KEYWORDS, "PRIMARY", 4)
-            if r[0] not in l2_keys
-        ]
-        # EPRV per-extension keywords (governed extensions with standard cards).
-        ext = []
-        for name, (path, level) in cls._EPRV_EXT_CSV.items():
-            ext += cls._eprv_rows(pd.read_csv(path), name, level)
-        return l2 + l4 + ext, cls._kpf_rows() + cls._masters_rows()
-
-    # --- Derived lookups (all read self.table) -------------------------------
-
-    def _routing_lookup(self):
-        """keyword -> (home extension, comment), derived from ``self.table``.
-
-        Write keys only: EPRV PRIMARY keywords (-> PRIMARY) and each KPF keyword
-        with a single home extension; KPF wins a name collision. EPRV
-        per-extension cards (RVMETHOD on RV#, CTYPE*, ...) and multi-home KPF
-        keywords (VELWIDTH on CCF#) have no single home, so they are excluded and
-        written via set_keyword's targeted ``ext=`` path.
-        """
-        routing = {}
-        for row in self.table.itertuples(index=False):
-            if row.PopulatedBy == self._EPRV_TAG and row.Extension == "PRIMARY":
-                routing.setdefault(row.Keyword, ("PRIMARY", row.Description))
-        kpf_homes = {}
-        for row in self.table.itertuples(index=False):
-            if row.PopulatedBy != self._EPRV_TAG:
-                kpf_homes.setdefault(row.Keyword, set()).add(row.Extension)
-        for row in self.table.itertuples(index=False):
-            if row.PopulatedBy != self._EPRV_TAG and len(kpf_homes[row.Keyword]) == 1:
-                routing[row.Keyword] = (row.Extension, row.Description)
-        return routing
-
-    def _validation_lookup(self):
-        """Per-extension allowed / required lookups, derived from ``self.table``.
-
-        allowed: every keyword registered for an extension (no level gate).
-        required: keyword -> minimal Level it is Required at (PRIMARY warnings
-        filter Level<=N).
-        """
-        allowed = {}
-        required = {}
-        for row in self.table.itertuples(index=False):
-            extn = row.Extension
-            allowed.setdefault(extn, set()).add(row.Keyword)
-            if row.Required:
-                d = required.setdefault(extn, {})
-                d[row.Keyword] = min(d.get(row.Keyword, row.Level), row.Level)
-        return allowed, required
-
-    def _eprv_primary_lookup(self):
-        """EPRV PRIMARY lookups, derived from ``self.table``.
-
-        Returns ``(seed, datatypes)``:
-
-        - ``seed`` -- ``{keyword: (typed_default, comment)}`` for the EPRV Required
-          PRIMARY keywords at Level <= 1 (the skeleton ``KPF1.__init__`` stamps),
-          typed via ``parse_value_to_datatype`` like ``RV2.__init__``.
-        - ``datatypes`` -- ``{keyword: DataType}`` for *all* EPRV PRIMARY keywords,
-          so ``_map_header`` can type the values it overlays. Scoped to EPRV PRIMARY
-          so it never feeds KPF's ``int``/``str`` to ``parse_value_to_datatype``.
-        """
-        seed = {}
-        datatypes = {}
-        for row in self.table.itertuples(index=False):
-            if row.PopulatedBy != self._EPRV_TAG or row.Extension != "PRIMARY":
-                continue
-            datatypes[row.Keyword] = row.DataType
-            if not (row.Required and row.Level <= 1):
-                continue
-            units = None if pd.isna(row.Units) else str(row.Units).strip()
-            unitstr = "" if not units or units.lower() == "n/a" else f"[{units}] "
-            comment = f"{unitstr}{row.Description}"
-            # Default already corrected in _build_registry (_DEFAULT_OVERRIDES).
-            default = None if pd.isna(row.Default) else row.Default
-            seed[row.Keyword] = parse_value_to_datatype(
-                row.Keyword, row.DataType, (default, comment)
-            )
-        return seed, datatypes
-
-    def _qc_flag_sets_lookup(self):
-        """QC-flag keyword sets, derived from ``self.table``.
-
-        Returns
-        -------
-        tuple
-            ``(all_flags, by_level)``. ``all_flags`` is every QUALITY_CONTROL row
-            tagged by a QC populator (the cross-level L0->L4 set). ``by_level``
-            maps a LEVEL tag (one per registered level, e.g. "L0"/"L1"/"L2"/"L4")
-            to that level's own ``QCL{n}`` flags (used by the per-level checkpoint).
-        """
-        all_flags = set()
-        by_level = {}
-        for row in self.table.itertuples(index=False):
-            if (
-                row.Extension != "QUALITY_CONTROL"
-                or row.PopulatedBy not in self._QC_POPULATORS
-            ):
-                continue
-            all_flags.add(row.Keyword)
-            # "QCL{n}" -> "L{n}", for each registered level
-            by_level.setdefault(row.PopulatedBy[2:], set()).add(row.Keyword)
-        return all_flags, by_level
-
-    # --- rvdata extension registration ---------------------------------------
+        return k in self._STRUCTURAL or k.startswith(self._STRUCTURAL_PREFIXES)
 
     @staticmethod
-    def register_rvdata_extension(level_extensions, name, datatype, description):
-        """Register a KPF-custom extension into an rvdata ``LEVELn_EXTENSIONS`` table.
+    def _compose_comment(description, units):
+        """The FITS comment for a registry row: ``Description [Units]``.
 
-        rvdata's ``RVn._read`` resolves each HDU's DataType by Name from its
-        ``LEVELn_EXTENSIONS`` DataFrame; a KPF-only extension (e.g. QUALITY_CONTROL)
-        is absent there, so reading an Ln product that contains it raises ``KeyError``.
-        This appends the row in-memory (idempotent). ``Required`` is False so rvdata
-        neither auto-creates it nor lists it in EXT_DESCRIPT -- the KPF model
-        ``__init__`` creates the (empty) extension explicitly.
+        Unit-less rows (blank or the EPRV ``N/A`` placeholder) carry the
+        description alone.
         """
-        if name in set(level_extensions["Name"]):
-            return
-        row = {col: "" for col in level_extensions.columns}
-        row.update(
-            HDU=int(level_extensions["HDU"].max()) + 1,
-            Name=name,
-            DataType=datatype,
-            Required=False,
-            Multiplicity=False,
-            Description=description,
-        )
-        level_extensions.loc[len(level_extensions)] = row
+        u = str(units).strip()
+        if not u or u.lower() == "n/a":
+            return description
+        return f"{description} [{u}]"
+
+    def is_registered(self, keyword, extension):
+        """True if ``keyword`` is registered for ``extension``.
+
+        The single membership test, so "is this card allowed here?" is asked one
+        way. ``allowed[ext]`` is the same question answered set-wise, for the
+        checkpoint that sweeps a whole header.
+        """
+        return (str(keyword).strip(), extension) in self.cards
+
+    def comment_for(self, keyword, extension=None):
+        """FITS comment for ``keyword`` on ``extension`` (``Description [Units]``).
+
+        With ``extension`` omitted the keyword's routed home is used -- the
+        comment ``set_keyword`` writes on a default (unrouted) write, which is
+        what the QC and diagnostics layers want when they mirror a comment into
+        their results.
+
+        Returns None when the keyword is not registered there; a registered
+        keyword with an empty Description returns ``""``, distinct from None.
+        """
+        name = str(keyword).strip()
+        if extension is None:
+            extension = self.routing.get(name)
+        card = self.cards.get((name, extension))
+        return None if card is None else card[0]
+
+    def datatype_for(self, keyword, extension):
+        """Registry ``DataType`` for ``keyword`` on ``extension``.
+
+        Mirrors ``comment_for``: None when the keyword is not registered there,
+        ``""`` when it is registered with no declared type (which
+        ``_parse_value`` passes through unchanged).
+        """
+        card = self.cards.get((str(keyword).strip(), extension))
+        return None if card is None else card[1]
+
+    @staticmethod
+    def coerce(datatype, value):
+        """Convert ``value`` to ``datatype``, the CSVs' vocabulary lowercased.
+
+        Floats carry their declared width, so a ``float32`` card is written at
+        single precision rather than silently at double. Booleans accept only
+        the three spellings a header value ever has -- ``True``/``False`` in
+        memory, ``T``/``F`` on disk, ``0``/``1`` by convention -- so a truthy
+        string is a bad value, not ``True``. Raises ``KeyError`` on an unknown
+        ``datatype`` and ``TypeError``/``ValueError`` on a value that will not
+        convert; the callers own what each of those means -- ``_parse_value``
+        warns past a bad frame value, ``set_keyword`` raises on a bad write.
+        """
+        match datatype:
+            case "str" | "string":
+                return str(value)
+            case "int":
+                return int(value)
+            case "uint":
+                number = int(value)
+                if number < 0:
+                    raise ValueError(f"{value!r} is negative")
+                return number
+            case "float" | "double":
+                return np.float64(value)
+            case "float32":
+                return np.float32(value)
+            case "bool" | "boolean":
+                if isinstance(value, (bool, np.bool_)):
+                    return bool(value)
+                if isinstance(value, str) and value.strip().upper() in ("T", "F"):
+                    return value.strip().upper() == "T"
+                if isinstance(value, (int, np.integer)) and value in (0, 1):
+                    return bool(value)
+                raise ValueError(f"{value!r} is not True/False, T/F or 0/1")
+            case _:
+                raise KeyError(datatype)
+
+    @classmethod
+    def _parse_value(cls, keyword, datatype, value):
+        """Type ``value`` to the registry ``DataType`` via ``coerce``.
+
+        KPF-owned typing over the CSVs' own vocabulary, matched
+        case-insensitively. An empty value is None; a blank ``DataType`` passes
+        the value through unchanged. There is deliberately **no**
+        ``"UNKNOWN"``/``"UNDEFINED"`` sentinel rule: ``SCI-OBJ``/``SKY-OBJ``
+        carry the literal value ``Unknown`` on real frames, and blanking those
+        would silently empty ``TRACE1..TRACE4``.
+
+        An unknown ``DataType`` raises -- it is a config error, not frame data. A
+        value that will not convert warns and yields None, so one malformed
+        native card cannot abort a reduction.
+        """
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return None
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        if not datatype or (isinstance(datatype, float) and pd.isna(datatype)):
+            return value
+        try:
+            return cls.coerce(str(datatype).strip().lower(), value)
+        except KeyError:
+            raise ValueError(
+                f"keyword {keyword!r}: unknown DataType {datatype!r}"
+            ) from None
+        except (TypeError, ValueError):
+            logger.warning(
+                "cannot convert value %r for keyword %r to type %s",
+                value,
+                keyword,
+                datatype,
+            )
+            return None
+
+    def primary_seed(self, data_model):
+        """``data_model``'s typed PRIMARY skeleton: ``{keyword: (value, comment)}``.
+
+        Every keyword registered on PRIMARY for that data model, carrying its
+        ``EPRV-header-map.csv`` default where it has one and blank where it does
+        not, each with its registry comment. Nothing is filtered on ``REQUIRED``:
+        that column is a compliance label, so the seed stamps a card for every
+        member of every ``#`` family -- the five-trace rule at the header level.
+
+        For ``L0``/``L1``/``L2``/``L4`` the set is the header-map rows at
+        ``Level <= n``, cumulative (156 cards at L0, L1 adds ``DQLVL1``, L2
+        ``EXTRACT``/``EXSNR#``/``EXSNRW#``/``DQLVL2``, L4 the seven RV rows and
+        ``DQLVL4``). For the masters it is that master's own
+        ``ML*-PRIMARY-keywords.csv`` rows: masters are outside EPRV scope and do
+        not inherit the science skeleton.
+        """
+        extension_manifest.require(data_model)
+        if data_model.startswith("ML"):
+            defaults = [(kw, None) for kw in self._data_model_primary[data_model]]
+        else:
+            cap = self._DATA_MODEL_LEVELS[data_model]
+            defaults = [
+                (str(row.EPRV_KEY).strip(), row.DEFAULT)
+                for row in self.header_map.itertuples(index=False)
+                if self._primary_levels[str(row.EPRV_KEY).strip()] <= cap
+            ]
+        return {
+            keyword: (
+                self._parse_value(
+                    keyword, self.datatype_for(keyword, "PRIMARY"), default
+                ),
+                self.comment_for(keyword, "PRIMARY"),
+            )
+            for keyword, default in defaults
+        }
+
+    # --- Derived lookups ------------------------------------------------------
+
+    @staticmethod
+    def _routing_lookup(homes):
+        """keyword -> home extension name, from ``keyword -> {extension}``.
+
+        A keyword registered on PRIMARY routes to PRIMARY (``RVMETHOD`` and
+        ``RVGREEN``/``RVRED``/``ERVGREEN``/``ERVRED`` are on PRIMARY *and* on
+        ``RV1..5``); otherwise a keyword with exactly one home routes there.
+        Everything else -- the per-extension cards that recur on every orderlet
+        (``CTYPE1``, ``VELWIDTH``) -- has no single home and is written via
+        ``set_keyword``'s targeted ``ext=`` path.
+        """
+        routing = {}
+        for keyword, extensions in homes.items():
+            if "PRIMARY" in extensions:
+                routing[keyword] = "PRIMARY"
+            elif len(extensions) == 1:
+                routing[keyword] = next(iter(extensions))
+        return routing
 
 
 # Module singleton -- the one registry instance every consumer reaches through.

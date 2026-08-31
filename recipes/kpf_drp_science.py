@@ -55,7 +55,8 @@ def main(config, args):
     data_root_in = data_dirs["KPF_DATA_INPUT"]
     data_root_science = data_dirs["KPF_SCIENCE_OUTPUT"]
 
-    l0 = KPF0.from_fits(kpf_filepath(obs_id, "L0", data_root=data_root_in))
+    fn = kpf_filepath(obs_id, "L0", data_root=data_root_in)
+    l0 = KPF0.from_fits(fn, standardize=True)
 
     # Resolve Gaia/SIMBAD astrometry (plus the native wmko row off PRIMARY TARG*) into
     # l0's CATALOG_RECORD, for the L0 diagnostics and barycentric correction to consume.

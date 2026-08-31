@@ -1,6 +1,6 @@
-# WMKO observatory coordinates
+# WMKO observatory coordinates, from astropy's EarthLocation.of_site("Keck Observatory").
 
-geosys = "GRS80"         # Geodetic reference system of the coordinates below
-longitude = -155.474719  # (degrees)
-latitude = 19.826        # (degrees)
-altitude = 4145.0        # (meters)
+geosys = "WGS84"             # Geodetic reference system of the coordinates below
+longitude = -155.47833333    # (degrees)
+latitude = 19.82833333       # (degrees)
+altitude = 4160.0            # (meters)

@@ -1,6 +1,7 @@
 """Tests for kpfpipe.utils.io: the FileHandler (mini-database, calibration-stack
 clustering, masters finder), the product-path builders (kpf_directory /
-kpf_filename / kpf_filepath), and junk-frame exclusion.
+kpf_filename / kpf_filepath), its name validator (check_filename_convention),
+and junk-frame exclusion.
 
 Unit tests use synthetic DataFrames and temp directories; the slow integration
 tests use real L0 data from tests/testdata/L0/20240405/.
@@ -21,6 +22,7 @@ from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.io import (
     FileHandler,
+    check_filename_convention,
     datecode_dirs_in_range,
     kpf_directory,
     kpf_filename,
@@ -504,6 +506,66 @@ class TestKpfFilename:
 
 
 # ---------------------------------------------------------------------------
+# check_filename_convention
+# ---------------------------------------------------------------------------
+
+
+class TestCheckFilenameConvention:
+    """`kpf_filename` read backwards. TestFilenameConsistency pins the two
+    against each other; these are the rejections, which no generator can reach.
+    """
+
+    @pytest.mark.parametrize(
+        ("level", "basename"),
+        [
+            ("L0", "KP.20240405.49597.71.fits"),
+            ("L1", "kpf_L1_20240405T134637.fits"),
+            ("L2", "kpf_SL2_20240405T134637.fits"),
+            ("L4", "kpf_SL4_20240405T134637.fits"),
+        ],
+    )
+    def test_accepts_the_level_name(self, level, basename):
+        assert check_filename_convention(basename, level)
+        # A path is accepted on its basename alone.
+        assert check_filename_convention(f"/data/{level}/20240405/{basename}", level)
+
+    @pytest.mark.parametrize(
+        ("level", "basename"),
+        [
+            ("L0", "kpf_L0_20240405T134637.fits"),  # L0 is WMKO-native
+            ("L1", "kpf_SL1_20240405T134637.fits"),  # L1 has no EPRV standard
+            ("L2", "kpf_L2_20240405T134637.fits"),  # L2 does
+            ("L2", "kpf_SL4_20240405T134637.fits"),  # right shape, wrong level
+            ("L4", "kpf_SL4_20240405T1346.fits"),  # truncated timestamp
+        ],
+    )
+    def test_rejects_an_off_convention_name(self, caplog, level, basename):
+        with caplog.at_level(logging.WARNING):
+            assert not check_filename_convention(basename, level)
+        assert "does not follow the KPF" in caplog.text
+
+    def test_master_name_carries_any_cal_type(self):
+        for cal_type in ("bias", "dark", "flat", "thar"):
+            name = f"KP.20240405.49597.71_master_{cal_type}_L1.fits"
+            assert check_filename_convention(name, "L1", master=True)
+
+    def test_master_rejects_the_wrong_level_or_type(self):
+        assert not check_filename_convention(
+            "KP.20240405.49597.71_master_bias_L2.fits", "L1", master=True
+        )
+        assert not check_filename_convention(
+            "KP.20240405.49597.71_master_wls_L2.fits", "L2", master=True
+        )
+        # A science name is not a master name, and vice versa.
+        assert not check_filename_convention(
+            "kpf_SL2_20240405T134637.fits", "L2", master=True
+        )
+        assert not check_filename_convention(
+            "KP.20240405.49597.71_master_bias_L2.fits", "L2"
+        )
+
+
+# ---------------------------------------------------------------------------
 # FileHandler.find_masters
 # ---------------------------------------------------------------------------
 
@@ -568,11 +630,10 @@ class TestFilenameConsistency:
     @pytest.mark.parametrize("level", ["L0", "L1", "L2", "L4"])
     def test_generated_name_passes_the_convention_check(self, level):
         # The name generator (kpf_filename's f-strings) and the name validator
-        # (independent regexes, plus rvdata's EPRV check for L2/L4) are never
-        # otherwise compared. The test above pins the two *generators* against
-        # each other; both call kpf_filename, so only this pins the generator
-        # against the validator. For L0/L1/masters a mismatch is a log warning
-        # and the write proceeds, so the drift would be silent.
+        # (check_filename_convention's regexes) are never otherwise compared. The
+        # test above pins the two *generators* against each other; both call
+        # kpf_filename, so only this pins the generator against the validator. A
+        # mismatch is a log warning and the write proceeds, so it would be silent.
         obj = self._make(level)
         assert obj.check_filename_convention(obj.generate_standard_filename())
 

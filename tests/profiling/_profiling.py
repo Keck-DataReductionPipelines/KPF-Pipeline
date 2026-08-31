@@ -171,8 +171,11 @@ def load_l0(config):
     from kpfpipe.data_models.level0 import KPF0
     from kpfpipe.utils.io import kpf_filepath
 
+    # Every downstream stage reads a standardized PRIMARY, and to_kpf1 raises
+    # without it, so the harness loads the way the recipe does.
     return KPF0.from_fits(
-        kpf_filepath(SCIENCE_OBS_ID, "L0", data_root=str(TESTDATA_DIR))
+        kpf_filepath(SCIENCE_OBS_ID, "L0", data_root=str(TESTDATA_DIR)),
+        standardize=True,
     )
 
 

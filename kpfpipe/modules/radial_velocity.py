@@ -14,7 +14,7 @@ import numpy as np
 from astropy.constants import c
 from astropy.stats import mad_std
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULTS, DETECTOR
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 
@@ -25,9 +25,6 @@ _DEFAULTS = {
     "rv_window": [-25.0, 25.0],
 }
 
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
-_RV_SFX = {"SCI1": "S1", "SCI2": "S2", "SCI3": "S3", "CAL": "CL", "SKY": "SK"}
-
 
 class RadialVelocity:
     """
@@ -36,7 +33,7 @@ class RadialVelocity:
     Parameters
     ----------
     l4_obj : KPF4
-        L4 frame carrying the per-order CCFs (CCFn/CCF_VARn), the CCF velocity-grid
+        L4 frame carrying the per-order CCFs (CCFn/CCFn_VAR), the CCF velocity-grid
         and mask headers, and the metadata-seeded RVn tables produced by
         CrossCorrelation. RV/RV_ERR are filled in place.
     config : None | dict | ConfigHandler
@@ -243,10 +240,10 @@ class RadialVelocity:
         chip = chip.upper()
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
-        if len(fibers) != 1 and set(fibers) != set(_SCI_FIBERS):
+        if len(fibers) != 1 and set(fibers) != set(DETECTOR["sci_fibers"]):
             raise ValueError(
                 f"fibers must be a single fiber or exactly the three science "
-                f"fibers {_SCI_FIBERS}; got {fibers}"
+                f"fibers {list(DETECTOR['sci_fibers'])}; got {fibers}"
             )
         for f in fibers:
             if f"{chip}_{f}" not in self._ccf:
@@ -437,10 +434,10 @@ class RadialVelocity:
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
 
-        if combine_fibers and set(fibers) != set(_SCI_FIBERS):
+        if combine_fibers and set(fibers) != set(DETECTOR["sci_fibers"]):
             raise ValueError(
                 f"combine_fibers=True requires the three science fibers "
-                f"{_SCI_FIBERS}; got {fibers}"
+                f"{list(DETECTOR['sci_fibers'])}; got {fibers}"
             )
         if not combine_fibers and len(fibers) != 1:
             raise ValueError(
@@ -568,8 +565,9 @@ class RadialVelocity:
         """
         Write all RV keywords from the perform()-filled stashes. Per
         orderlet: RVn RVMETHOD/SKYRMVD/TELLRMVD and per-fiber per-CCD
-        {GRN|RED}RV{sfx}/{GRN|RED}ERV{sfx}. On PRIMARY: RVMETHOD, and (when a science
-        combine ran) the SCI-combined RV{chip}/ERV{chip} and EPRV
+        RV{chip}/ERV{chip}, written onto that fiber's RVn table. On PRIMARY:
+        RVMETHOD, and (when a science combine ran) the SCI-combined
+        RV{chip}/ERV{chip} and EPRV
         RV/RVERR/BERV/BJDTDB. Non-finite values are written as None (FITS
         UNDEFINED). The RVn CTYPE cards belong to CrossCorrelation.
         """
@@ -580,13 +578,12 @@ class RadialVelocity:
             l4_obj.set_keyword("TELLRMVD", False, ext=rv_ext)
             pf = self._per_fiber[fiber]
             for chip, v in pf["ccd_rv"].items():
-                c = "GRN" if chip == "GREEN" else "RED"
                 e = pf["ccd_rv_err"][chip]
                 l4_obj.set_keyword(
-                    f"{c}RV{_RV_SFX[fiber]}", float(v) if np.isfinite(v) else None
+                    f"RV{chip}", float(v) if np.isfinite(v) else None, ext=rv_ext
                 )
                 l4_obj.set_keyword(
-                    f"{c}ERV{_RV_SFX[fiber]}", float(e) if np.isfinite(e) else None
+                    f"ERV{chip}", float(e) if np.isfinite(e) else None, ext=rv_ext
                 )
 
         # PRIMARY (EPRV L4): always the RV method; the combined RV only when a
@@ -733,7 +730,7 @@ class RadialVelocity:
         # Final science RV: sum the science orderlets' CCFs per chip, fit, then
         # combine the two CCDs at the RV level (see compute_weighted_rvs). RVs are
         # already barycentric, so the reported BERV/BJDTDB are descriptive.
-        sci_req = [f for f in fibers if f in _SCI_FIBERS]
+        sci_req = [f for f in fibers if f in DETECTOR["sci_fibers"]]
         sci = [f for f in sci_req if f in self._processed]
         if not sci_req:
             # Calibration-only run: PRIMARY RV/RVERR/BERV/BJDTDB stay UNDEFINED.

@@ -3,20 +3,17 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.quicklook.base import Plot
 
 # Orderlet panels, left-to-right, in the canonical KPF order.
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 # Per-order CCF normalization percentile (science vs. cal/sky), matching the
 # v2.12 AnalyzeL2 convention.
 _SCI_NORM_PCTILE = 99
 _CALSKY_NORM_PCTILE = 90
 # Vertical offset between successive orders' normalized CCFs in the grid.
 _ORDER_OFFSET = 0.5
-# Per-fiber suffix of the combined-RV keyword {GRN|RED}RV{sfx}, which
-# RadialVelocity homes on each fiber's own RV-table extension header.
-_RV_SFX = {"SCI1": "S1", "SCI2": "S2", "SCI3": "S3", "CAL": "CL", "SKY": "SK"}
 
 
 class PlotL4(Plot):
@@ -85,12 +82,12 @@ class PlotL4(Plot):
     def _combined_rv(self, chip, fiber):
         """Per-CCD orderlet-combined RV [km/s], or None.
 
-        The {GRN|RED}RV{sfx} keyword is routed by set_keyword to the fiber's own
-        RV-table extension header (e.g. GRNRVS2 -> RV3), so it is read from
-        there, not PRIMARY/INSTRUMENT_HEADER.
+        RV{chip} is homed on both PRIMARY (the SCI-combined value) and every
+        RVn table (the per-orderlet value), so RadialVelocity writes the
+        per-fiber one with an explicit ``ext=`` and it is read from there,
+        not PRIMARY/INSTRUMENT_HEADER.
         """
-        c = "GRN" if chip.upper() == "GREEN" else "RED"
-        key = f"{c}RV{_RV_SFX[fiber.upper()]}"
+        key = f"RV{chip.upper()}"
         val = self._ext_header(fiber, "RV").get(key)
         if val is None:
             return None
@@ -161,7 +158,7 @@ class PlotL4(Plot):
         unilluminated orderlet (no CCF) gets a framed 'not illuminated' note
         over the shared ``vref`` range instead of a blank default axis.
         """
-        is_sci = fiber in _SCI_FIBERS
+        is_sci = fiber in DETECTOR["sci_fibers"]
         top = norder * _ORDER_OFFSET
         ax.set_xlabel("RV (km/s)", fontsize=18)
         ax.tick_params(axis="y", which="both", left=False, right=False, labelleft=False)

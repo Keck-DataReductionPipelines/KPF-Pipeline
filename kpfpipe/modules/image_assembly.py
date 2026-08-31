@@ -495,7 +495,7 @@ class ImageAssembly:
         The ACF waveform filenames name the mode outright, and failing that the
         readout duration separates ~12 s fast readout from ~48 s regular.
         """
-        header = self.l0_obj.headers["PRIMARY"]
+        header = self.l0_obj.headers["INSTRUMENT_HEADER"]
         for chip in self.chips:
             prefix = {"GREEN": "GR", "RED": "RD"}[chip.upper()]
             self.read_time[chip.upper()] = (
@@ -537,8 +537,9 @@ class ImageAssembly:
     def _set_headers(self, l1_obj):
         """
         Write assembly metadata to ``l1_obj``: per-amplifier read noise
-        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, READMODE, and
-        the per-chip read time.
+        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, READMODE, and the
+        per-chip read time. ``infer_read_mode`` supplies both READMODE and the
+        ``self.read_time`` the ``TRT{chip}`` writes read.
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]

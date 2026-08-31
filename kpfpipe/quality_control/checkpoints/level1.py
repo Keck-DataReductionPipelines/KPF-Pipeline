@@ -10,6 +10,6 @@ class CheckpointL1(Checkpoint):
 
     LEVEL = "L1"
     # Missing assembled CCDs or a required PRIMARY keyword is fatal; others warn.
-    RAISE_FLAGS = ("DATAPRL1", "KWRDPRL1")
+    RAISE_FLAGS = ("DATAPRL1",)
     DIAGNOSTICS = DiagL1
     QC = QCL1

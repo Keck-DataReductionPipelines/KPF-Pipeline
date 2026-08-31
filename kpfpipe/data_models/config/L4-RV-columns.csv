@@ -1,0 +1,13 @@
+Name,BitDepth,Required,Description
+BJD_TDB,64,True,BJD in barycentric dynamical time
+RV,64,True,radial velocity
+RV_ERR,64,True,uncertainty in radial velocity
+BERV,64,True,barycentric earth radial velocity
+WAVE_START,64,True,start wavelength of RV
+WAVE_END,64,True,end wavelength of RV
+PIXEL_START,,False,start pixel of RV
+PIXEL_END,,False,end pixel of RV
+ORDER_INDEX,,False,order index (0-based)
+ECHELLE_ORDER,,False,physical echelle order number
+WEIGHT,,False,RV weight
+RESIDUAL_DRIFT,,False,residual instrumental drift

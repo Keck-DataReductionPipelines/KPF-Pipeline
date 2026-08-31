@@ -53,7 +53,7 @@ class MockL1:
         self._receipt = []
 
     def set_keyword(self, key, value):
-        # Mirrors KPFDataModel.set_keyword routing: L1-headers.csv routes all
+        # Mirrors KPFDataModel.set_keyword routing: L1-RECEIPT-keywords.csv routes all
         # three keys ImageProcessing writes to RECEIPT. Anything else is
         # unregistered here, so fail loud rather than inventing a PRIMARY
         # fallback the real router would never take.

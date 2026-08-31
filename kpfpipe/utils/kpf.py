@@ -4,7 +4,10 @@ import os
 import re
 from datetime import datetime, timedelta
 
-_OBS_ID_PATTERN = re.compile(r"(KP\.\d{8}\.\d{5}\.\d{2})")
+# The obs_id/KOAID shape, as a string so utils/io.py can embed it in the larger
+# filename patterns it builds, and compiled here for matching.
+OBS_ID_REGEX = r"KP\.\d{8}\.\d{5}\.\d{2}"
+_OBS_ID_PATTERN = re.compile(rf"({OBS_ID_REGEX})")
 _DATECODE_PATTERN = re.compile(r"\d{8}")
 _KPF_TIMESTAMP_PATTERN = re.compile(r"(\d{8}\.\d{5}\.\d{2})")
 

@@ -25,6 +25,19 @@ class DiagL0(Diagnostics):
 
     LEVEL = "L0"
 
+    def run(self):
+        """Run the L0 diagnostics, then mirror GDRSEEV onto EPRV PRIMARY.
+
+        SEEING maps from a diagnostic rather than a native card
+        (``EPRV-header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
+        QUALITY_CONTROL is still empty when standardize_header_format runs, so
+        DiagL0 is its PRIMARY writer too.
+        """
+        results = super().run()
+        if "GDRSEEV" in results:
+            self.kpf_obj.set_keyword("SEEING", results["GDRSEEV"][0])
+        return results
+
     def _record_skycoord(self, rec):
         """ICRS SkyCoord from a CATALOG_RECORD record.
 
@@ -67,7 +80,7 @@ class DiagL0(Diagnostics):
         """
         table = self.kpf_obj.data["CATALOG_RECORD"]
         rec = table[table["source"] == source][0]
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
         obs_time = Time(float(hdr["MJD-OBS"]), format="mjd")
         coord = self._record_skycoord(rec).apply_space_motion(new_obstime=obs_time)
@@ -102,21 +115,23 @@ class DiagL0(Diagnostics):
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
 
     def solar_lunar_geometry(self):
-        """TCSSUN, TCSMOON: deg, Sun altitude and target-Moon separation.
+        """SUNEL, MOONANG: deg, Sun altitude and target-Moon separation.
 
-        Both are evaluated at mid-exposure from the WMKO site. TCSSUN is negative
+        Both are evaluated at mid-exposure from the WMKO site. SUNEL is negative
         with the Sun below the horizon.
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         obs_time = Time(str(hdr["DATE-MID"]), scale="utc")
         sun = get_sun(obs_time).transform_to(
             AltAz(obstime=obs_time, location=KECK_LOCATION)
         )
         moon = get_body("moon", obs_time, KECK_LOCATION).transform_to("icrs")
         pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
+        # EPRV-defined, so these route straight to PRIMARY rather than to the
+        # QUALITY_CONTROL extension the other diagnostics land in.
         return self._tag(
-            TCSSUN=round(float(sun.alt.deg), 5),
-            TCSMOON=round(float(pointing.separation(moon).deg), 2),
+            SUNEL=round(float(sun.alt.deg), 5),
+            MOONANG=round(float(pointing.separation(moon).deg), 2),
         )
 
     solar_lunar_geometry._diag_name = "solar_lunar_geometry"
@@ -218,7 +233,7 @@ class DiagL0(Diagnostics):
         not recorded. One keyword covers both, so the chamber furthest from its
         setpoint is the one reported.
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         offsets = []
         for temp_key, set_key, design in (
             ("ETAV1C3T", "ETAV1C3S", 23.6),
@@ -327,7 +342,7 @@ class DiagL0(Diagnostics):
                 amplitude * (1 + ((px - x0) ** 2 + (py - y0) ** 2) / alpha**2) ** -beta
             )
 
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         center = (float(hdr.get("GCCRPIX1", 343.1)), float(hdr.get("GCCRPIX2", 264.7)))
         best, smallest = None, np.inf
         for alpha in (0.4 / 0.056, 1.0 / 0.056, 2.5 / 0.056):

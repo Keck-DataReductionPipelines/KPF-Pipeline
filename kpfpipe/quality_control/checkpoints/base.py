@@ -59,19 +59,17 @@ class Checkpoint:
     def unregistered_keywords(self):
         """Raise on any non-structural card not registered for its extension.
 
-        For each registry-governed extension present on the product (PRIMARY only
-        where it is EPRV-standard -- L1 onward; the raw WMKO L0 PRIMARY is
-        skipped), a card that is neither structural nor registered (in
-        ``keyword_registry.allowed[ext]``) raises ``ValueError`` and names it.
-        This subsumes the old WMKO-native leak check: a raw instrument keyword
-        kept in INSTRUMENT_HEADER is simply unregistered for an EPRV PRIMARY.
+        For each registry-governed extension present on the product, a card that
+        is neither structural nor registered (in ``keyword_registry.allowed[ext]``)
+        raises ``ValueError`` and names it. PRIMARY is validated at every level
+        including L0: standardize_header_format runs at load, so the PRIMARY a
+        checkpoint sees is always the EPRV one. This subsumes the old WMKO-native
+        leak check: a raw instrument keyword kept in INSTRUMENT_HEADER is simply
+        unregistered for an EPRV PRIMARY.
         """
         reg = self.kpf_obj.keyword_registry
-        skip_primary = str(self.LEVEL).upper() in ("L0", "NONE")
         for ext, allowed in reg.allowed.items():
             if ext not in self.kpf_obj.extensions:
-                continue
-            if ext == "PRIMARY" and skip_primary:
                 continue
             header = self.kpf_obj.headers[ext]
             for raw_key in list(header):
@@ -79,8 +77,9 @@ class Checkpoint:
                 if reg.is_structural(key) or key in allowed:
                     continue
                 raise ValueError(
-                    f"unregistered keyword {key!r} on {ext}; add it to "
-                    "config/L{0,1,2,4}-headers.csv or fix the writer"
+                    f"unregistered keyword {key!r} on {ext}; add it to the "
+                    "appropriate config/{prefix}-{EXTENSION}-keywords.csv or fix "
+                    "the writer"
                 )
 
     unregistered_keywords._checkpoint_name = "unregistered_keywords"
@@ -100,8 +99,8 @@ class Checkpoint:
         """
         header = self.kpf_obj.headers["QUALITY_CONTROL"]
         reg = self.kpf_obj.keyword_registry
-        for key in sorted(reg.qc_flag_keywords_by_level[self.LEVEL]):
-            if key in self.RAISE_FLAGS and header.get(key) == 0:
+        for key in sorted(self.RAISE_FLAGS):
+            if header.get(key) == 0:
                 raise ValueError(f"QC checkpoint failed: {key} = 0 ({self.LEVEL})")
         failing = sorted(key for key in reg.qc_flag_keywords if header.get(key) == 0)
         if failing:

@@ -66,6 +66,15 @@ def load_detector_config():
     _detector["numorder"] = sum(_detector["norder"].values())
     _detector["numtrace"] = len(_detector["fiber_positions"])
 
+    # The science fibers -- the ones carrying starlight, as opposed to SKY and
+    # CAL -- and their 1-based trace indices (trace N is slicer position N-1,
+    # which is what config/trace-map.csv tabulates). Derived here so the catalog
+    # overlay, the RV/CCF modules and the quicklooks read one definition rather
+    # than respelling the list.
+    _positions = _detector["fiber_positions"]
+    _detector["sci_fibers"] = tuple(f for f in _positions if f.startswith("SCI"))
+    _detector["sci_traces"] = tuple(_positions[f] + 1 for f in _detector["sci_fibers"])
+
     return _detector
 
 

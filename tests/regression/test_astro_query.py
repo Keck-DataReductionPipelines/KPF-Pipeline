@@ -67,9 +67,9 @@ def _merge(records, targradv=None, priority=("gaia", "simbad", "wmko")):
     default ``priority`` admits all three sources so these exercise the merge
     itself; the shipped policy is pinned in TestAstrometryPriority."""
     l0 = KPF0()
-    l0.headers["PRIMARY"]["IMTYPE"] = "object"
+    l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
     if targradv is not None:
-        l0.headers["PRIMARY"]["TARGRADV"] = targradv
+        l0.headers["INSTRUMENT_HEADER"]["TARGRADV"] = targradv
     aq = AstroQuery(l0, {"astrometry_priority": priority})
     for source, record in records.items():
         setattr(aq, f"_{source}", record)
@@ -272,7 +272,7 @@ class TestSingleSourceProvenance:
     def test_source_row_provenance_defaults_to_source(self):
         # A source row holds only its own values, so all three labels are its own.
         l0 = KPF0()
-        l0.headers["PRIMARY"]["IMTYPE"] = "object"
+        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G"))
         aq._write_catalog_record("wmko", _record("W"))
@@ -296,7 +296,7 @@ class TestRedshift:
 
     def test_written_row_carries_redshift(self):
         l0 = KPF0()
-        l0.headers["PRIMARY"]["IMTYPE"] = "object"
+        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G", rv=11.0))
         row = l0.data["CATALOG_RECORD"][0]
@@ -305,7 +305,7 @@ class TestRedshift:
     def test_missing_rv_leaves_redshift_nan(self):
         # rv absent -> z is NaN (blank CZ# downstream), not an error.
         l0 = KPF0()
-        l0.headers["PRIMARY"]["IMTYPE"] = "object"
+        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G", rv=None))
         row = l0.data["CATALOG_RECORD"][0]
@@ -342,7 +342,7 @@ class TestReadWmkoHeader:
     @staticmethod
     def _l0_targ(**targ):
         l0 = KPF0()
-        p = l0.headers["PRIMARY"]
+        p = l0.headers["INSTRUMENT_HEADER"]
         p["IMTYPE"] = "object"
         p["OBJECT"] = "testtarget"
         for key, value in targ.items():
@@ -518,9 +518,9 @@ def _simbad_instance(table):
 def _l0_for_query(**primary):
     """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID)."""
     l0 = KPF0()
-    l0.headers["PRIMARY"]["IMTYPE"] = "object"
+    l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
     for key, value in primary.items():
-        l0.headers["PRIMARY"][key] = value
+        l0.headers["INSTRUMENT_HEADER"][key] = value
     return l0
 
 
@@ -647,7 +647,7 @@ class TestExternalQueries:
         record.pop("color")
         record.pop("color_name")
         l0 = KPF0()
-        l0.headers["PRIMARY"]["IMTYPE"] = "object"
+        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("kpf-drp", record)
         row = l0.data["CATALOG_RECORD"][0]
@@ -954,7 +954,7 @@ class TestConstructor:
     def _l0(imtype):
         l0 = KPF0()
         if imtype is not None:
-            l0.headers["PRIMARY"]["IMTYPE"] = imtype
+            l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = imtype
         return l0
 
     @pytest.mark.parametrize("imtype", ["Bias", "Flat", None])

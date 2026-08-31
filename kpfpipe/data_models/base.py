@@ -21,30 +21,45 @@ For example, "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", so reading
 import logging
 
 import numpy as np
+import pandas as pd
 from astropy.io import fits
 from astropy.table import Table
 from rvdata.core.models.base import RVDataModel
+from rvdata.core.models.definitions import (
+    BASE_DRP_CONFIG_COLUMNS,
+    BASE_RECEIPT_COLUMNS,
+)
 
-# The keyword registry lives in its own module as a single KeywordRegistry
-# instance; base.py is its only importer, and re-exports it (below) so sibling
-# data_models files (level2/4) import the same singleton from base.
+# The keyword and extension reference data each live in their own module as a
+# single instance, re-exported below so sibling data_models files (level2/4)
+# import the same singletons from base.
+from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
+from kpfpipe.data_models.config import PATH as _config_path
+from kpfpipe.data_models.extension_manifest import extension_manifest
 from kpfpipe.data_models.keyword_registry import keyword_registry
+from kpfpipe.utils.io import check_filename_convention, kpf_filename
 from kpfpipe.utils.kpf import is_obs_id
+
+# The two extension-naming tables, read once here and shared by every level that
+# registers aliases: trace index -> fiber name, and the 1:1 KPF -> EPRV
+# extension synonyms.
+TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
+EXTENSION_ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
 # Receipt names that are data-model conversions / serialization rather than
 # pipeline modules -- excluded from DRPSTATU so it names the last real stage.
-# ``read``/``from_fits`` are here too: reading a product back must not clobber
-# the status the writer stamped (rvdata >=0.4.0 logs a ``read`` receipt via its
-# ``@receipt_logged`` decorator on ``RVDataModel.read``).
+# ``from_fits`` is here too: reading a product back must not clobber the status
+# the writer stamped.
 _INTERNAL_RECEIPTS = frozenset(
-    {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits", "read"}
+    {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"}
 )
 
-# Re-exported for sibling data_models modules: KPF2/KPF4 call
-# keyword_registry.register_rvdata_extension at import. Listed in __all__ so the
-# re-export is intentional, not an accident of import.
+# Re-exported so anything importing the base also reaches the one registry and
+# manifest instance. Listed in __all__ so the re-export is intentional, not an
+# accident of import.
 __all__ = [
     "KPFDataModel",
+    "extension_manifest",
     "keyword_registry",
 ]
 
@@ -54,15 +69,225 @@ logger = logging.getLogger(__name__)
 class KPFDataModel(RVDataModel):
     """Shared base for every KPF data model (L0, L1, L2, L4)."""
 
-    # The keyword registry singleton, surfaced as a class attribute so anything
-    # handed a KPF data model (the checkpoints validator, level0's WMKO->EPRV
-    # mapping, tests) reaches it via kpf.keyword_registry.
+    # The reference-data singletons, surfaced as class attributes so anything
+    # handed a KPF data model (the checkpoints validator, the WMKO->EPRV
+    # standardization, tests) reaches them via kpf.keyword_registry /
+    # kpf.extension_manifest.
     keyword_registry = keyword_registry
+    extension_manifest = extension_manifest
+
+    # Per-trace extension aliases, as (canonical template, alias suffix) pairs:
+    # ("TRACE#_FLUX", "FLUX") makes SCI2_FLUX an alias of TRACE3_FLUX. Empty for
+    # the levels that register none (L0/L1).
+    _ALIAS_TEMPLATES = ()
+
+    # The alias-aware data dict this level stores its arrays in, or None for the
+    # unaliased levels (L0/L1). Set, the shared build swaps it in and registers
+    # the aliases.
+    _DATA_DICT = None
+
+    # Whether construction stamps the registry's PRIMARY skeleton. L0 does not:
+    # ``_read`` replaces PRIMARY wholesale, so anything stamped at construction
+    # would be discarded, and a KPF0 read from disk must reflect the unaltered
+    # file. ``standardize_header_format`` seeds it once, after the read.
+    _SEEDS_PRIMARY = True
 
     def __init__(self):
         super().__init__()
         self.obs_id = None
         self.dirname = None
+
+    def _build(self):
+        """Build this level's extensions, tables and PRIMARY skeleton.
+
+        The one construction sequence, shared by every level: create every
+        extension the manifest declares; swap in the alias-aware dicts and
+        register the aliases (aliased levels only); fill the typed empty tables;
+        seed PRIMARY and restamp DATALVL for this level; then rebuild
+        EXT_DESCRIPT from the finished extension set. A concrete model's
+        ``__init__`` sets ``self.level`` and calls this.
+        """
+        self._create_manifest_extensions()
+        if self._DATA_DICT is not None:
+            self.extensions = AliasedOrderedDict.from_ordered_dict(self.extensions)
+            self.headers = AliasedOrderedDict.from_ordered_dict(self.headers)
+            self.data = self._DATA_DICT.from_ordered_dict(self.data)
+            self._register_aliases()
+        self._fill_typed_empty_tables()
+        if self._SEEDS_PRIMARY:
+            self._seed_primary()
+            # DATALVL's seeded value is the L0 default; restamp it for this level.
+            self.set_keyword("DATALVL", f"L{self.level}")
+        self._set_ext_descript()
+
+    def _register_aliases(self):
+        """Register this level's KPF-friendly extension aliases, from config.
+
+        Two families, both table-driven: the 1:1 synonyms in ``aliases.csv``
+        (e.g. CA_HK -> ANCILLARY_SPECTRUM), and the per-trace ``_ALIAS_TEMPLATES``
+        keyed off ``trace-map.csv`` (e.g. SCI2_FLUX -> TRACE3_FLUX). An alias
+        whose canonical extension this level does not declare is skipped, so one
+        table serves every level.
+        """
+        for _, row in EXTENSION_ALIASES.iterrows():
+            self._register_alias(str(row["KPF"]).strip(), str(row["EPRV"]).strip())
+        for _, row in TRACE_MAP.iterrows():
+            trace = int(row["Trace"])
+            fiber = str(row["Fiber"]).strip()
+            for template, suffix in self._ALIAS_TEMPLATES:
+                self._register_alias(
+                    f"{fiber}_{suffix}", template.replace("#", str(trace))
+                )
+
+    def _register_alias(self, alias, canonical):
+        """Register ``alias`` for ``canonical`` on all three alias-aware dicts."""
+        if canonical in self.extensions:
+            for d in (self.extensions, self.headers, self.data):
+                d.register_alias(alias, canonical)
+
+    @property
+    def _data_model(self):
+        """This model's keyword/extension tables, named by its data level.
+
+        The masters override this: their tables are ``ML{level}``.
+        """
+        return f"L{self.level}"
+
+    def _create_manifest_extensions(self):
+        """Create every extension this level's manifest declares.
+
+        No ``Required`` gate: that column is a compliance label, so the manifest
+        is a complete and literal statement of the level's shape and every row is
+        created (empty) here.
+        """
+        for name in self.extension_manifest.names(self._data_model):
+            if name not in self.extensions:
+                self.create_extension(
+                    name, self.extension_manifest.fits_type(self._data_model, name)
+                )
+
+    def _seed_primary(self):
+        """Stamp the registry's typed PRIMARY skeleton for this data model.
+
+        Every keyword registered on PRIMARY for this data model, with its
+        header-map default where it has one and blank where it does not, each
+        carrying the registry comment. Later writers overlay what they know. The
+        masters land on their own minimal ``ML*`` skeleton, not the science one.
+        """
+        seed = self.keyword_registry.primary_seed(self._data_model)
+        for keyword, value in seed.items():
+            self.headers["PRIMARY"][keyword] = value
+
+    def _fill_typed_empty_tables(self):
+        """Give the structural extensions their empty typed skeletons.
+
+        The three any manifest may declare: INSTRUMENT_HEADER's placeholder array
+        (its payload is the header, not the data), and the RECEIPT and DRP_CONFIG
+        column sets, which are the EPRV standard's. Each is gated on membership,
+        since not every level declares all three and ``set_data`` raises on an
+        absent extension. RECEIPT is built as an astropy Table directly, not
+        through pandas: ``Table.from_pandas`` collapses empty columns to float64
+        whatever the pandas dtype. L2 and L4 extend this with their own tables.
+        """
+        if "INSTRUMENT_HEADER" in self.extensions:
+            self.set_data("INSTRUMENT_HEADER", np.zeros((1,), dtype=np.float32))
+        if "RECEIPT" in self.extensions:
+            self.set_data(
+                "RECEIPT",
+                Table(
+                    {
+                        c: np.array([], dtype="U256")
+                        for c in BASE_RECEIPT_COLUMNS["Name"]
+                    }
+                ),
+            )
+        if "DRP_CONFIG" in self.extensions:
+            self.set_data(
+                "DRP_CONFIG",
+                pd.DataFrame(columns=BASE_DRP_CONFIG_COLUMNS["Name"].tolist()),
+            )
+
+    def _set_ext_descript(self):
+        """Rebuild EXT_DESCRIPT from the live extension set.
+
+        A no-op for the levels whose manifest declares no such extension (L0, L1
+        and the ML1 masters), so it can be called last in every ``__init__``.
+        """
+        if "EXT_DESCRIPT" not in self.extensions:
+            return
+        self.set_data(
+            "EXT_DESCRIPT",
+            pd.DataFrame(
+                [
+                    (name, self.extension_manifest.description(self._data_model, name))
+                    for name in self.extensions
+                ],
+                columns=["Name", "Description"],
+            ),
+        )
+
+    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+        """Read an EPRV-standard FITS HDUList into this model.
+
+        One read path at every level. ``RVDataModel.read`` dispatches L2/L4 to
+        ``RV2._read``/``RV4._read`` through a hardcoded class reference keyed on
+        ``self.level`` rather than through the MRO, so this override -- not the
+        class bases -- is what detaches rvdata's name-guessing readers. It also
+        drops rvdata's ``@receipt_logged`` ``read`` row and its read-time PRIMARY
+        recast, so a product reads back exactly as written.
+        """
+        if instrument is not None:
+            raise ValueError(
+                f"{type(self).__name__}.read reads EPRV-standard FITS only; "
+                f"instrument={instrument!r} is not supported"
+            )
+        self._read(hdul)
+
+    def _read(self, hdul):
+        """Read every extension from an EPRV-standard FITS HDUList.
+
+        The FITS type comes from the astropy HDU class, and the manifest supplies
+        the known-extension gate; an unknown extension raises.
+        """
+        known = set(self.extension_manifest.names(self._data_model))
+        for hdu in hdul:
+            ext_name = hdu.name
+
+            if isinstance(hdu, fits.PrimaryHDU):
+                fits_type = "PrimaryHDU"
+            elif isinstance(hdu, (fits.ImageHDU, fits.CompImageHDU)):
+                fits_type = "ImageHDU"
+            elif isinstance(hdu, fits.BinTableHDU):
+                fits_type = "BinTableHDU"
+            else:
+                continue
+
+            if ext_name != "PRIMARY" and ext_name not in self.extensions:
+                if ext_name not in known:
+                    raise ValueError(
+                        f"Non-standard extension {ext_name!r} in L{self.level} file"
+                    )
+                self.create_extension(ext_name, fits_type)
+
+            if ext_name == "PRIMARY":
+                pass
+            elif ext_name == "RECEIPT":
+                df = Table.read(hdu).to_pandas()
+                receipt_columns = BASE_RECEIPT_COLUMNS["Name"].tolist()
+                if df.empty:
+                    df = pd.DataFrame(columns=receipt_columns)
+                else:
+                    all_cols = df.columns.union(receipt_columns, sort=False)
+                    df = df.reindex(columns=all_cols).fillna("")
+                self.receipt = df
+            elif fits_type == "ImageHDU":
+                # np.array (not asarray) materializes the memmapped HDU into RAM
+                # before from_fits closes the file; a view would dangle afterward.
+                self.set_data(ext_name, np.array(hdu.data))
+            elif fits_type == "BinTableHDU":
+                self.set_data(ext_name, Table.read(hdu))
+
+            self.set_header(ext_name, hdu.header)
 
     @classmethod
     def from_fits(cls, fn, instrument=None, **kwargs):
@@ -70,36 +295,36 @@ class KPFDataModel(RVDataModel):
 
         The single read chokepoint for every KPF data model: one INFO record
         per FITS read, naming the concrete class and the path, then delegate
-        to the inherited reader (rvdata's for L2/L4 via RV2/RV4 in the MRO).
+        to ``read`` -> ``_read``, the one manifest-driven reader.
 
         Ensures ``obs_id`` is carried in memory after the read. L0 (and any
         product whose filename embeds the obs_id) resolves it during ``read``;
         L1/L2/L4 filenames are timestamp-based, so a read there recovers the
-        obs_id from the ORIGID provenance card instead (see ``_obs_id_from_receipt``).
+        obs_id from the ORIGID provenance card instead (see ``_obs_id_from_primary``).
         The ``to_kpfN`` converters set ``obs_id`` directly, so this only fills the
         from_fits path.
 
         CATALOG_RECORD is normalized here for every level: astropy's FITS reader
         returns a missing (NaN) cell masked, and a masked cell is not NaN
         (``np.isnan`` on one is falsy), so a missing-value check would read it as
-        present. This sits at the chokepoint rather than in each ``_read`` because
-        L2/L4 read through rvdata's readers.
+        present. It sits at the chokepoint, after the read, rather than inside
+        ``_read``.
         """
         logger.info("reading %s from %s", cls.__name__, fn)
         obj = super().from_fits(fn, instrument=instrument, **kwargs)
         if getattr(obj, "obs_id", None) is None:
-            obj.obs_id = obj._obs_id_from_receipt()
+            obj.obs_id = obj._obs_id_from_primary()
         table = obj.data.get("CATALOG_RECORD")
         if table is not None and getattr(table, "has_masked_values", False):
             obj.set_data("CATALOG_RECORD", table.filled(np.nan))
         return obj
 
-    def _obs_id_from_receipt(self):
-        """Recover the obs_id from the ORIGID card on RECEIPT (``None`` if absent
+    def _obs_id_from_primary(self):
+        """Recover the obs_id from the ORIGID card on PRIMARY (``None`` if absent
         or invalid, e.g. masters). ORIGID is stamped at L0 and forwarded on the
-        RECEIPT header, so it is the obs_id source for a from_fits'd L1/L2/L4."""
-        receipt = self.headers.get("RECEIPT")
-        origid = receipt.get("ORIGID") if receipt is not None else None
+        PRIMARY header, so it is the obs_id source for a from_fits'd L1/L2/L4."""
+        primary = self.headers.get("PRIMARY")
+        origid = primary.get("ORIGID") if primary is not None else None
         return origid if is_obs_id(origid) else None
 
     @staticmethod
@@ -132,12 +357,17 @@ class KPFDataModel(RVDataModel):
     def set_keyword(self, key, value, ext=None):
         """Write a registered keyword to its home extension header.
 
-        Looks ``key`` up in the merged KPF + EPRV keyword registry
-        (``config/L{0,1,2,4}-headers.csv`` plus the EPRV PRIMARY keywords) and
-        writes ``value`` to the extension named there, with the registry
-        Description as the FITS comment. This is the single write path for
-        registered keywords, so a keyword always lands on the same extension with
-        the same comment -- callers never name a comment.
+        Looks ``key`` up in the keyword registry (the
+        ``config/{prefix}-{EXTENSION}-keywords.csv`` tables) and writes ``value``
+        to the extension named there, with the registry comment
+        (``Description [Units]``) as the FITS comment. This is the single write
+        path for registered keywords, so a keyword always lands on the same
+        extension with the same comment -- callers never name a comment.
+
+        ``value`` is coerced to the registry ``DataType``, the header counterpart
+        of the manifest ``BitDepth`` check on ``set_data``: a card is written at
+        its declared width and a value that will not convert raises rather than
+        landing wrong. A None writes the blank seeded card through unchanged.
 
         ``ext`` targets a specific extension for EPRV per-extension cards that
         have no single routed home because they recur on every orderlet's
@@ -151,35 +381,48 @@ class KPFDataModel(RVDataModel):
         KeyError
             If ``key`` is registered nowhere (default), or not registered for
             ``ext`` (targeted); register it in the appropriate
-            ``config/L{level}-headers.csv`` before writing it.
+            ``config/{prefix}-{EXTENSION}-keywords.csv`` before writing it.
         ValueError
             If the target extension does not exist on this object (a config
             error -- the extension must be created before the write).
+        TypeError
+            If ``value`` does not convert to the registered ``DataType``.
         """
         name = str(key).strip()
         if ext is None:
-            route = self.keyword_registry.routing.get(name)
-            if route is None:
+            ext = self.keyword_registry.routing.get(name)
+            if ext is None:
                 raise KeyError(
-                    f"keyword {name!r} is not registered; add it to "
-                    "config/L{0,1,2,4}-headers.csv before writing it"
+                    f"keyword {name!r} is not registered; add it to the "
+                    "appropriate config/{prefix}-{EXTENSION}-keywords.csv before "
+                    "writing it"
                 )
-            ext, comment = route
+            # A routed home is a real registry row, so the comment cannot miss.
+            comment = self.keyword_registry.comment_for(name, ext)
         else:
             if hasattr(self.extensions, "_resolve"):
                 ext = self.extensions._resolve(ext)
-            comment = self.keyword_registry.comment_for(name, ext)
-            if comment is None:
+            if not self.keyword_registry.is_registered(name, ext):
                 raise KeyError(
                     f"keyword {name!r} is not registered for extension {ext!r}; "
-                    "register it in the appropriate config/L{0,1,2,4}-headers.csv "
-                    "before writing it"
+                    "register it in the appropriate "
+                    "config/{prefix}-{EXTENSION}-keywords.csv before writing it"
                 )
+            comment = self.keyword_registry.comment_for(name, ext)
         if ext not in self.extensions:
             raise ValueError(
                 f"cannot write {name!r}: extension {ext!r} does not exist on "
                 f"{type(self).__name__}"
             )
+        datatype = self.keyword_registry.datatype_for(name, ext)
+        if value is not None and datatype:
+            try:
+                value = self.keyword_registry.coerce(datatype.lower(), value)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise TypeError(
+                    f"keyword {name!r} on {ext!r} is declared {datatype}; "
+                    f"cannot write {value!r}: {exc}"
+                ) from None
         self.headers[ext][name] = (value, comment)
 
     def set_data(self, ext_name, data):
@@ -193,12 +436,8 @@ class KPFDataModel(RVDataModel):
         if hasattr(self.data, "_chip_split"):
             split = self.data._chip_split(ext_name)
             if split is not None:
-                # The chip-prefix write goes straight into the underlying
-                # canonical array (sized from the first write's dtype), bypassing
-                # rvdata's MinBitDepth check in super().set_data. Enforce it here
-                # so both write paths honor the born-64 WAVE / 8-bit policy.
                 canonical = self.data._resolve(split[0])
-                data = self._coerce_to_min_bit_depth(canonical, data, ext_name)
+                self._assert_bit_depth(canonical, data, ext_name)
                 self.data[ext_name] = data
                 return
         if hasattr(self.extensions, "_resolve"):
@@ -211,40 +450,35 @@ class KPFDataModel(RVDataModel):
             and data.dtype.names is not None
         ):
             data = Table(data)
+        self._assert_bit_depth(ext_name, data, ext_name)
+        # rvdata's upcast branch is unreachable: it is gated on its own
+        # _get_min_bit_depth, which KPF never overrides, so it always reads None.
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
         if ext_name == "RECEIPT" and isinstance(data, Table):
             self.receipt = data.to_pandas()
 
-    def _coerce_to_min_bit_depth(self, canonical_ext, data, label):
-        """Upcast ``data`` to satisfy ``canonical_ext``'s MinBitDepth, mirroring
-        rvdata's ``set_data`` enforcement (and its warning) for the chip-prefix
-        write path that bypasses it. A no-op with no requirement, an empty array,
-        or data already at depth (and for KPF4, whose MinBitDepth is None).
+    def _assert_bit_depth(self, canonical_ext, data, label):
+        """Raise unless ``data`` matches ``canonical_ext``'s declared BitDepth.
+
+        Width only: byte order is irrelevant (a FITS round-trip returns ``>f4``,
+        still 32 bits) and ``np.bool_`` satisfies the 8-bit master MASK rows it is
+        held as in memory. A no-op with no declaration, non-array data, or an
+        empty array -- every extension is born ``np.array([])``, which is 64-bit,
+        and reading an unpopulated product feeds that straight back through here.
         """
-        min_depth = self._get_min_bit_depth(canonical_ext)
+        depth = self.extension_manifest.bit_depth(self._data_model, canonical_ext)
         if (
-            min_depth is None
+            depth is None
             or not isinstance(data, np.ndarray)
             or data.size == 0
-            or data.dtype.itemsize * 8 >= min_depth
+            or data.dtype.itemsize * 8 == depth
         ):
-            return data
-        if np.issubdtype(data.dtype, np.floating):
-            target = np.dtype(f"float{min_depth}")
-        elif np.issubdtype(data.dtype, np.unsignedinteger):
-            target = np.dtype(f"uint{min_depth}")
-        else:
-            target = np.dtype(f"int{min_depth}")
-        logger.warning(
-            "Extension '%s' has dtype %s (%d-bit) but MinBitDepth=%d. Upcasting to %s.",
-            label,
-            data.dtype,
-            data.dtype.itemsize * 8,
-            min_depth,
-            target.name,
+            return
+        raise TypeError(
+            f"{label}: manifest declares {depth}-bit, got {data.dtype} "
+            f"({data.dtype.itemsize * 8}-bit)"
         )
-        return data.astype(target)
 
     def set_header(self, ext_name, header):
         """Set an extension header, resolving KPF aliases before the base class
@@ -268,57 +502,121 @@ class KPFDataModel(RVDataModel):
                     target.headers[ext][card.keyword] = (card.value, card.comment)
 
     def receipt_add_entry(self, function, args, status):
-        """Record a processing step, and update DRPSTATU for pipeline modules.
+        """Record a processing step, and stamp DRPSTATU for pipeline modules.
 
         Signature matches rvdata >=0.4.0: ``function`` names the step, ``args``
         is a key=value provenance string (``""`` when not applicable), ``status``
         is ``"PASS"``/``"FAIL"``.
+
+        DRPSTATU becomes '<Module Name> module complete' (the form
+        ``L0-PRIMARY-keywords.csv`` documents); conversion and serialization
+        receipts (``_INTERNAL_RECEIPTS``) are skipped so it names the last real
+        stage.
         """
         super().receipt_add_entry(function, args, status)
-        if status == "PASS":
-            self._update_drpstatus(function)
-
-    def _update_drpstatus(self, function):
-        """Stamp DRPSTATU = '<Module Name> module complete' for a completed module.
-
-        Called from ``receipt_add_entry``; conversions/serialization receipts
-        (``_INTERNAL_RECEIPTS``) are skipped so DRPSTATU names the last real stage.
-        DRPSTATU's registry home is RECEIPT, so ``set_keyword`` routes it there.
-        """
-        if function in _INTERNAL_RECEIPTS:
-            return
-        if "RECEIPT" not in self.extensions:
-            return
-        label = function.replace("_", " ").title()
-        self.set_keyword("DRPSTATU", f"{label} module complete")
+        if (
+            status == "PASS"
+            and function not in _INTERNAL_RECEIPTS
+            and "RECEIPT" in self.extensions
+        ):
+            label = function.replace("_", " ").title()
+            self.set_keyword("DRPSTATU", f"{label} module complete")
 
     def _create_hdul(self):
         """Sync ``self.receipt`` into the RECEIPT extension before writing (rvdata
         serializes ``self.data["RECEIPT"]``, not ``self.receipt``), creating the
         extension if L0/L1 omitted it. PRIMARY comments are preserved by rvdata's
-        own ``_create_hdul``, so no PRIMARY rebuild is needed."""
+        own ``_create_hdul``, so no PRIMARY rebuild is needed.
+
+        Also the one place FILENAME can be withheld: rvdata's ``to_fits`` stamps
+        it on PRIMARY unconditionally, immediately before calling this, so a
+        product that must not carry it (see ``_stamps_filename``) drops it here,
+        between the stamp and the write.
+        """
         if self.receipt is not None and not self.receipt.empty:
             if "RECEIPT" not in self.extensions:
                 self.create_extension("RECEIPT", "BinTableHDU")
             self._sync_receipt_to_extension()
+        if not self._stamps_filename:
+            # No native WMKO key maps to FILENAME (EPRV-header-map.csv), so an
+            # unstandardized PRIMARY only ever has the card rvdata just added.
+            del self.headers["PRIMARY"]["FILENAME"]
         return super()._create_hdul()
 
-    def generate_standard_filename(self):
-        """Abstract: every concrete KPF model builds its own standard filename.
+    @property
+    def _stamps_filename(self):
+        """Whether FILENAME belongs on this product's PRIMARY when it is written.
 
-        KPFDataModel is never instantiated directly -- only inherited -- so reaching
-        this means a subclass failed to define the method.
+        True for every EPRV-standard product. ``KPF0`` overrides it: FILENAME is
+        an EPRV PRIMARY keyword, so a raw (unstandardized) L0 must round-trip
+        with the native header it was read with.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} must define generate_standard_filename"
-        )
+        return True
+
+    def to_fits(self, fn=None):
+        """Write this product to ``fn``, defaulting to its standard filename.
+
+        The single write path for every level. KPF keeps a one-filepath
+        signature, so every call site passes a single path; rvdata >=0.4.0 names
+        the parameter ``out_filename``, so this shim is what bridges the two. The
+        rvdata implementation does the rest -- receipt row, warn-only filename
+        check, FILENAME stamp, ``_create_hdul``, then ``makedirs``/``writeto``.
+        """
+        if fn is None:
+            fn = self.generate_standard_filename()
+        out_path = super().to_fits(out_filename=fn)
+        logger.info("wrote %s to %s", type(self).__name__, out_path)
+        return out_path
+
+    def info(self):
+        """Print a summary of this product's extensions.
+
+        One row per extension -- name, type, shape/size -- with an Aliases column
+        for the levels whose extensions carry KPF-friendly synonyms (L2/L4).
+        """
+        if self.filename:
+            print(f"KPF L{self.level}: {self.filename}")
+        else:
+            print(f"Empty {type(self).__name__} data product")
+        if self.obs_id:
+            print(f"Obs ID: {self.obs_id}")
+
+        aliased = hasattr(self.extensions, "aliases_for")
+        width = 25 if aliased else 20
+        header = f"\n{'Extension':<{width}s} "
+        if aliased:
+            header += f"{'Aliases':<25s} "
+        print(f"{header}{'Type':<15s} {'Shape/Size':<20s}")
+        print("=" * (85 if aliased else 55))
+
+        for name, ext_type in self.extensions.items():
+            if name == "PRIMARY":
+                kind = "header"
+                size = f"{len(self.headers.get(name, {}))} cards"
+            else:
+                ext = self.data.get(name)
+                if isinstance(ext, np.ndarray) and ext.size > 0:
+                    kind, size = "array", str(ext.shape)
+                elif hasattr(ext, "__len__") and len(ext) > 0:
+                    kind, size = "table", f"{len(ext)} rows"
+                else:
+                    kind, size = ext_type, "(empty)"
+            row = f"{name:<{width}s} "
+            if aliased:
+                aliases = () if name == "PRIMARY" else self.extensions.aliases_for(name)
+                row += f"{', '.join(sorted(aliases)):<25s} "
+            print(f"{row}{kind:<15s} {size:<20s}")
+
+    def generate_standard_filename(self):
+        """This product's standard basename, built from ``obs_id`` and its level.
+
+        Raises
+        ------
+        ValueError
+            If ``obs_id`` is unset or invalid.
+        """
+        return kpf_filename(self.obs_id, f"L{self.level}")
 
     def check_filename_convention(self, filename):
-        """Abstract: every concrete KPF model declares its own filename convention.
-
-        KPFDataModel is never instantiated directly -- only inherited -- so reaching
-        this means a subclass failed to define the method.
-        """
-        raise NotImplementedError(
-            f"{type(self).__name__} must define check_filename_convention"
-        )
+        """Warn-only check of ``filename`` against this level's naming rule."""
+        return check_filename_convention(filename, f"L{self.level}")

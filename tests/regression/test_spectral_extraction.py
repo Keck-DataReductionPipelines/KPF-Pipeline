@@ -283,6 +283,7 @@ class TestSpectralExtractionRealData:
     @pytest.fixture(scope="class")
     def l2_from_flat(self):
         l0 = KPF0.from_fits(L0_FILE)
+        l0.standardize_header_format()
         ia = ImageAssembly(l0)
         l1 = ia.perform()
         se = SpectralExtraction(l1)

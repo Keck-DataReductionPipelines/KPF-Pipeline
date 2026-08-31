@@ -394,7 +394,7 @@ def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
         ("RED", NORDER_GREEN, NORDER_RED),
     ]:
         wave = np.stack([rows[start + i][0] for i in range(n)]).astype(np.float64)
-        flux = np.stack([rows[start + i][1] for i in range(n)]).astype(np.float64)
+        flux = np.stack([rows[start + i][1] for i in range(n)]).astype(np.float32)
         for fiber in _FIBERS:
             kpf2.set_data(f"{chip}_{fiber}_WAVE", wave.copy())
             kpf2.set_data(f"{chip}_{fiber}_FLUX", flux.copy())
@@ -727,7 +727,7 @@ class TestPerform:
             assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
             assert rv_table["ECHELLE_ORDER"][0] == 137
             # The per-bin CCF variance cube round-trips as an image extension.
-            assert hdul["CCF_VAR3"].data.shape == (NORDER, NVEL)
+            assert hdul["CCF3_VAR"].data.shape == (NORDER, NVEL)
 
 
 class TestConstructor:

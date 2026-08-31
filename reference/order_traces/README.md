@@ -46,15 +46,16 @@ Roles:
 ## Provenance
 
 Selected from 1899 order traces over 960 nights (every master flat that traced
-successfully, 2022-12 to 2026-04) by `notes/order_trace_stability.py`, which
-measures each epoch's centerlines against the era's median centerline. Within
-an era and away from the jumps below, the traces hold to 0.01-0.08 pixel RMS,
-so one reference per stretch is enough; figures are in
-`notes/order_trace_stability/`.
+successfully, 2022-12 to 2026-04) by a one-off stability analysis that measures
+each epoch's centerlines against the era's median centerline. Within an era and
+away from the jumps below, the traces hold to 0.01-0.08 pixel RMS, so one
+reference per stretch is enough.
 
-Jumps were found by `find_jumps` in that script: a level change of at least
-0.025 pixel that is at least 15x the local scatter, measured across the 8
-epochs either side, per chip. Detected jumps, with the chip that moved:
+That analysis was exploratory and is not kept in the repo; the numbers it
+produced are recorded here, and re-running it means re-deriving it from the
+master flats. Jumps came from the same pass: a level change of at least 0.025
+pixel that is at least 15x the local scatter, measured across the 8 epochs
+either side, per chip. Detected jumps, with the chip that moved:
 
 | Era | Jump | Chip | Step [pix] |
 |-----|------|------|-----------|
@@ -72,9 +73,9 @@ Era 3.0 has no jump.
 ## Known limits
 
 - **Era 1.0 before 2022-12-07 has no reference.** The era opens 2022-11-09, but
-  the first nights either lack a master flat or produced an unusable one
-  (`notes/bad_master_flats.txt`), so frames from 2022-11-09 to 2022-12-06 raise
-  `FileNotFoundError` in spectral extraction.
+  the first nights either lack a master flat or produced an unusable one, so
+  frames from 2022-11-09 to 2022-12-06 raise `FileNotFoundError` in spectral
+  extraction.
 - **A file dated `<datecode>` is timestamped at 00:00 UT of that date**, while
   several of these traces come from that night's *evening* flat. Where a jump
   happened between a night's morning and evening flat (2023-07-31, 2025-02-25,

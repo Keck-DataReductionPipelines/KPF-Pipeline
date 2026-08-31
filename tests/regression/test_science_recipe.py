@@ -155,6 +155,8 @@ class _FrozenAstroQuery:
         aq = self._aq
         for source, record in _CATALOG_CAPTURE.items():
             aq._write_catalog_record(source, dict(record))
+        for keyword, value in aq._catalog_primary_cards().items():
+            aq.l0_obj.set_keyword(keyword, value)
         aq.l0_obj.receipt_add_entry("astro_query", "", "PASS")
         return aq.l0_obj
 
@@ -325,23 +327,20 @@ class TestScienceRecipe:
         different input needs a deliberate re-pin, not a fix.
         """
         prim = l4.headers["PRIMARY"]
-        assert prim["RV"] == pytest.approx(11.29034877686747, abs=1e-6)
-        assert prim["BERV"] == pytest.approx(-18.507963847544822, abs=1e-6)
+        assert prim["RV"] == pytest.approx(11.290367394940835, abs=1e-6)
+        assert prim["BERV"] == pytest.approx(-18.507945234900816, abs=1e-6)
         assert prim["BJDTDB"] == pytest.approx(2460405.9689188506, abs=1e-9)
 
     def test_provenance_keywords_set(self, l2):
-        # DRPTAG stays on the L2 PRIMARY; the other provenance cards live on
-        # the L2 RECEIPT.
+        # The EPRV DRPTAG and its WMKO counterpart DRPVERNO both sit on PRIMARY,
+        # as do the rest of the provenance cards.
         prim = l2.headers["PRIMARY"]
-        receipt = l2.headers["RECEIPT"]
         version = importlib.metadata.version("kpfpipe")
         assert prim.get("DRPTAG") == version
-        assert all(k not in prim for k in ("DRPVERNO", "DRPSTATU", "PROGID", "KOAID"))
-        assert receipt.get("DRPVERNO") == version
-        assert "PROGID" in receipt
-        assert "KOAID" in receipt
+        assert prim.get("DRPVERNO") == version
+        assert prim.get("PROGID") and prim.get("KOAID")
         # BarycentricCorrection is the last module to run before the L2 write.
-        assert receipt.get("DRPSTATU") == "Barycentric Correction module complete"
+        assert prim.get("DRPSTATU") == "Barycentric Correction module complete"
 
     @pytest.mark.parametrize(
         "ext, blue_end, red_end",
@@ -466,8 +465,8 @@ def _wire_science_recipe(tmp_path, monkeypatch):
 
     class StubKPF0:
         @staticmethod
-        def from_fits(path):
-            record["calls"].append(("from_fits", path, ()))
+        def from_fits(path, standardize=False):
+            record["calls"].append(("from_fits", path, (standardize,)))
             return Product("l0")
 
     monkeypatch.setattr(recipe, "KPF0", StubKPF0)
@@ -518,8 +517,9 @@ class TestScienceRecipeWiring:
         return record
 
     def test_stages_run_in_order(self, run):
-        # CheckpointL0 runs BEFORE ImageAssembly on purpose: QCL0 writes the L0
-        # QC flags that to_kpf1 propagates into the L1/L2/L4 products.
+        # The load standardizes (next test), so every stage reads one PRIMARY,
+        # the EPRV one. CheckpointL0 runs BEFORE ImageAssembly on purpose: QCL0
+        # writes the L0 QC flags that to_kpf1 propagates into L1/L2/L4.
         assert [call[0] for call in run["calls"]] == [
             "from_fits",
             "AstroQuery",
@@ -540,6 +540,12 @@ class TestScienceRecipeWiring:
             "PlotL4",
             "CheckpointL4",
         ]
+
+    def test_the_load_standardizes(self, run):
+        # The conversion is no longer a stage of its own; the recipe gets it by
+        # loading with standardize=True, so nothing downstream sees a native PRIMARY.
+        load = next(call for call in run["calls"] if call[0] == "from_fits")
+        assert load[2] == (True,)
 
     def test_each_stage_receives_the_previous_product(self, run):
         # A mis-wired hand-off (SpectralExtraction fed the L0, RadialVelocity fed

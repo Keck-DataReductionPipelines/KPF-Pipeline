@@ -224,6 +224,19 @@ def write_science_l0(path, *, primary_cards=None, **kwargs):
     )
 
 
+def standardized_l0(path):
+    """Load an L0 from ``path``, standardized.
+
+    Every L0 module runs after standardization in production, so a fixture whose
+    object reaches DiagL0/QCL0/AstroQuery/CheckpointL0/ImageAssembly/to_kpf1 must
+    too: native cards live on INSTRUMENT_HEADER from then on, and PRIMARY is the
+    EPRV header.
+    """
+    from kpfpipe.data_models.level0 import KPF0
+
+    return KPF0.from_fits(str(path), standardize=True)
+
+
 def seed_catalog_record(kpf0, record=None):
     """Write the wmko and merged kpf-drp CATALOG_RECORD rows.
 
@@ -245,7 +258,7 @@ def set_fiber_arrays(
     """Populate ``{chip}_{fiber}_{suffix}`` with a constant for the given fibers.
 
     ``ncol`` is required on purpose -- see the module docstring. ``dtype`` must be
-    float64 for ``WAVE``, whose EPRV MinBitDepth the write path enforces.
+    float64 for ``WAVE``, whose EPRV BitDepth the write path enforces.
     """
     for chip in chips:
         for fiber in fibers:
@@ -298,7 +311,7 @@ def make_l4(
     ``rv_filled=False`` seeds NaN RVs, as a CrossCorrelation-only L4 has before
     RadialVelocity runs.
 
-    Does not seed the required PRIMARY keywords; call ``seed_required_primary``
+    Does not seed the PRIMARY skeleton; call ``KPF4()._seed_primary()``
     when the test needs KWRDPRL4 to pass.
     """
     from kpfpipe.data_models.level4 import KPF4
@@ -341,15 +354,3 @@ def make_l4(
     if bjdrng is not None:
         l4.headers["QUALITY_CONTROL"]["BJDRNG"] = bjdrng
     return l4
-
-
-def seed_required_primary(kpf, qc_cls):
-    """Seed every PRIMARY keyword ``qc_cls`` requires, skipping ones already set.
-
-    KWRDPR* is presence-only, so sentinel values suffice; reusing the production
-    ``_required_primary_keywords`` avoids drift. ``qc_cls`` is a parameter rather
-    than an import, so this module stays free of quality_control.
-    """
-    for kw in qc_cls(kpf)._required_primary_keywords():
-        if kw not in kpf.headers["PRIMARY"]:
-            kpf.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
