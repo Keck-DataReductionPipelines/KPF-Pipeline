@@ -84,6 +84,6 @@ def expected_routing():
 
 def expected_comment(description, units):
     """The FITS comment a row implies: ``Description [Units]``."""
-    if not units or units.lower() == "n/a":
+    if not units:
         return description
     return f"{description} [{units}]"

@@ -1,5 +1,5 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-CTYPE1,Name of axis 1,N/A,string,Order-N,BarycentricCorrection
-CTYPE2,Name of axis 2,N/A,string,N/A,
+CTYPE1,Name of axis 1,,string,Order-N,BarycentricCorrection
+CTYPE2,Name of axis 2,,string,N/A,
 BJDGREEN,Photon-weighted mid-time for the GREEN CCD,BJD_TDB,float,2460405.96455,BarycentricCorrection
 BJDRED,Photon-weighted mid-time for the RED CCD,BJD_TDB,float,2460405.96457,BarycentricCorrection

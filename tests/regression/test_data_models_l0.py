@@ -376,7 +376,7 @@ class TestPrimarySeed:
         assert prim["NUMTRACE"] == 5 and isinstance(prim["NUMTRACE"], int)
         # The comment comes from the registry Description, not the caller.
         assert prim.comments["INSTRUME"] == "Instrument name"
-        # Description [Units], with the EPRV "N/A" placeholder suppressed.
+        # Description [Units]; a unit-less row carries the description alone.
         assert prim.comments["EXPTIME"] == "Exposure time [s]"
 
     def test_datalvl_is_the_model_level(self):

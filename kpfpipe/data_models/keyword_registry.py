@@ -339,11 +339,10 @@ class KeywordRegistry:
     def _compose_comment(description, units):
         """The FITS comment for a registry row: ``Description [Units]``.
 
-        Unit-less rows (blank or the EPRV ``N/A`` placeholder) carry the
-        description alone.
+        A unit-less row leaves ``Units`` blank and carries the description alone.
         """
         u = str(units).strip()
-        if not u or u.lower() == "n/a":
+        if not u:
             return description
         return f"{description} [{u}]"
 

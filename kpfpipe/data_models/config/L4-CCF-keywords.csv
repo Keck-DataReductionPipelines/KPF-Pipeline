@@ -1,8 +1,8 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-CTYPE1,Name of axis 1,N/A,string,Velocity,CrossCorrelation
-CTYPE2,Name of axis 2,N/A,string,Order-N,CrossCorrelation
+CTYPE1,Name of axis 1,,string,Velocity,CrossCorrelation
+CTYPE2,Name of axis 2,,string,Order-N,CrossCorrelation
 VELSTART,Velocity grid start,km/s,Float,-100.0,CrossCorrelation
 VELSTEP,Velocity grid step size,km/s,Float,0.25,CrossCorrelation
-VELNSTEP,Number of steps in velocity grid,N/A,int,801,CrossCorrelation
-CCFMASK,Mask used to generate CCF,N/A,String,espresso_G2,CrossCorrelation
+VELNSTEP,Number of steps in velocity grid,,int,801,CrossCorrelation
+CCFMASK,Mask used to generate CCF,,String,espresso_G2,CrossCorrelation
 VELWIDTH,CCF mask hole full width,km/s,float,1.5,CrossCorrelation
