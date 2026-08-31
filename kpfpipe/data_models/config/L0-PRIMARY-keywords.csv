@@ -1,14 +1,12 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-INSTRUME,Instrument name,,String,KPF,KPF0.standardize_header_format
-INSTERA,Tag tracking permanent instrument changes,,String,KPF-2,KPF0.standardize_header_format
 FILENAME,Name of the FITS file,,String,kpf_L1_20240405T110833.fits,KPF*.to_fits
 DATALVL,Data product base level,,String,L0,KPF0.standardize_header_format
 ORIGIN,Entity that created this file,,String,Keck,KPF0.standardize_header_format
 DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,KPF0.standardize_header_format
 
 KOAID,KOA archive ID (WMKO req.),,String,KP.20240405.40113.57.fits,KPF0.standardize_header_format
-PROGID,WMKO program ID (WMKO req.),,String,K123,KPF0.standardize_header_format
 ORIGID,Original L0 observation ID,,String,KP.20240405.40113.57,KPF0.standardize_header_format
+PROGID,WMKO program ID (WMKO req.),,String,K123,KPF0.standardize_header_format
 DRPSTATU,DRP reduction status (WMKO req.),,String,Radial Velocity module complete,KPF0.standardize_header_format
 DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),,String,3.0.0,KPF0.standardize_header_format
 DRPTAG,RV DRP version,,String,3.0.0,KPF0.standardize_header_format
@@ -16,9 +14,11 @@ DRPHASH,Git commit hash,,String,277e3a1d99628d9fcef494797887663119,KPF0.standard
 EPRVTAG,Version of EPRV standard applied,,String,v0.4.0,KPF0.standardize_header_format
 VOCLASS,EPRV standard release identifier,,String,EPRVSTANDARD2026.06,KPF0.standardize_header_format
 
+INSTRUME,Instrument name,,String,KPF,KPF0.standardize_header_format
+INSTERA,Tag tracking permanent instrument changes,,String,KPF-2,KPF0.standardize_header_format
+PINAME,Program PI name,,String,Howard,
 PROGRAM,Observing program name,,String,K123,
 ORGANIZA,Data owner organization for licensing,,String,WMKO,
-PINAME,Program PI name,,String,Howard,
 OBSERVER,Observer,,String,Isaacson,
 OBSERVAT,Observatory name,,String,Keck Observatory,KPF0.standardize_header_format
 TELESCOP,Telescope name,,String,Keck I,KPF0.standardize_header_format
