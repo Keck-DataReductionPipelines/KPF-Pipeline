@@ -24,11 +24,8 @@ __all__ = ["KPF4", "NORDER_GREEN"]
 
 _RV_COLUMNS = pd.read_csv(_config_path / "L4-RV-columns.csv")
 
-# Build a set of valid chip-prefix keys for fast membership testing.
-# e.g., {"GREEN_SCI2_CCF": ("SCI2_CCF", "GREEN"),
-#        "GREEN_SCI2_RV": ("SCI2_RV", "GREEN")}.
-# Each maps a chip-prefixed key -> (fiber_alias, chip).
-_L4_CHIP_PREFIX_KEYS = {}
+# e.g. "GREEN_SCI2_CCF" -> ("SCI2_CCF", "GREEN")
+_L4_CHIP_PREFIX_KEYS = {}  # chip-prefixed key -> (fiber_alias, chip)
 for _, _row in TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in ("CCF", "CCF_VAR", "RV"):

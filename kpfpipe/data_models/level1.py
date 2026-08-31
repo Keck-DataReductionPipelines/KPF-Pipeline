@@ -46,12 +46,9 @@ class KPF1(KPFDataModel):
         """Create a KPF2 scaffold from this L1, carrying over headers and
         pass-through extensions.
 
-        The L1 PRIMARY is already EPRV-standard (converted in KPF0.to_kpf1), so
-        the PRIMARY and INSTRUMENT_HEADER headers are a pure pass-through. Pass-
-        through extensions (TELEMETRY, EXPMETER_SCI->EXPMETER, CATALOG_RECORD) and
-        KPF-friendly aliases (e.g. SCI2_FLUX -> TRACE3_FLUX) are handled below.
-        Trace arrays are created empty -- the caller (spectral extraction) fills
-        those in.
+        KPF-friendly aliases (e.g. SCI2_FLUX -> TRACE3_FLUX) apply automatically
+        via the L2 alias system. Trace arrays are created empty -- the caller
+        (spectral extraction) fills those in.
         """
         kpf2 = KPF2()
 

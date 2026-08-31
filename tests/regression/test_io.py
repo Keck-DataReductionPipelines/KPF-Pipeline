@@ -37,9 +37,7 @@ from ._scripts import write_l0_tree
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
 
-# ---------------------------------------------------------------------------
 # Synthetic test data setup (unit tests only)
-# ---------------------------------------------------------------------------
 
 # Filenames are KP.YYYYMMDD.SSSSS.FF.fits; the seconds-of-day fields set the gaps
 # the clustering keys on: two bias clusters >2 hr apart, one dark cluster, morning
@@ -146,9 +144,7 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
     return df, before, after
 
 
-# ---------------------------------------------------------------------------
 # FileHandler.build_calibration_stacks (synthetic mini databases)
-# ---------------------------------------------------------------------------
 
 
 def _cluster(cal_type, mini_db, **kwargs):
@@ -288,9 +284,7 @@ class TestBuildCalibrationStacks:
         assert lists[1] == sorted(_THAR_EVE)
 
 
-# ---------------------------------------------------------------------------
 # build_calibration_stacks (real data)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -344,9 +338,7 @@ class TestBuildMiniDatabaseDatecodeType:
         pd.testing.assert_frame_equal(from_int, from_str)
 
 
-# ---------------------------------------------------------------------------
 # datecode_dirs_in_range
-# ---------------------------------------------------------------------------
 
 
 class TestDatecodeDirsInRange:
@@ -360,9 +352,7 @@ class TestDatecodeDirsInRange:
         assert got == ["20240101", "20240115"]
 
 
-# ---------------------------------------------------------------------------
 # read_token_file
-# ---------------------------------------------------------------------------
 
 
 class TestReadTokenFile:
@@ -379,9 +369,7 @@ class TestReadTokenFile:
         assert read_token_file(str(f)) == []
 
 
-# ---------------------------------------------------------------------------
 # kpf_filepath
-# ---------------------------------------------------------------------------
 
 
 class TestKpfFilepath:
@@ -456,9 +444,7 @@ class TestKpfFilepath:
         )
 
 
-# ---------------------------------------------------------------------------
 # kpf_filename
-# ---------------------------------------------------------------------------
 
 
 class TestKpfFilename:
@@ -505,9 +491,7 @@ class TestKpfFilename:
             kpf_filename("KP.20240405.03600.00", "L0", master="bias")
 
 
-# ---------------------------------------------------------------------------
 # check_filename_convention
-# ---------------------------------------------------------------------------
 
 
 class TestCheckFilenameConvention:
@@ -565,9 +549,7 @@ class TestCheckFilenameConvention:
         )
 
 
-# ---------------------------------------------------------------------------
 # FileHandler.find_masters
-# ---------------------------------------------------------------------------
 
 
 class TestFindMasters:
@@ -600,9 +582,7 @@ class TestFindMasters:
         assert fh.find_masters(cal_type, level, "20240405") == [written]
 
 
-# ---------------------------------------------------------------------------
 # Filename-convention consistency contract
-# ---------------------------------------------------------------------------
 
 
 class TestFilenameConsistency:
@@ -643,9 +623,7 @@ class TestFilenameConsistency:
         assert master.check_filename_convention(master.generate_standard_filename())
 
 
-# ---------------------------------------------------------------------------
 # kpf_directory
-# ---------------------------------------------------------------------------
 
 
 class TestKpfDirectory:
@@ -763,9 +741,7 @@ class TestKpfDirectory:
             kpf_directory(kind="QLP", data_root="", level="L0", obs_id=self.OBS_ID)
 
 
-# ---------------------------------------------------------------------------
 # FileHandler.build_mini_database (real L0 data from tests/testdata/)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -812,10 +788,8 @@ class TestBuildMiniDatabaseErrors:
             FileHandler({}).build_mini_database("20240405")
 
 
-# ---------------------------------------------------------------------------
 # build_mini_database on-disk cache (read/write + staleness guardrails):
 # synthetic L0 frames written to a temp tree
-# ---------------------------------------------------------------------------
 
 
 def _write_l0_frame(tmp_path, datecode, obs_id):
@@ -981,10 +955,8 @@ class TestMiniDatabaseCache:
             fh.build_mini_database("20240405", cache=True)
 
 
-# ---------------------------------------------------------------------------
 # Junk exclusion: load_junk_obs_ids + build_calibration_stacks(exclude_junk=...)
 # (synthetic; the only junk files written go to isolated tmp_path/vNext/reference/)
-# ---------------------------------------------------------------------------
 
 
 _JUNK_BIAS = [

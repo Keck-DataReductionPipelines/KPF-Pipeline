@@ -36,11 +36,6 @@ NCOL_TEST = 16
 DATECODE = "20240101"  # shared by FILE_LIST and the master obs_ids below
 
 
-# ---------------------------------------------------------------------------
-# Helpers / fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture(scope="module")
 def cached_rough_wls():
     """The rough-WLS grid, built once for the whole module."""
@@ -132,11 +127,6 @@ def mock_pipeline(monkeypatch):
     return l2
 
 
-# ---------------------------------------------------------------------------
-# TestInit
-# ---------------------------------------------------------------------------
-
-
 def _stub_frame_pipeline(monkeypatch, l1=None, extract=None):
     """Short-circuit load -> process -> extract so a test drives only the fit.
 
@@ -175,11 +165,6 @@ class TestInit:
             WLS(FILE_LIST, config=42)
 
 
-# ---------------------------------------------------------------------------
-# TestExtractFrame
-# ---------------------------------------------------------------------------
-
-
 class TestExtractFrame:
     def test_returns_l2_obj(self, mock_pipeline):
         wls = WLS(FILE_LIST)
@@ -210,11 +195,6 @@ class TestExtractFrame:
 
         call_args = mock_ca.call_args[0]
         assert call_args[1].get("KPF_MASTERS_OUTPUT") == "/masters"
-
-
-# ---------------------------------------------------------------------------
-# TestProcessIndividualFrames
-# ---------------------------------------------------------------------------
 
 
 class TestProcessIndividualFrames:
@@ -250,11 +230,6 @@ class TestProcessIndividualFrames:
         )
         result = wls._process_stack_l0_to_l2()
         assert len(result) == 7
-
-
-# ---------------------------------------------------------------------------
-# TestMakeMasterL2
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -763,11 +738,6 @@ class TestMakeMasterL2:
             assert chip in out
 
 
-# ---------------------------------------------------------------------------
-# TestCalculateWlsCoeffs
-# ---------------------------------------------------------------------------
-
-
 class TestCalculateWlsCoeffs:
     def _make_lines(self, n, fibers=("SCI1",)):
         """Build a minimal `lines` dict with `n` lines per fiber."""
@@ -830,11 +800,6 @@ class TestCalculateWlsCoeffs:
         coeffs_fit = wls._calculate_wls_coeffs(lines, orders)
         wave_fit = wls._evaluate_wls_coeffs(coeffs_fit, orders, nfiber=1)
         np.testing.assert_allclose(wave_fit, wave_true, rtol=1e-9)
-
-
-# ---------------------------------------------------------------------------
-# Stack QC: line-fit QC, coefficient combination, min_stack_size gate
-# ---------------------------------------------------------------------------
 
 
 class TestFitAndQcStack:
@@ -1062,11 +1027,6 @@ class TestMinStackSizeGate:
         assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
 
 
-# ---------------------------------------------------------------------------
-# TestFitLinePositions
-# ---------------------------------------------------------------------------
-
-
 class TestFitLinePositions:
     def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
         # A NaN-filled orderlet (extraction failure) is skipped rather than
@@ -1170,11 +1130,6 @@ class TestFitLinePositions:
             )
         assert "RED SCI1: no good lines retained" in caplog.text
         assert len(result["wav"]) == 0
-
-
-# ---------------------------------------------------------------------------
-# TestRoughWlsLoading
-# ---------------------------------------------------------------------------
 
 
 class TestRoughWlsLoading:

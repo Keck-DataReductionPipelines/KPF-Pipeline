@@ -2,8 +2,7 @@
 
 This guide captures the coding conventions actually in use across the KPF-DRP vNext
 codebase, so that new code (whether written by a developer or by Claude) reads like
-the code already here. It was derived by surveying every subpackage — standard
-modules, masters, quality control, utils, recipes/configs, tests, and documentation.
+the code already here.
 
 **Authority precedence.**
 When requirements or design principles conflict, the order of governing document precedence is:
@@ -18,9 +17,8 @@ When any two conflict, the higher one wins.
 
 
 **Status of these rules.** These are *soft* requirements — this guide sits at the **bottom** of
-the authority hierarchy above, so where a rule here conflicts with any of those four documents,
-**the higher one wins** (style yields to science). It describes the dominant, prevailing pattern;
-where the codebase contradicts itself, the recommended variant is called out explicitly.
+the authority hierarchy above (style yields to science). It describes the dominant, prevailing
+pattern; where the codebase contradicts itself, the recommended variant is called out explicitly.
 
 This file covers *how code should look and be organized* — not operational/technical guidance
 (environment, commands) or the pipeline's structure (the architecture reference).
@@ -53,8 +51,7 @@ Contents:
 
 ## A. Core Design Principles
 
-These are the values the rest of this guide operationalizes. Each principle names where it is
-enforced concretely.
+Each principle names where it is enforced concretely.
 
 - **Code is self-documenting.** Names carry intent, so a reader rarely needs a comment to learn
   *what* a line does; comments are reserved for *why*. This is the lever behind the naming rules
@@ -83,8 +80,8 @@ enforced concretely.
 
 ## B. Pipeline design
 
-Conventions organized by pipeline subsystem. Where a subsystem has distinct **science** and
-**masters** flavors, they are called out under their own subheadings.
+Where a subsystem has distinct **science** and **masters** flavors, they are called out under
+their own subheadings.
 
 ### B.1 KPF data models
 

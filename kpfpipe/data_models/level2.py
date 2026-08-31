@@ -31,9 +31,8 @@ _TRACE_SUFFIXES = ["FLUX", "WAVE", "VAR", "BLAZE"]
 # (norder,) arrays aligned with the concatenated trace orders.
 _ANCILLARY_PER_ORDER = ["BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"]
 
-# Build a set of valid chip-prefix keys for fast membership testing.
-# e.g., {"GREEN_CAL_FLUX", "RED_CAL_FLUX", "GREEN_SCI1_FLUX", "GREEN_BARYCORR_Z", ...}
-_L2_CHIP_PREFIX_KEYS = {}  # chip-prefixed key → (base_key, chip)
+# e.g. "GREEN_CAL_FLUX", "RED_SCI1_FLUX", "GREEN_BARYCORR_Z", ...
+_L2_CHIP_PREFIX_KEYS = {}  # chip-prefixed key -> (base_key, chip)
 for _, _row in TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in _TRACE_SUFFIXES:
@@ -93,18 +92,14 @@ class KPF2(KPFDataModel):
         """
         Create a KPF4 scaffold from this KPF2, carrying over headers and receipt.
 
-        Returns a KPF4 with PRIMARY header keywords forwarded from L2, the
-        CATALOG_RECORD pass-through extension, and the receipt chain preserved. RV
-        and CCF data extensions are created but empty -- the caller (RV
+        RV and CCF data extensions are created but empty -- the caller (RV
         computation) fills those in.
         """
         kpf4 = KPF4()
 
-        # Forward PRIMARY, INSTRUMENT_HEADER, QUALITY_CONTROL, CATALOG_RECORD, and
-        # RECEIPT card-by-card, mirroring to_kpf2: PRIMARY overlays onto kpf4's EPRV
-        # seed (native wins), the rest are verbatim copies. The receipt *table*
-        # propagates separately via the copy below, as does CATALOG_RECORD's table --
-        # its rows, not just the presence flags, carry forward.
+        # Mirrors to_kpf2: PRIMARY overlays onto kpf4's EPRV seed (native wins), the
+        # rest are verbatim copies. The receipt *table* propagates via the copy
+        # below, as does CATALOG_RECORD's table -- its rows carry forward too.
         self._forward_headers(
             kpf4,
             (

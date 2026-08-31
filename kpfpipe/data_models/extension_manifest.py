@@ -4,19 +4,18 @@ Extension manifest for the KPF data models.
 Single home for the extension reference data, the structural twin of
 ``keyword_registry``: that one owns the header cards, this one owns the
 extensions they live on. ``ExtensionManifest`` builds every lookup once in
-``__init__``; the module exposes a single instance, ``extension_manifest``.
-``KPFDataModel`` (data_models/base.py) surfaces it as a class attribute, so
-consumers handed a ``kpf_obj`` reach it through ``kpf.extension_manifest``.
+``__init__``; the module exposes a single instance, ``extension_manifest``,
+surfaced by ``KPFDataModel`` as ``kpf.extension_manifest``.
 
 Source of truth: ``config/{data_model}-extensions.csv``, one per data model
 (``L0 L1 L2 L4 ML1 ML2-flat ML2-wls``, discovered from the filenames). Each is
 the complete, literal statement of that model's shape: every row is created,
-with no ``Required`` gate, so ``Required`` is a compliance label and ``HDU`` an
-ordinal, neither read here.
+with no ``Required`` gate (``Required`` is a compliance label, ``HDU`` an
+ordinal; neither is read here).
 
 Columns read: ``Name`` (the extension), ``DataType`` (its astropy HDU class),
-``BitDepth`` (the exact width ``KPFDataModel._assert_bit_depth`` enforces, blank
-where unconstrained) and ``Description`` (the EXT_DESCRIPT text).
+``BitDepth`` (the exact width ``KPFDataModel._assert_bit_depth`` enforces,
+blank where unconstrained) and ``Description`` (the EXT_DESCRIPT text).
 """
 
 import importlib.resources

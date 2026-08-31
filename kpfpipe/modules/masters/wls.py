@@ -254,8 +254,7 @@ class WLS(BaseMasterModule):
 
         candidate_wavs = np.sort(line_waves)
 
-        # Guardrail: supplied lines must lie within this order's rough WLS span;
-        # an out-of-range line signals a CHIP/ORDER labeling inconsistency.
+        # Guardrail (see docstring).
         lo, hi = wave1d.min(), wave1d.max()
         outside = (candidate_wavs < lo) | (candidate_wavs > hi)
         if np.any(outside):
@@ -704,20 +703,19 @@ class WLS(BaseMasterModule):
         Parameters
         ----------
         l0_file_list : list of str, optional
-            L0 files to process. Defaults to self.l0_file_list.
+            Defaults to ``self.l0_file_list``.
         linelist : str, optional
-            Path to a CSV line list. If different from the currently
-            cached ``self.linelist``, the file is reloaded and the cache
-            is updated. Defaults to ``self.linelist`` (no reload).
+            CSV line list path; reloaded if different from the cached path.
+            Defaults to ``self.linelist`` (no reload).
         lineprofile : str, optional
-            Line profile model name. Defaults to self.lineprofile.
+            Defaults to ``self.lineprofile``.
         poly_degree_x : int, optional
-            Polynomial degree along the pixel axis. Defaults to self.poly_degree_x.
+            Pixel-axis polynomial degree. Defaults to ``self.poly_degree_x``.
         poly_degree_m : int, optional
-            Polynomial degree along the order axis. Defaults to self.poly_degree_m.
+            Order-axis polynomial degree. Defaults to ``self.poly_degree_m``.
         poly_degree_f : int, optional
-            Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
-            Defaults to self.poly_degree_f.
+            Fiber-axis polynomial degree (3- and 5-fiber fits). Defaults to
+            ``self.poly_degree_f``.
         bias, dark, flat : bool | str | KPFMasterL1, optional
             Per-call calibration overrides (same forms as ImageProcessing.perform:
             bool, a master filepath, or a KPFMasterL1 object), clamped by the WLS
@@ -866,8 +864,7 @@ class WLS(BaseMasterModule):
             The master L2 output path; its directory anchors the
             ``thar_L2/`` subdirectory and its obs_id names the file.
         overwrite : bool, optional
-            If False (default), refuse to clobber an existing file and raise
-            FileExistsError. If True, replace any existing file.
+            Refuse to clobber an existing file unless True.
 
         Raises
         ------
@@ -931,8 +928,7 @@ class WLS(BaseMasterModule):
             The master L2 output path; its directory anchors the
             ``thar_L2/`` subdirectory.
         overwrite : bool, optional
-            If False (default), refuse to clobber an existing per-frame file
-            and raise FileExistsError. If True, replace any existing file.
+            Refuse to clobber an existing per-frame file unless True.
 
         Raises
         ------

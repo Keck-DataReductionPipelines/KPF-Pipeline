@@ -209,8 +209,7 @@ class TestRegistryConformance:
             assert reg.datatype_for(row.Keyword, row.Extension) == row.DataType
 
     def test_qc_flag_keyword_sets_are_scoped_by_level(self):
-        # Relocated from test_checkpoints.py: this is registry scoping, not
-        # Checkpoint behaviour, and it reaches the registry through the model
+        # Registry scoping, not Checkpoint behaviour; reached through the model
         # rather than importing data_models.keyword_registry (see _registry.py).
         reg = KPF1.keyword_registry
         # Representative checks live under their own level.

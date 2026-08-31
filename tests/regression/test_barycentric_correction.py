@@ -282,9 +282,8 @@ class TestComputeBarycorrReference:
     site, and the m/s units and sign. Golden values are pinned to
     barycorrpy==0.4.4.
 
-    Unmarked: it reads no truth frames, which is what ``slow`` means here. It
-    carried the marker as a hedge against a cold-cache ephemeris download, which
-    tests/conftest.py now allows through rather than blocking.
+    Unmarked: tests/conftest.py allows a cold-cache ephemeris download through
+    without the ``slow`` marker.
     """
 
     def test_matches_barycorrpy_reference(self):

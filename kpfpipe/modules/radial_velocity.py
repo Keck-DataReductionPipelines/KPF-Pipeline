@@ -290,18 +290,16 @@ class RadialVelocity:
         Parameters
         ----------
         chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'.
+            'GREEN' or 'RED'.
         fiber : str
-            Fiber identifier, e.g. 'SCI1'.
+            e.g. 'SCI1'.
         window : list of float, optional
             [min, max] km/s window about the dip for the first-pass fit.
             Defaults to the configured value.
         fit_nsigma : float, optional
-            Half-width of the second-pass fit window in units of the first-pass
-            sigma. Not a configurable parameter; set in code (default 3.0).
+            Second-pass window half-width, in first-pass sigmas.
         min_npts : int, optional
-            Minimum number of grid points to use in each fit window. Not a
-            configurable parameter; set in code (default 9).
+            Minimum grid points per fit window.
 
         Returns
         -------
@@ -396,21 +394,20 @@ class RadialVelocity:
         Parameters
         ----------
         chips : str or list of str
-            Chip identifier(s), i.e. 'GREEN' and/or 'RED'.
+            'GREEN' and/or 'RED'.
         fibers : str or list of str
             A single fiber, or the three science fibers when combine_fibers=True.
         combine_fibers : bool
-            Sum the three science fibers before collapsing orders.
+            Sum the three science fibers before collapsing orders (see above).
         combine_ccds : bool
-            Combine the per-chip RVs across CCDs (RV-level weighted mean).
+            Combine the per-chip RVs across CCDs (see above).
         window : list of float, optional
             [min, max] km/s window about the dip for the first-pass fit.
             Defaults to the configured value.
         fit_nsigma : float, optional
-            Half-width of the second-pass fit window in units of the first-pass
-            sigma. Not a configurable parameter; set in code (default 3.0).
+            Second-pass window half-width, in first-pass sigmas.
         min_npts : int, optional
-            Minimum number of grid points to use in each fit window.
+            Minimum grid points per fit window.
 
         Returns
         -------
@@ -634,20 +631,17 @@ class RadialVelocity:
         Parameters
         ----------
         chips : list of str, optional
-            Chip identifiers, i.e. 'GREEN' or 'RED'. Defaults to the configured
-            chips.
+            'GREEN' and/or 'RED'. Defaults to the configured chips.
         fibers : list of str, optional
-            Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to all configured
-            fibers (SCI, CAL, and SKY).
+            e.g. ['SCI1', 'SCI2']. Defaults to all configured fibers (SCI, CAL,
+            and SKY).
         rv_window : list of float, optional
             [min, max] km/s window about the dip for the first-pass fit.
             Overrides the configured value.
         fit_nsigma : float, optional
-            Half-width of the second-pass fit window in units of the first-pass
-            sigma. Not a configurable parameter; set in code (default 3.0).
+            Second-pass window half-width, in first-pass sigmas.
         min_npts : int, optional
-            Minimum number of grid points to use in each fit window. Not a
-            configurable parameter; set in code (default 9).
+            Minimum grid points per fit window.
 
         Returns
         -------

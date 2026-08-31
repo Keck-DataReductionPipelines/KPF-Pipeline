@@ -275,24 +275,15 @@ class KPF0(KPFDataModel):
         """Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
-        The PRIMARY is already EPRV-standard (converted once by
-        ``standardize_header_format``, which also snapshotted the raw instrument
-        header into INSTRUMENT_HEADER), so this is a pure forward: PRIMARY,
-        QUALITY_CONTROL and RECEIPT overlay card by card onto the L1 skeleton,
-        and the pass-through extensions carry their data across.
-
-        Returns a KPF1 with EPRV PRIMARY, INSTRUMENT_HEADER, pass-through
-        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG,
-        CATALOG_RECORD), receipt, and obs_id copied over. GREEN_CCD, GREEN_VAR,
-        RED_CCD, RED_VAR are created empty -- the caller (image assembly) fills
-        those in.
+        The PRIMARY is already EPRV-standard (from ``standardize_header_format``),
+        so this is a pure forward. GREEN/RED CCD and VAR are created empty -- the
+        caller (image assembly) fills those in.
 
         Raises
         ------
         ValueError
-            If this L0 has not been standardized. Forwarding a raw WMKO PRIMARY
-            onto an EPRV L1 PRIMARY would be silent corruption, so a mis-ordered
-            call fails loud and names the step that is missing.
+            If this L0 has not been standardized -- forwarding a raw WMKO PRIMARY
+            onto an EPRV L1 PRIMARY would be silent corruption.
         """
         if not self.standardized:
             raise ValueError(

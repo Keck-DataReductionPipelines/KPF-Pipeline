@@ -11,7 +11,6 @@ _OBS_ID_PATTERN = re.compile(rf"({OBS_ID_REGEX})")
 _DATECODE_PATTERN = re.compile(r"\d{8}")
 _KPF_TIMESTAMP_PATTERN = re.compile(r"(\d{8}\.\d{5}\.\d{2})")
 
-# Seconds per day
 _SECONDS_PER_DAY = 86400
 
 # Hawaii Standard Time is UTC-10 (KPF timestamps are UTC)

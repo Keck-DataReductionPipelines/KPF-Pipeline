@@ -267,9 +267,9 @@ class SpectralExtraction:
         Parameters
         ----------
         chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'
+            Chip identifier, 'GREEN' or 'RED'.
         fiber : str
-            Fiber identifier, e.g. 'SCI2'
+            Fiber identifier, e.g. 'SCI2'.
         order : int
             Spectral order number.
         extraction_method : str, optional
@@ -278,14 +278,9 @@ class SpectralExtraction:
         Returns
         -------
         flux_1d : ndarray
-            Extracted 1D flux spectrum for the specified orderlet.
+            1D flux spectrum.
         var_1d : ndarray
-            Corresponding 1D variance spectrum.
-
-        Notes
-        -----
-        Retrieves the orderlet pixel region and dispatches to the selected
-        extraction method.
+            1D variance spectrum.
         """
         if extraction_method is None:
             extraction_method = self.extraction_method
@@ -335,23 +330,17 @@ class SpectralExtraction:
         Parameters
         ----------
         chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'
+            Chip identifier, 'GREEN' or 'RED'.
         fibers : list of str, optional
-            Fibers identifiers, e.g. 'SCI2'
+            Fiber identifiers, e.g. 'SCI2'.
         extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
 
         Returns
         -------
         dict
-            Dictionary containing 2D arrays of shape (norder, ncol) for
-            extracted flux and variance. Keys follow standard KPF name
-            conventions, e.g. 'GREEN_SCI2_FLUX'.
-
-        Notes
-        -----
-        Loops over all spectral orders and requested fibers, performing
-        order-by-order extraction.
+            2D arrays of shape (norder, ncol) for extracted flux and variance,
+            keyed e.g. 'GREEN_SCI2_FLUX'.
         """
         if fibers is None:
             fibers = self.fibers
@@ -388,10 +377,9 @@ class SpectralExtraction:
                 l2_arrays[f"{chip}_{fiber}_FLUX"][order] = flux_1d
                 l2_arrays[f"{chip}_{fiber}_VAR"][order] = var_1d
 
-        # During some KPF eras one of the traces does not fall on the detector.
-        # In this case a single failure is expected from this method. Allowing
-        # the loop to continue through all orders provides useful diagnostic
-        # information for cases where the algorithm truly fails.
+        # Some KPF eras have one trace off-detector, so a single failure is
+        # expected; continuing the loop surfaces diagnostics if the algorithm
+        # truly fails.
         if failure == 1:
             logger.warning(
                 "1 orderlet failed to extract from the %s CCD; filled with NaN.", chip
@@ -444,27 +432,22 @@ class SpectralExtraction:
 
     def perform(self, chips=None, fibers=None, *, extraction_method=None):
         """
-        Execute spectral extraction. Optional keyword arguments
-        default to config settings.
+        Execute spectral extraction. Optional keyword arguments default to
+        config settings.
 
         Parameters
         ----------
         chips : list of str, optional
-            Chip identifiers, i.e. 'GREEN' or 'RED'
+            Chip identifiers, 'GREEN' or 'RED'.
         fibers : list of str, optional
-            Fiber identifiers, e.g. 'SCI2'
+            Fiber identifiers, e.g. 'SCI2'.
         extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
 
         Returns
         -------
         l2_obj : KPF2
-            L2 data object containing extracted 1D flux and variance arrays.
-
-        Notes
-        -----
-        Creates a KPF2 object from the input KPF1 object and populates it
-        with extracted spectra for all requested chips and fibers.
+            L2 with extracted 1D flux and variance arrays.
         """
         if chips is None:
             chips = self.chips

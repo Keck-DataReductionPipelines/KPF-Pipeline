@@ -22,12 +22,9 @@ class AliasedOrderedDict(OrderedDict):
     """
     OrderedDict with transparent name aliases.
 
-    Register an alias with ``register_alias(alias, canonical)``. After that,
-    ``__getitem__``, ``__setitem__``, ``__contains__``, and ``get()`` all resolve
-    the alias to the canonical key before performing the lookup. For example, once
-    "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", reading
-    ``d["SCI2_FLUX"]`` returns the same object stored under "TRACE3_FLUX" and
-    ``"SCI2_FLUX" in d`` is True.
+    Register an alias with ``register_alias(alias, canonical)``; ``__getitem__``,
+    ``__setitem__``, ``__contains__`` and ``get()`` then resolve the alias to the
+    canonical key before the lookup.
     """
 
     def __init__(self, *args, **kwargs):
@@ -115,9 +112,9 @@ class ChipPrefixDict(AliasedOrderedDict):
                 f"via {base_key!r} (rows are green-then-red)"
             )
         resolved = self._resolve(base_key)
-        # Allocate the full concatenated array on first write (or if empty).
-        # value.shape[1:] keeps this correct for 2-D traces (norder, ncol), the
-        # (norder_chip, nvel) CCF cubes, and 1-D per-order ancillary arrays.
+        # Allocate the full concatenated array on first write (or if empty);
+        # value.shape[1:] keeps this correct for 2-D traces, CCF cubes, and
+        # 1-D per-order arrays.
         existing = (
             super().__getitem__(resolved) if super().__contains__(resolved) else None
         )

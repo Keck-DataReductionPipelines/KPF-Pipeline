@@ -37,9 +37,7 @@ class PlotL4(Plot):
         super().__init__(l4_obj, output_dir, obs_id)
         self.fibers = _FIBERS
 
-    # ------------------------------------------------------------------
     # Data access helpers
-    # ------------------------------------------------------------------
 
     def _ccf(self, chip, fiber):
         """Return the (norder, nvel) CCF cube for one chip+fiber, or None.
@@ -123,9 +121,7 @@ class PlotL4(Plot):
         base = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         return [base[i % len(base)] for i in range(n)]
 
-    # ------------------------------------------------------------------
     # Plots
-    # ------------------------------------------------------------------
 
     def _rv_table(self, chip, fiber):
         """Return the per-order RV table (chip-sliced) for a fiber, or None."""

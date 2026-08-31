@@ -36,8 +36,6 @@ DEFAULTS = {
     "fibers": ["SKY", "SCI1", "SCI2", "SCI3", "CAL"],
 }
 
-# Lazy-load the detector config on first access
-
 
 def load_detector_config():
     path = Path(REPO_ROOT) / "reference/detector.toml"

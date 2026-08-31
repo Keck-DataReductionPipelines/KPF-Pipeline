@@ -594,11 +594,9 @@ class TestScienceRecipeErrors:
         )
         args = argparse.Namespace(obs_id=OBS_ID)
         recipe = _load_recipe()
-        # The old three-way tuple was just OSError three times over (IOError *is*
-        # OSError, FileNotFoundError subclasses it), so any OSError from the
-        # recipe's directory creation or FITS writes satisfied it. rvdata raises
-        # a bare IOError here, so match= on the obs_id is what pins the failure
-        # to the L0 read this test is named for.
+        # rvdata raises a bare IOError (an OSError) for a missing L0 file; match=
+        # on the obs_id is what pins the failure to the L0 read, since other
+        # OSErrors (dir creation, FITS writes) would also satisfy a bare type check.
         with pytest.raises(OSError, match=OBS_ID):
             recipe.main(config, args)
 

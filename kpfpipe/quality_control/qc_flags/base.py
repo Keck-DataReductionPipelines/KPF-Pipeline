@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 class QC:
     """Base runner for per-level pass/fail QC check methods.
 
+    Every level carries a required-PRIMARY-keyword placeholder check (e.g. L0's
+    KWRDPRL0): REQUIRED is now a compliance label, not a decision about what must
+    be on a product, so the registry-derived notion of "required" these checks
+    would read is gone. Until a KPF-owned definition replaces it, each raises
+    ``NotImplementedError`` (writing no flag, per ``run``) while its registry row
+    stays so the comment lookup still resolves.
+
     Parameters
     ----------
     kpf_obj : KPFDataModel

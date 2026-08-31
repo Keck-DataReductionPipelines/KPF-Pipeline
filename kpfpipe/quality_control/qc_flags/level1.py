@@ -34,14 +34,7 @@ class QCL1(QC):
     data_present._qc_key = "DATAPRL1"
 
     def required_keywords_present(self):
-        """Every required PRIMARY keyword is present -- not yet implemented.
-
-        The registry-derived notion of "required" this read is gone: REQUIRED is
-        a compliance label now, not a decision about what must be on a product.
-        Rebuilding the check against a KPF-owned definition is a follow-up; until
-        then it writes no flag (``QC.run`` treats NotImplementedError as "no
-        flag"), and the registry row stays so the comment lookup still resolves.
-        """
+        """Required PRIMARY keywords present -- not yet implemented; see ``QC``."""
         raise NotImplementedError(
             "KWRDPRL1 is pending a KPF-owned definition of a required keyword"
         )
@@ -120,7 +113,7 @@ class QCL1(QC):
     variance_positive._qc_key = "L1VAROK"
 
     def negative_snr_fraction(self):
-        """Pixels below -5 sigma at most 1% on each chip (v2.12 POS2DSNR)."""
+        """Pixels below -5 sigma at most 1% on each chip."""
         for chip in ("GREEN", "RED"):
             ccd = self.kpf_obj.data[f"{chip}_CCD"]
             var = self.kpf_obj.data[f"{chip}_VAR"]

@@ -439,40 +439,36 @@ class CrossCorrelation:
         Parameters
         ----------
         chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'.
+            Chip identifier, 'GREEN' or 'RED'.
         fiber : str
             Fiber identifier, e.g. 'SCI1'.
         mask_width : float, optional
-            Per-line mask top-hat width [km/s]. Defaults to the configured
-            value.
+            Per-line mask top-hat width [km/s]. Defaults to the configured value.
         step_size : float, optional
             CCF velocity step size [km/s]. Defaults to the configured value.
         window : list of float, optional
-            CCF velocity grid range [km/s] as [min, max] about the grid center.
-            Defaults to the configured value.
+            CCF velocity grid [min, max] [km/s] about the grid center. Defaults
+            to the configured value.
         clip_edge_pixels : tuple of int, optional
-            Number of pixels to drop from the (short_wavelength_end,
-            long_wavelength_end) of each order before correlating, removing the
-            blaze-faint, low-S/N order edges. Defaults to (500, 500).
+            Pixels dropped from the (short_wavelength_end, long_wavelength_end)
+            of each order before correlating (blaze-faint, low-S/N edges).
+            Defaults to (500, 500).
 
         Returns
         -------
         dict or None
-            {'velocity', 'ccf'}: the CCF velocity grid [km/s] and the CCF with
-            shape (norder_chip, n_velocity_step). The CCF is also cached under
-            f'{chip}_{fiber}'. Returns None if the fiber is not illuminated
-            (source 'none').
+            {'velocity', 'ccf'}: velocity grid [km/s] and CCF, shape
+            (norder_chip, n_velocity_step). Cached under f'{chip}_{fiber}'.
+            None if the fiber is not illuminated.
 
         Raises
         ------
         ValueError
-            For a range of malformed or unusable inputs: an unrecognized or
-            missing illumination keyword; a missing or unusable target colour
-            (``CCLR3``/``CCLRN3``) for a stellar fiber; a required but unpopulated
-            ``BARYCORR_Z``; a descending ``WAVE`` array; or a
-            ``clip_edge_pixels`` that removes every pixel of the order.
+            Malformed/unusable inputs: bad illumination keyword, missing target
+            colour, unpopulated ``BARYCORR_Z``, descending ``WAVE``, or
+            ``clip_edge_pixels`` that removes the whole order.
         RuntimeError
-            If the CCF is identically zero across all orders (no usable signal).
+            CCF is identically zero across all orders.
         """
         chip = chip.upper()
         fiber = fiber.upper()
@@ -597,8 +593,7 @@ class CrossCorrelation:
             f"about each fiber's center, step {self.ccf_step_size} km/s"
         )
 
-        # Per-CCD, per-orderlet summary. SOURCE is the illumination source; NCCF
-        # is the number of orders with a non-zero CCF on that chip.
+        # SOURCE = illumination source; NCCF = orders with a non-zero CCF, per chip.
         fiber_order = [f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in info]
         fiber_order += [f for f in info if f not in fiber_order]
 
@@ -661,26 +656,24 @@ class CrossCorrelation:
         concatenated) and their per-bin photon variances to {fiber}_CCF_VAR (same
         shape). The orderlet's RV table ({fiber}_RV) is seeded with its per-order
         metadata (ORDER_INDEX/ORDER_ID/ECHELLE_ORDER/BJD_TDB/BERV/WAVE_START/
-        WAVE_END/WEIGHT); the RV/RV_ERR columns are left NaN for RadialVelocity to
-        fill.
+        WAVE_END/WEIGHT); RV/RV_ERR are left NaN for RadialVelocity to fill.
 
         Parameters
         ----------
         chips : list of str, optional
-            Chip identifiers, i.e. 'GREEN' or 'RED'. Defaults to the configured
-            chips.
+            Chip identifiers, 'GREEN'/'RED'. Defaults to the configured chips.
         fibers : list of str, optional
             Fiber identifiers, e.g. ['SCI1', 'SCI2']. Defaults to all configured
-            fibers (SCI, CAL, and SKY).
+            fibers (SCI, CAL, SKY).
         ccf_mask_width : float, optional
             Per-line mask top-hat width [km/s]. Overrides the configured value.
         ccf_step_size : float, optional
             CCF velocity step size [km/s]. Overrides the configured value.
         ccf_window : list of float, optional
-            CCF velocity grid range [km/s] as [min, max] about the grid center.
-            Overrides the configured value.
+            CCF velocity grid [min, max] [km/s] about the grid center. Overrides
+            the configured value.
         clip_edge_pixels : tuple of int, optional
-            Pixels to drop from the (short_wavelength_end, long_wavelength_end)
+            Pixels dropped from the (short_wavelength_end, long_wavelength_end)
             of each order before correlating. Defaults to (500, 500).
 
         Returns
@@ -689,9 +682,8 @@ class CrossCorrelation:
             L4 with a CCF cube, a per-bin CCF variance cube, and a metadata-seeded
             per-order RV table per illuminated orderlet. Each CCF extension carries
             CTYPE1/CTYPE2/VELSTART/VELSTEP/VELNSTEP/CCFMASK/VELWIDTH; each RV
-            extension carries CTYPE1/CTYPE2. Unilluminated ('none') or
-            not-yet-implemented (etalon, lfc) fibers are skipped (empty
-            extensions).
+            extension carries CTYPE1/CTYPE2. Unilluminated or not-yet-implemented
+            (etalon, lfc) fibers are skipped.
         """
         if chips is None:
             chips = self.chips

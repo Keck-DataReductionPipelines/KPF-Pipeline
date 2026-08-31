@@ -1,9 +1,8 @@
 # KPF-DRP vNext: Pipeline Architecture
 
-This document describes the repo structure and KPF vNext pipeline **architecture**;
-it describes *how the pipeline is structured* — not project intent (the charter) or
-code conventions (the style guide). Consult this document before making structural
-or cross-cutting changes.
+This document describes the repo structure and KPF vNext pipeline **architecture** —
+not project intent (the charter) or code conventions (the style guide). Consult this
+document before making structural or cross-cutting changes.
 
 Contents:
 
@@ -144,7 +143,7 @@ RVDataModel (rvdata)
 - **L2/L4 add KPF-friendly extension aliases** via `AliasedOrderedDict`, registered from the
   config tables by the shared `_register_aliases` and each level's `_ALIAS_TEMPLATES`.
 
-`KPFDataModel` overrides `set_data`/`set_header` in `base.py` (not the level classes) with a `hasattr` guard so alias resolution runs during init — the rvdata base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1. Its `create_extension` override makes every extension header a `fits.Header` rather than an `OrderedDict` (see *Header standardization*).
+`KPFDataModel` overrides `set_data`/`set_header` in `base.py` (not the level classes) with a `hasattr` guard so alias resolution runs during init — the rvdata base's `.keys()` checks would otherwise bypass the `__contains__` overrides — yet stays inert for non-aliased L0/L1.
 
 ### Extension alias system
 
@@ -460,8 +459,7 @@ for L2/L4.
 
 `tests/` splits into `regression/` (the pytest suite) and `profiling/` (performance harnesses),
 with `tests/conftest.py` at the root serving both (its fixtures and the `requires_testdata`
-marker) and the real frames under the gitignored `tests/testdata/`. This section covers how the
-suites are **laid out**.
+marker) and the real frames under the gitignored `tests/testdata/`.
 
 ### Regression
 

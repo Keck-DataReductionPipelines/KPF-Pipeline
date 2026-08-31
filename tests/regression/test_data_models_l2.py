@@ -29,9 +29,7 @@ NORDER = DETECTOR["numorder"]
 
 # synthetic_l1_file fixture lives in tests/conftest.py
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")

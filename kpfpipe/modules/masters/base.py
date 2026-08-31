@@ -664,24 +664,19 @@ class BaseMasterModule:
         Parameters
         ----------
         l0_file_list : list of str, optional
-            List of L0 FITS filenames to stack.
+            L0 FITS filenames to stack.
         nstream : int, optional
-            Threshold number of frames at or above which the memory-light
-            streaming path is used instead of the in-memory data cube.
+            Frame-count threshold for switching to the streaming path.
             Defaults to 6.
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
         cal_type : {'bias', 'dark', 'flat', None}, optional
-            Calibration type, forwarded to ``_clean_l1_arrays`` to select the
-            final outlier-flagging mode. Defaults to the conservative
-            global-median mode.
+            Forwarded to ``_clean_l1_arrays`` to select the outlier-flagging
+            mode. Defaults to the conservative global-median mode.
         max_fail_fraction : float, optional
-            Maximum fraction of frames allowed to fail loading before raising.
-            Defaults to 0.2.
+            Maximum fraction of frames allowed to fail loading. Defaults to 0.2.
         max_fail_number : int, optional
-            Maximum absolute number of frames allowed to fail loading before
-            raising. Defaults to 2. Stacking raises when either limit is
-            exceeded.
+            Maximum absolute number of failed frames allowed. Defaults to 2.
 
         Returns
         -------
@@ -694,13 +689,9 @@ class BaseMasterModule:
 
         Notes
         -----
-        If number of frames is less than ``nstream``, statistics are computed
-        directly from a full data cube. Otherwise, a single-pass streaming
-        accumulation is used to bound memory usage.
-
-        An initial subset of frames is processed using the direct data cube
-        method to estimate approximate mean and rms. These estimates define
-        per-pixel clipping bounds for the streaming pass.
+        Below ``nstream`` frames, stats come from a full data cube; at or above
+        it, a single streaming pass bounds memory, using an initial subset to
+        estimate per-pixel clipping bounds.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -783,17 +774,12 @@ class BaseMasterModule:
         Parameters
         ----------
         level : str
-            Data level of the master to save; selects which cached
-            object to write. One of 'L1' or 'L2', matching the
-            subclass's ``make_master_l1`` / ``make_master_l2`` entry point.
+            'L1' or 'L2'; selects which cached object to write.
         path : str
             Output FITS path. Parent directories are created as needed.
         overwrite : bool, optional
-            If False (default), refuse to clobber an existing file and
-            raise FileExistsError. If True, replace any existing file
-            at ``path``. Defaults to False to protect against accidental
-            overwrites when called directly; entry points that pass an
-            output path through ``make_master_lN()`` should set True
+            Refuse to clobber an existing file unless True. Entry points that
+            pass an output path through ``make_master_lN()`` set this True
             explicitly.
 
         Raises

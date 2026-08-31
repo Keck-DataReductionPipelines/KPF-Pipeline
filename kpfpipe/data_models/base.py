@@ -2,20 +2,17 @@
 KPF base data model.
 
 Shared base for every KPF data model (L0, L1, L2, L4). Extends the EPRV Data
-Standard ``RVDataModel`` with the behavior common to all KPF products: FITS-header
-storage, provenance receipts, and alias-aware data and header access.
+Standard ``RVDataModel`` with FITS-header storage, provenance receipts, and
+alias-aware data/header access.
 
-Bi-directional extension aliasing allows use of either EPRV Data Standard
-or KPF naming conventions for order traces:
+Bi-directional extension aliasing lets KPF names substitute for EPRV
+order-trace names, e.g. "SCI2_FLUX" aliases "TRACE3_FLUX":
 
 * TRACE1 = SKY
 * TRACE2 = SCI1
 * TRACE3 = SCI2
 * TRACE4 = SCI3
 * TRACE5 = CAL
-
-For example, "SCI2_FLUX" is registered as an alias for "TRACE3_FLUX", so reading
-``d["SCI2_FLUX"]`` returns the same object stored under "TRACE3_FLUX".
 """
 
 import logging
@@ -30,9 +27,7 @@ from rvdata.core.models.definitions import (
     BASE_RECEIPT_COLUMNS,
 )
 
-# The keyword and extension reference data each live in their own module as a
-# single instance, re-exported below so sibling data_models files (level2/4)
-# import the same singletons from base.
+# Reference-data singletons, re-exported so level2/4 import them via base.
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.config import PATH as _config_path
 from kpfpipe.data_models.extension_manifest import extension_manifest
@@ -40,23 +35,18 @@ from kpfpipe.data_models.keyword_registry import keyword_registry
 from kpfpipe.utils.io import check_filename_convention, kpf_filename
 from kpfpipe.utils.kpf import is_obs_id
 
-# The two extension-naming tables, read once here and shared by every level that
-# registers aliases: trace index -> fiber name, and the 1:1 KPF -> EPRV
-# extension synonyms.
+# Trace index -> fiber name, and the 1:1 KPF -> EPRV extension synonyms.
 TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 EXTENSION_ALIASES = pd.read_csv(_config_path / "aliases.csv")
 
-# Receipt names that are data-model conversions / serialization rather than
-# pipeline modules -- excluded from DRPSTATU so it names the last real stage.
-# ``from_fits`` is here too: reading a product back must not clobber the status
-# the writer stamped.
+# Data-model conversion/serialization receipts, excluded from DRPSTATU so it
+# names the last real pipeline stage. ``from_fits`` is here too: reading a
+# product back must not clobber the status the writer stamped.
 _INTERNAL_RECEIPTS = frozenset(
     {"to_kpf1", "to_kpf2", "to_kpf4", "to_fits", "from_fits"}
 )
 
-# Re-exported so anything importing the base also reaches the one registry and
-# manifest instance. Listed in __all__ so the re-export is intentional, not an
-# accident of import.
+# Explicit __all__ marks the registry/manifest re-export as intentional.
 __all__ = [
     "KPFDataModel",
     "extension_manifest",
@@ -69,27 +59,21 @@ logger = logging.getLogger(__name__)
 class KPFDataModel(RVDataModel):
     """Shared base for every KPF data model (L0, L1, L2, L4)."""
 
-    # The reference-data singletons, surfaced as class attributes so anything
-    # handed a KPF data model (the checkpoints validator, the WMKO->EPRV
-    # standardization, tests) reaches them via kpf.keyword_registry /
-    # kpf.extension_manifest.
+    # Surfaced as class attributes so any kpf_obj reaches them via
+    # kpf.keyword_registry / kpf.extension_manifest.
     keyword_registry = keyword_registry
     extension_manifest = extension_manifest
 
-    # Per-trace extension aliases, as (canonical template, alias suffix) pairs:
-    # ("TRACE#_FLUX", "FLUX") makes SCI2_FLUX an alias of TRACE3_FLUX. Empty for
-    # the levels that register none (L0/L1).
+    # Per-trace aliases as (canonical template, alias suffix) pairs, e.g.
+    # ("TRACE#_FLUX", "FLUX") makes SCI2_FLUX an alias of TRACE3_FLUX. Empty for L0/L1.
     _ALIAS_TEMPLATES = ()
 
-    # The alias-aware data dict this level stores its arrays in, or None for the
-    # unaliased levels (L0/L1). Set, the shared build swaps it in and registers
-    # the aliases.
+    # Alias-aware data dict class for this level's arrays, or None for L0/L1.
     _DATA_DICT = None
 
     # Whether construction stamps the registry's PRIMARY skeleton. L0 does not:
-    # ``_read`` replaces PRIMARY wholesale, so anything stamped at construction
-    # would be discarded, and a KPF0 read from disk must reflect the unaltered
-    # file. ``standardize_header_format`` seeds it once, after the read.
+    # ``_read`` replaces PRIMARY wholesale, so anything stamped here would be
+    # discarded; ``standardize_header_format`` seeds it once, after the read.
     _SEEDS_PRIMARY = True
 
     def __init__(self):
@@ -100,12 +84,10 @@ class KPFDataModel(RVDataModel):
     def _build(self):
         """Build this level's extensions, tables and PRIMARY skeleton.
 
-        The one construction sequence, shared by every level: create every
-        extension the manifest declares; swap in the alias-aware dicts and
-        register the aliases (aliased levels only); fill the typed empty tables;
-        seed PRIMARY and restamp DATALVL for this level; then rebuild
-        EXT_DESCRIPT from the finished extension set. A concrete model's
-        ``__init__`` sets ``self.level`` and calls this.
+        Shared by every level: create manifest extensions, swap in alias-aware
+        dicts and register aliases (aliased levels only), fill typed empty
+        tables, seed PRIMARY and restamp DATALVL, rebuild EXT_DESCRIPT. A
+        concrete model's ``__init__`` sets ``self.level`` and calls this.
         """
         self._create_manifest_extensions()
         if self._DATA_DICT is not None:
@@ -123,11 +105,10 @@ class KPFDataModel(RVDataModel):
     def _register_aliases(self):
         """Register this level's KPF-friendly extension aliases, from config.
 
-        Two families, both table-driven: the 1:1 synonyms in ``aliases.csv``
-        (e.g. CA_HK -> ANCILLARY_SPECTRUM), and the per-trace ``_ALIAS_TEMPLATES``
-        keyed off ``trace-map.csv`` (e.g. SCI2_FLUX -> TRACE3_FLUX). An alias
-        whose canonical extension this level does not declare is skipped, so one
-        table serves every level.
+        Two families, both table-driven: 1:1 synonyms in ``aliases.csv`` (e.g.
+        CA_HK -> ANCILLARY_SPECTRUM), and per-trace ``_ALIAS_TEMPLATES`` keyed
+        off ``trace-map.csv`` (e.g. SCI2_FLUX -> TRACE3_FLUX). An alias whose
+        canonical extension this level lacks is skipped.
         """
         for _, row in EXTENSION_ALIASES.iterrows():
             self._register_alias(str(row["KPF"]).strip(), str(row["EPRV"]).strip())
@@ -156,9 +137,8 @@ class KPFDataModel(RVDataModel):
     def _create_manifest_extensions(self):
         """Create every extension this level's manifest declares.
 
-        No ``Required`` gate: that column is a compliance label, so the manifest
-        is a complete and literal statement of the level's shape and every row is
-        created (empty) here.
+        No ``Required`` gate: that column is a compliance label, so every
+        manifest row is created (empty) here.
         """
         for name in self.extension_manifest.names(self._data_model):
             if name not in self.extensions:
@@ -169,10 +149,10 @@ class KPFDataModel(RVDataModel):
     def _seed_primary(self):
         """Stamp the registry's typed PRIMARY skeleton for this data model.
 
-        Every keyword registered on PRIMARY for this data model, with its
-        header-map default where it has one and blank where it does not, each
-        carrying the registry comment. Later writers overlay what they know. The
-        masters land on their own minimal ``ML*`` skeleton, not the science one.
+        Every keyword registered on PRIMARY, with its header-map default where
+        it has one and blank otherwise, each carrying the registry comment.
+        Later writers overlay what they know. Masters land on their own
+        minimal ``ML*`` skeleton, not the science one.
         """
         seed = self.keyword_registry.primary_seed(self._data_model)
         for keyword, value in seed.items():
@@ -181,13 +161,12 @@ class KPFDataModel(RVDataModel):
     def _fill_typed_empty_tables(self):
         """Give the structural extensions their empty typed skeletons.
 
-        The three any manifest may declare: INSTRUMENT_HEADER's placeholder array
-        (its payload is the header, not the data), and the RECEIPT and DRP_CONFIG
-        column sets, which are the EPRV standard's. Each is gated on membership,
-        since not every level declares all three and ``set_data`` raises on an
-        absent extension. RECEIPT is built as an astropy Table directly, not
-        through pandas: ``Table.from_pandas`` collapses empty columns to float64
-        whatever the pandas dtype. L2 and L4 extend this with their own tables.
+        INSTRUMENT_HEADER's placeholder array, plus the EPRV RECEIPT and
+        DRP_CONFIG column sets. Each is gated on membership, since not every
+        level declares all three. RECEIPT is built as an astropy Table
+        directly, not via pandas: ``Table.from_pandas`` collapses empty
+        columns to float64 regardless of pandas dtype. L2 and L4 extend this
+        with their own tables.
         """
         if "INSTRUMENT_HEADER" in self.extensions:
             self.set_data("INSTRUMENT_HEADER", np.zeros((1,), dtype=np.float32))
@@ -210,8 +189,7 @@ class KPFDataModel(RVDataModel):
     def _set_ext_descript(self):
         """Rebuild EXT_DESCRIPT from the live extension set.
 
-        A no-op for the levels whose manifest declares no such extension (L0, L1
-        and the ML1 masters), so it can be called last in every ``__init__``.
+        A no-op where the manifest declares no such extension (L0, L1, ML1).
         """
         if "EXT_DESCRIPT" not in self.extensions:
             return
@@ -229,12 +207,12 @@ class KPFDataModel(RVDataModel):
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
         """Read an EPRV-standard FITS HDUList into this model.
 
-        One read path at every level. ``RVDataModel.read`` dispatches L2/L4 to
-        ``RV2._read``/``RV4._read`` through a hardcoded class reference keyed on
-        ``self.level`` rather than through the MRO, so this override -- not the
-        class bases -- is what detaches rvdata's name-guessing readers. It also
-        drops rvdata's ``@receipt_logged`` ``read`` row and its read-time PRIMARY
-        recast, so a product reads back exactly as written.
+        One read path at every level. ``RVDataModel.read`` dispatches L2/L4 via
+        a hardcoded class reference keyed on ``self.level``, bypassing the MRO
+        -- this override, not the class bases, is what detaches rvdata's
+        name-guessing readers. It also drops rvdata's ``@receipt_logged`` row
+        and read-time PRIMARY recast, so a product reads back exactly as
+        written.
         """
         if instrument is not None:
             raise ValueError(
@@ -293,22 +271,17 @@ class KPFDataModel(RVDataModel):
     def from_fits(cls, fn, instrument=None, **kwargs):
         """Read a data product from FITS, logging the file read (DRP-RUN-08).
 
-        The single read chokepoint for every KPF data model: one INFO record
-        per FITS read, naming the concrete class and the path, then delegate
-        to ``read`` -> ``_read``, the one manifest-driven reader.
+        The single read chokepoint: one INFO record per read, then delegate to
+        ``read`` -> ``_read``.
 
-        Ensures ``obs_id`` is carried in memory after the read. L0 (and any
-        product whose filename embeds the obs_id) resolves it during ``read``;
-        L1/L2/L4 filenames are timestamp-based, so a read there recovers the
-        obs_id from the ORIGID provenance card instead (see ``_obs_id_from_primary``).
-        The ``to_kpfN`` converters set ``obs_id`` directly, so this only fills the
-        from_fits path.
+        Ensures ``obs_id`` is set after the read. L0 resolves it during
+        ``read``; L1/L2/L4 filenames are timestamp-based, so it is recovered
+        from the ORIGID provenance card instead (see
+        ``_obs_id_from_primary``). The ``to_kpfN`` converters set ``obs_id``
+        directly, so this only covers the from_fits path.
 
-        CATALOG_RECORD is normalized here for every level: astropy's FITS reader
-        returns a missing (NaN) cell masked, and a masked cell is not NaN
-        (``np.isnan`` on one is falsy), so a missing-value check would read it as
-        present. It sits at the chokepoint, after the read, rather than inside
-        ``_read``.
+        Normalizes CATALOG_RECORD here: astropy's FITS reader marks a missing
+        cell masked rather than NaN, so ``np.isnan`` would miss it as present.
         """
         logger.info("reading %s from %s", cls.__name__, fn)
         obj = super().from_fits(fn, instrument=instrument, **kwargs)
@@ -331,12 +304,11 @@ class KPFDataModel(RVDataModel):
     def as_fits_header(src):
         """Return ``src`` as an ``astropy.io.fits.Header``, preserving comments.
 
-        KPF stores every extension header as a ``fits.Header`` so reads and writes
-        go through astropy natively, with no value-vs-``(value, comment)``
-        ambiguity. A ``fits.Header`` is returned as a copy (so callers can rebuild
-        an HDU without aliasing the stored header); a plain mapping -- RVData seeds
-        PRIMARY defaults as an ``OrderedDict`` of ``(value, comment)`` tuples -- is
-        rebuilt card by card, setting each value and comment together.
+        KPF stores every extension header as a ``fits.Header`` so reads/writes
+        go through astropy natively. A ``fits.Header`` is returned as a copy
+        (so callers can rebuild an HDU without aliasing the stored header); a
+        plain mapping -- RVData seeds PRIMARY defaults as an ``OrderedDict``
+        of ``(value, comment)`` tuples -- is rebuilt card by card.
         """
         if isinstance(src, fits.Header):
             return src.copy()
@@ -357,36 +329,30 @@ class KPFDataModel(RVDataModel):
     def set_keyword(self, key, value, ext=None):
         """Write a registered keyword to its home extension header.
 
-        Looks ``key`` up in the keyword registry (the
-        ``config/{prefix}-{EXTENSION}-keywords.csv`` tables) and writes ``value``
-        to the extension named there, with the registry comment
-        (``Description [Units]``) as the FITS comment. This is the single write
-        path for registered keywords, so a keyword always lands on the same
-        extension with the same comment -- callers never name a comment.
+        Looks ``key`` up in the keyword registry and writes ``value`` to its
+        registered extension, with the registry comment (``Description
+        [Units]``) as the FITS comment -- the single write path, so callers
+        never name a comment.
 
-        ``value`` is coerced to the registry ``DataType``, the header counterpart
-        of the manifest ``BitDepth`` check on ``set_data``: a card is written at
-        its declared width and a value that will not convert raises rather than
-        landing wrong. A None writes the blank seeded card through unchanged.
+        ``value`` is coerced to the registry ``DataType`` (the header
+        counterpart of the manifest ``BitDepth`` check on ``set_data``); a
+        value that will not convert raises rather than landing wrong. None
+        writes the blank seeded card through unchanged.
 
-        ``ext`` targets a specific extension for EPRV per-extension cards that
-        have no single routed home because they recur on every orderlet's
-        extension (e.g. ``VELSTART`` on ``CCF1..5``, ``RVMETHOD`` on ``RV1..5``).
-        The keyword must be registered *for that extension*; the comment still
-        comes from the registry. Aliases (e.g. ``SCI2_CCF``) resolve first. When
-        ``ext`` is None the keyword routes to its registered home as usual.
+        ``ext`` targets a specific extension for EPRV per-extension cards with
+        no single routed home (e.g. ``VELSTART`` on ``CCF1..5``, ``RVMETHOD``
+        on ``RV1..5``); the keyword must be registered for that extension.
+        Aliases (e.g. ``SCI2_CCF``) resolve first.
 
         Raises
         ------
         KeyError
-            If ``key`` is registered nowhere (default), or not registered for
-            ``ext`` (targeted); register it in the appropriate
-            ``config/{prefix}-{EXTENSION}-keywords.csv`` before writing it.
+            ``key`` is registered nowhere (default), or not for ``ext``
+            (targeted).
         ValueError
-            If the target extension does not exist on this object (a config
-            error -- the extension must be created before the write).
+            The target extension does not exist on this object.
         TypeError
-            If ``value`` does not convert to the registered ``DataType``.
+            ``value`` does not convert to the registered ``DataType``.
         """
         name = str(key).strip()
         if ext is None:
@@ -428,10 +394,10 @@ class KPFDataModel(RVDataModel):
     def set_data(self, ext_name, data):
         """Set extension data, resolving KPF aliases first.
 
-        For aliased models (KPF2/KPF4) this resolves chip-prefix keys (e.g.
-        'GREEN_SCI2_FLUX', routed through the data dict's ``__setitem__``) and
-        extension aliases before the base class ``.keys()`` check. The
-        ``hasattr`` guards make it a no-op passthrough for non-aliased L0/L1.
+        For aliased models (KPF2/KPF4), resolves chip-prefix keys (e.g.
+        'GREEN_SCI2_FLUX') and extension aliases before the base class
+        ``.keys()`` check. The ``hasattr`` guards make this a no-op
+        passthrough for L0/L1.
         """
         if hasattr(self.data, "_chip_split"):
             split = self.data._chip_split(ext_name)
@@ -451,8 +417,8 @@ class KPFDataModel(RVDataModel):
         ):
             data = Table(data)
         self._assert_bit_depth(ext_name, data, ext_name)
-        # rvdata's upcast branch is unreachable: it is gated on its own
-        # _get_min_bit_depth, which KPF never overrides, so it always reads None.
+        # rvdata's upcast branch is unreachable: gated on its own
+        # _get_min_bit_depth, which KPF never overrides.
         super().set_data(ext_name, data)
         # Sync self.receipt when the RECEIPT extension is loaded from FITS.
         if ext_name == "RECEIPT" and isinstance(data, Table):
@@ -461,11 +427,11 @@ class KPFDataModel(RVDataModel):
     def _assert_bit_depth(self, canonical_ext, data, label):
         """Raise unless ``data`` matches ``canonical_ext``'s declared BitDepth.
 
-        Width only: byte order is irrelevant (a FITS round-trip returns ``>f4``,
-        still 32 bits) and ``np.bool_`` satisfies the 8-bit master MASK rows it is
-        held as in memory. A no-op with no declaration, non-array data, or an
-        empty array -- every extension is born ``np.array([])``, which is 64-bit,
-        and reading an unpopulated product feeds that straight back through here.
+        Width only: byte order is irrelevant (FITS round-trip returns ``>f4``,
+        still 32 bits), and ``np.bool_`` satisfies the 8-bit master MASK rows.
+        A no-op with no declaration, non-array data, or an empty array --
+        every extension is born ``np.array([])`` (64-bit), so reading an
+        unpopulated product must pass.
         """
         depth = self.extension_manifest.bit_depth(self._data_model, canonical_ext)
         if (
@@ -490,11 +456,11 @@ class KPFDataModel(RVDataModel):
     def _forward_headers(self, target, ext_names):
         """Forward governed extension headers onto ``target``, card by card.
 
-        Shared by the ``to_kpf{1,2,4}`` conversions: for each name present on both
-        sides, copy every card with its FITS comment (``.items()`` would drop
-        comments). Copying overlays onto the target's header rather than replacing
-        it, so a PRIMARY pre-seeded with the EPRV skeleton keeps cards the source
-        lacks (native values win). An extension absent on either side is skipped.
+        Shared by the ``to_kpf{1,2,4}`` conversions. Copies every card with
+        its FITS comment (``.items()`` would drop comments), overlaying onto
+        the target's header rather than replacing it, so a PRIMARY pre-seeded
+        with the EPRV skeleton keeps cards the source lacks. An extension
+        absent on either side is skipped.
         """
         for ext in ext_names:
             if ext in self.headers and ext in target.headers:
@@ -505,13 +471,12 @@ class KPFDataModel(RVDataModel):
         """Record a processing step, and stamp DRPSTATU for pipeline modules.
 
         Signature matches rvdata >=0.4.0: ``function`` names the step, ``args``
-        is a key=value provenance string (``""`` when not applicable), ``status``
-        is ``"PASS"``/``"FAIL"``.
+        is a key=value provenance string (``""`` when not applicable),
+        ``status`` is ``"PASS"``/``"FAIL"``.
 
-        DRPSTATU becomes '<Module Name> module complete' (the form
-        ``L0-PRIMARY-keywords.csv`` documents); conversion and serialization
-        receipts (``_INTERNAL_RECEIPTS``) are skipped so it names the last real
-        stage.
+        DRPSTATU becomes '<Module Name> module complete'; conversion/
+        serialization receipts (``_INTERNAL_RECEIPTS``) are skipped so it
+        names the last real stage.
         """
         super().receipt_add_entry(function, args, status)
         if (
@@ -523,23 +488,22 @@ class KPFDataModel(RVDataModel):
             self.set_keyword("DRPSTATU", f"{label} module complete")
 
     def _create_hdul(self):
-        """Sync ``self.receipt`` into the RECEIPT extension before writing (rvdata
-        serializes ``self.data["RECEIPT"]``, not ``self.receipt``), creating the
-        extension if L0/L1 omitted it. PRIMARY comments are preserved by rvdata's
-        own ``_create_hdul``, so no PRIMARY rebuild is needed.
+        """Sync ``self.receipt`` into the RECEIPT extension before writing
+        (rvdata serializes ``self.data["RECEIPT"]``, not ``self.receipt``),
+        creating the extension if L0/L1 omitted it.
 
-        Also the one place FILENAME can be withheld: rvdata's ``to_fits`` stamps
-        it on PRIMARY unconditionally, immediately before calling this, so a
-        product that must not carry it (see ``_stamps_filename``) drops it here,
-        between the stamp and the write.
+        Also the one place FILENAME can be withheld: rvdata's ``to_fits``
+        stamps it on PRIMARY unconditionally just before calling this, so a
+        product that must not carry it (see ``_stamps_filename``) drops it
+        here.
         """
         if self.receipt is not None and not self.receipt.empty:
             if "RECEIPT" not in self.extensions:
                 self.create_extension("RECEIPT", "BinTableHDU")
             self._sync_receipt_to_extension()
         if not self._stamps_filename:
-            # No native WMKO key maps to FILENAME (EPRV-header-map.csv), so an
-            # unstandardized PRIMARY only ever has the card rvdata just added.
+            # No native WMKO key maps to FILENAME, so unstandardized PRIMARY
+            # only ever has the card rvdata just added.
             del self.headers["PRIMARY"]["FILENAME"]
         return super()._create_hdul()
 
@@ -547,20 +511,19 @@ class KPFDataModel(RVDataModel):
     def _stamps_filename(self):
         """Whether FILENAME belongs on this product's PRIMARY when it is written.
 
-        True for every EPRV-standard product. ``KPF0`` overrides it: FILENAME is
-        an EPRV PRIMARY keyword, so a raw (unstandardized) L0 must round-trip
-        with the native header it was read with.
+        True for every EPRV-standard product. ``KPF0`` overrides it: a raw
+        (unstandardized) L0 must round-trip with the native header it was
+        read with.
         """
         return True
 
     def to_fits(self, fn=None):
         """Write this product to ``fn``, defaulting to its standard filename.
 
-        The single write path for every level. KPF keeps a one-filepath
-        signature, so every call site passes a single path; rvdata >=0.4.0 names
-        the parameter ``out_filename``, so this shim is what bridges the two. The
-        rvdata implementation does the rest -- receipt row, warn-only filename
-        check, FILENAME stamp, ``_create_hdul``, then ``makedirs``/``writeto``.
+        The single write path for every level. Bridges KPF's one-filepath
+        signature to rvdata >=0.4.0's ``out_filename`` parameter; rvdata does
+        the rest -- receipt row, warn-only filename check, FILENAME stamp,
+        ``_create_hdul``, then ``makedirs``/``writeto``.
         """
         if fn is None:
             fn = self.generate_standard_filename()

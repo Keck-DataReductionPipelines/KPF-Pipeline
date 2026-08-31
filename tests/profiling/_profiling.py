@@ -100,11 +100,6 @@ QC_LABEL = "QC + diagnostics (all levels)"
 OVERHEAD_LABEL = "(orchestration / overhead)"
 
 
-# ---------------------------------------------------------------------------
-# Data access: skip-if-absent + config builders
-# ---------------------------------------------------------------------------
-
-
 def require_testdata():
     """Exit 0 with a clear message when the real frames are absent.
 
@@ -158,13 +153,10 @@ def masters_config(output_dir=None):
     )
 
 
-# ---------------------------------------------------------------------------
-# Intermediate-product builders (the science L0 -> L4 chain)
-#
-# Each rebuilds from scratch so a harness can call it twice (the cProfile pass
-# and the line_profiler pass each get a fresh, unmutated input). Construction is
-# kept OUT of the profiled call so each per-module report isolates that module.
-# ---------------------------------------------------------------------------
+# Intermediate-product builders (the science L0 -> L4 chain). Each rebuilds from
+# scratch so a harness can call it twice (cProfile pass + line_profiler pass each
+# get a fresh input); construction stays OUT of the profiled call so each report
+# isolates its own module.
 
 
 def load_l0(config):
@@ -286,11 +278,6 @@ def masters_l0_files(imtype):
     else:
         kwargs = {"cluster_gap_seconds": MASTERS_CLUSTER_GAP_SECONDS}
     return file_handler.build_calibration_stacks(imtype, **kwargs)[0]
-
-
-# ---------------------------------------------------------------------------
-# Profiling core
-# ---------------------------------------------------------------------------
 
 
 def _is_own_code(filename):
@@ -870,11 +857,6 @@ def _line_drilldown(call, args, kwargs, funcs):
     return _strip_docstrings(buf.getvalue(), funcs)
 
 
-# ---------------------------------------------------------------------------
-# Report rendering
-# ---------------------------------------------------------------------------
-
-
 def _fmt_func(r):
     return f"`{_module_label(r['file'])}:{r['name']}`"
 
@@ -899,7 +881,6 @@ def _render(title, total, rows, flags, line_text):
     )
     w("")
 
-    # Recommended actions --------------------------------------------------
     w(
         f"## Recommended actions (≥ {HOTSPOT_FRACTION:.0%} attributed time "
         f"and ≥ {HOTSPOT_MIN_SECONDS:.0f} s)"
@@ -915,7 +896,6 @@ def _render(title, total, rows, flags, line_text):
         w("_Nothing over threshold — **no action needed**._")
     w("")
 
-    # KPF-method ranking ---------------------------------------------------
     w(f"## KPF methods ≥ {TOP_FUNCTION_MIN_FRACTION:.0%} of runtime (attributed)")
     w("")
     w("| method | attributed % | attributed s | own s | calls |")
@@ -936,7 +916,6 @@ def _render(title, total, rows, flags, line_text):
     )
     w("")
 
-    # Line drill-down ------------------------------------------------------
     if line_text:
         w("## Line-level drill-down (hotspot methods)")
         w("")
@@ -1003,7 +982,6 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
     )
     w("")
 
-    # High-level summary (cumulative wall-clock per stage) -----------------
     w("## High-level summary")
     w("")
     w("| stage / bucket | % wall | s |")
@@ -1012,7 +990,6 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
         w(f"| `{lbl}` | {frac:.1%} | {secs:.3f} |")
     w("")
 
-    # Quarantined (nondeterministic) totals, reported separately ----------
     excluded = []
     if summary["bary_seconds"] > 0:
         excluded.append(
@@ -1041,7 +1018,6 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
     out.extend(excluded or ["- _None — fully deterministic disk + compute._"])
     w("")
 
-    # I/O vs compute (whole run; masters recipe) --------------------------
     if split is not None:
         base = split["total"]
         io_frac = split["io"] / base
@@ -1066,7 +1042,6 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
         )
         w("")
 
-    # Quicklook plot breakdown (science recipe) ---------------------------
     if quicklook and quicklook["rows"]:
         w("## Quicklook plot breakdown")
         w("")
@@ -1082,7 +1057,6 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
             w(f"| `{lbl}` | {frac:.1%} | {secs:.3f} |")
         w("")
 
-    # Quality-control per-level breakdown (science recipe) ----------------
     if quality and quality["rows"]:
         w("## Quality control breakdown")
         w("")
@@ -1101,11 +1075,6 @@ def _render_recipe(title, summary, split=None, quicklook=None, quality=None):
         w("")
 
     return "\n".join(out)
-
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
 
 
 def run_profile(

@@ -429,14 +429,13 @@ class FileHandler:
         cal_type : str
             Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
         min_stack_size : int, default 1
-            Minimum number of files required per stack; undersized stacks are
-            dropped. The default of 1 keeps every cluster (a no-op filter); the
-            masters recipe passes the configured per-cal-type value.
+            Minimum files required per stack; undersized stacks are dropped.
+            Default 1 is a no-op filter; the masters recipe passes the
+            configured per-cal-type value.
         max_stack_size : int or None, default None
-            Maximum number of files used per stack; oversized stacks are
-            truncated to their earliest ``max_stack_size`` frames. The default of
-            None imposes no ceiling; the masters recipe passes the configured
-            per-cal-type value.
+            Maximum files used per stack; oversized stacks are truncated to
+            their earliest frames. Default None imposes no ceiling; the
+            masters recipe passes the configured per-cal-type value.
         cluster_gap_seconds : int, default 7200
             Gap [s] between consecutive frames that splits one session from the
             next. The 2-hour default separates KPF morning vs. evening sessions.

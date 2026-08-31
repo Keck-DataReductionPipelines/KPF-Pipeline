@@ -683,9 +683,8 @@ class AstroQuery:
             if getattr(self, f"_{source}") is not None
         ]
 
-        # Only a source named in astrometry_priority may anchor the position, in that
-        # order; the first with a complete block wins and an incomplete one ahead of it
-        # is demoted with an auditable warning.
+        # First candidate in astrometry_priority order with a complete block wins;
+        # an incomplete one ahead of it is demoted with a warning.
         base_source, base_record = None, None
         for source in self.astrometry_priority:
             record = getattr(self, f"_{source}")

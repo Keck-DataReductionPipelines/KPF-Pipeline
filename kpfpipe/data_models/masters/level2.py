@@ -31,10 +31,8 @@ class KPFMasterL2(KPFMasterModel, KPF2):
     infers the kind from header keyword MASTYPE.
     """
 
-    # MASTYPE (WMKO token) -> schema kind, for from_fits. L2 masters are the WLS
-    # (thar) master and the flat master.
-    # Its values are also the manifest suffixes that select an L2 master's
-    # extension set (ML2-{kind}-extensions.csv), so they are named once here.
+    # MASTYPE (WMKO token) -> schema kind, for from_fits. Also the manifest
+    # suffix (ML2-{kind}-extensions.csv), so it is named once here.
     _MASTYPE_TO_KIND = {"thar": "wls", "flat": "flat"}
 
     def __init__(self, kind):

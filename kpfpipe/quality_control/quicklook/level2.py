@@ -39,9 +39,7 @@ class PlotL2(Plot):
         super().__init__(l2_obj, output_dir, obs_id)
         self.fibers = _FIBERS
 
-    # ------------------------------------------------------------------
     # Data access helpers
-    # ------------------------------------------------------------------
 
     def _flux(self, chip, fiber):
         """Return the (norder, ncol) flux array for one fiber, or None."""
@@ -89,9 +87,7 @@ class PlotL2(Plot):
         snr = flux / np.sqrt(np.abs(var))
         return np.where(np.isfinite(snr), snr, 0.0)
 
-    # ------------------------------------------------------------------
     # Plots
-    # ------------------------------------------------------------------
 
     def snr_per_order(self, chip):
         """Per-order SNR (95th pctile of flux/sqrt(|var|)) for each fiber plus

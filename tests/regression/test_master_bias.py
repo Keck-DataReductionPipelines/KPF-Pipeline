@@ -38,11 +38,6 @@ TESTDATA_BIAS_FILES = sorted(
 )
 
 
-# ---------------------------------------------------------------------------
-# Unit tests (mocked stack_frames)
-# ---------------------------------------------------------------------------
-
-
 class TestMasterBiasUnit:
     @pytest.fixture(scope="class")
     def master_bias(self):
@@ -66,11 +61,6 @@ class TestMasterBiasUnit:
             assert master_bias.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
 
 
-# ---------------------------------------------------------------------------
-# info() smoke tests
-# ---------------------------------------------------------------------------
-
-
 class TestMasterBiasInfo:
     def test_info_before_make_master_l1(self, capsys):
         bias = Bias(FILE_LIST)
@@ -89,11 +79,6 @@ class TestMasterBiasInfo:
         assert "make_master_l1() has not been called" not in out
         for chip in CHIPS:
             assert chip in out
-
-
-# ---------------------------------------------------------------------------
-# FITS round-trip (mocked stack_frames)
-# ---------------------------------------------------------------------------
 
 
 class TestMasterBiasRoundTrip:
@@ -119,22 +104,12 @@ class TestMasterBiasRoundTrip:
         assert ml1_read.headers["PRIMARY"].get("DATALVL") == "ML1"
 
 
-# ---------------------------------------------------------------------------
-# Signature: a bias applies no calibrations, so no bias/dark/flat kwargs
-# ---------------------------------------------------------------------------
-
-
 class TestMasterBiasSignature:
     @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
     def test_calibration_kwargs_rejected(self, kwarg):
         module = Bias(FILE_LIST)
         with pytest.raises(TypeError, match="unexpected keyword argument"):
             module.make_master_l1(**{kwarg: True})
-
-
-# ---------------------------------------------------------------------------
-# Regression tests (real L0 data)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -174,11 +149,9 @@ class TestMasterBiasRegression:
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values
 
-    # ------------------------------------------------------------------
     # The persisted product: written through kpf_filepath, as the masters
     # recipe writes it, then read back. These assertions arrived from a
     # recipe test that re-stacked this same five-frame bias to reach them.
-    # ------------------------------------------------------------------
 
     @pytest.fixture(scope="class")
     def master_bias_on_disk(self, master_bias, tmp_path_factory):
