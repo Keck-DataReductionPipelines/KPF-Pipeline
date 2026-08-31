@@ -336,12 +336,12 @@ class TestEPRVCompliance:
     """L0 against the EPRV standard.
 
     rvdata publishes no L0 tables -- L0 is the raw WMKO readout, not an EPRV
-    product -- so the oracle is KPF's own ``header-map.csv``. A bare KPF0 is
-    deliberately unseeded, because ``_read`` replaces PRIMARY wholesale;
+    product -- so the oracle is KPF's own registry. A bare KPF0 is deliberately
+    unseeded, because ``_read`` replaces PRIMARY wholesale;
     standardize_header_format is what puts the EPRV skeleton on it.
     """
 
-    def test_standardization_stamps_every_mapped_keyword(self, tmp_path):
+    def test_standardization_stamps_the_whole_seed(self, tmp_path):
         fn = tmp_path / "KP.20240101.00001.00.fits"
         write_minimal_l0(fn)
         l0 = standardized_l0(fn)
@@ -443,8 +443,8 @@ class TestStandardizedPrimary:
         )
 
     def test_unmapped_natives_do_not_reach_primary(self, tmp_path):
-        # A native the map does not name stays in INSTRUMENT_HEADER; the map is
-        # the definition of the EPRV PRIMARY set, so nothing leaks past it.
+        # A native the map does not name stays in INSTRUMENT_HEADER: the fill
+        # loop writes only mapped EPRV_KEYs, so nothing leaks past it.
         fn = str(tmp_path / "KP.20240113.00009.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"

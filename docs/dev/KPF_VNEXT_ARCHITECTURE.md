@@ -205,9 +205,11 @@ from a **single source-of-truth table** unioning the
 `config/{prefix}-{EXTENSION}-keywords.csv` registries, one file per extension per level.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
-routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags, read-noise,
-calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths),
+routes to: **PRIMARY** (EPRV keywords, plus the KPF-owned master calibration paths),
+**QUALITY_CONTROL** (QC flags, read-noise, calibration ages, DiagL2 metrics),
 the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `RV{GREEN,RED}`/`ERV{GREEN,RED}`).
+RECEIPT is not a home: it registers no keyword, carrying DRP provenance and applied flags as
+table rows (`receipt_add_entry`) rather than header cards.
 The one exception to *PRIMARY holds EPRV keywords only* is those same four names, which are homed on
 PRIMARY **as well** — there they are the SCI-combined RVs, KPF-registered yet belonging beside the EPRV
 `RV`/`RVERR`. Routing prefers PRIMARY, so the bare `set_keyword` writes the combined value and the
@@ -355,7 +357,7 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 `kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword`, which routes each to its registry home — most land on QUALITY_CONTROL, but a metric registered as an EPRV PRIMARY keyword goes to PRIMARY (`DiagL2.snr` writes `SNRSC*` to QUALITY_CONTROL and mirrors the summed-SCI values to `EXSNR1-5`/`EXSNRW1-5` on PRIMARY). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
 
-**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. So does a metric a module derives from a decision it just made: `CalibrationAssociation` writes the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`) alongside the master paths it selects (`*FILE` on RECEIPT), so a path and its age cannot disagree. Metrics computable from the finished product alone live in Diagnostics.
+**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. So does a metric a module derives from a decision it just made: `CalibrationAssociation` writes the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`) alongside the master paths it selects (`*FILE` on PRIMARY), so a path and its age cannot disagree. Metrics computable from the finished product alone live in Diagnostics.
 
 ### QC flags
 

@@ -466,8 +466,8 @@ class TestKPFMasterL1:
         prim = set(m.headers["PRIMARY"])
         assert set(m.keyword_registry.primary_seed("ML1")) <= prim
         assert m.headers["PRIMARY"]["DATALVL"] == "ML1"
-        # Masters are outside EPRV scope, so the science header-map skeleton
-        # must not reach a built master, DATALVL aside.
+        # Masters are outside EPRV scope, so the science skeleton must not
+        # reach a built master, DATALVL aside.
         science = set(m.keyword_registry.primary_seed("L1"))
         assert not (science & prim) - {"DATALVL"}
 
@@ -552,11 +552,11 @@ class TestEPRVCompliance:
 
     rvdata publishes no L1 tables either -- the assembled FFI is a KPF stage
     between the raw readout and the EPRV L2 -- so, as at L0, the oracle is KPF's
-    own header map. Unlike L0, an L1 seeds its PRIMARY at construction, so the
+    own registry. Unlike L0, an L1 seeds its PRIMARY at construction, so the
     cards are asserted on a bare model.
     """
 
-    def test_the_primary_carries_every_mapped_keyword(self):
+    def test_the_primary_carries_the_whole_seed(self):
         registry = KPF1.keyword_registry
         assert set(registry.primary_seed("L1")) <= set(KPF1().headers["PRIMARY"])
 

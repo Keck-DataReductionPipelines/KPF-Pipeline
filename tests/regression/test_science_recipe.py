@@ -266,18 +266,24 @@ class TestScienceRecipe:
             assert np.isfinite(float(hdr.get(key))), f"{key} not finite"
 
     def test_calibration_headers_set(self, l2):
-        # Master paths land in the RECEIPT table, ages on QUALITY_CONTROL.
+        # Master paths land on PRIMARY and in the RECEIPT table, ages on
+        # QUALITY_CONTROL. The two path copies must agree here, at L2, so the
+        # PRIMARY cards are shown to survive the L1 -> L2 forward.
         entry = l2.receipt_read_entry("calibration_association")
+        primary = l2.headers["PRIMARY"]
         qc = l2.headers["QUALITY_CONTROL"]
         # bias/dark use a full path + float AGE. Flat association is not wired
-        # up until flat processing exists.
+        # up until flat processing exists, so its card stays blank-seeded.
         for cal_type in ("bias", "dark"):
             assert entry[f"{cal_type}file"] is not None
+            assert primary[f"{cal_type.upper()}FILE"] == entry[f"{cal_type}file"]
             assert f"{cal_type.upper()}AGE" in qc
         assert entry["flatfile"] is None
+        assert primary["FLATFILE"] is None
         assert "FLATAGE" not in qc
         # thar follows the same convention; WLSAGE is in days.
         assert entry["wlsfile"].endswith("_master_thar_L2.fits")
+        assert primary["WLSFILE"] == entry["wlsfile"]
         assert isinstance(qc.get("WLSAGE"), float)
 
     def test_catalog_record_reaches_the_science_cards(self, l2):

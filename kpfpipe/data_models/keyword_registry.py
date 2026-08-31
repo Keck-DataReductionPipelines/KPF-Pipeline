@@ -20,9 +20,9 @@ unsourced. ``ExampleValue`` is documentation only, not read here.
 Three use-cases:
   (1) Mapping -- ``header_map`` (WMKO-native -> EPRV-standard, from
       ``config/header-map.csv``), consumed by
-      ``KPF0.standardize_header_format``; defines the EPRV PRIMARY keyword
-      set (every ``EPRV_KEY`` must be registered on PRIMARY, or the load
-      raises).
+      ``KPF0.standardize_header_format``; it annotates PRIMARY keywords the
+      CSVs already register with a native source and a default, and every
+      ``EPRV_KEY`` must be one of them or the load raises.
   (2) Validation -- ``is_registered``, ``allowed`` (per-extension set),
       ``is_structural`` (FITS bookkeeping cards, permitted everywhere,
       registered nowhere).
@@ -276,10 +276,10 @@ class KeywordRegistry:
     def _load_header_map(self):
         """Read ``config/header-map.csv``, the WMKO-native -> EPRV map.
 
-        PRIMARY-only by definition, so also the definition of the EPRV PRIMARY
-        keyword set: every ``EPRV_KEY`` must be unique and registered on
-        PRIMARY, or a stray key would seed a comment-less, untyped card
-        silently. Runs after ``_build_registry`` -- filters against
+        PRIMARY-only, and an annotation of the registry rather than a second
+        authority over them: every ``EPRV_KEY`` must be unique and already
+        registered on PRIMARY, or a stray key would carry a default no card
+        ever collects. Runs after ``_build_registry`` -- filters against
         ``self.allowed``.
 
         The seven site-coordinate keywords default from

@@ -363,7 +363,8 @@ class TestKeywordRegistry:
         assert reg.datatype_for("INSTRUME", "QUALITY_CONTROL") is None
 
     def test_header_map_keys_are_registered_on_primary(self):
-        # The two authorities cannot drift: _load_header_map raises otherwise.
+        # The map annotates the registry, so it cannot name a keyword the CSVs
+        # do not register: _load_header_map raises otherwise.
         reg = KPF1.keyword_registry
         keys = set(reg.header_map["EPRV_KEY"].astype(str).str.strip())
         assert keys <= reg.allowed["PRIMARY"]
