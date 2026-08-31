@@ -730,4 +730,5 @@ class TestOrderTraceSelection:
         monkeypatch.setattr(SpectralExtraction, "extract_ffi", extract)
         l2 = SpectralExtraction(minimal_l1).perform(fibers=[])
 
-        assert l2.headers["RECEIPT"]["TRACEREF"] == "order_trace_20231101.csv"
+        entry = l2.receipt[l2.receipt["FUNCTION"] == "spectral_extraction"].iloc[-1]
+        assert entry["ARGS"] == "order_trace=order_trace_20231101.csv"

@@ -129,10 +129,9 @@ class TestImageAssemblyBias:
         assert "RNNGGR1" in l1.headers["QUALITY_CONTROL"]
         assert "RNNGRD1" in l1.headers["QUALITY_CONTROL"]
 
-    def test_overscan_applied_in_header(self, l1_bias):
+    def test_overscan_applied_in_receipt(self, l1_bias):
         l1, _ = l1_bias
-        val = l1.headers["RECEIPT"].get("OSCANSUB")
-        assert val == 1
+        assert l1.receipt_read_entry("image_assembly")["oscansub"] == "1"
 
     def test_read_mode_in_header(self, l1_bias):
         l1, _ = l1_bias
@@ -472,7 +471,7 @@ class TestExpmeterWavelengthConversion:
 
 
 class TestOverscanMethods:
-    """The three ``_oscan_*`` kernels and the OSCANSUB provenance flag.
+    """The three ``_oscan_*`` kernels and the oscansub provenance flag.
 
     ``rowmedian`` is the configured default, so it is the only method the
     real-frame tests above ever run; ``median`` and ``zero`` are equally
@@ -523,11 +522,9 @@ class TestOverscanMethods:
         "method, expected", [("rowmedian", 1), ("median", 1), ("zero", 0)]
     )
     def test_oscansub_flag_tracks_method(self, ia, method, expected):
-        # OSCANSUB is a provenance card: 'zero' subtracts nothing and must say so.
+        # oscansub is provenance: 'zero' subtracts nothing and must say so.
         ia.overscan_method = method
-        l1 = KPF1()
-        ia._set_headers(l1)
-        assert l1.headers["RECEIPT"].get("OSCANSUB") == expected
+        assert ia._receipt_args() == f"oscansub={expected}"
 
 
 class TestReadMode:

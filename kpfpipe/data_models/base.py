@@ -487,6 +487,26 @@ class KPFDataModel(RVDataModel):
             label = function.replace("_", " ").title()
             self.set_keyword("DRPSTATU", f"{label} module complete")
 
+    def receipt_read_entry(self, function):
+        """The provenance ARGS of the most recent ``function`` receipt row.
+
+        ARGS is a ``", "``-joined list of ``key=value`` fragments; returns them
+        as a dict of strings, empty when ``function`` has no row. A fragment
+        written from ``None`` reads back as ``None``, so a key recorded without
+        a value and a key never recorded both ``get()`` as ``None``.
+        """
+        if self.receipt is None or self.receipt.empty:
+            return {}
+        rows = self.receipt[self.receipt["FUNCTION"] == function]
+        if rows.empty:
+            return {}
+        entry = {}
+        for token in str(rows.iloc[-1]["ARGS"]).split(", "):
+            key, _, value = token.partition("=")
+            if value:
+                entry[key.strip()] = None if value == "None" else value.strip()
+        return entry
+
     def _create_hdul(self):
         """Sync ``self.receipt`` into the RECEIPT extension before writing
         (rvdata serializes ``self.data["RECEIPT"]``, not ``self.receipt``),

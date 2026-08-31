@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.utils.config import ConfigHandler
@@ -265,21 +266,18 @@ class TestScienceRecipe:
             assert np.isfinite(float(hdr.get(key))), f"{key} not finite"
 
     def test_calibration_headers_set(self, l2):
-        # Master paths land on RECEIPT, ages on QUALITY_CONTROL (registry homes).
-        receipt = l2.headers["RECEIPT"]
+        # Master paths land in the RECEIPT table, ages on QUALITY_CONTROL.
+        entry = l2.receipt_read_entry("calibration_association")
         qc = l2.headers["QUALITY_CONTROL"]
-        # bias/dark use a full-path FILE + float AGE (no DIR). Flat association
-        # is not wired up until flat processing exists.
-        for prefix in ("BIAS", "DARK"):
-            assert f"{prefix}FILE" in receipt
-            assert f"{prefix}DIR" not in receipt
-            assert f"{prefix}AGE" in qc
-        assert "FLATFILE" not in receipt
+        # bias/dark use a full path + float AGE. Flat association is not wired
+        # up until flat processing exists.
+        for cal_type in ("bias", "dark"):
+            assert entry[f"{cal_type}file"] is not None
+            assert f"{cal_type.upper()}AGE" in qc
+        assert entry["flatfile"] is None
         assert "FLATAGE" not in qc
         # thar follows the same convention; WLSAGE is in days.
-        assert "WLSFILE" in receipt
-        assert "WLSDIR" not in receipt
-        assert receipt.get("WLSFILE").endswith("_master_thar_L2.fits")
+        assert entry["wlsfile"].endswith("_master_thar_L2.fits")
         assert isinstance(qc.get("WLSAGE"), float)
 
     def test_catalog_record_reaches_the_science_cards(self, l2):
@@ -625,23 +623,28 @@ class _FakeL4:
         self.headers = headers
         self.receipt = receipt
 
+    # The parse under test is production code, so borrow it rather than mock it.
+    receipt_read_entry = KPFDataModel.receipt_read_entry
+
 
 class TestScienceSummary:
     """Unit tests for the science_run_summary() formatter."""
 
     def _l4(self):
         headers = {
-            "RECEIPT": {
-                "ORIGID": "KP.20240405.40113.57",
-                "BIASFILE": "/m/20240405/KP.20240405.03637.74_master_bias_L1.fits",
-                "DARKFILE": "/m/20240405/KP.20240405.03637.74_master_dark_L1.fits",
-                "WLSFILE": "/m/20240405/KP.20240405.63499.95_master_thar_L2.fits",
-            },
+            "RECEIPT": {"ORIGID": "KP.20240405.40113.57"},
             "PRIMARY": {"RV": 11.290158, "RVERR": 0.000156, "BJDTDB": 2460405.968919},
         }
         receipt = pd.DataFrame(
             [
                 ("from_fits", "fn=/in/L0/20240405/KP.20240405.40113.57.fits, foo=None"),
+                (
+                    "calibration_association",
+                    "biasfile=/m/20240405/KP.20240405.03637.74_master_bias_L1.fits, "
+                    "darkfile=/m/20240405/KP.20240405.03637.74_master_dark_L1.fits, "
+                    "flatfile=None, "
+                    "wlsfile=/m/20240405/KP.20240405.63499.95_master_thar_L2.fits",
+                ),
                 (
                     "to_fits",
                     "out_filepath=/out/L2/20240405/kpf_SL2_20240405T110833.fits",
@@ -665,7 +668,7 @@ class TestScienceSummary:
             "outputs:  kpf_SL2_20240405T110833.fits  kpf_SL4_20240405T110833.fits"
             in text
         )
-        # Masters from the RECEIPT header cards.
+        # Masters from the calibration_association receipt entry.
         assert "bias=KP.20240405.03637.74_master_bias_L1.fits" in text
         assert "thar=KP.20240405.63499.95_master_thar_L2.fits" in text
         # RV km/s, error m/s (0.000156 km/s -> 0.156 m/s).

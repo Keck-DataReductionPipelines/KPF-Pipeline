@@ -99,10 +99,10 @@ def _make_kpf1(
 ):
     """Minimal KPF1 with all L1 QC-relevant headers.
 
-    QC-relevant keywords live on their registry-home extensions, not PRIMARY: the
-    applied-step flags (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) on RECEIPT, and the
-    read-noise and master-age keywords on QUALITY_CONTROL. They are seeded on the
-    loaded object after ``from_fits`` returns.
+    QC-relevant provenance lives on its registry-home extension, not PRIMARY: the
+    applied-step flags (oscansub/biassub/darksub/flatdiv) in the RECEIPT table,
+    and the read-noise and master-age keywords on QUALITY_CONTROL. They are
+    seeded on the loaded object after ``from_fits`` returns.
     """
     fn = str(tmp_path / "kpf_L1_20240405T010037.fits")
     primary = fits.PrimaryHDU()
@@ -121,11 +121,12 @@ def _make_kpf1(
     fits.HDUList(hdus).writeto(fn, overwrite=True)
     l1 = KPF1.from_fits(fn)
 
-    receipt = l1.headers["RECEIPT"]
-    receipt["OSCANSUB"] = (oscansub, "Overscan subtraction applied")
-    receipt["BIASSUB"] = (biassub, "Bias subtraction applied")
-    receipt["DARKSUB"] = (darksub, "Dark subtraction applied")
-    receipt["FLATDIV"] = (flatdiv, "Flat division applied")
+    l1.receipt_add_entry("image_assembly", f"oscansub={int(oscansub)}", "PASS")
+    l1.receipt_add_entry(
+        "image_processing",
+        f"biassub={int(biassub)}, darksub={int(darksub)}, flatdiv={int(flatdiv)}",
+        "PASS",
+    )
 
     qc = l1.headers["QUALITY_CONTROL"]
     qc["BIASAGE"] = (agebias, "Age of bias master [days]")
@@ -1463,11 +1464,11 @@ class TestQCL1:
         assert QCL1(l1).bias_ok() is False
 
     def test_bias_ok_subtract_flag_missing_raises(self, tmp_path):
-        # ImageProcessing writes BIASSUB on every run, 0 or 1; an absent card is
-        # a broken upstream invariant, not a not-subtracted frame.
+        # ImageProcessing writes biassub on every run, 0 or 1; an absent argument
+        # is a broken upstream invariant, not a not-subtracted frame.
         l1 = _make_kpf1(tmp_path, agebias=3.0)
-        del l1.headers["RECEIPT"]["BIASSUB"]
-        with pytest.raises(KeyError, match="BIASSUB"):
+        l1.receipt = l1.receipt[l1.receipt["FUNCTION"] != "image_processing"]
+        with pytest.raises(KeyError, match="biassub"):
             QCL1(l1).bias_ok()
 
     def test_bias_ok_fail_too_old(self, tmp_path):
@@ -1621,9 +1622,9 @@ class TestQCL1Run:
         l1 = _make_kpf1(tmp_path)
         results = QCL1(l1).run()
 
-        # BIASOK/DARKOK/FLATOK read the RECEIPT *SUB flags and the *AGE values
+        # BIASOK/DARKOK/FLATOK read the receipt *sub flags and the *AGE values
         # but are themselves QUALITY_CONTROL keywords; the applied-step flags
-        # (OSCANSUB/BIASSUB/DARKSUB/FLATDIV) stay RECEIPT-only provenance.
+        # (oscansub/biassub/darksub/flatdiv) stay RECEIPT-table provenance.
         # KWRDPRL1 is absent on purpose: its check is stubbed and writes no flag.
         qc_keys = [
             "DATAPRL1",
@@ -1645,7 +1646,7 @@ class TestQCL1Run:
         l1 = _make_kpf1(tmp_path, biassub=False)
         QCL1(l1).run()
 
-        # QC writes the BIASOK flag and never touches RECEIPT's BIASSUB.
+        # QC writes the BIASOK flag and never touches the receipt's biassub.
         assert l1.headers["QUALITY_CONTROL"].get("BIASOK") == 0
 
 

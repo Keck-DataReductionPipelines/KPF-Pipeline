@@ -167,7 +167,7 @@ class BaseMasterModule:
         Resolve one active calibration to a master, caching one per type.
 
         Source is ``self._active_calibrations[cal_type]``: True → master associated
-        into the frame header, str → filepath, KPFMasterL1 → in-memory master. A
+        into the frame receipt, str → filepath, KPFMasterL1 → in-memory master. A
         disk-backed master is read only when its path differs from the cached one
         (frames in a stack almost always share a master, so each is read once).
         Falsy and in-memory values are returned unchanged.
@@ -179,7 +179,9 @@ class BaseMasterModule:
         if isinstance(value, str):
             path = value
         elif value is True:
-            path = l1_obj.headers["RECEIPT"][f"{cal_type.upper()}FILE"]
+            path = l1_obj.receipt_read_entry("calibration_association")[
+                f"{cal_type}file"
+            ]
         else:
             return value  # let ImageProcessing raise the TypeError
 

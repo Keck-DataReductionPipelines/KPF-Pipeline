@@ -288,7 +288,7 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
 
 - **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROSCI1`); encode the level
   where needed for uniqueness (`DATAPRL0`). **Before coining a new keyword, reuse the legacy
-  spelling where the science meaning matches** (`WLSFILE`, `BIASFILE`), so downstream/archival
+  spelling where the science meaning matches** (`DATE-OBS`, `READMODE`), so downstream/archival
   tools keep reading v3 products; `reference/legacy_data_format.rst` is no longer vendored, so
   read it out of git history.
 - **Register every KPF keyword in `config/{prefix}-{EXTENSION}-keywords.csv`**

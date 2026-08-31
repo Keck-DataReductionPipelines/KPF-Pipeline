@@ -26,9 +26,9 @@ _DEFAULTS = {
 }
 
 _CALIBRATION_APPLIED_KEYS = {
-    "bias": "BIASSUB",
-    "dark": "DARKSUB",
-    "flat": "FLATDIV",
+    "bias": "biassub",
+    "dark": "darksub",
+    "flat": "flatdiv",
 }
 
 
@@ -42,9 +42,9 @@ class ImageProcessing:
     Parameters
     ----------
     l1_obj : KPF1
-        Assembled L1 frame. The RECEIPT header must contain the {BIAS,DARK}FILE
-        keyword (the master's full path, written by CalibrationAssociation) for
-        any calibration requested via the header lookup.
+        Assembled L1 frame. The RECEIPT table must carry the {bias,dark}file
+        argument (the master's full path, written by CalibrationAssociation) for
+        any calibration requested via the receipt lookup.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: bias, dark, flat
         (boolean flags toggling each calibration).
@@ -75,7 +75,7 @@ class ImageProcessing:
         self._bias_path = None
         self._dark_path = None
         self._flat_path = None
-        self._biassub = None  # applied flags for _set_headers
+        self._biassub = None  # applied flags for the receipt entry
         self._darksub = None
         self._flatdiv = None
         self._info = None
@@ -132,18 +132,18 @@ class ImageProcessing:
 
     def _get_master_path(self, cal_type):
         """
-        Read the master path for ``cal_type`` from the L1 RECEIPT header.
+        Read the master path for ``cal_type`` from the L1 RECEIPT table.
 
-        Returns the ``{PREFIX}FILE`` keyword (uppercase calibration name), the
-        master's full path written by CalibrationAssociation. Raises
-        FileNotFoundError if it is absent -- a ``True`` calibration was requested
-        on a frame that has not been through CalibrationAssociation.
+        Returns the ``{cal_type}file`` argument of the calibration_association
+        receipt entry, the master's full path. Raises FileNotFoundError if it is
+        absent -- a ``True`` calibration was requested on a frame that has not
+        been through CalibrationAssociation.
         """
-        prefix = cal_type.upper()
-        master_file = self.l1_obj.headers["RECEIPT"].get(f"{prefix}FILE")
+        entry = self.l1_obj.receipt_read_entry("calibration_association")
+        master_file = entry.get(f"{cal_type}file")
         if not master_file:
             raise FileNotFoundError(
-                f"{prefix}FILE must be present in the RECEIPT header. "
+                f"{cal_type}file must be present in the RECEIPT table. "
                 "Run CalibrationAssociation before ImageProcessing."
             )
         return master_file
@@ -248,16 +248,6 @@ class ImageProcessing:
             lines.append(f"  {'dark':<10s} {self._dark_path}")
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
-    def _set_headers(self, l1_obj):
-        """Write the applied-flag keywords (BIASSUB/DARKSUB/FLATDIV).
-
-        Reads the flags populated by perform(); set_keyword routes them to their
-        registry home (RECEIPT). All three are written on every run.
-        """
-        l1_obj.set_keyword("BIASSUB", int(self._biassub))
-        l1_obj.set_keyword("DARKSUB", int(self._darksub))
-        l1_obj.set_keyword("FLATDIV", int(self._flatdiv))
-
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
@@ -267,25 +257,25 @@ class ImageProcessing:
         """
         Return True if ``cal_type`` is already flagged applied on ``l1_obj``.
 
-        Reads the applied flag (``_CALIBRATION_APPLIED_KEYS``: BIASSUB/DARKSUB/
-        FLATDIV) from the RECEIPT header -- their registry home -- written by a
-        prior ``perform``. Lets callers -- and ``perform`` itself -- avoid applying a
+        Reads the applied flag (``_CALIBRATION_APPLIED_KEYS``: biassub/darksub/
+        flatdiv) from the image_processing receipt entry, written by a prior
+        ``perform``. Lets callers -- and ``perform`` itself -- avoid applying a
         calibration twice (e.g. a cached frame revisited during stacking).
 
         Parameters
         ----------
         l1_obj : KPF1
-            Frame whose RECEIPT header is inspected.
+            Frame whose RECEIPT table is inspected.
         cal_type : str
             Calibration name: 'bias', 'dark', or 'flat'.
 
         Returns
         -------
         bool
-            True if the calibration's header flag is present and truthy.
+            True if the calibration's flag was recorded applied.
         """
-        val = l1_obj.headers["RECEIPT"].get(_CALIBRATION_APPLIED_KEYS[cal_type])
-        return bool(val)
+        entry = l1_obj.receipt_read_entry("image_processing")
+        return entry.get(_CALIBRATION_APPLIED_KEYS[cal_type]) == "1"
 
     def perform(self, chips=None, *, bias=None, dark=None, flat=None):
         """
@@ -297,11 +287,11 @@ class ImageProcessing:
             CCD chips to process. Defaults to self.chips.
         bias : bool | str | KPFMasterL1, optional
             How to source the master bias. Falsy → skip. True → load via
-            BIASFILE (the master's full path) in the RECEIPT header. str →
+            biasfile (the master's full path) in the RECEIPT table. str →
             treat as an explicit filepath. KPFMasterL1 → use this object
             directly (no disk I/O). Defaults to self.bias.
         dark : bool | str | KPFMasterL1, optional
-            Same shape as ``bias``, sourced from DARKFILE. Applied
+            Same shape as ``bias``, sourced from darkfile. Applied
             after bias subtraction and scaled by the frame's exposure time.
             Defaults to self.dark.
         flat : bool | str | KPFMasterL1, optional
@@ -324,7 +314,7 @@ class ImageProcessing:
             If ``bias`` or ``dark`` is not bool, str, or KPFMasterL1.
         RuntimeError
             If a requested calibration is already flagged applied on the frame
-            (BIASSUB/DARKSUB), guarding against double subtraction.
+            (biassub/darksub), guarding against double subtraction.
         """
         # Per-call kwargs override the instance config; subtract_bias/
         # subtract_dark then read the resolved sources from self.
@@ -346,9 +336,9 @@ class ImageProcessing:
         prior_dark = self.calibration_applied(self.l1_obj, "dark")
         prior_flat = self.calibration_applied(self.l1_obj, "flat")
         if self.bias and prior_bias:
-            raise RuntimeError("bias already subtracted from this frame (BIASSUB=True)")
+            raise RuntimeError("bias already subtracted from this frame (biassub=1)")
         if self.dark and prior_dark:
-            raise RuntimeError("dark already subtracted from this frame (DARKSUB=True)")
+            raise RuntimeError("dark already subtracted from this frame (darksub=1)")
 
         if self.bias:
             for chip in self.chips:
@@ -366,9 +356,13 @@ class ImageProcessing:
         self._darksub = bool(self.dark) or prior_dark
         self._flatdiv = bool(self.flat) or prior_flat
 
-        self._set_headers(self.l1_obj)
         self._track_info()
-        self.l1_obj.receipt_add_entry("image_processing", "", "PASS")
+        self.l1_obj.receipt_add_entry(
+            "image_processing",
+            f"biassub={int(self._biassub)}, darksub={int(self._darksub)}, "
+            f"flatdiv={int(self._flatdiv)}",
+            "PASS",
+        )
 
         logger.info("%s", self._info)
         return self.l1_obj

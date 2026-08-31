@@ -66,9 +66,9 @@ def _make_science_l2(wls_path=None):
     l2.headers["PRIMARY"]["INSTRUME"] = "KPF"
     l2.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T11:08:33"
     if wls_path is not None:
-        # set_keyword routes WLSFILE to RECEIPT, where CalibrationAssociation
-        # writes it on the L1 and to_kpf2 carries it through.
-        l2.set_keyword("WLSFILE", wls_path)
+        # The wlsfile argument of the calibration_association entry, which
+        # CalibrationAssociation writes on the L1 and to_kpf2 carries through.
+        l2.receipt_add_entry("calibration_association", f"wlsfile={wls_path}", "PASS")
     return l2
 
 
@@ -129,7 +129,7 @@ class TestConstructor:
 class TestLoadWLS:
     def test_raises_when_wlsfile_missing(self):
         mod = WavelengthCalibration(_make_science_l2())
-        with pytest.raises(KeyError, match="WLSFILE"):
+        with pytest.raises(KeyError, match="wlsfile"):
             mod.load_wls()
 
     def test_raises_when_file_does_not_exist(self, tmp_path):
@@ -144,8 +144,8 @@ class TestLoadWLS:
         assert isinstance(loaded, KPFMasterL2)
         assert mod._wls_path == master_wls_path
 
-    def test_explicit_path_overrides_header(self, master_wls_path):
-        # Set WLSFILE to a bogus value to make sure the override wins.
+    def test_explicit_path_overrides_receipt(self, master_wls_path):
+        # Set wlsfile to a bogus value to make sure the override wins.
         mod = WavelengthCalibration(_make_science_l2(wls_path="/tmp/bogus.fits"))
         loaded = mod.load_wls(wls_path=master_wls_path)
         assert isinstance(loaded, KPFMasterL2)
@@ -200,7 +200,7 @@ class TestPerform:
                 assert_dtype(l2.data[ext], WAVE, ext)
 
     def test_explicit_path_bypasses_header(self, master_wls_path):
-        # The WLSFILE header is bogus; the valid wls_path override wins.
+        # The receipt wlsfile is bogus; the valid wls_path override wins.
         l2 = _make_science_l2(wls_path="/tmp/bogus.fits")
         WavelengthCalibration(l2).perform(wls_path=master_wls_path)
 
@@ -232,8 +232,8 @@ class TestPerform:
         assert not np.any(l2.data["RED_SCI2_WAVE"])
 
     def test_perform_raises_when_wlsfile_missing(self):
-        l2 = _make_science_l2()  # no WLSFILE
-        with pytest.raises(KeyError, match="WLSFILE"):
+        l2 = _make_science_l2()  # no wlsfile
+        with pytest.raises(KeyError, match="wlsfile"):
             WavelengthCalibration(l2).perform()
 
     def test_raises_when_master_missing_requested_fiber(self, tmp_path):

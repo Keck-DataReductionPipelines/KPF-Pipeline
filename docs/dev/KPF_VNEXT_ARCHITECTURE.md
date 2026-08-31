@@ -185,8 +185,8 @@ The architecture invariants:
   `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on read, so every model
   carries `obs_id` on every construction path.
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
-  as an **append-only history** — the RECEIPT header carrying the calibration provenance L1 and L2 add
-  (`OSCANSUB`, `BIASFILE`, `TRACEREF`).
+  as an **append-only history** — the RECEIPT table carrying the calibration provenance L1 and L2 add
+  (`oscansub`, `biasfile`).
 - **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
   L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),

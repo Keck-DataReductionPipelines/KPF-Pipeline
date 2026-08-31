@@ -300,9 +300,8 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
             l1.set_data(f"{chip}_CCD", np.ones(shape, dtype=np.float32))
             l1.set_data(f"{chip}_VAR", np.ones(shape, dtype=np.float32))
 
-    receipt = l1.headers["RECEIPT"]
-    for kw in ("OSCANSUB", "BIASSUB", "DARKSUB", "FLATDIV"):
-        receipt[kw] = (True, "applied")
+    l1.receipt_add_entry("image_assembly", "oscansub=1", "PASS")
+    l1.receipt_add_entry("image_processing", "biassub=1, darksub=1, flatdiv=1", "PASS")
 
     qc = l1.headers["QUALITY_CONTROL"]
     qc["BIASAGE"] = (1.0, "Age of bias master [days]")

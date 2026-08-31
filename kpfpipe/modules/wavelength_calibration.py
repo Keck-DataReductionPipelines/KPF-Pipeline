@@ -23,14 +23,14 @@ class WavelengthCalibration:
     """
     Apply a precomputed wavelength solution to an extracted KPF L2 frame.
 
-    Reads the master WLS path from the L2 RECEIPT header (``WLSFILE``, written
+    Reads the master WLS path from the L2 RECEIPT table (``wlsfile``, written
     by CalibrationAssociation), loads the corresponding KPFMasterL2, and copies
     each per-fiber {CHIP}_{FIBER}_WAVE array onto the science L2.
 
     Parameters
     ----------
     l2_obj : KPF2
-        Extracted L2 frame. The RECEIPT header must contain a WLSFILE keyword.
+        Extracted L2 frame. The RECEIPT table must record a wlsfile argument.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: chips, fibers.
     """
@@ -63,10 +63,10 @@ class WavelengthCalibration:
         """
         Load the master wavelength solution from disk.
 
-        If ``wls_path`` is provided it is used directly, bypassing the header
-        lookup. Otherwise the path is read from ``WLSFILE`` in the L2 RECEIPT
-        header (where CalibrationAssociation wrote it as a full path per the
-        legacy WLS convention).
+        If ``wls_path`` is provided it is used directly, bypassing the receipt
+        lookup. Otherwise the path is read from the ``wlsfile`` argument of the
+        L2 calibration_association receipt entry (where CalibrationAssociation
+        wrote it as a full path per the legacy WLS convention).
 
         Parameters
         ----------
@@ -81,19 +81,19 @@ class WavelengthCalibration:
         Raises
         ------
         KeyError
-            If neither ``wls_path`` is given nor WLSFILE is present in the L2
-            RECEIPT header.
+            If neither ``wls_path`` is given nor wlsfile is recorded in the L2
+            RECEIPT table.
         FileNotFoundError
             If the resolved path does not exist.
         """
         if wls_path is None:
-            receipt = self.l2_obj.headers.get("RECEIPT", {})
-            if "WLSFILE" not in receipt:
+            entry = self.l2_obj.receipt_read_entry("calibration_association")
+            if not entry.get("wlsfile"):
                 raise KeyError(
-                    "WLSFILE missing from L2 RECEIPT; "
+                    "wlsfile missing from the L2 RECEIPT table; "
                     "run CalibrationAssociation with 'thar' on the L1 first"
                 )
-            wls_path = receipt.get("WLSFILE")
+            wls_path = entry["wlsfile"]
 
         if not os.path.isfile(wls_path):
             raise FileNotFoundError(f"Master WLS file not found: {wls_path}")
@@ -115,7 +115,7 @@ class WavelengthCalibration:
             f"  fibers:  {self.fibers}",
         ]
         # WLSAGE is written to QUALITY_CONTROL by CalibrationAssociation,
-        # alongside the WLSFILE path it writes to RECEIPT.
+        # alongside the wlsfile path it writes to the receipt entry.
         agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
         lines.append(f"  wls_path: {self._wls_path}")
         if agewls is not None:
@@ -147,21 +147,21 @@ class WavelengthCalibration:
             Defaults to self.fibers.
         wls_path : str, optional
             Direct path to the master WLS L2 file. If omitted, the path is
-            read from WLSFILE on the L2 RECEIPT header.
+            read from wlsfile in the L2 RECEIPT table.
 
         Returns
         -------
         l2_obj : KPF2
             The input L2 with per-fiber _WAVE extensions populated and a
-            'wavelength_calibration' receipt entry. WLSFILE on RECEIPT is
+            'wavelength_calibration' receipt entry. The wlsfile argument is
             left untouched.
 
         Raises
         ------
         KeyError
             If the master WLS has no data for a requested
-            ``{CHIP}_{FIBER}_WAVE``, or (via ``load_wls``) if WLSFILE is absent
-            from the L2 RECEIPT and no ``wls_path`` was given.
+            ``{CHIP}_{FIBER}_WAVE``, or (via ``load_wls``) if wlsfile is absent
+            from the L2 RECEIPT table and no ``wls_path`` was given.
         FileNotFoundError
             Via ``load_wls``, if the resolved WLS path does not exist.
         """

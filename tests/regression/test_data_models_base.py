@@ -82,12 +82,6 @@ class TestSetKeyword:
         )
         assert "RNGREEN1" not in l1.headers["PRIMARY"]
 
-    def test_routes_to_receipt(self):
-        l1 = KPF1()
-        l1.set_keyword("BIASFILE", "/path/to/master_bias_L1.fits")
-        assert l1.headers["RECEIPT"]["BIASFILE"] == "/path/to/master_bias_L1.fits"
-        assert "BIASFILE" not in l1.headers["PRIMARY"]
-
     def test_routes_to_barycorr_and_bjd_extensions(self):
         l2 = KPF2()
         l2.set_keyword("BVGREEN", -12.3)
@@ -379,14 +373,13 @@ class TestKeywordRegistry:
 
 
 class TestQualityControlPropagation:
-    """QUALITY_CONTROL + RECEIPT header cards survive to_fits and L0->L1->L2."""
+    """QUALITY_CONTROL cards and the RECEIPT table survive to_fits and L0->L1->L2."""
 
     def test_l1_quality_control_receipt_roundtrip(self, tmp_path):
         l1 = KPF1()
         l1.set_keyword("RNGREEN1", 4.2)
         l1.set_keyword("BIASAGE", 1.5)
-        l1.set_keyword("OSCANSUB", 1)
-        l1.set_keyword("BIASFILE", "/m/bias_L1.fits")
+        l1.receipt_add_entry("image_assembly", "oscansub=1", "PASS")
         fn = str(tmp_path / "kpf_L1_20240101T000000.fits")
         l1.to_fits(fn)
         back = KPF1.from_fits(fn)
@@ -395,8 +388,7 @@ class TestQualityControlPropagation:
             "Read noise GREEN amp 1 [e-]"
         )
         assert back.headers["QUALITY_CONTROL"]["BIASAGE"] == 1.5
-        assert back.headers["RECEIPT"]["OSCANSUB"] == 1
-        assert back.headers["RECEIPT"]["BIASFILE"] == "/m/bias_L1.fits"
+        assert back.receipt_read_entry("image_assembly") == {"oscansub": "1"}
 
     def test_propagation_l0_to_l1_to_l2(self):
         l0 = KPF0()
@@ -407,12 +399,12 @@ class TestQualityControlPropagation:
         l0.set_keyword("NOTJUNK", 1)
         l1 = l0.to_kpf1()
         assert l1.headers["QUALITY_CONTROL"]["NOTJUNK"] == 1
-        l1.set_keyword("OSCANSUB", 1)
+        l1.receipt_add_entry("image_assembly", "oscansub=1", "PASS")
         l1.set_keyword("RNGREEN1", 4.0)
         l2 = l1.to_kpf2()
         assert l2.headers["QUALITY_CONTROL"]["NOTJUNK"] == 1
         assert l2.headers["QUALITY_CONTROL"]["RNGREEN1"] == 4.0
-        assert l2.headers["RECEIPT"]["OSCANSUB"] == 1
+        assert l2.receipt_read_entry("image_assembly") == {"oscansub": "1"}
 
 
 class TestExtDescript:

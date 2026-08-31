@@ -1,2 +1,0 @@
-Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-TRACEREF,Order trace reference filename,,str,kpf_20240405_order_trace.csv,SpectralExtraction

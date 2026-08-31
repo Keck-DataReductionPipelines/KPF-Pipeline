@@ -2,9 +2,11 @@
 
 import logging
 
+import pandas as pd
 import pytest
 from astropy.io import fits
 
+from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 
 # ---------------------------------------------------------------------------
@@ -24,19 +26,20 @@ class MockL1:
             "RECEIPT": fits.Header(),
             "QUALITY_CONTROL": fits.Header(),
         }
-        self._receipt = []
+        self.receipt = pd.DataFrame(columns=["FUNCTION", "ARGS", "STATUS"])
 
     def receipt_add_entry(self, name, args, status):
-        self._receipt.append((name, args, status))
+        self.receipt.loc[len(self.receipt)] = [name, args, status]
+
+    # The parse under test is production code, so borrow it rather than mock it.
+    receipt_read_entry = KPFDataModel.receipt_read_entry
 
     def set_keyword(self, key, value):
-        # Mirror the real routing: L1-RECEIPT-keywords.csv routes every {PREFIX}FILE
-        # master path to RECEIPT and every {PREFIX}AGE to QUALITY_CONTROL, and
-        # that is all CalibrationAssociation writes. Fail loud on anything else
-        # rather than inventing a PRIMARY fallback.
-        if key.endswith("FILE"):
-            self.headers["RECEIPT"][key] = value
-        elif key.endswith("AGE"):
+        # Mirror the real routing: L1-QUALITY_CONTROL-keywords.csv routes every
+        # {PREFIX}AGE to QUALITY_CONTROL, and that is all CalibrationAssociation
+        # writes as a keyword (the master paths go to the receipt entry). Fail
+        # loud on anything else rather than inventing a PRIMARY fallback.
+        if key.endswith("AGE"):
             self.headers["QUALITY_CONTROL"][key] = value
         else:
             raise KeyError(f"{key!r} is not routed by this mock; extend it")
@@ -262,13 +265,8 @@ class TestPerform:
         result = mod.perform(["bias"])
         assert result is mod.l1_obj
 
-    def test_adds_receipt_entry(self, masters_dir):
-        mod = _make_module(masters_dir)
-        mod.perform(["bias"])
-        assert ("calibration_association", "", "PASS") in mod.l1_obj._receipt
-
-    def test_sets_biasfile_header(self, masters_dir):
-        # BIASFILE is the master's full path (no separate BIASDIR).
+    def test_sets_biasfile_in_receipt(self, masters_dir):
+        # biasfile is the master's full path (no separate biasdir).
         mod = _make_module(masters_dir)
         mod.perform(["bias"])
         expected = str(
@@ -277,28 +275,36 @@ class TestPerform:
             / "20240405"
             / "KP.20240405.03637.74_master_bias_L1.fits"
         )
-        assert mod.l1_obj.headers["RECEIPT"].get("BIASFILE") == expected
+        entry = mod.l1_obj.receipt_read_entry("calibration_association")
+        assert entry["biasfile"] == expected
 
-    def test_sets_headers_for_dark_and_flat(self, masters_dir):
-        # No {PREFIX}DIR: {PREFIX}FILE holds the full path.
+    def test_unassociated_cal_types_are_none(self, masters_dir):
+        # All four are always recorded, so a consumer can tell "not associated"
+        # from "this module never ran".
+        mod = _make_module(masters_dir)
+        mod.perform(["bias"])
+        entry = mod.l1_obj.receipt_read_entry("calibration_association")
+        assert set(entry) == {"biasfile", "darkfile", "flatfile", "wlsfile"}
+        assert entry["darkfile"] is None
+        assert entry["flatfile"] is None
+        assert entry["wlsfile"] is None
+
+    def test_sets_receipt_and_ages_for_dark_and_flat(self, masters_dir):
         mod = _make_module(masters_dir)
         mod.perform(["bias", "dark", "flat"])
-        for prefix in ("BIAS", "DARK", "FLAT"):
-            assert f"{prefix}FILE" in mod.l1_obj.headers["RECEIPT"]
-            assert f"{prefix}DIR" not in mod.l1_obj.headers["RECEIPT"]
-            assert f"{prefix}AGE" in mod.l1_obj.headers["QUALITY_CONTROL"]
+        entry = mod.l1_obj.receipt_read_entry("calibration_association")
+        for cal_type in ("bias", "dark", "flat"):
+            assert entry[f"{cal_type}file"] is not None
+            assert f"{cal_type.upper()}AGE" in mod.l1_obj.headers["QUALITY_CONTROL"]
 
-    def test_sets_headers_for_thar(self, masters_dir):
+    def test_sets_receipt_and_age_for_thar(self, masters_dir):
         d = masters_dir / "masters" / "20240405"
         _stub_master(d, "KP.20240405.03637.74", "thar")
 
         mod = _make_module(masters_dir)
         mod.perform(["bias", "thar"])
-        receipt = mod.l1_obj.headers["RECEIPT"]
-        assert receipt.get("WLSFILE") == str(
-            d / "KP.20240405.03637.74_master_thar_L2.fits"
-        )
-        assert "WLSDIR" not in receipt
+        entry = mod.l1_obj.receipt_read_entry("calibration_association")
+        assert entry["wlsfile"] == str(d / "KP.20240405.03637.74_master_thar_L2.fits")
         assert "WLSAGE" in mod.l1_obj.headers["QUALITY_CONTROL"]
 
     def test_age_is_signed_master_minus_obs(self, masters_dir):
@@ -341,7 +347,8 @@ class TestPerform:
 
         mod2 = _make_module(tmp_path)
         mod2.perform(["bias"], masters_search_window_days=[-2, 0])
-        assert "BIASFILE" in mod2.l1_obj.headers["RECEIPT"]
+        entry = mod2.l1_obj.receipt_read_entry("calibration_association")
+        assert entry["biasfile"] is not None
 
 
 # ---------------------------------------------------------------------------
