@@ -189,7 +189,7 @@ class KPFDataModel(RVDataModel):
     def _set_ext_descript(self):
         """Rebuild EXT_DESCRIPT from the live extension set.
 
-        A no-op where the manifest declares no such extension (L0, L1, ML1).
+        A no-op where the manifest declares no such extension (ML1).
         """
         if "EXT_DESCRIPT" not in self.extensions:
             return

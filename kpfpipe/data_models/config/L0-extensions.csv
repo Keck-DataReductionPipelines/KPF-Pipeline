@@ -1,22 +1,23 @@
 HDU,Name,DataType,BitDepth,Required,Description
 0,PRIMARY,PrimaryHDU,,True,Observation metadata header
-1,GREEN_AMP1,ImageHDU,,False,Green CCD amplifier 1 readout
-2,GREEN_AMP2,ImageHDU,,False,Green CCD amplifier 2 readout
-3,GREEN_AMP3,ImageHDU,,False,Green CCD amplifier 3 readout
-4,GREEN_AMP4,ImageHDU,,False,Green CCD amplifier 4 readout
-5,RED_AMP1,ImageHDU,,False,Red CCD amplifier 1 readout
-6,RED_AMP2,ImageHDU,,False,Red CCD amplifier 2 readout
-7,RED_AMP3,ImageHDU,,False,Red CCD amplifier 3 readout
-8,RED_AMP4,ImageHDU,,False,Red CCD amplifier 4 readout
-9,CA_HK,ImageHDU,,False,Ca H&K spectrometer image
-10,EXPMETER_SCI,BinTableHDU,,False,Exposure meter science fiber
-11,EXPMETER_SKY,BinTableHDU,,False,Exposure meter sky fiber
-12,GUIDER_AVG,ImageHDU,,False,Guide camera average image
-13,GUIDER_CUBE_ORIGINS,BinTableHDU,,False,Guide camera cube origins table
-14,SOCAL PYRHELIOMETER,BinTableHDU,,False,SoCal pyrheliometer data
-15,TELEMETRY,BinTableHDU,,False,System telemetry table
-16,RECEIPT,BinTableHDU,,True,Processing history
-17,DRP_CONFIG,BinTableHDU,,False,Pipeline config as a 2-column table (key = value)
-18,QUALITY_CONTROL,BinTableHDU,,True,Quality-control booleans and diagnostic metrics
-19,CATALOG_RECORD,BinTableHDU,,True,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery
-20,INSTRUMENT_HEADER,ImageHDU,,False,Verbatim raw instrument (L0) PRIMARY header
+1,INSTRUMENT_HEADER,ImageHDU,,False,Verbatim raw instrument (L0) PRIMARY header
+2,RECEIPT,BinTableHDU,,True,Processing history
+3,DRP_CONFIG,BinTableHDU,,False,Pipeline config as a 2-column table (key = value)
+4,EXT_DESCRIPT,BinTableHDU,,True,Table describing contents of each extension
+5,GREEN_AMP1,ImageHDU,,False,Green CCD amplifier 1 readout
+6,GREEN_AMP2,ImageHDU,,False,Green CCD amplifier 2 readout
+7,GREEN_AMP3,ImageHDU,,False,Green CCD amplifier 3 readout
+8,GREEN_AMP4,ImageHDU,,False,Green CCD amplifier 4 readout
+9,RED_AMP1,ImageHDU,,False,Red CCD amplifier 1 readout
+10,RED_AMP2,ImageHDU,,False,Red CCD amplifier 2 readout
+11,RED_AMP3,ImageHDU,,False,Red CCD amplifier 3 readout
+12,RED_AMP4,ImageHDU,,False,Red CCD amplifier 4 readout
+13,CA_HK,ImageHDU,,False,Ca H&K spectrometer image
+14,EXPMETER_SCI,BinTableHDU,,False,Exposure meter science fiber
+15,EXPMETER_SKY,BinTableHDU,,False,Exposure meter sky fiber
+16,GUIDER_AVG,ImageHDU,,False,Guide camera average image
+17,GUIDER_CUBE_ORIGINS,BinTableHDU,,False,Guide camera cube origins table
+18,SOCAL PYRHELIOMETER,BinTableHDU,,False,SoCal pyrheliometer data
+19,TELEMETRY,BinTableHDU,,False,System telemetry table
+20,CATALOG_RECORD,BinTableHDU,,True,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery
+21,QUALITY_CONTROL,BinTableHDU,,True,Quality-control booleans and diagnostic metrics
