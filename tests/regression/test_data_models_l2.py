@@ -3,14 +3,13 @@ the AliasedOrderedDict extension-alias machinery, and the KPFMasterL2 calibratio
 product. Synthetic FITS fixtures only -- no real KPF data needed.
 """
 
-import logging
 from collections import OrderedDict
 
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from rvdata.core.models.level2 import RV2
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
@@ -22,16 +21,15 @@ from kpfpipe.data_models.masters.base import KPFMasterModel
 
 from ._catalog import SOURCES, catalog_record_table
 from ._dtype_policy import FLUX, WAVE, assert_dtype, assert_roundtrip_dtype
+from ._eprv import expand, kpf_table, rvdata_table
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 
 # synthetic_l1_file fixture lives in tests/conftest.py
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -50,8 +48,8 @@ def synthetic_masters_l2_file(tmp_path_factory):
 
     n_pix = 64
     # WAVE is born-64 (EPRV / dtype policy); float32 would trip rvdata's
-    # MinBitDepth upcast-and-warn on read.
-    wave = rng.random((NORDER_GREEN + NORDER_RED, n_pix)).astype(np.float64)
+    # BitDepth rejection on read.
+    wave = rng.random((DETECTOR["numorder"], n_pix)).astype(np.float64)
     trace3_wave = fits.ImageHDU(data=wave)
     trace3_wave.name = "TRACE3_WAVE"
 
@@ -66,29 +64,31 @@ def synthetic_masters_l2_file(tmp_path_factory):
 def converted_l1(synthetic_l0_file):
     """An L1 from KPF0.to_kpf1: EPRV-standard PRIMARY plus a populated
     INSTRUMENT_HEADER, the input to_kpf2 expects in production."""
-    return KPF0.from_fits(synthetic_l0_file).to_kpf1()
+    l0 = KPF0.from_fits(synthetic_l0_file)
+    l0.standardize_header_format()
+    return l0.to_kpf1()
 
 
 class TestKPF2QualityControlRoundTrip:
-    """The KPF-custom QUALITY_CONTROL extension survives KPF2's RV2 read path.
+    """The KPF-custom QUALITY_CONTROL extension round-trips through KPF2.
 
-    register_rvdata_extension teaches rvdata's definition-driven L2 reader about
-    QUALITY_CONTROL; without it, from_fits raises KeyError on that HDU.
+    It is a plain L2-extensions.csv row, so the manifest builds it and the
+    manifest-driven read accepts it back.
     """
 
     def test_quality_control_and_barycorr_roundtrip(self, tmp_path):
         l2 = KPF2()
         l2.set_keyword("NANSCI1", 7)
-        l2.set_keyword("CCD1BKMS", -3.21)
+        l2.set_keyword("BVGREEN", -3.21)
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
         l2.to_fits(fn)
         back = KPF2.from_fits(fn)
         assert back.headers["QUALITY_CONTROL"]["NANSCI1"] == 7
-        assert back.headers["BARYCORR_KMS"]["CCD1BKMS"] == -3.21
+        assert back.headers["BARYCORR_KMS"]["BVGREEN"] == -3.21
 
     def test_from_fits_recovers_obs_id_from_origid(self, tmp_path):
         # An L2's timestamp-based filename does not embed the obs_id, so from_fits
-        # recovers it from RECEIPT's ORIGID; that keeps generate_standard_filename
+        # recovers it from PRIMARY's ORIGID; that keeps generate_standard_filename
         # working on the from_fits construction path.
         l2 = KPF2()
         l2.set_keyword("ORIGID", "KP.20240101.00000.00")  # 0 s of day = 00:00:00
@@ -100,17 +100,16 @@ class TestKPF2QualityControlRoundTrip:
 
 
 class TestCatalogRecordPassthrough:
-    """CATALOG_RECORD rides L1 -> L2 and survives KPF2's RV2 read path.
+    """CATALOG_RECORD rides L1 -> L2 and reads back.
 
-    Same register_rvdata_extension mechanism as QUALITY_CONTROL above.
+    Another declared L2-extensions.csv row, like QUALITY_CONTROL above.
     """
 
     @staticmethod
     def _l1_with_catalog(rv=10.0):
-        # KPF1 creates CATALOG_RECORD only on the L0 pass-through or a read (it is
-        # Required=False in L1-extensions.csv), so a bare L1 makes it explicitly.
+        # Every L1-extensions.csv row is created, so CATALOG_RECORD is present
+        # and empty on a bare L1; only its rows need supplying.
         l1 = KPF1()
-        l1.create_extension("CATALOG_RECORD", "BinTableHDU")
         l1.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         return l1
 
@@ -119,8 +118,8 @@ class TestCatalogRecordPassthrough:
         assert [str(s) for s in l2.data["CATALOG_RECORD"]["source"]] == list(SOURCES)
 
     def test_catalog_record_roundtrip(self, tmp_path):
-        # The missing rv reads back NaN, not masked -- L2 reads through rvdata's
-        # RV2._read, so only the from_fits chokepoint can normalize it.
+        # The missing rv reads back NaN, not masked -- only the from_fits
+        # chokepoint can normalize it.
         l2 = self._l1_with_catalog(rv=None).to_kpf2()
         fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
         l2.to_fits(fn)
@@ -145,12 +144,12 @@ class TestToKPF2:
         assert isinstance(kpf2, KPF2)
 
     def test_to_kpf2_passes_through_eprv_primary(self, converted_l1):
-        # The keyword conversion happened in to_kpf1; to_kpf2 only forwards it.
+        # The keyword conversion happened in standardize_header_format; to_kpf1 and
+        # to_kpf2 only forward it.
         kpf2 = converted_l1.to_kpf2()
         prim = kpf2.headers["PRIMARY"]
-        assert prim.get("EXPTIME") == 300.0  # from ELAPSED, set in to_kpf1
+        assert prim.get("EXPTIME") == 300.0  # from ELAPSED
         assert prim.get("OBSTYPE") == "Object"  # from IMTYPE
-        assert prim.get("OBSERVER") == "Smith"  # from GROBSERV
         # Raw natives never reach the EPRV PRIMARY.
         assert "ELAPSED" not in prim
         assert "IMTYPE" not in prim
@@ -211,18 +210,18 @@ class TestToKPF2:
         assert "to_kpf2" in kpf2.receipt["FUNCTION"].values
 
     def test_to_kpf2_receipt_updates_drpstatus(self, synthetic_l1_file):
-        # KPF2 subclasses RV2, not KPFDataModel, so it carries its own copy of the
-        # DRPSTATU receipt override.
+        # The DRPSTATU receipt override lives on KPFDataModel; assert KPF2 reaches
+        # it, since to_kpf2 is the only producer that exercises it at L2.
         kpf2 = KPF1.from_fits(synthetic_l1_file).to_kpf2()
         kpf2.receipt_add_entry("barycentric_correction", "", "PASS")
         assert (
-            kpf2.headers["RECEIPT"].get("DRPSTATU")
+            kpf2.headers["PRIMARY"].get("DRPSTATU")
             == "Barycentric Correction module complete"
         )
 
     def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
-        # KPF2 reads through rvdata's RV2._read, a different path from KPF0/1,
-        # so the L0/L1 round-trip twins cover none of this.
+        # The receipt table and the DRPSTATU card it advances have to survive
+        # separate serialization paths -- the RECEIPT BinTable and PRIMARY.
         kpf2 = KPF2()
         kpf2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
         kpf2.receipt_add_entry("spectral_extraction", "", "PASS")
@@ -232,12 +231,12 @@ class TestToKPF2:
         back = KPF2.from_fits(fn)
         assert "spectral_extraction" in back.receipt["FUNCTION"].values
         assert (
-            back.headers["RECEIPT"].get("DRPSTATU")
+            back.headers["PRIMARY"].get("DRPSTATU")
             == "Spectral Extraction module complete"
         )
 
     def test_to_kpf2_propagates_origid(self, tmp_path):
-        # ORIGID is stamped at L0 and rides RECEIPT through to_kpf2; it is not
+        # ORIGID is stamped at L0 and rides PRIMARY through to_kpf2; it is not
         # rewritten at L2, and stays off PRIMARY.
         fn = str(tmp_path / "KP.20240113.23249.10_L1.fits")
         primary = fits.PrimaryHDU()
@@ -259,8 +258,7 @@ class TestToKPF2:
         # Mimic what KPF0.from_fits + to_kpf1 would have placed on the L1 RECEIPT.
         l1.set_keyword("ORIGID", "KP.20240113.23249.10")
         kpf2 = l1.to_kpf2()
-        assert kpf2.headers["RECEIPT"].get("ORIGID") == "KP.20240113.23249.10"
-        assert "ORIGID" not in kpf2.headers["PRIMARY"]
+        assert kpf2.headers["PRIMARY"].get("ORIGID") == "KP.20240113.23249.10"
 
 
 class TestAliasedOrderedDict:
@@ -325,10 +323,10 @@ class TestAliasedOrderedDict:
 
 
 class TestKPF2Aliases:
-    def test_kpf2_inherits_rv2(self):
-        kpf2 = KPF2()
-        assert isinstance(kpf2, RV2)
-        assert kpf2.level == 2
+    def test_kpf2_declares_its_level(self):
+        # The level is the manifest key, so KPF2 resolving to 2 is what makes
+        # _data_model, _seed_primary and _read read the L2 tables.
+        assert KPF2().level == 2
 
     def test_extension_alias_resolves(self):
         kpf2 = KPF2()
@@ -342,7 +340,7 @@ class TestKPF2Aliases:
 
     def test_set_data_via_alias(self):
         kpf2 = KPF2()
-        test_data = np.random.default_rng(42).random((10, 100))
+        test_data = np.random.default_rng(42).random((10, 100), dtype=np.float32)
         kpf2.set_data("SCI2_FLUX", test_data)
         np.testing.assert_array_equal(kpf2.data["TRACE3_FLUX"], test_data)
 
@@ -366,7 +364,7 @@ class TestKPF2Aliases:
         kpf2 = KPF2()
         n_pix = 100
         rng = np.random.default_rng(42)
-        trace_data = rng.random((NORDER_GREEN + NORDER_RED, n_pix))
+        trace_data = rng.random((DETECTOR["numorder"], n_pix), dtype=np.float32)
         kpf2.set_data("TRACE3_FLUX", trace_data)
 
         green = kpf2.data["GREEN_SCI2_FLUX"]
@@ -399,7 +397,7 @@ class TestKPF2Aliases:
         kpf2.set_data("RED_SCI2_FLUX", red_data)
 
         full = kpf2.data["SCI2_FLUX"]
-        assert full.shape == (NORDER_GREEN + NORDER_RED, n_pix)
+        assert full.shape == (DETECTOR["numorder"], n_pix)
         np.testing.assert_array_equal(full[:NORDER_GREEN], green_data)
         np.testing.assert_array_equal(full[NORDER_GREEN:], red_data)
 
@@ -412,7 +410,7 @@ class TestKPF2Aliases:
         green_data = np.zeros((NORDER_GREEN, n_pix), dtype=np.float32)
         kpf2.set_data("GREEN_SCI2_FLUX", green_data)
 
-        assert kpf2.data["TRACE3_FLUX"].shape == (NORDER_GREEN + NORDER_RED, n_pix)
+        assert kpf2.data["TRACE3_FLUX"].shape == (DETECTOR["numorder"], n_pix)
 
     def test_chip_prefix_write_via_set_data(self):
         kpf2 = KPF2()
@@ -447,27 +445,33 @@ class TestDtypeProvenance:
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path, name=name)
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path, name=name)
 
-    def test_chip_prefix_wave_write_enforces_min_bit_depth(self, caplog):
-        # A chip-prefix write bypasses rvdata's base set_data, so check it still
-        # enforces the born-64 WAVE policy (upcast plus MinBitDepth warning).
+    def test_set_data_rejects_the_wrong_bit_depth(self):
+        # The manifest declares an exact width, so a float32 WAVE is a producer
+        # bug and is refused rather than quietly widened.
         kpf2 = KPF2()
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(TypeError, match="TRACE1_WAVE: manifest declares 64-bit"):
+            kpf2.set_data("TRACE1_WAVE", np.ones((NORDER, 8), dtype=np.float32))
+
+    def test_chip_prefix_write_rejects_the_wrong_bit_depth(self):
+        # A chip-prefix write bypasses rvdata's base set_data, so check the KPF
+        # path enforces the born-64 WAVE policy too.
+        kpf2 = KPF2()
+        with pytest.raises(
+            TypeError, match="GREEN_SCI2_WAVE: manifest declares 64-bit"
+        ):
             kpf2.set_data(
                 "GREEN_SCI2_WAVE", np.ones((NORDER_GREEN, 8), dtype=np.float32)
             )
-        assert "MinBitDepth=64" in caplog.text
-        assert_dtype(kpf2.data["TRACE3_WAVE"], WAVE, "underlying TRACE3_WAVE")
 
-    def test_chip_prefix_flux_write_keeps_float32(self, caplog):
-        # MinBitDepth enforcement is WAVE/QUALITY-only, so float32 FLUX is kept
-        # as-is: no upcast, no warning.
+    def test_chip_prefix_flux_write_keeps_float32(self):
         kpf2 = KPF2()
-        with caplog.at_level(logging.WARNING):
-            kpf2.set_data(
-                "GREEN_SCI2_FLUX", np.ones((NORDER_GREEN, 8), dtype=np.float32)
-            )
-        assert "MinBitDepth" not in caplog.text
+        kpf2.set_data("GREEN_SCI2_FLUX", np.ones((NORDER_GREEN, 8), dtype=np.float32))
         assert_dtype(kpf2.data["TRACE3_FLUX"], FLUX, "underlying TRACE3_FLUX")
+
+    def test_empty_arrays_are_exempt(self):
+        # Every extension is born np.array([]) -- 64-bit -- so a 32-bit slot must
+        # accept an empty array or no product could be constructed or re-read.
+        KPF2().set_data("TRACE3_FLUX", np.array([]))
 
 
 class TestKPFMasterL2:
@@ -479,6 +483,11 @@ class TestKPFMasterL2:
             assert f"TRACE{n}_WAVE" in m.extensions
             for suffix in ("FLUX", "VAR", "BLAZE"):
                 assert f"TRACE{n}_{suffix}" not in m.extensions
+        # ML2-wls-extensions.csv is the whole inventory: no science L2 row it
+        # omits survives, and both coefficient extensions are built.
+        assert len(m.extensions) == 14
+        assert "GREEN_WLS_COEFFS" in m.extensions
+        assert "RED_WLS_COEFFS" in m.extensions
 
     def test_flat_extensions_created(self):
         m = KPFMasterL2(kind="flat")
@@ -488,6 +497,62 @@ class TestKPFMasterL2:
             for suffix in ("FLUX", "VAR", "BLAZE"):
                 assert f"TRACE{n}_{suffix}" in m.extensions
             assert f"TRACE{n}_WAVE" not in m.extensions
+        assert len(m.extensions) == 22
+
+    @pytest.mark.parametrize("kind", ("wls", "flat"))
+    def test_ext_descript_is_the_master_own_extension_set(self, kind):
+        # The master builds its own manifest, so EXT_DESCRIPT (written last)
+        # names exactly what it carries -- not the science L2 set.
+        m = KPFMasterL2(kind=kind)
+        assert m.data["EXT_DESCRIPT"]["Name"].tolist() == list(m.extensions)
+
+    @pytest.mark.parametrize("kind", ("wls", "flat"))
+    def test_primary_is_seeded_from_the_master_data_model(self, kind):
+        m = KPFMasterL2(kind=kind)
+        seed = m.keyword_registry.primary_seed(f"ML2-{kind}")
+        assert set(seed) <= set(m.headers["PRIMARY"])
+        assert m.headers["PRIMARY"]["DATALVL"] == "ML2"
+        # The EPRV science skeleton is not inherited.
+        science = set(m.keyword_registry.primary_seed("L2"))
+        assert not (science & set(m.headers["PRIMARY"])) - {"DATALVL"}
+
+    @pytest.mark.parametrize("kind", ("flat", "wls"))
+    def test_the_master_builds_its_whole_manifest(self, kind):
+        master = KPFMasterL2(kind=kind)
+        assert set(master.extensions) == set(
+            kpf_table(f"ML2-{kind}-extensions")["Name"]
+        )
+        # A master is not a translation of a native instrument product, so it
+        # carries no verbatim instrument header.
+        assert "INSTRUMENT_HEADER" not in master.extensions
+
+    @pytest.mark.parametrize("data_model", ("ML2-flat", "ML2-wls"))
+    def test_shared_rows_agree_with_the_science_manifest(self, data_model):
+        # The duplication between a master manifest and its science level's is
+        # intentional -- each stays a complete spec of one product -- so a shared
+        # row must not disagree, or a master would ship a TRACE1_WAVE unlike
+        # L2's.
+        master = kpf_table(f"{data_model}-extensions").set_index("Name")
+        science = kpf_table("L2-extensions").set_index("Name")
+        shared = set(master.index) & set(science.index)
+        assert shared
+        for name in shared:
+            assert master.loc[name, "DataType"] == science.loc[name, "DataType"], name
+            ours, theirs = master.loc[name, "BitDepth"], science.loc[name, "BitDepth"]
+            assert (pd.isna(ours) and pd.isna(theirs)) or ours == theirs, name
+
+    def test_bit_depth_from_the_master_manifest(self):
+        manifest = KPFMasterL2.extension_manifest
+        assert manifest.bit_depth("ML2-wls", "TRACE1_WAVE") == 64
+        assert manifest.bit_depth("ML2-wls", "GREEN_WLS_COEFFS") == 64
+        assert manifest.bit_depth("ML2-flat", "TRACE1_FLUX") == 32
+        assert manifest.bit_depth("ML2-wls", "RECEIPT") is None
+
+    def test_reads_through_the_one_base_reader(self):
+        # KPFMasterL2 declares no read/_read of its own: KPFDataModel.read is
+        # what detaches rvdata's level-keyed dispatch, once, for every level.
+        assert "read" not in vars(KPFMasterL2)
+        assert "_read" not in vars(KPFMasterL2)
 
     def test_kind_required_and_validated(self):
         with pytest.raises(TypeError):
@@ -506,7 +571,7 @@ class TestKPFMasterL2:
         n_pix = 32
         trace_data = (
             np.random.default_rng(42)
-            .random((NORDER_GREEN + NORDER_RED, n_pix))
+            .random((DETECTOR["numorder"], n_pix))
             .astype(np.float32)
         )
         m.data["TRACE3_WAVE"] = trace_data
@@ -526,13 +591,10 @@ class TestKPFMasterL2:
         m = KPFMasterL2(kind="wls")
         assert isinstance(m, KPFMasterModel)
 
-    def test_class_attributes(self):
-        assert KPFMasterL2._DATALVL == "ML2"
-
     def test_from_fits(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         assert "TRACE3_WAVE" in m.extensions
-        assert m.data["TRACE3_WAVE"].shape == (NORDER_GREEN + NORDER_RED, 64)
+        assert m.data["TRACE3_WAVE"].shape == (DETECTOR["numorder"], 64)
 
     def test_from_fits_adds_receipt_entry(self, synthetic_masters_l2_file):
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
@@ -574,10 +636,9 @@ class TestKPFMasterL2:
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "ML2"
 
-    def test_no_warning_on_known_extensions(self, caplog, synthetic_masters_l2_file):
-        with caplog.at_level(logging.WARNING):
-            KPFMasterL2.from_fits(synthetic_masters_l2_file)
-        assert "Non-standard extension" not in caplog.text
+    def test_known_extensions_read_cleanly(self, synthetic_masters_l2_file):
+        m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
+        assert set(m.extensions) == set(kpf_table("ML2-wls-extensions")["Name"])
 
     def test_set_input_files(self):
         m = KPFMasterL2(kind="wls")
@@ -599,7 +660,19 @@ class TestKPFMasterL2:
         assert "INPUT_FILES" in m2.extensions
         assert m2.data["INPUT_FILES"]["FILENAME"].tolist() == files
 
-    def test_warns_on_unknown_extension(self, caplog, tmp_path):
+    def test_seeded_but_unpopulated_cards_read_back_as_none(self, tmp_path):
+        m = KPFMasterL2(kind="wls")
+        m.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
+        m.set_input_files(["KP.20240405.63499.95.fits"], "thar")
+        out = str(tmp_path / "KP.20240405.63499.95_master_thar_L2.fits")
+        m.to_fits(out)
+
+        back = KPFMasterL2.from_fits(out)
+        assert set(back.extensions) == set(kpf_table("ML2-wls-extensions")["Name"])
+        for key in ("ROUGHWLS", "LINELIST", "POLYDEGX"):
+            assert back.headers["PRIMARY"][key] is None, key
+
+    def test_raises_on_unknown_extension(self, tmp_path):
         fn = str(tmp_path / "unknown_ext_ml2.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
@@ -610,17 +683,17 @@ class TestKPFMasterL2:
         hdul.writeto(fn, overwrite=True)
         hdul.close()
 
-        with caplog.at_level(logging.WARNING):
+        with pytest.raises(
+            ValueError, match="Non-standard extension 'WEIRD_EXTENSION'"
+        ):
             KPFMasterL2.from_fits(fn)
-        assert "Non-standard extension" in caplog.text
 
 
 class TestKPF2HeaderStorage:
-    """KPF2-specific header storage and the KPF2._create_hdul serialization path.
+    """KPF2-specific header storage and its serialization path.
 
-    KPF2 stores headers as fits.Header like every KPF model, but overrides
-    _create_hdul via RV2 -- a distinct path from the inherited base one covered in
-    test_data_models_base.py.
+    KPF2 stores headers as fits.Header like every KPF model; these cover the L2
+    extension set, which the base twins in test_data_models_base.py do not.
     """
 
     def test_fresh_l2_headers_are_fits_headers(self):
@@ -641,3 +714,134 @@ class TestKPF2HeaderStorage:
         prim = KPF2.from_fits(fn).headers["PRIMARY"]
         assert prim.get("HDRCMNT") == "kept"
         assert prim.comments["HDRCMNT"] == "comment must survive to_fits"
+
+
+class TestRvdataReadersAreDetached:
+    """rvdata's L2 reader never runs, and the assertion is not redundant.
+
+    ``RVDataModel.read`` dispatches to ``RV2._read`` through a hardcoded class
+    reference keyed on ``self.level``, not through the MRO, so KPF2 no longer
+    subclassing RV2 is not by itself what stops it -- ``KPFDataModel.read`` is.
+    """
+
+    def test_rv2_read_never_fires(self, tmp_path, monkeypatch):
+        from rvdata.core.models.level2 import RV2
+
+        fired = []
+        monkeypatch.setattr(
+            RV2, "_read", lambda self, hdul: fired.append("RV2"), raising=True
+        )
+        fn = str(tmp_path / "kpf_SL2_20240101T000000.fits")
+        KPF2().to_fits(fn)
+        KPF2.from_fits(fn)
+        assert fired == []
+
+
+# rvdata rows KPF deliberately does not build. These are the EPRV-optional set
+# rvdata's own name-guessing readers tolerated; KPF's manifest-driven read
+# declares what it accepts, so an undeclared extension is rejected, not inferred.
+_UNBUILT = {
+    "IMAGE": "EPRV-optional; KPF ships no whole-detector image at L2",
+    "TRACE1_DRIFT": "EPRV-optional; KPF has no drift product",
+    "TRACE1_QUALITY": "EPRV-optional; KPF carries QC in QUALITY_CONTROL",
+    "TRACE1_SKYMODEL": "EPRV-optional; KPF has no sky model",
+    "TRACE1_TELLURIC": "EPRV-optional; KPF does no telluric correction",
+    "CUSTOM1_TRACE1_FLUX": "EPRV CUSTOM slot; unused by KPF",
+    "CUSTOM1_TRACE1_VAR": "EPRV CUSTOM slot; unused by KPF",
+    "CUSTOM1_TRACE1_WAVE": "EPRV CUSTOM slot; unused by KPF",
+}
+
+# Extensions whose HDU type deliberately differs from the standard's.
+_DATATYPE_DEVIATIONS = {
+    "ANCILLARY_SPECTRUM": (
+        "EPRV says ImageHDU; KPF ships Ca H&K as a BinTableHDU placeholder while "
+        "extraction is WIP, and existing products encode it that way"
+    ),
+}
+
+# EPRV keywords KPF does not register.
+_UNREGISTERED = {
+    "PVN_#": "variable-length parametric WLS family; KPF writes no parametric WLS",
+}
+
+_PER_EXTENSION_TABLES = [
+    ("L2-TRACE_FLUX-keywords", "TRACE1_FLUX"),
+    ("L2-TRACE_VAR-keywords", "TRACE1_VAR"),
+    ("L2-TRACE_BLAZE-keywords", "TRACE1_BLAZE"),
+    ("L2-TRACE_WAVE-keywords", "TRACE1_WAVE"),
+    ("L2-BJD_TDB-keywords", "BJD_TDB"),
+    ("L2-BARYCORR_KMS-keywords", "BARYCORR_KMS"),
+    ("L2-BARYCORR_Z-keywords", "BARYCORR_Z"),
+]
+
+
+class TestEPRVCompliance:
+    """L2 against the installed rvdata tables.
+
+    Existence and shape only: every EPRV keyword is registered, every required
+    extension is declared and built. Where a keyword is *written* is the data
+    model's business -- ``set_keyword`` routes it off the registry -- not this
+    file's, so nothing here re-checks a write site. The three dicts above are the
+    complete list of divergences; anything else must match.
+    """
+
+    def test_every_eprv_primary_keyword_is_registered(self):
+        want = {
+            member
+            for keyword in rvdata_table("L2-PRIMARY-keywords")["Keyword"]
+            for member in expand(keyword)
+        }
+        assert not sorted(want - KPF2.keyword_registry.allowed["PRIMARY"])
+
+    @pytest.mark.parametrize(("table", "extension"), _PER_EXTENSION_TABLES)
+    def test_every_eprv_per_extension_keyword_is_registered(self, table, extension):
+        registry = KPF2.keyword_registry
+        missing = [
+            keyword
+            for keyword in map(str.strip, rvdata_table(table)["Keyword"])
+            if not registry.is_structural(keyword)
+            and keyword not in _UNREGISTERED
+            and keyword not in registry.allowed[extension]
+        ]
+        assert not missing
+
+    def test_every_required_extension_is_built(self):
+        rvdata = rvdata_table("L2-extensions")
+        assert set(rvdata[rvdata["Required"]]["Name"]) <= set(KPF2().extensions)
+
+    def test_the_model_builds_its_whole_manifest(self):
+        model = KPF2()
+        assert set(model.extensions) == set(kpf_table("L2-extensions")["Name"])
+
+    def test_undeclared_rvdata_extensions_are_listed(self):
+        undeclared = set(rvdata_table("L2-extensions")["Name"]) - set(
+            kpf_table("L2-extensions")["Name"]
+        )
+        assert undeclared == set(_UNBUILT)
+
+    def test_shared_extensions_agree_on_hdu_type(self):
+        rvdata = rvdata_table("L2-extensions")
+        kpf = kpf_table("L2-extensions")
+        theirs = dict(zip(rvdata["Name"], rvdata["DataType"], strict=True))
+        ours = dict(zip(kpf["Name"], kpf["DataType"], strict=True))
+        differing = {n for n in set(theirs) & set(ours) if theirs[n] != ours[n]}
+        assert differing == set(_DATATYPE_DEVIATIONS)
+
+    def test_bit_depth_meets_the_eprv_floor(self):
+        # rvdata's column is a floor and KPF's is exact, so this is >=, not ==:
+        # KPF declares the wider policy, filling in the float32 rows rvdata
+        # leaves blank.
+        rvdata = rvdata_table("L2-extensions")
+        ours = kpf_table("L2-extensions").set_index("Name")["BitDepth"]
+        shared = rvdata[rvdata["MinBitDepth"].notna() & ~rvdata["Name"].isin(_UNBUILT)]
+        assert not shared.empty
+        for _, row in shared.iterrows():
+            assert ours[row["Name"]] >= row["MinBitDepth"], row["Name"]
+
+    def test_the_order_table_carries_every_eprv_column(self):
+        # rvdata's BASE table declares no Required or MinBitDepth column, so
+        # every row it names is required and the widths are KPF's own.
+        theirs = set(rvdata_table("BASE-ORDER_TABLE-columns")["Name"])
+        ours = kpf_table("L2-ORDER_TABLE-columns").set_index("Name")
+        assert theirs <= set(ours.index)
+        assert set(KPF2().data["ORDER_TABLE"].columns) == set(ours.index)

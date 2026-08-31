@@ -18,7 +18,7 @@ pytestmark = pytest.mark.quicklook
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 NVEL = 21  # small velocity grid for fast tests
 
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]
@@ -26,8 +26,6 @@ _CHIPS = ["GREEN", "RED"]
 _VELSTART = -10.0
 _VELSTEP = 1.0
 _OBS_ID = "KP.20240405.40113.57"
-
-_RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
 
 
 def _gaussian_ccf(rng, depth=0.5):
@@ -75,7 +73,7 @@ def _make_l4(
         l4.headers[ext]["VELNSTEP"] = NVEL
         l4.headers[ext]["CCFMASK"] = "G2_espresso"
 
-    # Per-order RV tables (green orders near CCD1RV=0.5, red near CCD2RV=0.6),
+    # Per-order RV tables (green orders near 0.5 km/s, red near 0.6),
     # plus the combined-RV keyword on each fiber's own RV extension header.
     if with_rv:
         rng2 = np.random.default_rng(11)
@@ -91,9 +89,11 @@ def _make_l4(
             if with_weight:
                 cols["WEIGHT"] = weight
             l4.set_data(f"{fiber}_RV", Table(cols))
-            rv_ext = l4.data._resolve(f"{fiber}_RV")
-            l4.headers[rv_ext][f"CCD1RV{_RV_SFX[fiber]}"] = 0.5
-            l4.headers[rv_ext][f"CCD2RV{_RV_SFX[fiber]}"] = 0.6
+            # Written the way RadialVelocity writes them -- through set_keyword
+            # with an explicit ext -- so the panel is a gate on the routing, not
+            # just on the header text.
+            l4.set_keyword("RVGREEN", 0.5, ext=f"{fiber}_RV")
+            l4.set_keyword("RVRED", 0.6, ext=f"{fiber}_RV")
     return l4
 
 
@@ -184,7 +184,9 @@ class TestCcfGridAnnotations:
         # The delta-RV and weight column headers.
         assert "(this - avg)" in txt
         assert "weight" in txt
-        # Green SCI2 combined RV is CCD1RV2 = 0.5 km/s, shown to 5 dp.
+        # Green SCI2 combined RV is RVGREEN = 0.5 km/s on RV3, shown to 5 dp.
+        # A panel that failed to find it draws no value at all, so this pins the
+        # rendered number, not merely the panel.
         assert "0.50000" in txt and "km s" in txt
         # Per-order delta-RV is km/s to 4 decimals, e.g. "0.0020 km s^-1".
         assert re.search(r"\d\.\d{4}", txt)

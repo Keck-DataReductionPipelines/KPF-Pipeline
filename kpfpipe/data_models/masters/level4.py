@@ -15,7 +15,5 @@ class KPFMasterL4(KPFMasterModel, KPF4):
     Not yet implemented.
     """
 
-    _DATALVL = "ML4"
-
     def __init__(self):
         raise NotImplementedError("KPFMasterL4 is not yet implemented")

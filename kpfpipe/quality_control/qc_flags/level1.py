@@ -34,8 +34,10 @@ class QCL1(QC):
     data_present._qc_key = "DATAPRL1"
 
     def required_keywords_present(self):
-        """Every registry-required PRIMARY keyword for L1 is present (presence only)."""
-        return self._required_primary_keywords() <= set(self.kpf_obj.headers["PRIMARY"])
+        """Required PRIMARY keywords present -- not yet implemented; see ``QC``."""
+        raise NotImplementedError(
+            "KWRDPRL1 is pending a KPF-owned definition of a required keyword"
+        )
 
     required_keywords_present._qc_key = "KWRDPRL1"
 
@@ -64,29 +66,29 @@ class QCL1(QC):
     read_noise_nongauss_ok._qc_key = "RNNGOK"
 
     def bias_ok(self):
-        """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 7 days."""
+        """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 5 days."""
         if not self.kpf_obj.headers["RECEIPT"]["BIASSUB"]:
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["BIASAGE"])
-        return abs(age) <= 7
+        return abs(age) <= 5
 
     bias_ok._qc_key = "BIASOK"
 
     def dark_ok(self):
-        """Dark subtracted (RECEIPT DARKSUB) and master dark age <= 14 days."""
+        """Dark subtracted (RECEIPT DARKSUB) and master dark age <= 5 days."""
         if not self.kpf_obj.headers["RECEIPT"]["DARKSUB"]:
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["DARKAGE"])
-        return abs(age) <= 14
+        return abs(age) <= 5
 
     dark_ok._qc_key = "DARKOK"
 
     def flat_ok(self):
-        """Flat divided (RECEIPT FLATDIV) and master flat age <= 30 days."""
+        """Flat divided (RECEIPT FLATDIV) and master flat age <= 5 days."""
         if not self.kpf_obj.headers["RECEIPT"]["FLATDIV"]:
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["FLATAGE"])
-        return abs(age) <= 30
+        return abs(age) <= 5
 
     flat_ok._qc_key = "FLATOK"
 
@@ -111,7 +113,7 @@ class QCL1(QC):
     variance_positive._qc_key = "L1VAROK"
 
     def negative_snr_fraction(self):
-        """Pixels below -5 sigma at most 1% on each chip (v2.12 POS2DSNR)."""
+        """Pixels below -5 sigma at most 1% on each chip."""
         for chip in ("GREEN", "RED"):
             ccd = self.kpf_obj.data[f"{chip}_CCD"]
             var = self.kpf_obj.data[f"{chip}_VAR"]

@@ -45,11 +45,6 @@ _ORDERLET_SPACING = 19.0
 _ORDER_GAP = 15.0
 
 
-# ---------------------------------------------------------------------------
-# Stubs and synthetic data
-# ---------------------------------------------------------------------------
-
-
 class StubMasterFlat:
     """Minimal vNext master flat used by the numerical tests."""
 
@@ -198,11 +193,6 @@ def _curated_clusters(tracer):
     clusters = tracer._reject_malformed_clusters(clusters)
     tracer._clusters["GREEN"] = tracer._reject_faint_clusters("GREEN", clusters)
     return tracer._clusters["GREEN"]
-
-
-# ---------------------------------------------------------------------------
-# Detection and cluster curation
-# ---------------------------------------------------------------------------
 
 
 class TestDetection:
@@ -460,11 +450,6 @@ class TestCalIdentification:
             tracer._flag_cal_clusters(metadata)
 
 
-# ---------------------------------------------------------------------------
-# Trace identity
-# ---------------------------------------------------------------------------
-
-
 class TestTraceIdentity:
     def test_assigns_every_expected_fiber_and_order(self, tmp_path, monkeypatch):
         image, truth = _synthetic_flat()
@@ -617,11 +602,6 @@ class TestTraceIdentity:
         assert "3 orders detected but 2 expected" in caplog.text
 
 
-# ---------------------------------------------------------------------------
-# End-to-end tracing
-# ---------------------------------------------------------------------------
-
-
 class TestMakeMasterOrderTrace:
     def test_traces_a_synthetic_flat(self, tmp_path, monkeypatch):
         image, truth = _synthetic_flat()
@@ -704,11 +684,6 @@ class TestMakeMasterOrderTrace:
         tracer.make_master(output_dir=tmp_path / "out")
         tracer.info()
         assert "OrderTrace" in capsys.readouterr().out
-
-
-# ---------------------------------------------------------------------------
-# Configuration, input validation, and output
-# ---------------------------------------------------------------------------
 
 
 class TestConfiguration:
@@ -821,11 +796,6 @@ class TestCSVWriting:
         tracer = OrderTrace(master_path)
         with pytest.raises(RuntimeError, match="run make_master"):
             tracer.save_master(tmp_path / "traces.csv")
-
-
-# ---------------------------------------------------------------------------
-# Trace fitting, apertures, and validation
-# ---------------------------------------------------------------------------
 
 
 def _straight_trace(center, slope, bottom_edge, top_edge):
@@ -1191,11 +1161,6 @@ class TestApertureConstraint:
         assert (tracer._trace_tables["GREEN"]["TopEdge"] == 6.0).all()
 
 
-# ---------------------------------------------------------------------------
-# Real-data test
-# ---------------------------------------------------------------------------
-
-
 class TestRealData:
     @pytest.mark.slow
     @pytest.mark.requires_testdata
@@ -1214,11 +1179,13 @@ class TestRealData:
         tables = {chip: combined[combined["Chip"] == chip] for chip in ("GREEN", "RED")}
 
         # Resolve the reference through the same era lookup extraction uses. A
-        # masters product carries no JD_UTC, so date the flat from its filename.
+        # masters product goes through no to_kpf1, so it carries neither JD_UTC
+        # nor INSTERA: date the flat from its filename and stamp its era.
         datecode = masters[0].name.split(".")[1]
         tracer._master_flat.set_keyword(
             "JD_UTC", pd.Timestamp(datecode).to_julian_date()
         )
+        tracer._master_flat.set_keyword("INSTERA", "2.0")
         extractor = SpectralExtraction(tracer._master_flat)
         extractor._read_order_trace_reference()
         vetted = pd.read_csv(extractor._order_trace_path)

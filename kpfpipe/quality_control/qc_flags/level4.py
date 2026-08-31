@@ -10,7 +10,6 @@ import numpy as np
 from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 _REQUIRED_RV_COLUMNS = frozenset(
     {"RV", "RV_ERR", "BJD_TDB", "BERV", "WAVE_START", "WAVE_END", "WEIGHT"}
 )
@@ -36,8 +35,8 @@ class QCL4(QC):
         writes, including the BJD_TDB/BERV/WEIGHT the DiagL4 dispersion metrics
         consume.
         """
-        norder = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
-        for fiber in _SCI_FIBERS:
+        norder = DETECTOR["numorder"]
+        for fiber in DETECTOR["sci_fibers"]:
             ccf = self.kpf_obj.data.get(f"{fiber}_CCF")
             rv = self.kpf_obj.data.get(f"{fiber}_RV")
             if np.shape(ccf)[:1] != (norder,):
@@ -57,8 +56,10 @@ class QCL4(QC):
     ccf_rv_present._qc_key = "DATAPRL4"
 
     def required_keywords_present(self):
-        """Every registry-required PRIMARY keyword for L4 is present (presence only)."""
-        return self._required_primary_keywords() <= set(self.kpf_obj.headers["PRIMARY"])
+        """Required PRIMARY keywords present -- not yet implemented; see ``QC``."""
+        raise NotImplementedError(
+            "KWRDPRL4 is pending a KPF-owned definition of a required keyword"
+        )
 
     required_keywords_present._qc_key = "KWRDPRL4"
 

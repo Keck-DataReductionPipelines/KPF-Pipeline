@@ -5,37 +5,27 @@ Raw FITS readout from the KPF instrument: amplifier arrays plus exposure
 meter, guide camera, telemetry, and telescope metadata.
 """
 
-import importlib.resources
+import importlib.metadata
 import logging
-import os
-import re
 
-import numpy as np
 import pandas as pd
-from astropy.io import fits
-from astropy.table import Table
-from rvdata.core.models.definitions import BASE_RECEIPT_COLUMNS
-from rvdata.core.tools.headers import parse_value_to_datatype
 
-from kpfpipe import __version__
+from kpfpipe import REPO_ROOT, __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
-from kpfpipe.data_models.keyword_registry import SCI_TRACES
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.utils.io import kpf_filename
 from kpfpipe.utils.kpf import get_obs_id
 
 logger = logging.getLogger(__name__)
 
-_config_path = importlib.resources.files("kpfpipe.data_models.config")
-_L0_EXTENSIONS = pd.read_csv(_config_path / "L0-extensions.csv")
-_KNOWN_L0_EXTENSIONS = set(_L0_EXTENSIONS["Name"].tolist())
+# EPRV-standard compliance is pinned to the installed rv-data-standard release
+# (environment.yml pins it exactly): EPRVTAG is its version ("v0.4.0"), VOCLASS
+# the release month ("EPRVSTANDARD2026.06"). The release date is not in package
+# metadata (PyPI-only), so map it from the exact pin here; bump both together.
+_RVDATA_VERSION = importlib.metadata.version("rv-data-standard")
+_RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
 
-# WMKO-native L0 filename: KP.YYYYMMDD.NNNNN.NN.fits (the obs_id plus .fits).
-_L0_FILENAME_PATTERN = re.compile(r"KP\.\d{8}\.\d{5}\.\d{2}\.fits")
-
-# Initial DRPSTATU value on the L1 EPRV PRIMARY, before any pipeline module runs.
-# Each module overwrites it via the receipt_add_entry override (see base.py).
-_DRPSTATU_DEFAULT = "File ingested into KPF-DRP"
+# The calibration half of KPF's IMTYPE vocabulary; 'Object' is the other half.
+_CAL_OBSTYPES = frozenset({"Bias", "Dark", "Flatlamp", "Arclamp", "Etalon"})
 
 
 class KPF0(KPFDataModel):
@@ -48,51 +38,74 @@ class KPF0(KPFDataModel):
     (e.g. ``headers["PRIMARY"]``).
     """
 
+    # A raw L0 carries the native header it was read with; see _SEEDS_PRIMARY.
+    _SEEDS_PRIMARY = False
+
     def __init__(self):
         super().__init__()
         self.level = 0
+        self._build()
 
-        for _, row in _L0_EXTENSIONS.iterrows():
-            if row["Required"] and row["Name"] not in self.extensions:
-                self.create_extension(row["Name"], row["DataType"])
+    @classmethod
+    def from_fits(cls, fn, instrument=None, standardize=False, **kwargs):
+        """Read an L0 from FITS, standardizing its header on the way in if asked.
+
+        ``standardize`` defaults to False so a naive read reflects the file on
+        disk: PRIMARY as WMKO wrote it, INSTRUMENT_HEADER empty. The pipeline
+        always passes True -- every stage after the load reads the EPRV PRIMARY.
+        """
+        obj = super().from_fits(fn, instrument=instrument, **kwargs)
+        if standardize:
+            obj.standardize_header_format()
+        return obj
+
+    @property
+    def standardized(self):
+        """True once ``standardize_header_format`` has run on this L0.
+
+        The receipt is the pipeline's existing, explicit, persisted answer to
+        "which steps have run", so it -- not the header or extension structure --
+        is the discriminator. A fresh ``KPF0()`` has a zero-row receipt, hence
+        the ``not r.empty`` guard.
+        """
+        r = self.receipt
+        return (
+            r is not None
+            and not r.empty
+            and "standardize_header_format" in r["FUNCTION"].values
+        )
 
     def read(self, hdul, instrument=None, overwrite=False, **kwargs):
-        """Route L0 FITS reads to ``KPF0._read``, then stamp DRP provenance.
+        """Read an L0 FITS HDUList, resolving ``obs_id`` from its filename.
 
-        ``RVDataModel.read`` has no lvl==0 dispatch branch, so the inherited
-        ``from_fits`` would never call into ``_read`` without this override.
-        (This is the canonical statement of the read-override rationale; the
-        L1 and Masters-L2 overrides refer back here.)
+        The obs_id must be known before ``standardize_header_format``, which
+        writes it as the ORIGID provenance card.
         """
-        self._read(hdul)
-        # Derive obs_id before stamping: _stamp_wmko_tracking writes it as the
-        # ORIGID provenance card, so it must be known by then.
+        super().read(hdul, instrument=instrument, overwrite=overwrite, **kwargs)
         self.obs_id = get_obs_id(self.filename)
-        if "PRIMARY" in self.headers:
-            self._stamp_wmko_tracking()
 
-    def _stamp_wmko_tracking(self):
-        """Stamp WMKO DRP-RUN provenance onto the L0 RECEIPT at read time.
+    def _stamp_wmko_tracking(self, native):
+        """Stamp WMKO DRP-RUN provenance onto PRIMARY from ``native``.
 
-        The single population site for DRPVERNO, PROGID/KOAID, DRPSTATU, and ORIGID
-        (the original L0 obs_id), written to their registry home (RECEIPT) via
-        ``set_keyword`` and ridden forward onto L1/L2/L4 (see ``to_kpf1``).
-        DRPVERNO/DRPSTATU/ORIGID are always (re)stamped. KOAID and PROGID are not
-        on the raw WMKO PRIMARY -- they map from OFNAME and PROGNAME respectively.
-        A missing PROGNAME defaults PROGID to UNKNOWN with a warning; a missing
-        OFNAME (the archive obs_id) raises.
+        The single population site for DRPVERNO, ORIGID (the original L0 obs_id)
+        and PROGID/KOAID, which are not EPRV keywords -- they map from the native
+        OFNAME and PROGNAME, so they are read off the snapshot rather than the
+        EPRV skeleton this is filling. A missing PROGNAME defaults PROGID to
+        UNKNOWN with a warning; a missing OFNAME (the archive obs_id) raises on
+        a frame read from disk. DRPSTATU is left to ``receipt_add_entry``, which
+        advances it per module.
         """
         self.set_keyword("DRPVERNO", __version__)
-        self.set_keyword("DRPSTATU", _DRPSTATU_DEFAULT)
         self.set_keyword("ORIGID", self.obs_id)
-        primary = self.headers["PRIMARY"]
 
-        koaid = primary.get("OFNAME")
-        if not koaid:
+        koaid = native.get("OFNAME")
+        # Only a frame read from disk must name itself; an in-memory L0 has no
+        # archive identity, and blanks KOAID as it blanks ORIGID above.
+        if not koaid and self.filename:
             raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
         self.set_keyword("KOAID", koaid)
 
-        progname = primary.get("PROGNAME")
+        progname = native.get("PROGNAME")
         if not progname:
             logger.warning(
                 "PROGNAME absent from L0 PRIMARY; defaulting PROGID to 'UNKNOWN'"
@@ -100,102 +113,153 @@ class KPF0(KPFDataModel):
             progname = "UNKNOWN"
         self.set_keyword("PROGID", progname)
 
-    def _read(self, hdul):
-        """Read all extensions from an L0 FITS HDUList.
+    def standardize_header_format(self):
+        """Convert this L0's PRIMARY from WMKO-native to EPRV-standard, in place.
 
-        Iterates through all HDUs and creates extensions dynamically
-        based on what is present. ``CompImageHDU`` is transparently
-        decompressed by astropy.
+        The single conversion site, run at load by ``from_fits(standardize=True)``
+        and before any other stage, so everything downstream reads one PRIMARY:
+        the EPRV-standard one. The raw instrument header is preserved verbatim in
+        INSTRUMENT_HEADER, which is where a module that genuinely needs a native
+        card reads it from.
+
+        Snapshots that native header, replaces PRIMARY with the registry's typed
+        EPRV skeleton, fills it from the header map, then stamps the values that
+        are computed rather than mapped (INSTERA, and the WMKO/DRP/EPRV
+        provenance cards). A second call is a no-op.
+
+        Returns
+        -------
+        KPF0
+            This object, standardized.
         """
-        for hdu in hdul:
-            ext_name = hdu.name
+        if self.standardized:
+            return self
 
-            if isinstance(hdu, fits.PrimaryHDU):
-                fits_type = "PrimaryHDU"
-            elif isinstance(hdu, (fits.ImageHDU, fits.CompImageHDU)):
-                fits_type = "ImageHDU"
-            elif isinstance(hdu, fits.BinTableHDU):
-                fits_type = "BinTableHDU"
+        native = self.as_fits_header(self.headers["PRIMARY"])
+        self.set_header("INSTRUMENT_HEADER", native)
+
+        self.headers["PRIMARY"].clear()
+        self._seed_primary()
+        self._fill_from_native(native)
+        self._stamp_wmko_tracking(native)
+        self._stamp_observing_mode(native)
+        self._stamp_instrument_era()
+
+        self.set_keyword("DATALVL", "L0")
+        self.set_keyword("DRPTAG", __version__)
+        self.set_keyword("DRPHASH", __githash__)
+        self.set_keyword("EPRVTAG", f"v{_RVDATA_VERSION}")
+        self.set_keyword(
+            "VOCLASS",
+            f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
+        )
+
+        self.receipt_add_entry("standardize_header_format", "", "PASS")
+        return self
+
+    def _fill_from_native(self, native):
+        """Apply ``EPRV-header-map.csv`` to the native header, card by card.
+
+        A pure tabular pass over the PRIMARY-targeted map rows: take the
+        instrument value if the native header carries it, else the row default,
+        and type it to the registry DataType. A row with neither is skipped, so
+        the seeded blank card stands. ``JD_UTC`` is the one non-tabular value --
+        a per-frame transform of the native ``MJD-OBS`` -- and is applied last.
+
+        The ``KPF_EXT=QUALITY_CONTROL`` rows are not filled here: their source
+        extension is still empty at this point in the pipeline, so ``DiagL0``
+        stamps them onto PRIMARY when it computes them.
+        """
+        registry = self.keyword_registry
+        for row in registry.header_map.itertuples(index=False):
+            kpf_ext = "" if pd.isna(row.KPF_EXT) else str(row.KPF_EXT).strip()
+            if kpf_ext not in ("", "PRIMARY"):
+                continue
+            eprv_key = str(row.EPRV_KEY).strip()
+            kpf_key = "" if pd.isna(row.KPF_KEY) else str(row.KPF_KEY).strip()
+            default = None if pd.isna(row.DEFAULT) else row.DEFAULT
+
+            if kpf_key and kpf_key in native:
+                # Verbatim: some cards legitimately read "None" (e.g. CAL-OBJ when
+                # the cal fiber is dark -> TRACE5/CLSRC5); real data, not a sentinel.
+                raw_value = native.get(kpf_key)
+            elif default is not None and str(default).strip():
+                raw_value = default
             else:
                 continue
 
-            if ext_name not in self.extensions:
-                if ext_name != "PRIMARY":
-                    if ext_name not in _KNOWN_L0_EXTENSIONS:
-                        raise ValueError(
-                            f"Non-standard extension {ext_name!r} in L0 file"
-                        )
-                    self.create_extension(ext_name, fits_type)
-
-            if ext_name == "PRIMARY":
-                pass
-            elif ext_name == "RECEIPT":
-                t = Table.read(hdu)
-                df = t.to_pandas()
-                receipt_columns = BASE_RECEIPT_COLUMNS["Name"].tolist()
-                if df.empty:
-                    df = pd.DataFrame(columns=receipt_columns)
-                else:
-                    all_cols = df.columns.union(receipt_columns, sort=False)
-                    df = df.reindex(columns=all_cols).fillna("")
-                self.receipt = df
-            elif fits_type == "ImageHDU":
-                # np.array (not asarray) materializes the memmapped HDU into RAM
-                # before from_fits closes the file; a view would dangle afterward.
-                self.set_data(ext_name, np.array(hdu.data))
-            elif fits_type == "BinTableHDU":
-                self.set_data(ext_name, Table.read(hdu))
-
-            self.set_header(ext_name, hdu.header)
-
-    def check_filename_convention(self, filename):
-        """KPF L0 uses the WMKO-native KP.YYYYMMDD.NNNNN.NN.fits name."""
-        basename = os.path.basename(filename)
-        if not _L0_FILENAME_PATTERN.fullmatch(basename):
-            logger.warning(
-                "Filename '%s' does not follow the KPF L0 naming "
-                "convention (KP.YYYYMMDD.NNNNN.NN.fits)",
-                basename,
+            self.set_keyword(
+                eprv_key,
+                registry._parse_value(
+                    eprv_key, registry.datatype_for(eprv_key, "PRIMARY"), raw_value
+                ),
             )
-            return False
-        return True
 
-    def generate_standard_filename(self):
-        """KPF L0 filenames follow the KP.YYYYMMDD.NNNNN.NN.fits pattern.
+        # JD_UTC: convert the native MJD-OBS to a full Julian date. The one value
+        # transform the header map can't express, so it lives here, not as a default.
+        mjd = native.get("MJD-OBS")
+        if mjd not in (None, "", "UNKNOWN"):
+            self.set_keyword("JD_UTC", float(mjd) + 2400000.5)
 
-        Raises
-        ------
-        ValueError
-            If ``obs_id`` is unset or invalid.
+    def _stamp_observing_mode(self, native):
+        """Stamp ISSOLAR and OBSMODE from the OBSTYPE the tabular fill just mapped.
+
+        OBSMODE is redundant for KPF, which has one optical configuration: the
+        EPRV standard defines it for instruments with several (hi-res/low-res),
+        so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar. An IMTYPE
+        outside the vocabulary is a frame this DRP cannot classify, so it raises.
         """
-        return kpf_filename(self.obs_id, "L0")
-
-    def to_fits(self, fn=None):
-        """Write L0 data to a FITS file (plain ImageHDU, no compression)."""
-        if fn is None:
-            fn = self.generate_standard_filename()
-        if not fn.endswith(".fits"):
-            raise NameError("Filename must end with .fits")
-
-        self.receipt_add_entry("to_fits", f"out_filepath={fn}", "PASS")
-        # Warn-only advisory (match rvdata); the write still proceeds.
-        self.check_filename_convention(fn)
-
-        if "PRIMARY" in self.headers:
-            self.headers["PRIMARY"]["FILENAME"] = (
-                os.path.basename(fn),
-                "Name of the FITS file",
+        obstype = str(self.headers["PRIMARY"]["OBSTYPE"]).strip()
+        is_solar = any(
+            str(native.get(key, "")).strip().lower() == "socal"
+            for key in ("OBJECT", "TARGNAME")
+        )
+        if obstype == "Object":
+            mode = "solar" if is_solar else "sci"
+        elif obstype in _CAL_OBSTYPES:
+            mode = "cal"
+        else:
+            raise ValueError(
+                f"{self.obs_id} has IMTYPE {obstype!r}, which is not one of KPF's "
+                f"observation types ('Object', {', '.join(sorted(_CAL_OBSTYPES))})"
             )
+        self.set_keyword("ISSOLAR", is_solar)
+        self.set_keyword("OBSMODE", mode)
 
-        hdu_list = self._create_hdul()
-        hdul = fits.HDUList(hdu_list)
-        dirname = os.path.dirname(fn)
-        if dirname and not os.path.isdir(dirname):
-            os.makedirs(dirname, exist_ok=True)
-        hdul.writeto(fn, overwrite=True, output_verify="silentfix")
-        hdul.close()
-        logger.info("wrote %s to %s", type(self).__name__, fn)
-        return fn
+    def _stamp_instrument_era(self):
+        """Stamp INSTERA from JD_UTC against ``reference/instrument_eras.csv``.
+
+        Runs after the tabular fill, which is what supplies JD_UTC. A frame that
+        cannot be dated, or that no era covers, has no reference calibrations, so
+        this raises rather than shipping an unattributable product.
+        """
+        obs_time = pd.to_datetime(
+            self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
+        )
+        if pd.isna(obs_time):
+            raise ValueError(
+                f"Cannot infer the instrument era of {self.obs_id}: its JD_UTC is "
+                f"{self.headers['PRIMARY']['JD_UTC']!r}"
+            )
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        in_era = eras[
+            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
+        ]
+        if in_era.empty:
+            raise ValueError(
+                f"No KPF instrument era covers {obs_time}; the eras of "
+                f"reference/instrument_eras.csv do not span it"
+            )
+        self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
+
+    @property
+    def _stamps_filename(self):
+        """FILENAME is an EPRV PRIMARY keyword, so it is only correct to stamp it
+        on a standardized L0; a raw one must reflect the file it came from."""
+        return self.standardized
 
     _L0_TO_L1_PASSTHROUGH = [
         "CA_HK",
@@ -204,160 +268,30 @@ class KPF0(KPFDataModel):
         "TELEMETRY",
         "DRP_CONFIG",
         "CATALOG_RECORD",
+        "INSTRUMENT_HEADER",
     ]
-
-    def _map_header(self):
-        """Map this L0's raw WMKO PRIMARY to an EPRV-standard PRIMARY dict.
-
-        A pure tabular application of the registry's (sanitized) header_map: for
-        each row take the instrument value if present, else the row default, and
-        type it to the EPRV DataType. ``JD_UTC`` is the sole exception -- a
-        per-frame transform of the native ``MJD-OBS``, computed below.
-
-        Returns
-        -------
-        dict
-            EPRV-standard PRIMARY keyword -> typed value.
-        """
-        wmko_primary = self.headers["PRIMARY"]
-        out = {}
-        for _, row in self.keyword_registry.header_map.iterrows():
-            eprv_key = str(row["STANDARD"]).strip()
-            instrument_key = (
-                str(row["INSTRUMENT"]).strip() if pd.notna(row["INSTRUMENT"]) else ""
-            )
-            default_val = row["DEFAULT"] if pd.notna(row["DEFAULT"]) else None
-
-            if instrument_key and instrument_key in wmko_primary:
-                # Verbatim: some cards legitimately read "None" (e.g. CAL-OBJ when
-                # the cal fiber is dark -> TRACE1/CLSRC1); real data, not a sentinel.
-                raw_value = wmko_primary.get(instrument_key)
-            elif default_val is not None and str(default_val).strip():
-                raw_value = default_val
-            else:
-                continue
-            # Type to the EPRV DataType so the L1 overlay matches L2's typing (e.g.
-            # NUMTRACE '5' -> 5). Emit the bare value so to_kpf1's assignment keeps
-            # the comment KPF1.__init__ seeded onto the PRIMARY card.
-            dt = self.keyword_registry.eprv_primary_datatypes.get(eprv_key)
-            out[eprv_key] = (
-                parse_value_to_datatype(eprv_key, dt, raw_value)[0] if dt else raw_value
-            )
-
-        # JD_UTC: convert the native MJD-OBS to a full Julian date. The one value
-        # transform header_map can't express, so it lives here, not as a default.
-        mjd = wmko_primary.get("MJD-OBS")
-        if mjd not in (None, "", "UNKNOWN"):
-            out["JD_UTC"] = (
-                float(mjd) + 2400000.5,
-                "[day] Julian date of exposure start",
-            )
-        return out
-
-    # CATALOG_RECORD canonical column -> EPRV C*# keyword base. The row is stored in
-    # EPRV C*# format already, so the overlay is a direct copy (no conversion).
-    _CATALOG_CARD_BASES = {
-        "object": "CID",
-        "radec_src": "CSRC",
-        "ra": "CRA",
-        "dec": "CDEC",
-        "pmra": "CPMR",
-        "pmdec": "CPMD",
-        "parallax": "CPLX",
-        "rv": "CRV",
-        "z": "CZ",
-        "epoch": "CEPCH",
-        "equinox": "CEQNX",
-        "color": "CCLR",
-        "color_name": "CCLRN",
-    }
-
-    def _catalog_primary_cards(self):
-        """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
-
-        Returns ``{C-keyword: value}`` for every science fiber (``SCI_TRACES``) -- a
-        direct copy of the canonical row's already-EPRV-format cells, skipping any
-        missing value (NaN / "") so the card stays blank rather than carrying 'nan'.
-        Warns when the canonical astrometry was assembled from more than one catalog,
-        and when an empty table on a science frame (IMTYPE 'Object') shows AstroQuery
-        never ran -- the blank cards then fail BarycentricCorrection and
-        CrossCorrelation downstream.
-        """
-        table = self.data["CATALOG_RECORD"]
-        if not table.colnames:
-            imtype = self.headers["PRIMARY"].get("IMTYPE")
-            if str(imtype).strip().lower() == "object":
-                logger.warning(
-                    "CATALOG_RECORD is empty for a science frame; AstroQuery has not "
-                    "run, so the SCI C*# astrometry cards are left blank -- "
-                    "BarycentricCorrection and CrossCorrelation will fail downstream"
-                )
-            return {}
-
-        row = table[table["source"] == "kpf-drp"][0]
-
-        provenance = {
-            str(row[col]).strip()
-            for col in ("radec_src", "plx_src", "rv_src")
-            if str(row[col]).strip()
-        }
-        if len(provenance) > 1:
-            logger.warning(
-                "PRIMARY catalog keywords assembled from mixed sources "
-                "(radec=%s, parallax=%s, rv=%s); C*# astrometry is not "
-                "internally single-source",
-                row["radec_src"],
-                str(row["plx_src"]) or '""',
-                str(row["rv_src"]) or '""',
-            )
-
-        cards = {}
-        for col, base in self._CATALOG_CARD_BASES.items():
-            value = row[col]
-            if isinstance(value, str):
-                if value.strip() == "":
-                    continue
-            else:
-                if np.isnan(value):
-                    continue
-                value = float(value)
-            for i in SCI_TRACES:
-                cards[f"{base}{i}"] = value
-        return cards
 
     def to_kpf1(self):
         """Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
-        The raw WMKO PRIMARY is converted to EPRV-standard names/values here (the
-        single conversion site; see ``_map_header``), and preserved verbatim in the
-        immutable INSTRUMENT_HEADER. DRP-RUN provenance lives on RECEIPT (stamped
-        at read) and reaches L1 via the header forward below.
+        The PRIMARY is already EPRV-standard (from ``standardize_header_format``),
+        so this is a pure forward. GREEN/RED CCD and VAR are created empty -- the
+        caller (image assembly) fills those in.
 
-        Returns a KPF1 with EPRV PRIMARY, INSTRUMENT_HEADER, pass-through
-        extensions (CA_HK, EXPMETER_SCI/SKY, TELEMETRY, DRP_CONFIG,
-        CATALOG_RECORD), receipt, and obs_id copied over. GREEN_CCD, GREEN_VAR,
-        RED_CCD, RED_VAR are created empty -- the caller (image assembly) fills
-        those in.
+        Raises
+        ------
+        ValueError
+            If this L0 has not been standardized -- forwarding a raw WMKO PRIMARY
+            onto an EPRV L1 PRIMARY would be silent corruption.
         """
-        kpf1 = KPF1()
-
-        # Convert the raw WMKO PRIMARY to EPRV names/values, and snapshot the raw
-        # L0 PRIMARY verbatim into the immutable INSTRUMENT_HEADER.
-        if "PRIMARY" in self.headers:
-            for key, value in self._map_header().items():
-                kpf1.headers["PRIMARY"][key] = value
-
-            # Overlay the canonical astrometry onto the SCI-fiber C*# cards -- their
-            # sole writer (the raw TARG*/GAIAID mapping is blanked in the header_map).
-            for key, value in self._catalog_primary_cards().items():
-                kpf1.headers["PRIMARY"][key] = value
-
-            if "INSTRUMENT_HEADER" not in kpf1.extensions:
-                kpf1.create_extension("INSTRUMENT_HEADER", "ImageHDU")
-            kpf1.set_header(
-                "INSTRUMENT_HEADER", self.as_fits_header(self.headers["PRIMARY"])
+        if not self.standardized:
+            raise ValueError(
+                f"{self.obs_id} has not been standardized; call "
+                "standardize_header_format before to_kpf1"
             )
+
+        kpf1 = KPF1()
 
         for ext_name in self._L0_TO_L1_PASSTHROUGH:
             if ext_name in self.extensions:
@@ -369,39 +303,12 @@ class KPF0(KPFDataModel):
                 if ext_name in self.headers:
                     kpf1.set_header(ext_name, self.headers[ext_name])
 
-        # Forward the L0 QUALITY_CONTROL and RECEIPT headers onto L1, mirroring
-        # to_kpf2/to_kpf4. (PRIMARY is converted via _map_header above, not copied.)
-        self._forward_headers(kpf1, ("QUALITY_CONTROL", "RECEIPT"))
+        self._forward_headers(kpf1, ("PRIMARY", "QUALITY_CONTROL", "RECEIPT"))
 
         if self.receipt is not None and not self.receipt.empty:
             kpf1.receipt = self.receipt.copy()
         kpf1.obs_id = self.obs_id
 
-        # DATALVL is set by KPF1.__init__; _map_header no longer emits it, so no
-        # fixup is needed here.
+        kpf1.set_keyword("DATALVL", "L1")
         kpf1.receipt_add_entry("to_kpf1", "", "PASS")
         return kpf1
-
-    def info(self):
-        """Print summary of L0 data model contents."""
-        if self.filename:
-            print(f"KPF L0: {self.filename}")
-        else:
-            print("Empty KPF0 data product")
-        if self.obs_id:
-            print(f"Obs ID: {self.obs_id}")
-
-        print(f"\n{'Extension':<20s} {'Type':<15s} {'Shape/Size':<20s}")
-        print("=" * 55)
-        for name, ext_type in self.extensions.items():
-            if name == "PRIMARY":
-                n_cards = len(self.headers.get(name, {}))
-                print(f"{'PRIMARY':<20s} {'header':<15s} {n_cards} cards")
-                continue
-            ext = self.data.get(name)
-            if isinstance(ext, np.ndarray):
-                print(f"{name:<20s} {'array':<15s} {str(ext.shape):<20s}")
-            elif isinstance(ext, Table):
-                print(f"{name:<20s} {'table':<15s} {len(ext)} rows")
-            else:
-                print(f"{name:<20s} {ext_type:<15s} {'(empty)':<20s}")

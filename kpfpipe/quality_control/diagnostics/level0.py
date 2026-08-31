@@ -4,11 +4,12 @@ import logging
 
 import numpy as np
 from astropy import units as u
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import AltAz, SkyCoord, get_body, get_sun
 from astropy.time import Time
 from scipy.optimize import curve_fit
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
+from kpfpipe.utils.astro import KECK_LOCATION
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,19 @@ class DiagL0(Diagnostics):
     """
 
     LEVEL = "L0"
+
+    def run(self):
+        """Run the L0 diagnostics, then mirror GDRSEEV onto EPRV PRIMARY.
+
+        SEEING maps from a diagnostic rather than a native card
+        (``EPRV-header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
+        QUALITY_CONTROL is still empty when standardize_header_format runs, so
+        DiagL0 is its PRIMARY writer too.
+        """
+        results = super().run()
+        if "GDRSEEV" in results:
+            self.kpf_obj.set_keyword("SEEING", results["GDRSEEV"][0])
+        return results
 
     def _record_skycoord(self, rec):
         """ICRS SkyCoord from a CATALOG_RECORD record.
@@ -66,7 +80,7 @@ class DiagL0(Diagnostics):
         """
         table = self.kpf_obj.data["CATALOG_RECORD"]
         rec = table[table["source"] == source][0]
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
         obs_time = Time(float(hdr["MJD-OBS"]), format="mjd")
         coord = self._record_skycoord(rec).apply_space_motion(new_obstime=obs_time)
@@ -100,6 +114,28 @@ class DiagL0(Diagnostics):
 
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
 
+    def solar_lunar_geometry(self):
+        """SUNEL, MOONANG: deg, Sun altitude and target-Moon separation.
+
+        Both are evaluated at mid-exposure from the WMKO site. SUNEL is negative
+        with the Sun below the horizon.
+        """
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
+        obs_time = Time(str(hdr["DATE-MID"]), scale="utc")
+        sun = get_sun(obs_time).transform_to(
+            AltAz(obstime=obs_time, location=KECK_LOCATION)
+        )
+        moon = get_body("moon", obs_time, KECK_LOCATION).transform_to("icrs")
+        pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
+        # EPRV-defined, so these route straight to PRIMARY rather than to the
+        # QUALITY_CONTROL extension the other diagnostics land in.
+        return self._tag(
+            SUNEL=round(float(sun.alt.deg), 5),
+            MOONANG=round(float(pointing.separation(moon).deg), 2),
+        )
+
+    solar_lunar_geometry._diag_name = "solar_lunar_geometry"
+
     def _present_amps(self, chip):
         """Yield ``(i, array)`` for each present, non-empty ``{chip}_AMP{i}``.
 
@@ -121,7 +157,7 @@ class DiagL0(Diagnostics):
         """Largest fraction of any present amp on ``chip`` satisfying ``compare``.
 
         Raw D.N., before ImageAssembly applies gain or subtracts overscan; the
-        worst amp decides, mirroring v2.12's per-amp infobits.
+        worst amp decides.
         """
         fractions = [
             np.count_nonzero(compare(arr, level)) / arr.size
@@ -150,9 +186,9 @@ class DiagL0(Diagnostics):
     def amp_percentiles(self):
         """P{16,50,84}{G,R}AMP{1-4}: raw D.N. percentiles of each amplifier image.
 
-        Ports v2.12's per-amp MEDGRN*/P16*/P84* statistics: the whole raw amp
-        image, prescan and overscan included, NaNs excluded. Absent amps emit no
-        keyword, so a 2-amp readout writes only the amps it has.
+        Computed over the whole raw amp image, prescan and overscan included,
+        NaNs excluded. Absent amps emit no keyword, so a 2-amp readout writes
+        only the amps it has.
         """
         values = {}
         for chip, letter in (("GREEN", "G"), ("RED", "R")):
@@ -173,9 +209,8 @@ class DiagL0(Diagnostics):
     def ccd_temperature_offsets(self):
         """GTEMPOFF/RTEMPOFF: signed GREEN/RED CCD offset from setpoint [mK].
 
-        Ports the measurement half of v2.12 ``CCD_not_at_temp``: the
-        exposure-average kpf{green,red}.STA_CCD_T telemetry against the -100 C
-        setpoint, signed so the direction of the drift is visible.
+        The exposure-average kpf{green,red}.STA_CCD_T telemetry against the
+        -100 C setpoint, signed so the direction of the drift is visible.
         """
         return self._tag(
             GTEMPOFF=round(
@@ -191,13 +226,12 @@ class DiagL0(Diagnostics):
     def etalon_temperature_offset(self):
         """ETATOFF: signed etalon offset from setpoint [mK], worst chamber.
 
-        Ports the measurement half of v2.12 ``etalon_set_temp``: the inner bottom
-        lid (ETAV1C3T) and the outer chamber (ETAV1C4T), each against its own
-        setpoint keyword, falling back to the design value when the setpoint is
-        not recorded. One keyword covers both, so the chamber furthest from its
-        setpoint is the one reported.
+        The inner bottom lid (ETAV1C3T) and the outer chamber (ETAV1C4T), each
+        against its own setpoint keyword, falling back to the design value when
+        the setpoint is not recorded. One keyword covers both, so the chamber
+        furthest from its setpoint is the one reported.
         """
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         offsets = []
         for temp_key, set_key, design in (
             ("ETAV1C3T", "ETAV1C3S", 23.6),
@@ -213,8 +247,8 @@ class DiagL0(Diagnostics):
         """GUIDER_CUBE_ORIGINS rows, the unwritten ones dropped.
 
         A cube that recorded flux carries trailing rows with a zero timestamp and
-        zero flux; v2.12 drops them, but keeps an all-zero-flux cube whole so the
-        emptiness stays visible to the metrics.
+        zero flux; those are dropped, but an all-zero-flux cube is kept whole so
+        the emptiness stays visible to the metrics.
         """
         table = self.kpf_obj.data["GUIDER_CUBE_ORIGINS"]
         flux = np.asarray(table["object1_flux"], dtype=float)
@@ -227,11 +261,11 @@ class DiagL0(Diagnostics):
     def guider_errors(self):
         """GDR{X,Y,R}RMS/GDR{X,Y}BIAS: guiding error RMS and bias [mas].
 
-        Ports v2.12 ``AnalyzeGuider.measure_guider_errors``: per frame, the
-        target position minus the measured centroid, scaled by the 0.056 arcsec
-        CRED-2 pixel; R is the radial combination of the two axes. Fewer than 11
-        distinct centroid positions means the guide camera was not tracking, so
-        no keyword is emitted and GUIDEROK fails on their absence.
+        Per frame, the target position minus the measured centroid, scaled by
+        the 0.056 arcsec CRED-2 pixel; R is the radial combination of the two
+        axes. Fewer than 11 distinct centroid positions means the guide camera
+        was not tracking, so no keyword is emitted and GUIDEROK fails on their
+        absence.
         """
         table = self._guider_frames()
         x_mas = (table["target_x"] - table["object1_x"]) * 56.0
@@ -254,11 +288,9 @@ class DiagL0(Diagnostics):
     def guider_image_stats(self):
         """GDR{FW,FX,PK}{MD,STD}: per-frame guider FWHM [mas] and flux [ADU].
 
-        Ports v2.12 ``AnalyzeGuider``: the median and standard deviation across
-        frames of the fitted stellar FWHM, the object flux and its peak. FWHM
-        combines the two Gaussian axes the guide camera fits, in pixels, at the
-        0.056 arcsec CRED-2 pixel; v2.12 divided by the pixel scale rather than
-        multiplying, so its values were not the mas it labeled them.
+        Median and standard deviation across frames of the fitted stellar FWHM,
+        the object flux and its peak. FWHM combines the two Gaussian axes the
+        guide camera fits, in pixels, at the 0.056 arcsec CRED-2 pixel.
         """
         table = self._guider_frames()
         fwhm = (
@@ -284,13 +316,15 @@ class DiagL0(Diagnostics):
     guider_image_stats._diag_name = "guider_image_stats"
 
     def guider_seeing(self):
-        """GDRSEEJZ: J+Z-band seeing [arcsec] from a Moffat fit to GUIDER_AVG.
+        """GDRSEEJZ, GDRSEEV: seeing [arcsec] from a Moffat fit to GUIDER_AVG.
 
-        Ports v2.12 ``AnalyzeGuider.measure_seeing``: a 2D Moffat profile fit to
-        the median-subtracted co-added guider image, whose alpha is the seeing at
-        the guide camera's 950-1200 nm band. The fit is seeded at three widths
-        spanning 0.4-2.5 arcsec, centred on the guider reference pixel, and the
-        smallest-residual seed wins; a fit that never converges emits no keyword.
+        A 2D Moffat profile fit to the median-subtracted co-added guider image,
+        whose alpha is the seeing at the guide camera's 950-1200 nm band. The fit
+        is seeded at three widths spanning 0.4-2.5 arcsec, centred on the guider
+        reference pixel, and the smallest-residual seed wins; a fit that never
+        converges emits no keyword. GDRSEEV rescales that alpha from the band
+        midpoint to V by the Kolmogorov lambda^(1/5) law, both cards deriving
+        from the unrounded fit.
         """
         image = self.kpf_obj.data["GUIDER_AVG"]
         flat = np.asarray(image, dtype=float).ravel()
@@ -304,7 +338,7 @@ class DiagL0(Diagnostics):
                 amplitude * (1 + ((px - x0) ** 2 + (py - y0) ** 2) / alpha**2) ** -beta
             )
 
-        hdr = self.kpf_obj.headers["PRIMARY"]
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         center = (float(hdr.get("GCCRPIX1", 343.1)), float(hdr.get("GCCRPIX2", 264.7)))
         best, smallest = None, np.inf
         for alpha in (0.4 / 0.056, 1.0 / 0.056, 2.5 / 0.056):
@@ -318,17 +352,21 @@ class DiagL0(Diagnostics):
                 best, smallest = popt, residuals
         if best is None:
             return {}
-        return self._tag(GDRSEEJZ=round(abs(float(best[3])) * 0.056, 6))
+        seeing = abs(float(best[3])) * 0.056
+        return self._tag(
+            GDRSEEJZ=round(seeing, 6),
+            GDRSEEV=round(seeing * ((1200 + 950) / 2 / 550) ** 0.2, 6),
+        )
 
     guider_seeing._diag_name = "guider_seeing"
 
     def guider_saturation(self):
         """GDRNSAT/GDRFRSAT: saturated guider pixels and saturated-frame fraction.
 
-        Ports v2.12 ``AnalyzeGuider``: the CRED-2 saturates at 15830 ADU and both
-        metrics are taken at 90% of it. GDRNSAT counts pixels in the central
-        100x100 box of the co-added GUIDER_AVG, where the target sits; GDRFRSAT
-        is the fraction of frames whose brightest object pixel is saturated.
+        The CRED-2 saturates at 15830 ADU and both metrics are taken at 90% of
+        it. GDRNSAT counts pixels in the central 100x100 box of the co-added
+        GUIDER_AVG, where the target sits; GDRFRSAT is the fraction of frames
+        whose brightest object pixel is saturated.
         """
         level = 0.9 * 15830
         image = self.kpf_obj.data["GUIDER_AVG"]
@@ -370,14 +408,13 @@ class DiagL0(Diagnostics):
     def expmeter_channel_metrics(self):
         """EM{SCI,SKY}{SAT,NEG,INF}: per-fiber exposure meter channel metrics.
 
-        Ports v2.12 ``EM_not_saturated`` and ``EM_flux_not_negative``, which judge
-        each fiber on its own. SAT is saturated elements per reading -- elements
-        above 90% of the 1.93e6 reduced-spectrum saturation level, over the
-        interior readings (the first and last are partial and are dropped when
-        there are 3+) -- the form v2.12 gates at 1.5. NEG is the longest run of
-        adjacent channels whose time-summed flux is negative, the signature of
-        bias over-subtraction in the raw EM images; INF is the same run length for
-        channels holding a non-finite reading.
+        Each fiber is judged on its own. SAT is saturated elements per reading --
+        elements above 90% of the 1.93e6 reduced-spectrum saturation level, over
+        the interior readings (the first and last are partial and are dropped
+        when there are 3+). NEG is the longest run of adjacent channels whose
+        time-summed flux is negative, the signature of bias over-subtraction in
+        the raw EM images; INF is the same run length for channels holding a
+        non-finite reading.
         """
         values = {}
         for ext, fiber in (("EXPMETER_SCI", "SCI"), ("EXPMETER_SKY", "SKY")):
@@ -395,10 +432,10 @@ class DiagL0(Diagnostics):
     def expmeter_counts(self):
         """EM{SC,SK}CT{48,45,56,67,78}: cumulative EM counts [ADU] per band.
 
-        Ports v2.12 ``AnalyzeEM``: raw counts summed over every reading and over
-        the channels of each band, per fiber. The 445-870 nm total spans the EM's
-        full range and the four sub-bands partition it at v2.12's 551.25, 657.50
-        and 763.75 nm edges, so the sub-bands always add up to the total.
+        Raw counts summed over every reading and over the channels of each band,
+        per fiber. The 445-870 nm total spans the EM's full range and the four
+        sub-bands partition it at the 551.25, 657.50 and 763.75 nm edges, so the
+        sub-bands always add up to the total.
         """
         values = {}
         for ext, fiber in (("EXPMETER_SCI", "SC"), ("EXPMETER_SKY", "SK")):
@@ -419,9 +456,8 @@ class DiagL0(Diagnostics):
     def sky_sci_flux_ratio(self):
         """SKYSCIMS: SKY/SCI flux ratio in the main spectrometer, scaled from EM.
 
-        Ports v2.12 ``AnalyzeEM.SKY_SCI_main_spectrometer``: total SKY counts over
-        total SCI counts, the SKY side divided by the 14.1 SKY-to-SCI flux ratio
-        measured on bright twilight observations.
+        Total SKY counts over total SCI counts, the SKY side divided by the 14.1
+        SKY-to-SCI flux ratio measured on bright twilight observations.
         """
         sci = np.nansum(self._expmeter_flux("EXPMETER_SCI")[1])
         sky = np.nansum(self._expmeter_flux("EXPMETER_SKY")[1])

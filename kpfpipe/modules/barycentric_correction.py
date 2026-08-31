@@ -17,7 +17,7 @@ import logging
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import Angle, EarthLocation
+from astropy.coordinates import Angle
 from astropy.stats import mad_std
 from astropy.time import Time
 from barycorrpy import get_BC_vel, utc_tdb
@@ -26,7 +26,7 @@ from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
 from kpfpipe import DEFAULTS
-from kpfpipe.utils.astro import compute_redshift
+from kpfpipe.utils.astro import KECK_LOCATION, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
 
@@ -61,13 +61,6 @@ class BarycentricCorrection:
     config : None | dict | ConfigHandler
         Module configuration. Recognizes no module-specific keys.
     """
-
-    # WMKO site coordinates
-    KECK_LOCATION = EarthLocation(
-        lat=19.8260 * u.deg,
-        lon=-155.474719 * u.deg,
-        height=4145.0 * u.m,
-    )
 
     def __init__(self, l2_obj, config=None):
         self.l2_obj = l2_obj
@@ -631,7 +624,7 @@ class BarycentricCorrection:
         bc_vel_mps, bjd_tdb = self._compute_barycorr(
             astrometry,
             t_fwm,
-            self.KECK_LOCATION,
+            KECK_LOCATION,
             rv_mps=rv_mps,
         )
         bary_kms = bc_vel_mps / 1000.0
@@ -673,18 +666,15 @@ class BarycentricCorrection:
         Reads self._ccd_bjd/_ccd_kms/_ccd_z (populated by perform()); set_keyword
         routes each to its registry home. CCD1=GREEN, CCD2=RED.
         """
-        l2_obj.set_keyword("CCD1BJD", float(self._ccd_bjd[0]))
-        l2_obj.set_keyword("CCD1BKMS", float(self._ccd_kms[0]))
-        l2_obj.set_keyword("CCD1BZ", float(self._ccd_z[0]))
-        l2_obj.set_keyword("CCD2BJD", float(self._ccd_bjd[1]))
-        l2_obj.set_keyword("CCD2BKMS", float(self._ccd_kms[1]))
-        l2_obj.set_keyword("CCD2BZ", float(self._ccd_z[1]))
-        # CTYPE1 names the single (spectral-order) axis of these 1-D per-order
-        # arrays -- registered content, multi-homed across the three barycorr
-        # extensions, so stamped directly (set_keyword can't route a multi-home
-        # keyword). CTYPE2 is N/A: the arrays have no second axis.
+        l2_obj.set_keyword("BJDGREEN", float(self._ccd_bjd[0]))
+        l2_obj.set_keyword("BVGREEN", float(self._ccd_kms[0]))
+        l2_obj.set_keyword("BZGREEN", float(self._ccd_z[0]))
+        l2_obj.set_keyword("BJDRED", float(self._ccd_bjd[1]))
+        l2_obj.set_keyword("BVRED", float(self._ccd_kms[1]))
+        l2_obj.set_keyword("BZRED", float(self._ccd_z[1]))
+        # CTYPE1 names the single 1-D axis; CTYPE2 is N/A.
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
-            l2_obj.headers[ext]["CTYPE1"] = ("Order-N", "Name of axis 1")
+            l2_obj.set_keyword("CTYPE1", "Order-N", ext=ext)
 
     # ------------------------------------------------------------------
     # Public entry point

@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN, NORDER_RED
+from kpfpipe import DETECTOR
+from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
 
@@ -33,15 +34,11 @@ from ._science import (
     make_mask,
 )
 
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
+NORDER_RED = DETECTOR["norder"]["RED"]
 # Fiber order is the module's own config-overridable default, not the canonical
 # slicer order -- spelled out so a reordering in production shows up here.
 _FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -392,7 +389,7 @@ def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
         ("RED", NORDER_GREEN, NORDER_RED),
     ]:
         wave = np.stack([rows[start + i][0] for i in range(n)]).astype(np.float64)
-        flux = np.stack([rows[start + i][1] for i in range(n)]).astype(np.float64)
+        flux = np.stack([rows[start + i][1] for i in range(n)]).astype(np.float32)
         for fiber in _FIBERS:
             kpf2.set_data(f"{chip}_{fiber}_WAVE", wave.copy())
             kpf2.set_data(f"{chip}_{fiber}_FLUX", flux.copy())
@@ -675,7 +672,7 @@ class TestPerform:
         assert ccf_hdr["VELSTEP"] == pytest.approx(0.25)
         assert ccf_hdr["VELSTART"] == pytest.approx(RANGE_KMS[0])  # center 0
         assert ccf_hdr["CCFMASK"] == "G2_espresso"  # BP-RP 0.823 -> 5770 K -> G2
-        assert ccf_hdr["VELMASK"] == pytest.approx(cc_module.ccf_mask_width)
+        assert ccf_hdr["VELWIDTH"] == pytest.approx(cc_module.ccf_mask_width)
         rv_hdr = l4.headers["SCI2_RV"]
         assert rv_hdr["CTYPE1"] == "Columns"
         assert rv_hdr["CTYPE2"] == "Order-N"
@@ -725,7 +722,7 @@ class TestPerform:
             assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
             assert rv_table["ECHELLE_ORDER"][0] == 137
             # The per-bin CCF variance cube round-trips as an image extension.
-            assert hdul["CCF_VAR3"].data.shape == (NORDER, NVEL)
+            assert hdul["CCF3_VAR"].data.shape == (NORDER, NVEL)
 
 
 class TestConstructor:

@@ -197,7 +197,7 @@ class TestPerformShapes:
         )
         l2 = SpectralExtraction(minimal_l1).perform()
         assert l2.level == 2
-        assert l2.data["SCI2_FLUX"].shape == (NORDER_GREEN + NORDER_RED, NCOL)
+        assert l2.data["SCI2_FLUX"].shape == (DETECTOR["numorder"], NCOL)
 
     def test_every_fiber_lands_on_its_own_trace(self, minimal_l1, monkeypatch):
         # One fill value per fiber, so this sees a fiber written over another's
@@ -219,7 +219,7 @@ class TestPerformShapes:
         for fiber, fill in fills.items():
             for quantity in ("FLUX", "VAR"):
                 array = l2.data[f"{fiber}_{quantity}"]
-                assert array.shape == (NORDER_GREEN + NORDER_RED, NCOL)
+                assert array.shape == (DETECTOR["numorder"], NCOL)
                 np.testing.assert_array_equal(array, fill)
 
     def test_green_red_slices_independent(self, minimal_l1, monkeypatch):
@@ -283,6 +283,7 @@ class TestSpectralExtractionRealData:
     @pytest.fixture(scope="class")
     def l2_from_flat(self):
         l0 = KPF0.from_fits(L0_FILE)
+        l0.standardize_header_format()
         ia = ImageAssembly(l0)
         l1 = ia.perform()
         se = SpectralExtraction(l1)
@@ -297,7 +298,7 @@ class TestSpectralExtractionRealData:
         [
             ("GREEN_SCI2_FLUX", NORDER_GREEN),
             ("RED_SCI2_FLUX", NORDER_RED),
-            ("SCI2_FLUX", NORDER_GREEN + NORDER_RED),
+            ("SCI2_FLUX", DETECTOR["numorder"]),
         ],
     )
     def test_sci2_flux_shape(self, l2_from_flat, key, expected_rows):
@@ -654,14 +655,10 @@ class _StubL1:
         }
         self.headers = {
             "PRIMARY": {
-                # date_obs None stands for a frame the L0 could not date.
-                "JD_UTC": pd.Timestamp(date_obs).to_julian_date() if date_obs else None,
+                "JD_UTC": pd.Timestamp(date_obs).to_julian_date(),
                 "INSTERA": instera,
             }
         }
-
-    def set_keyword(self, key, value, ext=None):
-        self.headers["PRIMARY"][key] = value
 
 
 class TestOrderTraceSelection:
@@ -691,57 +688,24 @@ class TestOrderTraceSelection:
         with pytest.raises(FileNotFoundError, match="instrument era 2.5"):
             se._read_order_trace_reference()
 
-    def test_a_frame_between_eras_fails_loudly(self, tmp_path, monkeypatch):
-        # 2024-02-03 -> 2024-02-23 is uncovered by the era table.
+    def test_an_unregistered_instera_fails_loudly(self, tmp_path, monkeypatch):
         _stub_reference_tree(tmp_path, monkeypatch)
-        se = SpectralExtraction(_StubL1("2024-02-10T11:08:33", "1.0"))
+        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33", "UNKNOWN"))
 
-        with pytest.raises(ValueError, match="No KPF instrument era covers"):
+        with pytest.raises(ValueError, match="no instrument era 'UNKNOWN'"):
             se._read_order_trace_reference()
 
-    def test_an_undated_frame_fails_loudly(self, tmp_path, monkeypatch):
-        # MJD-OBS absent at L0 leaves JD_UTC seeded but unset.
-        _stub_reference_tree(tmp_path, monkeypatch)
-        se = SpectralExtraction(_StubL1(None, "2.0"))
-
-        with pytest.raises(ValueError, match="JD_UTC is None"):
-            se._read_order_trace_reference()
-
-    def test_an_undatable_frame_is_not_swallowed_as_a_missing_orderlet(
+    def test_an_unregistered_instera_is_not_swallowed_as_a_missing_orderlet(
         self, tmp_path, monkeypatch
     ):
         # extract_ffi catches LookupError to NaN-fill an absent orderlet. An era
-        # that cannot be inferred must not arrive disguised as one -- it must
+        # the table does not carry must not arrive disguised as one -- it must
         # abort on the first orderlet rather than be retried for every order.
         _stub_reference_tree(tmp_path, monkeypatch)
-        se = SpectralExtraction(_StubL1(None, "2.0"))
+        se = SpectralExtraction(_StubL1("2024-06-01T11:08:33", "UNKNOWN"))
 
         with pytest.raises(ValueError):
             se.extract_ffi("GREEN", ["SCI1"])
-
-    def test_restamps_an_instera_that_disagrees_with_jd_utc(
-        self, tmp_path, monkeypatch, caplog
-    ):
-        traces = _stub_reference_tree(tmp_path, monkeypatch)
-        l1 = _StubL1("2024-06-01T11:08:33", "1.0")
-        se = SpectralExtraction(l1)
-
-        with caplog.at_level("WARNING"):
-            se._read_order_trace_reference()
-
-        assert "disagrees with instrument era 2.0" in caplog.text
-        assert l1.headers["PRIMARY"]["INSTERA"] == "2.0"
-        # The era from JD_UTC, not the stamped one, picks the trace.
-        assert se._order_trace_path == str(traces / "order_trace_20240501.csv")
-
-    def test_restamps_an_unset_instera_without_failing(self, tmp_path, monkeypatch):
-        _stub_reference_tree(tmp_path, monkeypatch)
-        l1 = _StubL1("2024-06-01T11:08:33", "UNKNOWN")
-        se = SpectralExtraction(l1)
-
-        se._read_order_trace_reference()
-
-        assert l1.headers["PRIMARY"]["INSTERA"] == "2.0"
 
     def test_drops_missing_traces_and_keys_them_by_fiber_and_order(
         self, tmp_path, monkeypatch
@@ -757,26 +721,7 @@ class TestOrderTraceSelection:
     def test_writes_the_trace_path_to_the_l2_receipt(
         self, minimal_l1, tmp_path, monkeypatch
     ):
-        traces = _stub_reference_tree(tmp_path, monkeypatch)
-
-        def extract(self, chip, fibers, extraction_method, **kwargs):
-            self._read_order_trace_reference()
-            return {}
-
-        monkeypatch.setattr(SpectralExtraction, "extract_ffi", extract)
-        l2 = SpectralExtraction(minimal_l1).perform(fibers=[])
-
-        assert l2.headers["RECEIPT"]["TRACFILE"] == str(
-            traces / "order_trace_20231101.csv"
-        )
-
-    def test_writes_the_corrected_instera_to_the_l2(
-        self, minimal_l1, tmp_path, monkeypatch
-    ):
-        # to_kpf2() copies the L1 PRIMARY before the era is inferred, so the L2
-        # only carries the correction because _set_headers restamps it.
         _stub_reference_tree(tmp_path, monkeypatch)
-        minimal_l1.headers["PRIMARY"]["INSTERA"] = "2.0"
 
         def extract(self, chip, fibers, extraction_method, **kwargs):
             self._read_order_trace_reference()
@@ -785,4 +730,4 @@ class TestOrderTraceSelection:
         monkeypatch.setattr(SpectralExtraction, "extract_ffi", extract)
         l2 = SpectralExtraction(minimal_l1).perform(fibers=[])
 
-        assert l2.headers["PRIMARY"]["INSTERA"] == "1.0"
+        assert l2.headers["RECEIPT"]["TRACEREF"] == "order_trace_20231101.csv"

@@ -2,8 +2,7 @@
 
 This guide captures the coding conventions actually in use across the KPF-DRP vNext
 codebase, so that new code (whether written by a developer or by Claude) reads like
-the code already here. It was derived by surveying every subpackage — standard
-modules, masters, quality control, utils, recipes/configs, tests, and documentation.
+the code already here.
 
 **Authority precedence.**
 When requirements or design principles conflict, the order of governing document precedence is:
@@ -18,9 +17,8 @@ When any two conflict, the higher one wins.
 
 
 **Status of these rules.** These are *soft* requirements — this guide sits at the **bottom** of
-the authority hierarchy above, so where a rule here conflicts with any of those four documents,
-**the higher one wins** (style yields to science). It describes the dominant, prevailing pattern;
-where the codebase contradicts itself, the recommended variant is called out explicitly.
+the authority hierarchy above (style yields to science). It describes the dominant, prevailing
+pattern; where the codebase contradicts itself, the recommended variant is called out explicitly.
 
 This file covers *how code should look and be organized* — not operational/technical guidance
 (environment, commands) or the pipeline's structure (the architecture reference).
@@ -53,8 +51,7 @@ Contents:
 
 ## A. Core Design Principles
 
-These are the values the rest of this guide operationalizes. Each principle names where it is
-enforced concretely.
+Each principle names where it is enforced concretely.
 
 - **Code is self-documenting.** Names carry intent, so a reader rarely needs a comment to learn
   *what* a line does; comments are reserved for *why*. This is the lever behind the naming rules
@@ -83,8 +80,8 @@ enforced concretely.
 
 ## B. Pipeline design
 
-Conventions organized by pipeline subsystem. Where a subsystem has distinct **science** and
-**masters** flavors, they are called out under their own subheadings.
+Where a subsystem has distinct **science** and **masters** flavors, they are called out under
+their own subheadings.
 
 ### B.1 KPF data models
 
@@ -275,16 +272,17 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
 - **Write a registered keyword** with `obj.set_keyword(key, value)` — it routes to the registry
   home with the registry `Description` as comment. Never hardcode an extension/comment or write
   `headers["PRIMARY"][key] = …` for a registered keyword; the keyword must be in
-  `config/L{0,1,2,4}-headers.csv` first, or `set_keyword` raises. Never write to
-  `INSTRUMENT_HEADER`.
-- **Unregistered conversion/provenance cards** are assigned `header[key] = (value, comment)`
-  directly, only at the `KPF0` conversion sites; call `KPF0._map_header`, don't re-implement it.
+  `config/{prefix}-{EXTENSION}-keywords.csv` first, or `set_keyword` raises. Never write to
+  `INSTRUMENT_HEADER` outside `KPF0.standardize_header_format`.
+- **The native → EPRV conversion has one home**, `KPF0.standardize_header_format`; never
+  re-implement it, and never read a native card off PRIMARY once it has run.
 - **Prefer PRIMARY, fall back to `INSTRUMENT_HEADER`** for reads: a native that survives on PRIMARY
   under its own name is read there; one that never reaches PRIMARY, or that reads more clearly as a
   coherent native block, is read from `INSTRUMENT_HEADER`. No silent fallback — let a missing key
   raise.
-- **Use EPRV keyword names on PRIMARY** (`EXPTIME`, not `ELAPSED`); the L4 `CCD{1,2}RV`/`ERV` are
-  the one KPF-registered exception deliberately homed on PRIMARY.
+- **Use EPRV keyword names on PRIMARY** (`EXPTIME`, not `ELAPSED`). Two KPF-registered families are
+  deliberately homed there anyway: the L4 `RV{GREEN,RED}`/`ERV{GREEN,RED}`, and the WMKO provenance
+  cards `DRPVERNO`/`DRPSTATU`/`PROGID`/`KOAID`/`ORIGID`, which WMKO requires on the products.
 
 #### Keywords
 
@@ -293,11 +291,15 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
   spelling where the science meaning matches** (`WLSFILE`, `BIASFILE`), so downstream/archival
   tools keep reading v3 products; `reference/legacy_data_format.rst` is no longer vendored, so
   read it out of git history.
-- **Register every KPF keyword in `L{0,1,2,4}-headers.csv`** (`Keyword,Description,Extension,
-  DataType,PopulatedBy`) — `Extension` is its home and `Description` becomes the FITS comment (both
-  defined once, here). Flags are stored as `int` 0/1 (never Python bool): QC keys get a `QC: …`
-  description, other flags append `(T/F)`. Enumerate every family member on its own row — no
-  `?`/`*` wildcards.
+- **Register every KPF keyword in `config/{prefix}-{EXTENSION}-keywords.csv`**
+  (`Keyword,Description,Units,DataType,ExampleValue,PopulatedBy`) — the *filename* names the home
+  extension, and `Description [Units]` becomes the FITS comment (both defined once, here).
+  `ExampleValue` is documentation only and is never read by the pipeline; a blank `PopulatedBy`
+  means nothing writes an informative value to the keyword yet. Flags are stored as `int` 0/1
+  (never Python bool): QC keys get a `QC: …` description, other flags append `(T/F)`. `#` is the
+  one template marker and expands to `1..DETECTOR["numtrace"]`, in a keyword (`CRA#`) or in a
+  filename's family stem (`L2-TRACE_WAVE`); it is reserved, so the CSVs carry no comment rows.
+  Keep `Description [Units]` inside 47 characters or astropy truncates the card.
 
 ### B.5 Quality control (Diagnostics / QC / Checkpoints / Quicklook)
 

@@ -41,10 +41,6 @@ MASTERS_CONFIG_PATH = (
     + "/configs/kpf_drp_masters.toml"
 )
 
-# ---------------------------------------------------------------------------
-# Base-class fail-loudly paths (construction + frame loading)
-# ---------------------------------------------------------------------------
-
 
 class TestMasterBaseErrors:
     def test_unsorted_l0_list_raises(self):
@@ -67,13 +63,14 @@ class TestMasterBaseErrors:
         assert l1_obj is None
 
     def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
-        # EXPTIMOK is the EXPTIME/ELAPSED consistency flag; failing a required
-        # QCL0 flag drops the frame before assembly instead of raising.
+        # NOTJUNK is the observer junk-list flag; failing a required QCL0 flag
+        # drops the frame before assembly instead of raising.
         m = Dark(FILE_LIST)
         fn = FILE_LIST[0]
-        qc_result = {kw: (kw != "EXPTIMOK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
+        qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: object()
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: object(),
         )
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.QCL0",
@@ -81,7 +78,7 @@ class TestMasterBaseErrors:
         )
         with caplog.at_level(logging.WARNING):
             l1_obj = m._load_frame(fn, cache=False)
-        assert re.search(r"QC failed.*EXPTIMOK", caplog.text)
+        assert re.search(r"QC failed.*NOTJUNK", caplog.text)
         assert l1_obj is None
 
     def test_load_frame_qc_pass_returns_assembled(self, monkeypatch):
@@ -93,7 +90,8 @@ class TestMasterBaseErrors:
         raw_l0 = object()
         seen = {}
         monkeypatch.setattr(
-            "kpfpipe.modules.masters.base.KPF0.from_fits", lambda fn: raw_l0
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: raw_l0,
         )
 
         def _qc(l0):
@@ -113,11 +111,6 @@ class TestMasterBaseErrors:
         # `assembled` if only the return value is checked.
         assert seen["qc"] is raw_l0
         assert seen["assembly"] is raw_l0
-
-
-# ---------------------------------------------------------------------------
-# _process_frame: bias subtraction via CalibrationAssociation + ImageProcessing
-# ---------------------------------------------------------------------------
 
 
 class TestProcessFrame:
@@ -278,11 +271,6 @@ class TestProcessFrame:
         assert "masters_search_window_days" not in ca_config
 
 
-# ---------------------------------------------------------------------------
-# _load_calibration: resolve a calibration to a master, caching one per type
-# ---------------------------------------------------------------------------
-
-
 class TestLoadMaster:
     """A master shared across a stack is read from disk once; a different
     associated master replaces the cached one."""
@@ -365,11 +353,6 @@ class TestLoadMaster:
         monkeypatch.setattr(os.path, "isfile", lambda p: False)
         with pytest.raises(FileNotFoundError, match="Master file not found"):
             dark._load_calibration(self._frame(), "bias")
-
-
-# ---------------------------------------------------------------------------
-# Rate estimator: master IMG = total counts / total exposure time
-# ---------------------------------------------------------------------------
 
 
 def _stack_frame(exptime, ccd_val, var_val, shape=(2, 2)):
@@ -468,11 +451,6 @@ class TestRateEstimator:
         np.testing.assert_allclose(arrays["GREEN_IMG"], 10.0, rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
-# Per-pixel-per-frame rejection in the final normalization
-# ---------------------------------------------------------------------------
-
-
 class TestPerPixelRejection:
     """Counts and exposure time are summed over the SAME per-pixel survivor set, so
     a pixel with fewer good frames yields the same rate as a fully-sampled pixel --
@@ -544,11 +522,6 @@ class TestPerPixelRejection:
         np.testing.assert_allclose(img, 10.0, rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
-# Real sigma-clipping in the datacube path (un-stubbed flag_outliers)
-# ---------------------------------------------------------------------------
-
-
 class TestDatacubeClipping:
     """The datacube path runs the real flag_outliers rejection, unlike
     TestRateEstimator (clipping disabled) and TestPerPixelRejection (stubbed)."""
@@ -604,11 +577,6 @@ class TestDatacubeClipping:
         np.testing.assert_allclose(
             arrays["GREEN_SNR"], 600.0 / np.sqrt(100500.0), rtol=1e-5
         )
-
-
-# ---------------------------------------------------------------------------
-# Per-pixel inclusion gates in the final normalization
-# ---------------------------------------------------------------------------
 
 
 class TestSurvivorGate:
@@ -673,11 +641,6 @@ class TestSurvivorGate:
         assert bool(arrays["GREEN_MASK"][0, 0]) is False  # var_sum == 0
         assert bool(arrays["GREEN_MASK"][0, 1]) is False  # exptime_sum == 0
         assert bool(arrays["GREEN_MASK"][1, 1]) is True
-
-
-# ---------------------------------------------------------------------------
-# _clean_l1_arrays: bad-pixel interpolation and mask recompute
-# ---------------------------------------------------------------------------
 
 
 class TestCleanL1Arrays:
@@ -780,11 +743,6 @@ class TestCleanL1Arrays:
             )
 
 
-# ---------------------------------------------------------------------------
-# Stacking input validation (stack_frames / _compute_stats_from_datacube)
-# ---------------------------------------------------------------------------
-
-
 class TestStackingValidation:
     """Malformed stacks must raise rather than silently produce a bad master."""
 
@@ -851,11 +809,6 @@ class TestStackingValidation:
                 dark.stack_frames()
 
 
-# ---------------------------------------------------------------------------
-# _resolve_calibrations: standard intersected with resolved(bias/dark/flat)
-# ---------------------------------------------------------------------------
-
-
 class TestResolveCalibrations:
     """Effective calibrations are the per-master standard intersected with the
     resolved flags; flags can only turn standard calibrations off."""
@@ -905,11 +858,6 @@ class TestResolveCalibrations:
         assert dark._resolve_calibrations(flat="/p/master_flat.fits")["flat"] is False
 
 
-# ---------------------------------------------------------------------------
-# L1 output dtype provenance (shared master-L1 path; see _dtype_policy.py)
-# ---------------------------------------------------------------------------
-
-
 class TestDtypeProvenance:
     """Master IMG/SNR are float32; MASK is bool in memory, uint8 (8-bit) on disk."""
 
@@ -949,11 +897,6 @@ class TestDtypeProvenance:
         assert_dtype(master.data["GREEN_MASK"], MASK_MEM, "GREEN_MASK after to_fits")
 
 
-# ---------------------------------------------------------------------------
-# save_master / make_master_l1(master_path=...) -- the shared write path
-# ---------------------------------------------------------------------------
-
-
 class TestSaveMaster:
     """The shared write path, exercised through Bias (the simplest master)."""
 
@@ -986,11 +929,6 @@ class TestSaveMaster:
             bias.make_master_l1()  # populates ml1_obj
         with pytest.raises(FileExistsError, match="overwrite=True"):
             bias.save_master("L1", str(master_path))
-
-
-# ---------------------------------------------------------------------------
-# Config plumbing: each module reads the sections it names, and only those
-# ---------------------------------------------------------------------------
 
 
 class TestConfigSectionPlumbing:
@@ -1032,11 +970,6 @@ class TestConfigSectionPlumbing:
             MODULE_CALIBRATION_ASSOCIATION={"masters_search_window_days": [-3, 1]}
         )
         assert cls(FILE_LIST, config)._masters_search_window_days == [-3, 1]
-
-
-# ---------------------------------------------------------------------------
-# INPUT_FILES provenance
-# ---------------------------------------------------------------------------
 
 
 class TestInputFilesProvenance:

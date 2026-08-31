@@ -1,0 +1,8 @@
+Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
+MASTYPE,Master calibration type,,str,thar,KPFMasterModel.set_input_files
+ROUGHWLS,Rough WLS reference file,,str,kpf_20240405_master_WLS_rough.fits,WLS.make_master_l2
+LINELIST,Line list reference file,,str,thar_lines_20240405.csv,WLS.make_master_l2
+LINEPROF,Line profile model used in WLS fit,,str,gaussian,WLS.make_master_l2
+POLYDEGX,"WLS polynomial degree, pixel axis",,int,5,WLS.make_master_l2
+POLYDEGM,"WLS polynomial degree, order axis",,int,5,WLS.make_master_l2
+POLYDEGF,"WLS polynomial degree, fiber axis",,int,2,WLS.make_master_l2

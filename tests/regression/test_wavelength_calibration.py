@@ -53,10 +53,10 @@ def _make_master_l2(seed=42):
     for chip in _CHIPS:
         norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
         for fiber in _FIBERS:
-            # WAVE is born-64; rvdata's MinBitDepth would otherwise
-            # upcast-and-warn a float32 WAVE on read.
+            # WAVE is born-64; set_data enforces the manifest's BitDepth
+            # floor, so a float32 array here would upcast-and-warn.
             arr = rng.uniform(4000.0, 8000.0, size=(norder, NCOL)).astype(np.float64)
-            master.data[f"{chip}_{fiber}_WAVE"] = arr
+            master.set_data(f"{chip}_{fiber}_WAVE", arr)
     return master
 
 
@@ -339,6 +339,7 @@ class TestSpectrumOrientation:
             "fibers": _SCI_FIBERS,
         }
         l0 = KPF0.from_fits(kpf_filepath(OBS_ID, "L0", data_root=str(TESTDATA_DIR)))
+        l0.standardize_header_format()
         l1 = ImageAssembly(l0, config).perform()
         l1 = CalibrationAssociation(l1, config).perform(
             ["bias", "dark", "flat", "thar"]

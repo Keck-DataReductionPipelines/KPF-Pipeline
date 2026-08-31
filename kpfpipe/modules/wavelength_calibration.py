@@ -114,8 +114,8 @@ class WavelengthCalibration:
             f"  chips:   {self.chips}",
             f"  fibers:  {self.fibers}",
         ]
-        # WLSAGE is written to QUALITY_CONTROL by DiagL1 (CalibrationAssociation
-        # writes WLSFILE to RECEIPT; DiagL1 derives the age from it).
+        # WLSAGE is written to QUALITY_CONTROL by CalibrationAssociation,
+        # alongside the WLSFILE path it writes to RECEIPT.
         agewls = self.l2_obj.headers.get("QUALITY_CONTROL", {}).get("WLSAGE")
         lines.append(f"  wls_path: {self._wls_path}")
         if agewls is not None:

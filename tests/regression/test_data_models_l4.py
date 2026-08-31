@@ -16,10 +16,11 @@ from kpfpipe.data_models.masters import KPFMasterL4
 
 from ._catalog import SOURCES, catalog_record_table
 from ._dtype_policy import BJD, CCF, RV_FLOAT, assert_dtype, assert_roundtrip_dtype
+from ._eprv import kpf_table, rvdata_table
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 
 
 class TestToKPF4:
@@ -54,20 +55,19 @@ class TestToKPF4:
         assert len(kpf4.data["RV1"]) == 0
 
     def test_program_ids_survive_transform_and_validate(self, synthetic_l1_file):
-        # PROGID/KOAID live on RECEIPT, not PRIMARY, and ride the RECEIPT forward.
+        # PROGID/KOAID are PRIMARY cards and ride the PRIMARY forward.
         l1 = KPF1.from_fits(synthetic_l1_file)
-        l1.headers["RECEIPT"]["PROGID"] = "U999"
-        l1.headers["RECEIPT"]["KOAID"] = "KP.20201122.34567.89"
+        l1.set_keyword("PROGID", "U999")
+        l1.set_keyword("KOAID", "KP.20201122.34567.89")
         l4 = l1.to_kpf2().to_kpf4()
 
-        receipt = l4.headers["RECEIPT"]
-        assert receipt.get("PROGID") == "U999"
-        assert receipt.get("KOAID") == "KP.20201122.34567.89"
-        assert "PROGID" not in l4.headers["PRIMARY"]
+        prim = l4.headers["PRIMARY"]
+        assert prim.get("PROGID") == "U999"
+        assert prim.get("KOAID") == "KP.20201122.34567.89"
 
     def test_receipt_and_drpstatus_survive_roundtrip(self, tmp_path):
-        # KPF4 reads through rvdata's RV4._read, a different path from KPF0/1,
-        # so the L0/L1 round-trip twins cover none of this.
+        # The receipt table and the DRPSTATU card it advances have to survive
+        # separate serialization paths -- the RECEIPT BinTable and PRIMARY.
         l4 = KPF2().to_kpf4()
         l4.headers["PRIMARY"]["DATE-OBS"] = "2024-01-01T00:00:00"
         l4.receipt_add_entry("radial_velocity", "", "PASS")
@@ -77,11 +77,11 @@ class TestToKPF4:
         back = KPF4.from_fits(fn)
         assert "radial_velocity" in back.receipt["FUNCTION"].values
         assert (
-            back.headers["RECEIPT"].get("DRPSTATU") == "Radial Velocity module complete"
+            back.headers["PRIMARY"].get("DRPSTATU") == "Radial Velocity module complete"
         )
 
     def test_kpf4_has_quality_control_extension(self):
-        # KPF4 must create QUALITY_CONTROL (RV4 does not) so to_kpf4 has a
+        # QUALITY_CONTROL is an L4-extensions.csv row, so to_kpf4 has a
         # destination and the accumulated QC history reaches L4.
         assert "QUALITY_CONTROL" in KPF4().extensions
 
@@ -108,7 +108,7 @@ class TestToKPF4:
 
 
 class TestCatalogRecordPassthrough:
-    """CATALOG_RECORD rides L2 -> L4 and survives KPF4's RV4 read path."""
+    """CATALOG_RECORD rides L2 -> L4 and reads back."""
 
     @staticmethod
     def _l2_with_catalog():
@@ -117,8 +117,8 @@ class TestCatalogRecordPassthrough:
         return kpf2
 
     def test_kpf4_has_catalog_record_extension(self):
-        # Like QUALITY_CONTROL: RV4 does not create it, so KPF4 must, giving
-        # to_kpf4's pass-through a destination.
+        # Like QUALITY_CONTROL: a declared L4 row, giving to_kpf4's pass-through
+        # a destination.
         assert "CATALOG_RECORD" in KPF4().extensions
 
     def test_rows_reach_l4(self):
@@ -134,28 +134,34 @@ class TestCatalogRecordPassthrough:
 
 
 class TestKPF4:
-    def test_kpf4_inherits_rv4(self):
-        from rvdata.core.models.level4 import RV4
-
-        kpf4 = KPF4()
-        assert isinstance(kpf4, RV4)
-        assert kpf4.level == 4
+    def test_kpf4_declares_its_level(self):
+        # The level is the manifest key, so KPF4 resolving to 4 is what makes
+        # _data_model, _seed_primary and _read read the L4 tables.
+        assert KPF4().level == 4
 
     def test_ccf_rv_extensions_per_orderlet(self):
         kpf4 = KPF4()
         for n in range(1, 6):
             assert f"CCF{n}" in kpf4.extensions
-            assert f"CCF_VAR{n}" in kpf4.extensions
+            assert f"CCF{n}_VAR" in kpf4.extensions
             assert f"RV{n}" in kpf4.extensions
 
+    def test_every_rv_table_carries_twelve_columns(self):
+        # A dark fiber must ship the same table shape as an illuminated one, so
+        # the skeleton comes from the manifest rather than from what was filled.
+        kpf4 = KPF4()
+        for trace in range(1, DETECTOR["numtrace"] + 1):
+            table = kpf4.data[f"RV{trace}"]
+            assert len(table.columns) == 12, (f"RV{trace}", list(table.columns))
+
     def test_trace_derived_aliases(self):
-        # CCF{n}/CCF_VAR{n}/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is 1, CAL is 5.
+        # CCF{n}/CCF{n}_VAR/RV{n} <-> TRACE{n}: SCI2 is trace 3, SKY is 1, CAL is 5.
         kpf4 = KPF4()
         assert kpf4.data._resolve("SCI2_CCF") == "CCF3"
-        assert kpf4.data._resolve("SCI2_CCF_VAR") == "CCF_VAR3"
+        assert kpf4.data._resolve("SCI2_CCF_VAR") == "CCF3_VAR"
         assert kpf4.data._resolve("SCI2_RV") == "RV3"
         assert kpf4.data._resolve("CAL_CCF") == "CCF5"
-        assert kpf4.data._resolve("CAL_CCF_VAR") == "CCF_VAR5"
+        assert kpf4.data._resolve("CAL_CCF_VAR") == "CCF5_VAR"
         assert kpf4.data._resolve("SKY_RV") == "RV1"
         # bare RV is not an alias (RV is trace-mapped, not a 1:1 alias)
         assert kpf4.data._resolve("RV") == "RV"
@@ -180,7 +186,7 @@ class TestKPF4:
         path = tmp_path / "kpf_SL4_20240101T000002.fits"
         kpf4.to_fits(str(path))
         back = KPF4.from_fits(str(path))
-        assert "CCF_VAR3" in back.extensions
+        assert "CCF3_VAR" in back.extensions
         np.testing.assert_allclose(np.asarray(back.data["SCI2_CCF_VAR"]), var)
         np.testing.assert_allclose(np.asarray(back.data["SCI2_CCF"]), ccf)
 
@@ -284,3 +290,90 @@ class TestDtypeProvenance:
         table = KPF4.from_fits(path).data["SCI2_RV"]
         for column in ("RV", "RV_ERR", "WAVE_START", "WAVE_END", "BJD_TDB"):
             assert_dtype(table[column], RV_FLOAT, f"SCI2_RV {column} after round-trip")
+
+
+class TestRvdataReadersAreDetached:
+    """rvdata's L4 reader never runs; see the L2 twin for why this is asserted."""
+
+    def test_rv4_read_never_fires(self, tmp_path, monkeypatch):
+        from rvdata.core.models.level4 import RV4
+
+        fired = []
+        monkeypatch.setattr(
+            RV4, "_read", lambda self, hdul: fired.append("RV4"), raising=True
+        )
+        fn = str(tmp_path / "kpf_SL4_20240101T000000.fits")
+        KPF4().to_fits(fn)
+        KPF4.from_fits(fn)
+        assert fired == []
+
+
+# rvdata rows KPF deliberately does not build; see the L2 twin for the rationale.
+_UNBUILT = {
+    "DIAGNOSTICS1": "EPRV-optional; KPF carries diagnostics in QUALITY_CONTROL",
+    "CUSTOM_CCF1": "EPRV CUSTOM slot; unused by KPF",
+    "CUSTOM_RV1": "EPRV CUSTOM slot; unused by KPF",
+}
+
+_PER_EXTENSION_TABLES = [("L4-CCF1-keywords", "CCF1"), ("L4-RV1-keywords", "RV1")]
+
+
+class TestEPRVCompliance:
+    """L4 against the installed rvdata tables.
+
+    Existence and shape only, as at L2. L4 is where rvdata's own tables are
+    thinnest: ``L4-extensions.csv`` declares no bit depths at all, putting the RV
+    widths in ``L4-RV_TABLE-columns.csv`` instead, which is what
+    ``config/L4-RV-columns.csv`` is checked against.
+    """
+
+    def test_every_eprv_primary_keyword_is_registered(self):
+        want = set(map(str.strip, rvdata_table("L4-PRIMARY-keywords")["Keyword"]))
+        assert not sorted(want - KPF4.keyword_registry.allowed["PRIMARY"])
+
+    @pytest.mark.parametrize(("table", "extension"), _PER_EXTENSION_TABLES)
+    def test_every_eprv_per_extension_keyword_is_registered(self, table, extension):
+        registry = KPF4.keyword_registry
+        missing = [
+            keyword
+            for keyword in map(str.strip, rvdata_table(table)["Keyword"])
+            if not registry.is_structural(keyword)
+            and keyword not in registry.allowed[extension]
+        ]
+        assert not missing
+
+    def test_every_required_extension_is_built(self):
+        rvdata = rvdata_table("L4-extensions")
+        assert set(rvdata[rvdata["Required"]]["Name"]) <= set(KPF4().extensions)
+
+    def test_the_model_builds_its_whole_manifest(self):
+        model = KPF4()
+        assert set(model.extensions) == set(kpf_table("L4-extensions")["Name"])
+
+    def test_undeclared_rvdata_extensions_are_listed(self):
+        undeclared = set(rvdata_table("L4-extensions")["Name"]) - set(
+            kpf_table("L4-extensions")["Name"]
+        )
+        assert undeclared == set(_UNBUILT)
+
+    def test_shared_extensions_agree_on_hdu_type(self):
+        rvdata = rvdata_table("L4-extensions")
+        kpf = kpf_table("L4-extensions")
+        theirs = dict(zip(rvdata["Name"], rvdata["DataType"], strict=True))
+        ours = dict(zip(kpf["Name"], kpf["DataType"], strict=True))
+        assert not {n for n in set(theirs) & set(ours) if theirs[n] != ours[n]}
+
+    def test_the_rv_table_carries_every_required_eprv_column(self):
+        theirs = rvdata_table("L4-RV_TABLE-columns")
+        ours = kpf_table("L4-RV-columns").set_index("Name")
+        required = set(theirs[theirs["Required"] == "Yes"]["Name"])
+        assert required <= set(ours.index)
+        assert set(KPF4().data["RV1"].columns) == set(ours.index)
+
+    def test_rv_column_bit_depth_meets_the_eprv_floor(self):
+        theirs = rvdata_table("L4-RV_TABLE-columns")
+        ours = kpf_table("L4-RV-columns").set_index("Name")["BitDepth"]
+        declared = theirs[theirs["MinBitDepth"].notna()]
+        assert not declared.empty
+        for _, row in declared.iterrows():
+            assert ours[row["Name"]] >= row["MinBitDepth"], row["Name"]

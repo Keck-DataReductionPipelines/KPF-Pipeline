@@ -10,6 +10,6 @@ class CheckpointL0(Checkpoint):
 
     LEVEL = "L0"
     # Missing raw data or a missing required PRIMARY keyword is fatal; others warn.
-    RAISE_FLAGS = ("DATAPRL0", "KWRDPRL0")
+    RAISE_FLAGS = ("DATAPRL0",)
     DIAGNOSTICS = DiagL0
     QC = QCL0

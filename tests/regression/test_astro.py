@@ -11,17 +11,20 @@ stellar line mask whichever catalog supplied the colour.
 """
 
 import logging
+import tomllib
 
 import astropy.units as u
 import numpy as np
 import pytest
 from astropy.constants import c
 
+from kpfpipe import REPO_ROOT
 from kpfpipe.utils.astro import (
     _B_V,
     _BP_RP,
     _EEM,
     _G_J,
+    KECK_LOCATION,
     air_to_vac,
     color_to_teff,
     compute_doppler_factor,
@@ -33,6 +36,23 @@ C_KMS = c.to("km/s").value
 # The tabulated G2V row, in the three colours the pipeline can be handed.
 SUN_TEFF = 5770.0
 SUN_COLORS = {"B-V": 0.650, "Gaia BP-RP": 0.823, "G-J": 4.635 - 3.60}
+
+
+class TestKeckLocation:
+    """KECK_LOCATION is built from observatory.toml, never a second literal."""
+
+    @staticmethod
+    def _config():
+        return tomllib.loads((REPO_ROOT / "reference/observatory.toml").read_text())
+
+    def test_matches_the_observatory_config(self):
+        config = self._config()
+        assert KECK_LOCATION.lat.deg == pytest.approx(config["latitude"])
+        assert KECK_LOCATION.lon.deg == pytest.approx(config["longitude"])
+        assert KECK_LOCATION.height.to(u.m).value == pytest.approx(config["altitude"])
+
+    def test_geosys_is_the_ellipsoid_astropy_uses(self):
+        assert KECK_LOCATION.ellipsoid == self._config()["geosys"]
 
 
 class TestComputeRedshift:

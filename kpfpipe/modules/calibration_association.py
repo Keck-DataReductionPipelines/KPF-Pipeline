@@ -158,16 +158,19 @@ class CalibrationAssociation:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l1_obj):
-        """Write the master-path keyword for each associated calibration.
+        """Write the master-path and signed-age keywords for each association.
 
         Reads self._calibrations (from perform()); each cal type contributes
-        {PREFIX}FILE (full master path), which set_keyword routes to RECEIPT.
-        The signed age {PREFIX}AGE is recomputed downstream by DiagL1 from this
-        path plus PRIMARY DATE-OBS, not written here.
+        {PREFIX}FILE (full master path, routed to RECEIPT) and {PREFIX}AGE (the
+        master's timestamp minus PRIMARY DATE-OBS, in days, routed to
+        QUALITY_CONTROL).
         """
+        obs_dt = datetime.fromisoformat(l1_obj.headers["PRIMARY"]["DATE-OBS"])
         for cal_type, cal in self._calibrations.items():
             prefix = _HEADER_PREFIX[cal_type]
             l1_obj.set_keyword(f"{prefix}FILE", cal["filepath"])
+            age = kpf_timestamp_to_datetime(get_timestamp(cal["filepath"])) - obs_dt
+            l1_obj.set_keyword(f"{prefix}AGE", age.total_seconds() / 86400.0)
 
     # ------------------------------------------------------------------
     # Public entry point

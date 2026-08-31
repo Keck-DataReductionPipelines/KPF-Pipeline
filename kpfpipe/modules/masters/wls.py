@@ -254,8 +254,7 @@ class WLS(BaseMasterModule):
 
         candidate_wavs = np.sort(line_waves)
 
-        # Guardrail: supplied lines must lie within this order's rough WLS span;
-        # an out-of-range line signals a CHIP/ORDER labeling inconsistency.
+        # Guardrail (see docstring).
         lo, hi = wave1d.min(), wave1d.max()
         outside = (candidate_wavs < lo) | (candidate_wavs > hi)
         if np.any(outside):
@@ -704,20 +703,19 @@ class WLS(BaseMasterModule):
         Parameters
         ----------
         l0_file_list : list of str, optional
-            L0 files to process. Defaults to self.l0_file_list.
+            Defaults to ``self.l0_file_list``.
         linelist : str, optional
-            Path to a CSV line list. If different from the currently
-            cached ``self.linelist``, the file is reloaded and the cache
-            is updated. Defaults to ``self.linelist`` (no reload).
+            CSV line list path; reloaded if different from the cached path.
+            Defaults to ``self.linelist`` (no reload).
         lineprofile : str, optional
-            Line profile model name. Defaults to self.lineprofile.
+            Defaults to ``self.lineprofile``.
         poly_degree_x : int, optional
-            Polynomial degree along the pixel axis. Defaults to self.poly_degree_x.
+            Pixel-axis polynomial degree. Defaults to ``self.poly_degree_x``.
         poly_degree_m : int, optional
-            Polynomial degree along the order axis. Defaults to self.poly_degree_m.
+            Order-axis polynomial degree. Defaults to ``self.poly_degree_m``.
         poly_degree_f : int, optional
-            Polynomial degree along the fiber axis (used for 3- and 5-fiber fits).
-            Defaults to self.poly_degree_f.
+            Fiber-axis polynomial degree (3- and 5-fiber fits). Defaults to
+            ``self.poly_degree_f``.
         bias, dark, flat : bool | str | KPFMasterL1, optional
             Per-call calibration overrides (same forms as ImageProcessing.perform:
             bool, a master filepath, or a KPFMasterL1 object), clamped by the WLS
@@ -820,19 +818,18 @@ class WLS(BaseMasterModule):
             # cannot mis-route a solution (e.g. SKY's onto CAL).
             canonical = sorted(self.fibers, key=lambda fb: self.fiber_positions[fb])
             for i, fiber in enumerate(canonical):
-                if W.ndim == 2:
-                    self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W
-                else:
-                    self.ml2_obj.data[f"{chip}_{fiber}_WAVE"] = W[:, :, i]
+                # set_data, not data[...]: only set_data checks the manifest's
+                # declared BitDepth, which is what keeps master WAVE float64.
+                self.ml2_obj.set_data(
+                    f"{chip}_{fiber}_WAVE", W if W.ndim == 2 else W[:, :, i]
+                )
 
-            coeffs_ext = f"{chip}_WLS_COEFFS"
-            if coeffs_ext not in self.ml2_obj.extensions:
-                self.ml2_obj.create_extension(coeffs_ext, "ImageHDU")
-            self.ml2_obj.set_data(coeffs_ext, coeffs_mean)
+            self.ml2_obj.set_data(f"{chip}_WLS_COEFFS", coeffs_mean)
 
         self.ml2_obj.set_input_files(self._stacked_files, "thar")
 
-        # WLS metadata is out of EPRV scope but registered in ML2-wls-headers.csv,
+        # WLS metadata is out of EPRV scope but registered in
+        # ML2-wls-PRIMARY-keywords.csv,
         # so it routes through set_keyword (-> PRIMARY, registry comments).
         self.ml2_obj.set_keyword("ROUGHWLS", self.rough_wls_file)
         self.ml2_obj.set_keyword("LINELIST", self.linelist)
@@ -867,8 +864,7 @@ class WLS(BaseMasterModule):
             The master L2 output path; its directory anchors the
             ``thar_L2/`` subdirectory and its obs_id names the file.
         overwrite : bool, optional
-            If False (default), refuse to clobber an existing file and raise
-            FileExistsError. If True, replace any existing file.
+            Refuse to clobber an existing file unless True.
 
         Raises
         ------
@@ -932,8 +928,7 @@ class WLS(BaseMasterModule):
             The master L2 output path; its directory anchors the
             ``thar_L2/`` subdirectory.
         overwrite : bool, optional
-            If False (default), refuse to clobber an existing per-frame file
-            and raise FileExistsError. If True, replace any existing file.
+            Refuse to clobber an existing per-frame file unless True.
 
         Raises
         ------

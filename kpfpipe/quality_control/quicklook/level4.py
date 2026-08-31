@@ -3,20 +3,17 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.quicklook.base import Plot
 
 # Orderlet panels, left-to-right, in the canonical KPF order.
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
 # Per-order CCF normalization percentile (science vs. cal/sky), matching the
 # v2.12 AnalyzeL2 convention.
 _SCI_NORM_PCTILE = 99
 _CALSKY_NORM_PCTILE = 90
 # Vertical offset between successive orders' normalized CCFs in the grid.
 _ORDER_OFFSET = 0.5
-# Per-fiber suffix for the legacy combined-RV keyword CCD{1|2}RV{sfx}, which
-# RadialVelocity homes on each fiber's own RV-table extension header.
-_RV_SFX = {"SCI1": "1", "SCI2": "2", "SCI3": "3", "CAL": "C", "SKY": "S"}
 
 
 class PlotL4(Plot):
@@ -40,9 +37,7 @@ class PlotL4(Plot):
         super().__init__(l4_obj, output_dir, obs_id)
         self.fibers = _FIBERS
 
-    # ------------------------------------------------------------------
     # Data access helpers
-    # ------------------------------------------------------------------
 
     def _ccf(self, chip, fiber):
         """Return the (norder, nvel) CCF cube for one chip+fiber, or None.
@@ -85,12 +80,12 @@ class PlotL4(Plot):
     def _combined_rv(self, chip, fiber):
         """Per-CCD orderlet-combined RV [km/s], or None.
 
-        The legacy CCD{1|2}RV{sfx} keyword is routed by set_keyword to the
-        fiber's own RV-table extension header (e.g. CCD1RV2 -> RV3), so it is
-        read from there, not PRIMARY/INSTRUMENT_HEADER.
+        RV{chip} is homed on both PRIMARY (the SCI-combined value) and every
+        RVn table (the per-orderlet value), so RadialVelocity writes the
+        per-fiber one with an explicit ``ext=`` and it is read from there,
+        not PRIMARY/INSTRUMENT_HEADER.
         """
-        n = "1" if chip.upper() == "GREEN" else "2"
-        key = f"CCD{n}RV{_RV_SFX[fiber.upper()]}"
+        key = f"RV{chip.upper()}"
         val = self._ext_header(fiber, "RV").get(key)
         if val is None:
             return None
@@ -126,9 +121,7 @@ class PlotL4(Plot):
         base = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         return [base[i % len(base)] for i in range(n)]
 
-    # ------------------------------------------------------------------
     # Plots
-    # ------------------------------------------------------------------
 
     def _rv_table(self, chip, fiber):
         """Return the per-order RV table (chip-sliced) for a fiber, or None."""
@@ -161,7 +154,7 @@ class PlotL4(Plot):
         unilluminated orderlet (no CCF) gets a framed 'not illuminated' note
         over the shared ``vref`` range instead of a blank default axis.
         """
-        is_sci = fiber in _SCI_FIBERS
+        is_sci = fiber in DETECTOR["sci_fibers"]
         top = norder * _ORDER_OFFSET
         ax.set_xlabel("RV (km/s)", fontsize=18)
         ax.tick_params(axis="y", which="both", left=False, right=False, labelleft=False)

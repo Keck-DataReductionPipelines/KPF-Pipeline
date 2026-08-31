@@ -17,7 +17,13 @@ from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 from kpfpipe.utils.kpf import get_obs_id
 
-from ._dtype_policy import MASK_MEM, WAVE, assert_dtype, assert_roundtrip_dtype
+from ._dtype_policy import (
+    MASK_MEM,
+    WAVE,
+    WLS_COEFFS,
+    assert_dtype,
+    assert_roundtrip_dtype,
+)
 from ._masters import FILE_LIST
 
 # Captured before the memoizing fixture below patches the method.
@@ -28,11 +34,6 @@ NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL_TEST = 16
 
 DATECODE = "20240101"  # shared by FILE_LIST and the master obs_ids below
-
-
-# ---------------------------------------------------------------------------
-# Helpers / fixtures
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -126,11 +127,6 @@ def mock_pipeline(monkeypatch):
     return l2
 
 
-# ---------------------------------------------------------------------------
-# TestInit
-# ---------------------------------------------------------------------------
-
-
 def _stub_frame_pipeline(monkeypatch, l1=None, extract=None):
     """Short-circuit load -> process -> extract so a test drives only the fit.
 
@@ -169,11 +165,6 @@ class TestInit:
             WLS(FILE_LIST, config=42)
 
 
-# ---------------------------------------------------------------------------
-# TestExtractFrame
-# ---------------------------------------------------------------------------
-
-
 class TestExtractFrame:
     def test_returns_l2_obj(self, mock_pipeline):
         wls = WLS(FILE_LIST)
@@ -204,11 +195,6 @@ class TestExtractFrame:
 
         call_args = mock_ca.call_args[0]
         assert call_args[1].get("KPF_MASTERS_OUTPUT") == "/masters"
-
-
-# ---------------------------------------------------------------------------
-# TestProcessIndividualFrames
-# ---------------------------------------------------------------------------
 
 
 class TestProcessIndividualFrames:
@@ -244,11 +230,6 @@ class TestProcessIndividualFrames:
         )
         result = wls._process_stack_l0_to_l2()
         assert len(result) == 7
-
-
-# ---------------------------------------------------------------------------
-# TestMakeMasterL2
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -391,6 +372,13 @@ class TestMakeMasterL2:
             name="KP.20240113.23249.10_master_thar_L2.fits",
         )
 
+    def test_coeffs_extensions_exist_before_any_fit(self):
+        # The manifest builds both chips' coefficient extensions at
+        # construction; make_master_l2 only fills them.
+        bare = KPFMasterL2(kind="wls")
+        assert "GREEN_WLS_COEFFS" in bare.extensions
+        assert "RED_WLS_COEFFS" in bare.extensions
+
     def test_coeffs_extensions_populated(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
@@ -399,6 +387,7 @@ class TestMakeMasterL2:
             assert ext in ml2.extensions
             coeffs = ml2.data[ext]
             assert coeffs is not None
+            assert_dtype(coeffs, WLS_COEFFS, ext)
             assert coeffs.shape == (
                 wls.poly_degree_x + 1,
                 wls.poly_degree_m + 1,
@@ -447,16 +436,20 @@ class TestMakeMasterL2:
         assert primary["POLYDEGM"] == wls.poly_degree_m
         assert primary["POLYDEGF"] == wls.poly_degree_f
 
-    def test_ml2_datalvl_and_minimal_primary(self, mock_make_master_l2, tmp_path):
-        # Regression: ML2 must not inherit RV2's EPRV science PRIMARY skeleton, and
-        # DATALVL must be "ML2" both in memory and on disk -- rvdata's to_fits
-        # never re-stamps DATALVL.
+    def test_ml2_datalvl_and_master_primary(self, mock_make_master_l2, tmp_path):
+        # Regression: ML2 seeds its own ML2-wls PRIMARY set, not the EPRV L2
+        # science skeleton, and DATALVL must be "ML2" both in memory and on disk
+        # -- rvdata's to_fits never re-stamps DATALVL.
         from kpfpipe.data_models.masters.level2 import KPFMasterL2
 
         ml2 = WLS(FILE_LIST).make_master_l2()
         assert ml2.headers["PRIMARY"].get("DATALVL") == "ML2"
-        seeded = set(ml2.keyword_registry.eprv_primary_seed)
-        assert not (seeded & set(ml2.headers["PRIMARY"])) - {"DATALVL"}
+        primary = set(ml2.headers["PRIMARY"])
+        assert set(ml2.keyword_registry.primary_seed("ML2-wls")) <= primary
+        science = set(ml2.keyword_registry.primary_seed("L2"))
+        # DATALVL and DRPSTATU are stamped, not seeded: every product carries
+        # them, masters included.
+        assert not (science & primary) - {"DATALVL", "DRPSTATU"}
 
         out_path = tmp_path / "KP.20240113.23249.10_master_thar_L2.fits"
         ml2.to_fits(str(out_path))
@@ -721,8 +714,10 @@ class TestMakeMasterL2:
             # RED stays at the schema-default zeros: it is not in self.chips.
             assert np.all(ml2.data[f"GREEN_{fiber}_WAVE"] == 5500.0)
             assert np.all(ml2.data[f"RED_{fiber}_WAVE"] == 0.0)
+        # Both coefficient extensions come from the manifest, so an unprocessed
+        # chip's ships at the schema default rather than being absent.
         assert "GREEN_WLS_COEFFS" in ml2.extensions
-        assert "RED_WLS_COEFFS" not in ml2.extensions
+        assert "RED_WLS_COEFFS" in ml2.extensions
 
     def test_info_before_make_master_l2(self, capsys):
         wls = WLS(FILE_LIST)
@@ -741,11 +736,6 @@ class TestMakeMasterL2:
         assert "make_master_l2() has not been called" not in out
         for chip in wls.chips:
             assert chip in out
-
-
-# ---------------------------------------------------------------------------
-# TestCalculateWlsCoeffs
-# ---------------------------------------------------------------------------
 
 
 class TestCalculateWlsCoeffs:
@@ -810,11 +800,6 @@ class TestCalculateWlsCoeffs:
         coeffs_fit = wls._calculate_wls_coeffs(lines, orders)
         wave_fit = wls._evaluate_wls_coeffs(coeffs_fit, orders, nfiber=1)
         np.testing.assert_allclose(wave_fit, wave_true, rtol=1e-9)
-
-
-# ---------------------------------------------------------------------------
-# Stack QC: line-fit QC, coefficient combination, min_stack_size gate
-# ---------------------------------------------------------------------------
 
 
 class TestFitAndQcStack:
@@ -1042,11 +1027,6 @@ class TestMinStackSizeGate:
         assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
 
 
-# ---------------------------------------------------------------------------
-# TestFitLinePositions
-# ---------------------------------------------------------------------------
-
-
 class TestFitLinePositions:
     def test_nan_orderlet_emits_warning_and_does_not_crash(self, caplog):
         # A NaN-filled orderlet (extraction failure) is skipped rather than
@@ -1150,11 +1130,6 @@ class TestFitLinePositions:
             )
         assert "RED SCI1: no good lines retained" in caplog.text
         assert len(result["wav"]) == 0
-
-
-# ---------------------------------------------------------------------------
-# TestRoughWlsLoading
-# ---------------------------------------------------------------------------
 
 
 class TestRoughWlsLoading:

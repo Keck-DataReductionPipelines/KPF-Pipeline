@@ -178,7 +178,8 @@ def _catalog_record_hdu():
     from kpfpipe.modules.astro_query import AstroQuery
 
     l0 = KPF0()
-    l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+    # AstroQuery reads the native instrument header, not the EPRV PRIMARY.
+    l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "Object"
     AstroQuery(l0)._write_catalog_record(
         "kpf-drp",
         {

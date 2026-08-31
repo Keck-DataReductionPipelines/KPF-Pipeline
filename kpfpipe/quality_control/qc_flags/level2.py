@@ -38,7 +38,7 @@ class QCL2(QC):
                         return False
                     if not np.any(np.isfinite(arr)):
                         return False
-        per_order = (norder["GREEN"] + norder["RED"],)
+        per_order = (DETECTOR["numorder"],)
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             arr = self.kpf_obj.data.get(ext)
             if np.shape(arr) != per_order or not np.any(np.isfinite(arr)):
@@ -48,8 +48,10 @@ class QCL2(QC):
     extraction_present._qc_key = "DATAPRL2"
 
     def required_keywords_present(self):
-        """Every registry-required PRIMARY keyword for L2 is present (presence only)."""
-        return self._required_primary_keywords() <= set(self.kpf_obj.headers["PRIMARY"])
+        """Required PRIMARY keywords present -- not yet implemented; see ``QC``."""
+        raise NotImplementedError(
+            "KWRDPRL2 is pending a KPF-owned definition of a required keyword"
+        )
 
     required_keywords_present._qc_key = "KWRDPRL2"
 

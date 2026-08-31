@@ -3,6 +3,7 @@
 import glob
 import logging
 import os
+import re
 import tempfile
 from datetime import datetime
 
@@ -10,6 +11,7 @@ import pandas as pd
 from astropy.io import fits
 
 from kpfpipe.utils.kpf import (
+    OBS_ID_REGEX,
     get_datecode,
     get_obs_id,
     get_timestamp,
@@ -427,14 +429,13 @@ class FileHandler:
         cal_type : str
             Calibration frame type. One of 'bias', 'dark', 'flat', 'thar'.
         min_stack_size : int, default 1
-            Minimum number of files required per stack; undersized stacks are
-            dropped. The default of 1 keeps every cluster (a no-op filter); the
-            masters recipe passes the configured per-cal-type value.
+            Minimum files required per stack; undersized stacks are dropped.
+            Default 1 is a no-op filter; the masters recipe passes the
+            configured per-cal-type value.
         max_stack_size : int or None, default None
-            Maximum number of files used per stack; oversized stacks are
-            truncated to their earliest ``max_stack_size`` frames. The default of
-            None imposes no ceiling; the masters recipe passes the configured
-            per-cal-type value.
+            Maximum files used per stack; oversized stacks are truncated to
+            their earliest frames. Default None imposes no ceiling; the
+            masters recipe passes the configured per-cal-type value.
         cluster_gap_seconds : int, default 7200
             Gap [s] between consecutive frames that splits one session from the
             next. The 2-hour default separates KPF morning vs. evening sessions.
@@ -604,6 +605,53 @@ def kpf_filename(obs_id, level, *, master=None):
     # L2/L4 use the EPRV "kpf_SL{N}" prefix.
     prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
     return f"{prefix}_{eprv_ts}.fits"
+
+
+def check_filename_convention(filename, level, *, master=False):
+    """Warn-only check that ``filename`` follows the naming rule for ``level``.
+
+    ``kpf_filename`` read backwards: a basename this accepts is one that builder
+    could have produced. Advisory by design, matching rvdata's contract -- a
+    non-compliant name warns and returns False, and the caller writes it anyway.
+    ``<model>.check_filename_convention()`` is the object-side entry point.
+
+    Parameters
+    ----------
+    filename : str
+        Filename or path; only the basename is examined.
+    level : str
+        Data level 'L0'/'L1'/'L2'/'L4' (masters: 'L1'/'L2'/'L4').
+    master : bool, optional
+        True for a master calibration product, whose DRP-RUN-05 name carries any
+        of the four ``_CAL_TYPES`` tokens.
+
+    Returns
+    -------
+    bool
+        True if the basename follows the convention.
+    """
+    if master:
+        convention = "{KOAID}_master_{" + ",".join(_CAL_TYPES) + "}_" + f"{level}.fits"
+        pattern = rf"{OBS_ID_REGEX}_master_({'|'.join(_CAL_TYPES)})_{level}\.fits"
+    elif level == "L0":
+        convention = "KP.YYYYMMDD.NNNNN.NN.fits"
+        pattern = rf"{OBS_ID_REGEX}\.fits"
+    else:
+        # The prefix rule kpf_filename applies: L1 has no EPRV standard.
+        prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
+        convention = f"{prefix}_YYYYMMDDThhmmss.fits"
+        pattern = rf"{prefix}_\d{{8}}T\d{{6}}\.fits"
+
+    basename = os.path.basename(filename)
+    if re.fullmatch(pattern, basename):
+        return True
+    logger.warning(
+        "Filename '%s' does not follow the KPF %s naming convention (%s)",
+        basename,
+        "masters" if master else level,
+        convention,
+    )
+    return False
 
 
 _DIRECTORY_KINDS = ("science", "masters", "QLP", "cal_stack")

@@ -222,6 +222,7 @@ tests/profiling/reports/
 
 # Local working notes / scratch task lists — personal, never tracked.
 notes/
+DEV_PLAN.md
 
 __pycache__
 kpf_drp.egg-info
@@ -232,3 +233,10 @@ docs/source/api/_generated/
 # Governing docs copied from docs/dev/ into the Sphinx tree at build time
 # (conf.py _sync_guidelines); tracked source of truth is docs/dev/.
 docs/source/dev/guidelines/*.md
+
+# Local Claude Code agent configuration — per-developer, never tracked.
+.claude/
+
+# Vendored copy of the v2.12 KPF-Pipeline tree, kept locally for reference
+# while porting (docs, legacy module sources). Not part of the vNext package.
+legacy/

@@ -53,8 +53,9 @@ class DiagL2(Diagnostics):
     def _order_at(self, wavelength_nm):
         """``(chip, order)`` whose SCI2 wavelengths span ``wavelength_nm``.
 
-        v2.12 hardcoded the order index per wavelength, which only holds for one
-        instrument era; the WAVE arrays (Angstroms) carry the mapping directly.
+        Looked up from the WAVE arrays (Angstroms) rather than a hardcoded order
+        index, since the order-to-wavelength mapping shifts across instrument
+        eras.
         """
         for chip in _CHIPS:
             wave = np.asarray(self.kpf_obj.data[f"{chip}_SCI2_WAVE"])
@@ -73,11 +74,10 @@ class DiagL2(Diagnostics):
 
         SNR = flux / sqrt(|var|) over the order carrying each wavelength;
         non-finite values are treated as 0 so a single bad pixel does not poison
-        the percentile. The summed-SCI spectrum is SCI1+SCI2+SCI3 (v2.12 summed
-        SCI1+SCI3+SCI3, dropping SCI2).
+        the percentile. The summed-SCI spectrum is SCI1+SCI2+SCI3.
         """
         out = {}
-        for wavelength in (452, 548, 652, 747, 852):
+        for index, wavelength in enumerate((452, 548, 652, 747, 852), start=1):
             chip, order = self._order_at(wavelength)
             for code, fibers in (
                 ("SC", ("SCI1", "SCI2", "SCI3")),
@@ -95,6 +95,8 @@ class DiagL2(Diagnostics):
                 out[f"SNR{code}{wavelength}"] = round(
                     float(np.nanpercentile(np.where(np.isfinite(snr), snr, 0.0), 95)), 3
                 )
+            out[f"EXSNR{index}"] = out[f"SNRSC{wavelength}"]
+            out[f"EXSNRW{index}"] = wavelength * 10.0
         return self._tag(**out)
 
     snr._diag_name = "snr"
@@ -102,9 +104,9 @@ class DiagL2(Diagnostics):
     def order_flux_ratios(self):
         """Peak SCI2 flux at four wavelengths over the peak at 652 nm.
 
-        Peak flux is the 95th percentile of the order's counts, as in v2.12. The
-        ratios track the spectrum's colour, which moves with the target and with
-        anything vignetting or defocusing part of the band.
+        Peak flux is the 95th percentile of the order's counts. The ratios track
+        the spectrum's colour, which moves with the target and with anything
+        vignetting or defocusing part of the band.
         """
         peak = {}
         for wavelength in (452, 548, 652, 747, 852):
@@ -127,8 +129,8 @@ class DiagL2(Diagnostics):
         ratio is formed (the orderlets do not share a wavelength solution), and
         the median is taken over the central 500 pixels of the order. The paired
         ``U`` keyword is the uncertainty on that median, 1.2533 * sigma /
-        sqrt(n); v2.12 bootstrapped it from an unseeded RNG, which no
-        deterministic pipeline can carry.
+        sqrt(n) -- closed-form rather than bootstrapped, since a bootstrap needs
+        an RNG no deterministic pipeline can carry.
         """
         out = {}
         for wavelength in (452, 548, 652, 747, 852):

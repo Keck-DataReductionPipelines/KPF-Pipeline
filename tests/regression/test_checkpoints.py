@@ -33,13 +33,13 @@ from kpfpipe.quality_control.checkpoints import (
 from ._data_models import (
     make_l4,
     seed_catalog_record,
-    seed_required_primary,
     set_fiber_arrays,
     set_wave_bands,
+    standardized_l0,
     write_science_l0,
 )
 
-_NORDER_TOTAL = DETECTOR["norder"]["GREEN"] + DETECTOR["norder"]["RED"]
+_NORDER_TOTAL = DETECTOR["numorder"]
 _NCOL = 20  # matches the mini_detector ncol, which the DATAPRL2 shape check reads
 
 
@@ -75,12 +75,14 @@ class TestUnregisteredKeywords:
         l2.set_keyword("NANSCI1", 3)  # registered -> QUALITY_CONTROL
         CheckpointL2(l2).unregistered_keywords()  # no raise
 
-    def test_raw_l0_primary_is_skipped(self):
-        # The raw WMKO L0 PRIMARY is not registry-governed, so an unregistered
-        # native on it must NOT raise at L0.
+    def test_l0_primary_is_validated_too(self):
+        # standardize_header_format runs at load, so the PRIMARY a checkpoint sees is
+        # the EPRV one at every level -- a native leaked onto it raises at L0
+        # exactly as it does at L2.
         l0 = KPF0()
-        l0.headers["PRIMARY"]["GAIAID"] = (12345, "raw native")
-        CheckpointL0(l0).unregistered_keywords()  # no raise
+        l0.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
+        with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
+            CheckpointL0(l0).unregistered_keywords()
 
 
 @pytest.mark.usefixtures("mini_detector")
@@ -224,7 +226,6 @@ def _make_l2(*, populate=True):
         set_wave_bands(l2, ncol=_NCOL)
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             l2.set_data(ext, np.zeros(_NORDER_TOTAL, dtype=np.float64))
-    seed_required_primary(l2, CheckpointL2.QC)
     return l2
 
 
@@ -267,12 +268,12 @@ class TestCheckpointL0:
         # in-process exercise of QCL0.run().
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
         write_science_l0(fn, namps=4, shape=(10, 10), primary_cards={"PROGNAME": None})
-        l0 = seed_catalog_record(KPF0.from_fits(fn))
+        l0 = seed_catalog_record(standardized_l0(fn))
         with caplog.at_level(logging.WARNING):
             CheckpointL0(l0).run()
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
-        assert qc["KWRDPRL0"] == 1
+        assert "KWRDPRL0" not in qc  # its check is stubbed, so it writes no flag
         assert qc["GREENL0"] == 1
         assert qc["REDL0"] == 1
         assert qc["TCSOFF"] < 1.0
@@ -305,17 +306,14 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
 
     qc = l1.headers["QUALITY_CONTROL"]
     qc["BIASAGE"] = (1.0, "Age of bias master [days]")
-    qc["DARKAGE"] = (5.0, "Age of dark master [days]")
-    qc["FLATAGE"] = (10.0, "Age of flat master [days]")
+    qc["DARKAGE"] = (3.0, "Age of dark master [days]")
+    qc["FLATAGE"] = (3.0, "Age of flat master [days]")
     for i in range(1, 5):
         qc[f"RNGREEN{i}"] = (3.5, "RN e-")
         qc[f"RNRED{i}"] = (4.0, "RN e-")
         qc[f"RNNGGR{i}"] = (1.0, "RNNG")
         qc[f"RNNGRD{i}"] = (1.0, "RNNG")
 
-    for kw in CheckpointL1.QC(l1)._required_primary_keywords():
-        if kw not in l1.headers["PRIMARY"]:
-            l1.headers["PRIMARY"][kw] = ("UNKNOWN", "seeded for test")
     return l1
 
 
@@ -328,22 +326,13 @@ class TestCheckpointL1:
         assert not caplog.records
         qc = l1.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL1"] == 1
-        assert qc["KWRDPRL1"] == 1
+        assert "KWRDPRL1" not in qc  # its check is stubbed, so it writes no flag
 
     def test_run_raises_when_ccd_data_missing(self):
         # No assembled CCDs: DiagL1's flux percentiles have no pixels to measure,
         # but that only logs, so the fatal verdict comes from DATAPRL1.
         l1 = _make_l1(ccd=False)
         with pytest.raises(ValueError, match="DATAPRL1 = 0"):
-            CheckpointL1(l1).run()
-
-    def test_run_raises_when_required_keyword_missing(self):
-        # KWRDPRL1 is fatal (in RAISE_FLAGS): a missing required PRIMARY keyword
-        # -> KWRDPRL1 = 0 -> run() raises.
-        l1 = _make_l1()
-        req = sorted(CheckpointL1.QC(l1)._required_primary_keywords())
-        del l1.headers["PRIMARY"][req[0]]
-        with pytest.raises(ValueError, match="KWRDPRL1 = 0"):
             CheckpointL1(l1).run()
 
     def test_run_warns_when_read_noise_out_of_range(self, caplog):
@@ -373,7 +362,6 @@ def _make_l4(*, sci=True):
     metrics directly and do the same damage.
     """
     l4 = make_l4(sci=sci, jitter=1e-7, berv=7.9, seed=3)
-    seed_required_primary(l4, CheckpointL4.QC)
     return l4
 
 
@@ -404,13 +392,4 @@ class TestCheckpointL4:
         # only logs, so the fatal verdict comes from DATAPRL4.
         l4 = _make_l4(sci=False)
         with pytest.raises(ValueError, match="DATAPRL4 = 0"):
-            CheckpointL4(l4).run()
-
-    def test_run_raises_when_required_keyword_missing(self):
-        # KWRDPRL4 is fatal (in RAISE_FLAGS): a missing required PRIMARY keyword
-        # -> KWRDPRL4 = 0 -> run() raises.
-        l4 = _make_l4()
-        req = sorted(CheckpointL4.QC(l4)._required_primary_keywords())
-        del l4.headers["PRIMARY"][req[0]]
-        with pytest.raises(ValueError, match="KWRDPRL4 = 0"):
             CheckpointL4(l4).run()

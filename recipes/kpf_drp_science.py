@@ -1,13 +1,10 @@
 """
 KPF science reduction recipe.
 
-Runs the full single-exposure science pipeline end-to-end for one obs_id,
-L0 -> L1 -> L2 -> L4: read the raw L0 frame, assemble it into a full-frame
-image, associate and apply calibration masters (bias, dark, flat, ThAr WLS),
-extract 1D spectra, attach the wavelength solution, apply the barycentric
-correction, and compute radial velocities from the cross-correlation function.
-Diagnostics, QC, and quicklook layers run at each level, and the L2 and L4
-data products are written to the output data root.
+Runs the single-exposure pipeline end-to-end for one obs_id, L0 -> L1 -> L2 ->
+L4: assemble the FFI, apply calibration masters, extract and calibrate the
+spectra, apply the barycentric correction, and compute RVs from the CCF.
+Diagnostics/QC/quicklook run at each level; L2 and L4 are written to disk.
 """
 
 import logging
@@ -55,67 +52,58 @@ def main(config, args):
     data_root_in = data_dirs["KPF_DATA_INPUT"]
     data_root_science = data_dirs["KPF_SCIENCE_OUTPUT"]
 
-    l0 = KPF0.from_fits(kpf_filepath(obs_id, "L0", data_root=data_root_in))
+    fn = kpf_filepath(obs_id, "L0", data_root=data_root_in)
+    l0 = KPF0.from_fits(fn, standardize=True)
 
-    # Resolve Gaia/SIMBAD astrometry (plus the native wmko row off PRIMARY TARG*) into
-    # l0's CATALOG_RECORD, for the L0 diagnostics and barycentric correction to consume.
+    # Resolves into l0's CATALOG_RECORD, consumed by L0 diagnostics and
+    # barycentric correction.
     logger.info("resolving catalog astrometry for %s", obs_id)
     astro_query = AstroQuery(l0, config)
     l0 = astro_query.perform()
 
-    # Generate L0 quicklook plots
     logger.info("generating L0 quicklook plots for %s", obs_id)
     l0_qlp_dir = kpf_directory(
         kind="QLP", data_root=data_root_science, level="L0", obs_id=obs_id
     )
     PlotL0(l0, output_dir=l0_qlp_dir).run("all")
 
-    # L0 processing complete: CheckpointL0.run() folds in Diagnostics + QC, then
-    # validates. Run before assembly on purpose -- QCL0 writes the L0 QC flags
-    # onto l0's QUALITY_CONTROL, which to_kpf1 propagates downstream so the
-    # L1/L2/L4 products carry the full append-only QC history.
+    # Run before assembly on purpose: QCL0 writes the L0 QC flags onto l0's
+    # QUALITY_CONTROL, which to_kpf1 propagates downstream so L1/L2/L4 carry
+    # the full append-only QC history.
     logger.info("running L0 checkpoint for %s", obs_id)
     CheckpointL0(l0).run()
 
-    # Assemble the raw L0 readout into a single L1 full-frame image (FFI)
     logger.info("assembling L0 -> L1 FFI for %s", obs_id)
     image_assembly = ImageAssembly(l0, config)
     l1 = image_assembly.perform()
 
-    # Associate the implemented calibration masters closest to this frame so
-    # image processing and wavelength calibration can use them. Flat frames are
-    # still part of the desired data set, but master-flat construction and flat
-    # division are not implemented yet, so the basic path does not require them.
+    # Flat frames are part of the desired set, but master-flat construction and
+    # flat division aren't implemented yet, so the basic path doesn't need them.
     logger.info("associating calibration masters for %s", obs_id)
     calibration_association = CalibrationAssociation(l1, config)
     l1 = calibration_association.perform(["bias", "dark", "thar"])
 
-    # Apply standard FFI image processing. The current runnable path performs
-    # bias and dark subtraction; flat correction remains disabled in config.
+    # Currently performs bias and dark subtraction; flat correction remains
+    # disabled in config.
     logger.info("applying image processing for %s", obs_id)
     image_processing = ImageProcessing(l1, config)
     l1 = image_processing.perform()
 
-    # L1 quicklook plots
     logger.info("generating L1 quicklook plots for %s", obs_id)
     l1_qlp_dir = kpf_directory(
         kind="QLP", data_root=data_root_science, level="L1", obs_id=obs_id
     )
     PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
-    # L1 processing complete: CheckpointL1.run() folds in Diagnostics + QC,
-    # then validates (science -> Diagnostics -> QC -> Checkpoints).
     logger.info("running L1 checkpoint for %s", obs_id)
     CheckpointL1(l1).run()
 
-    # Extract the 2D FFI down to 1D spectra (2D --> 1D), since the RV analysis
-    # operates on per-order flux rather than the raw image.
+    # RV analysis operates on per-order flux rather than the raw image.
     logger.info("extracting 1D spectra for %s", obs_id)
     spectral_extraction = SpectralExtraction(l1, config)
     l2 = spectral_extraction.perform()
 
-    # Attach the precomputed wavelength solution (per-fiber WAVE arrays from the
-    # WLS master) so each order has a calibrated wavelength axis [Å, vacuum].
+    # Per-fiber WAVE arrays from the WLS master: calibrated axis [Å, vacuum].
     logger.info("attaching wavelength solution for %s", obs_id)
     wavelength_calibration = WavelengthCalibration(l2, config)
     l2 = wavelength_calibration.perform()
@@ -127,23 +115,19 @@ def main(config, args):
     barycentric_correction = BarycentricCorrection(l2, config)
     l2 = barycentric_correction.perform()
 
-    # L2 quicklook plots
     logger.info("generating L2 quicklook plots for %s", obs_id)
     l2_qlp_dir = kpf_directory(
         kind="QLP", data_root=data_root_science, level="L2", obs_id=obs_id
     )
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 
-    # L2 processing complete: CheckpointL2.run() folds in Diagnostics + QC,
-    # then validates (science -> Diagnostics -> QC -> Checkpoints).
     logger.info("running L2 checkpoint for %s", obs_id)
     CheckpointL2(l2).run()
 
-    # Write the L2 data products (extracted 1D spectra) to disk
+    # Write L2 (extracted 1D spectra) to disk.
     l2_out_path = kpf_filepath(obs_id, "L2", data_root=data_root_science)
     l2.to_fits(l2_out_path)
 
-    # Cross-correlate the extracted spectra to build the per-order CCFs (L4).
     logger.info("cross-correlating spectra for %s", obs_id)
     cross_correlation = CrossCorrelation(l2, config)
     l4 = cross_correlation.perform()
@@ -153,24 +137,20 @@ def main(config, args):
     radial_velocity = RadialVelocity(l4, config)
     l4 = radial_velocity.perform()
 
-    # L4 quicklook plots
     logger.info("generating L4 quicklook plots for %s", obs_id)
     l4_qlp_dir = kpf_directory(
         kind="QLP", data_root=data_root_science, level="L4", obs_id=obs_id
     )
     PlotL4(l4, output_dir=l4_qlp_dir, obs_id=obs_id).run("all")
 
-    # L4 processing complete: CheckpointL4.run() folds in Diagnostics (DiagL4)
-    # and QC (QCL4), then validates (science -> Diagnostics -> QC -> Checkpoints).
     logger.info("running L4 checkpoint for %s", obs_id)
     CheckpointL4(l4).run()
 
-    # Write the final L4 data product (RVs and CCFs) to disk
+    # Write L4 (RVs and CCFs) to disk.
     l4_out_path = kpf_filepath(obs_id, "L4", data_root=data_root_science)
     l4.to_fits(l4_out_path)
 
-    # End-of-run verdict: a compact roll-up read straight off the finished L4
-    # product (masters, inputs/outputs, combined RV), plus the elapsed.
+    # Compact end-of-run verdict (masters, inputs/outputs, combined RV, elapsed).
     logger.info(science_run_summary(l4, time.monotonic() - t0))
 
     logger.info("exiting kpf_drp_science pipeline")

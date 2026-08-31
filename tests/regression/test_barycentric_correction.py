@@ -17,12 +17,13 @@ from astropy.time import Time
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
+from kpfpipe.utils.astro import KECK_LOCATION
 
 from ._dtype_policy import BARYCORR, BJD, assert_dtype
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-NORDER = NORDER_GREEN + NORDER_RED
+NORDER = DETECTOR["numorder"]
 NCOL = 50  # reduced column count for speed
 
 
@@ -281,9 +282,8 @@ class TestComputeBarycorrReference:
     site, and the m/s units and sign. Golden values are pinned to
     barycorrpy==0.4.4.
 
-    Unmarked: it reads no truth frames, which is what ``slow`` means here. It
-    carried the marker as a hedge against a cold-cache ephemeris download, which
-    tests/conftest.py now allows through rather than blocking.
+    Unmarked: tests/conftest.py allows a cold-cache ephemeris download through
+    without the ``slow`` marker.
     """
 
     def test_matches_barycorrpy_reference(self):
@@ -298,7 +298,7 @@ class TestComputeBarycorrReference:
         }
         t = Time("2024-06-15T09:00:00.000", scale="utc")
         bc_vel, bjd_tdb = BarycentricCorrection._compute_barycorr(
-            astrometry, t, BarycentricCorrection.KECK_LOCATION
+            astrometry, t, KECK_LOCATION
         )
         # Physical sanity: BERV within Earth's orbital +/-30 km/s; BJD_TDB within
         # a few minutes of JD_UTC (clock + Romer light-travel delay).
@@ -306,7 +306,7 @@ class TestComputeBarycorrReference:
         assert abs(bjd_tdb[0] - t.utc.jd) < 0.01
         # Pins at 1 cm/s and ~0.1 s: tight enough to catch a frame/unit/sign
         # rewiring, loose enough to clear ephemeris/IERS noise at the pinned version.
-        assert bc_vel[0] == pytest.approx(24627.871206121636, abs=1e-2)
+        assert bc_vel[0] == pytest.approx(24627.84694194215, abs=1e-2)
         assert bjd_tdb[0] == pytest.approx(2460476.873644211, abs=1e-6)
 
 
@@ -594,7 +594,7 @@ class TestFluxWeightedMidpointCcds:
         unweighted_green = t_orders.jd[:NORDER_GREEN].mean()
 
         # Make the bluest (earliest) GREEN order dominate the flux weighting.
-        flux = np.ones((NORDER, NCOL), dtype=float)
+        flux = np.ones((NORDER, NCOL), dtype=np.float32)
         flux[0] = 1000.0
         synthetic_kpf2.set_data("SCI2_FLUX", flux)
 
@@ -607,7 +607,7 @@ class TestFluxWeightedMidpointCcds:
     # it one line later (nan_to_num -> zero weight), which is what this asserts.
     @pytest.mark.filterwarnings("ignore:All-NaN slice encountered:RuntimeWarning")
     def test_nan_flux_order_gets_zero_weight(self, synthetic_kpf2):
-        flux = np.ones((NORDER, NCOL), dtype=float)
+        flux = np.ones((NORDER, NCOL), dtype=np.float32)
         flux[NORDER_GREEN] = np.nan  # first RED order failed extraction
         synthetic_kpf2.set_data("SCI2_FLUX", flux)
 
@@ -619,7 +619,7 @@ class TestFluxWeightedMidpointCcds:
 
     def test_all_zero_weight_chip_raises(self, synthetic_kpf2):
         # A whole chip at zero flux makes the weighted mean undefined.
-        flux = np.ones((NORDER, NCOL), dtype=float)
+        flux = np.ones((NORDER, NCOL), dtype=np.float32)
         flux[NORDER_GREEN:] = 0.0
         synthetic_kpf2.set_data("SCI2_FLUX", flux)
         bc = BarycentricCorrection(synthetic_kpf2)
@@ -843,16 +843,16 @@ class TestPerform:
         bjd = kpf2.headers["BJD_TDB"]
         kms = kpf2.headers["BARYCORR_KMS"]
         z = kpf2.headers["BARYCORR_Z"]
-        for key in ("CCD1BJD", "CCD2BJD"):
+        for key in ("BJDGREEN", "BJDRED"):
             assert key in bjd, f"{key} missing from BJD_TDB"
-        for key in ("CCD1BKMS", "CCD2BKMS"):
+        for key in ("BVGREEN", "BVRED"):
             assert key in kms, f"{key} missing from BARYCORR_KMS"
-        for key in ("CCD1BZ", "CCD2BZ"):
+        for key in ("BZGREEN", "BZRED"):
             assert key in z, f"{key} missing from BARYCORR_Z"
 
         # The stub gives every order the same delta_rv, so the chip means match.
-        np.testing.assert_allclose(kms.get("CCD1BKMS"), kms.get("CCD2BKMS"))
-        np.testing.assert_allclose(z.get("CCD1BZ"), z.get("CCD2BZ"))
+        np.testing.assert_allclose(kms.get("BVGREEN"), kms.get("BVRED"))
+        np.testing.assert_allclose(z.get("BZGREEN"), z.get("BZRED"))
 
     def test_ctype1_axis_label(self, bc_monkeypatched):
         # These are 1-D per-order arrays, so CTYPE1 names the order axis and

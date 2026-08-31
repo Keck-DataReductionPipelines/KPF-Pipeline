@@ -155,6 +155,8 @@ class _FrozenAstroQuery:
         aq = self._aq
         for source, record in _CATALOG_CAPTURE.items():
             aq._write_catalog_record(source, dict(record))
+        for keyword, value in aq._catalog_primary_cards().items():
+            aq.l0_obj.set_keyword(keyword, value)
         aq.l0_obj.receipt_add_entry("astro_query", "", "PASS")
         return aq.l0_obj
 
@@ -242,7 +244,7 @@ class TestScienceRecipe:
         assert "barycentric_correction" in modules
 
     def test_barycorr_extensions_populated(self, l2):
-        norder = NORDER_GREEN + NORDER_RED
+        norder = DETECTOR["numorder"]
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             arr = np.asarray(l2.data[ext])
             assert arr.shape == (norder,), f"{ext} shape {arr.shape} != ({norder},)"
@@ -250,12 +252,12 @@ class TestScienceRecipe:
 
     def test_per_ccd_barycorr_keywords(self, l2):
         homes = {
-            "CCD1BJD": "BJD_TDB",
-            "CCD2BJD": "BJD_TDB",
-            "CCD1BKMS": "BARYCORR_KMS",
-            "CCD2BKMS": "BARYCORR_KMS",
-            "CCD1BZ": "BARYCORR_Z",
-            "CCD2BZ": "BARYCORR_Z",
+            "BJDGREEN": "BJD_TDB",
+            "BJDRED": "BJD_TDB",
+            "BVGREEN": "BARYCORR_KMS",
+            "BVRED": "BARYCORR_KMS",
+            "BZGREEN": "BARYCORR_Z",
+            "BZRED": "BARYCORR_Z",
         }
         for key, ext in homes.items():
             hdr = l2.headers[ext]
@@ -325,23 +327,20 @@ class TestScienceRecipe:
         different input needs a deliberate re-pin, not a fix.
         """
         prim = l4.headers["PRIMARY"]
-        assert prim["RV"] == pytest.approx(11.29034877686747, abs=1e-6)
-        assert prim["BERV"] == pytest.approx(-18.507963847544822, abs=1e-6)
+        assert prim["RV"] == pytest.approx(11.290367394940835, abs=1e-6)
+        assert prim["BERV"] == pytest.approx(-18.507945234900816, abs=1e-6)
         assert prim["BJDTDB"] == pytest.approx(2460405.9689188506, abs=1e-9)
 
     def test_provenance_keywords_set(self, l2):
-        # DRPTAG stays on the L2 PRIMARY; the other provenance cards live on
-        # the L2 RECEIPT.
+        # The EPRV DRPTAG and its WMKO counterpart DRPVERNO both sit on PRIMARY,
+        # as do the rest of the provenance cards.
         prim = l2.headers["PRIMARY"]
-        receipt = l2.headers["RECEIPT"]
         version = importlib.metadata.version("kpfpipe")
         assert prim.get("DRPTAG") == version
-        assert all(k not in prim for k in ("DRPVERNO", "DRPSTATU", "PROGID", "KOAID"))
-        assert receipt.get("DRPVERNO") == version
-        assert "PROGID" in receipt
-        assert "KOAID" in receipt
+        assert prim.get("DRPVERNO") == version
+        assert prim.get("PROGID") and prim.get("KOAID")
         # BarycentricCorrection is the last module to run before the L2 write.
-        assert receipt.get("DRPSTATU") == "Barycentric Correction module complete"
+        assert prim.get("DRPSTATU") == "Barycentric Correction module complete"
 
     @pytest.mark.parametrize(
         "ext, blue_end, red_end",
@@ -466,8 +465,8 @@ def _wire_science_recipe(tmp_path, monkeypatch):
 
     class StubKPF0:
         @staticmethod
-        def from_fits(path):
-            record["calls"].append(("from_fits", path, ()))
+        def from_fits(path, standardize=False):
+            record["calls"].append(("from_fits", path, (standardize,)))
             return Product("l0")
 
     monkeypatch.setattr(recipe, "KPF0", StubKPF0)
@@ -518,8 +517,9 @@ class TestScienceRecipeWiring:
         return record
 
     def test_stages_run_in_order(self, run):
-        # CheckpointL0 runs BEFORE ImageAssembly on purpose: QCL0 writes the L0
-        # QC flags that to_kpf1 propagates into the L1/L2/L4 products.
+        # The load standardizes (next test), so every stage reads one PRIMARY,
+        # the EPRV one. CheckpointL0 runs BEFORE ImageAssembly on purpose: QCL0
+        # writes the L0 QC flags that to_kpf1 propagates into L1/L2/L4.
         assert [call[0] for call in run["calls"]] == [
             "from_fits",
             "AstroQuery",
@@ -540,6 +540,12 @@ class TestScienceRecipeWiring:
             "PlotL4",
             "CheckpointL4",
         ]
+
+    def test_the_load_standardizes(self, run):
+        # The conversion is no longer a stage of its own; the recipe gets it by
+        # loading with standardize=True, so nothing downstream sees a native PRIMARY.
+        load = next(call for call in run["calls"] if call[0] == "from_fits")
+        assert load[2] == (True,)
 
     def test_each_stage_receives_the_previous_product(self, run):
         # A mis-wired hand-off (SpectralExtraction fed the L0, RadialVelocity fed
@@ -588,11 +594,9 @@ class TestScienceRecipeErrors:
         )
         args = argparse.Namespace(obs_id=OBS_ID)
         recipe = _load_recipe()
-        # The old three-way tuple was just OSError three times over (IOError *is*
-        # OSError, FileNotFoundError subclasses it), so any OSError from the
-        # recipe's directory creation or FITS writes satisfied it. rvdata raises
-        # a bare IOError here, so match= on the obs_id is what pins the failure
-        # to the L0 read this test is named for.
+        # rvdata raises a bare IOError (an OSError) for a missing L0 file; match=
+        # on the obs_id is what pins the failure to the L0 read, since other
+        # OSErrors (dir creation, FITS writes) would also satisfy a bare type check.
         with pytest.raises(OSError, match=OBS_ID):
             recipe.main(config, args)
 

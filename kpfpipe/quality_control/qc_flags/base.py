@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 class QC:
     """Base runner for per-level pass/fail QC check methods.
 
+    Every level carries a required-PRIMARY-keyword placeholder check (e.g. L0's
+    KWRDPRL0): REQUIRED is now a compliance label, not a decision about what must
+    be on a product, so the registry-derived notion of "required" these checks
+    would read is gone. Until a KPF-owned definition replaces it, each raises
+    ``NotImplementedError`` (writing no flag, per ``run``) while its registry row
+    stays so the comment lookup still resolves.
+
     Parameters
     ----------
     kpf_obj : KPFDataModel
@@ -47,7 +54,7 @@ class QC:
             kw = fn._qc_key
             # Mirror the registry Description into results (the FITS comment
             # source; see ``_tag``). The _qc_key must be registered.
-            comment = self.kpf_obj.keyword_registry.routing[kw][1]
+            comment = self.kpf_obj.keyword_registry.comment_for(kw)
             try:
                 passed = fn()
             except NotImplementedError:
@@ -70,18 +77,6 @@ class QC:
             )
 
         return self.results
-
-    def _required_primary_keywords(self):
-        """Registry EPRV ``Required`` PRIMARY keywords at or below this level.
-
-        The level cap is the level's own number, so this runs unchanged for L1,
-        L2, and L4 -- each returns the required PRIMARY keywords tagged at or
-        below its own level. Read off the model's registry singleton so qc_flags
-        imports nothing from data_models.
-        """
-        cap = int(str(self.LEVEL)[1:])
-        reg = self.kpf_obj.keyword_registry
-        return {k for k, lvl in reg.required["PRIMARY"].items() if lvl <= cap}
 
     def _iter_checks(self):
         """Yield each ``(name, method)`` tagged ``_qc_key``.

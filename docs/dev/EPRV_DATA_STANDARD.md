@@ -35,8 +35,8 @@ instruments may adopt it natively; existing ones supply a *translator*. KPF prod
 | **L3** | Orders stitched into a single 1-D spectrum; blaze-corrected; drift **and** barycentric applied to wavelengths | Yes (KPF does not currently produce L3) |
 | **L4** | Derived products: radial velocities, CCFs, activity metrics | **Yes** |
 
-Implication for our hierarchy: `KPF0`/`KPF1` are KPF-internal (they wrap `KPFDataModel`),
-while `KPF2`/`KPF4` subclass the EPRV `RV2`/`RV4` and must satisfy everything below.
+Implication for our hierarchy: all four models subclass `KPFDataModel`, which subclasses
+`RVDataModel`. `KPF0`/`KPF1` are KPF-internal; `KPF2`/`KPF4` must satisfy everything below.
 
 ---
 
@@ -150,8 +150,8 @@ L4 PRIMARY gains: `BJDTDB`, `RV`, `RVERR`, `BERV`, `RVMETHOD`, `SYSVEL`.
 >   (`Order-N`) applies; KPF stamps that and treats `CTYPE2` as N/A for 1-D. RV/CCF (2-D)
 >   carry both. KPF treats `CTYPE` as registered content (axis meaning), not a structural
 >   WCS card.
-> - **KPF `CCF_VARn` extension** — the standard defines no CCF-variance product (`CCFn` is
->   value-only). KPF adds `CCF_VARn`, an `ImageHDU` per-velocity-bin CCF photon-variance cube
+> - **KPF `CCFn_VAR` extension** — the standard defines no CCF-variance product (`CCFn` is
+>   value-only). KPF adds `CCFn_VAR`, an `ImageHDU` per-velocity-bin CCF photon-variance cube
 >   paired 1:1 with `CCFn` (same shape/numbering/per-chip access), persisting what the RV
 >   photon-error step needs. Additive and team-scoped, following the `QUALITY_CONTROL`
 >   precedent — it does not alter any standard-defined extension.

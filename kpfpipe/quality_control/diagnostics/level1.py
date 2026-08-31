@@ -1,60 +1,14 @@
-"""Diagnostics for KPF Level 1 (assembled FFI) data products.
-
-Metrics recomputable from the finished L1 product -- chiefly the master
-calibration ages (bias/dark/flat/WLS), each the signed age of the associated
-master relative to the observation time.
-"""
-
-from datetime import datetime
+"""Diagnostics for KPF Level 1 (assembled FFI) data products."""
 
 import numpy as np
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
-from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
-
-_CAL_AGE_KEYS = {
-    "BIASFILE": "BIASAGE",
-    "DARKFILE": "DARKAGE",
-    "FLATFILE": "FLATAGE",
-    "WLSFILE": "WLSAGE",
-}
 
 
 class DiagL1(Diagnostics):
     """Diagnostics for KPF Level 1 assembled FFI products."""
 
     LEVEL = "L1"
-
-    def calibration_ages(self):
-        """Signed fractional-day age (master - obs) for each associated master.
-
-        Recomputed from the finished L1 product: the master path is read from
-        RECEIPT (``{PREFIX}FILE``, written by CalibrationAssociation) and the
-        observation timestamp from PRIMARY (DATE-OBS). The master
-        timestamp is parsed from its filename. A cal type is skipped when its
-        path is absent. RECEIPT and PRIMARY are default L1 extensions and DATE-OBS
-        is a required PRIMARY keyword (KWRDPRL1), so all three are read directly;
-        a KeyError would signal a broken upstream invariant.
-
-        Returns
-        -------
-        dict
-            Maps each present ``{PREFIX}AGE`` keyword to its ``(age, comment)``.
-        """
-        receipt = self.kpf_obj.headers["RECEIPT"]
-        obs_dt = datetime.fromisoformat(self.kpf_obj.headers["PRIMARY"]["DATE-OBS"])
-
-        results = {}
-        for file_kw, age_kw in _CAL_AGE_KEYS.items():
-            path = receipt.get(file_kw)
-            if not path:
-                continue
-            master_dt = kpf_timestamp_to_datetime(get_timestamp(path))
-            age_days = (master_dt - obs_dt).total_seconds() / 86400.0
-            results[age_kw] = age_days
-        return self._tag(**results)
-
-    calibration_ages._diag_name = "calibration_ages"
 
     def flux_percentiles(self):
         """Flux percentiles (99/90/50/10) of each assembled CCD frame, in e-.

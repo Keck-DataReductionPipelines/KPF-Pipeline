@@ -23,7 +23,12 @@ from kpfpipe.quality_control.diagnostics import (
     Diagnostics,
 )
 
-from ._data_models import set_fiber_arrays, set_wave_bands, write_amp_l0
+from ._data_models import (
+    set_fiber_arrays,
+    set_wave_bands,
+    standardized_l0,
+    write_amp_l0,
+)
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
@@ -203,13 +208,15 @@ def _set_catalog_record(l0, records):
 
 
 def _make_l0_pointing():
-    """A KPF0 with just an L0 PRIMARY pointing (RA/DEC/MJD-OBS), no catalog yet.
-    IMTYPE 'Object' so AstroQuery accepts it."""
+    """A KPF0 with just a native instrument pointing (RA/DEC/MJD-OBS), no catalog
+    yet. The cards go on INSTRUMENT_HEADER, where every L0 module reads them once
+    standardize_header_format has run. IMTYPE 'Object' so AstroQuery accepts it."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "Object"
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
+    l0.standardize_header_format()
     return l0
 
 
@@ -361,12 +368,59 @@ class TestDiagL0Contingency:
             DiagL0(l0).target_ra_dec_offset()
 
 
-# ---------------------------------------------------------------------------
-# DiagL1 -- master calibration ages
-# ---------------------------------------------------------------------------
+class TestDiagL0SolarLunarGeometry:
+    """Sun altitude and target-Moon separation at mid-exposure."""
 
+    def _make_l0(self, date_mid, ra=_PT_RA, dec=_PT_DEC):
+        l0 = _make_l0_pointing()
+        native = l0.headers["INSTRUMENT_HEADER"]
+        native["RA"] = ra
+        native["DEC"] = dec
+        native["DATE-MID"] = date_mid
+        return l0
 
-_CAL_AGE_KEYS = ("BIASAGE", "DARKAGE", "FLATAGE", "WLSAGE")
+    def test_matches_legacy_2d_product(self):
+        # KP.20240405.40113.57, whose legacy 2D carries -61.60211 deg and 54.2
+        # deg. The Sun altitude differs in the 4th decimal: v2.12 sited sun and
+        # moon geometry a few hundred metres from KECK_LOCATION.
+        l0 = self._make_l0(
+            "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
+        )
+        results = DiagL0(l0).solar_lunar_geometry()
+        assert results["SUNEL"][0] == pytest.approx(-61.60211, abs=1e-3)
+        assert results["MOONANG"][0] == pytest.approx(54.2, abs=0.01)
+
+    def test_sun_above_horizon_at_local_noon(self):
+        # Maunakea noon is 22:00 UT; the Sun clears the horizon by a wide margin.
+        results = DiagL0(
+            self._make_l0("2024-04-05T22:00:00.000")
+        ).solar_lunar_geometry()
+        assert results["SUNEL"][0] > 30
+
+    def test_moon_separation_at_the_moon(self):
+        # Pointing at the Moon's own 2024-04-05T11:09 position.
+        l0 = self._make_l0(
+            "2024-04-05T11:09:11.082", ra="12:58:57.79", dec="-06:17:27.7"
+        )
+        assert DiagL0(l0).solar_lunar_geometry()["MOONANG"][0] < 1.0
+
+    def test_written_to_primary(self):
+        # EPRV-defined, so these route to PRIMARY, not QUALITY_CONTROL.
+        l0 = _make_l0_with_catalog()
+        l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
+        results = DiagL0(l0).run()
+        for key in ("SUNEL", "MOONANG"):
+            assert l0.headers["PRIMARY"][key] == results[key][0]
+            assert key not in l0.headers["QUALITY_CONTROL"]
+
+    def test_missing_date_mid_raises(self):
+        with pytest.raises(KeyError, match="DATE-MID"):
+            DiagL0(_make_l0_pointing()).solar_lunar_geometry()
+
+    def test_diag_name_correct(self):
+        assert (
+            DiagL0.__dict__["solar_lunar_geometry"]._diag_name == "solar_lunar_geometry"
+        )
 
 
 class TestDiagL0PixelFractions:
@@ -381,7 +435,7 @@ class TestDiagL0PixelFractions:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_clean_frame_is_zero(self, tmp_path):
         l0 = self._make_amp_l0(tmp_path)
@@ -450,7 +504,7 @@ class TestDiagL0AmpPercentiles:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00001.00.fits", namps=namps, shape=(10, 10)
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_all_24_keywords_emitted(self, tmp_path):
         results = DiagL0(self._make_amp_l0(tmp_path)).amp_percentiles()
@@ -519,7 +573,7 @@ class TestDiagL0ExpmeterChannels:
                 ),
             ],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_clean_flux_is_zero(self, tmp_path):
         results = DiagL0(self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)).run()
@@ -602,7 +656,7 @@ class TestDiagL0ExpmeterChannels:
     def test_no_em_data_emits_no_keyword(self, tmp_path):
         # A frame with no EM extension (e.g. a calibration): the metrics are skipped.
         fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(10, 10))
-        assert "EMSCISAT" not in DiagL0(KPF0.from_fits(fn)).run()
+        assert "EMSCISAT" not in DiagL0(standardized_l0(fn)).run()
 
     def test_diag_name_correct(self):
         assert DiagL0.__dict__["expmeter_channel_metrics"]._diag_name == (
@@ -641,7 +695,7 @@ class TestDiagL0ExpmeterCounts:
                 fits.BinTableHDU(table(sky_counts), name="EXPMETER_SKY"),
             ],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_counts_summed_over_readings_and_bands(self, tmp_path):
         # Two readings of each channel, so every band doubles its per-reading count.
@@ -703,7 +757,7 @@ class TestDiagL0CcdTemperatures:
             shape=(10, 10),
             extra_hdus=[fits.BinTableHDU(table, name="TELEMETRY")],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_offset_is_signed_millikelvin(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
@@ -733,8 +787,8 @@ class TestDiagL0EtalonTemperature:
 
     def _make_l0_with_etalon(self, **cards):
         l0 = KPF0()
-        l0.headers["PRIMARY"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
-        l0.headers["PRIMARY"].update(cards)
+        l0.headers["INSTRUMENT_HEADER"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
+        l0.headers["INSTRUMENT_HEADER"].update(cards)
         return l0
 
     def test_at_design_setpoints_is_zero(self):
@@ -813,7 +867,7 @@ class TestDiagL0Guider:
                 fits.BinTableHDU(Table(columns), name="GUIDER_CUBE_ORIGINS"),
             ],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_constant_offset_gives_rms_and_bias(self, tmp_path):
         # A 0.5 pixel offset in x on every frame: 0.056"/pix -> 28 mas, and with
@@ -897,7 +951,7 @@ class TestDiagL0Guider:
 
 
 class TestDiagL0GuiderSeeing:
-    """J+Z-band seeing from the Moffat fit to the co-added guider image."""
+    """J+Z-band and V-band seeing from the Moffat fit to the co-added guider image."""
 
     def _make_l0_with_moffat(self, tmp_path, alpha, *, corrupt=False):
         y, x = np.indices((81, 81))
@@ -910,13 +964,20 @@ class TestDiagL0GuiderSeeing:
             primary_cards={"GCCRPIX1": 40.0, "GCCRPIX2": 40.0},
             extra_hdus=[fits.ImageHDU(image, name="GUIDER_AVG")],
         )
-        return KPF0.from_fits(fn)
+        return standardized_l0(fn)
 
     def test_seeing_is_alpha_in_arcsec(self, tmp_path):
         # alpha = 8 px at the 0.056"/pix CRED-2 scale -> 0.448" seeing.
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
         results = DiagL0(l0).guider_seeing()
         assert results["GDRSEEJZ"][0] == pytest.approx(8.0 * 0.056, rel=0.05)
+
+    def test_v_band_seeing_is_the_scaled_jz_seeing(self, tmp_path):
+        # Kolmogorov lambda^(1/5) from the 950-1200 nm band midpoint to 550 nm.
+        results = DiagL0(self._make_l0_with_moffat(tmp_path, 8.0)).guider_seeing()
+        assert results["GDRSEEV"][0] == pytest.approx(
+            results["GDRSEEJZ"][0] * 1.1434288742094985, rel=1e-5
+        )
 
     def test_wider_profile_gives_larger_seeing(self, tmp_path):
         narrow = DiagL0(self._make_l0_with_moffat(tmp_path, 5.0)).guider_seeing()
@@ -930,84 +991,37 @@ class TestDiagL0GuiderSeeing:
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
         results = DiagL0(l0).run()
-        assert l0.headers["QUALITY_CONTROL"]["GDRSEEJZ"] == results["GDRSEEJZ"][0]
+        for key in ("GDRSEEJZ", "GDRSEEV"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_gdrseev_is_mirrored_onto_primary_seeing(self, tmp_path):
+        # ``EPRV-header-map.csv`` gives SEEING KPF_EXT=QUALITY_CONTROL, and
+        # QUALITY_CONTROL is still empty when standardize_header_format runs, so
+        # DiagL0 stamps the seeded-blank PRIMARY card itself.
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0)
+        results = DiagL0(l0).run()
+        assert l0.headers["PRIMARY"]["SEEING"] == results["GDRSEEV"][0]
+
+    def test_unfittable_image_leaves_primary_seeing_blank(self, tmp_path):
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
+        assert "GDRSEEV" not in DiagL0(l0).run()
+        assert not l0.headers["PRIMARY"]["SEEING"]
 
     def test_diag_name_correct(self):
         assert DiagL0.__dict__["guider_seeing"]._diag_name == "guider_seeing"
 
 
-def _make_kpf1_with_calibrations(date_obs="2024-04-05T11:08:33", files=None):
-    """A KPF1 carrying a PRIMARY DATE-OBS, RECEIPT master paths, and assembled CCDs.
+def _make_kpf1(date_obs="2024-04-05T11:08:33"):
+    """A KPF1 carrying a PRIMARY DATE-OBS and both assembled CCDs.
 
-    Mirrors the finished-L1 state DiagL1 reads: CalibrationAssociation has written
-    each ``{PREFIX}FILE`` to RECEIPT, to_kpf1 has populated the EPRV PRIMARY, and
-    ImageAssembly has filled both CCDs (flux_percentiles reads them on every run).
+    Mirrors the finished-L1 state DiagL1 reads: to_kpf1 has populated the EPRV
+    PRIMARY and ImageAssembly has filled both CCDs.
     """
     l1 = KPF1()
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
     for chip in ("GREEN", "RED"):
         l1.data[f"{chip}_CCD"] = np.ones((4, 4), dtype=float)
-    for kw, path in (files or {}).items():
-        l1.set_keyword(kw, path)  # *FILE routes to RECEIPT
     return l1
-
-
-class TestDiagL1CalibrationAges:
-    def test_signed_age_same_day(self):
-        # Master at 2024-04-05 01:00:37 UTC vs obs 11:08:33 UTC -> -0.422176 d.
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
-        )
-        results = DiagL1(l1).run()
-        assert results["BIASAGE"][0] == pytest.approx(-0.422176, abs=1e-5)
-        # Routed to QUALITY_CONTROL with the registry comment.
-        qc = l1.headers["QUALITY_CONTROL"]
-        assert qc["BIASAGE"] == pytest.approx(-0.422176, abs=1e-5)
-        assert qc.comments["BIASAGE"] == "Master bias age [days]"
-
-    def test_signed_age_previous_day(self):
-        # Master 2024-04-04 22:00:00 UTC vs obs 2024-04-05 11:08:33 UTC.
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240404.79200.00_master_bias_L1.fits"}
-        )
-        results = DiagL1(l1).run()
-        assert results["BIASAGE"][0] == pytest.approx(-0.547604, abs=1e-5)
-
-    def test_all_cal_types(self):
-        l1 = _make_kpf1_with_calibrations(
-            files={
-                "BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits",
-                "DARKFILE": "/m/KP.20240405.03637.74_master_dark_L1.fits",
-                "FLATFILE": "/m/KP.20240405.03637.74_master_flat_L1.fits",
-                "WLSFILE": "/m/KP.20240405.03637.74_master_thar_L2.fits",
-            }
-        )
-        results = DiagL1(l1).run()
-        assert set(results) >= set(_CAL_AGE_KEYS)
-        for kw in _CAL_AGE_KEYS:
-            assert l1.headers["QUALITY_CONTROL"][kw] == pytest.approx(
-                -0.422176, abs=1e-5
-            )
-
-    def test_missing_cal_type_skipped(self):
-        # Only a bias path present -> only BIASAGE written.
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
-        )
-        results = DiagL1(l1).run()
-        assert set(results) & set(_CAL_AGE_KEYS) == {"BIASAGE"}
-        assert "DARKAGE" not in l1.headers["QUALITY_CONTROL"]
-
-    def test_no_date_obs_raises(self):
-        # DATE-OBS is guaranteed by the L1 checkpoint's KWRDPRL1 raise gate; if it
-        # is missing anyway, calibration_ages fails loud (a broken upstream
-        # invariant).
-        l1 = _make_kpf1_with_calibrations(
-            files={"BIASFILE": "/m/KP.20240405.03637.74_master_bias_L1.fits"}
-        )
-        del l1.headers["PRIMARY"]["DATE-OBS"]
-        with pytest.raises(KeyError, match="DATE-OBS"):
-            DiagL1(l1).calibration_ages()
 
 
 class TestDiagL1FluxPercentiles:
@@ -1015,7 +1029,7 @@ class TestDiagL1FluxPercentiles:
     _RAMP = np.arange(101, dtype=float).reshape(1, 101)
 
     def _l1(self, **ccds):
-        l1 = _make_kpf1_with_calibrations()  # real DATE-OBS, no cal paths
+        l1 = _make_kpf1()
         for ext, arr in ccds.items():
             l1.data[ext] = arr
         return l1
@@ -1161,6 +1175,14 @@ class TestDiagL2Snr:
             6.0 / np.sqrt(0.75), abs=0.01
         )
 
+    def test_summed_sci_mirrored_to_primary(self):
+        kpf2 = _make_kpf2_nan_pixels()
+        DiagL2(kpf2).run()
+        primary, qc = kpf2.headers["PRIMARY"], kpf2.headers["QUALITY_CONTROL"]
+        for index, wavelength in enumerate((452, 548, 652, 747, 852), start=1):
+            assert primary.get(f"EXSNR{index}") == qc.get(f"SNRSC{wavelength}")
+            assert primary.get(f"EXSNRW{index}") == wavelength * 10.0
+
     def test_raises_without_var(self):
         kpf2 = _make_kpf2_nan_pixels(var=None)
         with pytest.raises(IndexError):
@@ -1298,8 +1320,11 @@ class TestDiagL4:
         DiagL4(l4).run()
         assert l4.headers["QUALITY_CONTROL"]["BJDMEAN"] == pytest.approx(10.0)
 
-    def test_raises_without_sci2_rv_table(self):
-        with pytest.raises(KeyError, match="BJD_TDB"):
+    def test_raises_on_empty_sci2_rv_table(self):
+        # A bare KPF4 carries every RV# table with its 12-column skeleton and no
+        # rows, so the columns resolve and the weighted mean is undefined for
+        # want of samples -- not for want of a column.
+        with pytest.raises(RuntimeWarning, match="invalid value"):
             DiagL4(KPF4()).bjd_dispersion()
 
     def test_raises_without_weight_column(self):

@@ -13,6 +13,7 @@ gated per file type by the masters modules.
 """
 
 import logging
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -49,13 +50,10 @@ class ImageAssembly:
     """
     Assemble a raw L0 readout into an L1 full-frame image.
 
-    Operations include:
-      - orienting amplifier channels
-      - applying gain conversion (ADU --> photo-electrons)
-      - measuring read noise
-      - subtracting overscan bias
-      - assembling full-frame images (FFI)
-      - converting EXPMETER_SCI/SKY wavelengths from nm to Angstroms
+    Orients amplifier channels, applies gain conversion (ADU --> photo-electrons),
+    measures read noise, infers the CCD readout mode, subtracts overscan bias, and
+    stitches the per-chip FFI; also converts EXPMETER_SCI/SKY wavelengths from nm to
+    Angstroms.
 
     Parameters
     ----------
@@ -89,6 +87,7 @@ class ImageAssembly:
         self.gain = {}  # amp ext -> gain; set by _parse_amplifier_reference()
         self.namp = {}  # chip -> n amps; set by count_amplifiers()
         self.dims = {}  # chip -> amp shape; set by count_amplifiers()
+        self.read_time = {}  # chip -> readout seconds; set by infer_read_mode()
         self.readnoise = {}  # channel ext -> RN std; set by measure_read_noise()
         # channel ext -> sqrt(2/pi)*std/mad; set by measure_read_noise()
         self.rn_nongauss = {}
@@ -212,16 +211,10 @@ class ImageAssembly:
         chip : str
             CCD identifier, e.g., 'GREEN' or 'RED'.
 
-        Returns
-        -------
-        None
-
         Notes
         -----
-        Sets instance attributes:
-        - ``self.namp[chip]`` : number of amplifier regions detected.
-        - ``self.dims[chip]`` : shape of each amplifier channel.
-        Only 2-amp and 4-amp configurations are supported.
+        Sets ``self.namp[chip]`` (amplifier count) and ``self.dims[chip]`` (per-channel
+        shape). Only 2-amp and 4-amp configurations are supported.
         """
         chip = chip.upper()
 
@@ -252,10 +245,6 @@ class ImageAssembly:
         ----------
         chip : str
             CCD identifier, e.g., 'GREEN' or 'RED'.
-
-        Returns
-        -------
-        None
 
         Notes
         -----
@@ -300,14 +289,6 @@ class ImageAssembly:
         ----------
         chip : str
             CCD identifier, e.g., 'GREEN' or 'RED'.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        Conversion formula: pixel_electrons = pixel_ADU * gain / 65536
         """
         chip = chip.upper()
 
@@ -328,17 +309,11 @@ class ImageAssembly:
         buffer : tuple of int, optional
             Number of pixels to ignore at the edges (start, end). Defaults to (5, 5).
 
-        Returns
-        -------
-        None
-
         Notes
         -----
-        Stores results in:
-        - ``self.readnoise[channel_ext]`` : standard deviation of cleaned overscan.
-        - ``self.rn_nongauss[channel_ext]`` : non-Gaussian factor, computed as
-          ``sqrt(2/pi) * std / mad`` (the ``sqrt(2/pi)`` normalization makes the
-          indicator ~1 for a Gaussian).
+        Stores ``self.readnoise[channel_ext]`` (std of cleaned overscan) and
+        ``self.rn_nongauss[channel_ext]`` (``sqrt(2/pi) * std / mad``, normalized to
+        be ~1 for a Gaussian).
         """
         if sigma is None:
             sigma = self.readnoise_sigma
@@ -375,10 +350,6 @@ class ImageAssembly:
             Overscan subtraction method ('zero', 'median', 'rowmedian').
         buffer : tuple of int, optional
             Number of pixels to ignore at edges. Defaults to (0, 0).
-
-        Returns
-        -------
-        None
         """
         if method is None:
             method = self.overscan_method
@@ -477,6 +448,36 @@ class ImageAssembly:
             image = np.flip(image, axis=0)
         return image
 
+    def infer_read_mode(self):
+        """
+        Infer CCD readout speed from the raw L0 header, and record each chip's
+        shutter-close to file-write readout duration in ``self.read_time``.
+
+        Returns
+        -------
+        read_mode : str
+            'fast' or 'regular'.
+
+        Notes
+        -----
+        The ACF waveform filenames name the mode outright, and failing that the
+        readout duration separates ~12 s fast readout from ~48 s regular.
+        """
+        header = self.l0_obj.headers["INSTRUMENT_HEADER"]
+        for chip in self.chips:
+            prefix = {"GREEN": "GR", "RED": "RD"}[chip.upper()]
+            self.read_time[chip.upper()] = (
+                datetime.fromisoformat(header[f"{prefix}DATE"])
+                - datetime.fromisoformat(header[f"{prefix}DATE-E"])
+            ).total_seconds()
+
+        acf = f"{header['GRACFFLN']} {header['RDACFFLN']}"
+        if "fast" in acf:
+            return "fast"
+        if "regular" in acf:
+            return "regular"
+        return "fast" if min(self.read_time.values()) < 20 else "regular"
+
     # ------------------------------------------------------------------
     # Private helpers - module execution
     # ------------------------------------------------------------------
@@ -503,8 +504,10 @@ class ImageAssembly:
 
     def _set_headers(self, l1_obj):
         """
-        Write read-noise metadata to ``l1_obj``: per-amplifier read noise
-        (RN_KEYS), the non-Gaussian factor, and the OSCANSUB flag.
+        Write assembly metadata to ``l1_obj``: per-amplifier read noise
+        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, READMODE, and the
+        per-chip read time. ``infer_read_mode`` supplies both READMODE and the
+        ``self.read_time`` the ``TRT{chip}`` writes read.
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
@@ -513,6 +516,9 @@ class ImageAssembly:
 
         # "zero" is the explicit no-op method (strips overscan, subtracts none).
         l1_obj.set_keyword("OSCANSUB", int(self.overscan_method != "zero"))
+        l1_obj.set_keyword("READMODE", self.infer_read_mode())
+        for chip, read_time in self.read_time.items():
+            l1_obj.set_keyword(f"TRT{chip}", round(read_time, 3))
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -540,14 +546,6 @@ class ImageAssembly:
 
         Notes
         -----
-        Pipeline steps:
-        1. Count amplifiers and determine dimensions
-        2. Apply gain conversion (ADU --> electrons)
-        3. Measure read noise
-        4. Subtract overscan bias
-        5. Stitch channels into a full-frame image
-        6. Convert EXPMETER_SCI/SKY wavelength column labels from nm to Å
-
         Amplifier-channel orientation is handled on-the-fly inside
         measure_read_noise and subtract_overscan (each restores the original
         orientation afterward), not as a separate top-level step.

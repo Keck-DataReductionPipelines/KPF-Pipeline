@@ -12,7 +12,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import bounded_polyval
 
@@ -53,68 +53,38 @@ class SpectralExtraction:
 
         self._order_trace = None
         self._order_trace_path = None
-        self._instera = None
         self._info = None
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _infer_instrument_era(self):
-        """Infer this frame's instrument era from ``JD_UTC``, caching its tag in
-        ``self._instera`` and returning its ``instrument_eras`` row with the
-        frame's observation time.
-
-        A frame whose ``INSTERA`` disagrees is warned about and restamped -- the
-        timestamp wins, since references are keyed to it.
-
-        Raises ``ValueError`` when the frame cannot be dated or falls outside
-        every era. Deliberately not a ``LookupError``: ``extract_ffi`` catches
-        that to fill an absent orderlet with NaN, and would bury this."""
-        primary = self.l1_obj.headers["PRIMARY"]
-        jd_utc = primary.get("JD_UTC")
-        obs_time = pd.to_datetime(jd_utc, unit="D", origin="julian")
-        if pd.isna(obs_time):
-            raise ValueError(
-                f"Cannot infer the instrument era of {self.l1_obj.obs_id}: its "
-                f"JD_UTC is {jd_utc!r}"
-            )
-
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
-        in_era = eras[
-            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
-        ]
-        if in_era.empty:
-            raise ValueError(
-                f"No KPF instrument era covers {obs_time}; the eras of "
-                f"reference/instrument_eras.csv do not span it"
-            )
-
-        era = in_era.iloc[0]
-        self._instera = str(era["INSTERA"])
-
-        if str(primary.get("INSTERA")) != self._instera:
-            logger.warning(
-                "header INSTERA %s disagrees with instrument era %s inferred from "
-                "JD_UTC; restamping INSTERA as %s",
-                primary.get("INSTERA"),
-                self._instera,
-                self._instera,
-            )
-            self.l1_obj.set_keyword("INSTERA", self._instera)
-
-        return era, obs_time
-
     def _read_order_trace_reference(self):
         """Load the vetted order trace for this frame, caching the per-chip
         tables in ``self._order_trace`` and the file in ``self._order_trace_path``.
 
         The reference is the most recent one measured before the frame within
-        the frame's instrument era, read from ``reference/order_traces``."""
-        era, obs_time = self._infer_instrument_era()
+        the frame's instrument era (``INSTERA``, stamped at ``KPF0.to_kpf1``),
+        read from ``reference/order_traces``.
+
+        Raises ``ValueError`` when no era carries the frame's ``INSTERA``.
+        Deliberately not a ``LookupError``: ``extract_ffi`` catches that to fill
+        an absent orderlet with NaN, and would bury this."""
+        primary = self.l1_obj.headers["PRIMARY"]
+        instera = str(primary["INSTERA"])
+        obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
+
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        match = eras[eras["INSTERA"].astype(str) == instera]
+        if match.empty:
+            raise ValueError(
+                f"reference/instrument_eras.csv carries no instrument era "
+                f"{instera!r}, the INSTERA of {self.l1_obj.obs_id}"
+            )
+        era = match.iloc[0]
 
         # Trace geometry moves whenever the instrument is opened, so only a
         # reference measured earlier in this era describes this frame.
@@ -128,7 +98,7 @@ class SpectralExtraction:
         if not in_era:
             raise FileNotFoundError(
                 f"No order trace measured before {obs_time} within KPF instrument "
-                f"era {self._instera}"
+                f"era {instera}"
             )
 
         filepath = in_era[max(in_era)]
@@ -297,9 +267,9 @@ class SpectralExtraction:
         Parameters
         ----------
         chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'
+            Chip identifier, 'GREEN' or 'RED'.
         fiber : str
-            Fiber identifier, e.g. 'SCI2'
+            Fiber identifier, e.g. 'SCI2'.
         order : int
             Spectral order number.
         extraction_method : str, optional
@@ -308,14 +278,9 @@ class SpectralExtraction:
         Returns
         -------
         flux_1d : ndarray
-            Extracted 1D flux spectrum for the specified orderlet.
+            1D flux spectrum.
         var_1d : ndarray
-            Corresponding 1D variance spectrum.
-
-        Notes
-        -----
-        Retrieves the orderlet pixel region and dispatches to the selected
-        extraction method.
+            1D variance spectrum.
         """
         if extraction_method is None:
             extraction_method = self.extraction_method
@@ -365,23 +330,17 @@ class SpectralExtraction:
         Parameters
         ----------
         chip : str
-            Chip identifier, i.e. 'GREEN' or 'RED'
+            Chip identifier, 'GREEN' or 'RED'.
         fibers : list of str, optional
-            Fibers identifiers, e.g. 'SCI2'
+            Fiber identifiers, e.g. 'SCI2'.
         extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
 
         Returns
         -------
         dict
-            Dictionary containing 2D arrays of shape (norder, ncol) for
-            extracted flux and variance. Keys follow standard KPF name
-            conventions, e.g. 'GREEN_SCI2_FLUX'.
-
-        Notes
-        -----
-        Loops over all spectral orders and requested fibers, performing
-        order-by-order extraction.
+            2D arrays of shape (norder, ncol) for extracted flux and variance,
+            keyed e.g. 'GREEN_SCI2_FLUX'.
         """
         if fibers is None:
             fibers = self.fibers
@@ -418,10 +377,9 @@ class SpectralExtraction:
                 l2_arrays[f"{chip}_{fiber}_FLUX"][order] = flux_1d
                 l2_arrays[f"{chip}_{fiber}_VAR"][order] = var_1d
 
-        # During some KPF eras one of the traces does not fall on the detector.
-        # In this case a single failure is expected from this method. Allowing
-        # the loop to continue through all orders provides useful diagnostic
-        # information for cases where the algorithm truly fails.
+        # Some KPF eras have one trace off-detector, so a single failure is
+        # expected; continuing the loop surfaces diagnostics if the algorithm
+        # truly fails.
         if failure == 1:
             logger.warning(
                 "1 orderlet failed to extract from the %s CCD; filled with NaN.", chip
@@ -452,13 +410,21 @@ class SpectralExtraction:
             lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
-    def _set_headers(self, l2_obj):
-        """Write the order trace the spectra were extracted with and the era it
-        was chosen for (inferred after ``to_kpf2`` copied the L1 PRIMARY)."""
+    def _set_headers(self, l2_obj, extraction_method):
+        """Write the extraction method and the order trace the spectra were
+        extracted with (by filename -- it always comes from
+        ``reference/order_traces``)."""
+        l2_obj.set_keyword("EXTRACT", extraction_method)
         if self._order_trace_path is not None:
-            l2_obj.set_keyword("TRACFILE", self._order_trace_path)
-        if self._instera is not None:
-            l2_obj.set_keyword("INSTERA", self._instera)
+            l2_obj.set_keyword("TRACEREF", os.path.basename(self._order_trace_path))
+        # CTYPEn is FITS axis order, the reverse of the numpy shape (Norder, Mpix):
+        # axis 1 is the dispersion axis (NAXIS1 = Mpix), axis 2 the order axis
+        # (NAXIS2 = Norder). Same pair CrossCorrelation writes on CCF#/RV#.
+        for trace in range(1, DETECTOR["numtrace"] + 1):
+            for suffix in ("FLUX", "VAR", "BLAZE"):
+                ext = f"TRACE{trace}_{suffix}"
+                l2_obj.set_keyword("CTYPE1", "Pixel", ext=ext)
+                l2_obj.set_keyword("CTYPE2", "Order-N", ext=ext)
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -466,27 +432,22 @@ class SpectralExtraction:
 
     def perform(self, chips=None, fibers=None, *, extraction_method=None):
         """
-        Execute spectral extraction. Optional keyword arguments
-        default to config settings.
+        Execute spectral extraction. Optional keyword arguments default to
+        config settings.
 
         Parameters
         ----------
         chips : list of str, optional
-            Chip identifiers, i.e. 'GREEN' or 'RED'
+            Chip identifiers, 'GREEN' or 'RED'.
         fibers : list of str, optional
-            Fiber identifiers, e.g. 'SCI2'
+            Fiber identifiers, e.g. 'SCI2'.
         extraction_method : str, optional
             Extraction method ('box', 'optimal', or 'flat_relative').
 
         Returns
         -------
         l2_obj : KPF2
-            L2 data object containing extracted 1D flux and variance arrays.
-
-        Notes
-        -----
-        Creates a KPF2 object from the input KPF1 object and populates it
-        with extracted spectra for all requested chips and fibers.
+            L2 with extracted 1D flux and variance arrays.
         """
         if chips is None:
             chips = self.chips
@@ -505,7 +466,7 @@ class SpectralExtraction:
                 )
                 l2_obj.set_data(f"{chip}_{fiber}_VAR", l2_arrays[f"{chip}_{fiber}_VAR"])
 
-        self._set_headers(l2_obj)
+        self._set_headers(l2_obj, extraction_method)
         self._track_info(chips, fibers)
         l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
 
