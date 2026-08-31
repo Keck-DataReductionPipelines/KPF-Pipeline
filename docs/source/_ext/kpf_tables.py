@@ -15,12 +15,14 @@ them with a plain ``.. csv-table:: :file:`` directive.
 
 Two table shapes are generated:
 
-* ``{L0,L1,L2,L4}-extensions.csv`` -- one data model's extension manifest,
-  passed through verbatim.
-* ``{PRIMARY,QUALITY_CONTROL}-keywords.csv`` -- that extension's keywords
-  across all four science levels, concatenated in level order with a ``Level``
-  column marking where each is introduced. The levels register disjoint keyword
-  sets, so the concatenation drops nothing.
+* one table per level, passed through verbatim -- ``{L0,L1,L2,L4}-extensions.csv``
+  (that model's extension manifest) and
+  ``{L0,L1,L2,L4}-QUALITY_CONTROL-keywords.csv`` (the QC keywords that level's
+  QC pass writes).
+* one table spanning every level -- ``PRIMARY-keywords.csv``, the four levels'
+  registrations concatenated in level order with a ``Level`` column marking
+  where each keyword is introduced. The levels register disjoint keyword sets,
+  so the concatenation drops nothing.
 
 A missing config CSV is left to raise: these tables exist to keep the docs and
 the config in step, so config drift must fail the build rather than quietly
@@ -31,14 +33,21 @@ import csv
 import importlib.resources
 import os
 
-# The science data models documented under Data Products, in level order, and
-# the extensions whose keywords get a page of their own. Both are editorial
-# choices, fixed to match the pages in data_products/ (one section per level in
-# data_models.rst, one page per keyword extension) rather than discovered from
-# the config -- discovery would emit tables no page references. The masters
-# models (ML1, ML2-flat, ML2-wls) are outside Data Products scope.
+# The science data models documented under Data Products, in level order. The
+# masters models (ML1, ML2-flat, ML2-wls) are outside Data Products scope.
 LEVELS = ("L0", "L1", "L2", "L4")
-KEYWORD_EXTENSIONS = ("PRIMARY", "QUALITY_CONTROL")
+
+# Config CSVs rendered one table per level, named by the config's own file
+# naming: "{level}-{stem}.csv".
+PER_LEVEL_TABLES = ("extensions", "QUALITY_CONTROL-keywords")
+
+# Extensions whose keywords are rendered as a single table spanning every level.
+MERGED_KEYWORD_EXTENSIONS = ("PRIMARY",)
+
+# Which table takes which shape is an editorial choice, fixed to match the pages
+# in data_products/ (a section per level in data_models.rst and in
+# quality_control.rst, one whole-header table in primary_header.rst) rather than
+# discovered from the config -- discovery would emit tables no page references.
 
 # Config column name -> table heading, for the columns whose config spelling is
 # not what a reader should see. Anything absent here keeps its own name.
@@ -78,11 +87,12 @@ def _generate(output_dir):
     config = importlib.resources.files("kpfpipe.data_models.config")
     os.makedirs(output_dir, exist_ok=True)
 
-    for level in LEVELS:
-        name = f"{level}-extensions.csv"
-        _write(os.path.join(output_dir, name), *_read(config / name))
+    for stem in PER_LEVEL_TABLES:
+        for level in LEVELS:
+            name = f"{level}-{stem}.csv"
+            _write(os.path.join(output_dir, name), *_read(config / name))
 
-    for extension in KEYWORD_EXTENSIONS:
+    for extension in MERGED_KEYWORD_EXTENSIONS:
         header, rows = None, []
         for level in LEVELS:
             level_header, level_rows = _read(
