@@ -13,7 +13,7 @@ import astropy.units as u
 import pandas as pd
 from astropy.coordinates import Angle
 
-from kpfpipe import REPO_ROOT, __githash__, __version__
+from kpfpipe import DETECTOR, REPO_ROOT, __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
@@ -28,12 +28,19 @@ logger = logging.getLogger(__name__)
 _RVDATA_VERSION = importlib.metadata.version("rv-data-standard")
 _RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
 
-# Sidereal hours per hour of UT: a fixed target's hour angle advances with the
-# sidereal day, so an exposure's endpoints are this much further apart in HA.
-_SIDEREAL_RATE = 1.0027379
-
 # The calibration half of KPF's IMTYPE vocabulary; 'Object' is the other half.
 _CAL_OBSTYPES = frozenset({"Bias", "Dark", "Flatlamp", "Arclamp", "Etalon"})
+
+# KPF's fiber-source names -> the EPRV calibration-source vocabulary of CLSRC#.
+_CAL_SOURCES = {
+    "target": "Target",
+    "sky": "Sky",
+    "none": "None",
+    "th_gold": "ThAr",
+    "th_daily": "ThAr",
+    "lfcfiber": "LFC",
+    "etalonfiber": "Etalon",
+}
 
 
 class KPF0(KPFDataModel):
@@ -254,15 +261,21 @@ class KPF0(KPFDataModel):
         self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
 
     def _observing_mode(self):
-        """Stamp ISSOLAR and OBSMODE from the OBSTYPE the tabular fill just mapped.
+        """Stamp ISSOLAR, OBSMODE and CLSRC# from what the tabular fill mapped.
 
         OBSMODE is redundant for KPF, which has one optical configuration: the
         EPRV standard defines it for instruments with several (hi-res/low-res),
         so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar. An IMTYPE
         outside the vocabulary is a frame this DRP cannot classify, so it raises.
+
+        CLSRC# names each trace's illumination source in the EPRV vocabulary,
+        normalized from the KPF fiber-source name TRACE# carries. A source the
+        standard does not name (a broadband flat, say) is stamped verbatim, and
+        the modules that dispatch on it reject it there.
         """
         native = self.headers["INSTRUMENT_HEADER"]
-        obstype = str(self.headers["PRIMARY"]["OBSTYPE"]).strip()
+        prim = self.headers["PRIMARY"]
+        obstype = str(prim["OBSTYPE"]).strip()
         is_solar = any(
             str(native.get(key, "")).strip().lower() == "socal"
             for key in ("OBJECT", "TARGNAME")
@@ -278,6 +291,13 @@ class KPF0(KPFDataModel):
             )
         self.set_keyword("ISSOLAR", is_solar)
         self.set_keyword("OBSMODE", mode)
+
+        for trace in range(1, DETECTOR["numtrace"] + 1):
+            source = prim.get(f"TRACE{trace}")
+            if not source:
+                continue
+            name = str(source).strip().lower()
+            self.set_keyword(f"CLSRC{trace}", _CAL_SOURCES.get(name, source))
 
     def _site_coordinates(self):
         """Stamp the observatory location onto PRIMARY from ``KECK_LOCATION``.
@@ -311,6 +331,8 @@ class KPF0(KPFDataModel):
         A frame the TCS never pointed -- a bias, a lamp -- carries no TCS cards
         to derive from, and these stay blank with them.
         """
+        _SIDEREAL_RATE = 1.0027379  # hours per hour of UT
+
         prim = self.headers["PRIMARY"]
         if prim.get("TEL1") is not None:
             self.set_keyword("TZA1", round(90.0 - float(prim["TEL1"]), 2))

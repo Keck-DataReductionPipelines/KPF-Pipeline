@@ -407,7 +407,7 @@ class TestPerform:
     pre-commit loop.
     """
 
-    _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CAL-OBJ='None' -> skipped
+    _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CLSRC5='None' -> skipped
 
     @pytest.fixture(scope="module")
     def performed(self, rv_l4):
@@ -442,7 +442,7 @@ class TestPerform:
             }
 
     def test_unilluminated_fiber_skipped(self, performed):
-        # CAL-OBJ='None' -> CrossCorrelation wrote no CAL CCF or RV table.
+        # CLSRC5='None' -> CrossCorrelation wrote no CAL CCF or RV table.
         _, l4 = performed
         assert l4.data["CAL_CCF"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
@@ -536,7 +536,7 @@ class TestPerform:
 
     def test_cal_only_run_skips_combine(self, monkeypatch, caplog):
         # A calibration-only run must not raise: PRIMARY RV is left UNDEFINED.
-        l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="Th_gold")
+        l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="ThAr")
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             prim = (
                 RadialVelocity(l4, config={"rv_window": RANGE_KMS})

@@ -29,7 +29,7 @@ BINNING,Binning mode,,String,1x1,KPF0.standardize_headers
 NUMORDER,Number of orders,,Uint,67,KPF0.standardize_headers
 NUMTRACE,Number of object-indexed keyword families,,UInt,5,KPF0.standardize_headers
 TRACE#,Type of object in trace #,,String,SCI,KPF0.standardize_headers
-CLSRC#,Calibration source in trace # if used,,String,EtalonFiber,
+CLSRC#,Calibration source in trace # if used,,String,Etalon,KPF0.standardize_headers
 CSRC#,Catalog source for object in trace #,,String,Gaia DR3,AstroQuery
 CID#,Catalog designation for object in trace #,,String,DR3 2870618101503062016,AstroQuery
 CRA#,Catalog RA for object in trace #,sexagesimal,String,23:13:16.98,AstroQuery

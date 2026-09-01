@@ -520,7 +520,7 @@ class TestStandardizedPrimary:
 
 
 class TestObservingMode:
-    """OBSMODE and ISSOLAR, both derived from the mapped OBSTYPE.
+    """OBSMODE and ISSOLAR from the mapped OBSTYPE, CLSRC# from the TRACE# cards.
 
     KPF has one optical configuration, so OBSMODE restates OBSTYPE and ISSOLAR
     as sci/cal/solar rather than naming a configuration of its own.
@@ -561,6 +561,32 @@ class TestObservingMode:
     def test_unrecognized_imtype_is_rejected(self):
         with pytest.raises(ValueError, match="IMTYPE 'Sky'"):
             self._standardize("Sky")
+
+    def test_clsrc_normalizes_each_trace(self):
+        prim = self._standardize(
+            "Object",
+            **{"SKY-OBJ": "Sky", "SCI-OBJ": "Target", "CAL-OBJ": "Th_gold"},
+        )
+        assert prim["CLSRC1"] == "Sky"
+        assert [prim[f"CLSRC{trace}"] for trace in (2, 3, 4)] == ["Target"] * 3
+        assert prim["CLSRC5"] == "ThAr"
+
+    @pytest.mark.parametrize(
+        "cal_obj, source",
+        [
+            ("Th_gold", "ThAr"),
+            ("Th_daily", "ThAr"),
+            ("LFCFiber", "LFC"),
+            ("EtalonFiber", "Etalon"),
+            ("BrdbandFiber", "BrdbandFiber"),
+        ],
+    )
+    def test_clsrc_vocabulary(self, cal_obj, source):
+        prim = self._standardize("Arclamp", **{"CAL-OBJ": cal_obj})
+        assert prim["CLSRC5"] == source
+
+    def test_clsrc_is_blank_when_the_trace_names_no_source(self):
+        assert self._standardize("Bias")["CLSRC5"] is None
 
 
 class TestFiveTraceShape:

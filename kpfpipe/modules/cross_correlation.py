@@ -8,7 +8,7 @@ CCFs, their per-bin photon variances, and the per-order metadata table the
 radial-velocity step later fills with fitted RVs.
 
 Each fiber's mask, barycentric handling, and CCF grid center are dispatched from
-its illumination source (SCI-OBJ/SKY-OBJ/CAL-OBJ in INSTRUMENT_HEADER):
+its illumination source (the PRIMARY CLSRC# card for its trace):
 
   +--------+-------------------------------------+----------+---------------------+
   | source | mask                                | barycorr | grid center         |
@@ -36,7 +36,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS, REPO_ROOT
+from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
 from kpfpipe.utils.astro import color_to_teff, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
@@ -100,71 +100,62 @@ class CrossCorrelation:
     # Private helpers
     # ------------------------------------------------------------------
 
-    # Fiber -> the INSTRUMENT_HEADER keyword giving its illumination source.
-    _OBJ_KEYWORD = {
-        "SCI1": "SCI-OBJ",
-        "SCI2": "SCI-OBJ",
-        "SCI3": "SCI-OBJ",
-        "SKY": "SKY-OBJ",
-        "CAL": "CAL-OBJ",
-    }
-
     def _resolve_illumination_source(self, chip, fiber):
         """
         Resolve (and cache) the orderlet's illumination source and CCF settings
         (dict: 'object', 'mask_name', 'apply_barycorr', 'vel_grid_center') from
-        its SCI-OBJ/SKY-OBJ/CAL-OBJ keyword in INSTRUMENT_HEADER. 'none' and the
-        not-yet-built sources (etalon, lfc) get None mask/barycorr/center.
+        the PRIMARY CLSRC# card ``KPF0.standardize_headers`` stamped for the
+        fiber's trace. 'none' and the not-yet-built sources (etalon, lfc) get
+        None mask/barycorr/center.
         """
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
             return self._illumination_source[key]
+        positions = DETECTOR["fiber_positions"]
         try:
-            keyword = self._OBJ_KEYWORD[fiber.upper()]
+            keyword = f"CLSRC{positions[fiber.upper()] + 1}"
         except KeyError:
             raise ValueError(
-                f"unknown fiber {fiber!r}; expected one of {sorted(self._OBJ_KEYWORD)}"
+                f"unknown fiber {fiber!r}; expected one of {sorted(positions)}"
             ) from None
-        inst = self.l2_obj.headers.get("INSTRUMENT_HEADER", {})
-        if keyword not in inst:
+        clsrc = self.l2_obj.headers["PRIMARY"].get(keyword)
+        if not clsrc:
             raise ValueError(
-                f"illumination keyword {keyword!r} not in INSTRUMENT_HEADER; "
+                f"{keyword} is not set on PRIMARY; "
                 f"cannot dispatch a mask for fiber {fiber}"
             )
 
-        # Dispatch the raw keyword to source object + CCF settings (mask,
-        # barycorr flag, grid center: systemic RV for a star, 0 for sky/cal).
-        raw = inst.get(keyword)
-        v = str(raw).strip().lower()
-        if v == "target":
+        # Dispatch the source to CCF settings (mask, barycorr flag, grid center:
+        # systemic RV for a star, 0 for sky/cal).
+        if clsrc == "Target":
             source = {
                 "object": "target",
                 "mask_name": self._resolve_stellar_mask(),
                 "apply_barycorr": True,
                 "vel_grid_center": self._get_systemic_rv(),
             }
-        elif v == "sky":
+        elif clsrc == "Sky":
             source = {
                 "object": "sky",
                 "mask_name": "G2_espresso",
                 "apply_barycorr": True,
                 "vel_grid_center": 0.0,
             }
-        elif v in ("th_gold", "th_daily"):
+        elif clsrc == "ThAr":
             source = {
                 "object": "thar",
                 "mask_name": "thar",
                 "apply_barycorr": False,
                 "vel_grid_center": 0.0,
             }
-        elif v == "none":
+        elif clsrc == "None":
             source = {
                 "object": "none",
                 "mask_name": None,
                 "apply_barycorr": None,
                 "vel_grid_center": None,
             }
-        elif v == "lfcfiber":
+        elif clsrc == "LFC":
             source = {
                 "object": "lfc",
                 "mask_name": None,
@@ -175,7 +166,7 @@ class CrossCorrelation:
                 "%s is lfc-illuminated; CCF is not implemented. Skipping this fiber.",
                 fiber.upper(),
             )
-        elif "etalon" in v:
+        elif clsrc == "Etalon":
             source = {
                 "object": "etalon",
                 "mask_name": None,
@@ -188,7 +179,7 @@ class CrossCorrelation:
                 fiber.upper(),
             )
         else:
-            raise ValueError(f"unrecognized illumination source {raw!r}")
+            raise ValueError(f"unrecognized illumination source {clsrc!r}")
 
         self._illumination_source[key] = source
         return source

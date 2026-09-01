@@ -64,7 +64,8 @@ def seed_sci2_cards(kpf2, *, sci_obj="Target", sky_obj="Sky", cal_obj="None"):
     kpf2.headers["PRIMARY"]["CCLR3"] = 0.823  # G2V -> 5770 K
     kpf2.headers["PRIMARY"]["CCLRN3"] = "Gaia BP-RP"
     kpf2.headers["PRIMARY"]["CRV3"] = 0.0
-    kpf2.headers["INSTRUMENT_HEADER"]["SCI-OBJ"] = sci_obj
-    kpf2.headers["INSTRUMENT_HEADER"]["SKY-OBJ"] = sky_obj
-    kpf2.headers["INSTRUMENT_HEADER"]["CAL-OBJ"] = cal_obj
+    kpf2.headers["PRIMARY"]["CLSRC1"] = sky_obj
+    for trace in (2, 3, 4):
+        kpf2.headers["PRIMARY"][f"CLSRC{trace}"] = sci_obj
+    kpf2.headers["PRIMARY"]["CLSRC5"] = cal_obj
     return kpf2

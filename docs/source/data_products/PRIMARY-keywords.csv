@@ -27,6 +27,7 @@ READMODE,Readout mode,,String,normal,ImageAssembly
 NUMORDER,Number of orders,,Uint,67,KPF0.standardize_headers
 NUMTRACE,Number of object-indexed keyword families,,UInt,5,KPF0.standardize_headers
 TRACE#,Type of object in trace #,,String,SCI,KPF0.standardize_headers
+CLSRC#,Calibration source in trace # if used,,String,Etalon,KPF0.standardize_headers
 BIASFILE,Master bias full path,,String,masters/20240405/kpf_20240405_master_bias.fits,CalibrationAssociation
 DARKFILE,Master dark full path,,String,masters/20240405/kpf_20240405_master_dark.fits,CalibrationAssociation
 FLATFILE,Master flat full path,,String,masters/20240405/kpf_20240405_master_flat.fits,
@@ -45,7 +46,6 @@ BJDTDB,Barycentric Julian Day in TDB,JD,double,2460405.96456,RadialVelocity
 BERV,Barycentric RV,km/s,float,12.4431,RadialVelocity
 SYSVEL,Systemic velocity subtracted from RVs,km/s,float,-18.55,
 SYSACC,Acceleration of the systemic velocity,m/s/s,float,0.0,
-CLSRC#,Calibration source in trace # if used,,String,EtalonFiber,
 CSRC#,Catalog source for object in trace #,,String,Gaia DR3,AstroQuery
 CID#,Catalog designation for object in trace #,,String,DR3 2870618101503062016,AstroQuery
 CRA#,Catalog RA for object in trace #,sexagesimal,String,23:13:16.98,AstroQuery
