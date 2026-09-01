@@ -92,74 +92,6 @@ class KPF0(KPFDataModel):
         super().read(hdul, instrument=instrument)
         self.obs_id = get_obs_id(self.filename)
 
-    def _program_identification(self, native):
-        """Stamp the observing program's identity onto PRIMARY from ``native``.
-
-        These map from native cards, so they are read off the snapshot rather
-        than the EPRV skeleton this is filling. A missing OFNAME (the archive
-        obs_id) raises on a frame read from disk; the other native cards default
-        to UNKNOWN with a warning. ORGANIZA is the data owner, one organization
-        for every KPF frame. PROGID and PROGRAM are the WMKO and EPRV spellings
-        of one value.
-        """
-        self.set_keyword("ORIGID", self.obs_id)
-        self.set_keyword("ORGANIZA", "WMKO")
-
-        koaid = native.get("OFNAME")
-        # Only a frame read from disk must name itself; an in-memory L0 has no
-        # archive identity, and blanks KOAID as it blanks ORIGID above.
-        if not koaid and self.filename:
-            raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
-        self.set_keyword("KOAID", koaid)
-
-        program = self._resolve_native(native, "PROGNAME", ("GRPROGNA", "RDPROGNA"))
-        self.set_keyword("PROGID", program)
-        self.set_keyword("PROGRAM", program)
-        self.set_keyword("PINAME", self._resolve_native(native, "PROGPI"))
-        self.set_keyword(
-            "OBSERVER",
-            self._resolve_native(native, "OBSERVER", ("GROBSERV", "RDOBSERV")),
-        )
-
-    @staticmethod
-    def _resolve_native(native, key, fallbacks=()):
-        """``key``'s native value, or 'UNKNOWN' when the frame names none.
-
-        A missing card falls back to the guider and readout copies KPF writes
-        alongside it, which stand in only when they agree -- two that disagree
-        name no one value.
-        """
-        value = native.get(key)
-        if value:
-            return value
-        copies = {native.get(k) for k in fallbacks} - {None, ""}
-        if len(copies) == 1:
-            return copies.pop()
-        if copies:
-            logger.warning(
-                "%s absent from L0 PRIMARY and %s disagree; defaulting to 'UNKNOWN'",
-                key,
-                "/".join(fallbacks),
-            )
-        else:
-            logger.warning("%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key)
-        return "UNKNOWN"
-
-    def _drp_metadata(self):
-        """Stamp the pipeline and standard version cards onto PRIMARY.
-
-        DRPVERNO is the WMKO spelling of the DRP version, DRPTAG the EPRV one;
-        both carry ``kpfpipe.__version__``.
-        """
-        self.set_keyword("DRPVERNO", __version__)
-        self.set_keyword("DRPTAG", __version__)
-        self.set_keyword("DRPHASH", __githash__)
-        self.set_keyword("EPRVTAG", f"v{_RVDATA_VERSION}")
-        self.set_keyword(
-            "VOCLASS",
-            f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
-        )
-
     def standardize_headers(self):
         """Convert this L0's PRIMARY from WMKO-native to EPRV-standard, in place.
 
@@ -182,24 +114,33 @@ class KPF0(KPFDataModel):
         if self.standardized:
             return self
 
-        native = self.as_fits_header(self.headers["PRIMARY"])
-        self.set_header("INSTRUMENT_HEADER", native)
+        self.set_header(
+            "INSTRUMENT_HEADER", self.as_fits_header(self.headers["PRIMARY"])
+        )
 
+        # map keywords from INSTRUMENT_HEADER -> PRIMARY and compute the rest
         self.headers["PRIMARY"].clear()
         self._seed_primary()
-        self._fill_from_native(native)
-        self._program_identification(native)
-        self._drp_metadata()
-        self._observing_mode(native)
+        self._fill_from_native()
+        self._program_identification()
         self._instrument_era()
+        self._observing_mode()
         self._site_coordinates()
         self._tcs_pointing()
+        self._drp_metadata()
+
+        # file identification metadata
+        koaid = self.headers["INSTRUMENT_HEADER"].get("OFNAME")
+        if not koaid and self.filename:
+            raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
+        self.set_keyword("KOAID", koaid)
+        self.set_keyword("ORIGID", self.obs_id)
         self.set_keyword("DATALVL", "L0")
 
         self.receipt_add_entry("standardize_headers", "", "PASS")
         return self
 
-    def _fill_from_native(self, native):
+    def _fill_from_native(self):
         """Apply ``header-map.csv`` to the native header, card by card.
 
         A pure tabular pass over the PRIMARY-targeted map rows: take the
@@ -212,6 +153,7 @@ class KPF0(KPFDataModel):
         extension is still empty at this point in the pipeline, so ``DiagL0``
         stamps them onto PRIMARY when it computes them.
         """
+        native = self.headers["INSTRUMENT_HEADER"]
         registry = self.keyword_registry
         for row in registry.header_map.itertuples(index=False):
             kpf_ext = "" if pd.isna(row.KPF_EXT) else str(row.KPF_EXT).strip()
@@ -242,6 +184,100 @@ class KPF0(KPFDataModel):
         mjd = native.get("MJD-OBS")
         if mjd not in (None, "", "UNKNOWN"):
             self.set_keyword("JD_UTC", float(mjd) + 2400000.5)
+
+    def _program_identification(self):
+        """Stamp the observing program's identity onto PRIMARY.
+
+        These map from native cards, so they are read off INSTRUMENT_HEADER
+        rather than the EPRV skeleton this is filling. A card the frame does not
+        carry defaults to UNKNOWN with a warning. ORGANIZA is the data owner, one
+        organization for every KPF frame. PROGID and PROGRAM are the WMKO and
+        EPRV spellings of one value.
+        """
+        self.set_keyword("ORGANIZA", "WMKO")
+
+        program = self._resolve_native("PROGNAME", ("GRPROGNA", "RDPROGNA"))
+        self.set_keyword("PROGID", program)
+        self.set_keyword("PROGRAM", program)
+        self.set_keyword("PINAME", self._resolve_native("PROGPI"))
+        self.set_keyword(
+            "OBSERVER", self._resolve_native("OBSERVER", ("GROBSERV", "RDOBSERV"))
+        )
+
+    def _resolve_native(self, key, fallbacks=()):
+        """``key``'s native value, or 'UNKNOWN' when the frame names none.
+
+        A missing card falls back to the guider and readout copies KPF writes
+        alongside it, which stand in only when they agree -- two that disagree
+        name no one value.
+        """
+        native = self.headers["INSTRUMENT_HEADER"]
+        value = native.get(key)
+        if value:
+            return value
+        copies = {native.get(k) for k in fallbacks} - {None, ""}
+        if len(copies) == 1:
+            return copies.pop()
+        if copies:
+            logger.warning(
+                "%s absent from L0 PRIMARY and %s disagree; defaulting to 'UNKNOWN'",
+                key,
+                "/".join(fallbacks),
+            )
+        else:
+            logger.warning("%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key)
+        return "UNKNOWN"
+
+    def _instrument_era(self):
+        """Stamp INSTERA from JD_UTC against ``reference/instrument_eras.csv``.
+
+        Runs after the tabular fill, which is what supplies JD_UTC. A frame no
+        era covers -- an undated one included, since its JD_UTC parses to NaT,
+        which no interval contains -- has no reference calibrations, so this
+        raises rather than shipping an unattributable product.
+        """
+        obs_time = pd.to_datetime(
+            self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
+        )
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        in_era = eras[
+            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
+        ]
+        if in_era.empty:
+            raise ValueError(
+                f"No KPF instrument era covers {obs_time}; the eras of "
+                f"reference/instrument_eras.csv do not span it"
+            )
+        self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
+
+    def _observing_mode(self):
+        """Stamp ISSOLAR and OBSMODE from the OBSTYPE the tabular fill just mapped.
+
+        OBSMODE is redundant for KPF, which has one optical configuration: the
+        EPRV standard defines it for instruments with several (hi-res/low-res),
+        so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar. An IMTYPE
+        outside the vocabulary is a frame this DRP cannot classify, so it raises.
+        """
+        native = self.headers["INSTRUMENT_HEADER"]
+        obstype = str(self.headers["PRIMARY"]["OBSTYPE"]).strip()
+        is_solar = any(
+            str(native.get(key, "")).strip().lower() == "socal"
+            for key in ("OBJECT", "TARGNAME")
+        )
+        if obstype == "Object":
+            mode = "solar" if is_solar else "sci"
+        elif obstype in _CAL_OBSTYPES:
+            mode = "cal"
+        else:
+            raise ValueError(
+                f"{self.obs_id} has IMTYPE {obstype!r}, which is not one of KPF's "
+                f"observation types ('Object', {', '.join(sorted(_CAL_OBSTYPES))})"
+            )
+        self.set_keyword("ISSOLAR", is_solar)
+        self.set_keyword("OBSMODE", mode)
 
     def _site_coordinates(self):
         """Stamp the observatory location onto PRIMARY from ``KECK_LOCATION``.
@@ -294,55 +330,20 @@ class KPF0(KPFDataModel):
             )
             self.set_keyword(keyword, round(math.degrees(q), 2))
 
-    def _observing_mode(self, native):
-        """Stamp ISSOLAR and OBSMODE from the OBSTYPE the tabular fill just mapped.
+    def _drp_metadata(self):
+        """Stamp the pipeline and standard version cards onto PRIMARY.
 
-        OBSMODE is redundant for KPF, which has one optical configuration: the
-        EPRV standard defines it for instruments with several (hi-res/low-res),
-        so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar. An IMTYPE
-        outside the vocabulary is a frame this DRP cannot classify, so it raises.
+        DRPVERNO is the WMKO spelling of the DRP version, DRPTAG the EPRV one;
+        both carry ``kpfpipe.__version__``.
         """
-        obstype = str(self.headers["PRIMARY"]["OBSTYPE"]).strip()
-        is_solar = any(
-            str(native.get(key, "")).strip().lower() == "socal"
-            for key in ("OBJECT", "TARGNAME")
+        self.set_keyword("DRPVERNO", __version__)
+        self.set_keyword("DRPTAG", __version__)
+        self.set_keyword("DRPHASH", __githash__)
+        self.set_keyword("EPRVTAG", f"v{_RVDATA_VERSION}")
+        self.set_keyword(
+            "VOCLASS",
+            f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
         )
-        if obstype == "Object":
-            mode = "solar" if is_solar else "sci"
-        elif obstype in _CAL_OBSTYPES:
-            mode = "cal"
-        else:
-            raise ValueError(
-                f"{self.obs_id} has IMTYPE {obstype!r}, which is not one of KPF's "
-                f"observation types ('Object', {', '.join(sorted(_CAL_OBSTYPES))})"
-            )
-        self.set_keyword("ISSOLAR", is_solar)
-        self.set_keyword("OBSMODE", mode)
-
-    def _instrument_era(self):
-        """Stamp INSTERA from JD_UTC against ``reference/instrument_eras.csv``.
-
-        Runs after the tabular fill, which is what supplies JD_UTC. A frame no
-        era covers -- an undated one included, since its JD_UTC parses to NaT,
-        which no interval contains -- has no reference calibrations, so this
-        raises rather than shipping an unattributable product.
-        """
-        obs_time = pd.to_datetime(
-            self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
-        )
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
-        in_era = eras[
-            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
-        ]
-        if in_era.empty:
-            raise ValueError(
-                f"No KPF instrument era covers {obs_time}; the eras of "
-                f"reference/instrument_eras.csv do not span it"
-            )
-        self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
 
     _L0_TO_L1_PASSTHROUGH = [
         "CA_HK",
