@@ -14,7 +14,7 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.quality_control.diagnostics import DiagL0
+from kpfpipe.quality_control.checkpoints import CheckpointL0
 from kpfpipe.quality_control.qc_flags import QCL0
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
@@ -209,7 +209,8 @@ class BaseMasterModule:
         try:
             l0_obj = KPF0.from_fits(fn, standardize=True)
 
-            DiagL0(l0_obj).run()
+            for diagnostics in CheckpointL0.DIAGNOSTICS:
+                diagnostics(l0_obj).run()
             qc = QCL0(l0_obj).run()
             failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
             if failed:

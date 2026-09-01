@@ -21,6 +21,9 @@ from kpfpipe.quality_control.diagnostics import (
     DiagL2,
     DiagL4,
     Diagnostics,
+    ExposureMeter,
+    Guider,
+    Telemetry,
 )
 
 from ._data_models import (
@@ -368,61 +371,6 @@ class TestDiagL0Contingency:
             DiagL0(l0).target_ra_dec_offset()
 
 
-class TestDiagL0SolarLunarGeometry:
-    """Sun altitude and target-Moon separation at mid-exposure."""
-
-    def _make_l0(self, date_mid, ra=_PT_RA, dec=_PT_DEC):
-        l0 = _make_l0_pointing()
-        native = l0.headers["INSTRUMENT_HEADER"]
-        native["RA"] = ra
-        native["DEC"] = dec
-        native["DATE-MID"] = date_mid
-        return l0
-
-    def test_matches_legacy_2d_product(self):
-        # KP.20240405.40113.57, whose legacy 2D carries -61.60211 deg and 54.2
-        # deg. The Sun altitude differs in the 4th decimal: v2.12 sited sun and
-        # moon geometry a few hundred metres from KECK_LOCATION.
-        l0 = self._make_l0(
-            "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
-        )
-        results = DiagL0(l0).solar_lunar_geometry()
-        assert results["SUNEL"][0] == pytest.approx(-61.60211, abs=1e-3)
-        assert results["MOONANG"][0] == pytest.approx(54.2, abs=0.01)
-
-    def test_sun_above_horizon_at_local_noon(self):
-        # Maunakea noon is 22:00 UT; the Sun clears the horizon by a wide margin.
-        results = DiagL0(
-            self._make_l0("2024-04-05T22:00:00.000")
-        ).solar_lunar_geometry()
-        assert results["SUNEL"][0] > 30
-
-    def test_moon_separation_at_the_moon(self):
-        # Pointing at the Moon's own 2024-04-05T11:09 position.
-        l0 = self._make_l0(
-            "2024-04-05T11:09:11.082", ra="12:58:57.79", dec="-06:17:27.7"
-        )
-        assert DiagL0(l0).solar_lunar_geometry()["MOONANG"][0] < 1.0
-
-    def test_written_to_primary(self):
-        # EPRV-defined, so these route to PRIMARY, not QUALITY_CONTROL.
-        l0 = _make_l0_with_catalog()
-        l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
-        results = DiagL0(l0).run()
-        for key in ("SUNEL", "MOONANG"):
-            assert l0.headers["PRIMARY"][key] == results[key][0]
-            assert key not in l0.headers["QUALITY_CONTROL"]
-
-    def test_missing_date_mid_raises(self):
-        with pytest.raises(KeyError, match="DATE-MID"):
-            DiagL0(_make_l0_pointing()).solar_lunar_geometry()
-
-    def test_diag_name_correct(self):
-        assert (
-            DiagL0.__dict__["solar_lunar_geometry"]._diag_name == "solar_lunar_geometry"
-        )
-
-
 class TestDiagL0PixelFractions:
     """Worst-amp dead/saturated pixel fractions, one pair per chip.
 
@@ -548,280 +496,7 @@ class TestDiagL0AmpPercentiles:
         assert DiagL0.__dict__["amp_percentiles"]._diag_name == "amp_percentiles"
 
 
-class TestDiagL0ExpmeterChannels:
-    """Per-fiber EM channel metrics: saturation rate and negative/non-finite runs.
-
-    Each fiber here is 4 readings x 25 wavelength channels, so the two interior
-    readings carry the saturation count.
-    """
-
-    def _make_l0_with_expmeter(self, tmp_path, sci, sky=None):
-        def table(values):
-            columns = {"Date-Beg": ["2024-09-23T09:12:09.484"] * len(values)}
-            columns.update(
-                {str(5000.0 + i): values[:, i] for i in range(values.shape[1])}
-            )
-            return Table(columns)
-
-        fn = write_amp_l0(
-            tmp_path / "KP.20240405.00005.00.fits",
-            shape=(10, 10),
-            extra_hdus=[
-                fits.BinTableHDU(table(sci), name="EXPMETER_SCI"),
-                fits.BinTableHDU(
-                    table(sci if sky is None else sky), name="EXPMETER_SKY"
-                ),
-            ],
-        )
-        return standardized_l0(fn)
-
-    def test_clean_flux_is_zero(self, tmp_path):
-        results = DiagL0(self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)).run()
-        for fiber in ("SCI", "SKY"):
-            for metric in ("SAT", "NEG", "INF"):
-                assert results[f"EM{fiber}{metric}"][0] == 0
-
-    def test_saturation_is_per_reading(self, tmp_path):
-        # 3 saturated elements over the 2 interior readings -> 1.5 per reading.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[1, :2] = 0.95 * 1.93e6
-        flux[2, 0] = 0.95 * 1.93e6
-        results = DiagL0(
-            self._make_l0_with_expmeter(tmp_path, flux)
-        ).expmeter_channel_metrics()
-        assert results["EMSCISAT"][0] == 1.5
-
-    def test_saturation_drops_edge_readings(self, tmp_path):
-        # The first and last readings are partial, so saturation there is dropped.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[[0, -1], :] = 0.95 * 1.93e6
-        results = DiagL0(
-            self._make_l0_with_expmeter(tmp_path, flux)
-        ).expmeter_channel_metrics()
-        assert results["EMSCISAT"][0] == 0.0
-
-    def test_negative_run_length(self, tmp_path):
-        # A channel counts as negative when its time-summed flux is negative.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[:, 5:25] = -1000.0
-        results = DiagL0(
-            self._make_l0_with_expmeter(tmp_path, flux)
-        ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 20
-
-    def test_negative_run_counts_adjacent_only(self, tmp_path):
-        # Two separated blocks of 3 and 5: the longest run is 5, not their sum.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[:, 2:5] = -1000.0
-        flux[:, 10:15] = -1000.0
-        results = DiagL0(
-            self._make_l0_with_expmeter(tmp_path, flux)
-        ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 5
-
-    def test_negative_needs_the_time_sum(self, tmp_path):
-        # One negative reading a channel does not make: the sum stays positive.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[0, 5:25] = -1000.0
-        results = DiagL0(
-            self._make_l0_with_expmeter(tmp_path, flux)
-        ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 0
-
-    def test_non_finite_run_length(self, tmp_path):
-        # A channel with any non-finite reading counts, NaN or inf.
-        flux = _EM_CLEAN_FLUX.copy()
-        flux[0, 5:9] = np.nan
-        flux[2, 9] = np.inf
-        results = DiagL0(
-            self._make_l0_with_expmeter(tmp_path, flux)
-        ).expmeter_channel_metrics()
-        assert results["EMSCIINF"][0] == 5
-
-    def test_fibers_measured_separately(self, tmp_path):
-        # A clean SCI and a negative SKY: only the SKY keyword moves.
-        sky = _EM_CLEAN_FLUX.copy()
-        sky[:, 5:25] = -1000.0
-        results = DiagL0(
-            self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX, sky=sky)
-        ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 0
-        assert results["EMSKYNEG"][0] == 20
-
-    def test_written_to_quality_control(self, tmp_path):
-        l0 = self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)
-        results = DiagL0(l0).run()
-        assert l0.headers["QUALITY_CONTROL"]["EMSCISAT"] == results["EMSCISAT"][0]
-
-    def test_no_em_data_emits_no_keyword(self, tmp_path):
-        # A frame with no EM extension (e.g. a calibration): the metrics are skipped.
-        fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(10, 10))
-        assert "EMSCISAT" not in DiagL0(standardized_l0(fn)).run()
-
-    def test_diag_name_correct(self):
-        assert DiagL0.__dict__["expmeter_channel_metrics"]._diag_name == (
-            "expmeter_channel_metrics"
-        )
-
-
-class TestDiagL0ExpmeterCounts:
-    """Cumulative EM counts per wavelength band, and the SKY/SCI ratio.
-
-    One channel per band plus a 900 nm channel outside the 445-870 nm range, so
-    an out-of-band channel is seen to be dropped everywhere. Column labels are nm:
-    ImageAssembly converts them to Angstroms only at L0 -> L1.
-    """
-
-    _WAVES = [500.0, 600.0, 700.0, 800.0, 900.0]
-
-    def _make_l0_with_expmeter(self, tmp_path, sci_counts, sky_counts):
-        def table(counts):
-            columns = {
-                "Date-Beg": ["2024-09-23T09:12:09.484", "2024-09-23T09:12:12.484"]
-            }
-            columns.update(
-                {
-                    str(w): [float(c), float(c)]
-                    for w, c in zip(self._WAVES, counts, strict=True)
-                }
-            )
-            return Table(columns)
-
-        fn = write_amp_l0(
-            tmp_path / "KP.20240405.00008.00.fits",
-            shape=(10, 10),
-            extra_hdus=[
-                fits.BinTableHDU(table(sci_counts), name="EXPMETER_SCI"),
-                fits.BinTableHDU(table(sky_counts), name="EXPMETER_SKY"),
-            ],
-        )
-        return standardized_l0(fn)
-
-    def test_counts_summed_over_readings_and_bands(self, tmp_path):
-        # Two readings of each channel, so every band doubles its per-reading count.
-        l0 = self._make_l0_with_expmeter(tmp_path, [1, 2, 4, 8, 16], [1, 1, 1, 1, 1])
-        results = DiagL0(l0).expmeter_counts()
-        assert results["EMSCCT45"][0] == 2  # 500 nm
-        assert results["EMSCCT56"][0] == 4  # 600 nm
-        assert results["EMSCCT67"][0] == 8  # 700 nm
-        assert results["EMSCCT78"][0] == 16  # 800 nm; the 900 nm channel is dropped
-        assert results["EMSCCT48"][0] == 30  # 445-870 nm: the four sub-bands
-
-    def test_sky_fiber_counted_separately(self, tmp_path):
-        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [3, 0, 0, 0, 0])
-        results = DiagL0(l0).expmeter_counts()
-        assert results["EMSKCT45"][0] == 6
-        assert results["EMSCCT45"][0] == 2
-
-    def test_nans_excluded(self, tmp_path):
-        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
-        l0.data["EXPMETER_SCI"]["500.0"][0] = np.nan
-        results = DiagL0(l0).expmeter_counts()
-        assert results["EMSCCT45"][0] == 1
-
-    def test_sky_sci_ratio_scaled_by_throughput(self, tmp_path):
-        # Equal SKY and SCI totals -> the ratio is 1/14.1, the twilight throughput.
-        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
-        results = DiagL0(l0).sky_sci_flux_ratio()
-        assert results["SKYSCIMS"][0] == round(1 / 14.1, 6)
-
-    def test_sky_sci_ratio_uses_every_channel(self, tmp_path):
-        # The ratio is over all channels, the out-of-band 900 nm one included.
-        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [2, 2, 2, 2, 2])
-        results = DiagL0(l0).sky_sci_flux_ratio()
-        assert results["SKYSCIMS"][0] == round(2 / 14.1, 6)
-
-    def test_written_to_quality_control(self, tmp_path):
-        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
-        results = DiagL0(l0).run()
-        for key in ("SKYSCIMS", "EMSCCT48", "EMSKCT78"):
-            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
-
-    def test_diag_names_correct(self):
-        assert DiagL0.__dict__["expmeter_counts"]._diag_name == "expmeter_counts"
-        assert DiagL0.__dict__["sky_sci_flux_ratio"]._diag_name == "sky_sci_flux_ratio"
-
-
-class TestDiagL0CcdTemperatures:
-    """GREEN/RED CCD offsets from the -100 C setpoint, read off TELEMETRY."""
-
-    def _make_l0_with_telemetry(self, tmp_path, green, red):
-        table = Table(
-            {
-                "keyword": ["kpfgreen.STA_CCD_T", "kpfred.STA_CCD_T"],
-                "average": [green, red],
-            }
-        )
-        fn = write_amp_l0(
-            tmp_path / "KP.20240405.00008.00.fits",
-            shape=(10, 10),
-            extra_hdus=[fits.BinTableHDU(table, name="TELEMETRY")],
-        )
-        return standardized_l0(fn)
-
-    def test_offset_is_signed_millikelvin(self, tmp_path):
-        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
-        results = DiagL0(l0).ccd_temperature_offsets()
-        assert results["GTEMPOFF"][0] == pytest.approx(-4.0, abs=1e-3)
-        assert results["RTEMPOFF"][0] == pytest.approx(7.0, abs=1e-3)
-
-    def test_at_setpoint_is_zero(self, tmp_path):
-        l0 = self._make_l0_with_telemetry(tmp_path, -100.0, -100.0)
-        results = DiagL0(l0).ccd_temperature_offsets()
-        assert results["GTEMPOFF"][0] == 0.0
-        assert results["RTEMPOFF"][0] == 0.0
-
-    def test_written_to_quality_control(self, tmp_path):
-        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
-        results = DiagL0(l0).run()
-        for key in ("GTEMPOFF", "RTEMPOFF"):
-            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
-
-    def test_diag_name_correct(self):
-        name = DiagL0.__dict__["ccd_temperature_offsets"]._diag_name
-        assert name == "ccd_temperature_offsets"
-
-
-class TestDiagL0EtalonTemperature:
-    """Etalon chamber offset from setpoint, off the PRIMARY temperature cards."""
-
-    def _make_l0_with_etalon(self, **cards):
-        l0 = KPF0()
-        l0.headers["INSTRUMENT_HEADER"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
-        l0.headers["INSTRUMENT_HEADER"].update(cards)
-        return l0
-
-    def test_at_design_setpoints_is_zero(self):
-        # No ETAV1C3S/ETAV1C4S recorded, so the design values apply.
-        l0 = self._make_l0_with_etalon()
-        assert DiagL0(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
-
-    def test_offset_is_signed_millikelvin(self):
-        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
-        results = DiagL0(l0).etalon_temperature_offset()
-        assert results["ETATOFF"][0] == pytest.approx(0.4, abs=1e-3)
-
-    def test_recorded_setpoint_wins_over_design(self):
-        l0 = self._make_l0_with_etalon(ETAV1C3T=24.0, ETAV1C3S=24.0)
-        assert DiagL0(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
-
-    def test_worst_chamber_reported(self):
-        # The outer chamber is further off, so it is the one that survives.
-        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6002, ETAV1C4T=23.8993)
-        results = DiagL0(l0).etalon_temperature_offset()
-        assert results["ETATOFF"][0] == pytest.approx(-0.7, abs=1e-3)
-
-    def test_written_to_quality_control(self):
-        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
-        results = DiagL0(l0).run()
-        assert l0.headers["QUALITY_CONTROL"]["ETATOFF"] == results["ETATOFF"][0]
-
-    def test_diag_name_correct(self):
-        name = DiagL0.__dict__["etalon_temperature_offset"]._diag_name
-        assert name == "etalon_temperature_offset"
-
-
-class TestDiagL0Guider:
+class TestGuider:
     """Guiding error statistics and guide-camera saturation.
 
     Twelve frames, so the centroids clear the 11-distinct-position floor below
@@ -873,7 +548,7 @@ class TestDiagL0Guider:
         # A 0.5 pixel offset in x on every frame: 0.056"/pix -> 28 mas, and with
         # no scatter the RMS equals the bias.
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5)
-        results = DiagL0(l0).guider_errors()
+        results = Guider(l0).guider_errors()
         assert results["GDRXRMS"][0] == pytest.approx(28.0)
         assert results["GDRXBIAS"][0] == pytest.approx(28.0)
         assert results["GDRYRMS"][0] == 0.0
@@ -881,59 +556,59 @@ class TestDiagL0Guider:
 
     def test_bias_keeps_its_sign(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, dy=-0.5)
-        results = DiagL0(l0).guider_errors()
+        results = Guider(l0).guider_errors()
         assert results["GDRYBIAS"][0] == pytest.approx(-28.0)
         assert results["GDRYRMS"][0] == pytest.approx(28.0)
 
     def test_untracked_camera_emits_no_keyword(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5, rows=8)
-        assert DiagL0(l0).guider_errors() == {}
+        assert Guider(l0).guider_errors() == {}
 
     def test_unwritten_rows_dropped(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, peak=1.0)
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][:2] = 0.0
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:2] = 1e5
         # The two zero-flux frames are unwritten, so their peaks do not count.
-        assert DiagL0(l0).guider_saturation()["GDRFRSAT"][0] == 0.0
+        assert Guider(l0).guider_saturation()["GDRFRSAT"][0] == 0.0
 
     def test_saturated_pixels_counted_in_central_box(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, nbright=4)
-        assert DiagL0(l0).guider_saturation()["GDRNSAT"][0] == 4
+        assert Guider(l0).guider_saturation()["GDRNSAT"][0] == 4
 
     def test_pixels_outside_the_box_ignored(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path)
         l0.data["GUIDER_AVG"][0, 0] = 1e5
-        assert DiagL0(l0).guider_saturation()["GDRNSAT"][0] == 0
+        assert Guider(l0).guider_saturation()["GDRNSAT"][0] == 0
 
     def test_saturated_frame_fraction(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path)
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:3] = 1e5
-        assert DiagL0(l0).guider_saturation()["GDRFRSAT"][0] == 0.25
+        assert Guider(l0).guider_saturation()["GDRFRSAT"][0] == 0.25
 
     def test_below_saturation_threshold_not_counted(self, tmp_path):
         # 90% of the 15830 ADU CRED-2 saturation level is the threshold.
         l0 = self._make_l0_with_guider(tmp_path, peak=14000.0, avg_level=14000.0)
-        results = DiagL0(l0).guider_saturation()
+        results = Guider(l0).guider_saturation()
         assert results["GDRFRSAT"][0] == 0.0
         assert results["GDRNSAT"][0] == 0
 
     def test_radial_rms_combines_both_axes(self, tmp_path):
         # A 0.5 pixel offset on each axis: R is their quadrature sum.
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5, dy=0.5)
-        results = DiagL0(l0).guider_errors()
+        results = Guider(l0).guider_errors()
         assert results["GDRRRMS"][0] == pytest.approx(28.0 * 2**0.5)
 
     def test_fwhm_from_the_fitted_gaussian_axes(self, tmp_path):
         # sigma=(3,4) pixels -> 5 px in quadrature, x2.3548 to FWHM, x56 mas/pix.
         l0 = self._make_l0_with_guider(tmp_path, axes=(3.0, 4.0))
-        results = DiagL0(l0).guider_image_stats()
+        results = Guider(l0).guider_image_stats()
         assert results["GDRFWMD"][0] == pytest.approx(5 * 2.3548 * 56.0, rel=1e-4)
         assert results["GDRFWSTD"][0] == 0.0
 
     def test_flux_and_peak_statistics(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, flux=200.0, peak=50.0)
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][0] = 100.0
-        results = DiagL0(l0).guider_image_stats()
+        results = Guider(l0).guider_image_stats()
         assert results["GDRFXMD"][0] == 200.0
         assert results["GDRFXSTD"][0] > 0.0
         assert results["GDRPKMD"][0] == 50.0
@@ -941,16 +616,16 @@ class TestDiagL0Guider:
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5, nbright=2, axes=(3.0, 4.0))
-        results = DiagL0(l0).run()
+        results = Guider(l0).run()
         for key in ("GDRXRMS", "GDRRRMS", "GDRYBIAS", "GDRNSAT", "GDRFRSAT", "GDRFWMD"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
     def test_diag_names_correct(self):
         for name in ("guider_errors", "guider_saturation", "guider_image_stats"):
-            assert DiagL0.__dict__[name]._diag_name == name
+            assert Guider.__dict__[name]._diag_name == name
 
 
-class TestDiagL0GuiderSeeing:
+class TestGuiderSeeing:
     """J+Z-band and V-band seeing from the Moffat fit to the co-added guider image."""
 
     def _make_l0_with_moffat(self, tmp_path, alpha, *, corrupt=False):
@@ -969,46 +644,495 @@ class TestDiagL0GuiderSeeing:
     def test_seeing_is_alpha_in_arcsec(self, tmp_path):
         # alpha = 8 px at the 0.056"/pix CRED-2 scale -> 0.448" seeing.
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
-        results = DiagL0(l0).guider_seeing()
+        results = Guider(l0).guider_seeing()
         assert results["GDRSEEJZ"][0] == pytest.approx(8.0 * 0.056, rel=0.05)
 
     def test_v_band_seeing_is_the_scaled_jz_seeing(self, tmp_path):
         # Kolmogorov lambda^(1/5) from the 950-1200 nm band midpoint to 550 nm.
-        results = DiagL0(self._make_l0_with_moffat(tmp_path, 8.0)).guider_seeing()
+        results = Guider(self._make_l0_with_moffat(tmp_path, 8.0)).guider_seeing()
         assert results["GDRSEEV"][0] == pytest.approx(
             results["GDRSEEJZ"][0] * 1.1434288742094985, rel=1e-5
         )
 
     def test_wider_profile_gives_larger_seeing(self, tmp_path):
-        narrow = DiagL0(self._make_l0_with_moffat(tmp_path, 5.0)).guider_seeing()
-        wide = DiagL0(self._make_l0_with_moffat(tmp_path, 15.0)).guider_seeing()
+        narrow = Guider(self._make_l0_with_moffat(tmp_path, 5.0)).guider_seeing()
+        wide = Guider(self._make_l0_with_moffat(tmp_path, 15.0)).guider_seeing()
         assert wide["GDRSEEJZ"][0] > narrow["GDRSEEJZ"][0]
 
     def test_unfittable_image_emits_no_keyword(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
-        assert DiagL0(l0).guider_seeing() == {}
+        assert Guider(l0).guider_seeing() == {}
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
-        results = DiagL0(l0).run()
+        results = Guider(l0).run()
         for key in ("GDRSEEJZ", "GDRSEEV"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
-    def test_gdrseev_is_mirrored_onto_primary_seeing(self, tmp_path):
+    def test_diag_name_correct(self):
+        assert Guider.__dict__["guider_seeing"]._diag_name == "guider_seeing"
+
+
+class TestExposureMeterChannels:
+    """Per-fiber EM channel metrics: saturation rate and negative/non-finite runs.
+
+    Each fiber here is 4 readings x 25 wavelength channels, so the two interior
+    readings carry the saturation count.
+    """
+
+    def _make_l0_with_expmeter(self, tmp_path, sci, sky=None):
+        def table(values):
+            columns = {"Date-Beg": ["2024-09-23T09:12:09.484"] * len(values)}
+            columns.update(
+                {str(5000.0 + i): values[:, i] for i in range(values.shape[1])}
+            )
+            return Table(columns)
+
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00005.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.BinTableHDU(table(sci), name="EXPMETER_SCI"),
+                fits.BinTableHDU(
+                    table(sci if sky is None else sky), name="EXPMETER_SKY"
+                ),
+            ],
+        )
+        return standardized_l0(fn)
+
+    def test_clean_flux_is_zero(self, tmp_path):
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)
+        ).run()
+        for fiber in ("SCI", "SKY"):
+            for metric in ("SAT", "NEG", "INF"):
+                assert results[f"EM{fiber}{metric}"][0] == 0
+
+    def test_saturation_is_per_reading(self, tmp_path):
+        # 3 saturated elements over the 2 interior readings -> 1.5 per reading.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[1, :2] = 0.95 * 1.93e6
+        flux[2, 0] = 0.95 * 1.93e6
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCISAT"][0] == 1.5
+
+    def test_saturation_drops_edge_readings(self, tmp_path):
+        # The first and last readings are partial, so saturation there is dropped.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[[0, -1], :] = 0.95 * 1.93e6
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCISAT"][0] == 0.0
+
+    def test_negative_run_length(self, tmp_path):
+        # A channel counts as negative when its time-summed flux is negative.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 5:25] = -1000.0
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 20
+
+    def test_negative_run_counts_adjacent_only(self, tmp_path):
+        # Two separated blocks of 3 and 5: the longest run is 5, not their sum.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[:, 2:5] = -1000.0
+        flux[:, 10:15] = -1000.0
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 5
+
+    def test_negative_needs_the_time_sum(self, tmp_path):
+        # One negative reading a channel does not make: the sum stays positive.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[0, 5:25] = -1000.0
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 0
+
+    def test_non_finite_run_length(self, tmp_path):
+        # A channel with any non-finite reading counts, NaN or inf.
+        flux = _EM_CLEAN_FLUX.copy()
+        flux[0, 5:9] = np.nan
+        flux[2, 9] = np.inf
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, flux)
+        ).expmeter_channel_metrics()
+        assert results["EMSCIINF"][0] == 5
+
+    def test_fibers_measured_separately(self, tmp_path):
+        # A clean SCI and a negative SKY: only the SKY keyword moves.
+        sky = _EM_CLEAN_FLUX.copy()
+        sky[:, 5:25] = -1000.0
+        results = ExposureMeter(
+            self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX, sky=sky)
+        ).expmeter_channel_metrics()
+        assert results["EMSCINEG"][0] == 0
+        assert results["EMSKYNEG"][0] == 20
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)
+        results = ExposureMeter(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["EMSCISAT"] == results["EMSCISAT"][0]
+
+    def test_no_em_data_emits_no_keyword(self, tmp_path):
+        # A frame with no EM extension (e.g. a calibration): the metrics are skipped.
+        fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(10, 10))
+        assert "EMSCISAT" not in ExposureMeter(standardized_l0(fn)).run()
+
+    def test_diag_name_correct(self):
+        assert ExposureMeter.__dict__["expmeter_channel_metrics"]._diag_name == (
+            "expmeter_channel_metrics"
+        )
+
+
+class TestExposureMeterCounts:
+    """Cumulative EM counts per wavelength band, and the SKY/SCI ratio.
+
+    One channel per band plus a 900 nm channel outside the 445-870 nm range, so
+    an out-of-band channel is seen to be dropped everywhere. Column labels are nm:
+    ImageAssembly converts them to Angstroms only at L0 -> L1.
+    """
+
+    _WAVES = [500.0, 600.0, 700.0, 800.0, 900.0]
+
+    def _make_l0_with_expmeter(self, tmp_path, sci_counts, sky_counts):
+        def table(counts):
+            columns = {
+                "Date-Beg": ["2024-09-23T09:12:09.484", "2024-09-23T09:12:12.484"]
+            }
+            columns.update(
+                {
+                    str(w): [float(c), float(c)]
+                    for w, c in zip(self._WAVES, counts, strict=True)
+                }
+            )
+            return Table(columns)
+
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[
+                fits.BinTableHDU(table(sci_counts), name="EXPMETER_SCI"),
+                fits.BinTableHDU(table(sky_counts), name="EXPMETER_SKY"),
+            ],
+        )
+        return standardized_l0(fn)
+
+    def test_counts_summed_over_readings_and_bands(self, tmp_path):
+        # Two readings of each channel, so every band doubles its per-reading count.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 2, 4, 8, 16], [1, 1, 1, 1, 1])
+        results = ExposureMeter(l0).expmeter_counts()
+        assert results["EMSCCT45"][0] == 2  # 500 nm
+        assert results["EMSCCT56"][0] == 4  # 600 nm
+        assert results["EMSCCT67"][0] == 8  # 700 nm
+        assert results["EMSCCT78"][0] == 16  # 800 nm; the 900 nm channel is dropped
+        assert results["EMSCCT48"][0] == 30  # 445-870 nm: the four sub-bands
+
+    def test_sky_fiber_counted_separately(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [3, 0, 0, 0, 0])
+        results = ExposureMeter(l0).expmeter_counts()
+        assert results["EMSKCT45"][0] == 6
+        assert results["EMSCCT45"][0] == 2
+
+    def test_nans_excluded(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        l0.data["EXPMETER_SCI"]["500.0"][0] = np.nan
+        results = ExposureMeter(l0).expmeter_counts()
+        assert results["EMSCCT45"][0] == 1
+
+    def test_sky_sci_ratio_scaled_by_throughput(self, tmp_path):
+        # Equal SKY and SCI totals -> the ratio is 1/14.1, the twilight throughput.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        results = ExposureMeter(l0).sky_sci_flux_ratio()
+        assert results["SKYSCIMS"][0] == round(1 / 14.1, 6)
+
+    def test_sky_sci_ratio_uses_every_channel(self, tmp_path):
+        # The ratio is over all channels, the out-of-band 900 nm one included.
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [2, 2, 2, 2, 2])
+        results = ExposureMeter(l0).sky_sci_flux_ratio()
+        assert results["SKYSCIMS"][0] == round(2 / 14.1, 6)
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
+        results = ExposureMeter(l0).run()
+        for key in ("SKYSCIMS", "EMSCCT48", "EMSKCT78"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_names_correct(self):
+        assert ExposureMeter.__dict__["expmeter_counts"]._diag_name == "expmeter_counts"
+        assert (
+            ExposureMeter.__dict__["sky_sci_flux_ratio"]._diag_name
+            == "sky_sci_flux_ratio"
+        )
+
+
+class TestTelemetrySolarLunarGeometry:
+    """Sun and Moon geometry at mid-exposure."""
+
+    def _make_l0(self, date_mid, ra=_PT_RA, dec=_PT_DEC):
+        l0 = _make_l0_pointing()
+        native = l0.headers["INSTRUMENT_HEADER"]
+        native["RA"] = ra
+        native["DEC"] = dec
+        native["DATE-MID"] = date_mid
+        return l0
+
+    def test_sun_altitude_matches_legacy_2d_product(self):
+        # KP.20240405.40113.57, whose legacy 2D carries -61.60211 deg. The value
+        # differs in the 4th decimal: v2.12 sited sun and moon geometry a few
+        # hundred metres from KECK_LOCATION.
+        l0 = self._make_l0(
+            "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
+        )
+        results = Telemetry(l0).solar_lunar_geometry()
+        assert results["SUNEL"][0] == pytest.approx(-61.60211, abs=1e-3)
+
+    def test_moon_separation_is_topocentric(self):
+        # Same frame. The Moon sits at 22:15:30.9 -15:19:35.8 and the target at
+        # 10:59, nearly opposite it. v2.12 reported 54.2 deg here: it separated
+        # the pointing from a Moon transformed out of its observer-centred frame,
+        # which moves the Moon to the solar-system barycentre.
+        l0 = self._make_l0(
+            "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
+        )
+        results = Telemetry(l0).solar_lunar_geometry()
+        assert results["MOONANG"][0] == pytest.approx(153.14, abs=0.01)
+
+    def test_sun_above_horizon_at_local_noon(self):
+        # Maunakea noon is 22:00 UT; the Sun clears the horizon by a wide margin.
+        results = Telemetry(
+            self._make_l0("2024-04-05T22:00:00.000")
+        ).solar_lunar_geometry()
+        assert results["SUNEL"][0] > 30
+
+    def test_moon_separation_at_the_moon(self):
+        # Pointing at the Moon's own topocentric 2024-04-05T11:09 position.
+        l0 = self._make_l0(
+            "2024-04-05T11:09:11.082", ra="22:15:30.93", dec="-15:19:35.8"
+        )
+        assert Telemetry(l0).solar_lunar_geometry()["MOONANG"][0] < 0.01
+
+    def test_moon_below_horizon_before_dawn(self):
+        # 11:09 UT is 01:09 HST, with the waning crescent not yet risen.
+        l0 = self._make_l0("2024-04-05T11:09:11.082")
+        assert Telemetry(l0).solar_lunar_geometry()["MOONEL"][0] < 0
+
+    def test_illumination_of_the_waning_crescent(self):
+        # Three days before the 2024-04-08 new moon: a 45.7 deg elongation.
+        l0 = self._make_l0("2024-04-05T11:09:11.082")
+        results = Telemetry(l0).solar_lunar_geometry()
+        assert results["MOONILLU"][0] == pytest.approx(15.1, abs=0.1)
+
+    def test_illumination_at_opposition_is_full(self):
+        # Within hours of the 2024-04-23T23:49 full moon.
+        l0 = self._make_l0("2024-04-24T00:00:00.000")
+        assert Telemetry(l0).solar_lunar_geometry()["MOONILLU"][0] > 99
+
+    def test_written_to_primary(self):
+        # EPRV-defined, so these route to PRIMARY, not QUALITY_CONTROL.
+        l0 = _make_l0_with_catalog()
+        l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
+        results = Telemetry(l0).run()
+        for key in ("SUNEL", "MOONEL", "MOONANG", "MOONILLU"):
+            assert l0.headers["PRIMARY"][key] == results[key][0]
+            assert key not in l0.headers["QUALITY_CONTROL"]
+
+    def test_missing_date_mid_raises(self):
+        with pytest.raises(KeyError, match="DATE-MID"):
+            Telemetry(_make_l0_pointing()).solar_lunar_geometry()
+
+    def test_diag_name_correct(self):
+        name = Telemetry.__dict__["solar_lunar_geometry"]._diag_name
+        assert name == "solar_lunar_geometry"
+
+
+class TestTelemetryCcdTemperatures:
+    """GREEN/RED CCD offsets from the -100 C setpoint, read off TELEMETRY."""
+
+    def _make_l0_with_telemetry(self, tmp_path, green, red):
+        table = Table(
+            {
+                "keyword": ["kpfgreen.STA_CCD_T", "kpfred.STA_CCD_T"],
+                "average": [green, red],
+            }
+        )
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00008.00.fits",
+            shape=(10, 10),
+            extra_hdus=[fits.BinTableHDU(table, name="TELEMETRY")],
+        )
+        return standardized_l0(fn)
+
+    def test_offset_is_signed_millikelvin(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
+        results = Telemetry(l0).ccd_temperature_offsets()
+        assert results["GTEMPOFF"][0] == pytest.approx(-4.0, abs=1e-3)
+        assert results["RTEMPOFF"][0] == pytest.approx(7.0, abs=1e-3)
+
+    def test_at_setpoint_is_zero(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.0, -100.0)
+        results = Telemetry(l0).ccd_temperature_offsets()
+        assert results["GTEMPOFF"][0] == 0.0
+        assert results["RTEMPOFF"][0] == 0.0
+
+    def test_written_to_quality_control(self, tmp_path):
+        l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
+        results = Telemetry(l0).run()
+        for key in ("GTEMPOFF", "RTEMPOFF"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+    def test_diag_name_correct(self):
+        name = Telemetry.__dict__["ccd_temperature_offsets"]._diag_name
+        assert name == "ccd_temperature_offsets"
+
+
+class TestTelemetryEtalonTemperature:
+    """Etalon chamber offset from setpoint, off the PRIMARY temperature cards."""
+
+    def _make_l0_with_etalon(self, **cards):
+        l0 = KPF0()
+        l0.headers["INSTRUMENT_HEADER"].update({"ETAV1C3T": 23.6, "ETAV1C4T": 23.9})
+        l0.headers["INSTRUMENT_HEADER"].update(cards)
+        return l0
+
+    def test_at_design_setpoints_is_zero(self):
+        # No ETAV1C3S/ETAV1C4S recorded, so the design values apply.
+        l0 = self._make_l0_with_etalon()
+        assert Telemetry(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+
+    def test_offset_is_signed_millikelvin(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
+        results = Telemetry(l0).etalon_temperature_offset()
+        assert results["ETATOFF"][0] == pytest.approx(0.4, abs=1e-3)
+
+    def test_recorded_setpoint_wins_over_design(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=24.0, ETAV1C3S=24.0)
+        assert Telemetry(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+
+    def test_worst_chamber_reported(self):
+        # The outer chamber is further off, so it is the one that survives.
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6002, ETAV1C4T=23.8993)
+        results = Telemetry(l0).etalon_temperature_offset()
+        assert results["ETATOFF"][0] == pytest.approx(-0.7, abs=1e-3)
+
+    def test_written_to_quality_control(self):
+        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
+        results = Telemetry(l0).run()
+        assert l0.headers["QUALITY_CONTROL"]["ETATOFF"] == results["ETATOFF"][0]
+
+    def test_diag_name_correct(self):
+        name = Telemetry.__dict__["etalon_temperature_offset"]._diag_name
+        assert name == "etalon_temperature_offset"
+
+
+class TestTelemetryMoonRadialVelocity:
+    """RV of sunlight reflected off the Moon."""
+
+    def _make_l0(self, date_mid):
+        l0 = _make_l0_pointing()
+        l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = date_mid
+        return l0
+
+    def test_sums_the_two_legs_of_the_reflected_path(self):
+        # At 2024-04-05T11:09 the Moon recedes from the Sun at -0.1967 km/s and
+        # Keck recedes from the Moon at -0.3627 km/s.
+        l0 = self._make_l0("2024-04-05T11:09:11.082")
+        results = Telemetry(l0).moon_radial_velocity()
+        assert results["MOONRV"][0] == pytest.approx(-0.559443, abs=1e-4)
+
+    def test_tracks_the_lunar_month(self):
+        # Half a synodic month on, the Sun-Moon leg has reversed and dominates.
+        l0 = self._make_l0("2024-04-19T11:09:11.082")
+        results = Telemetry(l0).moon_radial_velocity()
+        assert results["MOONRV"][0] == pytest.approx(1.509830, abs=1e-4)
+
+    def test_written_to_primary(self):
+        l0 = self._make_l0("2024-04-05T11:09:11.082")
+        results = Telemetry(l0).run()
+        assert l0.headers["PRIMARY"]["MOONRV"] == results["MOONRV"][0]
+
+    def test_diag_name_correct(self):
+        name = Telemetry.__dict__["moon_radial_velocity"]._diag_name
+        assert name == "moon_radial_velocity"
+
+
+class TestTelemetrySiteConditions:
+    """Airmass, humidity, pressure and mirror temperature off the native cards."""
+
+    def _make_l0_with_conditions(self, **cards):
+        l0 = _make_l0_pointing()
+        native = l0.headers["INSTRUMENT_HEADER"]
+        native.update(
+            {
+                "AIRMASS": 1.31,
+                "RELH": 12.25,
+                "PRES": 620.881,
+                "PRIMTEMP": 1.403147,
+                "SECMTEMP": -0.288888,
+                "DIFFPTDW": 39.103147,
+            }
+        )
+        native.update(cards)
+        return l0
+
+    def test_values_copy_the_native_cards(self):
+        results = Telemetry(self._make_l0_with_conditions()).site_conditions()
+        assert results["AIRMASS"][0] == pytest.approx(1.31)
+        assert results["INHUM"][0] == pytest.approx(12.25)
+        assert results["M1TMP"][0] == pytest.approx(1.403147)
+        assert results["M2TEMP"][0] == pytest.approx(-0.288888)
+
+    def test_pressure_is_converted_to_kilopascals(self):
+        # The Vaisala reads hPa; OUTPRES is registered in kPa.
+        l0 = self._make_l0_with_conditions(PRES=620.881)
+        assert Telemetry(l0).site_conditions()["OUTPRES"][0] == pytest.approx(62.0881)
+
+    def test_dewpoint_is_the_offset_below_the_primary_mirror(self):
+        # The DCS reports only DIFFPTDW, to a tenth of a degree.
+        results = Telemetry(self._make_l0_with_conditions()).site_conditions()
+        assert results["DEWPOINT"][0] == -37.7
+
+    def test_written_to_primary(self):
+        l0 = self._make_l0_with_conditions()
+        results = Telemetry(l0).run()
+        for key in ("AIRMASS", "INHUM", "DEWPOINT", "OUTPRES", "M1TMP", "M2TEMP"):
+            assert l0.headers["PRIMARY"][key] == results[key][0]
+
+    def test_missing_native_card_emits_nothing(self):
+        # One method, one native source: a frame short a card writes no card.
+        l0 = self._make_l0_with_conditions()
+        del l0.headers["INSTRUMENT_HEADER"]["RELH"]
+        assert Telemetry(l0).run().keys().isdisjoint({"AIRMASS", "INHUM"})
+
+    def test_diag_name_correct(self):
+        assert Telemetry.__dict__["site_conditions"]._diag_name == "site_conditions"
+
+
+class TestTelemetrySeeing:
+    """The guider's V-band seeing, carried onto the PRIMARY SEEING card."""
+
+    def test_gdrseev_is_carried_onto_primary_seeing(self):
         # ``header-map.csv`` gives SEEING KPF_EXT=QUALITY_CONTROL, and
         # QUALITY_CONTROL is still empty when standardize_headers runs, so
-        # DiagL0 stamps the seeded-blank PRIMARY card itself.
-        l0 = self._make_l0_with_moffat(tmp_path, 8.0)
-        results = DiagL0(l0).run()
-        assert l0.headers["PRIMARY"]["SEEING"] == results["GDRSEEV"][0]
+        # Telemetry stamps the seeded-blank PRIMARY card once Guider has run.
+        l0 = _make_l0_pointing()
+        l0.headers["QUALITY_CONTROL"]["GDRSEEV"] = 0.87
+        results = Telemetry(l0).run()
+        assert l0.headers["PRIMARY"]["SEEING"] == results["SEEING"][0] == 0.87
 
-    def test_unfittable_image_leaves_primary_seeing_blank(self, tmp_path):
-        l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
-        assert "GDRSEEV" not in DiagL0(l0).run()
+    def test_unmeasured_seeing_leaves_primary_blank(self):
+        l0 = _make_l0_pointing()
+        assert "SEEING" not in Telemetry(l0).run()
         assert not l0.headers["PRIMARY"]["SEEING"]
 
     def test_diag_name_correct(self):
-        assert DiagL0.__dict__["guider_seeing"]._diag_name == "guider_seeing"
+        assert Telemetry.__dict__["seeing"]._diag_name == "seeing"
 
 
 def _make_kpf1(date_obs="2024-04-05T11:08:33"):

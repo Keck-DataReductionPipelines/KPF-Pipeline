@@ -762,6 +762,11 @@ _DATATYPE_DEVIATIONS = {
 # EPRV keywords KPF does not register.
 _UNREGISTERED = {
     "PVN_#": "variable-length parametric WLS family; KPF writes no parametric WLS",
+    "INHUMT": "EPRV-optional; every environment card is sampled at DATE-MID",
+    "OUTPREST": "EPRV-optional; every environment card is sampled at DATE-MID",
+    "M1TMPT": "EPRV-optional; every environment card is sampled at DATE-MID",
+    "OUTTMPT": "EPRV-optional; KPF has no OUTTMP to timestamp",
+    "OUTHUMT": "EPRV-optional; KPF has no OUTHUM to timestamp",
 }
 
 _PER_EXTENSION_TABLES = [
@@ -790,7 +795,7 @@ class TestEPRVCompliance:
             member
             for keyword in rvdata_table("L2-PRIMARY-keywords")["Keyword"]
             for member in expand(keyword)
-        }
+        } - set(_UNREGISTERED)
         assert not sorted(want - KPF2.keyword_registry.allowed["PRIMARY"])
 
     @pytest.mark.parametrize(("table", "extension"), _PER_EXTENSION_TABLES)

@@ -320,13 +320,15 @@ class KPF0(KPFDataModel):
 
         TZA1 is the complement of the TEL1 elevation. PARST1/PAREND1 are the
         parallactic angle -- the angle at the target between the celestial pole
-        and the zenith, positive east of north::
+        and the zenith, positive east of north -- at the two ends of the
+        exposure. The native PARANG the DCS recorded at mid-exposure sets the
+        angle itself; only the half-exposure rotation either side of it comes
+        from::
 
             q = atan2(sin H, tan(lat) cos(dec) - sin(dec) cos H)
 
-        (Meeus 1998, eq. 14.1), evaluated half an exposure either side of THA1,
-        the hour angle the TCS read at TTIME, mid-exposure. Neglecting refraction
-        puts it ~0.1 deg from the native PARANG of a frame at airmass 1.3.
+        (Meeus 1998, eq. 14.1), which neglects refraction -- worth ~0.1 deg at
+        airmass 1.3 absolute, but almost nothing over the 75 s of a difference.
 
         A frame the TCS never pointed -- a bias, a lamp -- carries no TCS cards
         to derive from, and these stay blank with them.
@@ -334,9 +336,14 @@ class KPF0(KPFDataModel):
         _SIDEREAL_RATE = 1.0027379  # hours per hour of UT
 
         prim = self.headers["PRIMARY"]
+        native = self.headers["INSTRUMENT_HEADER"]
         if prim.get("TEL1") is not None:
             self.set_keyword("TZA1", round(90.0 - float(prim["TEL1"]), 2))
-        if not prim.get("THA1") or not prim.get("TDEC1"):
+        if (
+            not prim.get("THA1")
+            or not prim.get("TDEC1")
+            or native.get("PARANG") is None
+        ):
             return
 
         lat = KECK_LOCATION.lat.rad
@@ -345,12 +352,20 @@ class KPF0(KPFDataModel):
         half = (
             0.5 * float(prim.get("EXPTIME") or 0.0) / 3600.0 * _SIDEREAL_RATE
         ) * u.hourangle
-        for keyword, ha in (("PARST1", mid - half), ("PAREND1", mid + half)):
-            q = math.atan2(
-                math.sin(ha.rad),
-                math.tan(lat) * math.cos(dec) - math.sin(dec) * math.cos(ha.rad),
+
+        def parallactic(ha):
+            return math.degrees(
+                math.atan2(
+                    math.sin(ha.rad),
+                    math.tan(lat) * math.cos(dec) - math.sin(dec) * math.cos(ha.rad),
+                )
             )
-            self.set_keyword(keyword, round(math.degrees(q), 2))
+
+        parang = float(native["PARANG"])
+        for keyword, ha in (("PARST1", mid - half), ("PAREND1", mid + half)):
+            q = parang + parallactic(ha) - parallactic(mid)
+            # Back into (-180, 180], which also absorbs a wrap in the difference.
+            self.set_keyword(keyword, round((q + 180.0) % 360.0 - 180.0, 2))
 
     def _drp_metadata(self):
         """Stamp the pipeline and standard version cards onto PRIMARY.

@@ -259,6 +259,14 @@ translator; vNext may differ by design — confirm each is intended):
    WIP and existing master/L2 products (including the truth dataset) encode it as a
    `BinTableHDU`, so flipping the model type breaks reading them back. Switch to `ImageHDU`
    when Ca H&K is built and products are regenerated.
+7. **Environment block.** vNext registers none of the standard's five environment timestamps
+   (`INHUMT`, `OUTTMPT`, `OUTHUMT`, `OUTPREST`, `M1TMPT`). The KPF L0 header samples every
+   environment card in one `keyheader [ExposureMiddle]` snapshot, so `DATE-MID` already
+   timestamps the three values vNext supplies, and `OUTTMP`/`OUTHUM` have nothing to
+   timestamp — the native header records no outside temperature, humidity or wind at all.
+   The exclusion is declared in `_UNREGISTERED` (`tests/regression/test_data_models_l2.py`).
+   Two KPF-specific cards are added in their place: `M2TEMP` (native `SECMTEMP`) and
+   `DEWPOINT` (`PRIMTEMP - DIFFPTDW`, the only form the DCS reports a dewpoint in).
 
 **Instrument eras (`INSTERA`)**: the KPF era table is vendored at
 `reference/instrument_eras.csv` (era tag, UT

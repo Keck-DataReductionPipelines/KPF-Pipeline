@@ -29,6 +29,7 @@ from kpfpipe.quality_control.checkpoints import (
     CheckpointL2,
     CheckpointL4,
 )
+from kpfpipe.quality_control.diagnostics import Guider, Telemetry
 
 from ._data_models import (
     make_l4,
@@ -153,13 +154,16 @@ class TestRunFoldsDiagnosticsAndQC:
     def test_run_order_and_qc_results_capture(self):
         calls = []
 
-        class FakeDiag:
-            def __init__(self, obj):
-                pass
+        def fake_diagnostics(tag):
+            class FakeDiag:
+                def __init__(self, obj):
+                    pass
 
-            def run(self):
-                calls.append("diag")
-                return {}
+                def run(self):
+                    calls.append(tag)
+                    return {}
+
+            return FakeDiag
 
         class FakeQC:
             def __init__(self, obj):
@@ -171,7 +175,7 @@ class TestRunFoldsDiagnosticsAndQC:
 
         class FakeCheckpoint(Checkpoint):
             LEVEL = "L2"
-            DIAGNOSTICS = FakeDiag
+            DIAGNOSTICS = (fake_diagnostics("diag"), fake_diagnostics("diag2"))
             QC = FakeQC
 
             def probe(self):
@@ -182,15 +186,14 @@ class TestRunFoldsDiagnosticsAndQC:
         chk = FakeCheckpoint(KPF2())
         chk.run()
 
-        # Diagnostics first, QC second, then the checkpoint method(s).
-        assert calls[0] == "diag"
-        assert calls[1] == "qc"
-        assert "checkpoint" in calls[2:]
+        # Every Diagnostics class in order, then QC, then the checkpoint method(s).
+        assert calls[:3] == ["diag", "diag2", "qc"]
+        assert "checkpoint" in calls[3:]
         # QC's result dict is captured for callers (e.g. scripts/quality_control/qc.py).
         assert chk.qc_results == {"DATAPRL2": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self, caplog):
-        # A concrete-level checkpoint with DIAGNOSTICS = QC = None: run() does the
+        # A concrete-level checkpoint with no DIAGNOSTICS and no QC: run() does the
         # checkpoint methods only and leaves qc_results empty. (LEVEL must be a
         # recognized level -- qc_flags() looks it up directly, no silent default.)
         class NoStageCheckpoint(Checkpoint):
@@ -277,6 +280,12 @@ class TestCheckpointL0:
         assert qc["GREENL0"] == 1
         assert qc["REDL0"] == 1
         assert qc["TCSOFF"] < 1.0
+
+    def test_guider_runs_before_telemetry(self):
+        # Telemetry carries the guider's GDRSEEV onto the PRIMARY SEEING card,
+        # so it has nothing to carry until Guider has measured it.
+        order = CheckpointL0.DIAGNOSTICS
+        assert order.index(Guider) < order.index(Telemetry)
 
 
 # ---------------------------------------------------------------------------

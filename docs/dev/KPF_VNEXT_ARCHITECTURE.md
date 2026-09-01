@@ -341,8 +341,11 @@ The first three run in a strict order — **Diagnostics → QC → Checkpoints**
 prior wrote, driven by the recipe through a **single `CheckpointL{n}(obj).run()` call**:
 
 - `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as
-  the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the
-  checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly.
+  the `DIAGNOSTICS`/`QC` class attributes), then runs the checkpoint methods — so callers no longer
+  invoke the Diagnostics/QC classes directly. `DIAGNOSTICS` is an ordered tuple, run in sequence, and
+  is the single place a level's diagnostics order is declared: `CheckpointL1.DIAGNOSTICS = (DiagL1,)`,
+  `CheckpointL0.DIAGNOSTICS = (DiagL0, Guider, ExposureMeter, Telemetry)` — Guider before Telemetry,
+  which carries the guider's `GDRSEEV` onto the PRIMARY `SEEING` card.
 - The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g.
   `scripts/quality_control/qc.py`). A level with no paired class skips that stage.
 
@@ -356,6 +359,8 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 ### Diagnostics
 
 `kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword`, which routes each to its registry home — most land on QUALITY_CONTROL, but a metric registered as an EPRV PRIMARY keyword goes to PRIMARY (`DiagL2.snr` writes `SNRSC*` to QUALITY_CONTROL and mirrors the summed-SCI values to `EXSNR1-5`/`EXSNRW1-5` on PRIMARY). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+
+A level whose metrics span several unrelated extensions splits them into per-extension classes beside its `DiagL{n}`, each a `Diagnostics` subclass carrying that level's `LEVEL`. L0 has three: `Guider` (`GUIDER_AVG`, `GUIDER_CUBE_ORIGINS`), `ExposureMeter` (`EXPMETER_SCI`, `EXPMETER_SKY`) and `Telemetry` (the `TELEMETRY` table, the environment cards on `INSTRUMENT_HEADER`, and the solar/lunar geometry), leaving `DiagL0` the raw amplifier images and `CATALOG_RECORD`. The recipe still drives them all through `CheckpointL0(l0).run()`.
 
 **Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. So does a metric a module derives from a decision it just made: `CalibrationAssociation` writes the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`) alongside the master paths it selects (`*FILE` on PRIMARY), so a path and its age cannot disagree. Metrics computable from the finished product alone live in Diagnostics.
 

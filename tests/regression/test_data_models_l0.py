@@ -686,12 +686,13 @@ class TestIdempotencyAndGate:
 class TestKPF0TcsPointing:
     """The pointing cards KPF0 derives from the TCS cards the header map fills."""
 
-    # The TCS cards of the 2024-04-05 science frame, and the PARANG that frame
-    # carries at mid-exposure -- an independent value to check the formula against.
+    # The TCS cards of the 2024-04-05 science frame, PARANG included: the DCS
+    # records it at mid-exposure, so it is the angle PARST1/PAREND1 straddle.
     _POINTING = {
         "EL": 49.66,
         "DEC": "+40:25:50.0",
         "HA": "+02:44:48.20",
+        "PARANG": 108.08,
         "ELAPSED": 75.022,
     }
     _NATIVE_PARANG = 108.08
@@ -705,13 +706,22 @@ class TestKPF0TcsPointing:
     def test_zenith_angle_complements_the_elevation(self, tmp_path):
         assert self._pointed(tmp_path)["TZA1"] == 40.34
 
-    def test_parallactic_angle_matches_the_native_parang(self, tmp_path):
+    def test_parallactic_angle_straddles_the_native_parang(self, tmp_path):
         prim = self._pointed(tmp_path)
-        # Neglecting refraction, so a tenth of a degree at this airmass.
+        # Symmetric about mid-exposure, so the two ends average back to PARANG.
         mid = (prim["PARST1"] + prim["PAREND1"]) / 2
-        assert mid == pytest.approx(self._NATIVE_PARANG, abs=0.2)
+        assert mid == pytest.approx(self._NATIVE_PARANG, abs=0.01)
         # Past the meridian with dec > latitude: the angle falls back from 180.
         assert prim["PARST1"] > prim["PAREND1"]
+
+    def test_the_cards_stay_blank_without_a_native_parang(self, tmp_path):
+        cards = {k: v for k, v in self._POINTING.items() if k != "PARANG"}
+        fn = write_minimal_l0(
+            tmp_path / "KP.20240113.00006.00.fits", primary_cards=cards
+        )
+        prim = standardized_l0(fn).headers["PRIMARY"]
+        assert prim["TZA1"] == 40.34
+        assert prim["PARST1"] is None and prim["PAREND1"] is None
 
     def test_an_unpointed_frame_leaves_the_cards_blank(self, synthetic_l0_minimal):
         prim = standardized_l0(synthetic_l0_minimal).headers["PRIMARY"]
