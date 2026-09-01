@@ -132,7 +132,7 @@ RVDataModel (rvdata)
   `KPFDataModel._build()`, which creates the manifest extensions, swaps in the alias-aware dicts
   and registers aliases (when the model sets `_DATA_DICT`), fills the typed empty tables, seeds
   PRIMARY and restamps DATALVL, then rebuilds EXT_DESCRIPT. KPF0 sets `_SEEDS_PRIMARY = False`:
-  `_read` replaces PRIMARY wholesale, so `standardize_header_format` seeds it after the read
+  `_read` replaces PRIMARY wholesale, so `standardize_headers` seeds it after the read
   instead.
 - **`check_filename_convention` is shared too** — `KPFDataModel` implements it for every level,
   delegating to `utils.io.check_filename_convention(filename, f"L{self.level}")`, which owns the
@@ -159,18 +159,18 @@ Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are co
 ### Header standardization
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** —
-`KPF0.standardize_header_format`, which every raw-L0 load runs via `from_fits(standardize=True)` and
+`KPF0.standardize_headers`, which every raw-L0 load runs via `from_fits(standardize=True)` and
 which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
 The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
 The architecture invariants:
 
 - **PRIMARY holds EPRV-registered keywords and the WMKO provenance cards** from
   L0-after-standardization onward (EPRV keyword names + FITS structural cards — no raw natives).
-  `standardize_header_format` seeds the whole registered PRIMARY skeleton for the level, then fills it from
+  `standardize_headers` seeds the whole registered PRIMARY skeleton for the level, then fills it from
   `header-map.csv`; every card is present, blank where nothing supplied a value. (The other
   keyword-homing exception is noted under *Keyword registry*.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
-  written once by `standardize_header_format` and never again.
+  written once by `standardize_headers` and never again.
 - **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`** — at L0 too, now that standardization runs
   at load. The map carries only some natives to PRIMARY, mostly under renamed EPRV keys — so read a
   native from PRIMARY when it survives there under its own name (e.g. `DATE-OBS`, `OBJECT`), and from
@@ -179,7 +179,7 @@ The architecture invariants:
   the exposure meter against; its *target astrometry*, by contrast, comes off the PRIMARY `C*#` cards,
   which `AstroQuery` fills from `CATALOG_RECORD`).
 - **DRP provenance is stamped during standardization** onto PRIMARY
-  (`KPF0.standardize_header_format` → `_stamp_wmko_tracking`, not `to_kpf1`):
+  (`KPF0.standardize_headers` → `_stamp_wmko_tracking`, not `to_kpf1`):
   `DRPVERNO`/`PROGID`/`KOAID`/`ORIGID`, plus `DRPSTATU`, which `receipt_add_entry` advances per module.
   It rides PRIMARY forward. A raw `from_fits()` carries none of it — the conversion is what stamps it.
   `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on read, so every model

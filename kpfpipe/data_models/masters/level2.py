@@ -50,7 +50,7 @@ class KPFMasterL2(KPFMasterModel, KPF2):
         return f"ML{self.level}-{self.kind}"
 
     @classmethod
-    def from_fits(cls, fn, instrument=None, **kwargs):
+    def from_fits(cls, fn):
         """Load an L2 master, inferring ``kind`` from the file's PRIMARY MASTYPE.
 
         rvdata's RVDataModel.from_fits builds the instance via ``cls()`` with no
@@ -84,6 +84,6 @@ class KPFMasterL2(KPFMasterModel, KPF2):
             obj = cls(kind)
             obj.filename = os.path.basename(fn)
             obj.dirname = os.path.dirname(fn)
-            obj.read(hdul, instrument, **kwargs)
-        obj.receipt_add_entry("from_fits", f"fn={fn}, instrument={instrument}", "PASS")
+            obj.read(hdul)
+        obj.receipt_add_entry("from_fits", f"fn={fn}", "PASS")
         return obj

@@ -339,7 +339,7 @@ class TestSpectrumOrientation:
             "fibers": _SCI_FIBERS,
         }
         l0 = KPF0.from_fits(kpf_filepath(OBS_ID, "L0", data_root=str(TESTDATA_DIR)))
-        l0.standardize_header_format()
+        l0.standardize_headers()
         l1 = ImageAssembly(l0, config).perform()
         l1 = CalibrationAssociation(l1, config).perform(
             ["bias", "dark", "flat", "thar"]

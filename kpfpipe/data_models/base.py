@@ -73,7 +73,7 @@ class KPFDataModel(RVDataModel):
 
     # Whether construction stamps the registry's PRIMARY skeleton. L0 does not:
     # ``_read`` replaces PRIMARY wholesale, so anything stamped here would be
-    # discarded; ``standardize_header_format`` seeds it once, after the read.
+    # discarded; ``standardize_headers`` seeds it once, after the read.
     _SEEDS_PRIMARY = True
 
     def __init__(self):
@@ -204,7 +204,7 @@ class KPFDataModel(RVDataModel):
             ),
         )
 
-    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+    def read(self, hdul, instrument=None):
         """Read an EPRV-standard FITS HDUList into this model.
 
         One read path at every level. ``RVDataModel.read`` dispatches L2/L4 via
@@ -268,7 +268,7 @@ class KPFDataModel(RVDataModel):
             self.set_header(ext_name, hdu.header)
 
     @classmethod
-    def from_fits(cls, fn, instrument=None, **kwargs):
+    def from_fits(cls, fn):
         """Read a data product from FITS, logging the file read (DRP-RUN-08).
 
         The single read chokepoint: one INFO record per read, then delegate to
@@ -284,7 +284,7 @@ class KPFDataModel(RVDataModel):
         cell masked rather than NaN, so ``np.isnan`` would miss it as present.
         """
         logger.info("reading %s from %s", cls.__name__, fn)
-        obj = super().from_fits(fn, instrument=instrument, **kwargs)
+        obj = super().from_fits(fn)
         if getattr(obj, "obs_id", None) is None:
             obj.obs_id = obj._obs_id_from_primary()
         table = obj.data.get("CATALOG_RECORD")

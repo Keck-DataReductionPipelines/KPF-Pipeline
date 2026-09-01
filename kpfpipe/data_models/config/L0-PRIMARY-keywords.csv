@@ -1,41 +1,41 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
 FILENAME,Name of the FITS file,,String,kpf_L1_20240405T110833.fits,KPF*.to_fits
-DATALVL,Data product base level,,String,L0,KPF0.standardize_header_format
-ORIGIN,Entity that created this file,,String,Keck,KPF0.standardize_header_format
-DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,KPF0.standardize_header_format
+DATALVL,Data product base level,,String,L0,KPF0.standardize_headers
+ORIGIN,Entity that created this file,,String,Keck,KPF0.standardize_headers
+DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,KPF0.standardize_headers
 
-KOAID,KOA archive ID (WMKO req.),,String,KP.20240405.40113.57.fits,KPF0.standardize_header_format
-ORIGID,Original L0 observation ID,,String,KP.20240405.40113.57,KPF0.standardize_header_format
-PROGID,WMKO program ID (WMKO req.),,String,K123,KPF0.standardize_header_format
-DRPSTATU,DRP reduction status (WMKO req.),,String,Radial Velocity module complete,KPF0.standardize_header_format
-DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),,String,3.0.0,KPF0.standardize_header_format
-DRPTAG,RV DRP version,,String,3.0.0,KPF0.standardize_header_format
-DRPHASH,Git commit hash,,String,277e3a1d99628d9fcef494797887663119,KPF0.standardize_header_format
-EPRVTAG,Version of EPRV standard applied,,String,v0.4.0,KPF0.standardize_header_format
-VOCLASS,EPRV standard release identifier,,String,EPRVSTANDARD2026.06,KPF0.standardize_header_format
+KOAID,KOA archive ID (WMKO req.),,String,KP.20240405.40113.57.fits,KPF0.standardize_headers
+ORIGID,Original L0 observation ID,,String,KP.20240405.40113.57,KPF0.standardize_headers
+PROGID,WMKO program ID (WMKO req.),,String,K123,KPF0.standardize_headers
+DRPSTATU,DRP reduction status (WMKO req.),,String,Radial Velocity module complete,KPF0.standardize_headers
+DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),,String,3.0.0,KPF0.standardize_headers
+DRPTAG,RV DRP version,,String,3.0.0,KPF0.standardize_headers
+DRPHASH,Git commit hash,,String,277e3a1d99628d9fcef494797887663119,KPF0.standardize_headers
+EPRVTAG,Version of EPRV standard applied,,String,v0.4.0,KPF0.standardize_headers
+VOCLASS,EPRV standard release identifier,,String,EPRVSTANDARD2026.06,KPF0.standardize_headers
 
-INSTRUME,Instrument name,,String,KPF,KPF0.standardize_header_format
-INSTERA,Tag tracking permanent instrument changes,,String,KPF-2,KPF0.standardize_header_format
+INSTRUME,Instrument name,,String,KPF,KPF0.standardize_headers
+INSTERA,Tag tracking permanent instrument changes,,String,KPF-2,KPF0.standardize_headers
 PINAME,Program PI name,,String,Howard,
 PROGRAM,Observing program name,,String,K123,
 ORGANIZA,Data owner organization for licensing,,String,WMKO,
 OBSERVER,Observer,,String,Isaacson,
-OBSERVAT,Observatory name,,String,Keck Observatory,KPF0.standardize_header_format
-TELESCOP,Telescope name,,String,Keck I,KPF0.standardize_header_format
+OBSERVAT,Observatory name,,String,Keck Observatory,KPF0.standardize_headers
+TELESCOP,Telescope name,,String,Keck I,KPF0.standardize_headers
 
-OBJECT,Primary object name,,String,219134,KPF0.standardize_header_format
+OBJECT,Primary object name,,String,219134,KPF0.standardize_headers
 ALIASES,User-defined object names; ';' separated,,String,HD 219134; Gaia DR3 2870618101503062016,AstroQuery
-DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,KPF0.standardize_header_format
-JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,KPF0.standardize_header_format
-OBSTYPE,Observation type,,String,Object,KPF0.standardize_header_format
-OBSMODE,Observing mode,,String,sci,KPF0.standardize_header_format
-ISSOLAR,True if the observation is of the Sun,,Boolean,F,KPF0.standardize_header_format
+DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,KPF0.standardize_headers
+JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,KPF0.standardize_headers
+OBSTYPE,Observation type,,String,Object,KPF0.standardize_headers
+OBSMODE,Observing mode,,String,sci,KPF0.standardize_headers
+ISSOLAR,True if the observation is of the Sun,,Boolean,F,KPF0.standardize_headers
 
-EXPTIME,Exposure time,s,Float,75.022,KPF0.standardize_header_format
-BINNING,Binning mode,,String,1x1,KPF0.standardize_header_format
-NUMORDER,Number of orders,,Uint,67,KPF0.standardize_header_format
-NUMTRACE,Number of object-indexed keyword families,,UInt,5,KPF0.standardize_header_format
-TRACE#,Type of object in trace #,,String,SCI,KPF0.standardize_header_format
+EXPTIME,Exposure time,s,Float,75.022,KPF0.standardize_headers
+BINNING,Binning mode,,String,1x1,KPF0.standardize_headers
+NUMORDER,Number of orders,,Uint,67,KPF0.standardize_headers
+NUMTRACE,Number of object-indexed keyword families,,UInt,5,KPF0.standardize_headers
+TRACE#,Type of object in trace #,,String,SCI,KPF0.standardize_headers
 CLSRC#,Calibration source in trace # if used,,String,EtalonFiber,
 CSRC#,Catalog source for object in trace #,,String,Gaia DR3,AstroQuery
 CID#,Catalog designation for object in trace #,,String,DR3 2870618101503062016,AstroQuery
@@ -50,28 +50,28 @@ CRV#,Catalog systemic RV for trace #,km/s,Float,-18.55,AstroQuery
 CZ#,Catalog redshift Z for trace #,,Float,-0.0000619,AstroQuery
 CCLR#,Catalog color 1 - color 2 for trace #,mag,Float,1.9376,AstroQuery
 CCLRN#,Catalog color 1 - color 2 name for trace #,,String,Gaia BP-RP,AstroQuery
-NUMTEL,Number of telescopes used,,UInt,1,KPF0.standardize_header_format
-TELEID1,Telescope label as indexed in TCS keywords,,String,K1,KPF0.standardize_header_format
-TTIME,TCS-data date/time,UTC,String,2024-04-05T11:09:11,KPF0.standardize_header_format
-TEQNX,TCS equinox,yr,String,2000.0,KPF0.standardize_header_format
-TEPCH,TCS epoch,yr,String,2016.0,KPF0.standardize_header_format
-TLST1,TCS LST for telescope 1,sexagesimal,String,06:37:52.9,KPF0.standardize_header_format
-TRA1,TCS RA for telescope 1,sexagesimal,String,23:13:16.98,KPF0.standardize_header_format
-TDEC1,TCS Dec for telescope 1,sexagesimal,String,+57:10:06.1,KPF0.standardize_header_format
-TEL1,TCS elevation angle for telescope 1,deg,Float,59.4,KPF0.standardize_header_format
+NUMTEL,Number of telescopes used,,UInt,1,KPF0.standardize_headers
+TELEID1,Telescope label as indexed in TCS keywords,,String,K1,KPF0.standardize_headers
+TTIME,TCS-data date/time,UTC,String,2024-04-05T11:09:11,KPF0.standardize_headers
+TEQNX,TCS equinox,yr,String,2000.0,KPF0.standardize_headers
+TEPCH,TCS epoch,yr,String,2016.0,KPF0.standardize_headers
+TLST1,TCS LST for telescope 1,sexagesimal,String,06:37:52.9,KPF0.standardize_headers
+TRA1,TCS RA for telescope 1,sexagesimal,String,23:13:16.98,KPF0.standardize_headers
+TDEC1,TCS Dec for telescope 1,sexagesimal,String,+57:10:06.1,KPF0.standardize_headers
+TEL1,TCS elevation angle for telescope 1,deg,Float,59.4,KPF0.standardize_headers
 TZA1,TCS zenith angle for telescope 1,deg,Float,30.6,
-TAZ1,TCS azimuth angle for telescope 1,deg,Float,41.9,KPF0.standardize_header_format
-THA1,TCS hour angle for telescope 1,sexagesimal,String,-16:35:24.1,KPF0.standardize_header_format
+TAZ1,TCS azimuth angle for telescope 1,deg,Float,41.9,KPF0.standardize_headers
+THA1,TCS hour angle for telescope 1,sexagesimal,String,-16:35:24.1,KPF0.standardize_headers
 PARST1,Parallactic angle at start; telescope 1,deg,Float,175.2,
 PAREND1,Parallactic angle at end; telescope 1,deg,Float,180.7,
 
-OBSLON,Longitude for barycentric correction,deg,Float,-155.47833333,KPF0.standardize_header_format
-OBSLAT,Latitude for barycentric correction,deg,Float,19.82833333,KPF0.standardize_header_format
-OBSALT,Altitude for barycentric correction,meters,Float,4160,KPF0.standardize_header_format
-GEOSYS,Coordinate system for the site location,,String,WGS84,KPF0.standardize_header_format
-OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.818,KPF0.standardize_header_format
-OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.591,KPF0.standardize_header_format
-OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.194,KPF0.standardize_header_format
+OBSLON,Longitude for barycentric correction,deg,Float,-155.47833333,KPF0.standardize_headers
+OBSLAT,Latitude for barycentric correction,deg,Float,19.82833333,KPF0.standardize_headers
+OBSALT,Altitude for barycentric correction,meters,Float,4160,KPF0.standardize_headers
+GEOSYS,Coordinate system for the site location,,String,WGS84,KPF0.standardize_headers
+OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.818,KPF0.standardize_headers
+OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.591,KPF0.standardize_headers
+OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.194,KPF0.standardize_headers
 
 SEEING,Seeing at beginning of exposure,arcsec,Float,0.87,DiagL0
 AIRMASS,Airmass at start of exposure,secZ,Float,1.16,

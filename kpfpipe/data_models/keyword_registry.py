@@ -20,7 +20,7 @@ unsourced. ``ExampleValue`` is documentation only, not read here.
 Three use-cases:
   (1) Mapping -- ``header_map`` (WMKO-native -> EPRV-standard, from
       ``config/header-map.csv``), consumed by
-      ``KPF0.standardize_header_format``; it annotates PRIMARY keywords the
+      ``KPF0.standardize_headers``; it annotates PRIMARY keywords the
       CSVs already register with a native source and a default, and every
       ``EPRV_KEY`` must be one of them or the load raises.
   (2) Validation -- ``is_registered``, ``allowed`` (per-extension set),

@@ -47,21 +47,21 @@ class KPF0(KPFDataModel):
         self._build()
 
     @classmethod
-    def from_fits(cls, fn, instrument=None, standardize=False, **kwargs):
+    def from_fits(cls, fn, standardize=False):
         """Read an L0 from FITS, standardizing its header on the way in if asked.
 
         ``standardize`` defaults to False so a naive read reflects the file on
         disk: PRIMARY as WMKO wrote it, INSTRUMENT_HEADER empty. The pipeline
         always passes True -- every stage after the load reads the EPRV PRIMARY.
         """
-        obj = super().from_fits(fn, instrument=instrument, **kwargs)
+        obj = super().from_fits(fn)
         if standardize:
-            obj.standardize_header_format()
+            obj.standardize_headers()
         return obj
 
     @property
     def standardized(self):
-        """True once ``standardize_header_format`` has run on this L0.
+        """True once ``standardize_headers`` has run on this L0.
 
         The receipt is the pipeline's existing, explicit, persisted answer to
         "which steps have run", so it -- not the header or extension structure --
@@ -72,16 +72,16 @@ class KPF0(KPFDataModel):
         return (
             r is not None
             and not r.empty
-            and "standardize_header_format" in r["FUNCTION"].values
+            and "standardize_headers" in r["FUNCTION"].values
         )
 
-    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+    def read(self, hdul, instrument=None):
         """Read an L0 FITS HDUList, resolving ``obs_id`` from its filename.
 
-        The obs_id must be known before ``standardize_header_format``, which
+        The obs_id must be known before ``standardize_headers``, which
         writes it as the ORIGID provenance card.
         """
-        super().read(hdul, instrument=instrument, overwrite=overwrite, **kwargs)
+        super().read(hdul, instrument=instrument)
         self.obs_id = get_obs_id(self.filename)
 
     def _stamp_wmko_tracking(self, native):
@@ -113,7 +113,7 @@ class KPF0(KPFDataModel):
             progname = "UNKNOWN"
         self.set_keyword("PROGID", progname)
 
-    def standardize_header_format(self):
+    def standardize_headers(self):
         """Convert this L0's PRIMARY from WMKO-native to EPRV-standard, in place.
 
         The single conversion site, run at load by ``from_fits(standardize=True)``
@@ -154,7 +154,7 @@ class KPF0(KPFDataModel):
             f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
         )
 
-        self.receipt_add_entry("standardize_header_format", "", "PASS")
+        self.receipt_add_entry("standardize_headers", "", "PASS")
         return self
 
     def _fill_from_native(self, native):
@@ -269,7 +269,7 @@ class KPF0(KPFDataModel):
         """Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
-        The PRIMARY is already EPRV-standard (from ``standardize_header_format``),
+        The PRIMARY is already EPRV-standard (from ``standardize_headers``),
         so this is a pure forward. GREEN/RED CCD and VAR are created empty -- the
         caller (image assembly) fills those in.
 
@@ -282,7 +282,7 @@ class KPF0(KPFDataModel):
         if not self.standardized:
             raise ValueError(
                 f"{self.obs_id} has not been standardized; call "
-                "standardize_header_format before to_kpf1"
+                "standardize_headers before to_kpf1"
             )
 
         kpf1 = KPF1()

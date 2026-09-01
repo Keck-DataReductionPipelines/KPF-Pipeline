@@ -408,7 +408,7 @@ class TestQualityControlPropagation:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-        l0.standardize_header_format()
+        l0.standardize_headers()
         # QCL0 routes L0 QC flags to QUALITY_CONTROL.
         l0.set_keyword("NOTJUNK", 1)
         l1 = l0.to_kpf1()
@@ -474,7 +474,7 @@ class TestBareModelDefaults:
     """A standalone model carries real provenance values, not 'UNKNOWN'.
 
     rvdata's header map defaults these to the literal string; KPF overrides them
-    in the registry, so they are already right before standardize_header_format runs.
+    in the registry, so they are already right before standardize_headers runs.
     """
 
     @pytest.mark.parametrize("keyword", ("EPRVTAG", "VOCLASS", "DRPTAG"))

@@ -210,13 +210,13 @@ def _set_catalog_record(l0, records):
 def _make_l0_pointing():
     """A KPF0 with just a native instrument pointing (RA/DEC/MJD-OBS), no catalog
     yet. The cards go on INSTRUMENT_HEADER, where every L0 module reads them once
-    standardize_header_format has run. IMTYPE 'Object' so AstroQuery accepts it."""
+    standardize_headers has run. IMTYPE 'Object' so AstroQuery accepts it."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "Object"
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
-    l0.standardize_header_format()
+    l0.standardize_headers()
     return l0
 
 
@@ -996,7 +996,7 @@ class TestDiagL0GuiderSeeing:
 
     def test_gdrseev_is_mirrored_onto_primary_seeing(self, tmp_path):
         # ``header-map.csv`` gives SEEING KPF_EXT=QUALITY_CONTROL, and
-        # QUALITY_CONTROL is still empty when standardize_header_format runs, so
+        # QUALITY_CONTROL is still empty when standardize_headers runs, so
         # DiagL0 stamps the seeded-blank PRIMARY card itself.
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
         results = DiagL0(l0).run()

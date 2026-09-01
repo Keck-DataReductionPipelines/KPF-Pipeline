@@ -30,7 +30,7 @@ class DiagL0(Diagnostics):
 
         SEEING maps from a diagnostic rather than a native card
         (``header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
-        QUALITY_CONTROL is still empty when standardize_header_format runs, so
+        QUALITY_CONTROL is still empty when standardize_headers runs, so
         DiagL0 is its PRIMARY writer too.
         """
         results = super().run()
