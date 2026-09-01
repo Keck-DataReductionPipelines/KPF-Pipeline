@@ -334,7 +334,6 @@ class TestKeywordRegistry:
     def test_primary_seed_is_typed_and_commented(self):
         seed = KPF1.keyword_registry.primary_seed("L0")
         assert seed["NUMTRACE"] == (5, "Number of object-indexed keyword families")
-        assert seed["OBSALT"][0] == 4160.0  # injected from kpfpipe.KECK_LOCATION
         assert seed["AIRMASS"] == (None, "Airmass at start of exposure [secZ]")
 
     def test_primary_seed_covers_every_member_of_a_family(self):

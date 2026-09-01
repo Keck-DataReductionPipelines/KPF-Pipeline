@@ -179,7 +179,7 @@ The architecture invariants:
   the exposure meter against; its *target astrometry*, by contrast, comes off the PRIMARY `C*#` cards,
   which `AstroQuery` fills from `CATALOG_RECORD`).
 - **DRP provenance is stamped during standardization** onto PRIMARY
-  (`KPF0.standardize_headers` → `_stamp_wmko_tracking`, not `to_kpf1`):
+  (`KPF0.standardize_headers` → `_program_identification`, not `to_kpf1`):
   `DRPVERNO`/`PROGID`/`KOAID`/`ORIGID`, plus `DRPSTATU`, which `receipt_add_entry` advances per module.
   It rides PRIMARY forward. A raw `from_fits()` carries none of it — the conversion is what stamps it.
   `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on read, so every model

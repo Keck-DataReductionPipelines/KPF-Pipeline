@@ -43,7 +43,6 @@ import pandas as pd
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.extension_manifest import extension_manifest
-from kpfpipe.utils.astro import KECK_LOCATION
 
 logger = logging.getLogger(__name__)
 
@@ -281,10 +280,6 @@ class KeywordRegistry:
         registered on PRIMARY, or a stray key would carry a default no card
         ever collects. Runs after ``_build_registry`` -- filters against
         ``self.allowed``.
-
-        The seven site-coordinate keywords default from
-        ``kpfpipe.KECK_LOCATION`` rather than a DEFAULT cell, so the
-        observatory config stays their single source.
         """
         raw = pd.read_csv(_kpf_pipe_cfg / "header-map.csv")
         keys = raw["EPRV_KEY"].astype(str).str.strip()
@@ -300,21 +295,6 @@ class KeywordRegistry:
                 f"on PRIMARY: {unregistered}. Register them in the appropriate "
                 "config/{prefix}-PRIMARY-keywords.csv before mapping them."
             )
-        # 1e-5 deg is ~1 m, against the ~140 m a 1 cm/s barycentric correction
-        # needs (dv = omega * dx); rounding also absorbs astropy's geodetic noise.
-        site = {
-            "GEOSYS": KECK_LOCATION.ellipsoid,
-            "OBSLON": round(KECK_LOCATION.lon.deg, 5),
-            "OBSLAT": round(KECK_LOCATION.lat.deg, 5),
-            "OBSALT": round(KECK_LOCATION.height.to_value("m"), 3),
-            "OBSGEO-X": round(KECK_LOCATION.x.to_value("m"), 3),
-            "OBSGEO-Y": round(KECK_LOCATION.y.to_value("m"), 3),
-            "OBSGEO-Z": round(KECK_LOCATION.z.to_value("m"), 3),
-        }
-        for keyword, value in site.items():
-            blank = (keys == keyword) & raw["DEFAULT"].isna()
-            # str(): DEFAULT is a text column, and _parse_value types it on read.
-            raw.loc[blank, "DEFAULT"] = str(value)
         self.header_map = raw
 
     # --- Accessors ------------------------------------------------------------

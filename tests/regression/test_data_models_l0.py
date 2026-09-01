@@ -229,6 +229,31 @@ class TestKPF0Provenance:
         assert prim.get("PROGID") == "UNKNOWN"
         assert prim.get("KOAID") == "KP.20240113.00001.00.fits"
 
+    def test_program_and_observer_fall_back_to_their_copies(self, tmp_path):
+        fn = write_minimal_l0(
+            tmp_path / "KP.20240113.00004.00.fits",
+            primary_cards={
+                "PROGNAME": None,
+                "GRPROGNA": "K123",
+                "RDPROGNA": "K123",
+                "GROBSERV": "Isaacson",  # RDOBSERV absent: one copy is enough
+            },
+        )
+        prim = standardized_l0(fn).headers["PRIMARY"]
+        assert prim["PROGID"] == "K123"
+        assert prim["PROGRAM"] == "K123"
+        assert prim["OBSERVER"] == "Isaacson"
+
+    def test_disagreeing_copies_default_to_unknown_and_warn(self, caplog, tmp_path):
+        fn = write_minimal_l0(
+            tmp_path / "KP.20240113.00005.00.fits",
+            primary_cards={"PROGNAME": None, "GRPROGNA": "K123", "RDPROGNA": "K456"},
+        )
+        with caplog.at_level(logging.WARNING):
+            prim = standardized_l0(fn).headers["PRIMARY"]
+        assert prim["PROGRAM"] == "UNKNOWN"
+        assert "GRPROGNA/RDPROGNA disagree" in caplog.text
+
     def test_raises_when_ofname_absent(self, tmp_path):
         # Without OFNAME there is no KOAID (the archive obs_id), so fail loud
         # rather than stamp a placeholder.
@@ -478,7 +503,7 @@ class TestStandardizedPrimary:
     def test_undated_frame_is_rejected(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
-        with pytest.raises(ValueError, match="Cannot infer the instrument era"):
+        with pytest.raises(ValueError, match="No KPF instrument era covers NaT"):
             l0.standardize_headers()
 
     def test_frame_between_eras_is_rejected(self):
@@ -630,6 +655,42 @@ class TestIdempotencyAndGate:
         assert (
             l0.headers["PRIMARY"]["DRPSTATU"] == "Standardize Headers module complete"
         )
+
+
+class TestKPF0TcsPointing:
+    """The pointing cards KPF0 derives from the TCS cards the header map fills."""
+
+    # The TCS cards of the 2024-04-05 science frame, and the PARANG that frame
+    # carries at mid-exposure -- an independent value to check the formula against.
+    _POINTING = {
+        "EL": 49.66,
+        "DEC": "+40:25:50.0",
+        "HA": "+02:44:48.20",
+        "ELAPSED": 75.022,
+    }
+    _NATIVE_PARANG = 108.08
+
+    def _pointed(self, tmp_path):
+        fn = write_minimal_l0(
+            tmp_path / "KP.20240113.00006.00.fits", primary_cards=self._POINTING
+        )
+        return standardized_l0(fn).headers["PRIMARY"]
+
+    def test_zenith_angle_complements_the_elevation(self, tmp_path):
+        assert self._pointed(tmp_path)["TZA1"] == 40.34
+
+    def test_parallactic_angle_matches_the_native_parang(self, tmp_path):
+        prim = self._pointed(tmp_path)
+        # Neglecting refraction, so a tenth of a degree at this airmass.
+        mid = (prim["PARST1"] + prim["PAREND1"]) / 2
+        assert mid == pytest.approx(self._NATIVE_PARANG, abs=0.2)
+        # Past the meridian with dec > latitude: the angle falls back from 180.
+        assert prim["PARST1"] > prim["PAREND1"]
+
+    def test_an_unpointed_frame_leaves_the_cards_blank(self, synthetic_l0_minimal):
+        prim = standardized_l0(synthetic_l0_minimal).headers["PRIMARY"]
+        for keyword in ("TZA1", "PARST1", "PAREND1"):
+            assert prim[keyword] is None
 
 
 class TestBlankCards:

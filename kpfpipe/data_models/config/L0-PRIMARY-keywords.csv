@@ -3,25 +3,18 @@ FILENAME,Name of the FITS file,,String,kpf_L1_20240405T110833.fits,KPF*.to_fits
 DATALVL,Data product base level,,String,L0,KPF0.standardize_headers
 ORIGIN,Entity that created this file,,String,Keck,KPF0.standardize_headers
 DATE,Last modification date/time of this file,UTC,String,2024-04-05T11:08:33,KPF0.standardize_headers
-
-KOAID,KOA archive ID (WMKO req.),,String,KP.20240405.40113.57.fits,KPF0.standardize_headers
 ORIGID,Original L0 observation ID,,String,KP.20240405.40113.57,KPF0.standardize_headers
-PROGID,WMKO program ID (WMKO req.),,String,K123,KPF0.standardize_headers
-DRPSTATU,DRP reduction status (WMKO req.),,String,Radial Velocity module complete,KPF0.standardize_headers
-DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),,String,3.0.0,KPF0.standardize_headers
-DRPTAG,RV DRP version,,String,3.0.0,KPF0.standardize_headers
-DRPHASH,Git commit hash,,String,277e3a1d99628d9fcef494797887663119,KPF0.standardize_headers
-EPRVTAG,Version of EPRV standard applied,,String,v0.4.0,KPF0.standardize_headers
-VOCLASS,EPRV standard release identifier,,String,EPRVSTANDARD2026.06,KPF0.standardize_headers
+KOAID,KOA archive ID (WMKO req.),,String,KP.20240405.40113.57.fits,KPF0.standardize_headers
 
-INSTRUME,Instrument name,,String,KPF,KPF0.standardize_headers
-INSTERA,Tag tracking permanent instrument changes,,String,KPF-2,KPF0.standardize_headers
-PINAME,Program PI name,,String,Howard,
-PROGRAM,Observing program name,,String,K123,
-ORGANIZA,Data owner organization for licensing,,String,WMKO,
-OBSERVER,Observer,,String,Isaacson,
+PINAME,Program PI name,,String,Howard,KPF0.standardize_headers
+PROGRAM,Observing program name,,String,K123,KPF0.standardize_headers
+PROGID,WMKO program ID (WMKO req.; EPRV equivalent is PROGRAM),,String,K123,KPF0.standardize_headers
+ORGANIZA,Data owner organization for licensing,,String,WMKO,KPF0.standardize_headers
+OBSERVER,Observer,,String,Isaacson,KPF0.standardize_headers
 OBSERVAT,Observatory name,,String,Keck Observatory,KPF0.standardize_headers
 TELESCOP,Telescope name,,String,Keck I,KPF0.standardize_headers
+INSTRUME,Instrument name,,String,KPF,KPF0.standardize_headers
+INSTERA,Tag tracking permanent instrument changes,,String,KPF-2,KPF0.standardize_headers
 
 OBJECT,Primary object name,,String,219134,KPF0.standardize_headers
 ALIASES,User-defined object names; ';' separated,,String,HD 219134; Gaia DR3 2870618101503062016,AstroQuery
@@ -59,11 +52,11 @@ TLST1,TCS LST for telescope 1,sexagesimal,String,06:37:52.9,KPF0.standardize_hea
 TRA1,TCS RA for telescope 1,sexagesimal,String,23:13:16.98,KPF0.standardize_headers
 TDEC1,TCS Dec for telescope 1,sexagesimal,String,+57:10:06.1,KPF0.standardize_headers
 TEL1,TCS elevation angle for telescope 1,deg,Float,59.4,KPF0.standardize_headers
-TZA1,TCS zenith angle for telescope 1,deg,Float,30.6,
+TZA1,TCS zenith angle for telescope 1,deg,Float,30.6,KPF0.standardize_headers
 TAZ1,TCS azimuth angle for telescope 1,deg,Float,41.9,KPF0.standardize_headers
 THA1,TCS hour angle for telescope 1,sexagesimal,String,-16:35:24.1,KPF0.standardize_headers
-PARST1,Parallactic angle at start; telescope 1,deg,Float,175.2,
-PAREND1,Parallactic angle at end; telescope 1,deg,Float,180.7,
+PARST1,Parallactic angle at start; telescope 1,deg,Float,175.2,KPF0.standardize_headers
+PAREND1,Parallactic angle at end; telescope 1,deg,Float,180.7,KPF0.standardize_headers
 
 OBSLON,Longitude for barycentric correction,deg,Float,-155.47833333,KPF0.standardize_headers
 OBSLAT,Latitude for barycentric correction,deg,Float,19.82833333,KPF0.standardize_headers
@@ -102,3 +95,10 @@ ADDFLAG,Additional team-defined flag,,String,Pass,
 OBSFLAG,Observer pass/fail for exposure,,String,Pass,
 FULLCOMP,Is this file fully EPRV-standard compliant?,,String,Yes,
 DQLVL0,L0 quality-check bitfield,,UInt,0,
+
+DRPSTATU,DRP reduction status (WMKO req.),,String,Radial Velocity module complete,KPF0.standardize_headers
+DRPVERNO,Pipeline version (WMKO req.; EPRV equivalent is DRPTAG),,String,3.0.0,KPF0.standardize_headers
+DRPTAG,RV DRP version,,String,3.0.0,KPF0.standardize_headers
+DRPHASH,Git commit hash,,String,277e3a1d99628d9fcef494797887663119,KPF0.standardize_headers
+EPRVTAG,Version of EPRV standard applied,,String,v0.4.0,KPF0.standardize_headers
+VOCLASS,EPRV standard release identifier,,String,EPRVSTANDARD2026.06,KPF0.standardize_headers
