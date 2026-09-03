@@ -45,7 +45,7 @@ ERVRED,RED SCI-combined RV error,km/s,float,0.0014,RadialVelocity
 BJDTDB,Barycentric Julian Day in TDB,JD,double,2460405.96456,RadialVelocity
 BERV,Barycentric RV,km/s,float,12.4431,RadialVelocity
 SYSVEL,Systemic velocity subtracted from RVs,km/s,float,0.0,RadialVelocity
-SYSACC,Acceleration of the systemic velocity,m/s/s,float,0.0,RadialVelocity
+SYSACC,Acceleration of the systemic velocity,km/s^2,float,0.0,RadialVelocity
 CSRC#,Catalog source for object in trace #,,String,Gaia DR3,AstroQuery
 CID#,Catalog designation for object in trace #,,String,DR3 2870618101503062016,AstroQuery
 CRA#,Catalog RA for object in trace #,sexagesimal,String,23:13:16.98,AstroQuery
