@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class Guider(Diagnostics):
     """Diagnostics from the GUIDER_AVG image and the GUIDER_CUBE_ORIGINS table.
 
-    Runs before Telemetry, which carries this class's GDRSEEV onto the PRIMARY
-    SEEING card.
+    Also carries the two observing conditions the guiding is judged against:
+    SEEING, which is this class's own V-band measurement, and AIRMASS.
     """
 
     LEVEL = "L0"
@@ -92,7 +92,7 @@ class Guider(Diagnostics):
     guider_image_stats._diag_name = "guider_image_stats"
 
     def guider_seeing(self):
-        """GDRSEEJZ, GDRSEEV: seeing [arcsec] from a Moffat fit to GUIDER_AVG.
+        """GDRSEEJZ, GDRSEEV, SEEING: seeing [arcsec] from a Moffat fit to GUIDER_AVG.
 
         A 2D Moffat profile fit to the median-subtracted co-added guider image,
         whose alpha is the seeing at the guide camera's 950-1200 nm band. The fit
@@ -100,7 +100,8 @@ class Guider(Diagnostics):
         reference pixel, and the smallest-residual seed wins; a fit that never
         converges emits no keyword. GDRSEEV rescales that alpha from the band
         midpoint to V by the Kolmogorov lambda^(1/5) law, both cards deriving
-        from the unrounded fit.
+        from the unrounded fit. SEEING is the same V-band measurement under its
+        EPRV name, which the registry routes to PRIMARY.
         """
         image = self.kpf_obj.data["GUIDER_AVG"]
         flat = np.asarray(image, dtype=float).ravel()
@@ -129,10 +130,8 @@ class Guider(Diagnostics):
         if best is None:
             return {}
         seeing = abs(float(best[3])) * 0.056
-        return self._tag(
-            GDRSEEJZ=round(seeing, 6),
-            GDRSEEV=round(seeing * ((1200 + 950) / 2 / 550) ** 0.2, 6),
-        )
+        v_band = round(seeing * ((1200 + 950) / 2 / 550) ** 0.2, 6)
+        return self._tag(GDRSEEJZ=round(seeing, 6), GDRSEEV=v_band, SEEING=v_band)
 
     guider_seeing._diag_name = "guider_seeing"
 
@@ -153,3 +152,10 @@ class Guider(Diagnostics):
         )
 
     guider_saturation._diag_name = "guider_saturation"
+
+    def airmass(self):
+        """AIRMASS: the airmass the DCS recorded at mid-exposure [secZ]."""
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
+        return self._tag(AIRMASS=round(float(hdr["AIRMASS"]), 6))
+
+    airmass._diag_name = "airmass"

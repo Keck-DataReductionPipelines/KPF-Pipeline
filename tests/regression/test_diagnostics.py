@@ -663,11 +663,18 @@ class TestGuiderSeeing:
         l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
         assert Guider(l0).guider_seeing() == {}
 
+    def test_unmeasured_seeing_leaves_primary_blank(self, tmp_path):
+        l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
+        Guider(l0).run()
+        assert not l0.headers["PRIMARY"]["SEEING"]
+
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
         results = Guider(l0).run()
         for key in ("GDRSEEJZ", "GDRSEEV"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+        # SEEING is the same measurement under its EPRV name, so it goes to PRIMARY.
+        assert l0.headers["PRIMARY"]["SEEING"] == results["GDRSEEV"][0]
 
     def test_diag_name_correct(self):
         assert Guider.__dict__["guider_seeing"]._diag_name == "guider_seeing"
@@ -1063,14 +1070,13 @@ class TestTelemetryMoonRadialVelocity:
 
 
 class TestTelemetrySiteConditions:
-    """Airmass, humidity, pressure and mirror temperature off the native cards."""
+    """Humidity, pressure, dewpoint and mirror temperatures off the native cards."""
 
     def _make_l0_with_conditions(self, **cards):
         l0 = _make_l0_pointing()
         native = l0.headers["INSTRUMENT_HEADER"]
         native.update(
             {
-                "AIRMASS": 1.31,
                 "RELH": 12.25,
                 "PRES": 620.881,
                 "PRIMTEMP": 1.403147,
@@ -1083,7 +1089,6 @@ class TestTelemetrySiteConditions:
 
     def test_values_copy_the_native_cards(self):
         results = Telemetry(self._make_l0_with_conditions()).site_conditions()
-        assert results["AIRMASS"][0] == pytest.approx(1.31)
         assert results["INHUM"][0] == pytest.approx(12.25)
         assert results["M1TMP"][0] == pytest.approx(1.403147)
         assert results["M2TEMP"][0] == pytest.approx(-0.288888)
@@ -1101,38 +1106,38 @@ class TestTelemetrySiteConditions:
     def test_written_to_primary(self):
         l0 = self._make_l0_with_conditions()
         results = Telemetry(l0).run()
-        for key in ("AIRMASS", "INHUM", "DEWPOINT", "OUTPRES", "M1TMP", "M2TEMP"):
+        for key in ("INHUM", "DEWPOINT", "OUTPRES", "M1TMP", "M2TEMP"):
             assert l0.headers["PRIMARY"][key] == results[key][0]
 
     def test_missing_native_card_emits_nothing(self):
         # One method, one native source: a frame short a card writes no card.
         l0 = self._make_l0_with_conditions()
         del l0.headers["INSTRUMENT_HEADER"]["RELH"]
-        assert Telemetry(l0).run().keys().isdisjoint({"AIRMASS", "INHUM"})
+        assert Telemetry(l0).run().keys().isdisjoint({"INHUM", "OUTPRES"})
 
     def test_diag_name_correct(self):
         assert Telemetry.__dict__["site_conditions"]._diag_name == "site_conditions"
 
 
-class TestTelemetrySeeing:
-    """The guider's V-band seeing, carried onto the PRIMARY SEEING card."""
+class TestGuiderAirmass:
+    """The airmass card, copied from the native header."""
 
-    def test_gdrseev_is_carried_onto_primary_seeing(self):
-        # ``header-map.csv`` gives SEEING KPF_EXT=QUALITY_CONTROL, and
-        # QUALITY_CONTROL is still empty when standardize_headers runs, so
-        # Telemetry stamps the seeded-blank PRIMARY card once Guider has run.
+    def _make_l0_with_airmass(self, **cards):
         l0 = _make_l0_pointing()
-        l0.headers["QUALITY_CONTROL"]["GDRSEEV"] = 0.87
-        results = Telemetry(l0).run()
-        assert l0.headers["PRIMARY"]["SEEING"] == results["SEEING"][0] == 0.87
+        l0.headers["INSTRUMENT_HEADER"].update({"AIRMASS": 1.31, **cards})
+        return l0
 
-    def test_unmeasured_seeing_leaves_primary_blank(self):
-        l0 = _make_l0_pointing()
-        assert "SEEING" not in Telemetry(l0).run()
-        assert not l0.headers["PRIMARY"]["SEEING"]
+    def test_value_copies_the_native_card(self):
+        results = Guider(self._make_l0_with_airmass()).airmass()
+        assert results["AIRMASS"][0] == pytest.approx(1.31)
+
+    def test_written_to_primary(self):
+        l0 = self._make_l0_with_airmass()
+        results = Guider(l0).run()
+        assert l0.headers["PRIMARY"]["AIRMASS"] == results["AIRMASS"][0]
 
     def test_diag_name_correct(self):
-        assert Telemetry.__dict__["seeing"]._diag_name == "seeing"
+        assert Guider.__dict__["airmass"]._diag_name == "airmass"
 
 
 def _make_kpf1(date_obs="2024-04-05T11:08:33"):

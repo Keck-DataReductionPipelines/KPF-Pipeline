@@ -16,6 +16,5 @@ class CheckpointL0(Checkpoint):
     LEVEL = "L0"
     # Missing raw data or a missing required PRIMARY keyword is fatal; others warn.
     RAISE_FLAGS = ("DATAPRL0",)
-    # Guider before Telemetry: SEEING is the guider's GDRSEEV, carried to PRIMARY.
     DIAGNOSTICS = (DiagL0, Guider, ExposureMeter, Telemetry)
     QC = QCL0

@@ -66,8 +66,8 @@ OBSGEO-X,Cartesian X for barycentric correction,meters,Float,-5464487.818,KPF0.s
 OBSGEO-Y,Cartesian Y for barycentric correction,meters,Float,-2492806.591,KPF0.standardize_headers
 OBSGEO-Z,Cartesian Z for barycentric correction,meters,Float,2151240.194,KPF0.standardize_headers
 
-SEEING,Seeing at beginning of exposure,arcsec,Float,0.87,Telemetry
-AIRMASS,Airmass at start of exposure,secZ,Float,1.16,Telemetry
+SEEING,Seeing at beginning of exposure,arcsec,Float,0.87,Guider
+AIRMASS,Airmass at start of exposure,secZ,Float,1.16,Guider
 ROTANG,Rotator angle,deg,Float,80.3,
 SUNEL,Sun elevation angle,deg,Float,-35.6,Telemetry
 MOONANG,Target-Moon angle,deg,Float,111.3,Telemetry

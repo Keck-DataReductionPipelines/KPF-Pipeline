@@ -157,8 +157,8 @@ class KPF0(KPFDataModel):
         a per-frame transform of the native ``MJD-OBS`` -- and is applied last.
 
         The ``KPF_EXT=QUALITY_CONTROL`` rows are not filled here: their source
-        extension is still empty at this point in the pipeline, so ``DiagL0``
-        stamps them onto PRIMARY when it computes them.
+        extension is still empty at this point in the pipeline, so ``Guider``
+        stamps the one such card, SEEING, onto PRIMARY when it measures it.
         """
         native = self.headers["INSTRUMENT_HEADER"]
         registry = self.keyword_registry

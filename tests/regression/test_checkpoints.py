@@ -29,7 +29,6 @@ from kpfpipe.quality_control.checkpoints import (
     CheckpointL2,
     CheckpointL4,
 )
-from kpfpipe.quality_control.diagnostics import Guider, Telemetry
 
 from ._data_models import (
     make_l4,
@@ -280,12 +279,6 @@ class TestCheckpointL0:
         assert qc["GREENL0"] == 1
         assert qc["REDL0"] == 1
         assert qc["TCSOFF"] < 1.0
-
-    def test_guider_runs_before_telemetry(self):
-        # Telemetry carries the guider's GDRSEEV onto the PRIMARY SEEING card,
-        # so it has nothing to carry until Guider has measured it.
-        order = CheckpointL0.DIAGNOSTICS
-        assert order.index(Guider) < order.index(Telemetry)
 
 
 # ---------------------------------------------------------------------------

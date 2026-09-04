@@ -18,8 +18,7 @@ class Telemetry(Diagnostics):
     """Instrument telemetry and the observing conditions of the exposure.
 
     Covers the TELEMETRY table, the environment cards the native header carries
-    and the solar/lunar geometry, and runs after Guider: SEEING is the guider's
-    GDRSEEV carried onto PRIMARY.
+    and the solar/lunar geometry.
     """
 
     LEVEL = "L0"
@@ -67,7 +66,7 @@ class Telemetry(Diagnostics):
     etalon_temperature_offset._diag_name = "etalon_temperature_offset"
 
     def site_conditions(self):
-        """AIRMASS, INHUM, DEWPOINT, OUTPRES, M1TMP, M2TEMP at mid-exposure.
+        """INHUM, DEWPOINT, OUTPRES, M1TMP, M2TEMP: conditions at mid-exposure.
 
         Read from the native cards, all of them the keyheader ExposureMiddle
         snapshot. RELH and PRES are the in-dome Vaisala humidity and pressure,
@@ -77,7 +76,6 @@ class Telemetry(Diagnostics):
         """
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         return self._tag(
-            AIRMASS=round(float(hdr["AIRMASS"]), 6),
             INHUM=round(float(hdr["RELH"]), 6),
             DEWPOINT=round(float(hdr["PRIMTEMP"]) - float(hdr["DIFFPTDW"]), 1),
             OUTPRES=round(float(hdr["PRES"]) / 10.0, 6),
@@ -147,18 +145,3 @@ class Telemetry(Diagnostics):
         )
 
     moon_radial_velocity._diag_name = "moon_radial_velocity"
-
-    def seeing(self):
-        """SEEING: V-band seeing [arcsec], the guider's GDRSEEV on PRIMARY.
-
-        SEEING maps from a diagnostic rather than a native card
-        (``header-map.csv`` gives it ``KPF_EXT=QUALITY_CONTROL``), and
-        QUALITY_CONTROL is still empty when standardize_headers runs, so its
-        PRIMARY card is stamped here, once Guider has measured it.
-        """
-        qc = self.kpf_obj.headers["QUALITY_CONTROL"]
-        if "GDRSEEV" not in qc:
-            return {}
-        return self._tag(SEEING=float(qc["GDRSEEV"]))
-
-    seeing._diag_name = "seeing"
