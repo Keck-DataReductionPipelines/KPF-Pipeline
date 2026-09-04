@@ -9,20 +9,22 @@ DATTIMOK,QC: Dates/times consistent (DATE-BEG/MID/END/ELAPSED),,int,1,QCL0
 EXPTIMOK,"QC: EXPTIME finite/non-neg, matches ELAPSED",,int,1,QCL0
 READOK,QC: CCD read properly (not a smeared 6-6.7 s readout),,int,1,QCL0
 NTPOK,QC: NTP clock error < 100 ms,,int,1,QCL0
-GUIDEROK,QC: guider not saturated and RMS/bias within 50 mas,,int,1,QCL0
-SEEINGOK,QC: V-band seeing < 1 arcsec,,int,1,QCL0
+GUIDEROK,QC: guiding error RMS/bias within 50 mas,,int,1,QCL0
+GDRCAMOK,QC: guide camera not saturated,,int,1,QCL0
+SEEINGOK,QC: V-band seeing < 1.5 arcsec,,int,1,QCL0
 ELEVOK,QC: telescope elevation above 30 deg (ADC working range),,int,1,QCL0
 TARGETOK,QC: pointing consistent with target/catalog RA/DEC,,int,1,QCL0
 ASTROMOK,QC: catalog epoch/equinox/rv/parallax/PM in physical range,,int,1,QCL0
 COLOROK,QC: catalog color present and in physical range,,int,1,QCL0
 EMTIMEOK,QC: exposure meter times consistent with shutter window,,int,1,QCL0
 EMFLUXOK,QC: exposure meter flux not saturated or negative,,int,1,QCL0
-GTEMPOK,QC: GREEN CCD within 10 mK of its temperature setpoint,,int,1,QCL0
-RTEMPOK,QC: RED CCD within 10 mK of its temperature setpoint,,int,1,QCL0
+TEMP10,QC: both CCDs within 10 mK of their temperature setpoints,,int,1,QCL0
+TEMP100,QC: both CCDs within 100 mK of their temperature setpoints,,int,1,QCL0
+TEMP1000,QC: both CCDs within 1000 mK of their temperature setpoints,,int,1,QCL0
 ETATMPOK,QC: etalon chamber temperatures at their setpoints,,int,1,QCL0
 AGITOK,QC: agitator running above minimum speed,,int,1,QCL0
-GREENL0,QC: GREEN dead/over-exposed pixel fractions within limits,,int,1,QCL0
-REDL0,QC: RED dead/over-exposed pixel fractions within limits,,int,1,QCL0
+DEADPXOK,QC: dead pixel fraction within limits on both CCDs,,int,1,QCL0
+SATPXOK,QC: over-exposed pixel fraction within limits on both CCDs,,int,1,QCL0
 NOTJUNK,QC: obs_id not in junk list,,int,1,QCL0
 TCSOFF,Pointing offset from TCS/DCS target (arcsec),,float,0.12,DiagL0
 OBJOFF,Pointing offset from OBJECT SIMBAD position (arcsec),,float,0.31,DiagL0

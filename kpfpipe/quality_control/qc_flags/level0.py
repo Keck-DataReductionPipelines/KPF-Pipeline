@@ -204,51 +204,68 @@ class QCL0(QC):
 
     good_readout._qc_key = "READOK"
 
-    def _ccd_temp_ok(self, key):
-        """One CCD held within 10 mK of its temperature setpoint.
+    def _ccd_temps_ok(self, limit):
+        """Both CCDs held within ``limit`` mK of their temperature setpoints.
 
-        DiagL0 measures the signed offset; this applies the limit to its
+        Telemetry measures the signed offsets; this applies the limit to their
         magnitude. Detector temperature drift moves the spectrum on the chip, so
-        it bears directly on RV stability.
+        it bears directly on RV stability, and the three flags below grade how
+        far it has drifted rather than passing or failing on one threshold.
         """
-        return abs(float(self.kpf_obj.headers["QUALITY_CONTROL"][key])) < 10.0
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        return all(abs(float(hdr[key])) < limit for key in ("GTEMPOFF", "RTEMPOFF"))
 
-    def green_ccd_temp_ok(self):
-        """GREEN CCD at its temperature setpoint."""
-        return self._ccd_temp_ok("GTEMPOFF")
+    def ccd_temps_within_10mk(self):
+        """Both CCDs within 10 mK of setpoint."""
+        return self._ccd_temps_ok(10.0)
 
-    green_ccd_temp_ok._qc_key = "GTEMPOK"
+    ccd_temps_within_10mk._qc_key = "TEMP10"
 
-    def red_ccd_temp_ok(self):
-        """RED CCD at its temperature setpoint."""
-        return self._ccd_temp_ok("RTEMPOFF")
+    def ccd_temps_within_100mk(self):
+        """Both CCDs within 100 mK of setpoint."""
+        return self._ccd_temps_ok(100.0)
 
-    red_ccd_temp_ok._qc_key = "RTEMPOK"
+    ccd_temps_within_100mk._qc_key = "TEMP100"
+
+    def ccd_temps_within_1000mk(self):
+        """Both CCDs within 1000 mK of setpoint."""
+        return self._ccd_temps_ok(1000.0)
+
+    ccd_temps_within_1000mk._qc_key = "TEMP1000"
 
     def guiding_ok(self):
-        """Guiding tracked to spec and the guide camera was not saturated.
+        """Guiding tracked to spec: 50 mas in both X/Y RMS and bias.
 
-        The guiding error must hold to 50 mas in both X/Y RMS and bias, at most 3
-        pixels of the co-added image saturated, and at most 10% of frames
-        carrying a saturated peak. DiagL0 measures all six; this applies the
-        limits. Bias is judged on magnitude, not signed value.
+        Guider measures all four; this applies the limit. Bias is judged on
+        magnitude, not signed value.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         if any(float(hdr[key]) > 50.0 for key in ("GDRXRMS", "GDRYRMS")):
             return False
-        if any(abs(float(hdr[key])) > 50.0 for key in ("GDRXBIAS", "GDRYBIAS")):
-            return False
-        return int(hdr["GDRNSAT"]) <= 3 and float(hdr["GDRFRSAT"]) <= 0.1
+        return all(abs(float(hdr[key])) <= 50.0 for key in ("GDRXBIAS", "GDRYBIAS"))
 
     guiding_ok._qc_key = "GUIDEROK"
 
+    def guide_camera_ok(self):
+        """Guide camera not saturated.
+
+        At most 3 pixels of the co-added image saturated, and at most 10% of
+        frames carrying a saturated peak. A saturated camera biases the centroid
+        the guiding errors are measured from, so this is judged apart from the
+        guiding itself.
+        """
+        hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
+        return int(hdr["GDRNSAT"]) <= 3 and float(hdr["GDRFRSAT"]) <= 0.1
+
+    guide_camera_ok._qc_key = "GDRCAMOK"
+
     def seeing_ok(self):
-        """V-band seeing under 1 arcsec.
+        """V-band seeing under 1.5 arcsec.
 
         A frame whose guider Moffat fit never converged carries no GDRSEEV and
         fails.
         """
-        return float(self.kpf_obj.headers["QUALITY_CONTROL"]["GDRSEEV"]) < 1.0
+        return float(self.kpf_obj.headers["QUALITY_CONTROL"]["GDRSEEV"]) < 1.5
 
     seeing_ok._qc_key = "SEEINGOK"
 
@@ -433,24 +450,23 @@ class QCL0(QC):
 
     expmeter_flux_sane._qc_key = "EMFLUXOK"
 
-    def _chip_pixels_ok(self, dead_key, sat_key):
-        """Both raw pixel-quality fractions of a chip within their limits.
+    def _pixel_fractions_ok(self, keys, limit):
+        """Both chips within ``limit`` on one raw pixel-quality fraction.
 
-        At most 5% of any amp below 1.0e4 D.N. (dead) and at most 15% above
-        5.0e8 D.N. (saturated). DiagL0 measures the fractions; this only applies
-        the limits.
+        DiagL0 measures the fractions per chip; this only applies the limit,
+        which either chip can fail on its own.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        return float(hdr[dead_key]) <= 0.05 and float(hdr[sat_key]) <= 0.15
+        return all(float(hdr[key]) <= limit for key in keys)
 
-    def green_pixels_ok(self):
-        """GREEN raw pixel quality: neither dead nor saturated beyond the limits."""
-        return self._chip_pixels_ok("DEADPXFG", "SATPXFG")
+    def dead_pixels_ok(self):
+        """At most 5% of any amp on either chip below 1.0e4 D.N."""
+        return self._pixel_fractions_ok(("DEADPXFG", "DEADPXFR"), 0.05)
 
-    green_pixels_ok._qc_key = "GREENL0"
+    dead_pixels_ok._qc_key = "DEADPXOK"
 
-    def red_pixels_ok(self):
-        """RED raw pixel quality: neither dead nor saturated beyond the limits."""
-        return self._chip_pixels_ok("DEADPXFR", "SATPXFR")
+    def saturated_pixels_ok(self):
+        """At most 15% of any amp on either chip above 5.0e8 D.N."""
+        return self._pixel_fractions_ok(("SATPXFG", "SATPXFR"), 0.15)
 
-    red_pixels_ok._qc_key = "REDL0"
+    saturated_pixels_ok._qc_key = "SATPXOK"

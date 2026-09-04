@@ -276,8 +276,8 @@ class TestCheckpointL0:
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
         assert "KWRDPRL0" not in qc  # its check is stubbed, so it writes no flag
-        assert qc["GREENL0"] == 1
-        assert qc["REDL0"] == 1
+        assert qc["DEADPXOK"] == 1
+        assert qc["SATPXOK"] == 1
         assert qc["TCSOFF"] < 1.0
 
 

@@ -1121,37 +1121,39 @@ class TestQCL0PixelQuality:
 
     def test_pixels_ok_pass(self, tmp_path):
         l0 = self._make_kpf0_with_fractions(tmp_path)
-        assert QCL0(l0).green_pixels_ok() is True
-        assert QCL0(l0).red_pixels_ok() is True
+        assert QCL0(l0).dead_pixels_ok() is True
+        assert QCL0(l0).saturated_pixels_ok() is True
 
     def test_pass_at_limits(self, tmp_path):
         # 5% dead and 15% saturated are the limits; a fraction must exceed to fail.
         l0 = self._make_kpf0_with_fractions(tmp_path, DEADPXFG=0.05, SATPXFG=0.15)
-        assert QCL0(l0).green_pixels_ok() is True
+        assert QCL0(l0).dead_pixels_ok() is True
+        assert QCL0(l0).saturated_pixels_ok() is True
 
     def test_dead_fail_past_limit(self, tmp_path):
         l0 = self._make_kpf0_with_fractions(tmp_path, DEADPXFG=0.06)
-        assert QCL0(l0).green_pixels_ok() is False
+        assert QCL0(l0).dead_pixels_ok() is False
 
     def test_saturated_fail_past_limit(self, tmp_path):
         l0 = self._make_kpf0_with_fractions(tmp_path, SATPXFR=0.16)
-        assert QCL0(l0).red_pixels_ok() is False
+        assert QCL0(l0).saturated_pixels_ok() is False
 
-    def test_chips_judged_separately(self, tmp_path):
-        # A dead GREEN chip does not drag down the RED verdict.
+    def test_either_chip_fails_the_flag(self, tmp_path):
+        # One flag per defect across both CCDs, so a dead GREEN fails it alone.
         l0 = self._make_kpf0_with_fractions(tmp_path, DEADPXFG=0.5)
-        assert QCL0(l0).green_pixels_ok() is False
-        assert QCL0(l0).red_pixels_ok() is True
+        assert QCL0(l0).dead_pixels_ok() is False
+        # ... and says nothing about saturation, which is the other flag.
+        assert QCL0(l0).saturated_pixels_ok() is True
 
     def test_missing_fraction_raises(self, tmp_path):
         # DiagL0 did not run, so there is nothing to judge.
         with pytest.raises(KeyError, match="DEADPXFG"):
-            QCL0(_make_kpf0(tmp_path)).green_pixels_ok()
+            QCL0(_make_kpf0(tmp_path)).dead_pixels_ok()
 
     def test_qc_keys_correct(self):
         expected = {
-            "green_pixels_ok": "GREENL0",
-            "red_pixels_ok": "REDL0",
+            "dead_pixels_ok": "DEADPXOK",
+            "saturated_pixels_ok": "SATPXOK",
         }
         for method_name, key in expected.items():
             fn = QCL0.__dict__[method_name]
@@ -1191,26 +1193,26 @@ class TestQCL0Telemetry:
 
     def test_ccd_temps_pass(self, tmp_path):
         l0 = self._make_kpf0_with_temps(tmp_path, GTEMPOFF=-9.9, RTEMPOFF=9.9)
-        assert QCL0(l0).green_ccd_temp_ok() is True
-        assert QCL0(l0).red_ccd_temp_ok() is True
+        assert QCL0(l0).ccd_temps_within_10mk() is True
 
     def test_ccd_temp_fail_either_direction(self, tmp_path):
         # The limit is on the magnitude, so a cold CCD fails like a warm one.
-        assert (
-            QCL0(
-                self._make_kpf0_with_temps(tmp_path, GTEMPOFF=-10.5)
-            ).green_ccd_temp_ok()
-            is False
-        )
-        assert (
-            QCL0(self._make_kpf0_with_temps(tmp_path, RTEMPOFF=10.5)).red_ccd_temp_ok()
-            is False
-        )
+        cold = self._make_kpf0_with_temps(tmp_path, GTEMPOFF=-10.5)
+        warm = self._make_kpf0_with_temps(tmp_path, RTEMPOFF=10.5)
+        assert QCL0(cold).ccd_temps_within_10mk() is False
+        assert QCL0(warm).ccd_temps_within_10mk() is False
 
-    def test_chips_judged_separately(self, tmp_path):
+    def test_either_chip_fails_the_flag(self, tmp_path):
+        # One flag for both CCDs, so a drifting GREEN fails it on its own.
         l0 = self._make_kpf0_with_temps(tmp_path, GTEMPOFF=50.0)
-        assert QCL0(l0).green_ccd_temp_ok() is False
-        assert QCL0(l0).red_ccd_temp_ok() is True
+        assert QCL0(l0).ccd_temps_within_10mk() is False
+        assert QCL0(l0).ccd_temps_within_100mk() is True
+
+    def test_the_three_limits_grade_the_drift(self, tmp_path):
+        l0 = self._make_kpf0_with_temps(tmp_path, GTEMPOFF=500.0)
+        assert QCL0(l0).ccd_temps_within_10mk() is False
+        assert QCL0(l0).ccd_temps_within_100mk() is False
+        assert QCL0(l0).ccd_temps_within_1000mk() is True
 
     def test_guiding_ok_pass(self, tmp_path):
         assert QCL0(self._make_kpf0_with_guider(tmp_path)).guiding_ok() is True
@@ -1224,26 +1226,35 @@ class TestQCL0Telemetry:
         l0 = self._make_kpf0_with_guider(tmp_path, GDRXBIAS=-60.0)
         assert QCL0(l0).guiding_ok() is False
 
-    def test_guider_saturation_fails(self, tmp_path):
-        assert (
-            QCL0(self._make_kpf0_with_guider(tmp_path, GDRNSAT=4)).guiding_ok() is False
-        )
-        assert (
-            QCL0(self._make_kpf0_with_guider(tmp_path, GDRFRSAT=0.11)).guiding_ok()
-            is False
-        )
-
     def test_guiding_missing_metric_raises(self, tmp_path):
-        # DiagL0 emits no guiding error when the camera was not tracking.
+        # Guider emits no guiding error when the camera was not tracking.
         with pytest.raises(KeyError, match="GDRXRMS"):
             QCL0(_make_kpf0(tmp_path)).guiding_ok()
 
+    def test_guide_camera_ok_pass(self, tmp_path):
+        assert QCL0(self._make_kpf0_with_guider(tmp_path)).guide_camera_ok() is True
+
+    def test_guider_saturation_fails(self, tmp_path):
+        assert (
+            QCL0(self._make_kpf0_with_guider(tmp_path, GDRNSAT=4)).guide_camera_ok()
+            is False
+        )
+        assert (
+            QCL0(self._make_kpf0_with_guider(tmp_path, GDRFRSAT=0.11)).guide_camera_ok()
+            is False
+        )
+
+    def test_saturation_does_not_fail_the_guiding_flag(self, tmp_path):
+        # The two are judged apart: a saturated camera may still have tracked.
+        l0 = self._make_kpf0_with_guider(tmp_path, GDRNSAT=4)
+        assert QCL0(l0).guiding_ok() is True
+
     def test_seeing_ok_pass(self, tmp_path):
-        l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=0.999)
+        l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=1.499)
         assert QCL0(l0).seeing_ok() is True
 
-    def test_seeing_ok_fail_at_one_arcsec(self, tmp_path):
-        l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=1.0)
+    def test_seeing_ok_fail_at_the_threshold(self, tmp_path):
+        l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=1.5)
         assert QCL0(l0).seeing_ok() is False
 
     def test_seeing_missing_metric_raises(self, tmp_path):
@@ -1321,9 +1332,11 @@ class TestQCL0Telemetry:
 
     def test_qc_keys_correct(self):
         expected = {
-            "green_ccd_temp_ok": "GTEMPOK",
-            "red_ccd_temp_ok": "RTEMPOK",
+            "ccd_temps_within_10mk": "TEMP10",
+            "ccd_temps_within_100mk": "TEMP100",
+            "ccd_temps_within_1000mk": "TEMP1000",
             "guiding_ok": "GUIDEROK",
+            "guide_camera_ok": "GDRCAMOK",
             "seeing_ok": "SEEINGOK",
             "elevation_ok": "ELEVOK",
             "etalon_at_temp": "ETATMPOK",
