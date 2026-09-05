@@ -1,13 +1,10 @@
 """Diagnostics for the KPF Level 0 guide camera extensions."""
 
-import logging
-
 import numpy as np
 from scipy.optimize import curve_fit
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
-
-logger = logging.getLogger(__name__)
+from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 
 class Guider(Diagnostics):
@@ -94,18 +91,15 @@ class Guider(Diagnostics):
     def guider_seeing(self):
         """GDRSEEJZ, GDRSEEV, SEEING: seeing [arcsec] from a Moffat fit to GUIDER_AVG.
 
-        A 2D Moffat profile fit to the median-subtracted co-added guider image,
-        whose alpha is the seeing at the guide camera's 950-1200 nm band. The fit
-        is seeded at three widths spanning 0.4-2.5 arcsec, centred on the guider
-        reference pixel, and the smallest-residual seed wins; a fit that never
-        converges emits no keyword. GDRSEEV rescales that alpha from the band
-        midpoint to V by the Kolmogorov lambda^(1/5) law, both cards deriving
-        from the unrounded fit. SEEING is the same V-band measurement under its
-        EPRV name, which the registry routes to PRIMARY.
+        The fitted alpha is the seeing in the guide camera's 950-1200 nm band;
+        GDRSEEV rescales it to V by the Kolmogorov lambda^(1/5) law, and SEEING
+        is that same V-band value under its EPRV name, routed to PRIMARY.
         """
-        image = self.kpf_obj.data["GUIDER_AVG"]
-        flat = np.asarray(image, dtype=float).ravel()
-        flat = flat - np.median(flat)
+        beta = 2.5
+        image = np.asarray(self.kpf_obj.data["GUIDER_AVG"], dtype=float)
+        outliers = flag_outliers(image, 5.0, kernel_size=3, method="trend")
+        image = interpolate_bad_pixels(image, ~outliers)
+        flat = image.ravel() - np.median(image)
         y, x = np.indices(image.shape)
         xy = (x.ravel(), y.ravel())
 
@@ -117,19 +111,13 @@ class Guider(Diagnostics):
 
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         center = (float(hdr.get("GCCRPIX1", 343.1)), float(hdr.get("GCCRPIX2", 264.7)))
-        best, smallest = None, np.inf
-        for alpha in (0.4 / 0.056, 1.0 / 0.056, 2.5 / 0.056):
-            try:
-                popt, _ = curve_fit(moffat, xy, flat, p0=[1, *center, alpha, 2.5])
-            except (RuntimeError, ValueError) as e:
-                logger.debug("guider seeing fit failed at alpha=%.1f px: %s", alpha, e)
-                continue
-            residuals = float(np.sum((flat - moffat(xy, *popt)) ** 2))
-            if residuals < smallest:
-                best, smallest = popt, residuals
-        if best is None:
-            return {}
-        seeing = abs(float(best[3])) * 0.056
+        # Seed alpha from the area above half the peak, the Moffat half-max radius.
+        peak = float(np.percentile(flat, 99.9))
+        half_width = (np.count_nonzero(flat > 0.5 * peak) / np.pi) ** 0.5
+        alpha = half_width / (2 ** (1 / beta) - 1) ** 0.5
+
+        popt, _ = curve_fit(moffat, xy, flat, p0=[peak, *center, alpha, beta])
+        seeing = abs(float(popt[3])) * 0.056
         v_band = round(seeing * ((1200 + 950) / 2 / 550) ** 0.2, 6)
         return self._tag(GDRSEEJZ=round(seeing, 6), GDRSEEV=v_band, SEEING=v_band)
 

@@ -659,9 +659,10 @@ class TestGuiderSeeing:
         wide = Guider(self._make_l0_with_moffat(tmp_path, 15.0)).guider_seeing()
         assert wide["GDRSEEJZ"][0] > narrow["GDRSEEJZ"][0]
 
-    def test_unfittable_image_emits_no_keyword(self, tmp_path):
+    def test_unfittable_image_raises(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
-        assert Guider(l0).guider_seeing() == {}
+        with pytest.raises(ValueError):
+            Guider(l0).guider_seeing()
 
     def test_unmeasured_seeing_leaves_primary_blank(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
