@@ -46,6 +46,9 @@ class Diagnostics:
         skipped: this layer is informational and never aborts the pipeline, so its
         keywords are simply not written. Halting is the checkpoint layer's role.
 
+        A keyword the header rejects is skipped on its own, so it takes neither
+        the siblings its method computed nor its own ``self.results`` entry.
+
         Returns
         -------
         dict
@@ -55,15 +58,26 @@ class Diagnostics:
 
         for name, fn in self._iter_methods():
             try:
-                output = fn()
-                for kw, (value, comment) in output.items():
-                    self.results[kw] = (value, comment)
-                    # set_keyword routes each metric to its registry home; the FITS
-                    # comment is the registry Description (the metric-dict comment is
-                    # retained in self.results only).
-                    self.kpf_obj.set_keyword(kw, value)
+                output = list(fn().items())
             except Exception as e:
                 logger.error("%s diagnostic %r raised: %s", self.LEVEL, name, e)
+                continue
+            for kw, (value, comment) in output:
+                # set_keyword routes each metric to its registry home; the FITS
+                # comment is the registry Description (the metric-dict comment is
+                # retained in self.results only).
+                try:
+                    self.kpf_obj.set_keyword(kw, value)
+                except Exception as e:
+                    logger.error(
+                        "%s diagnostic %r keyword %r rejected: %s",
+                        self.LEVEL,
+                        name,
+                        kw,
+                        e,
+                    )
+                    continue
+                self.results[kw] = (value, comment)
 
         for kw, (value, comment) in self.results.items():
             logger.debug("%s %s = %s — %s", self.LEVEL, kw, value, comment)

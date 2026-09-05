@@ -336,8 +336,9 @@ class KPFDataModel(RVDataModel):
 
         ``value`` is coerced to the registry ``DataType`` (the header
         counterpart of the manifest ``BitDepth`` check on ``set_data``); a
-        value that will not convert raises rather than landing wrong. None
-        writes the blank seeded card through unchanged.
+        value that will not convert raises rather than landing wrong. A
+        non-finite float is meaningless as a measurement and raises for the
+        same reason; None writes the blank seeded card through unchanged.
 
         ``ext`` targets a specific extension for EPRV per-extension cards with
         no single routed home (e.g. ``VELSTART`` on ``CCF1..5``, ``RVMETHOD``
@@ -352,7 +353,8 @@ class KPFDataModel(RVDataModel):
         ValueError
             The target extension does not exist on this object.
         TypeError
-            ``value`` does not convert to the registered ``DataType``.
+            ``value`` does not convert to the registered ``DataType``, or is a
+            non-finite float.
         """
         name = str(key).strip()
         if ext is None:
@@ -389,6 +391,11 @@ class KPFDataModel(RVDataModel):
                     f"keyword {name!r} on {ext!r} is declared {datatype}; "
                     f"cannot write {value!r}: {exc}"
                 ) from None
+        if isinstance(value, float) and not np.isfinite(value):
+            raise TypeError(
+                f"cannot write {value!r} to keyword {name!r} on {ext!r}: a "
+                "non-finite value is not a measurement"
+            )
         self.headers[ext][name] = (value, comment)
 
     def set_data(self, ext_name, data):

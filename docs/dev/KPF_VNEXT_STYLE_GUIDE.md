@@ -314,8 +314,10 @@ The four layers live in `kpfpipe/quality_control/`. Conventions for writing QC c
   def nan_counts(self): ...
   nan_counts._diag_name = "nan_counts"   # Diagnostics (_qc_key / _checkpoint_name for QC / Checkpoints)
   ```
-- **Runners reset `self.results = {}` at entry** and wrap each method in `try/except`, re-raising as
-  `RuntimeError` (loud failure, no silent suppression).
+- **Runners reset `self.results = {}` at entry** and wrap each method in `try/except`, logging the
+  failure at ERROR. Neither informational layer aborts the pipeline: a raising **Diagnostics** method
+  writes no keyword, a raising **QC** check writes its flag as 0. **Checkpoints** re-raise — that
+  layer alone halts.
 - **QC writes `int` 0/1 and does no validation**; round floats
   (`round(float(x), 6)`) and cast numpy scalars to Python types. The per-check comment lives once in
   the registry `Description` (QC methods carry only `_qc_key`). QC comments are namespaced `"QC: …"`;
