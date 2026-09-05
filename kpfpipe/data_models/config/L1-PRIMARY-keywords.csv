@@ -1,3 +1,7 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-READMODE,Readout mode,N/A,String,normal,ImageAssembly
-DQLVL1,L1 quality-check bitfield,N/A,UInt,0,
+READMODE,Readout mode,,String,normal,ImageAssembly
+BIASFILE,Master bias full path,,String,masters/20240405/kpf_20240405_master_bias.fits,CalibrationAssociation
+DARKFILE,Master dark full path,,String,masters/20240405/kpf_20240405_master_dark.fits,CalibrationAssociation
+FLATFILE,Master flat full path,,String,masters/20240405/kpf_20240405_master_flat.fits,
+WLSFILE,WLS master full path,,String,masters/20240405/kpf_20240405_master_WLS.fits,CalibrationAssociation
+DQLVL1,L1 quality-check bitfield,,UInt,0,

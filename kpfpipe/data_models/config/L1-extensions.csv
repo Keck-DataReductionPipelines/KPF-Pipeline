@@ -1,15 +1,16 @@
 HDU,Name,DataType,BitDepth,Required,Description
 0,PRIMARY,PrimaryHDU,,True,Observation metadata header
-1,GREEN_CCD,ImageHDU,32,True,Assembled green CCD frame (4080x4080)
-2,GREEN_VAR,ImageHDU,32,True,Green CCD variance frame
-3,RED_CCD,ImageHDU,32,True,Assembled red CCD frame (4080x4080)
-4,RED_VAR,ImageHDU,32,True,Red CCD variance frame
-5,CA_HK,ImageHDU,,False,Ca H&K spectrometer image
-6,EXPMETER_SCI,BinTableHDU,,False,Exposure meter science fiber
-7,EXPMETER_SKY,BinTableHDU,,False,Exposure meter sky fiber
-8,TELEMETRY,BinTableHDU,,False,System telemetry table
-9,RECEIPT,BinTableHDU,,True,Accumulated processing history
-10,DRP_CONFIG,BinTableHDU,,False,Pipeline config as a 2-column table (key = value)
-11,INSTRUMENT_HEADER,ImageHDU,,False,Verbatim raw instrument (L0) PRIMARY header
-12,QUALITY_CONTROL,BinTableHDU,,True,Quality-control booleans and diagnostic metrics
+1,INSTRUMENT_HEADER,ImageHDU,,False,Verbatim raw instrument (L0) PRIMARY header
+2,RECEIPT,BinTableHDU,,True,Accumulated processing history
+3,DRP_CONFIG,BinTableHDU,,False,Pipeline config as a 2-column table (key = value)
+4,EXT_DESCRIPT,BinTableHDU,,True,Table describing contents of each extension
+5,GREEN_CCD,ImageHDU,32,True,Assembled green CCD frame (4080x4080)
+6,GREEN_VAR,ImageHDU,32,True,Green CCD variance frame
+7,RED_CCD,ImageHDU,32,True,Assembled red CCD frame (4080x4080)
+8,RED_VAR,ImageHDU,32,True,Red CCD variance frame
+9,CA_HK,ImageHDU,,False,Ca H&K spectrometer image
+10,EXPMETER_SCI,BinTableHDU,,False,Exposure meter science fiber
+11,EXPMETER_SKY,BinTableHDU,,False,Exposure meter sky fiber
+12,TELEMETRY,BinTableHDU,,False,System telemetry table
 13,CATALOG_RECORD,BinTableHDU,,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery
+14,QUALITY_CONTROL,BinTableHDU,,True,Quality-control booleans and diagnostic metrics

@@ -1,8 +1,4 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-BIASAGE,Master bias age,days,float,0.35,CalibrationAssociation
-DARKAGE,Master dark age,days,float,0.35,CalibrationAssociation
-FLATAGE,Master flat age,days,float,0.35,
-WLSAGE,WLS master age,days,float,0.35,CalibrationAssociation
 DATAPRL1,QC: GREEN/RED CCD+VAR present and populated,,int,1,QCL1
 KWRDPRL1,QC: required L1 PRIMARY keywords present,,int,1,QCL1
 RNOK,QC: per-amp read noise 2-6 e-,,int,1,QCL1
@@ -13,6 +9,12 @@ FLATOK,QC: flat divided & master age <= 5 days,,int,0,QCL1
 L1NANOK,QC: GREEN/RED CCDs all finite,,int,1,QCL1
 L1VAROK,QC: no negative L1 variance where flux finite,,int,1,QCL1
 L1SNROK,QC: L1 pixel fraction below -5 sigma <= 1%,,int,1,QCL1
+BIASAGE,Master bias age,days,float,0.35,CalibrationAssociation
+DARKAGE,Master dark age,days,float,0.35,CalibrationAssociation
+FLATAGE,Master flat age,days,float,0.35,
+WLSAGE,WLS master age,days,float,0.35,CalibrationAssociation
+TRTGREEN,GREEN chip total read time,seconds,float,47.5,ImageAssembly
+TRTRED,RED chip total read time,seconds,float,47.5,ImageAssembly
 RNGREEN1,Read noise GREEN amp 1,e-,float,4.12,ImageAssembly
 RNGREEN2,Read noise GREEN amp 2,e-,float,4.08,ImageAssembly
 RNGREEN3,Read noise GREEN amp 3,e-,float,4.15,ImageAssembly
@@ -29,8 +31,6 @@ RNNGRD1,Non-Gaussian read noise RED amp 1,,float,1.00,ImageAssembly
 RNNGRD2,Non-Gaussian read noise RED amp 2,,float,1.01,ImageAssembly
 RNNGRD3,Non-Gaussian read noise RED amp 3,,float,0.99,ImageAssembly
 RNNGRD4,Non-Gaussian read noise RED amp 4,,float,1.02,ImageAssembly
-TRTGREEN,GREEN chip total read time,seconds,float,47.5,ImageAssembly
-TRTRED,RED chip total read time,seconds,float,47.5,ImageAssembly
 FFIG99P,99th percentile flux in the GREEN CCD image,e-,float,124800.0,DiagL1
 FFIG90P,90th percentile flux in the GREEN CCD image,e-,float,41200.0,DiagL1
 FFIG50P,50th percentile flux in the GREEN CCD image,e-,float,860.0,DiagL1

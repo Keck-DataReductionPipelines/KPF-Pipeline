@@ -278,8 +278,10 @@ class TestLoadMaster:
     @staticmethod
     def _frame(biasfile="master_bias.fits", biasdir="/m"):
         frame = MagicMock(name="l1")
-        # BIASFILE holds the master's full path and lives on RECEIPT.
-        frame.headers = {"RECEIPT": {"BIASFILE": os.path.join(biasdir, biasfile)}}
+        # biasfile holds the master's full path and lives in the RECEIPT table.
+        frame.receipt_read_entry.return_value = {
+            "biasfile": os.path.join(biasdir, biasfile)
+        }
         return frame
 
     def test_falsy_value_returns_unchanged_without_loading(self, monkeypatch):

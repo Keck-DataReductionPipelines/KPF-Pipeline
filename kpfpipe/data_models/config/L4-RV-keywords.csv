@@ -1,9 +1,9 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-CTYPE1,Name of axis 1,N/A,string,Columns,CrossCorrelation
-CTYPE2,Name of axis 2,N/A,string,Order-N,CrossCorrelation
-RVMETHOD,RV derivation method,N/A,String,CCF,RadialVelocity
-SKYRMVD,Sky model removed?,N/A,Bool,False,RadialVelocity
-TELLRMVD,Telluric model removed?,N/A,Bool,False,RadialVelocity
+CTYPE1,Name of axis 1,,string,Columns,CrossCorrelation
+CTYPE2,Name of axis 2,,string,Order-N,CrossCorrelation
+RVMETHOD,RV derivation method,,String,CCF,RadialVelocity
+SKYRMVD,Sky model removed?,,Bool,False,RadialVelocity
+TELLRMVD,Telluric model removed?,,Bool,False,RadialVelocity
 RVGREEN,GREEN RV for this trace,km/s,float,-18.549,RadialVelocity
 RVRED,RED RV for this trace,km/s,float,-18.556,RadialVelocity
 ERVGREEN,GREEN RV error for this trace,km/s,float,0.0021,RadialVelocity

@@ -14,7 +14,7 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.quality_control.diagnostics import DiagL0
+from kpfpipe.quality_control.checkpoints import CheckpointL0
 from kpfpipe.quality_control.qc_flags import QCL0
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
@@ -167,7 +167,7 @@ class BaseMasterModule:
         Resolve one active calibration to a master, caching one per type.
 
         Source is ``self._active_calibrations[cal_type]``: True → master associated
-        into the frame header, str → filepath, KPFMasterL1 → in-memory master. A
+        into the frame receipt, str → filepath, KPFMasterL1 → in-memory master. A
         disk-backed master is read only when its path differs from the cached one
         (frames in a stack almost always share a master, so each is read once).
         Falsy and in-memory values are returned unchanged.
@@ -179,7 +179,9 @@ class BaseMasterModule:
         if isinstance(value, str):
             path = value
         elif value is True:
-            path = l1_obj.headers["RECEIPT"][f"{cal_type.upper()}FILE"]
+            path = l1_obj.receipt_read_entry("calibration_association")[
+                f"{cal_type}file"
+            ]
         else:
             return value  # let ImageProcessing raise the TypeError
 
@@ -207,7 +209,8 @@ class BaseMasterModule:
         try:
             l0_obj = KPF0.from_fits(fn, standardize=True)
 
-            DiagL0(l0_obj).run()
+            for diagnostics in CheckpointL0.DIAGNOSTICS:
+                diagnostics(l0_obj).run()
             qc = QCL0(l0_obj).run()
             failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
             if failed:

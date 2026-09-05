@@ -9,27 +9,27 @@ HDU,Name,DataType,BitDepth,Required,Description
 7,TRACE1_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 1 (SKY)
 8,TRACE1_VAR,ImageHDU,32,True,Variance for trace 1 (SKY)
 9,TRACE1_BLAZE,ImageHDU,32,True,Blaze for trace 1 (SKY)
-10,BARYCORR_KMS,ImageHDU,64,True,Barycentric correction in km/s
-11,BARYCORR_Z,ImageHDU,64,True,Barycentric correction in redshift
-12,BJD_TDB,ImageHDU,64,True,Photon-weighted midpoint in BJD_TDB
-13,TRACE2_FLUX,ImageHDU,32,True,Flux in trace 2 (SCI1)
-14,TRACE2_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 2 (SCI1)
-15,TRACE2_VAR,ImageHDU,32,True,Variance for trace 2 (SCI1)
-16,TRACE2_BLAZE,ImageHDU,32,True,Blaze for trace 2 (SCI1)
-17,TRACE3_FLUX,ImageHDU,32,True,Flux in trace 3 (SCI2)
-18,TRACE3_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 3 (SCI2)
-19,TRACE3_VAR,ImageHDU,32,True,Variance for trace 3 (SCI2)
-20,TRACE3_BLAZE,ImageHDU,32,True,Blaze for trace 3 (SCI2)
-21,TRACE4_FLUX,ImageHDU,32,True,Flux in trace 4 (SCI3)
-22,TRACE4_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 4 (SCI3)
-23,TRACE4_VAR,ImageHDU,32,True,Variance for trace 4 (SCI3)
-24,TRACE4_BLAZE,ImageHDU,32,True,Blaze for trace 4 (SCI3)
-25,TRACE5_FLUX,ImageHDU,32,True,Flux in trace 5 (CAL)
-26,TRACE5_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 5 (CAL)
-27,TRACE5_VAR,ImageHDU,32,True,Variance for trace 5 (CAL)
-28,TRACE5_BLAZE,ImageHDU,32,True,Blaze for trace 5 (CAL)
+10,TRACE2_FLUX,ImageHDU,32,True,Flux in trace 2 (SCI1)
+11,TRACE2_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 2 (SCI1)
+12,TRACE2_VAR,ImageHDU,32,True,Variance for trace 2 (SCI1)
+13,TRACE2_BLAZE,ImageHDU,32,True,Blaze for trace 2 (SCI1)
+14,TRACE3_FLUX,ImageHDU,32,True,Flux in trace 3 (SCI2)
+15,TRACE3_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 3 (SCI2)
+16,TRACE3_VAR,ImageHDU,32,True,Variance for trace 3 (SCI2)
+17,TRACE3_BLAZE,ImageHDU,32,True,Blaze for trace 3 (SCI2)
+18,TRACE4_FLUX,ImageHDU,32,True,Flux in trace 4 (SCI3)
+19,TRACE4_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 4 (SCI3)
+20,TRACE4_VAR,ImageHDU,32,True,Variance for trace 4 (SCI3)
+21,TRACE4_BLAZE,ImageHDU,32,True,Blaze for trace 4 (SCI3)
+22,TRACE5_FLUX,ImageHDU,32,True,Flux in trace 5 (CAL)
+23,TRACE5_WAVE,ImageHDU,64,True,Vacuum wavelength solution for trace 5 (CAL)
+24,TRACE5_VAR,ImageHDU,32,True,Variance for trace 5 (CAL)
+25,TRACE5_BLAZE,ImageHDU,32,True,Blaze for trace 5 (CAL)
+26,BARYCORR_KMS,ImageHDU,64,True,Barycentric correction in km/s
+27,BARYCORR_Z,ImageHDU,64,True,Barycentric correction in redshift
+28,BJD_TDB,ImageHDU,64,True,Photon-weighted midpoint in BJD_TDB
 29,ANCILLARY_SPECTRUM,BinTableHDU,,False,Ancillary spectra (Ca H&K); a KPF BinTableHDU deviation
 30,EXPMETER,BinTableHDU,,False,Table of exposure meter counts over the exposure
 31,TELEMETRY,BinTableHDU,,False,Table of telemetry collected during the exposure
-32,QUALITY_CONTROL,BinTableHDU,,False,Quality-control booleans and diagnostic metrics
-33,CATALOG_RECORD,BinTableHDU,,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery
+32,CATALOG_RECORD,BinTableHDU,,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery
+33,QUALITY_CONTROL,BinTableHDU,,False,Quality-control booleans and diagnostic metrics

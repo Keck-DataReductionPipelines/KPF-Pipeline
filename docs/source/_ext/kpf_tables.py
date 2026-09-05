@@ -13,16 +13,15 @@ build-time-generation pattern as conf.py's guidelines bridge). The generated
 CSVs are gitignored; the config CSVs stay the sole tracked copy. Pages consume
 them with a plain ``.. csv-table:: :file:`` directive.
 
-Two table shapes are generated:
+One table shape is generated: one table per level, passed through verbatim --
+``{L0,L1,L2,L4}-extensions.csv`` (that model's extension manifest) and
+``{L0,L1,L2,L4}-QUALITY_CONTROL-keywords.csv`` (the QC keywords that level's QC
+pass writes).
 
-* one table per level, passed through verbatim -- ``{L0,L1,L2,L4}-extensions.csv``
-  (that model's extension manifest) and
-  ``{L0,L1,L2,L4}-QUALITY_CONTROL-keywords.csv`` (the QC keywords that level's
-  QC pass writes).
-* one table spanning every level -- ``PRIMARY-keywords.csv``, the four levels'
-  registrations concatenated in level order with a ``Level`` column marking
-  where each keyword is introduced. The levels register disjoint keyword sets,
-  so the concatenation drops nothing.
+The PRIMARY keyword table is *not* generated: ``data_products/PRIMARY-keywords.csv``
+is maintained by hand, so the whole header can be presented in reading order
+rather than in config-file order. ``tests/regression/test_docs.py`` asserts it
+against the config registries, so drift fails the suite instead of the build.
 
 A missing config CSV is left to raise: these tables exist to keep the docs and
 the config in step, so config drift must fail the build rather than quietly
@@ -41,13 +40,10 @@ LEVELS = ("L0", "L1", "L2", "L4")
 # naming: "{level}-{stem}.csv".
 PER_LEVEL_TABLES = ("extensions", "QUALITY_CONTROL-keywords")
 
-# Extensions whose keywords are rendered as a single table spanning every level.
-MERGED_KEYWORD_EXTENSIONS = ("PRIMARY",)
-
-# Which table takes which shape is an editorial choice, fixed to match the pages
+# Which config CSVs are rendered is an editorial choice, fixed to match the pages
 # in data_products/ (a section per level in data_models.rst and in
-# quality_control.rst, one whole-header table in primary_header.rst) rather than
-# discovered from the config -- discovery would emit tables no page references.
+# quality_control.rst) rather than discovered from the config -- discovery would
+# emit tables no page references.
 
 # Config column name -> table heading, for the columns whose config spelling is
 # not what a reader should see. Anything absent here keeps its own name.
@@ -91,19 +87,6 @@ def _generate(output_dir):
         for level in LEVELS:
             name = f"{level}-{stem}.csv"
             _write(os.path.join(output_dir, name), *_read(config / name))
-
-    for extension in MERGED_KEYWORD_EXTENSIONS:
-        header, rows = None, []
-        for level in LEVELS:
-            level_header, level_rows = _read(
-                config / f"{level}-{extension}-keywords.csv"
-            )
-            # Level goes second: the keyword is the identifier the reader scans
-            # for, the level an attribute of it.
-            if header is None:
-                header = [level_header[0], "Level", *level_header[1:]]
-            rows.extend([row[0], level, *row[1:]] for row in level_rows)
-        _write(os.path.join(output_dir, f"{extension}-keywords.csv"), header, rows)
 
 
 def _on_config_inited(app, _config):

@@ -37,7 +37,7 @@ from kpfpipe.utils.kpf import is_obs_id
 
 # Trace index -> fiber name, and the 1:1 KPF -> EPRV extension synonyms.
 TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
-EXTENSION_ALIASES = pd.read_csv(_config_path / "aliases.csv")
+EXTENSION_ALIASES = pd.read_csv(_config_path / "extension-aliases.csv")
 
 # Data-model conversion/serialization receipts, excluded from DRPSTATU so it
 # names the last real pipeline stage. ``from_fits`` is here too: reading a
@@ -73,7 +73,7 @@ class KPFDataModel(RVDataModel):
 
     # Whether construction stamps the registry's PRIMARY skeleton. L0 does not:
     # ``_read`` replaces PRIMARY wholesale, so anything stamped here would be
-    # discarded; ``standardize_header_format`` seeds it once, after the read.
+    # discarded; ``standardize_headers`` seeds it once, after the read.
     _SEEDS_PRIMARY = True
 
     def __init__(self):
@@ -105,7 +105,7 @@ class KPFDataModel(RVDataModel):
     def _register_aliases(self):
         """Register this level's KPF-friendly extension aliases, from config.
 
-        Two families, both table-driven: 1:1 synonyms in ``aliases.csv`` (e.g.
+        Two families, both table-driven: 1:1 synonyms in ``extension-aliases.csv`` (e.g.
         CA_HK -> ANCILLARY_SPECTRUM), and per-trace ``_ALIAS_TEMPLATES`` keyed
         off ``trace-map.csv`` (e.g. SCI2_FLUX -> TRACE3_FLUX). An alias whose
         canonical extension this level lacks is skipped.
@@ -189,7 +189,7 @@ class KPFDataModel(RVDataModel):
     def _set_ext_descript(self):
         """Rebuild EXT_DESCRIPT from the live extension set.
 
-        A no-op where the manifest declares no such extension (L0, L1, ML1).
+        A no-op where the manifest declares no such extension (ML1).
         """
         if "EXT_DESCRIPT" not in self.extensions:
             return
@@ -204,7 +204,7 @@ class KPFDataModel(RVDataModel):
             ),
         )
 
-    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+    def read(self, hdul, instrument=None):
         """Read an EPRV-standard FITS HDUList into this model.
 
         One read path at every level. ``RVDataModel.read`` dispatches L2/L4 via
@@ -268,7 +268,7 @@ class KPFDataModel(RVDataModel):
             self.set_header(ext_name, hdu.header)
 
     @classmethod
-    def from_fits(cls, fn, instrument=None, **kwargs):
+    def from_fits(cls, fn):
         """Read a data product from FITS, logging the file read (DRP-RUN-08).
 
         The single read chokepoint: one INFO record per read, then delegate to
@@ -284,7 +284,7 @@ class KPFDataModel(RVDataModel):
         cell masked rather than NaN, so ``np.isnan`` would miss it as present.
         """
         logger.info("reading %s from %s", cls.__name__, fn)
-        obj = super().from_fits(fn, instrument=instrument, **kwargs)
+        obj = super().from_fits(fn)
         if getattr(obj, "obs_id", None) is None:
             obj.obs_id = obj._obs_id_from_primary()
         table = obj.data.get("CATALOG_RECORD")
@@ -336,8 +336,9 @@ class KPFDataModel(RVDataModel):
 
         ``value`` is coerced to the registry ``DataType`` (the header
         counterpart of the manifest ``BitDepth`` check on ``set_data``); a
-        value that will not convert raises rather than landing wrong. None
-        writes the blank seeded card through unchanged.
+        value that will not convert raises rather than landing wrong. A
+        non-finite float is meaningless as a measurement and raises for the
+        same reason; None writes the blank seeded card through unchanged.
 
         ``ext`` targets a specific extension for EPRV per-extension cards with
         no single routed home (e.g. ``VELSTART`` on ``CCF1..5``, ``RVMETHOD``
@@ -352,7 +353,8 @@ class KPFDataModel(RVDataModel):
         ValueError
             The target extension does not exist on this object.
         TypeError
-            ``value`` does not convert to the registered ``DataType``.
+            ``value`` does not convert to the registered ``DataType``, or is a
+            non-finite float.
         """
         name = str(key).strip()
         if ext is None:
@@ -389,6 +391,11 @@ class KPFDataModel(RVDataModel):
                     f"keyword {name!r} on {ext!r} is declared {datatype}; "
                     f"cannot write {value!r}: {exc}"
                 ) from None
+        if isinstance(value, float) and not np.isfinite(value):
+            raise TypeError(
+                f"cannot write {value!r} to keyword {name!r} on {ext!r}: a "
+                "non-finite value is not a measurement"
+            )
         self.headers[ext][name] = (value, comment)
 
     def set_data(self, ext_name, data):
@@ -487,35 +494,36 @@ class KPFDataModel(RVDataModel):
             label = function.replace("_", " ").title()
             self.set_keyword("DRPSTATU", f"{label} module complete")
 
+    def receipt_read_entry(self, function):
+        """The provenance ARGS of the most recent ``function`` receipt row.
+
+        ARGS is a ``", "``-joined list of ``key=value`` fragments; returns them
+        as a dict of strings, empty when ``function`` has no row. A fragment
+        written from ``None`` reads back as ``None``, so a key recorded without
+        a value and a key never recorded both ``get()`` as ``None``.
+        """
+        if self.receipt is None or self.receipt.empty:
+            return {}
+        rows = self.receipt[self.receipt["FUNCTION"] == function]
+        if rows.empty:
+            return {}
+        entry = {}
+        for token in str(rows.iloc[-1]["ARGS"]).split(", "):
+            key, _, value = token.partition("=")
+            if value:
+                entry[key.strip()] = None if value == "None" else value.strip()
+        return entry
+
     def _create_hdul(self):
         """Sync ``self.receipt`` into the RECEIPT extension before writing
         (rvdata serializes ``self.data["RECEIPT"]``, not ``self.receipt``),
         creating the extension if L0/L1 omitted it.
-
-        Also the one place FILENAME can be withheld: rvdata's ``to_fits``
-        stamps it on PRIMARY unconditionally just before calling this, so a
-        product that must not carry it (see ``_stamps_filename``) drops it
-        here.
         """
         if self.receipt is not None and not self.receipt.empty:
             if "RECEIPT" not in self.extensions:
                 self.create_extension("RECEIPT", "BinTableHDU")
             self._sync_receipt_to_extension()
-        if not self._stamps_filename:
-            # No native WMKO key maps to FILENAME, so unstandardized PRIMARY
-            # only ever has the card rvdata just added.
-            del self.headers["PRIMARY"]["FILENAME"]
         return super()._create_hdul()
-
-    @property
-    def _stamps_filename(self):
-        """Whether FILENAME belongs on this product's PRIMARY when it is written.
-
-        True for every EPRV-standard product. ``KPF0`` overrides it: a raw
-        (unstandardized) L0 must round-trip with the native header it was
-        read with.
-        """
-        return True
 
     def to_fits(self, fn=None):
         """Write this product to ``fn``, defaulting to its standard filename.

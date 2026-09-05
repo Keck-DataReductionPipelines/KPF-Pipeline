@@ -90,11 +90,15 @@ class TestToKPF4:
         kpf2 = KPF2()
         kpf2.set_keyword("NANSCI1", 7)  # DiagL2 metric -> QUALITY_CONTROL
         kpf2.headers["QUALITY_CONTROL"]["DATAPRL0"] = (1, "L0 flag (propagated)")
-        kpf2.headers["RECEIPT"]["BIASSUB"] = (1, "bias subtracted")
+        # No keyword is registered on RECEIPT any more -- provenance lives in the
+        # table -- so a raw card stands in for the header-forwarding path.
+        kpf2.headers["RECEIPT"]["PROVCARD"] = (1, "raw provenance card")
+        kpf2.receipt_add_entry("image_processing", "biassub=1", "PASS")
         kpf4 = kpf2.to_kpf4()
         assert kpf4.headers["QUALITY_CONTROL"].get("NANSCI1") == 7
         assert kpf4.headers["QUALITY_CONTROL"].get("DATAPRL0") == 1
-        assert kpf4.headers["RECEIPT"].get("BIASSUB") == 1
+        assert kpf4.headers["RECEIPT"].get("PROVCARD") == 1
+        assert kpf4.receipt_read_entry("image_processing") == {"biassub": "1"}
 
     def test_l4_quality_control_survives_round_trip(self, tmp_path):
         kpf2 = KPF2()

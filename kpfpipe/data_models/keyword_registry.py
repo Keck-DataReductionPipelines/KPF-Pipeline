@@ -19,10 +19,10 @@ unsourced. ``ExampleValue`` is documentation only, not read here.
 
 Three use-cases:
   (1) Mapping -- ``header_map`` (WMKO-native -> EPRV-standard, from
-      ``config/EPRV-header-map.csv``), consumed by
-      ``KPF0.standardize_header_format``; defines the EPRV PRIMARY keyword
-      set (every ``EPRV_KEY`` must be registered on PRIMARY, or the load
-      raises).
+      ``config/header-map.csv``), consumed by
+      ``KPF0.standardize_headers``; it annotates PRIMARY keywords the
+      CSVs already register with a native source and a default, and every
+      ``EPRV_KEY`` must be one of them or the load raises.
   (2) Validation -- ``is_registered``, ``allowed`` (per-extension set),
       ``is_structural`` (FITS bookkeeping cards, permitted everywhere,
       registered nowhere).
@@ -43,7 +43,6 @@ import pandas as pd
 
 from kpfpipe import DETECTOR
 from kpfpipe.data_models.extension_manifest import extension_manifest
-from kpfpipe.utils.astro import KECK_LOCATION
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +150,9 @@ class KeywordRegistry:
         rows, data_model_primary = self._load_keyword_rows()
         self.table = pd.DataFrame(rows, columns=self._COLUMNS)
         self.registered = frozenset(self.table["Keyword"])
-        # PRIMARY keywords contributed by each data model's own CSVs -- the seed
-        # set for the masters, which are outside EPRV scope.
+        # PRIMARY keywords contributed by each data model's own CSVs, in file
+        # order -- what primary_seed accumulates, and what keeps the masters'
+        # registrations out of the science skeleton.
         self._data_model_primary = MappingProxyType(
             {p: tuple(kws) for p, kws in data_model_primary.items()}
         )
@@ -160,7 +160,6 @@ class KeywordRegistry:
         cards = {}  # (keyword, extension) -> (comment, DataType)
         allowed = {}  # extension -> {keyword}
         homes = {}  # keyword -> {extension it is registered on}
-        primary_levels = {}  # keyword -> lowest Level it is on PRIMARY at
         qc_all = set()
         qc_by_level = {}
         for row in self.table.itertuples(index=False):
@@ -170,11 +169,7 @@ class KeywordRegistry:
             )
             allowed.setdefault(row.Extension, set()).add(row.Keyword)
             homes.setdefault(row.Keyword, set()).add(row.Extension)
-            if row.Extension == "PRIMARY":
-                primary_levels[row.Keyword] = min(
-                    primary_levels.get(row.Keyword, row.Level), row.Level
-                )
-            elif (
+            if (
                 row.Extension == "QUALITY_CONTROL"
                 and row.PopulatedBy in self._QC_POPULATORS
             ):
@@ -189,8 +184,6 @@ class KeywordRegistry:
             {ext: frozenset(kws) for ext, kws in allowed.items()}
         )
         self.routing = MappingProxyType(self._routing_lookup(homes))
-        # The level gate primary_seed applies to the header map.
-        self._primary_levels = MappingProxyType(primary_levels)
         self.qc_flag_keywords = frozenset(qc_all)
         self.qc_flag_keywords_by_level = MappingProxyType(
             {lvl: frozenset(kws) for lvl, kws in qc_by_level.items()}
@@ -280,47 +273,28 @@ class KeywordRegistry:
         return rows, data_model_primary
 
     def _load_header_map(self):
-        """Read ``config/EPRV-header-map.csv``, the WMKO-native -> EPRV map.
+        """Read ``config/header-map.csv``, the WMKO-native -> EPRV map.
 
-        PRIMARY-only by definition, so also the definition of the EPRV PRIMARY
-        keyword set: every ``EPRV_KEY`` must be unique and registered on
-        PRIMARY, or a stray key would seed a comment-less, untyped card
-        silently. Runs after ``_build_registry`` -- filters against
+        PRIMARY-only, and an annotation of the registry rather than a second
+        authority over them: every ``EPRV_KEY`` must be unique and already
+        registered on PRIMARY, or a stray key would carry a default no card
+        ever collects. Runs after ``_build_registry`` -- filters against
         ``self.allowed``.
-
-        The seven site-coordinate keywords default from
-        ``kpfpipe.KECK_LOCATION`` rather than a DEFAULT cell, so the
-        observatory config stays their single source.
         """
-        raw = pd.read_csv(_kpf_pipe_cfg / "EPRV-header-map.csv")
+        raw = pd.read_csv(_kpf_pipe_cfg / "header-map.csv")
         keys = raw["EPRV_KEY"].astype(str).str.strip()
         duplicated = sorted(set(keys[keys.duplicated()]))
         if duplicated:
             raise ValueError(
-                f"EPRV-header-map.csv has duplicate EPRV_KEY rows: {duplicated}"
+                f"header-map.csv has duplicate EPRV_KEY rows: {duplicated}"
             )
         unregistered = sorted(set(keys) - self.allowed.get("PRIMARY", frozenset()))
         if unregistered:
             raise ValueError(
-                "EPRV-header-map.csv maps EPRV_KEY values that are not registered "
+                "header-map.csv maps EPRV_KEY values that are not registered "
                 f"on PRIMARY: {unregistered}. Register them in the appropriate "
                 "config/{prefix}-PRIMARY-keywords.csv before mapping them."
             )
-        # 1e-5 deg is ~1 m, against the ~140 m a 1 cm/s barycentric correction
-        # needs (dv = omega * dx); rounding also absorbs astropy's geodetic noise.
-        site = {
-            "GEOSYS": KECK_LOCATION.ellipsoid,
-            "OBSLON": round(KECK_LOCATION.lon.deg, 5),
-            "OBSLAT": round(KECK_LOCATION.lat.deg, 5),
-            "OBSALT": round(KECK_LOCATION.height.to_value("m"), 3),
-            "OBSGEO-X": round(KECK_LOCATION.x.to_value("m"), 3),
-            "OBSGEO-Y": round(KECK_LOCATION.y.to_value("m"), 3),
-            "OBSGEO-Z": round(KECK_LOCATION.z.to_value("m"), 3),
-        }
-        for keyword, value in site.items():
-            blank = (keys == keyword) & raw["DEFAULT"].isna()
-            # str(): DEFAULT is a text column, and _parse_value types it on read.
-            raw.loc[blank, "DEFAULT"] = str(value)
         self.header_map = raw
 
     # --- Accessors ------------------------------------------------------------
@@ -339,11 +313,10 @@ class KeywordRegistry:
     def _compose_comment(description, units):
         """The FITS comment for a registry row: ``Description [Units]``.
 
-        Unit-less rows (blank or the EPRV ``N/A`` placeholder) carry the
-        description alone.
+        A unit-less row leaves ``Units`` blank and carries the description alone.
         """
         u = str(units).strip()
-        if not u or u.lower() == "n/a":
+        if not u:
             return description
         return f"{description} [{u}]"
 
@@ -455,27 +428,34 @@ class KeywordRegistry:
         """``data_model``'s typed PRIMARY skeleton: ``{keyword: (value, comment)}``.
 
         Every keyword registered on PRIMARY for that data model, with its
-        ``EPRV-header-map.csv`` default where it has one and blank otherwise,
+        ``header-map.csv`` default where it has one and blank otherwise,
         each carrying its registry comment. Nothing is filtered on
         ``REQUIRED`` -- the seed stamps a card for every member of every ``#``
         family (the five-trace rule at the header level).
 
-        For ``L0``/``L1``/``L2``/``L4`` the set is the header-map rows at
-        ``Level <= n``, cumulative (156 cards at L0, L1 adds ``DQLVL1``, L2
-        ``EXTRACT``/``EXSNR#``/``EXSNRW#``/``DQLVL2``, L4 the seven RV rows and
-        ``DQLVL4``). For the masters it is that master's own
-        ``ML*-PRIMARY-keywords.csv`` rows -- masters are outside EPRV scope and
-        do not inherit the science skeleton.
+        For ``L0``/``L1``/``L2``/``L4`` the set is every PRIMARY registration at
+        ``Level <= n``, cumulative: L1 adds ``READMODE``, the master-calibration
+        paths and ``DQLVL1``, L2 the extraction cards and ``DQLVL2``, L4 the RV
+        summary and ``DQLVL4``. The header map supplies defaults, not membership
+        -- a keyword KPF owns but the EPRV standard has no row for (``BIASFILE``,
+        ``RVGREEN``) is still seeded, blank. For the masters the set is that
+        master's own ``ML*-PRIMARY-keywords.csv`` rows -- masters are outside
+        EPRV scope and do not inherit the science skeleton.
         """
         extension_manifest.require(data_model)
         if data_model.startswith("ML"):
             defaults = [(kw, None) for kw in self._data_model_primary[data_model]]
         else:
             cap = self._DATA_MODEL_LEVELS[data_model]
-            defaults = [
-                (str(row.EPRV_KEY).strip(), row.DEFAULT)
+            mapped = {
+                str(row.EPRV_KEY).strip(): row.DEFAULT
                 for row in self.header_map.itertuples(index=False)
-                if self._primary_levels[str(row.EPRV_KEY).strip()] <= cap
+            }
+            defaults = [
+                (keyword, mapped.get(keyword))
+                for model, keywords in self._data_model_primary.items()
+                if not model.startswith("ML") and self._DATA_MODEL_LEVELS[model] <= cap
+                for keyword in keywords
             ]
         return {
             keyword: (

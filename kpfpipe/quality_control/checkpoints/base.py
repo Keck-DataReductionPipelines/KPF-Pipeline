@@ -26,7 +26,7 @@ class Checkpoint:
 
     LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
     RAISE_FLAGS = ()  # QC keywords whose failure (0) raises; every other 0 warns.
-    DIAGNOSTICS = None  # Paired Diagnostics class, run first by run() (None = skip).
+    DIAGNOSTICS = ()  # Paired Diagnostics classes, run first by run(), in order.
     QC = None  # Paired QC class, run second; its results land in self.qc_results.
 
     def __init__(self, kpf_obj):
@@ -42,8 +42,8 @@ class Checkpoint:
         raises. A level with no paired ``DIAGNOSTICS``/``QC`` skips that stage.
         The checkpoint methods themselves never write (no return value).
         """
-        if self.DIAGNOSTICS is not None:
-            self.DIAGNOSTICS(self.kpf_obj).run()
+        for diagnostics in self.DIAGNOSTICS:
+            diagnostics(self.kpf_obj).run()
         if self.QC is not None:
             self.qc_results = self.QC(self.kpf_obj).run()
         for name, fn in self._iter_checkpoints():
@@ -62,7 +62,7 @@ class Checkpoint:
         For each registry-governed extension present on the product, a card that
         is neither structural nor registered (in ``keyword_registry.allowed[ext]``)
         raises ``ValueError`` and names it. PRIMARY is validated at every level
-        including L0: standardize_header_format runs at load, so the PRIMARY a
+        including L0: standardize_headers runs at load, so the PRIMARY a
         checkpoint sees is always the EPRV one. This subsumes the old WMKO-native
         leak check: a raw instrument keyword kept in INSTRUMENT_HEADER is simply
         unregistered for an EPRV PRIMARY.

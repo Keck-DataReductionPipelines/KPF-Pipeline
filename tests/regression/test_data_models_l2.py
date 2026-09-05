@@ -65,7 +65,7 @@ def converted_l1(synthetic_l0_file):
     """An L1 from KPF0.to_kpf1: EPRV-standard PRIMARY plus a populated
     INSTRUMENT_HEADER, the input to_kpf2 expects in production."""
     l0 = KPF0.from_fits(synthetic_l0_file)
-    l0.standardize_header_format()
+    l0.standardize_headers()
     return l0.to_kpf1()
 
 
@@ -144,7 +144,7 @@ class TestToKPF2:
         assert isinstance(kpf2, KPF2)
 
     def test_to_kpf2_passes_through_eprv_primary(self, converted_l1):
-        # The keyword conversion happened in standardize_header_format; to_kpf1 and
+        # The keyword conversion happened in standardize_headers; to_kpf1 and
         # to_kpf2 only forward it.
         kpf2 = converted_l1.to_kpf2()
         prim = kpf2.headers["PRIMARY"]
@@ -762,6 +762,11 @@ _DATATYPE_DEVIATIONS = {
 # EPRV keywords KPF does not register.
 _UNREGISTERED = {
     "PVN_#": "variable-length parametric WLS family; KPF writes no parametric WLS",
+    "INHUMT": "EPRV-optional; every environment card is sampled at DATE-MID",
+    "OUTPREST": "EPRV-optional; every environment card is sampled at DATE-MID",
+    "M1TMPT": "EPRV-optional; every environment card is sampled at DATE-MID",
+    "OUTTMPT": "EPRV-optional; KPF has no OUTTMP to timestamp",
+    "OUTHUMT": "EPRV-optional; KPF has no OUTHUM to timestamp",
 }
 
 _PER_EXTENSION_TABLES = [
@@ -790,7 +795,7 @@ class TestEPRVCompliance:
             member
             for keyword in rvdata_table("L2-PRIMARY-keywords")["Keyword"]
             for member in expand(keyword)
-        }
+        } - set(_UNREGISTERED)
         assert not sorted(want - KPF2.keyword_registry.allowed["PRIMARY"])
 
     @pytest.mark.parametrize(("table", "extension"), _PER_EXTENSION_TABLES)

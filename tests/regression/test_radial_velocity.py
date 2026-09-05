@@ -50,12 +50,14 @@ def _make_l4(
     cal_obj="None",
     berv=0.0,
     bjd=0.0,
+    sysrv=0.0,
     perform_fibers=None,
 ):
     """Synthetic KPF2 (absorption at MASK_CENTERS, shifted by V_INJECT) run
     through CrossCorrelation (mask stubbed, narrow grid) into a KPF4."""
     kpf2 = KPF2()
     seed_sci2_cards(kpf2, sci_obj=sci_obj, sky_obj=sky_obj, cal_obj=cal_obj)
+    kpf2.headers["PRIMARY"]["CRV3"] = sysrv  # the stellar CCF grid center
 
     wave_1d = np.linspace(5000.0, 5050.0, NCOL)
     lam_obs = MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS)
@@ -407,7 +409,7 @@ class TestPerform:
     pre-commit loop.
     """
 
-    _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CAL-OBJ='None' -> skipped
+    _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CLSRC5='None' -> skipped
 
     @pytest.fixture(scope="module")
     def performed(self, rv_l4):
@@ -442,7 +444,7 @@ class TestPerform:
             }
 
     def test_unilluminated_fiber_skipped(self, performed):
-        # CAL-OBJ='None' -> CrossCorrelation wrote no CAL CCF or RV table.
+        # CLSRC5='None' -> CrossCorrelation wrote no CAL CCF or RV table.
         _, l4 = performed
         assert l4.data["CAL_CCF"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
@@ -460,6 +462,18 @@ class TestPerform:
         assert rv_hdr["SKYRMVD"] is False
         assert rv_hdr["TELLRMVD"] is False
         assert l4.headers["PRIMARY"]["RVMETHOD"] == "CCF"
+
+    def test_reported_rvs_are_absolute(self, monkeypatch):
+        # SYSVEL is what was subtracted from the RVs, not the systemic velocity
+        # itself. Centering the CCF grid on the injected velocity does not move
+        # the answer: the grid stays in absolute velocity, so the fitted RV
+        # carries the systemic RV and nothing takes it back out.
+        l4 = _make_l4(monkeypatch, sysrv=V_INJECT)
+        module = RadialVelocity(l4, config={"rv_window": RANGE_KMS})
+        prim = module.perform().headers["PRIMARY"]
+        assert prim["RV"] == pytest.approx(V_INJECT, abs=0.1)
+        assert prim["SYSVEL"] == 0.0
+        assert prim["SYSACC"] == 0.0
 
     def test_per_ccd_rv_keywords(self, performed):
         # Per-orderlet RVs are written as RV{chip}/ERV{chip} onto that fiber's own
@@ -536,7 +550,7 @@ class TestPerform:
 
     def test_cal_only_run_skips_combine(self, monkeypatch, caplog):
         # A calibration-only run must not raise: PRIMARY RV is left UNDEFINED.
-        l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="Th_gold")
+        l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="ThAr")
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             prim = (
                 RadialVelocity(l4, config={"rv_window": RANGE_KMS})

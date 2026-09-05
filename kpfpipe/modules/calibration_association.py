@@ -161,9 +161,10 @@ class CalibrationAssociation:
         """Write the master-path and signed-age keywords for each association.
 
         Reads self._calibrations (from perform()); each cal type contributes
-        {PREFIX}FILE (full master path, routed to RECEIPT) and {PREFIX}AGE (the
+        {PREFIX}FILE (full master path, routed to PRIMARY) and {PREFIX}AGE (the
         master's timestamp minus PRIMARY DATE-OBS, in days, routed to
-        QUALITY_CONTROL).
+        QUALITY_CONTROL). Only associated cal types get a card; the receipt
+        entry is the one that records all four, None where unassociated.
         """
         obs_dt = datetime.fromisoformat(l1_obj.headers["PRIMARY"]["DATE-OBS"])
         for cal_type, cal in self._calibrations.items():
@@ -171,6 +172,14 @@ class CalibrationAssociation:
             l1_obj.set_keyword(f"{prefix}FILE", cal["filepath"])
             age = kpf_timestamp_to_datetime(get_timestamp(cal["filepath"])) - obs_dt
             l1_obj.set_keyword(f"{prefix}AGE", age.total_seconds() / 86400.0)
+
+    def _receipt_args(self):
+        """The master path of every supported cal type, None where unassociated."""
+        associated = {c: cal["filepath"] for c, cal in self._calibrations.items()}
+        return ", ".join(
+            f"{prefix.lower()}file={associated.get(cal_type)}"
+            for cal_type, prefix in _HEADER_PREFIX.items()
+        )
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -235,7 +244,9 @@ class CalibrationAssociation:
 
         self._set_headers(self.l1_obj)
         self._track_info()
-        self.l1_obj.receipt_add_entry("calibration_association", "", "PASS")
+        self.l1_obj.receipt_add_entry(
+            "calibration_association", self._receipt_args(), "PASS"
+        )
 
         logger.info("%s", self._info)
         return self.l1_obj

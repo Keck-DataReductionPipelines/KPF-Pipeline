@@ -8,12 +8,10 @@ from Gaia (by GAIAID, whose release prefix picks the data release queried) and S
 astrometry (no query), merges them into a canonical ``kpf-drp`` row, and writes all
 four rows to the L0 ``CATALOG_RECORD`` extension.
 
-CATALOG_RECORD bridges an ordering problem: the results ultimately belong on the EPRV
-PRIMARY catalog keywords (``C*#``), but that conversion does not happen until
-``KPF0.to_kpf1()`` downstream, which overlays the merged record onto those cards.
-AstroQuery never modifies the L0 PRIMARY header. All rows share one schema in the EPRV
-C*# PRIMARY format (see ``_CATALOG_COLUMNS``), so ``to_kpf1`` can copy cells straight
-onto the catalog cards.
+All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_COLUMNS``), so
+the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards; the resolved names
+are joined into ``ALIASES``. Those two families are the only PRIMARY cards AstroQuery
+writes.
 """
 
 import logging
@@ -69,11 +67,13 @@ _SIMBAD_UNITS = {
     "rvz_radvel": u.km / u.s,
     "B": None,
     "V": None,
+    "main_id": None,
+    "ids": None,
 }
 
-# Votable fields asked of SIMBAD, beyond the ra/dec every query returns. Spelled out
-# rather than derived from _SIMBAD_UNITS, so the two can be seen to diverge.
-_SIMBAD_FIELDS = ("pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V")
+# Votable fields asked of SIMBAD, beyond the ra/dec/main_id every query returns. Spelled
+# out rather than derived from _SIMBAD_UNITS, so the two can be seen to diverge.
+_SIMBAD_FIELDS = ("pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V", "ids")
 
 # Queryable Gaia release -> its gaia_source table, newest last. DR1 and EDR3 are
 # excluded (no radial_velocity or BP/RP photometry, and superseded, respectively).
@@ -185,6 +185,7 @@ class AstroQuery:
         self._wmko = None  # native WMKO record; set by read_wmko_header()
         self._gaia = None  # Gaia DR3 record; set by query_gaia()
         self._simbad = None  # SIMBAD record; set by query_simbad()
+        self._common_name = None  # SIMBAD common name; set by query_simbad()
         self._canonical = None  # merged kpf-drp record; set by merge_catalog_records()
         self._info = None
 
@@ -301,6 +302,32 @@ class AstroQuery:
         if not obj:
             return None
         return f"HD {obj}" if obj.isdigit() else obj
+
+    @staticmethod
+    def _simbad_common_name(row):
+        """The common name in a SIMBAD result row: its proper name ('NAME Vega' among
+        the ``ids``) else ``main_id``, SIMBAD's own preferred identifier ('* tau Cet'
+        for HD 10700), stripped of the marker and identifier padding. For a star with
+        neither, main_id is a catalog designation that ``_aliases`` de-duplicates.
+        """
+        ids = str(row["ids"]).split("|")
+        name = next((i for i in ids if i.startswith("NAME ")), str(row["main_id"]))
+        return " ".join(name.removeprefix("NAME ").removeprefix("*").split())
+
+    def _aliases(self):
+        """The ALIASES value: the SIMBAD-resolvable name, the Gaia-resolvable
+        designation and the common name, '; ' separated, skipping any unavailable or
+        already listed.
+        """
+        aliases = []
+        for name in (
+            self._simbad_resolvable_name(),
+            self._gaia["object"] if self._gaia else None,
+            self._common_name,
+        ):
+            if name and name not in aliases:
+                aliases.append(name)
+        return "; ".join(aliases)
 
     @staticmethod
     def _scalar(value):
@@ -547,6 +574,7 @@ class AstroQuery:
             return None
         self._verify_units(result, _SIMBAD_UNITS, "SIMBAD")
         row = result[0]
+        self._common_name = self._simbad_common_name(row)
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
         # To the EPRV C*# format: deg -> sexagesimal; PM mas/yr -> arcsec/yr.
@@ -862,7 +890,8 @@ class AstroQuery:
         l0_obj : KPF0
             The input L0, with the ``wmko``/``gaia``/``simbad`` and merged ``kpf-drp``
             rows written to ``CATALOG_RECORD``, the canonical astrometry overlaid onto
-            the SCI-fiber ``C*#`` PRIMARY cards, plus an 'astro_query' receipt entry.
+            the SCI-fiber ``C*#`` PRIMARY cards, the resolved names on ``ALIASES``, plus
+            an 'astro_query' receipt entry.
             Unusually for a pipeline module this returns an L0, not the next level --
             AstroQuery runs before assembly.
 
@@ -891,6 +920,7 @@ class AstroQuery:
         # enrichment: a card with no catalog value stays present and blank.
         for keyword, value in self._catalog_primary_cards().items():
             self.l0_obj.set_keyword(keyword, value)
+        self.l0_obj.set_keyword("ALIASES", self._aliases())
 
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")

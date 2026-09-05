@@ -65,9 +65,20 @@ class QCL1(QC):
 
     read_noise_nongauss_ok._qc_key = "RNNGOK"
 
+    def _calibration_applied(self, key):
+        """Whether ImageProcessing recorded ``key`` applied in the RECEIPT table.
+
+        ImageProcessing writes all three flags on every run, so an absent one is
+        a frame that never went through it -- an error, not a False.
+        """
+        entry = self.kpf_obj.receipt_read_entry("image_processing")
+        if key not in entry:
+            raise KeyError(f"{key} missing from the RECEIPT table")
+        return entry[key] == "1"
+
     def bias_ok(self):
-        """Bias subtracted (RECEIPT BIASSUB) and master bias age <= 5 days."""
-        if not self.kpf_obj.headers["RECEIPT"]["BIASSUB"]:
+        """Bias subtracted (receipt biassub) and master bias age <= 5 days."""
+        if not self._calibration_applied("biassub"):
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["BIASAGE"])
         return abs(age) <= 5
@@ -75,8 +86,8 @@ class QCL1(QC):
     bias_ok._qc_key = "BIASOK"
 
     def dark_ok(self):
-        """Dark subtracted (RECEIPT DARKSUB) and master dark age <= 5 days."""
-        if not self.kpf_obj.headers["RECEIPT"]["DARKSUB"]:
+        """Dark subtracted (receipt darksub) and master dark age <= 5 days."""
+        if not self._calibration_applied("darksub"):
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["DARKAGE"])
         return abs(age) <= 5
@@ -84,8 +95,8 @@ class QCL1(QC):
     dark_ok._qc_key = "DARKOK"
 
     def flat_ok(self):
-        """Flat divided (RECEIPT FLATDIV) and master flat age <= 5 days."""
-        if not self.kpf_obj.headers["RECEIPT"]["FLATDIV"]:
+        """Flat divided (receipt flatdiv) and master flat age <= 5 days."""
+        if not self._calibration_applied("flatdiv"):
             return False
         age = float(self.kpf_obj.headers["QUALITY_CONTROL"]["FLATAGE"])
         return abs(age) <= 5

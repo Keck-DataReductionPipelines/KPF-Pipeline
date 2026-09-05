@@ -27,7 +27,7 @@ class KPF1(KPFDataModel):
 
     def __init__(self):
         # L1 is not an EPRV level, but the PRIMARY skeleton is still stamped at
-        # construction; the values standardize_header_format wrote at L0 are
+        # construction; the values standardize_headers wrote at L0 are
         # forwarded over it by KPF0.to_kpf1.
         super().__init__()
         self.level = 1

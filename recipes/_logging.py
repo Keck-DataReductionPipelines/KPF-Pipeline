@@ -13,22 +13,20 @@ def science_run_summary(l4, elapsed_s):
     """Format the science recipe's end-of-run verdict from the finished L4.
 
     A compact, greppable roll-up read off the L4 the recipe just built: obs_id
-    and the master-file cards from RECEIPT, the input/product paths from the
-    RECEIPT provenance table, and the combined RV from PRIMARY, plus the
+    and the master-file and input/product paths from the RECEIPT provenance
+    table, and the combined RV from PRIMARY, plus the
     wall-clock elapsed. ``RV``/``RVERR``/``BJDTDB`` that
     are not real numbers (absent or FITS UNDEFINED, e.g. no science combine ran)
     render as ``n/a``; ``RV`` is km/s (error in m/s), ``BJDTDB`` is BJD_TDB. The
     surrounding blank lines make the block stand out by eye in the log.
     """
-    receipt = l4.headers.get("RECEIPT", {})
     primary = l4.headers.get("PRIMARY", {})
 
     def base(path):
         return os.path.basename(path) if path else "n/a"
 
     def receipt_paths(function, arg_key):
-        # The input/product paths are not first-class keywords (unlike the master
-        # cards); they survive only as key=value fragments in the RECEIPT ARGS.
+        # Every matching row, unlike receipt_read_entry's most-recent one.
         table = getattr(l4, "receipt", None)
         if table is None or getattr(table, "empty", True):
             return []
@@ -43,10 +41,11 @@ def science_run_summary(l4, elapsed_s):
         return out
 
     obs_id = getattr(l4, "obs_id", None) or primary.get("ORIGID") or "unknown"
+    cal = l4.receipt_read_entry("calibration_association")
     masters = {
-        "bias": receipt.get("BIASFILE"),
-        "dark": receipt.get("DARKFILE"),
-        "thar": receipt.get("WLSFILE"),
+        "bias": cal.get("biasfile"),
+        "dark": cal.get("darkfile"),
+        "thar": cal.get("wlsfile"),
     }
     masters_str = "  ".join(f"{k}={base(v)}" for k, v in masters.items())
     # First from_fits is the original L0 read; a reload would append its own.

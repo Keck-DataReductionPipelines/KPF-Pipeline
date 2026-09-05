@@ -154,7 +154,7 @@ class TestKPF1:
 
 
 class TestToKpf1:
-    """L0 -> L1 is a pure forward once standardize_header_format has run.
+    """L0 -> L1 is a pure forward once standardize_headers has run.
 
     The native -> EPRV conversion itself is tested in test_data_models_l0.py;
     here the subject is what to_kpf1 carries across, and the fail-loud gate on
@@ -164,7 +164,7 @@ class TestToKpf1:
     @staticmethod
     def _standardized(fn):
         l0 = KPF0.from_fits(fn)
-        l0.standardize_header_format()
+        l0.standardize_headers()
         return l0
 
     def test_raw_l0_is_rejected(self, synthetic_l0_file):
@@ -217,7 +217,7 @@ class TestToKpf1:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-        l0.standardize_header_format()
+        l0.standardize_headers()
         astro_query = AstroQuery(l0)
         astro_query._write_catalog_record("kpf-drp", record)
         for keyword, value in astro_query._catalog_primary_cards().items():
@@ -266,7 +266,7 @@ class TestToKpf1:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
-        l0.standardize_header_format()
+        l0.standardize_headers()
         p = l0.to_kpf1().headers["PRIMARY"]
         for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
             assert kw in p
@@ -287,7 +287,7 @@ class TestToKpf1:
 
     def test_to_kpf1_forwards_the_instrument_header(self, synthetic_l0_file):
         # INSTRUMENT_HEADER is a verbatim copy of the raw L0 PRIMARY, written by
-        # standardize_header_format and carried across as a pass-through extension.
+        # standardize_headers and carried across as a pass-through extension.
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
         assert "INSTRUMENT_HEADER" in l1.extensions
         inst = l1.headers["INSTRUMENT_HEADER"]
@@ -309,11 +309,11 @@ class TestToKpf1:
         assert prim.get("KOAID") == "KP.20240113.23249.10.fits"
 
     def test_to_kpf1_forwards_drpstatus(self, synthetic_l0_file):
-        # standardize_header_format is not an internal receipt, so it advances
+        # standardize_headers is not an internal receipt, so it advances
         # DRPSTATU; to_kpf1 is denylisted and leaves it alone.
         l0 = self._standardized(synthetic_l0_file)
         prim = l0.to_kpf1().headers["PRIMARY"]
-        assert prim.get("DRPSTATU") == "Standardize Header Format module complete"
+        assert prim.get("DRPSTATU") == "Standardize Headers module complete"
 
     def test_to_kpf1_copies_passthrough_extensions(self, synthetic_l0_file):
         l0 = self._standardized(synthetic_l0_file)
@@ -341,9 +341,9 @@ class TestToKpf1:
 
     def test_to_kpf1_carries_receipt(self, synthetic_l0_file):
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
-        assert len(l1.receipt) >= 3  # from_fits + standardize_header_format + to_kpf1
+        assert len(l1.receipt) >= 3  # from_fits + standardize_headers + to_kpf1
         assert "to_kpf1" in l1.receipt["FUNCTION"].values
-        assert "standardize_header_format" in l1.receipt["FUNCTION"].values
+        assert "standardize_headers" in l1.receipt["FUNCTION"].values
 
     def test_to_kpf1_copies_obs_id(self, synthetic_l0_file):
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
@@ -368,7 +368,7 @@ class TestCatalogRecordPassthrough:
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
-        l0.standardize_header_format()
+        l0.standardize_headers()
         return l0
 
     def test_rows_reach_l1(self):
@@ -396,7 +396,7 @@ class TestDrpStatus:
 
     def test_module_receipt_updates_status(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l0.standardize_header_format()
+        l0.standardize_headers()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("image_assembly", "", "PASS")
         status = l1.headers["PRIMARY"].get("DRPSTATU")
@@ -404,7 +404,7 @@ class TestDrpStatus:
 
     def test_master_receipt_updates_status(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l0.standardize_header_format()
+        l0.standardize_headers()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("master_bias", "", "PASS")
         status = l1.headers["PRIMARY"].get("DRPSTATU")
@@ -412,7 +412,7 @@ class TestDrpStatus:
 
     def test_internal_receipts_do_not_change_status(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
-        l0.standardize_header_format()
+        l0.standardize_headers()
         l1 = l0.to_kpf1()
         l1.receipt_add_entry("radial_velocity", "", "PASS")
         for internal in ("to_kpf2", "to_kpf4", "to_fits", "from_fits"):
@@ -466,8 +466,8 @@ class TestKPFMasterL1:
         prim = set(m.headers["PRIMARY"])
         assert set(m.keyword_registry.primary_seed("ML1")) <= prim
         assert m.headers["PRIMARY"]["DATALVL"] == "ML1"
-        # Masters are outside EPRV scope, so the science header-map skeleton
-        # must not reach a built master, DATALVL aside.
+        # Masters are outside EPRV scope, so the science skeleton must not
+        # reach a built master, DATALVL aside.
         science = set(m.keyword_registry.primary_seed("L1"))
         assert not (science & prim) - {"DATALVL"}
 
@@ -552,11 +552,11 @@ class TestEPRVCompliance:
 
     rvdata publishes no L1 tables either -- the assembled FFI is a KPF stage
     between the raw readout and the EPRV L2 -- so, as at L0, the oracle is KPF's
-    own header map. Unlike L0, an L1 seeds its PRIMARY at construction, so the
+    own registry. Unlike L0, an L1 seeds its PRIMARY at construction, so the
     cards are asserted on a bare model.
     """
 
-    def test_the_primary_carries_every_mapped_keyword(self):
+    def test_the_primary_carries_the_whole_seed(self):
         registry = KPF1.keyword_registry
         assert set(registry.primary_seed("L1")) <= set(KPF1().headers["PRIMARY"])
 

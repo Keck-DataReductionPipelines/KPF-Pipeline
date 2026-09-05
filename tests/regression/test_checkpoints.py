@@ -76,7 +76,7 @@ class TestUnregisteredKeywords:
         CheckpointL2(l2).unregistered_keywords()  # no raise
 
     def test_l0_primary_is_validated_too(self):
-        # standardize_header_format runs at load, so the PRIMARY a checkpoint sees is
+        # standardize_headers runs at load, so the PRIMARY a checkpoint sees is
         # the EPRV one at every level -- a native leaked onto it raises at L0
         # exactly as it does at L2.
         l0 = KPF0()
@@ -153,13 +153,16 @@ class TestRunFoldsDiagnosticsAndQC:
     def test_run_order_and_qc_results_capture(self):
         calls = []
 
-        class FakeDiag:
-            def __init__(self, obj):
-                pass
+        def fake_diagnostics(tag):
+            class FakeDiag:
+                def __init__(self, obj):
+                    pass
 
-            def run(self):
-                calls.append("diag")
-                return {}
+                def run(self):
+                    calls.append(tag)
+                    return {}
+
+            return FakeDiag
 
         class FakeQC:
             def __init__(self, obj):
@@ -171,7 +174,7 @@ class TestRunFoldsDiagnosticsAndQC:
 
         class FakeCheckpoint(Checkpoint):
             LEVEL = "L2"
-            DIAGNOSTICS = FakeDiag
+            DIAGNOSTICS = (fake_diagnostics("diag"), fake_diagnostics("diag2"))
             QC = FakeQC
 
             def probe(self):
@@ -182,15 +185,14 @@ class TestRunFoldsDiagnosticsAndQC:
         chk = FakeCheckpoint(KPF2())
         chk.run()
 
-        # Diagnostics first, QC second, then the checkpoint method(s).
-        assert calls[0] == "diag"
-        assert calls[1] == "qc"
-        assert "checkpoint" in calls[2:]
+        # Every Diagnostics class in order, then QC, then the checkpoint method(s).
+        assert calls[:3] == ["diag", "diag2", "qc"]
+        assert "checkpoint" in calls[3:]
         # QC's result dict is captured for callers (e.g. scripts/quality_control/qc.py).
         assert chk.qc_results == {"DATAPRL2": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self, caplog):
-        # A concrete-level checkpoint with DIAGNOSTICS = QC = None: run() does the
+        # A concrete-level checkpoint with no DIAGNOSTICS and no QC: run() does the
         # checkpoint methods only and leaves qc_results empty. (LEVEL must be a
         # recognized level -- qc_flags() looks it up directly, no silent default.)
         class NoStageCheckpoint(Checkpoint):
@@ -274,8 +276,8 @@ class TestCheckpointL0:
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
         assert "KWRDPRL0" not in qc  # its check is stubbed, so it writes no flag
-        assert qc["GREENL0"] == 1
-        assert qc["REDL0"] == 1
+        assert qc["DEADPXOK"] == 1
+        assert qc["SATPXOK"] == 1
         assert qc["TCSOFF"] < 1.0
 
 
@@ -300,9 +302,8 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
             l1.set_data(f"{chip}_CCD", np.ones(shape, dtype=np.float32))
             l1.set_data(f"{chip}_VAR", np.ones(shape, dtype=np.float32))
 
-    receipt = l1.headers["RECEIPT"]
-    for kw in ("OSCANSUB", "BIASSUB", "DARKSUB", "FLATDIV"):
-        receipt[kw] = (True, "applied")
+    l1.receipt_add_entry("image_assembly", "oscansub=1", "PASS")
+    l1.receipt_add_entry("image_processing", "biassub=1, darksub=1, flatdiv=1", "PASS")
 
     qc = l1.headers["QUALITY_CONTROL"]
     qc["BIASAGE"] = (1.0, "Age of bias master [days]")

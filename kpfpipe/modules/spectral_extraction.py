@@ -411,12 +411,8 @@ class SpectralExtraction:
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj, extraction_method):
-        """Write the extraction method and the order trace the spectra were
-        extracted with (by filename -- it always comes from
-        ``reference/order_traces``)."""
+        """Write the extraction method and the per-trace axis types."""
         l2_obj.set_keyword("EXTRACT", extraction_method)
-        if self._order_trace_path is not None:
-            l2_obj.set_keyword("TRACEREF", os.path.basename(self._order_trace_path))
         # CTYPEn is FITS axis order, the reverse of the numpy shape (Norder, Mpix):
         # axis 1 is the dispersion axis (NAXIS1 = Mpix), axis 2 the order axis
         # (NAXIS2 = Norder). Same pair CrossCorrelation writes on CCF#/RV#.
@@ -468,7 +464,13 @@ class SpectralExtraction:
 
         self._set_headers(l2_obj, extraction_method)
         self._track_info(chips, fibers)
-        l2_obj.receipt_add_entry("spectral_extraction", "", "PASS")
+        l2_obj.receipt_add_entry(
+            "spectral_extraction",
+            f"order_trace={os.path.basename(self._order_trace_path)}"
+            if self._order_trace_path is not None
+            else "",
+            "PASS",
+        )
 
         logger.info("%s", self._info)
         return l2_obj

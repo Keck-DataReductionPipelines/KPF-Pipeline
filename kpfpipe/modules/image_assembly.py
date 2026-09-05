@@ -505,8 +505,8 @@ class ImageAssembly:
     def _set_headers(self, l1_obj):
         """
         Write assembly metadata to ``l1_obj``: per-amplifier read noise
-        (RN_KEYS), the non-Gaussian factor, the OSCANSUB flag, READMODE, and the
-        per-chip read time. ``infer_read_mode`` supplies both READMODE and the
+        (RN_KEYS), the non-Gaussian factor, READMODE, and the per-chip read
+        time. ``infer_read_mode`` supplies both READMODE and the
         ``self.read_time`` the ``TRT{chip}`` writes read.
         """
         for channel_ext, rn in self.readnoise.items():
@@ -514,11 +514,13 @@ class ImageAssembly:
             l1_obj.set_keyword(key_read, round(float(rn), 4))
             l1_obj.set_keyword(key_rnng, round(float(self.rn_nongauss[channel_ext]), 4))
 
-        # "zero" is the explicit no-op method (strips overscan, subtracts none).
-        l1_obj.set_keyword("OSCANSUB", int(self.overscan_method != "zero"))
         l1_obj.set_keyword("READMODE", self.infer_read_mode())
         for chip, read_time in self.read_time.items():
             l1_obj.set_keyword(f"TRT{chip}", round(read_time, 3))
+
+    def _receipt_args(self):
+        """Whether overscan was subtracted; "zero" strips it but subtracts none."""
+        return f"oscansub={int(self.overscan_method != 'zero')}"
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -576,7 +578,7 @@ class ImageAssembly:
         self._convert_expmeter_wavelengths_to_angstroms(l1_obj)
         self._set_headers(l1_obj)
         self._track_info(chips)
-        l1_obj.receipt_add_entry("image_assembly", "", "PASS")
+        l1_obj.receipt_add_entry("image_assembly", self._receipt_args(), "PASS")
 
         logger.info("%s", self._info)
         return l1_obj

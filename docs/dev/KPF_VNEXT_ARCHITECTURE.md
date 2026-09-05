@@ -132,7 +132,7 @@ RVDataModel (rvdata)
   `KPFDataModel._build()`, which creates the manifest extensions, swaps in the alias-aware dicts
   and registers aliases (when the model sets `_DATA_DICT`), fills the typed empty tables, seeds
   PRIMARY and restamps DATALVL, then rebuilds EXT_DESCRIPT. KPF0 sets `_SEEDS_PRIMARY = False`:
-  `_read` replaces PRIMARY wholesale, so `standardize_header_format` seeds it after the read
+  `_read` replaces PRIMARY wholesale, so `standardize_headers` seeds it after the read
   instead.
 - **`check_filename_convention` is shared too** — `KPFDataModel` implements it for every level,
   delegating to `utils.io.check_filename_convention(filename, f"L{self.level}")`, which owns the
@@ -159,18 +159,18 @@ Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are co
 ### Header standardization
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** —
-`KPF0.standardize_header_format`, which every raw-L0 load runs via `from_fits(standardize=True)` and
+`KPF0.standardize_headers`, which every raw-L0 load runs via `from_fits(standardize=True)` and
 which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
 The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
 The architecture invariants:
 
 - **PRIMARY holds EPRV-registered keywords and the WMKO provenance cards** from
   L0-after-standardization onward (EPRV keyword names + FITS structural cards — no raw natives).
-  `standardize_header_format` seeds the whole registered PRIMARY skeleton for the level, then fills it from
-  `EPRV-header-map.csv`; every card is present, blank where nothing supplied a value. (The other
+  `standardize_headers` seeds the whole registered PRIMARY skeleton for the level, then fills it from
+  `header-map.csv`; every card is present, blank where nothing supplied a value. (The other
   keyword-homing exception is noted under *Keyword registry*.)
 - **`INSTRUMENT_HEADER` is an immutable verbatim copy of the raw L0 PRIMARY** (values and comments),
-  written once by `standardize_header_format` and never again.
+  written once by `standardize_headers` and never again.
 - **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`** — at L0 too, now that standardization runs
   at load. The map carries only some natives to PRIMARY, mostly under renamed EPRV keys — so read a
   native from PRIMARY when it survives there under its own name (e.g. `DATE-OBS`, `OBJECT`), and from
@@ -179,14 +179,14 @@ The architecture invariants:
   the exposure meter against; its *target astrometry*, by contrast, comes off the PRIMARY `C*#` cards,
   which `AstroQuery` fills from `CATALOG_RECORD`).
 - **DRP provenance is stamped during standardization** onto PRIMARY
-  (`KPF0.standardize_header_format` → `_stamp_wmko_tracking`, not `to_kpf1`):
+  (`KPF0.standardize_headers` → `_program_identification`, not `to_kpf1`):
   `DRPVERNO`/`PROGID`/`KOAID`/`ORIGID`, plus `DRPSTATU`, which `receipt_add_entry` advances per module.
   It rides PRIMARY forward. A raw `from_fits()` carries none of it — the conversion is what stamps it.
   `ORIGID` (the original L0 obs_id) is also how L1/L2/L4 recover `self.obs_id` on read, so every model
   carries `obs_id` on every construction path.
 - **`QUALITY_CONTROL` + `RECEIPT` propagate L0→L1→L2→L4** card-by-card (`KPFDataModel._forward_headers`)
-  as an **append-only history** — the RECEIPT header carrying the calibration provenance L1 and L2 add
-  (`OSCANSUB`, `BIASFILE`, `TRACEREF`).
+  as an **append-only history** — the RECEIPT table carrying the calibration provenance L1 and L2 add
+  (`oscansub`, `biasfile`).
 - **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
   L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
@@ -205,9 +205,11 @@ from a **single source-of-truth table** unioning the
 `config/{prefix}-{EXTENSION}-keywords.csv` registries, one file per extension per level.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
-routes to: **PRIMARY** (EPRV keywords), **QUALITY_CONTROL** (QC flags, read-noise,
-calibration ages, DiagL2 metrics), **RECEIPT** (DRP provenance, applied flags, calibration paths),
+routes to: **PRIMARY** (EPRV keywords, plus the KPF-owned master calibration paths),
+**QUALITY_CONTROL** (QC flags, read-noise, calibration ages, DiagL2 metrics),
 the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `RV{GREEN,RED}`/`ERV{GREEN,RED}`).
+RECEIPT is not a home: it registers no keyword, carrying DRP provenance and applied flags as
+table rows (`receipt_add_entry`) rather than header cards.
 The one exception to *PRIMARY holds EPRV keywords only* is those same four names, which are homed on
 PRIMARY **as well** — there they are the SCI-combined RVs, KPF-registered yet belonging beside the EPRV
 `RV`/`RVERR`. Routing prefers PRIMARY, so the bare `set_keyword` writes the combined value and the
@@ -339,8 +341,11 @@ The first three run in a strict order — **Diagnostics → QC → Checkpoints**
 prior wrote, driven by the recipe through a **single `CheckpointL{n}(obj).run()` call**:
 
 - `Checkpoint.run()` folds in the paired Diagnostics and QC classes first (named on the subclass as
-  the `DIAGNOSTICS`/`QC` class attributes, e.g. `CheckpointL1.DIAGNOSTICS = DiagL1`), then runs the
-  checkpoint methods — so callers no longer invoke `DiagL{n}`/`QCL{n}` directly.
+  the `DIAGNOSTICS`/`QC` class attributes), then runs the checkpoint methods — so callers no longer
+  invoke the Diagnostics/QC classes directly. `DIAGNOSTICS` is a tuple, run in sequence and the single
+  place a level's diagnostics are declared: `CheckpointL1.DIAGNOSTICS = (DiagL1,)`,
+  `CheckpointL0.DIAGNOSTICS = (DiagL0, Guider, ExposureMeter, Telemetry)`. No class reads another's
+  output, so the order is presentational.
 - The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g.
   `scripts/quality_control/qc.py`). A level with no paired class skips that stage.
 
@@ -355,7 +360,9 @@ This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a 
 
 `kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword`, which routes each to its registry home — most land on QUALITY_CONTROL, but a metric registered as an EPRV PRIMARY keyword goes to PRIMARY (`DiagL2.snr` writes `SNRSC*` to QUALITY_CONTROL and mirrors the summed-SCI values to `EXSNR1-5`/`EXSNRW1-5` on PRIMARY). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
 
-**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. So does a metric a module derives from a decision it just made: `CalibrationAssociation` writes the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`) alongside the master paths it selects (`*FILE` on RECEIPT), so a path and its age cannot disagree. Metrics computable from the finished product alone live in Diagnostics.
+A level whose metrics span several unrelated extensions splits them into per-extension classes beside its `DiagL{n}`, each a `Diagnostics` subclass carrying that level's `LEVEL`. L0 has three: `Guider` (`GUIDER_AVG`, `GUIDER_CUBE_ORIGINS`, plus the `SEEING` and `AIRMASS` cards the guiding is judged against), `ExposureMeter` (`EXPMETER_SCI`, `EXPMETER_SKY`) and `Telemetry` (the `TELEMETRY` table, the environment cards on `INSTRUMENT_HEADER`, and the solar/lunar geometry), leaving `DiagL0` the raw amplifier images and `CATALOG_RECORD`. The recipe still drives them all through `CheckpointL0(l0).run()`.
+
+**Where metrics live.** Metrics that depend on intermediate processing state (e.g. read noise from raw overscan) stay in the pipeline module that produces them — they cannot be recomputed from the finished product. So does a metric a module derives from a decision it just made: `CalibrationAssociation` writes the master calibration **ages** (`BIASAGE`/`DARKAGE`/`FLATAGE`/`WLSAGE`) alongside the master paths it selects (`*FILE` on PRIMARY), so a path and its age cannot disagree. Metrics computable from the finished product alone live in Diagnostics.
 
 ### QC flags
 

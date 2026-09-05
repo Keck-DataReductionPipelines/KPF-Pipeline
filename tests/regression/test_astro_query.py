@@ -472,6 +472,8 @@ _SIMBAD_VALUES = {
     "rvz_radvel": 12.3,
     "B": 9.5,
     "V": 8.5,
+    "main_id": "* tau Cet",
+    "ids": "HD  10700|* tau Cet|Gaia DR3 2452378776434477184",
 }
 
 
@@ -593,6 +595,29 @@ class TestExternalQueries:
         )
         assert AstroQuery(_l0_for_query())._simbad_resolvable_name() is None
         assert AstroQuery(_l0_for_query(OBJECT=""))._simbad_resolvable_name() is None
+
+    @pytest.mark.parametrize(
+        ("main_id", "ids", "expected"),
+        [
+            ("* tau Cet", "HD  10700|* tau Cet", "tau Cet"),  # Bayer, from main_id
+            ("* alf Lyr", "* alf Lyr|NAME Vega", "Vega"),  # proper name wins
+            ("HD  219134", "HD  219134|HIP 114622", "HD 219134"),  # no common name
+        ],
+    )
+    def test_simbad_common_name(self, main_id, ids, expected):
+        row = _simbad_table({"main_id": main_id, "ids": ids})[0]
+        assert AstroQuery._simbad_common_name(row) == expected
+
+    def test_aliases(self):
+        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        aq._gaia = {"object": "Gaia DR3 12345"}
+        aq._common_name = "tau Cet"
+        assert aq._aliases() == "HD 10700; Gaia DR3 12345; tau Cet"
+
+    def test_aliases_drops_unresolved_and_duplicate_names(self):
+        aq = AstroQuery(_l0_for_query(OBJECT="219134"))
+        aq._common_name = "HD 219134"  # main_id fallback, no Gaia row
+        assert aq._aliases() == "HD 219134"
 
     def test_verify_units_missing_and_mismatch_raises(self):
         AstroQuery._verify_units(_gaia_table(), _GAIA_UNITS, "Gaia DR3")  # no raise
@@ -799,12 +824,12 @@ class TestRequestMatchesParse:
         assert launch_job.call_count == 1
 
     def test_simbad_votable_fields_match_parsed_columns(self):
-        # ra/dec arrive in SIMBAD's default basic set, so they are not requested.
+        # ra/dec/main_id arrive in SIMBAD's default basic set, so are not requested.
         aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
         with _patch_simbad(_simbad_instance(_simbad_table())) as simbad_client:
             aq.query_simbad()
         requested = set(simbad_client.call_args.args[0])
-        assert requested == set(_SIMBAD_UNITS) - {"ra", "dec"}
+        assert requested == set(_SIMBAD_UNITS) - {"ra", "dec", "main_id"}
 
 
 def _release_aware_launch_job(present=(), failing=()):
@@ -934,6 +959,12 @@ class TestPerform:
         _, record = _perform(do_gaia_query=False)
         assert "gaia" not in record["source"]
         assert "simbad" in record["source"]
+
+    def test_aliases_written_to_primary(self):
+        # The SIMBAD common name of the mocked table is 'tau Cet', already the
+        # resolvable name here, so it de-duplicates away.
+        aq, _ = _perform()
+        assert aq.l0_obj.headers["PRIMARY"]["ALIASES"] == "tau Cet; Gaia DR3 12345"
 
     def test_gaia_off_falls_through_to_simbad(self):
         # The provenance must follow the merge down rather than stay "gaia".

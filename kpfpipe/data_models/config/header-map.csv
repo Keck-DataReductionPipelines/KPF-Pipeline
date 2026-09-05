@@ -127,15 +127,10 @@ MOONEL,,,,False
 MOONILLU,,,,False
 MOONRV,,,,False
 M1TMP,,,,False
-M1TMPT,,,,False
 INHUM,,,,False
-INHUMT,,,,False
 OUTTMP,,,,False
-OUTTMPT,,,,False
 OUTHUM,,,,False
-OUTHUMT,,,,False
 OUTPRES,,,,False
-OUTPREST,,,,False
 ENVWINDS,,,,False
 ENVWINDD,,,,False
 DRPTAG,,,,True

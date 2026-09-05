@@ -7,12 +7,16 @@ meter, guide camera, telemetry, and telescope metadata.
 
 import importlib.metadata
 import logging
+import math
 
+import astropy.units as u
 import pandas as pd
+from astropy.coordinates import Angle
 
-from kpfpipe import REPO_ROOT, __githash__, __version__
+from kpfpipe import DETECTOR, REPO_ROOT, __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.kpf import get_obs_id
 
 logger = logging.getLogger(__name__)
@@ -26,6 +30,17 @@ _RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
 
 # The calibration half of KPF's IMTYPE vocabulary; 'Object' is the other half.
 _CAL_OBSTYPES = frozenset({"Bias", "Dark", "Flatlamp", "Arclamp", "Etalon"})
+
+# KPF's fiber-source names -> the EPRV calibration-source vocabulary of CLSRC#.
+_CAL_SOURCES = {
+    "target": "Target",
+    "sky": "Sky",
+    "none": "None",
+    "th_gold": "ThAr",
+    "th_daily": "ThAr",
+    "lfcfiber": "LFC",
+    "etalonfiber": "Etalon",
+}
 
 
 class KPF0(KPFDataModel):
@@ -47,21 +62,21 @@ class KPF0(KPFDataModel):
         self._build()
 
     @classmethod
-    def from_fits(cls, fn, instrument=None, standardize=False, **kwargs):
+    def from_fits(cls, fn, standardize=False):
         """Read an L0 from FITS, standardizing its header on the way in if asked.
 
         ``standardize`` defaults to False so a naive read reflects the file on
         disk: PRIMARY as WMKO wrote it, INSTRUMENT_HEADER empty. The pipeline
         always passes True -- every stage after the load reads the EPRV PRIMARY.
         """
-        obj = super().from_fits(fn, instrument=instrument, **kwargs)
+        obj = super().from_fits(fn)
         if standardize:
-            obj.standardize_header_format()
+            obj.standardize_headers()
         return obj
 
     @property
     def standardized(self):
-        """True once ``standardize_header_format`` has run on this L0.
+        """True once ``standardize_headers`` has run on this L0.
 
         The receipt is the pipeline's existing, explicit, persisted answer to
         "which steps have run", so it -- not the header or extension structure --
@@ -72,48 +87,19 @@ class KPF0(KPFDataModel):
         return (
             r is not None
             and not r.empty
-            and "standardize_header_format" in r["FUNCTION"].values
+            and "standardize_headers" in r["FUNCTION"].values
         )
 
-    def read(self, hdul, instrument=None, overwrite=False, **kwargs):
+    def read(self, hdul, instrument=None):
         """Read an L0 FITS HDUList, resolving ``obs_id`` from its filename.
 
-        The obs_id must be known before ``standardize_header_format``, which
+        The obs_id must be known before ``standardize_headers``, which
         writes it as the ORIGID provenance card.
         """
-        super().read(hdul, instrument=instrument, overwrite=overwrite, **kwargs)
+        super().read(hdul, instrument=instrument)
         self.obs_id = get_obs_id(self.filename)
 
-    def _stamp_wmko_tracking(self, native):
-        """Stamp WMKO DRP-RUN provenance onto PRIMARY from ``native``.
-
-        The single population site for DRPVERNO, ORIGID (the original L0 obs_id)
-        and PROGID/KOAID, which are not EPRV keywords -- they map from the native
-        OFNAME and PROGNAME, so they are read off the snapshot rather than the
-        EPRV skeleton this is filling. A missing PROGNAME defaults PROGID to
-        UNKNOWN with a warning; a missing OFNAME (the archive obs_id) raises on
-        a frame read from disk. DRPSTATU is left to ``receipt_add_entry``, which
-        advances it per module.
-        """
-        self.set_keyword("DRPVERNO", __version__)
-        self.set_keyword("ORIGID", self.obs_id)
-
-        koaid = native.get("OFNAME")
-        # Only a frame read from disk must name itself; an in-memory L0 has no
-        # archive identity, and blanks KOAID as it blanks ORIGID above.
-        if not koaid and self.filename:
-            raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
-        self.set_keyword("KOAID", koaid)
-
-        progname = native.get("PROGNAME")
-        if not progname:
-            logger.warning(
-                "PROGNAME absent from L0 PRIMARY; defaulting PROGID to 'UNKNOWN'"
-            )
-            progname = "UNKNOWN"
-        self.set_keyword("PROGID", progname)
-
-    def standardize_header_format(self):
+    def standardize_headers(self):
         """Convert this L0's PRIMARY from WMKO-native to EPRV-standard, in place.
 
         The single conversion site, run at load by ``from_fits(standardize=True)``
@@ -124,8 +110,8 @@ class KPF0(KPFDataModel):
 
         Snapshots that native header, replaces PRIMARY with the registry's typed
         EPRV skeleton, fills it from the header map, then stamps the values that
-        are computed rather than mapped (INSTERA, and the WMKO/DRP/EPRV
-        provenance cards). A second call is a no-op.
+        are computed rather than mapped (INSTERA, the site coordinates, and the
+        WMKO/DRP/EPRV provenance cards). A second call is a no-op.
 
         Returns
         -------
@@ -135,30 +121,34 @@ class KPF0(KPFDataModel):
         if self.standardized:
             return self
 
-        native = self.as_fits_header(self.headers["PRIMARY"])
-        self.set_header("INSTRUMENT_HEADER", native)
-
-        self.headers["PRIMARY"].clear()
-        self._seed_primary()
-        self._fill_from_native(native)
-        self._stamp_wmko_tracking(native)
-        self._stamp_observing_mode(native)
-        self._stamp_instrument_era()
-
-        self.set_keyword("DATALVL", "L0")
-        self.set_keyword("DRPTAG", __version__)
-        self.set_keyword("DRPHASH", __githash__)
-        self.set_keyword("EPRVTAG", f"v{_RVDATA_VERSION}")
-        self.set_keyword(
-            "VOCLASS",
-            f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
+        self.set_header(
+            "INSTRUMENT_HEADER", self.as_fits_header(self.headers["PRIMARY"])
         )
 
-        self.receipt_add_entry("standardize_header_format", "", "PASS")
+        # map keywords from INSTRUMENT_HEADER -> PRIMARY and compute the rest
+        self.headers["PRIMARY"].clear()
+        self._seed_primary()
+        self._fill_from_native()
+        self._program_identification()
+        self._instrument_era()
+        self._observing_mode()
+        self._site_coordinates()
+        self._tcs_pointing()
+        self._drp_metadata()
+
+        # file identification metadata
+        koaid = self.headers["INSTRUMENT_HEADER"].get("OFNAME")
+        if not koaid and self.filename:
+            raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
+        self.set_keyword("KOAID", koaid)
+        self.set_keyword("ORIGID", self.obs_id)
+        self.set_keyword("DATALVL", "L0")
+
+        self.receipt_add_entry("standardize_headers", "", "PASS")
         return self
 
-    def _fill_from_native(self, native):
-        """Apply ``EPRV-header-map.csv`` to the native header, card by card.
+    def _fill_from_native(self):
+        """Apply ``header-map.csv`` to the native header, card by card.
 
         A pure tabular pass over the PRIMARY-targeted map rows: take the
         instrument value if the native header carries it, else the row default,
@@ -167,9 +157,10 @@ class KPF0(KPFDataModel):
         a per-frame transform of the native ``MJD-OBS`` -- and is applied last.
 
         The ``KPF_EXT=QUALITY_CONTROL`` rows are not filled here: their source
-        extension is still empty at this point in the pipeline, so ``DiagL0``
-        stamps them onto PRIMARY when it computes them.
+        extension is still empty at this point in the pipeline, so ``Guider``
+        stamps the one such card, SEEING, onto PRIMARY when it measures it.
         """
+        native = self.headers["INSTRUMENT_HEADER"]
         registry = self.keyword_registry
         for row in registry.header_map.itertuples(index=False):
             kpf_ext = "" if pd.isna(row.KPF_EXT) else str(row.KPF_EXT).strip()
@@ -201,15 +192,90 @@ class KPF0(KPFDataModel):
         if mjd not in (None, "", "UNKNOWN"):
             self.set_keyword("JD_UTC", float(mjd) + 2400000.5)
 
-    def _stamp_observing_mode(self, native):
-        """Stamp ISSOLAR and OBSMODE from the OBSTYPE the tabular fill just mapped.
+    def _program_identification(self):
+        """Stamp the observing program's identity onto PRIMARY.
+
+        These map from native cards, so they are read off INSTRUMENT_HEADER
+        rather than the EPRV skeleton this is filling. A card the frame does not
+        carry defaults to UNKNOWN with a warning. ORGANIZA is the data owner, one
+        organization for every KPF frame. PROGID and PROGRAM are the WMKO and
+        EPRV spellings of one value.
+        """
+        self.set_keyword("ORGANIZA", "WMKO")
+
+        program = self._resolve_native("PROGNAME", ("GRPROGNA", "RDPROGNA"))
+        self.set_keyword("PROGID", program)
+        self.set_keyword("PROGRAM", program)
+        self.set_keyword("PINAME", self._resolve_native("PROGPI"))
+        self.set_keyword(
+            "OBSERVER", self._resolve_native("OBSERVER", ("GROBSERV", "RDOBSERV"))
+        )
+
+    def _resolve_native(self, key, fallbacks=()):
+        """``key``'s native value, or 'UNKNOWN' when the frame names none.
+
+        A missing card falls back to the guider and readout copies KPF writes
+        alongside it, which stand in only when they agree -- two that disagree
+        name no one value.
+        """
+        native = self.headers["INSTRUMENT_HEADER"]
+        value = native.get(key)
+        if value:
+            return value
+        copies = {native.get(k) for k in fallbacks} - {None, ""}
+        if len(copies) == 1:
+            return copies.pop()
+        if copies:
+            logger.warning(
+                "%s absent from L0 PRIMARY and %s disagree; defaulting to 'UNKNOWN'",
+                key,
+                "/".join(fallbacks),
+            )
+        else:
+            logger.warning("%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key)
+        return "UNKNOWN"
+
+    def _instrument_era(self):
+        """Stamp INSTERA from JD_UTC against ``reference/instrument_eras.csv``.
+
+        Runs after the tabular fill, which is what supplies JD_UTC. A frame no
+        era covers -- an undated one included, since its JD_UTC parses to NaT,
+        which no interval contains -- has no reference calibrations, so this
+        raises rather than shipping an unattributable product.
+        """
+        obs_time = pd.to_datetime(
+            self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
+        )
+        eras = pd.read_csv(
+            f"{REPO_ROOT}/reference/instrument_eras.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        in_era = eras[
+            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
+        ]
+        if in_era.empty:
+            raise ValueError(
+                f"No KPF instrument era covers {obs_time}; the eras of "
+                f"reference/instrument_eras.csv do not span it"
+            )
+        self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
+
+    def _observing_mode(self):
+        """Stamp ISSOLAR, OBSMODE and CLSRC# from what the tabular fill mapped.
 
         OBSMODE is redundant for KPF, which has one optical configuration: the
         EPRV standard defines it for instruments with several (hi-res/low-res),
         so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar. An IMTYPE
         outside the vocabulary is a frame this DRP cannot classify, so it raises.
+
+        CLSRC# names each trace's illumination source in the EPRV vocabulary,
+        normalized from the KPF fiber-source name TRACE# carries. A source the
+        standard does not name (a broadband flat, say) is stamped verbatim, and
+        the modules that dispatch on it reject it there.
         """
-        obstype = str(self.headers["PRIMARY"]["OBSTYPE"]).strip()
+        native = self.headers["INSTRUMENT_HEADER"]
+        prim = self.headers["PRIMARY"]
+        obstype = str(prim["OBSTYPE"]).strip()
         is_solar = any(
             str(native.get(key, "")).strip().lower() == "socal"
             for key in ("OBJECT", "TARGNAME")
@@ -226,56 +292,111 @@ class KPF0(KPFDataModel):
         self.set_keyword("ISSOLAR", is_solar)
         self.set_keyword("OBSMODE", mode)
 
-    def _stamp_instrument_era(self):
-        """Stamp INSTERA from JD_UTC against ``reference/instrument_eras.csv``.
+        for trace in range(1, DETECTOR["numtrace"] + 1):
+            source = prim.get(f"TRACE{trace}")
+            if not source:
+                continue
+            name = str(source).strip().lower()
+            self.set_keyword(f"CLSRC{trace}", _CAL_SOURCES.get(name, source))
 
-        Runs after the tabular fill, which is what supplies JD_UTC. A frame that
-        cannot be dated, or that no era covers, has no reference calibrations, so
-        this raises rather than shipping an unattributable product.
+    def _site_coordinates(self):
+        """Stamp the observatory location onto PRIMARY from ``KECK_LOCATION``.
+
+        The site is a property of the telescope, not of the frame, so it is
+        computed here rather than mapped from a native card. 1e-5 deg is ~1 m,
+        against the ~140 m a 1 cm/s barycentric correction needs
+        (dv = omega * dx); rounding also absorbs astropy's geodetic noise.
         """
-        obs_time = pd.to_datetime(
-            self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
-        )
-        if pd.isna(obs_time):
-            raise ValueError(
-                f"Cannot infer the instrument era of {self.obs_id}: its JD_UTC is "
-                f"{self.headers['PRIMARY']['JD_UTC']!r}"
-            )
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
-        in_era = eras[
-            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
-        ]
-        if in_era.empty:
-            raise ValueError(
-                f"No KPF instrument era covers {obs_time}; the eras of "
-                f"reference/instrument_eras.csv do not span it"
-            )
-        self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
+        self.set_keyword("GEOSYS", KECK_LOCATION.ellipsoid)
+        self.set_keyword("OBSLON", round(KECK_LOCATION.lon.deg, 5))
+        self.set_keyword("OBSLAT", round(KECK_LOCATION.lat.deg, 5))
+        self.set_keyword("OBSALT", round(KECK_LOCATION.height.to_value("m"), 3))
+        self.set_keyword("OBSGEO-X", round(KECK_LOCATION.x.to_value("m"), 3))
+        self.set_keyword("OBSGEO-Y", round(KECK_LOCATION.y.to_value("m"), 3))
+        self.set_keyword("OBSGEO-Z", round(KECK_LOCATION.z.to_value("m"), 3))
 
-    @property
-    def _stamps_filename(self):
-        """FILENAME is an EPRV PRIMARY keyword, so it is only correct to stamp it
-        on a standardized L0; a raw one must reflect the file it came from."""
-        return self.standardized
+    def _tcs_pointing(self):
+        """Stamp the pointing cards derived from the TCS cards the map filled.
+
+        TZA1 is the complement of the TEL1 elevation. PARST1/PAREND1 are the
+        parallactic angle -- the angle at the target between the celestial pole
+        and the zenith, positive east of north -- at the two ends of the
+        exposure. The native PARANG the DCS recorded at mid-exposure sets the
+        angle itself; only the half-exposure rotation either side of it comes
+        from::
+
+            q = atan2(sin H, tan(lat) cos(dec) - sin(dec) cos H)
+
+        (Meeus 1998, eq. 14.1), which neglects refraction -- worth ~0.1 deg at
+        airmass 1.3 absolute, but almost nothing over the 75 s of a difference.
+
+        A frame the TCS never pointed -- a bias, a lamp -- carries no TCS cards
+        to derive from, and these stay blank with them.
+        """
+        _SIDEREAL_RATE = 1.0027379  # hours per hour of UT
+
+        prim = self.headers["PRIMARY"]
+        native = self.headers["INSTRUMENT_HEADER"]
+        if prim.get("TEL1") is not None:
+            self.set_keyword("TZA1", round(90.0 - float(prim["TEL1"]), 2))
+        if (
+            not prim.get("THA1")
+            or not prim.get("TDEC1")
+            or native.get("PARANG") is None
+        ):
+            return
+
+        lat = KECK_LOCATION.lat.rad
+        dec = Angle(prim["TDEC1"], unit=u.deg).rad
+        mid = Angle(prim["THA1"], unit=u.hourangle)
+        half = (
+            0.5 * float(prim.get("EXPTIME") or 0.0) / 3600.0 * _SIDEREAL_RATE
+        ) * u.hourangle
+
+        def parallactic(ha):
+            return math.degrees(
+                math.atan2(
+                    math.sin(ha.rad),
+                    math.tan(lat) * math.cos(dec) - math.sin(dec) * math.cos(ha.rad),
+                )
+            )
+
+        parang = float(native["PARANG"])
+        for keyword, ha in (("PARST1", mid - half), ("PAREND1", mid + half)):
+            q = parang + parallactic(ha) - parallactic(mid)
+            # Back into (-180, 180], which also absorbs a wrap in the difference.
+            self.set_keyword(keyword, round((q + 180.0) % 360.0 - 180.0, 2))
+
+    def _drp_metadata(self):
+        """Stamp the pipeline and standard version cards onto PRIMARY.
+
+        DRPVERNO is the WMKO spelling of the DRP version, DRPTAG the EPRV one;
+        both carry ``kpfpipe.__version__``.
+        """
+        self.set_keyword("DRPVERNO", __version__)
+        self.set_keyword("DRPTAG", __version__)
+        self.set_keyword("DRPHASH", __githash__)
+        self.set_keyword("EPRVTAG", f"v{_RVDATA_VERSION}")
+        self.set_keyword(
+            "VOCLASS",
+            f"EPRVSTANDARD{_RVDATA_RELEASE_MONTHS[_RVDATA_VERSION]}",
+        )
 
     _L0_TO_L1_PASSTHROUGH = [
         "CA_HK",
         "EXPMETER_SCI",
         "EXPMETER_SKY",
         "TELEMETRY",
-        "DRP_CONFIG",
-        "CATALOG_RECORD",
         "INSTRUMENT_HEADER",
+        "CATALOG_RECORD",
+        "DRP_CONFIG",
     ]
 
     def to_kpf1(self):
         """Create a KPF1 scaffold from this L0, carrying over headers and
         pass-through extensions.
 
-        The PRIMARY is already EPRV-standard (from ``standardize_header_format``),
+        The PRIMARY is already EPRV-standard (from ``standardize_headers``),
         so this is a pure forward. GREEN/RED CCD and VAR are created empty -- the
         caller (image assembly) fills those in.
 
@@ -288,7 +409,7 @@ class KPF0(KPFDataModel):
         if not self.standardized:
             raise ValueError(
                 f"{self.obs_id} has not been standardized; call "
-                "standardize_header_format before to_kpf1"
+                "standardize_headers before to_kpf1"
             )
 
         kpf1 = KPF1()

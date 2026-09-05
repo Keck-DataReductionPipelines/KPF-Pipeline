@@ -1,5 +1,5 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-CTYPE1,Name of axis 1,N/A,string,Order-N,BarycentricCorrection
-CTYPE2,Name of axis 2,N/A,string,N/A,
+CTYPE1,Name of axis 1,,string,Order-N,BarycentricCorrection
+CTYPE2,Name of axis 2,,string,N/A,
 BVGREEN,Barycentric velocity for the GREEN CCD,km/s,float,12.4431,BarycentricCorrection
 BVRED,Barycentric velocity for the RED CCD,km/s,float,12.4432,BarycentricCorrection

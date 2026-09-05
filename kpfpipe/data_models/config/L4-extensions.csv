@@ -19,5 +19,5 @@ HDU,Name,DataType,BitDepth,Required,Description
 17,CCF5,ImageHDU,64,False,CCF from which RV5 was derived (CAL)
 18,CCF5_VAR,ImageHDU,64,False,Per-velocity-bin CCF photon variance for CCF5 (CAL)
 19,RV5,BinTableHDU,,True,Derived radial velocity measurement for trace 5 (CAL)
-20,QUALITY_CONTROL,BinTableHDU,,False,Quality-control booleans and diagnostic metrics
-21,CATALOG_RECORD,BinTableHDU,,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery
+20,CATALOG_RECORD,BinTableHDU,,False,External catalog astrometry (Gaia/SIMBAD/DCS) resolved by AstroQuery
+21,QUALITY_CONTROL,BinTableHDU,,False,Quality-control booleans and diagnostic metrics

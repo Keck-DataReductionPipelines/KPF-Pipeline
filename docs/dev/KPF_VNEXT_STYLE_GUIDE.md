@@ -259,7 +259,7 @@ but its values are EPRV targets.)*
 - **CSV config tables** (`data_models/config/`) drive HDU layout and alias registration: comma-
   separated, single header row, read with `pandas.read_csv`, always ending in a `Description`
   column. Extension manifests (`L0-extensions.csv`, …) are `HDU,Name,DataType,Required,Description`;
-  mapping tables are `aliases.csv` (`KPF,EPRV,…`) and `trace-map.csv` (`Trace,Fiber,…`).
+  mapping tables are `extension-aliases.csv` (`KPF,EPRV,…`) and `trace-map.csv` (`Trace,Fiber,…`).
 - **Keep fiber names in sync** across `trace-map.csv`, `[TRACES].fibers`, and `detector.toml`.
 
 #### Headers
@@ -273,8 +273,8 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
   home with the registry `Description` as comment. Never hardcode an extension/comment or write
   `headers["PRIMARY"][key] = …` for a registered keyword; the keyword must be in
   `config/{prefix}-{EXTENSION}-keywords.csv` first, or `set_keyword` raises. Never write to
-  `INSTRUMENT_HEADER` outside `KPF0.standardize_header_format`.
-- **The native → EPRV conversion has one home**, `KPF0.standardize_header_format`; never
+  `INSTRUMENT_HEADER` outside `KPF0.standardize_headers`.
+- **The native → EPRV conversion has one home**, `KPF0.standardize_headers`; never
   re-implement it, and never read a native card off PRIMARY once it has run.
 - **Prefer PRIMARY, fall back to `INSTRUMENT_HEADER`** for reads: a native that survives on PRIMARY
   under its own name is read there; one that never reaches PRIMARY, or that reads more clearly as a
@@ -288,7 +288,7 @@ Every extension header is an `astropy.io.fits.Header`. When writing code:
 
 - **Keyword names**: ≤8 chars, uppercase, no underscores (`NANSCI1`, `ZEROSCI1`); encode the level
   where needed for uniqueness (`DATAPRL0`). **Before coining a new keyword, reuse the legacy
-  spelling where the science meaning matches** (`WLSFILE`, `BIASFILE`), so downstream/archival
+  spelling where the science meaning matches** (`DATE-OBS`, `READMODE`), so downstream/archival
   tools keep reading v3 products; `reference/legacy_data_format.rst` is no longer vendored, so
   read it out of git history.
 - **Register every KPF keyword in `config/{prefix}-{EXTENSION}-keywords.csv`**
@@ -314,8 +314,10 @@ The four layers live in `kpfpipe/quality_control/`. Conventions for writing QC c
   def nan_counts(self): ...
   nan_counts._diag_name = "nan_counts"   # Diagnostics (_qc_key / _checkpoint_name for QC / Checkpoints)
   ```
-- **Runners reset `self.results = {}` at entry** and wrap each method in `try/except`, re-raising as
-  `RuntimeError` (loud failure, no silent suppression).
+- **Runners reset `self.results = {}` at entry** and wrap each method in `try/except`, logging the
+  failure at ERROR. Neither informational layer aborts the pipeline: a raising **Diagnostics** method
+  writes no keyword, a raising **QC** check writes its flag as 0. **Checkpoints** re-raise — that
+  layer alone halts.
 - **QC writes `int` 0/1 and does no validation**; round floats
   (`round(float(x), 6)`) and cast numpy scalars to Python types. The per-check comment lives once in
   the registry `Description` (QC methods carry only `_qc_key`). QC comments are namespaced `"QC: …"`;

@@ -563,7 +563,7 @@ class RadialVelocity:
         Write all RV keywords from the perform()-filled stashes. Per
         orderlet: RVn RVMETHOD/SKYRMVD/TELLRMVD and per-fiber per-CCD
         RV{chip}/ERV{chip}, written onto that fiber's RVn table. On PRIMARY:
-        RVMETHOD, and (when a science combine ran) the SCI-combined
+        RVMETHOD/SYSVEL/SYSACC, and (when a science combine ran) the SCI-combined
         RV{chip}/ERV{chip} and EPRV
         RV/RVERR/BERV/BJDTDB. Non-finite values are written as None (FITS
         UNDEFINED). The RVn CTYPE cards belong to CrossCorrelation.
@@ -583,9 +583,10 @@ class RadialVelocity:
                     f"ERV{chip}", float(e) if np.isfinite(e) else None, ext=rv_ext
                 )
 
-        # PRIMARY (EPRV L4): always the RV method; the combined RV only when a
-        # science combine was formed (else RV/RVERR/BERV/BJDTDB stay UNDEFINED).
         l4_obj.set_keyword("RVMETHOD", "CCF")
+        # The CCF grid centers on the systemic RV; no systemic RV is subtracted.
+        l4_obj.set_keyword("SYSVEL", 0.0)
+        l4_obj.set_keyword("SYSACC", 0.0)
         if not self._sci_combined_ran:
             return
         for chip, v in self._sci_ccd_rv.items():

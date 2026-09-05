@@ -1,5 +1,5 @@
 Keyword,Description,Units,DataType,ExampleValue,PopulatedBy
-CTYPE1,Name of axis 1,N/A,string,Order-N,BarycentricCorrection
-CTYPE2,Name of axis 2,N/A,string,N/A,
-BZGREEN,Barycentric redshift for the GREEN CCD,N/A,float,0.00004151,BarycentricCorrection
-BZRED,Barycentric redshift for the RED CCD,N/A,float,0.00004151,BarycentricCorrection
+CTYPE1,Name of axis 1,,string,Order-N,BarycentricCorrection
+CTYPE2,Name of axis 2,,string,N/A,
+BZGREEN,Barycentric redshift for the GREEN CCD,,float,0.00004151,BarycentricCorrection
+BZRED,Barycentric redshift for the RED CCD,,float,0.00004151,BarycentricCorrection
