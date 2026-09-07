@@ -7,9 +7,9 @@ meter, guide camera, telemetry, and telescope metadata.
 
 import importlib.metadata
 import logging
-import math
 
 import astropy.units as u
+import numpy as np
 import pandas as pd
 from astropy.coordinates import Angle
 
@@ -365,10 +365,12 @@ class KPF0(KPFDataModel):
         ) * u.hourangle
 
         def parallactic(ha):
-            return math.degrees(
-                math.atan2(
-                    math.sin(ha.rad),
-                    math.tan(lat) * math.cos(dec) - math.sin(dec) * math.cos(ha.rad),
+            return float(
+                np.degrees(
+                    np.arctan2(
+                        np.sin(ha.rad),
+                        np.tan(lat) * np.cos(dec) - np.sin(dec) * np.cos(ha.rad),
+                    )
                 )
             )
 
