@@ -1,0 +1,4 @@
+Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,Etalon
+ExposureMeter.expmeter_channel_metrics,EMSCI#|EMSKY#,"Saturated, negative and non-finite exposure-meter channels, per fiber",EXPMETER_SCI|EXPMETER_SKY,1,1,0,0,0,0,0,0
+ExposureMeter.expmeter_counts,EMSCCT#|EMSKCT#,"Cumulative exposure-meter counts, per fiber and wavelength band",EXPMETER_SCI|EXPMETER_SKY,1,1,0,0,0,0,0,0
+ExposureMeter.sky_sci_flux_ratio,SKYSCIMS,"SKY/SCI flux ratio in the main spectrometer, scaled from the EM data",EXPMETER_SCI|EXPMETER_SKY,1,1,0,0,0,0,0,0

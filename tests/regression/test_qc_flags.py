@@ -17,18 +17,21 @@ from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.quality_control.applicability import applicability
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.quality_control.qc_flags.level0 import QCL0
 from kpfpipe.quality_control.qc_flags.level1 import QCL1
 from kpfpipe.quality_control.qc_flags.level2 import QCL2
 from kpfpipe.quality_control.qc_flags.level4 import QCL4
 
+from . import _applicability
 from ._data_models import (
     GOOD_DATES,
     NORDER,
     NORDER_TOTAL,
     make_l4,
     set_fiber_arrays,
+    stamp_frame_type,
     standardized_l0,
     telemetry_hdu,
     write_amp_l0,
@@ -119,7 +122,7 @@ def _make_kpf1(
         hdus.append(fits.ImageHDU(data=data, name=f"{chip}_VAR"))
 
     fits.HDUList(hdus).writeto(fn, overwrite=True)
-    l1 = KPF1.from_fits(fn)
+    l1 = stamp_frame_type(KPF1.from_fits(fn))
 
     l1.receipt_add_entry("image_assembly", f"oscansub={int(oscansub)}", "PASS")
     l1.receipt_add_entry(
@@ -159,7 +162,7 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
     fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
     ncols = _NCOLS
 
-    kpf2 = KPF2()
+    kpf2 = stamp_frame_type(KPF2())
 
     total_pixels = 0
     for chip in chips:
@@ -191,6 +194,17 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def ungated(monkeypatch):
+    """Declare every check applicable, for tests of a stub QC subclass.
+
+    A stub class has no ``config/*-applicability.csv``; the gate itself is
+    covered by ``TestQCApplicability``.
+    """
+    monkeypatch.setattr(applicability, "applies", lambda *_: True)
+
+
+@pytest.mark.usefixtures("ungated")
 class TestQCBase:
     """Runner behaviour: writing, failure, raises, empty."""
 
@@ -203,6 +217,7 @@ class TestQCBase:
         """
 
         class _FakeObj:
+            frame_type = "Star"
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             keyword_registry = types.SimpleNamespace(
                 comment_for=lambda kw, ext=None: "",
@@ -1992,3 +2007,73 @@ class TestQCKeyRegistration:
                 f"{key} is not tagged as a {level} QC flag in the registry, so "
                 "Checkpoint.qc_flags would never scan it"
             )
+
+    @pytest.mark.parametrize("level", sorted(_CLASSES))
+    def test_applicability_table_matches_the_class(self, level):
+        # A missing row is a KeyError at run time; a stale one is a check that
+        # was deleted while its frame-type policy lived on.
+        qc_cls = self._CLASSES[level]
+        rows = _applicability.table(qc_cls.__name__)
+        tagged = _applicability.tagged_methods(qc_cls, "_qc_key")
+        prefix = f"{qc_cls.__name__}."
+        assert all(m.startswith(prefix) for m in rows["Method"])
+        assert {m.removeprefix(prefix) for m in rows["Method"]} == set(tagged), (
+            f"config/{qc_cls.__name__}-applicability.csv and the tagged checks on "
+            f"{qc_cls.__name__} have drifted apart"
+        )
+
+    @pytest.mark.parametrize("level", sorted(_CLASSES))
+    def test_applicability_description_mirrors_the_registry(self, level):
+        qc_cls = self._CLASSES[level]
+        registry = KPF0().keyword_registry
+        tagged = _applicability.tagged_methods(qc_cls, "_qc_key")
+        for row in _applicability.table(qc_cls.__name__).itertuples(index=False):
+            method = row.Method.removeprefix(f"{qc_cls.__name__}.")
+            parsed = _applicability.DESCRIPTION.match(row.Description)
+            assert parsed, f"{row.Method}: Description is not '<KEYWORD>: <text>'"
+            assert parsed["keyword"] == tagged[method]._qc_key
+            # The registry prefixes every QC flag "QC: "; the table drops it,
+            # the keyword ahead of the colon already saying which layer this is.
+            expected = registry.comment_for(parsed["keyword"]).removeprefix("QC: ")
+            assert parsed["text"] == expected
+
+
+class TestQCApplicability:
+    """The frame-type gate: only declared checks run, and the table is well formed."""
+
+    _CLASSES = (QCL0, QCL1, QCL2, QCL4)
+
+    @pytest.mark.parametrize("qc_cls", _CLASSES, ids=lambda c: c.__name__)
+    def test_table_shape(self, qc_cls):
+        rows = _applicability.table(qc_cls.__name__)
+        assert list(rows.columns) == _applicability.QC_COLUMNS
+        for frame in _applicability.FRAME_TYPES:
+            assert set(rows[frame]) <= {0, 1}
+
+    @pytest.mark.parametrize("qc_cls", _CLASSES, ids=lambda c: c.__name__)
+    def test_required_data_names_extensions(self, qc_cls):
+        for row in _applicability.table(qc_cls.__name__).itertuples(index=False):
+            unknown = _applicability.unknown_extensions(row.RequiredData, qc_cls.LEVEL)
+            assert not unknown, (
+                f"{row.Method} requires {unknown}, no {qc_cls.LEVEL} ext"
+            )
+
+    def test_calibration_frame_skips_pointing_checks(self, tmp_path, caplog):
+        # The point of the layer: a Bias has no target, so TARGETOK is not
+        # attempted, writes no flag, and warns about nothing.
+        l0 = _make_kpf0(tmp_path, imtype="Bias")
+        with caplog.at_level(logging.WARNING):
+            results = QCL0(l0).run()
+        skipped = ("TARGETOK", "ASTROMOK", "COLOROK", "GUIDEROK", "SEEINGOK", "ELEVOK")
+        for key in skipped:
+            assert key not in results
+            assert key not in l0.headers["QUALITY_CONTROL"]
+            assert key not in caplog.text
+        # A check declared for every frame type still runs.
+        assert "DATTIMOK" in results
+
+    def test_science_frame_runs_pointing_checks(self, tmp_path):
+        l0 = _make_kpf0(tmp_path, imtype="Object")
+        results = QCL0(l0).run()
+        assert "TARGETOK" in results
+        assert "DATTIMOK" in results

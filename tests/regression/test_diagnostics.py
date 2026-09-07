@@ -15,6 +15,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.astro_query import AstroQuery
+from kpfpipe.quality_control.applicability import applicability
 from kpfpipe.quality_control.diagnostics import (
     DiagL0,
     DiagL1,
@@ -26,9 +27,11 @@ from kpfpipe.quality_control.diagnostics import (
     Telemetry,
 )
 
+from . import _applicability
 from ._data_models import (
     set_fiber_arrays,
     set_wave_bands,
+    stamp_frame_type,
     standardized_l0,
     write_amp_l0,
 )
@@ -50,9 +53,21 @@ _EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def ungated(monkeypatch):
+    """Declare every metric applicable, for tests of a stub Diagnostics subclass.
+
+    A stub class has no ``config/*-applicability.csv``; the gate itself is
+    covered by ``TestDiagnosticsApplicability``.
+    """
+    monkeypatch.setattr(applicability, "applies", lambda *_: True)
+
+
+@pytest.mark.usefixtures("ungated")
 class TestDiagnosticsBase:
     def _make_obj(self):
         class _FakeObj:
+            frame_type = "Star"
             headers = {"PRIMARY": {}}
             data = {}
 
@@ -537,6 +552,7 @@ class TestGuider:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00008.00.fits",
             shape=(10, 10),
+            primary_cards={"IMTYPE": "Object"},
             extra_hdus=[
                 fits.ImageHDU(avg, name="GUIDER_AVG"),
                 fits.BinTableHDU(Table(columns), name="GUIDER_CUBE_ORIGINS"),
@@ -636,7 +652,11 @@ class TestGuiderSeeing:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00008.00.fits",
             shape=(10, 10),
-            primary_cards={"GCCRPIX1": 40.0, "GCCRPIX2": 40.0},
+            primary_cards={
+                "IMTYPE": "Object",
+                "GCCRPIX1": 40.0,
+                "GCCRPIX2": 40.0,
+            },
             extra_hdus=[fits.ImageHDU(image, name="GUIDER_AVG")],
         )
         return standardized_l0(fn)
@@ -699,6 +719,7 @@ class TestExposureMeterChannels:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00005.00.fits",
             shape=(10, 10),
+            primary_cards={"IMTYPE": "Object"},
             extra_hdus=[
                 fits.BinTableHDU(table(sci), name="EXPMETER_SCI"),
                 fits.BinTableHDU(
@@ -790,7 +811,11 @@ class TestExposureMeterChannels:
 
     def test_no_em_data_emits_no_keyword(self, tmp_path):
         # A frame with no EM extension (e.g. a calibration): the metrics are skipped.
-        fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(10, 10))
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00006.00.fits",
+            shape=(10, 10),
+            primary_cards={"IMTYPE": "Object"},
+        )
         assert "EMSCISAT" not in ExposureMeter(standardized_l0(fn)).run()
 
     def test_diag_name_correct(self):
@@ -825,6 +850,7 @@ class TestExposureMeterCounts:
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00008.00.fits",
             shape=(10, 10),
+            primary_cards={"IMTYPE": "Object"},
             extra_hdus=[
                 fits.BinTableHDU(table(sci_counts), name="EXPMETER_SCI"),
                 fits.BinTableHDU(table(sky_counts), name="EXPMETER_SKY"),
@@ -1030,7 +1056,8 @@ class TestTelemetryEtalonTemperature:
         assert results["ETATOFF"][0] == pytest.approx(-0.7, abs=1e-3)
 
     def test_written_to_quality_control(self):
-        l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
+        # Etalon frame: the only type ETATOFF is declared applicable to.
+        l0 = stamp_frame_type(self._make_l0_with_etalon(ETAV1C3T=23.6004), "Etalon")
         results = Telemetry(l0).run()
         assert l0.headers["QUALITY_CONTROL"]["ETATOFF"] == results["ETATOFF"][0]
 
@@ -1147,7 +1174,7 @@ def _make_kpf1(date_obs="2024-04-05T11:08:33"):
     Mirrors the finished-L1 state DiagL1 reads: to_kpf1 has populated the EPRV
     PRIMARY and ImageAssembly has filled both CCDs.
     """
-    l1 = KPF1()
+    l1 = stamp_frame_type(KPF1())
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
     for chip in ("GREEN", "RED"):
         l1.data[f"{chip}_CCD"] = np.ones((4, 4), dtype=float)
@@ -1207,7 +1234,7 @@ def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True, var=0.25):
     with ``var`` (None leaves it empty) since every DiagL2 method now reads it.
     populate=False sets no arrays at all -- the "no data populated" schema case.
     """
-    kpf2 = KPF2()
+    kpf2 = stamp_frame_type(KPF2())
     if not populate:
         return kpf2
 
@@ -1397,7 +1424,7 @@ class TestDiagL2OrderletFluxRatios:
 
 def _l4_with_sci2_rv(bjd, berv, weight):
     """KPF4 carrying a SCI2 per-order RV table with BJD_TDB/BERV/WEIGHT."""
-    l4 = KPF4()
+    l4 = stamp_frame_type(KPF4())
     l4.set_data(
         "SCI2_RV",
         Table(
@@ -1466,3 +1493,83 @@ class TestDiagL4:
         )
         with pytest.raises(KeyError, match="WEIGHT"):
             DiagL4(l4).bjd_dispersion()
+
+
+# ---------------------------------------------------------------------------
+# Applicability tables
+# ---------------------------------------------------------------------------
+
+
+class TestDiagnosticsApplicability:
+    """The frame-type gate: only declared metrics run, and the tables are current."""
+
+    _CLASSES = (DiagL0, DiagL1, DiagL2, DiagL4, Guider, ExposureMeter, Telemetry)
+    _IDS = [c.__name__ for c in _CLASSES]
+
+    @pytest.mark.parametrize("diag_cls", _CLASSES, ids=_IDS)
+    def test_table_matches_the_class(self, diag_cls):
+        # A missing row raises at run time; a stale one is a metric that was
+        # deleted while its frame-type policy lived on.
+        rows = _applicability.table(diag_cls.__name__)
+        tagged = _applicability.tagged_methods(diag_cls, "_diag_name")
+        prefix = f"{diag_cls.__name__}."
+        assert all(m.startswith(prefix) for m in rows["Method"])
+        assert {m.removeprefix(prefix) for m in rows["Method"]} == set(tagged), (
+            f"config/{diag_cls.__name__}-applicability.csv and the tagged methods "
+            f"on {diag_cls.__name__} have drifted apart"
+        )
+
+    @pytest.mark.parametrize("diag_cls", _CLASSES, ids=_IDS)
+    def test_table_shape(self, diag_cls):
+        rows = _applicability.table(diag_cls.__name__)
+        assert list(rows.columns) == _applicability.DIAG_COLUMNS
+        for frame in _applicability.FRAME_TYPES:
+            assert set(rows[frame]) <= {0, 1}
+
+    @pytest.mark.parametrize("diag_cls", _CLASSES, ids=_IDS)
+    def test_keywords_partition_the_registry(self, diag_cls):
+        # Keying on Method costs the per-keyword mirror the QC tables get, so the
+        # Keywords templates restore it: together they must cover every keyword
+        # the registry says this class writes, each exactly once. That fails a
+        # template that is too greedy as loudly as one that is too narrow.
+        registered = set(_applicability.registered_keywords(diag_cls.__name__))
+        owner = {}
+        for row in _applicability.table(diag_cls.__name__).itertuples(index=False):
+            for entry in row.Keywords.split("|"):
+                covered = _applicability.matches(entry, registered)
+                assert covered, (
+                    f"{row.Method} declares {entry!r}, which covers no keyword "
+                    f"the registry lists as populated by {diag_cls.__name__}"
+                )
+                for keyword in covered:
+                    assert keyword not in owner, (
+                        f"{diag_cls.__name__}: {keyword} is covered by both "
+                        f"{owner[keyword]!r} and {entry!r}"
+                    )
+                    owner[keyword] = entry
+        assert set(owner) == registered, (
+            f"config/{diag_cls.__name__}-applicability.csv covers no keyword for "
+            f"{sorted(registered - set(owner))}"
+        )
+
+    @pytest.mark.parametrize("diag_cls", _CLASSES, ids=_IDS)
+    def test_required_data_names_extensions(self, diag_cls):
+        for row in _applicability.table(diag_cls.__name__).itertuples(index=False):
+            unknown = _applicability.unknown_extensions(
+                row.RequiredData, diag_cls.LEVEL
+            )
+            assert not unknown, (
+                f"{row.Method} requires {unknown}, no {diag_cls.LEVEL} extension"
+            )
+
+    def test_calibration_frame_skips_guider_metrics(self, tmp_path, caplog):
+        # The point of the layer: a Bias has no guider exposure, so the metrics
+        # are not attempted and nothing is logged as an error.
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00009.00.fits",
+            shape=(10, 10),
+            primary_cards={"IMTYPE": "Bias"},
+        )
+        with caplog.at_level(logging.ERROR):
+            assert Guider(standardized_l0(fn)).run() == {}
+        assert not caplog.records

@@ -9,6 +9,7 @@ concrete module lives in test_master_<type>.py.
 import logging
 import os
 import re
+import types
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -70,7 +71,7 @@ class TestMasterBaseErrors:
         qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",
-            lambda fn, standardize=False: object(),
+            lambda fn, standardize=False: types.SimpleNamespace(frame_type="Dark"),
         )
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.QCL0",
@@ -87,7 +88,8 @@ class TestMasterBaseErrors:
         fn = FILE_LIST[0]
         qc_result = {kw: (True, "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         assembled = object()
-        raw_l0 = object()
+        # The diagnostics the gate folds in read frame_type off the loaded L0.
+        raw_l0 = types.SimpleNamespace(frame_type="Dark")
         seen = {}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",

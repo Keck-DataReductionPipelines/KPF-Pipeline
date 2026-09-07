@@ -1,0 +1,6 @@
+Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,Etalon
+Telemetry.ccd_temperature_offsets,GTEMPOFF|RTEMPOFF,CCD temperature offsets from their setpoints,TELEMETRY,1,1,1,1,1,1,1,1
+Telemetry.etalon_temperature_offset,ETATOFF,Etalon chamber temperature offset from its setpoint,TELEMETRY|INSTRUMENT_HEADER,0,0,0,0,0,0,0,1
+Telemetry.site_conditions,INHUM|DEWPOINT|OUTPRES|M1TMP|M2TEMP,"Site humidity, dew point, pressure and mirror temperatures",INSTRUMENT_HEADER,1,1,1,1,1,1,1,1
+Telemetry.solar_lunar_geometry,SUNEL|MOONEL|MOONANG|MOONILLU,"Solar and lunar elevation, separation and illumination",INSTRUMENT_HEADER,1,0,0,0,0,0,0,0
+Telemetry.moon_radial_velocity,MOONRV,RV of sunlight reflected off the Moon,INSTRUMENT_HEADER,1,0,0,0,0,0,0,0

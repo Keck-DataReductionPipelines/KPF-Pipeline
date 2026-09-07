@@ -8,6 +8,8 @@ separate Checkpoints layer.
 
 import logging
 
+from kpfpipe.quality_control.applicability import applicability
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,6 +38,8 @@ class QC:
     def run(self):
         """Run all checks and write each 0/1 result.
 
+        A check the applicability table does not declare for this frame type is
+        skipped before it runs, writing no flag.
         Each result is logged as it is written: DEBUG on a pass, WARNING on a
         fail, ERROR on a check that raised (counted as a fail -- this layer never
         aborts; halting is the checkpoint layer's role). ``NotImplementedError``
@@ -49,8 +53,17 @@ class QC:
             checks only).
         """
         self.results = {}
+        frame_type = self.kpf_obj.frame_type
 
         for name, fn in self._iter_checks():
+            if not applicability.applies(type(self).__name__, name, frame_type):
+                logger.debug(
+                    "%s QC check %r does not apply to a %s frame; skipped",
+                    self.LEVEL,
+                    name,
+                    frame_type,
+                )
+                continue
             kw = fn._qc_key
             # Mirror the registry Description into results (the FITS comment
             # source; see ``_tag``). The _qc_key must be registered.

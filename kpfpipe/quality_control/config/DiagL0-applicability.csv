@@ -1,0 +1,7 @@
+Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,Etalon
+DiagL0.gaia_ra_dec_offset,GAIAOFF,Pointing offset from the Gaia catalog position,CATALOG_RECORD,1,0,0,0,0,0,0,0
+DiagL0.target_ra_dec_offset,TCSOFF,Pointing offset from the TCS/DCS target position,CATALOG_RECORD|INSTRUMENT_HEADER,1,0,0,0,0,0,0,0
+DiagL0.object_ra_dec_offset,OBJOFF,Pointing offset from the SIMBAD position,CATALOG_RECORD,1,0,0,0,0,0,0,0
+DiagL0.dead_pixel_fractions,DEADPXF#,"Fraction of raw pixels below the dead-pixel level, per chip",GREEN_AMP#|RED_AMP#,1,1,1,1,1,1,1,1
+DiagL0.saturated_pixel_fractions,SATPXF#,"Fraction of raw pixels above the saturation level, per chip",GREEN_AMP#|RED_AMP#,1,1,1,1,1,1,1,1
+DiagL0.amp_percentiles,P#AMP#,16th/50th/84th percentiles of each raw amplifier,GREEN_AMP#|RED_AMP#,1,1,1,1,1,1,1,1

@@ -1,0 +1,6 @@
+Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,Etalon
+Guider.guider_errors,GDR#RMS|GDR#BIAS,"Guiding error RMS and bias in x, y and r",GUIDER_CUBE_ORIGINS,1,0,0,0,0,0,0,0
+Guider.guider_image_stats,GDRFW#|GDRFX#|GDRPK#,"Median and spread of the guider images' FWHM, flux and peak flux",GUIDER_CUBE_ORIGINS,1,0,0,0,0,0,0,0
+Guider.guider_seeing,GDRSEE#|SEEING,"Seeing from the guider Moffat fit, in J+Z and scaled to V band",GUIDER_AVG|INSTRUMENT_HEADER,1,0,0,0,0,0,0,0
+Guider.guider_saturation,GDRNSAT|GDRFRSAT,Saturation in the co-added guider image and across its frames,GUIDER_AVG,1,0,0,0,0,0,0,0
+Guider.airmass,AIRMASS,Airmass of the observation,INSTRUMENT_HEADER,1,0,0,0,0,0,0,0

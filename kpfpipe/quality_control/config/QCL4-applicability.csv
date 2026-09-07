@@ -1,0 +1,5 @@
+Method,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,Etalon
+QCL4.ccf_rv_present,DATAPRL4: L4 CCF/CCF_VAR/RV present and populated,RV#|CCF#|CCF#_VAR,1,1,0,0,0,0,0,0
+QCL4.required_keywords_present,KWRDPRL4: required L4 PRIMARY keywords present,PRIMARY,1,1,0,0,0,0,0,0
+QCL4.berv_within_tolerance,BERVOK: per-order BERV range within 0.04 m/s,QUALITY_CONTROL,1,1,0,0,0,0,0,0
+QCL4.bjd_within_tolerance,BJDOK: per-order BJD range within 1 s,QUALITY_CONTROL,1,1,0,0,0,0,0,0

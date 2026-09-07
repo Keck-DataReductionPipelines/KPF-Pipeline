@@ -45,6 +45,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
 "kpfpipe.data_models.config" = ["*.csv"]
+"kpfpipe.quality_control.config" = ["*.csv"]
 
 [tool.setuptools.packages.find]
 include = ["kpfpipe*", "tools*", "scripts*", "recipes*"]

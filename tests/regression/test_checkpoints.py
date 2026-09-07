@@ -35,6 +35,7 @@ from ._data_models import (
     seed_catalog_record,
     set_fiber_arrays,
     set_wave_bands,
+    stamp_frame_type,
     standardized_l0,
     write_science_l0,
 )
@@ -221,7 +222,7 @@ class TestRunFoldsDiagnosticsAndQC:
 def _make_l2(*, populate=True):
     """KPF2 good enough for CheckpointL2.run(): clean FLUX/VAR on every fiber and
     the required PRIMARY keywords seeded so KWRDPRL2 passes."""
-    l2 = KPF2()
+    l2 = stamp_frame_type(KPF2())
     if populate:
         set_fiber_arrays(l2, "FLUX", 1.0, ncol=_NCOL)
         set_fiber_arrays(l2, "VAR", 0.25, ncol=_NCOL)
@@ -295,7 +296,7 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
     deliberately round-trips through from_fits to reproduce the sparse-PRIMARY
     case its KWRDPRL1 test needs; here the skeleton PRIMARY is what is wanted.
     """
-    l1 = KPF1()
+    l1 = stamp_frame_type(KPF1())
     l1.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
     if ccd:
         for chip in ("GREEN", "RED"):

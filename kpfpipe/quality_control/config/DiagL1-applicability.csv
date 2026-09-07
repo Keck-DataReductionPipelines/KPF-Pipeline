@@ -1,0 +1,2 @@
+Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,Etalon
+DiagL1.flux_percentiles,FFI#,Flux percentiles of each assembled FFI,GREEN_CCD|RED_CCD,1,1,1,1,1,1,1,1

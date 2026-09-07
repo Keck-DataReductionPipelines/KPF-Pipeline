@@ -589,6 +589,55 @@ class TestObservingMode:
         assert self._standardize("Bias")["CLSRC5"] is None
 
 
+class TestFrameType:
+    """``frame_type``, the applicability vocabulary the QC layers gate on."""
+
+    @staticmethod
+    def _l0(imtype, **native):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = imtype
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
+        for key, value in native.items():
+            l0.headers["PRIMARY"][key] = value
+        return l0.standardize_headers()
+
+    @pytest.mark.parametrize(
+        "imtype, expected",
+        [
+            ("Bias", "Bias"),
+            ("Dark", "Dark"),
+            ("Flatlamp", "Flat"),
+            ("Etalon", "Etalon"),
+        ],
+    )
+    def test_obstype_names_the_type(self, imtype, expected):
+        assert self._l0(imtype).frame_type == expected
+
+    def test_object_frame_is_star(self, synthetic_l0_file):
+        assert standardized_l0(synthetic_l0_file).frame_type == "Star"
+
+    def test_socal_frame_is_sun(self):
+        assert self._l0("Object", OBJECT="SoCal").frame_type == "Sun"
+
+    @pytest.mark.parametrize(
+        "cal_obj, expected", [("Th_gold", "ThAr"), ("LFCFiber", "LFC")]
+    )
+    def test_arclamp_splits_on_its_source(self, cal_obj, expected):
+        l0 = self._l0("Arclamp", **{"CAL-OBJ": cal_obj})
+        assert l0.frame_type == expected
+
+    def test_arclamp_with_an_unnamed_source_raises(self):
+        # BrdbandFiber is stamped verbatim, naming neither arclamp source.
+        l0 = self._l0("Arclamp", **{"CAL-OBJ": "BrdbandFiber"})
+        with pytest.raises(ValueError, match="Arclamp"):
+            _ = l0.frame_type
+
+    def test_unstandardized_product_raises(self):
+        # The blank PRIMARY skeleton: no OBSTYPE, so no gate can be applied.
+        with pytest.raises(ValueError, match="names no frame type"):
+            _ = KPF0().frame_type
+
+
 class TestFiveTraceShape:
     """Verification step 5 (L0/L1): every ``#`` family carries a card for every
     trace, on every frame, regardless of IMTYPE or which fibers were illuminated.

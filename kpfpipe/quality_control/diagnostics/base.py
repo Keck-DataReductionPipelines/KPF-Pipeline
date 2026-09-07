@@ -8,6 +8,8 @@ extensions. QC then reads those metrics and applies pass/fail thresholds.
 
 import logging
 
+from kpfpipe.quality_control.applicability import applicability
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +44,9 @@ class Diagnostics:
         """Run all diagnostic methods, writing each result via set_keyword.
 
         Resets ``self.results`` at the start so calling ``run()`` repeatedly
-        is deterministic. A method that raises is logged at ERROR (naming it) and
+        is deterministic. A method the applicability table does not declare for
+        this frame type is skipped before it runs, emitting no keyword.
+        A method that raises is logged at ERROR (naming it) and
         skipped: this layer is informational and never aborts the pipeline, so its
         keywords are simply not written. Halting is the checkpoint layer's role.
 
@@ -55,8 +59,17 @@ class Diagnostics:
             Maps each FITS keyword to its ``(value, comment)`` pair.
         """
         self.results = {}
+        frame_type = self.kpf_obj.frame_type
 
         for name, fn in self._iter_methods():
+            if not applicability.applies(type(self).__name__, name, frame_type):
+                logger.debug(
+                    "%s diagnostic %r does not apply to a %s frame; skipped",
+                    self.LEVEL,
+                    name,
+                    frame_type,
+                )
+                continue
             try:
                 output = list(fn().items())
             except Exception as e:
