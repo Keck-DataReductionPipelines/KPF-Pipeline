@@ -53,15 +53,15 @@ class QC:
             checks only).
         """
         self.results = {}
-        frame_type = self.kpf_obj.frame_type
+        frame = applicability.frame_type(self.kpf_obj)
 
         for name, fn in self._iter_checks():
-            if not applicability.applies(type(self).__name__, name, frame_type):
+            if not applicability.applies(type(self).__name__, name, frame):
                 logger.debug(
                     "%s QC check %r does not apply to a %s frame; skipped",
                     self.LEVEL,
                     name,
-                    frame_type,
+                    frame,
                 )
                 continue
             kw = fn._qc_key

@@ -67,7 +67,7 @@ def _merge(records, targradv=None, priority=("gaia", "simbad", "wmko")):
     default ``priority`` admits all three sources so these exercise the merge
     itself; the shipped policy is pinned in TestAstrometryPriority."""
     l0 = KPF0()
-    l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
+    l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
     if targradv is not None:
         l0.headers["INSTRUMENT_HEADER"]["TARGRADV"] = targradv
     aq = AstroQuery(l0, {"astrometry_priority": priority})
@@ -272,7 +272,7 @@ class TestSingleSourceProvenance:
     def test_source_row_provenance_defaults_to_source(self):
         # A source row holds only its own values, so all three labels are its own.
         l0 = KPF0()
-        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G"))
         aq._write_catalog_record("wmko", _record("W"))
@@ -296,7 +296,7 @@ class TestRedshift:
 
     def test_written_row_carries_redshift(self):
         l0 = KPF0()
-        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G", rv=11.0))
         row = l0.data["CATALOG_RECORD"][0]
@@ -305,7 +305,7 @@ class TestRedshift:
     def test_missing_rv_leaves_redshift_nan(self):
         # rv absent -> z is NaN (blank CZ# downstream), not an error.
         l0 = KPF0()
-        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G", rv=None))
         row = l0.data["CATALOG_RECORD"][0]
@@ -342,8 +342,8 @@ class TestReadWmkoHeader:
     @staticmethod
     def _l0_targ(**targ):
         l0 = KPF0()
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
         p = l0.headers["INSTRUMENT_HEADER"]
-        p["IMTYPE"] = "object"
         p["OBJECT"] = "testtarget"
         for key, value in targ.items():
             p[key] = value
@@ -520,7 +520,7 @@ def _simbad_instance(table):
 def _l0_for_query(**primary):
     """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID)."""
     l0 = KPF0()
-    l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
+    l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
     for key, value in primary.items():
         l0.headers["INSTRUMENT_HEADER"][key] = value
     return l0
@@ -672,7 +672,7 @@ class TestExternalQueries:
         record.pop("color")
         record.pop("color_name")
         l0 = KPF0()
-        l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
         aq = AstroQuery(l0)
         aq._write_catalog_record("kpf-drp", record)
         row = l0.data["CATALOG_RECORD"][0]
@@ -978,23 +978,23 @@ class TestPerform:
 
 class TestConstructor:
     """The constructor's three guards. Every other AstroQuery(...) in the suite
-    passes IMTYPE='object' and either None or a plain dict, so none of these is
+    passes OBSTYPE='Object' and either None or a plain dict, so none of these is
     otherwise exercised."""
 
     @staticmethod
-    def _l0(imtype):
+    def _l0(obstype):
         l0 = KPF0()
-        if imtype is not None:
-            l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = imtype
+        if obstype is not None:
+            l0.headers["PRIMARY"]["OBSTYPE"] = obstype
         return l0
 
-    @pytest.mark.parametrize("imtype", ["Bias", "Flat", None])
-    def test_rejects_non_object_frames(self, imtype):
+    @pytest.mark.parametrize("obstype", ["Bias", "Flat", None])
+    def test_rejects_non_object_frames(self, obstype):
         # The class docstring's headline promise. Without it, AstroQuery would
         # fire SIMBAD lookups on OBJECT='bias' and write a bogus CATALOG_RECORD
         # that to_kpf1 copies onto the EPRV C*# cards.
         with pytest.raises(ValueError, match="science frames"):
-            AstroQuery(self._l0(imtype))
+            AstroQuery(self._l0(obstype))
 
     def test_rejects_unsupported_config_type(self):
         with pytest.raises(TypeError, match="must be None, dict, or ConfigHandler"):

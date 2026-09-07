@@ -59,15 +59,15 @@ class Diagnostics:
             Maps each FITS keyword to its ``(value, comment)`` pair.
         """
         self.results = {}
-        frame_type = self.kpf_obj.frame_type
+        frame = applicability.frame_type(self.kpf_obj)
 
         for name, fn in self._iter_methods():
-            if not applicability.applies(type(self).__name__, name, frame_type):
+            if not applicability.applies(type(self).__name__, name, frame):
                 logger.debug(
                     "%s diagnostic %r does not apply to a %s frame; skipped",
                     self.LEVEL,
                     name,
-                    frame_type,
+                    frame,
                 )
                 continue
             try:

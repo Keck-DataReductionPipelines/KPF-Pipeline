@@ -79,17 +79,14 @@ CATALOG_RECORD = {
     "color_name": "Gaia BP-RP",
 }
 
-# The PRIMARY cards KPFDataModel.frame_type reads, per frame type. In-memory
+# The PRIMARY cards applicability.frame_type reads, per frame type. In-memory
 # products skip KPF0.standardize_headers, so their builders stamp these directly.
 FRAME_TYPE_CARDS = {
     "Star": {"OBSTYPE": "Object", "ISSOLAR": False},
     "Sun": {"OBSTYPE": "Object", "ISSOLAR": True},
-    "Bias": {"OBSTYPE": "Bias"},
-    "Dark": {"OBSTYPE": "Dark"},
-    "Flat": {"OBSTYPE": "Flatlamp"},
-    "Etalon": {"OBSTYPE": "Etalon"},
-    "ThAr": {"OBSTYPE": "Arclamp", "CLSRC5": "ThAr"},
-    "LFC": {"OBSTYPE": "Arclamp", "CLSRC5": "LFC"},
+} | {
+    frame: {"OBSTYPE": frame}
+    for frame in ("Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
 }
 
 _DEFAULT_PRIMARY = {
@@ -251,10 +248,10 @@ def standardized_l0(path):
 
 
 def stamp_frame_type(kpf_obj, frame_type="Star"):
-    """Stamp PRIMARY so ``kpf_obj.frame_type`` resolves to ``frame_type``.
+    """Stamp PRIMARY so the applicability gate resolves ``frame_type``.
 
-    The applicability gate in every Diagnostics/QC ``run()`` reads it, and an
-    in-memory L1/L2/L4 has only the blank PRIMARY skeleton.
+    Every Diagnostics/QC ``run()`` reads it, and an in-memory L1/L2/L4 has only
+    the blank PRIMARY skeleton.
     """
     kpf_obj.headers["PRIMARY"].update(FRAME_TYPE_CARDS[frame_type])
     return kpf_obj

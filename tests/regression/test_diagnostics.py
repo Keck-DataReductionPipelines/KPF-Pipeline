@@ -61,13 +61,13 @@ def ungated(monkeypatch):
     covered by ``TestDiagnosticsApplicability``.
     """
     monkeypatch.setattr(applicability, "applies", lambda *_: True)
+    monkeypatch.setattr(applicability, "frame_type", lambda _: "Star")
 
 
 @pytest.mark.usefixtures("ungated")
 class TestDiagnosticsBase:
     def _make_obj(self):
         class _FakeObj:
-            frame_type = "Star"
             headers = {"PRIMARY": {}}
             data = {}
 

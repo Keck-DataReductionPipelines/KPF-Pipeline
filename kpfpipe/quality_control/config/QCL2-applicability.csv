@@ -1,7 +1,7 @@
-Method,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,Etalon
-QCL2.extraction_present,DATAPRL2: L2 FLUX/VAR/WAVE present and populated,TRACE#_FLUX|TRACE#_VAR|TRACE#_WAVE,1,1,0,0,1,1,1,1
-QCL2.required_keywords_present,KWRDPRL2: required L2 PRIMARY keywords present,PRIMARY,1,1,0,0,1,1,1,1
-QCL2.flux_finite_fraction,L2NANOK: L2 NaN fraction <= 1%,QUALITY_CONTROL,1,1,0,0,1,1,1,1
-QCL2.nonzero_flux,L2FLXOK: L2 non-positive flux fraction < 0.5,QUALITY_CONTROL,1,1,0,0,1,1,1,1
-QCL2.variance_positive,L2VAROK: no negative L2 variance where flux finite,TRACE#_FLUX|TRACE#_VAR,1,1,0,0,1,1,1,1
-QCL2.science_snr,L2SNROK: science SNR finite and above floor,QUALITY_CONTROL,1,1,0,0,0,0,0,0
+Method,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+QCL2.extraction_present,DATAPRL2: L2 FLUX/VAR/WAVE present and populated,TRACE#_FLUX|TRACE#_VAR|TRACE#_WAVE,1,1,0,0,1,1,1,1,1
+QCL2.required_keywords_present,KWRDPRL2: required L2 PRIMARY keywords present,PRIMARY,1,1,0,0,1,1,1,1,1
+QCL2.flux_finite_fraction,L2NANOK: L2 NaN fraction <= 1%,QUALITY_CONTROL,1,1,0,0,1,1,1,1,1
+QCL2.nonzero_flux,L2FLXOK: L2 non-positive flux fraction < 0.5,QUALITY_CONTROL,1,1,0,0,1,1,1,1,1
+QCL2.variance_positive,L2VAROK: no negative L2 variance where flux finite,TRACE#_FLUX|TRACE#_VAR,1,1,0,0,1,1,1,1,1
+QCL2.science_snr,L2SNROK: science SNR finite and above floor,QUALITY_CONTROL,1,1,0,0,0,0,0,0,0

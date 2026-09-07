@@ -202,6 +202,7 @@ def ungated(monkeypatch):
     covered by ``TestQCApplicability``.
     """
     monkeypatch.setattr(applicability, "applies", lambda *_: True)
+    monkeypatch.setattr(applicability, "frame_type", lambda _: "Star")
 
 
 @pytest.mark.usefixtures("ungated")
@@ -217,7 +218,6 @@ class TestQCBase:
         """
 
         class _FakeObj:
-            frame_type = "Star"
             headers = {"PRIMARY": {}, "QUALITY_CONTROL": {}}
             keyword_registry = types.SimpleNamespace(
                 comment_for=lambda kw, ext=None: "",

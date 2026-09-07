@@ -71,7 +71,9 @@ class TestMasterBaseErrors:
         qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",
-            lambda fn, standardize=False: types.SimpleNamespace(frame_type="Dark"),
+            lambda fn, standardize=False: types.SimpleNamespace(
+                headers={"PRIMARY": {"OBSTYPE": "Dark"}}
+            ),
         )
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.QCL0",
@@ -88,8 +90,8 @@ class TestMasterBaseErrors:
         fn = FILE_LIST[0]
         qc_result = {kw: (True, "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         assembled = object()
-        # The diagnostics the gate folds in read frame_type off the loaded L0.
-        raw_l0 = types.SimpleNamespace(frame_type="Dark")
+        # The diagnostics the gate folds in read OBSTYPE off the loaded L0.
+        raw_l0 = types.SimpleNamespace(headers={"PRIMARY": {"OBSTYPE": "Dark"}})
         seen = {}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",

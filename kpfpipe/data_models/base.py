@@ -27,8 +27,6 @@ from rvdata.core.models.definitions import (
     BASE_RECEIPT_COLUMNS,
 )
 
-from kpfpipe import DETECTOR
-
 # Reference-data singletons, re-exported so level2/4 import them via base.
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.config import PATH as _config_path
@@ -40,17 +38,6 @@ from kpfpipe.utils.kpf import is_obs_id
 # Trace index -> fiber name, and the 1:1 KPF -> EPRV extension synonyms.
 TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
 EXTENSION_ALIASES = pd.read_csv(_config_path / "extension-aliases.csv")
-
-# OBSTYPE -> ``frame_type``, for the types OBSTYPE names outright.
-_FRAME_TYPE_BY_OBSTYPE = {
-    "Bias": "Bias",
-    "Dark": "Dark",
-    "Flatlamp": "Flat",
-    "Etalon": "Etalon",
-}
-
-# The arclamp sources KPF distinguishes, in the CLSRC# vocabulary.
-_ARCLAMP_SOURCES = frozenset({"ThAr", "LFC"})
 
 # Data-model conversion/serialization receipts, excluded from DRPSTATU so it
 # names the last real pipeline stage. ``from_fits`` is here too: reading a
@@ -146,39 +133,6 @@ class KPFDataModel(RVDataModel):
         The masters override this: their tables are ``ML{level}``.
         """
         return f"L{self.level}"
-
-    @property
-    def frame_type(self):
-        """This exposure's frame type, one of ``applicability.FRAME_TYPES``.
-
-        Read from the PRIMARY cards ``KPF0.standardize_headers`` stamps, which
-        forward to every downstream level. ``OBSTYPE`` names most types outright;
-        ``Object`` splits on ``ISSOLAR`` and ``Arclamp`` on ``CLSRC#``. A frame
-        this DRP cannot classify raises rather than silently running every check.
-        """
-        prim = self.headers["PRIMARY"]
-        obstype = str(prim.get("OBSTYPE", "")).strip()
-        if obstype == "Object":
-            return "Sun" if prim.get("ISSOLAR") else "Star"
-        if obstype in _FRAME_TYPE_BY_OBSTYPE:
-            return _FRAME_TYPE_BY_OBSTYPE[obstype]
-        if obstype == "Arclamp":
-            sources = _ARCLAMP_SOURCES & {
-                str(prim.get(f"CLSRC{trace}", "")).strip()
-                for trace in range(1, DETECTOR["numtrace"] + 1)
-            }
-            if len(sources) == 1:
-                return next(iter(sources))
-            raise ValueError(
-                f"{self.obs_id} is an Arclamp whose CLSRC1-"
-                f"{DETECTOR['numtrace']} cards name "
-                f"{len(sources)} of the arclamp sources "
-                f"{sorted(_ARCLAMP_SOURCES)}; exactly one is required"
-            )
-        raise ValueError(
-            f"{self.obs_id} has OBSTYPE {obstype!r}, which names no frame type; "
-            "run KPF0.standardize_headers before the quality-control layers"
-        )
 
     def _create_manifest_extensions(self):
         """Create every extension this level's manifest declares.

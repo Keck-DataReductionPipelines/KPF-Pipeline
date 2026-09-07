@@ -28,16 +28,18 @@ logger = logging.getLogger(__name__)
 _RVDATA_VERSION = importlib.metadata.version("rv-data-standard")
 _RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
 
-# The calibration half of KPF's IMTYPE vocabulary; 'Object' is the other half.
-_CAL_OBSTYPES = frozenset({"Bias", "Dark", "Flatlamp", "Arclamp", "Etalon"})
-
-# KPF's fiber-source names -> the EPRV calibration-source vocabulary of CLSRC#.
-_CAL_SOURCES = {
-    "target": "Target",
-    "sky": "Sky",
-    "none": "None",
+# Every KPF name that needs translating, lowercased -> its EPRV spelling. The
+# frame types feed OBSTYPE, the lamps feed both OBSTYPE and CLSRC#. A name absent
+# here is no KPF type or lamp: OBSTYPE rejects it, CLSRC# keeps it verbatim.
+_EPRV_SOURCES = {
+    "object": "Object",
+    "bias": "Bias",
+    "dark": "Dark",
+    "flatlamp": "Flat",
     "th_gold": "ThAr",
     "th_daily": "ThAr",
+    "u_gold": "UNe",
+    "u_daily": "UNe",
     "lfcfiber": "LFC",
     "etalonfiber": "Etalon",
 }
@@ -261,12 +263,15 @@ class KPF0(KPFDataModel):
         self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
 
     def _observing_mode(self):
-        """Stamp ISSOLAR, OBSMODE and CLSRC# from what the tabular fill mapped.
+        """Stamp OBSTYPE, ISSOLAR, OBSMODE and CLSRC#.
+
+        IMTYPE names the frame's type outright except on an Arclamp, which says
+        only that a lamp was used; OCTAGON says which, because CAL-OBJ carries an
+        octagon position index rather than a lamp name on a real arclamp frame.
 
         OBSMODE is redundant for KPF, which has one optical configuration: the
         EPRV standard defines it for instruments with several (hi-res/low-res),
-        so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar. An IMTYPE
-        outside the vocabulary is a frame this DRP cannot classify, so it raises.
+        so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar.
 
         CLSRC# names each trace's illumination source in the EPRV vocabulary,
         normalized from the KPF fiber-source name TRACE# carries. A source the
@@ -275,29 +280,35 @@ class KPF0(KPFDataModel):
         """
         native = self.headers["INSTRUMENT_HEADER"]
         prim = self.headers["PRIMARY"]
-        obstype = str(prim["OBSTYPE"]).strip()
+
+        imtype = str(native.get("IMTYPE", "")).strip()
+        card = "OCTAGON" if imtype == "Arclamp" else "IMTYPE"
+        name = str(native.get(card, "")).strip()
+        obstype = _EPRV_SOURCES.get(name.lower())
+        if obstype is None:
+            raise ValueError(
+                f"{self.obs_id} has {card} {name!r}, which names no KPF "
+                f"observation type ({', '.join(sorted(set(_EPRV_SOURCES.values())))})"
+            )
+
         is_solar = any(
             str(native.get(key, "")).strip().lower() == "socal"
             for key in ("OBJECT", "TARGNAME")
         )
-        if obstype == "Object":
-            mode = "solar" if is_solar else "sci"
-        elif obstype in _CAL_OBSTYPES:
-            mode = "cal"
-        else:
-            raise ValueError(
-                f"{self.obs_id} has IMTYPE {obstype!r}, which is not one of KPF's "
-                f"observation types ('Object', {', '.join(sorted(_CAL_OBSTYPES))})"
-            )
+        self.set_keyword("OBSTYPE", obstype)
         self.set_keyword("ISSOLAR", is_solar)
-        self.set_keyword("OBSMODE", mode)
+        self.set_keyword(
+            "OBSMODE",
+            ("solar" if is_solar else "sci") if obstype == "Object" else "cal",
+        )
 
         for trace in range(1, DETECTOR["numtrace"] + 1):
             source = prim.get(f"TRACE{trace}")
             if not source:
                 continue
-            name = str(source).strip().lower()
-            self.set_keyword(f"CLSRC{trace}", _CAL_SOURCES.get(name, source))
+            self.set_keyword(
+                f"CLSRC{trace}", _EPRV_SOURCES.get(str(source).strip().lower(), source)
+            )
 
     def _site_coordinates(self):
         """Stamp the observatory location onto PRIMARY from ``KECK_LOCATION``.

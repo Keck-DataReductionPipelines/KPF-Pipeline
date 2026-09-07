@@ -20,7 +20,7 @@ import pandas as pd
 from kpfpipe.quality_control.config import PATH as _config_path
 
 # Every frame type a check can be declared applicable to; the boolean columns.
-FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "Etalon")
+FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
 
 _SUFFIX = "-applicability.csv"
 
@@ -72,6 +72,25 @@ class Applicability:
                 "must declare which frame types its checks apply to"
             )
         return self._tables[class_name]
+
+    @staticmethod
+    def frame_type(kpf_obj):
+        """``kpf_obj``'s column: its OBSTYPE, with Object split on ISSOLAR.
+
+        Star and Sun share an OBSTYPE but not a check list -- nothing points or
+        guides at the Sun -- so the gate resolves them here rather than in the
+        dozen methods that differ.
+        """
+        prim = kpf_obj.headers["PRIMARY"]
+        obstype = str(prim.get("OBSTYPE", "")).strip()
+        if obstype == "Object":
+            return "Sun" if prim.get("ISSOLAR") else "Star"
+        if obstype not in FRAME_TYPES:
+            raise ValueError(
+                f"OBSTYPE {obstype!r} names no frame type; run "
+                "KPF0.standardize_headers before the quality-control layers"
+            )
+        return obstype
 
     def methods(self, class_name):
         """``class_name``'s declared method names, unqualified."""

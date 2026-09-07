@@ -23,7 +23,7 @@ _CFG = importlib.resources.files("kpfpipe.quality_control.config")
 
 # The boolean columns, spelled out rather than imported so a silent edit to
 # ``applicability.FRAME_TYPES`` cannot pass unnoticed.
-FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "Etalon")
+FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
 
 QC_COLUMNS = ["Method", "Description", "RequiredData", *FRAME_TYPES]
 DIAG_COLUMNS = ["Method", "Keywords", "Description", "RequiredData", *FRAME_TYPES]
