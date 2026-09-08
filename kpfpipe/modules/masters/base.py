@@ -74,10 +74,10 @@ class BaseMasterModule:
 
     # QCL0 flags a frame must pass to enter a stack: data present and not
     # observer-junk. A frame failing either is dropped in ``_load_frame`` and
-    # counted as a load failure. Deliberately loosened while the QC suite is
-    # overhauled: KWRDPRL0 writes no card (its check is stubbed) and EXPTIMOK
-    # leaves the tuple with it, since a flag with no card raises a bare KeyError
-    # at the `qc[kw][0]` read below rather than rejecting the frame.
+    # counted as a load failure. KWRDPRL0 stays out: it does not apply to the
+    # calibration frames a stack is built from, so it writes no card, and a flag
+    # with no card raises a bare KeyError at the `qc[kw][0]` read below rather
+    # than rejecting the frame. EXPTIMOK leaves the tuple with it.
     _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
 
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in

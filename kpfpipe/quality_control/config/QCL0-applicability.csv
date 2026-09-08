@@ -1,6 +1,6 @@
 Method,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 QCL0.data_l0_red_green,DATAPRL0: GREEN/RED amps present and populated,GREEN_AMP#|RED_AMP#,1,1,1,1,1,1,1,1,1
-QCL0.header_keywords_present,KWRDPRL0: required L0 PRIMARY keywords present,PRIMARY,1,1,1,1,1,1,1,1,1
+QCL0.header_keywords_present,KWRDPRL0: required L0 PRIMARY keywords present,PRIMARY,1,1,0,0,0,0,0,0,0
 QCL0.telemetry_present,TELEPR: TELEMETRY extension present and populated,TELEMETRY,1,1,1,1,1,1,1,1,1
 QCL0.cahk_present,CAHKPR: CA_HK extension present and populated,CA_HK,1,1,0,0,0,0,0,0,0
 QCL0.expmeter_sci_present,EMSCIPR: EXPMETER_SCI extension present and populated,EXPMETER_SCI,1,1,0,0,0,0,0,0,0

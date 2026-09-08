@@ -16,13 +16,6 @@ logger = logging.getLogger(__name__)
 class QC:
     """Base runner for per-level pass/fail QC check methods.
 
-    Every level carries a required-PRIMARY-keyword placeholder check (e.g. L0's
-    KWRDPRL0): REQUIRED is now a compliance label, not a decision about what must
-    be on a product, so the registry-derived notion of "required" these checks
-    would read is gone. Until a KPF-owned definition replaces it, each raises
-    ``NotImplementedError`` (writing no flag, per ``run``) while its registry row
-    stays so the comment lookup still resolves.
-
     Parameters
     ----------
     kpf_obj : KPFDataModel
@@ -88,6 +81,25 @@ class QC:
             )
 
         return self.results
+
+    def _primary_keywords_populated(self):
+        """Every PRIMARY keyword registered through this level carries a value.
+
+        ``primary_seed`` is cumulative (L0 through ``LEVEL``), so a card an
+        upstream stage left blank fails here too. The seed stamps every card at
+        standardization, making a blank -- not a missing key -- the failure this
+        reports.
+
+        Known gap: thirteen L0 cards (DQLVL0, FULLCOMP, the six *FLAG summaries,
+        ROTANG, OUTTMP, OUTHUM, ENVWINDS, ENVWINDD) have no writer yet, so this
+        fails on every frame until they get one.
+        """
+        header = self.kpf_obj.headers["PRIMARY"]
+        for keyword in self.kpf_obj.keyword_registry.primary_seed(self.LEVEL):
+            value = header.get(keyword)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                return False
+        return True
 
     def _iter_checks(self):
         """Yield each ``(name, method)`` tagged ``_qc_key``.

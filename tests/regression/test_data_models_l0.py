@@ -221,6 +221,14 @@ class TestKPF0Provenance:
         assert l0.obs_id == "KP.20240113.23249.10"
         assert l0.headers["PRIMARY"].get("ORIGID") == "KP.20240113.23249.10"
 
+    def test_standardizing_stamps_the_source_filename(self, synthetic_l0_file):
+        # to_fits restamps FILENAME with the name it writes; in memory the card
+        # names the file the product was read from.
+        l0 = standardized_l0(synthetic_l0_file)
+        assert l0.headers["PRIMARY"].get("FILENAME") == os.path.basename(
+            synthetic_l0_file
+        )
+
     def test_progid_defaults_to_unknown_and_warns(self, caplog, synthetic_l0_minimal):
         with caplog.at_level(logging.WARNING):
             l0 = standardized_l0(synthetic_l0_minimal)

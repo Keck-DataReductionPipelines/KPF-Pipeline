@@ -144,6 +144,7 @@ class KPF0(KPFDataModel):
             raise ValueError("OFNAME absent from L0 PRIMARY; cannot set KOAID")
         self.set_keyword("KOAID", koaid)
         self.set_keyword("ORIGID", self.obs_id)
+        self.set_keyword("FILENAME", self.filename)
         self.set_keyword("DATALVL", "L0")
 
         self.receipt_add_entry("standardize_headers", "", "PASS")

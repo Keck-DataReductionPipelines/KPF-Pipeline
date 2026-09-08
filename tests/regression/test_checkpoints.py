@@ -31,6 +31,7 @@ from kpfpipe.quality_control.checkpoints import (
 )
 
 from ._data_models import (
+    fill_primary,
     make_l4,
     seed_catalog_record,
     set_fiber_arrays,
@@ -272,12 +273,12 @@ class TestCheckpointL0:
         # in-process exercise of QCL0.run().
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
         write_science_l0(fn, namps=4, shape=(10, 10), primary_cards={"PROGNAME": None})
-        l0 = seed_catalog_record(standardized_l0(fn))
+        l0 = fill_primary(seed_catalog_record(standardized_l0(fn)), "L0")
         with caplog.at_level(logging.WARNING):
             CheckpointL0(l0).run()
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
-        assert "KWRDPRL0" not in qc  # its check is stubbed, so it writes no flag
+        assert qc["KWRDPRL0"] == 1
         assert qc["DEADPXOK"] == 1
         assert qc["SATPXOK"] == 1
         assert qc["TCSOFF"] < 1.0
@@ -297,7 +298,7 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
     deliberately round-trips through from_fits to reproduce the sparse-PRIMARY
     case its KWRDPRL1 test needs; here the skeleton PRIMARY is what is wanted.
     """
-    l1 = stamp_frame_type(KPF1())
+    l1 = fill_primary(stamp_frame_type(KPF1()), "L1")
     l1.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
     if ccd:
         for chip in ("GREEN", "RED"):
@@ -329,7 +330,7 @@ class TestCheckpointL1:
         assert not caplog.records
         qc = l1.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL1"] == 1
-        assert "KWRDPRL1" not in qc  # its check is stubbed, so it writes no flag
+        assert qc["KWRDPRL1"] == 1
 
     def test_run_raises_when_ccd_data_missing(self):
         # No assembled CCDs: DiagL1's flux percentiles have no pixels to measure,
@@ -364,8 +365,7 @@ def _make_l4(*, sci=True):
     header-stuffing; passing ``bervrng=``/``bjdrng=`` instead would write the
     metrics directly and do the same damage.
     """
-    l4 = make_l4(sci=sci, jitter=1e-7, berv=7.9, seed=3)
-    return l4
+    return fill_primary(make_l4(sci=sci, jitter=1e-7, berv=7.9, seed=3), "L4")
 
 
 class TestCheckpointL4:

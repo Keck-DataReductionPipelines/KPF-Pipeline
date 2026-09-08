@@ -257,6 +257,20 @@ def stamp_frame_type(kpf_obj, frame_type="Star"):
     return kpf_obj
 
 
+def fill_primary(kpf_obj, level):
+    """Populate every blank PRIMARY card ``level``'s seed stamps, so KWRDPR* passes.
+
+    The value is a marker, not a plausible one: the check tests only that a card
+    is not blank.
+    """
+    prim = kpf_obj.headers["PRIMARY"]
+    for keyword in kpf_obj.keyword_registry.primary_seed(level):
+        value = prim.get(keyword)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            prim[keyword] = "filled"
+    return kpf_obj
+
+
 def seed_catalog_record(kpf0, record=None):
     """Write the wmko and merged kpf-drp CATALOG_RECORD rows.
 

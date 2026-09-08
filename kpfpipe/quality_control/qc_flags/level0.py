@@ -55,10 +55,8 @@ class QCL0(QC):
     data_l0_red_green._qc_key = "DATAPRL0"
 
     def header_keywords_present(self):
-        """Required PRIMARY keywords exist -- not yet implemented; see ``QC``."""
-        raise NotImplementedError(
-            "KWRDPRL0 is pending a KPF-owned definition of a required keyword"
-        )
+        """Every PRIMARY keyword registered through L0 is populated."""
+        return self._primary_keywords_populated()
 
     header_keywords_present._qc_key = "KWRDPRL0"
 

@@ -29,6 +29,7 @@ from ._data_models import (
     GOOD_DATES,
     NORDER,
     NORDER_TOTAL,
+    fill_primary,
     make_l4,
     set_fiber_arrays,
     stamp_frame_type,
@@ -431,12 +432,16 @@ class TestQCL0:
         l0 = KPF0.from_fits(fn)
         assert QCL0(l0).data_l0_red_green() is False
 
-    def test_header_keywords_present_is_stubbed(self, tmp_path):
-        # KWRDPRL0 is pending a KPF-owned definition of "required"; until then it
-        # raises NotImplementedError, which QC.run treats as "write no flag".
+    def test_header_keywords_present(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        with pytest.raises(NotImplementedError, match="KWRDPRL0"):
-            QCL0(l0).header_keywords_present()
+        assert QCL0(l0).header_keywords_present() is False  # seeded cards blank
+        fill_primary(l0, "L0")
+        assert QCL0(l0).header_keywords_present() is True
+
+    def test_header_keywords_present_fails_on_one_blank(self, tmp_path):
+        l0 = fill_primary(_make_kpf0(tmp_path), "L0")
+        l0.headers["PRIMARY"]["OBSTYPE"] = "  "
+        assert QCL0(l0).header_keywords_present() is False
 
     def _make_kpf0_with_telemetry(self, tmp_path, nrows):
         fn = write_amp_l0(
@@ -1401,11 +1406,11 @@ class TestQCL1:
         l1.data["RED_CCD"][:] = np.nan
         assert QCL1(l1).data_present() is False
 
-    def test_required_keywords_present_is_stubbed(self, tmp_path):
-        # KWRDPRL1 is pending a KPF-owned definition of "required"; until then
-        # it raises NotImplementedError, which QC.run treats as "write no flag".
-        with pytest.raises(NotImplementedError, match="KWRDPRL1"):
-            QCL1(_make_kpf1(tmp_path)).required_keywords_present()
+    def test_required_keywords_present(self, tmp_path):
+        l1 = _make_kpf1(tmp_path)
+        assert QCL1(l1).required_keywords_present() is False  # seeded cards blank
+        fill_primary(l1, "L1")
+        assert QCL1(l1).required_keywords_present() is True
 
     def test_read_noise_ok_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, with_rn=True)
@@ -1653,7 +1658,6 @@ class TestQCL1Run:
         # BIASOK/DARKOK/FLATOK read the receipt *sub flags and the *AGE values
         # but are themselves QUALITY_CONTROL keywords; the applied-step flags
         # (oscansub/biassub/darksub/flatdiv) stay RECEIPT-table provenance.
-        # KWRDPRL1 is absent on purpose: its check is stubbed and writes no flag.
         qc_keys = [
             "DATAPRL1",
             "RNOK",
@@ -1689,11 +1693,11 @@ class TestQCL2:
         kpf2 = _make_kpf2_nan_headers()
         assert QCL2(kpf2).extraction_present() is True
 
-    def test_required_keywords_present_is_stubbed(self):
-        # KWRDPRL2 is pending a KPF-owned definition of "required"; until then
-        # it raises NotImplementedError, which QC.run treats as "write no flag".
-        with pytest.raises(NotImplementedError, match="KWRDPRL2"):
-            QCL2(_make_kpf2_nan_headers()).required_keywords_present()
+    def test_required_keywords_present(self):
+        l2 = _make_kpf2_nan_headers()
+        assert QCL2(l2).required_keywords_present() is False  # seeded cards blank
+        fill_primary(l2, "L2")
+        assert QCL2(l2).required_keywords_present() is True
 
     def test_extraction_present_fail_empty_kpf2(self):
         kpf2 = KPF2()
@@ -1946,21 +1950,19 @@ class TestQCL4:
         with pytest.raises(KeyError, match="BJDRNG"):
             QCL4(make_l4()).bjd_within_tolerance()
 
-    def test_required_keywords_present_is_stubbed(self):
-        # KWRDPRL4 is pending a KPF-owned definition of "required"; until then
-        # it raises NotImplementedError, which QC.run treats as "write no flag".
-        with pytest.raises(NotImplementedError, match="KWRDPRL4"):
-            QCL4(make_l4()).required_keywords_present()
+    def test_required_keywords_present(self):
+        l4 = make_l4()
+        assert QCL4(l4).required_keywords_present() is False  # seeded cards blank
+        fill_primary(l4, "L4")
+        assert QCL4(l4).required_keywords_present() is True
 
     def test_run_all_good(self):
-        l4 = make_l4(bervrng=0.02, bjdrng=0.5)
+        l4 = fill_primary(make_l4(bervrng=0.02, bjdrng=0.5), "L4")
         results = QCL4(l4).run()
-        assert set(results) >= {"DATAPRL4", "BERVOK", "BJDOK"}
-        # The stubbed KWRDPRL4 writes no flag at all.
-        assert "KWRDPRL4" not in results
+        assert set(results) >= {"DATAPRL4", "BERVOK", "BJDOK", "KWRDPRL4"}
         qc = l4.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL4"] == 1 and qc["BERVOK"] == 1 and qc["BJDOK"] == 1
-        assert "KWRDPRL4" not in qc
+        assert qc["KWRDPRL4"] == 1
 
     def test_run_flags_failure(self):
         # no CCF/RV, and out-of-tolerance BERV/BJD ranges
