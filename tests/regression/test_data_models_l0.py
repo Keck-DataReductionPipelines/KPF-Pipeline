@@ -585,15 +585,27 @@ class TestObservingMode:
         with pytest.raises(ValueError, match="OCTAGON 'BrdbandFiber'"):
             self._standardize("Arclamp", OCTAGON="BrdbandFiber")
 
-    @pytest.mark.parametrize("imtype", ("Bias", "Dark", "Flatlamp"))
-    def test_calibration_frames_are_cal(self, imtype):
-        prim = self._standardize(imtype)
+    @pytest.mark.parametrize(
+        "imtype, native",
+        [
+            ("Bias", {}),
+            ("Dark", {}),
+            ("Flatlamp", {}),
+            ("Arclamp", {"OCTAGON": "Th_daily"}),
+            ("Arclamp", {"OCTAGON": "U_gold"}),
+            ("Arclamp", {"OCTAGON": "LFCFiber"}),
+            ("Arclamp", {"OCTAGON": "EtalonFiber"}),
+        ],
+    )
+    def test_calibration_frames_are_cal(self, imtype, native):
+        prim = self._standardize(imtype, **native)
         assert prim["OBSMODE"] == "cal"
         assert prim["ISSOLAR"] is False
 
+    @pytest.mark.parametrize("name", ("SoCal", "Sun"))
     @pytest.mark.parametrize("key", ("OBJECT", "TARGNAME"))
-    def test_socal_frame_is_solar(self, key):
-        prim = self._standardize("Object", **{key: "SoCal"})
+    def test_solar_frame_is_solar(self, key, name):
+        prim = self._standardize("Object", **{key: name})
         assert prim["OBSMODE"] == "solar"
         assert prim["ISSOLAR"] is True
 

@@ -293,7 +293,7 @@ class KPF0(KPFDataModel):
             )
 
         is_solar = any(
-            str(native.get(key, "")).strip().lower() == "socal"
+            str(native.get(key, "")).strip().lower() in ("socal", "sun")
             for key in ("OBJECT", "TARGNAME")
         )
         self.set_keyword("OBSTYPE", obstype)
