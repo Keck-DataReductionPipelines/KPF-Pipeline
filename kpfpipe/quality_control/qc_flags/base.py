@@ -65,8 +65,6 @@ class QC:
                 )
                 continue
             kw = fn._qc_key
-            # Mirror the registry Description into results (the FITS comment
-            # source; see ``_tag``). The _qc_key must be registered.
             comment = self.kpf_obj.keyword_registry.comment_for(kw)
             try:
                 passed = fn()

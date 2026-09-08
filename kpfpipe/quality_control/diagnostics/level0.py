@@ -81,13 +81,13 @@ class DiagL0(Diagnostics):
         """
         if "gaia" not in self.kpf_obj.data["CATALOG_RECORD"]["source"]:
             return {}
-        return self._tag(GAIAOFF=self._offset("gaia"))
+        return {"GAIAOFF": self._offset("gaia")}
 
     gaia_ra_dec_offset._diag_name = "gaia_ra_dec_offset"
 
     def target_ra_dec_offset(self):
         """TCSOFF: arcsec, RA/DEC pointing vs DCS target position at obs epoch."""
-        return self._tag(TCSOFF=self._offset("wmko"))
+        return {"TCSOFF": self._offset("wmko")}
 
     target_ra_dec_offset._diag_name = "target_ra_dec_offset"
 
@@ -98,7 +98,7 @@ class DiagL0(Diagnostics):
         """
         if "simbad" not in self.kpf_obj.data["CATALOG_RECORD"]["source"]:
             return {}
-        return self._tag(OBJOFF=self._offset("simbad"))
+        return {"OBJOFF": self._offset("simbad")}
 
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
 
@@ -133,19 +133,19 @@ class DiagL0(Diagnostics):
 
     def dead_pixel_fractions(self):
         """DEADPXFG/DEADPXFR: worst-amp fraction of GREEN/RED pixels under 1.0e4 D.N."""
-        return self._tag(
-            DEADPXFG=self._amp_pixel_fraction("GREEN", np.less, 1.0e4),
-            DEADPXFR=self._amp_pixel_fraction("RED", np.less, 1.0e4),
-        )
+        return {
+            "DEADPXFG": self._amp_pixel_fraction("GREEN", np.less, 1.0e4),
+            "DEADPXFR": self._amp_pixel_fraction("RED", np.less, 1.0e4),
+        }
 
     dead_pixel_fractions._diag_name = "dead_pixel_fractions"
 
     def saturated_pixel_fractions(self):
         """SATPXFG/SATPXFR: worst-amp fraction of GREEN/RED pixels over 5.0e8 D.N."""
-        return self._tag(
-            SATPXFG=self._amp_pixel_fraction("GREEN", np.greater, 5.0e8),
-            SATPXFR=self._amp_pixel_fraction("RED", np.greater, 5.0e8),
-        )
+        return {
+            "SATPXFG": self._amp_pixel_fraction("GREEN", np.greater, 5.0e8),
+            "SATPXFR": self._amp_pixel_fraction("RED", np.greater, 5.0e8),
+        }
 
     saturated_pixel_fractions._diag_name = "saturated_pixel_fractions"
 
@@ -163,6 +163,6 @@ class DiagL0(Diagnostics):
                     values[f"P{pct}{letter}AMP{i}"] = round(
                         float(np.nanpercentile(arr, pct)), 6
                     )
-        return self._tag(**values)
+        return values
 
     amp_percentiles._diag_name = "amp_percentiles"

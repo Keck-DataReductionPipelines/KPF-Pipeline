@@ -34,14 +34,14 @@ class Telemetry(Diagnostics):
         The exposure-average kpf{green,red}.STA_CCD_T telemetry against the
         -100 C setpoint, signed so the direction of the drift is visible.
         """
-        return self._tag(
-            GTEMPOFF=round(
+        return {
+            "GTEMPOFF": round(
                 (self._telemetry_average("kpfgreen.STA_CCD_T") + 100.0) * 1e3, 6
             ),
-            RTEMPOFF=round(
+            "RTEMPOFF": round(
                 (self._telemetry_average("kpfred.STA_CCD_T") + 100.0) * 1e3, 6
             ),
-        )
+        }
 
     ccd_temperature_offsets._diag_name = "ccd_temperature_offsets"
 
@@ -61,7 +61,7 @@ class Telemetry(Diagnostics):
         ):
             setpoint = float(hdr[set_key]) if set_key in hdr else design
             offsets.append((float(hdr[temp_key]) - setpoint) * 1e3)
-        return self._tag(ETATOFF=round(max(offsets, key=abs), 6))
+        return {"ETATOFF": round(max(offsets, key=abs), 6)}
 
     etalon_temperature_offset._diag_name = "etalon_temperature_offset"
 
@@ -75,13 +75,13 @@ class Telemetry(Diagnostics):
         to a tenth of a degree.
         """
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
-        return self._tag(
-            INHUM=round(float(hdr["RELH"]), 6),
-            DEWPOINT=round(float(hdr["PRIMTEMP"]) - float(hdr["DIFFPTDW"]), 1),
-            OUTPRES=round(float(hdr["PRES"]) / 10.0, 6),
-            M1TMP=round(float(hdr["PRIMTEMP"]), 6),
-            M2TEMP=round(float(hdr["SECMTEMP"]), 6),
-        )
+        return {
+            "INHUM": round(float(hdr["RELH"]), 6),
+            "DEWPOINT": round(float(hdr["PRIMTEMP"]) - float(hdr["DIFFPTDW"]), 1),
+            "OUTPRES": round(float(hdr["PRES"]) / 10.0, 6),
+            "M1TMP": round(float(hdr["PRIMTEMP"]), 6),
+            "M2TEMP": round(float(hdr["SECMTEMP"]), 6),
+        }
 
     site_conditions._diag_name = "site_conditions"
 
@@ -105,12 +105,12 @@ class Telemetry(Diagnostics):
         moon_direction = SkyCoord(moon.ra, moon.dec)
         # EPRV-defined, so these route straight to PRIMARY rather than to the
         # QUALITY_CONTROL extension the other diagnostics land in.
-        return self._tag(
-            SUNEL=round(float(sun.transform_to(horizon).alt.deg), 5),
-            MOONEL=round(float(moon.transform_to(horizon).alt.deg), 5),
-            MOONANG=round(float(pointing.separation(moon_direction).deg), 2),
-            MOONILLU=round(float(50 * (1 - np.cos(elongation))), 2),
-        )
+        return {
+            "SUNEL": round(float(sun.transform_to(horizon).alt.deg), 5),
+            "MOONEL": round(float(moon.transform_to(horizon).alt.deg), 5),
+            "MOONANG": round(float(pointing.separation(moon_direction).deg), 2),
+            "MOONILLU": round(float(50 * (1 - np.cos(elongation))), 2),
+        }
 
     solar_lunar_geometry._diag_name = "solar_lunar_geometry"
 
@@ -138,10 +138,10 @@ class Telemetry(Diagnostics):
         earth_pos, earth_vel = get_body_barycentric_posvel("earth", obs_time)
         site_pos, site_vel = KECK_LOCATION.get_gcrs_posvel(obs_time)
         observer = (earth_pos + site_pos, earth_vel + site_vel)
-        return self._tag(
-            MOONRV=round(
+        return {
+            "MOONRV": round(
                 self._recession(sun, moon) + self._recession(moon, observer), 6
             )
-        )
+        }
 
     moon_radial_velocity._diag_name = "moon_radial_velocity"

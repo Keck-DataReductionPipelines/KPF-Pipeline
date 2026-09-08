@@ -43,11 +43,11 @@ class DiagL4(Diagnostics):
         """Photon-weighted mean BJD_TDB and its per-order spread (SCI2)."""
         tab = self.kpf_obj.data[f"{_SCI_REF}_RV"]
         mean, std, rng = self._weighted_dispersion(tab["BJD_TDB"], tab["WEIGHT"])
-        return self._tag(
-            BJDMEAN=round(mean, 6),
-            BJDSTD=round(std * _SEC_PER_DAY, 4),
-            BJDRNG=round(rng * _SEC_PER_DAY, 4),
-        )
+        return {
+            "BJDMEAN": round(mean, 6),
+            "BJDSTD": round(std * _SEC_PER_DAY, 4),
+            "BJDRNG": round(rng * _SEC_PER_DAY, 4),
+        }
 
     bjd_dispersion._diag_name = "bjd_dispersion"
 
@@ -55,10 +55,10 @@ class DiagL4(Diagnostics):
         """Weighted-mean barycentric RV correction and per-order spread (SCI2)."""
         tab = self.kpf_obj.data[f"{_SCI_REF}_RV"]
         mean, std, rng = self._weighted_dispersion(tab["BERV"], tab["WEIGHT"])
-        return self._tag(
-            BERVMEAN=round(mean, 6),
-            BERVSTD=round(std * _KMS_TO_MS, 4),
-            BERVRNG=round(rng * _KMS_TO_MS, 4),
-        )
+        return {
+            "BERVMEAN": round(mean, 6),
+            "BERVSTD": round(std * _KMS_TO_MS, 4),
+            "BERVRNG": round(rng * _KMS_TO_MS, 4),
+        }
 
     berv_dispersion._diag_name = "berv_dispersion"

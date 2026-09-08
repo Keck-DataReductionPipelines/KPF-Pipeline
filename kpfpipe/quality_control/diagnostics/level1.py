@@ -16,7 +16,7 @@ class DiagL1(Diagnostics):
         Returns
         -------
         dict
-            Maps each ``FFI{G,R}{pct}P`` keyword to its ``(value, comment)``.
+            Maps each ``FFI{G,R}{pct}P`` keyword to its value.
         """
         results = {}
         for chip, prefix in (("GREEN", "FFIG"), ("RED", "FFIR")):
@@ -24,6 +24,6 @@ class DiagL1(Diagnostics):
             percentiles = np.nanpercentile(arr, [99, 90, 50, 10])
             for pct, value in zip([99, 90, 50, 10], percentiles, strict=True):
                 results[f"{prefix}{pct}P"] = round(float(value), 3)
-        return self._tag(**results)
+        return results
 
     flux_percentiles._diag_name = "flux_percentiles"

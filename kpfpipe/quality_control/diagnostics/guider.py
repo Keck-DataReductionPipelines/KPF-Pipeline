@@ -48,13 +48,13 @@ class Guider(Diagnostics):
         )
         if unique <= 10:
             return {}
-        return self._tag(
-            GDRXRMS=round(float(np.nanmean(x_mas**2) ** 0.5), 6),
-            GDRYRMS=round(float(np.nanmean(y_mas**2) ** 0.5), 6),
-            GDRRRMS=round(float(np.nanmean(x_mas**2 + y_mas**2) ** 0.5), 6),
-            GDRXBIAS=round(float(np.nanmean(x_mas)), 6),
-            GDRYBIAS=round(float(np.nanmean(y_mas)), 6),
-        )
+        return {
+            "GDRXRMS": round(float(np.nanmean(x_mas**2) ** 0.5), 6),
+            "GDRYRMS": round(float(np.nanmean(y_mas**2) ** 0.5), 6),
+            "GDRRRMS": round(float(np.nanmean(x_mas**2 + y_mas**2) ** 0.5), 6),
+            "GDRXBIAS": round(float(np.nanmean(x_mas)), 6),
+            "GDRYBIAS": round(float(np.nanmean(y_mas)), 6),
+        }
 
     guider_errors._diag_name = "guider_errors"
 
@@ -84,7 +84,7 @@ class Guider(Diagnostics):
             column = np.asarray(column, dtype=float)
             values[f"{prefix}MD"] = round(float(np.median(column)), 6)
             values[f"{prefix}STD"] = round(float(np.std(column)), 6)
-        return self._tag(**values)
+        return values
 
     guider_image_stats._diag_name = "guider_image_stats"
 
@@ -119,7 +119,7 @@ class Guider(Diagnostics):
         popt, _ = curve_fit(moffat, xy, flat, p0=[peak, *center, alpha, beta])
         seeing = abs(float(popt[3])) * 0.056
         v_band = round(seeing * ((1200 + 950) / 2 / 550) ** 0.2, 6)
-        return self._tag(GDRSEEJZ=round(seeing, 6), GDRSEEV=v_band, SEEING=v_band)
+        return {"GDRSEEJZ": round(seeing, 6), "GDRSEEV": v_band, "SEEING": v_band}
 
     guider_seeing._diag_name = "guider_seeing"
 
@@ -134,16 +134,16 @@ class Guider(Diagnostics):
         level = 0.9 * 15830
         image = self.kpf_obj.data["GUIDER_AVG"]
         peak = np.asarray(self._guider_frames()["object1_peak"], dtype=float)
-        return self._tag(
-            GDRNSAT=int(np.count_nonzero(image[205:305, 270:370] > level)),
-            GDRFRSAT=round(float(np.count_nonzero(peak > level) / len(peak)), 6),
-        )
+        return {
+            "GDRNSAT": int(np.count_nonzero(image[205:305, 270:370] > level)),
+            "GDRFRSAT": round(float(np.count_nonzero(peak > level) / len(peak)), 6),
+        }
 
     guider_saturation._diag_name = "guider_saturation"
 
     def airmass(self):
         """AIRMASS: the airmass the DCS recorded at mid-exposure [secZ]."""
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
-        return self._tag(AIRMASS=round(float(hdr["AIRMASS"]), 6))
+        return {"AIRMASS": round(float(hdr["AIRMASS"]), 6)}
 
     airmass._diag_name = "airmass"

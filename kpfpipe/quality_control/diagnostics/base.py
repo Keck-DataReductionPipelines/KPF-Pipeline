@@ -29,17 +29,6 @@ class Diagnostics:
         self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (value, comment).
 
-    def _tag(self, **values):
-        """Pair each ``keyword=value`` with its registry-sourced FITS comment.
-
-        Sources the comment from the keyword registry (single source of truth) so
-        ``self.results`` stays in sync with the ``set_keyword`` header write. Every
-        emitted keyword must be registered; an unregistered one raises rather than
-        getting a blank comment.
-        """
-        registry = self.kpf_obj.keyword_registry
-        return {kw: (value, registry.comment_for(kw)) for kw, value in values.items()}
-
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.
 
@@ -75,10 +64,7 @@ class Diagnostics:
             except Exception as e:
                 logger.error("%s diagnostic %r raised: %s", self.LEVEL, name, e)
                 continue
-            for kw, (value, comment) in output:
-                # set_keyword routes each metric to its registry home; the FITS
-                # comment is the registry Description (the metric-dict comment is
-                # retained in self.results only).
+            for kw, value in output:
                 try:
                     self.kpf_obj.set_keyword(kw, value)
                 except Exception as e:
@@ -90,7 +76,10 @@ class Diagnostics:
                         e,
                     )
                     continue
-                self.results[kw] = (value, comment)
+                self.results[kw] = (
+                    value,
+                    self.kpf_obj.keyword_registry.comment_for(kw),
+                )
 
         for kw, (value, comment) in self.results.items():
             logger.debug("%s %s = %s — %s", self.LEVEL, kw, value, comment)

@@ -1,6 +1,7 @@
 """Tests for the Diagnostics framework and per-level subclasses."""
 
 import logging
+import types
 
 import numpy as np
 import pytest
@@ -70,6 +71,11 @@ class TestDiagnosticsBase:
         class _FakeObj:
             headers = {"PRIMARY": {}}
             data = {}
+            # run() mirrors each written keyword's registry Description into
+            # results; these test keys are in no real registry.
+            keyword_registry = types.SimpleNamespace(
+                comment_for=lambda kw, ext=None: f"{kw} description"
+            )
 
             def set_keyword(self, key, value):
                 # The real set_keyword writes the value only (the comment comes
@@ -84,20 +90,20 @@ class TestDiagnosticsBase:
 
         class MyDiag(Diagnostics):
             def metric_a(self):
-                return {"KEYA": (3.14, "metric a")}
+                return {"KEYA": 3.14}
 
             metric_a._diag_name = "metric_a"
 
         results = MyDiag(obj).run()
         assert obj.headers["PRIMARY"]["KEYA"] == 3.14
-        assert results["KEYA"] == (3.14, "metric a")
+        assert results["KEYA"] == (3.14, "KEYA description")
 
     def test_method_can_emit_multiple_keys(self):
         obj = self._make_obj()
 
         class MyDiag(Diagnostics):
             def multi(self):
-                return {"K1": (1, "one"), "K2": (2, "two")}
+                return {"K1": 1, "K2": 2}
 
             multi._diag_name = "multi"
 
@@ -147,7 +153,7 @@ class TestDiagnosticsBase:
             boom._diag_name = "boom"
 
             def after(self):
-                return {"KEYA": (3.14, "metric a")}
+                return {"KEYA": 3.14}
 
             after._diag_name = "after"
 
@@ -157,7 +163,7 @@ class TestDiagnosticsBase:
             results = MyDiag(obj).run()
         assert "diagnostic 'boom' raised" in caplog.text
         assert "boom!" in caplog.text
-        assert results == {"KEYA": (3.14, "metric a")}
+        assert results == {"KEYA": (3.14, "KEYA description")}
         assert obj.headers["PRIMARY"]["KEYA"] == 3.14
 
     def test_repeated_run_resets_results(self):
@@ -166,17 +172,17 @@ class TestDiagnosticsBase:
 
         class MyDiag(Diagnostics):
             def metric(self):
-                return {"VAL": (self.kpf_obj.value, "value")}
+                return {"VAL": self.kpf_obj.value}
 
             metric._diag_name = "metric"
 
         d = MyDiag(obj)
         d.run()
-        assert d.results == {"VAL": (1, "value")}
+        assert d.results == {"VAL": (1, "VAL description")}
 
         obj.value = 99
         d.run()
-        assert d.results == {"VAL": (99, "value")}
+        assert d.results == {"VAL": (99, "VAL description")}
 
     def test_empty_subclass_runs_cleanly(self):
         obj = self._make_obj()
@@ -402,8 +408,8 @@ class TestDiagL0PixelFractions:
 
     def test_clean_frame_is_zero(self, tmp_path):
         l0 = self._make_amp_l0(tmp_path)
-        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.0
-        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"][0] == 0.0
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"] == 0.0
+        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"] == 0.0
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_amp_l0(tmp_path)
@@ -418,33 +424,33 @@ class TestDiagL0PixelFractions:
         l0 = self._make_amp_l0(tmp_path)
         l0.data["GREEN_AMP3"].flat[:50] = 1.0e4
         l0.data["GREEN_AMP3"].flat[:5] = 0.0
-        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.05
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"] == 0.05
 
     def test_saturated_counts_pixels_above_threshold(self, tmp_path):
         # Strictly above 5.0e8 D.N. counts; a pixel exactly at it does not.
         l0 = self._make_amp_l0(tmp_path)
         l0.data["RED_AMP2"].flat[:50] = 5.0e8
         l0.data["RED_AMP2"].flat[:15] = 6.0e8
-        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"][0] == 0.15
+        assert DiagL0(l0).saturated_pixel_fractions()["SATPXFR"] == 0.15
 
     def test_chips_measured_separately(self, tmp_path):
         # A dead GREEN amp leaves the RED fraction at zero, and vice versa.
         l0 = self._make_amp_l0(tmp_path)
         l0.data["GREEN_AMP1"].flat[:50] = 0.0
         results = DiagL0(l0).dead_pixel_fractions()
-        assert results["DEADPXFG"][0] == 0.5
-        assert results["DEADPXFR"][0] == 0.0
+        assert results["DEADPXFG"] == 0.5
+        assert results["DEADPXFR"] == 0.0
 
     def test_worst_amp_decides(self, tmp_path):
         # One bad amp sets its chip's fraction even though the other three are clean.
         l0 = self._make_amp_l0(tmp_path)
         l0.data["RED_AMP4"].flat[:50] = 0.0
-        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFR"][0] == 0.5
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFR"] == 0.5
 
     def test_two_amp_readout(self, tmp_path):
         # Absent amps are skipped, so a 2-amp frame is measured on the amps it has.
         l0 = self._make_amp_l0(tmp_path, namps=2)
-        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"][0] == 0.0
+        assert DiagL0(l0).dead_pixel_fractions()["DEADPXFG"] == 0.0
 
     def test_no_amp_data_raises(self, tmp_path):
         l0 = self._make_amp_l0(tmp_path, namps=0)
@@ -486,7 +492,7 @@ class TestDiagL0AmpPercentiles:
         l0.data["GREEN_AMP2"].flat[:] = np.arange(100.0)
         results = DiagL0(l0).amp_percentiles()
         for pct in (16, 50, 84):
-            assert results[f"P{pct}GAMP2"][0] == pytest.approx(
+            assert results[f"P{pct}GAMP2"] == pytest.approx(
                 np.percentile(np.arange(100.0), pct)
             )
 
@@ -494,7 +500,7 @@ class TestDiagL0AmpPercentiles:
         # NaN pixels are dropped rather than poisoning the whole amp.
         l0 = self._make_amp_l0(tmp_path)
         l0.data["RED_AMP1"].flat[:10] = np.nan
-        assert DiagL0(l0).amp_percentiles()["P50RAMP1"][0] == 1.0e6
+        assert DiagL0(l0).amp_percentiles()["P50RAMP1"] == 1.0e6
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_amp_l0(tmp_path)
@@ -565,16 +571,16 @@ class TestGuider:
         # no scatter the RMS equals the bias.
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5)
         results = Guider(l0).guider_errors()
-        assert results["GDRXRMS"][0] == pytest.approx(28.0)
-        assert results["GDRXBIAS"][0] == pytest.approx(28.0)
-        assert results["GDRYRMS"][0] == 0.0
-        assert results["GDRYBIAS"][0] == 0.0
+        assert results["GDRXRMS"] == pytest.approx(28.0)
+        assert results["GDRXBIAS"] == pytest.approx(28.0)
+        assert results["GDRYRMS"] == 0.0
+        assert results["GDRYBIAS"] == 0.0
 
     def test_bias_keeps_its_sign(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, dy=-0.5)
         results = Guider(l0).guider_errors()
-        assert results["GDRYBIAS"][0] == pytest.approx(-28.0)
-        assert results["GDRYRMS"][0] == pytest.approx(28.0)
+        assert results["GDRYBIAS"] == pytest.approx(-28.0)
+        assert results["GDRYRMS"] == pytest.approx(28.0)
 
     def test_untracked_camera_emits_no_keyword(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5, rows=8)
@@ -585,50 +591,50 @@ class TestGuider:
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][:2] = 0.0
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:2] = 1e5
         # The two zero-flux frames are unwritten, so their peaks do not count.
-        assert Guider(l0).guider_saturation()["GDRFRSAT"][0] == 0.0
+        assert Guider(l0).guider_saturation()["GDRFRSAT"] == 0.0
 
     def test_saturated_pixels_counted_in_central_box(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, nbright=4)
-        assert Guider(l0).guider_saturation()["GDRNSAT"][0] == 4
+        assert Guider(l0).guider_saturation()["GDRNSAT"] == 4
 
     def test_pixels_outside_the_box_ignored(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path)
         l0.data["GUIDER_AVG"][0, 0] = 1e5
-        assert Guider(l0).guider_saturation()["GDRNSAT"][0] == 0
+        assert Guider(l0).guider_saturation()["GDRNSAT"] == 0
 
     def test_saturated_frame_fraction(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path)
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_peak"][:3] = 1e5
-        assert Guider(l0).guider_saturation()["GDRFRSAT"][0] == 0.25
+        assert Guider(l0).guider_saturation()["GDRFRSAT"] == 0.25
 
     def test_below_saturation_threshold_not_counted(self, tmp_path):
         # 90% of the 15830 ADU CRED-2 saturation level is the threshold.
         l0 = self._make_l0_with_guider(tmp_path, peak=14000.0, avg_level=14000.0)
         results = Guider(l0).guider_saturation()
-        assert results["GDRFRSAT"][0] == 0.0
-        assert results["GDRNSAT"][0] == 0
+        assert results["GDRFRSAT"] == 0.0
+        assert results["GDRNSAT"] == 0
 
     def test_radial_rms_combines_both_axes(self, tmp_path):
         # A 0.5 pixel offset on each axis: R is their quadrature sum.
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5, dy=0.5)
         results = Guider(l0).guider_errors()
-        assert results["GDRRRMS"][0] == pytest.approx(28.0 * 2**0.5)
+        assert results["GDRRRMS"] == pytest.approx(28.0 * 2**0.5)
 
     def test_fwhm_from_the_fitted_gaussian_axes(self, tmp_path):
         # sigma=(3,4) pixels -> 5 px in quadrature, x2.3548 to FWHM, x56 mas/pix.
         l0 = self._make_l0_with_guider(tmp_path, axes=(3.0, 4.0))
         results = Guider(l0).guider_image_stats()
-        assert results["GDRFWMD"][0] == pytest.approx(5 * 2.3548 * 56.0, rel=1e-4)
-        assert results["GDRFWSTD"][0] == 0.0
+        assert results["GDRFWMD"] == pytest.approx(5 * 2.3548 * 56.0, rel=1e-4)
+        assert results["GDRFWSTD"] == 0.0
 
     def test_flux_and_peak_statistics(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, flux=200.0, peak=50.0)
         l0.data["GUIDER_CUBE_ORIGINS"]["object1_flux"][0] = 100.0
         results = Guider(l0).guider_image_stats()
-        assert results["GDRFXMD"][0] == 200.0
-        assert results["GDRFXSTD"][0] > 0.0
-        assert results["GDRPKMD"][0] == 50.0
-        assert results["GDRPKSTD"][0] == 0.0
+        assert results["GDRFXMD"] == 200.0
+        assert results["GDRFXSTD"] > 0.0
+        assert results["GDRPKMD"] == 50.0
+        assert results["GDRPKSTD"] == 0.0
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_guider(tmp_path, dx=0.5, nbright=2, axes=(3.0, 4.0))
@@ -665,19 +671,19 @@ class TestGuiderSeeing:
         # alpha = 8 px at the 0.056"/pix CRED-2 scale -> 0.448" seeing.
         l0 = self._make_l0_with_moffat(tmp_path, 8.0)
         results = Guider(l0).guider_seeing()
-        assert results["GDRSEEJZ"][0] == pytest.approx(8.0 * 0.056, rel=0.05)
+        assert results["GDRSEEJZ"] == pytest.approx(8.0 * 0.056, rel=0.05)
 
     def test_v_band_seeing_is_the_scaled_jz_seeing(self, tmp_path):
         # Kolmogorov lambda^(1/5) from the 950-1200 nm band midpoint to 550 nm.
         results = Guider(self._make_l0_with_moffat(tmp_path, 8.0)).guider_seeing()
-        assert results["GDRSEEV"][0] == pytest.approx(
-            results["GDRSEEJZ"][0] * 1.1434288742094985, rel=1e-5
+        assert results["GDRSEEV"] == pytest.approx(
+            results["GDRSEEJZ"] * 1.1434288742094985, rel=1e-5
         )
 
     def test_wider_profile_gives_larger_seeing(self, tmp_path):
         narrow = Guider(self._make_l0_with_moffat(tmp_path, 5.0)).guider_seeing()
         wide = Guider(self._make_l0_with_moffat(tmp_path, 15.0)).guider_seeing()
-        assert wide["GDRSEEJZ"][0] > narrow["GDRSEEJZ"][0]
+        assert wide["GDRSEEJZ"] > narrow["GDRSEEJZ"]
 
     def test_unfittable_image_raises(self, tmp_path):
         l0 = self._make_l0_with_moffat(tmp_path, 8.0, corrupt=True)
@@ -745,7 +751,7 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCISAT"][0] == 1.5
+        assert results["EMSCISAT"] == 1.5
 
     def test_saturation_drops_edge_readings(self, tmp_path):
         # The first and last readings are partial, so saturation there is dropped.
@@ -754,7 +760,7 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCISAT"][0] == 0.0
+        assert results["EMSCISAT"] == 0.0
 
     def test_negative_run_length(self, tmp_path):
         # A channel counts as negative when its time-summed flux is negative.
@@ -763,7 +769,7 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 20
+        assert results["EMSCINEG"] == 20
 
     def test_negative_run_counts_adjacent_only(self, tmp_path):
         # Two separated blocks of 3 and 5: the longest run is 5, not their sum.
@@ -773,7 +779,7 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 5
+        assert results["EMSCINEG"] == 5
 
     def test_negative_needs_the_time_sum(self, tmp_path):
         # One negative reading a channel does not make: the sum stays positive.
@@ -782,7 +788,7 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 0
+        assert results["EMSCINEG"] == 0
 
     def test_non_finite_run_length(self, tmp_path):
         # A channel with any non-finite reading counts, NaN or inf.
@@ -792,7 +798,7 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCIINF"][0] == 5
+        assert results["EMSCIINF"] == 5
 
     def test_fibers_measured_separately(self, tmp_path):
         # A clean SCI and a negative SKY: only the SKY keyword moves.
@@ -801,8 +807,8 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX, sky=sky)
         ).expmeter_channel_metrics()
-        assert results["EMSCINEG"][0] == 0
-        assert results["EMSKYNEG"][0] == 20
+        assert results["EMSCINEG"] == 0
+        assert results["EMSKYNEG"] == 20
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_expmeter(tmp_path, _EM_CLEAN_FLUX)
@@ -862,35 +868,35 @@ class TestExposureMeterCounts:
         # Two readings of each channel, so every band doubles its per-reading count.
         l0 = self._make_l0_with_expmeter(tmp_path, [1, 2, 4, 8, 16], [1, 1, 1, 1, 1])
         results = ExposureMeter(l0).expmeter_counts()
-        assert results["EMSCCT45"][0] == 2  # 500 nm
-        assert results["EMSCCT56"][0] == 4  # 600 nm
-        assert results["EMSCCT67"][0] == 8  # 700 nm
-        assert results["EMSCCT78"][0] == 16  # 800 nm; the 900 nm channel is dropped
-        assert results["EMSCCT48"][0] == 30  # 445-870 nm: the four sub-bands
+        assert results["EMSCCT45"] == 2  # 500 nm
+        assert results["EMSCCT56"] == 4  # 600 nm
+        assert results["EMSCCT67"] == 8  # 700 nm
+        assert results["EMSCCT78"] == 16  # 800 nm; the 900 nm channel is dropped
+        assert results["EMSCCT48"] == 30  # 445-870 nm: the four sub-bands
 
     def test_sky_fiber_counted_separately(self, tmp_path):
         l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [3, 0, 0, 0, 0])
         results = ExposureMeter(l0).expmeter_counts()
-        assert results["EMSKCT45"][0] == 6
-        assert results["EMSCCT45"][0] == 2
+        assert results["EMSKCT45"] == 6
+        assert results["EMSCCT45"] == 2
 
     def test_nans_excluded(self, tmp_path):
         l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
         l0.data["EXPMETER_SCI"]["500.0"][0] = np.nan
         results = ExposureMeter(l0).expmeter_counts()
-        assert results["EMSCCT45"][0] == 1
+        assert results["EMSCCT45"] == 1
 
     def test_sky_sci_ratio_scaled_by_throughput(self, tmp_path):
         # Equal SKY and SCI totals -> the ratio is 1/14.1, the twilight throughput.
         l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
         results = ExposureMeter(l0).sky_sci_flux_ratio()
-        assert results["SKYSCIMS"][0] == round(1 / 14.1, 6)
+        assert results["SKYSCIMS"] == round(1 / 14.1, 6)
 
     def test_sky_sci_ratio_uses_every_channel(self, tmp_path):
         # The ratio is over all channels, the out-of-band 900 nm one included.
         l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [2, 2, 2, 2, 2])
         results = ExposureMeter(l0).sky_sci_flux_ratio()
-        assert results["SKYSCIMS"][0] == round(2 / 14.1, 6)
+        assert results["SKYSCIMS"] == round(2 / 14.1, 6)
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_expmeter(tmp_path, [1, 1, 1, 1, 1], [1, 1, 1, 1, 1])
@@ -925,7 +931,7 @@ class TestTelemetrySolarLunarGeometry:
             "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
         )
         results = Telemetry(l0).solar_lunar_geometry()
-        assert results["SUNEL"][0] == pytest.approx(-61.60211, abs=1e-3)
+        assert results["SUNEL"] == pytest.approx(-61.60211, abs=1e-3)
 
     def test_moon_separation_is_topocentric(self):
         # Same frame. The Moon sits at 22:15:30.9 -15:19:35.8 and the target at
@@ -936,37 +942,37 @@ class TestTelemetrySolarLunarGeometry:
             "2024-04-05T11:09:11.082", ra="10:59:27.50", dec="+40:25:50.0"
         )
         results = Telemetry(l0).solar_lunar_geometry()
-        assert results["MOONANG"][0] == pytest.approx(153.14, abs=0.01)
+        assert results["MOONANG"] == pytest.approx(153.14, abs=0.01)
 
     def test_sun_above_horizon_at_local_noon(self):
         # Maunakea noon is 22:00 UT; the Sun clears the horizon by a wide margin.
         results = Telemetry(
             self._make_l0("2024-04-05T22:00:00.000")
         ).solar_lunar_geometry()
-        assert results["SUNEL"][0] > 30
+        assert results["SUNEL"] > 30
 
     def test_moon_separation_at_the_moon(self):
         # Pointing at the Moon's own topocentric 2024-04-05T11:09 position.
         l0 = self._make_l0(
             "2024-04-05T11:09:11.082", ra="22:15:30.93", dec="-15:19:35.8"
         )
-        assert Telemetry(l0).solar_lunar_geometry()["MOONANG"][0] < 0.01
+        assert Telemetry(l0).solar_lunar_geometry()["MOONANG"] < 0.01
 
     def test_moon_below_horizon_before_dawn(self):
         # 11:09 UT is 01:09 HST, with the waning crescent not yet risen.
         l0 = self._make_l0("2024-04-05T11:09:11.082")
-        assert Telemetry(l0).solar_lunar_geometry()["MOONEL"][0] < 0
+        assert Telemetry(l0).solar_lunar_geometry()["MOONEL"] < 0
 
     def test_illumination_of_the_waning_crescent(self):
         # Three days before the 2024-04-08 new moon: a 45.7 deg elongation.
         l0 = self._make_l0("2024-04-05T11:09:11.082")
         results = Telemetry(l0).solar_lunar_geometry()
-        assert results["MOONILLU"][0] == pytest.approx(15.1, abs=0.1)
+        assert results["MOONILLU"] == pytest.approx(15.1, abs=0.1)
 
     def test_illumination_at_opposition_is_full(self):
         # Within hours of the 2024-04-23T23:49 full moon.
         l0 = self._make_l0("2024-04-24T00:00:00.000")
-        assert Telemetry(l0).solar_lunar_geometry()["MOONILLU"][0] > 99
+        assert Telemetry(l0).solar_lunar_geometry()["MOONILLU"] > 99
 
     def test_written_to_primary(self):
         # EPRV-defined, so these route to PRIMARY, not QUALITY_CONTROL.
@@ -1006,14 +1012,14 @@ class TestTelemetryCcdTemperatures:
     def test_offset_is_signed_millikelvin(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
         results = Telemetry(l0).ccd_temperature_offsets()
-        assert results["GTEMPOFF"][0] == pytest.approx(-4.0, abs=1e-3)
-        assert results["RTEMPOFF"][0] == pytest.approx(7.0, abs=1e-3)
+        assert results["GTEMPOFF"] == pytest.approx(-4.0, abs=1e-3)
+        assert results["RTEMPOFF"] == pytest.approx(7.0, abs=1e-3)
 
     def test_at_setpoint_is_zero(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.0, -100.0)
         results = Telemetry(l0).ccd_temperature_offsets()
-        assert results["GTEMPOFF"][0] == 0.0
-        assert results["RTEMPOFF"][0] == 0.0
+        assert results["GTEMPOFF"] == 0.0
+        assert results["RTEMPOFF"] == 0.0
 
     def test_written_to_quality_control(self, tmp_path):
         l0 = self._make_l0_with_telemetry(tmp_path, -100.004, -99.993)
@@ -1038,22 +1044,22 @@ class TestTelemetryEtalonTemperature:
     def test_at_design_setpoints_is_zero(self):
         # No ETAV1C3S/ETAV1C4S recorded, so the design values apply.
         l0 = self._make_l0_with_etalon()
-        assert Telemetry(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+        assert Telemetry(l0).etalon_temperature_offset()["ETATOFF"] == 0.0
 
     def test_offset_is_signed_millikelvin(self):
         l0 = self._make_l0_with_etalon(ETAV1C3T=23.6004)
         results = Telemetry(l0).etalon_temperature_offset()
-        assert results["ETATOFF"][0] == pytest.approx(0.4, abs=1e-3)
+        assert results["ETATOFF"] == pytest.approx(0.4, abs=1e-3)
 
     def test_recorded_setpoint_wins_over_design(self):
         l0 = self._make_l0_with_etalon(ETAV1C3T=24.0, ETAV1C3S=24.0)
-        assert Telemetry(l0).etalon_temperature_offset()["ETATOFF"][0] == 0.0
+        assert Telemetry(l0).etalon_temperature_offset()["ETATOFF"] == 0.0
 
     def test_worst_chamber_reported(self):
         # The outer chamber is further off, so it is the one that survives.
         l0 = self._make_l0_with_etalon(ETAV1C3T=23.6002, ETAV1C4T=23.8993)
         results = Telemetry(l0).etalon_temperature_offset()
-        assert results["ETATOFF"][0] == pytest.approx(-0.7, abs=1e-3)
+        assert results["ETATOFF"] == pytest.approx(-0.7, abs=1e-3)
 
     def test_written_to_quality_control(self):
         # Etalon frame: the only type ETATOFF is declared applicable to.
@@ -1079,13 +1085,13 @@ class TestTelemetryMoonRadialVelocity:
         # Keck recedes from the Moon at -0.3627 km/s.
         l0 = self._make_l0("2024-04-05T11:09:11.082")
         results = Telemetry(l0).moon_radial_velocity()
-        assert results["MOONRV"][0] == pytest.approx(-0.559443, abs=1e-4)
+        assert results["MOONRV"] == pytest.approx(-0.559443, abs=1e-4)
 
     def test_tracks_the_lunar_month(self):
         # Half a synodic month on, the Sun-Moon leg has reversed and dominates.
         l0 = self._make_l0("2024-04-19T11:09:11.082")
         results = Telemetry(l0).moon_radial_velocity()
-        assert results["MOONRV"][0] == pytest.approx(1.509830, abs=1e-4)
+        assert results["MOONRV"] == pytest.approx(1.509830, abs=1e-4)
 
     def test_written_to_primary(self):
         l0 = self._make_l0("2024-04-05T11:09:11.082")
@@ -1117,19 +1123,19 @@ class TestTelemetrySiteConditions:
 
     def test_values_copy_the_native_cards(self):
         results = Telemetry(self._make_l0_with_conditions()).site_conditions()
-        assert results["INHUM"][0] == pytest.approx(12.25)
-        assert results["M1TMP"][0] == pytest.approx(1.403147)
-        assert results["M2TEMP"][0] == pytest.approx(-0.288888)
+        assert results["INHUM"] == pytest.approx(12.25)
+        assert results["M1TMP"] == pytest.approx(1.403147)
+        assert results["M2TEMP"] == pytest.approx(-0.288888)
 
     def test_pressure_is_converted_to_kilopascals(self):
         # The Vaisala reads hPa; OUTPRES is registered in kPa.
         l0 = self._make_l0_with_conditions(PRES=620.881)
-        assert Telemetry(l0).site_conditions()["OUTPRES"][0] == pytest.approx(62.0881)
+        assert Telemetry(l0).site_conditions()["OUTPRES"] == pytest.approx(62.0881)
 
     def test_dewpoint_is_the_offset_below_the_primary_mirror(self):
         # The DCS reports only DIFFPTDW, to a tenth of a degree.
         results = Telemetry(self._make_l0_with_conditions()).site_conditions()
-        assert results["DEWPOINT"][0] == -37.7
+        assert results["DEWPOINT"] == -37.7
 
     def test_written_to_primary(self):
         l0 = self._make_l0_with_conditions()
@@ -1157,7 +1163,7 @@ class TestGuiderAirmass:
 
     def test_value_copies_the_native_card(self):
         results = Guider(self._make_l0_with_airmass()).airmass()
-        assert results["AIRMASS"][0] == pytest.approx(1.31)
+        assert results["AIRMASS"] == pytest.approx(1.31)
 
     def test_written_to_primary(self):
         l0 = self._make_l0_with_airmass()
