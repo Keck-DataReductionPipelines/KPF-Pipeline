@@ -1,5 +1,7 @@
 """Diagnostics for the KPF Level 0 telemetry and observing conditions."""
 
+from datetime import timedelta
+
 import numpy as np
 from astropy import units as u
 from astropy.coordinates import (
@@ -12,6 +14,7 @@ from astropy.time import Time
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
 from kpfpipe.utils.astro import KECK_LOCATION
+from kpfpipe.utils.network import cfht_weather
 
 
 class Telemetry(Diagnostics):
@@ -66,24 +69,59 @@ class Telemetry(Diagnostics):
     etalon_temperature_offset._diag_name = "etalon_temperature_offset"
 
     def site_conditions(self):
-        """INHUM, DEWPOINT, OUTPRES, M1TMP, M2TEMP: conditions at mid-exposure.
+        """INHUM, OUTPRES, OUTTMP, OUTHUM, ENVWINDS, ENVWINDD: conditions at
+        mid-exposure.
 
-        Read from the native cards, all of them the keyheader ExposureMiddle
-        snapshot. RELH and PRES are the in-dome Vaisala humidity and pressure,
-        the latter in hPa where OUTPRES is in kPa. The DCS reports the dewpoint
-        only as DIFFPTDW, its offset below the primary mirror temperature, and
-        to a tenth of a degree.
+        RELH and PRES are the in-dome Vaisala humidity and pressure, the latter in
+        hPa where OUTPRES is in kPa. Nothing WMKO records carries the weather
+        outside the dome, so the rest come from the CFHT tower a few hundred metres
+        away -- a proxy, close enough for conditions monitoring and outside the
+        science chain. Its archive stamps rows in HST and reports wind in knots.
+
+        The station drops a minute here and there, so the nearest row within half
+        an hour stands in. Conditions move about 0.3 C and 2% humidity over that
+        span, and a longer gap is a station outage worth reporting as one.
         """
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
-        return {
-            "INHUM": round(float(hdr["RELH"]), 6),
-            "DEWPOINT": round(float(hdr["PRIMTEMP"]) - float(hdr["DIFFPTDW"]), 1),
-            "OUTPRES": round(float(hdr["PRES"]) / 10.0, 6),
-            "M1TMP": round(float(hdr["PRIMTEMP"]), 6),
-            "M2TEMP": round(float(hdr["SECMTEMP"]), 6),
-        }
+        stamp = Time(str(hdr["DATE-MID"]), scale="utc").to_datetime() - timedelta(
+            hours=10
+        )
+        # A row the Range cut short of its readings, or short of its timestamp, is
+        # indexed under nothing that will be looked up.
+        rows = {}
+        for line in cfht_weather(stamp.date()).splitlines():
+            fields = line.split()
+            if len(fields) >= 9:
+                rows[" ".join(fields[:5])] = fields[5:9]
+
+        for offset in sorted(range(-30, 31), key=abs):
+            reading = rows.get(
+                (stamp + timedelta(minutes=offset)).strftime("%Y %m %d %H %M")
+            )
+            if reading is None:
+                continue
+            wind, direction, temperature, humidity = (float(f) for f in reading)
+            return {
+                "INHUM": round(float(hdr["RELH"]), 6),
+                "OUTPRES": round(float(hdr["PRES"]) / 10.0, 6),
+                "OUTTMP": temperature,
+                "OUTHUM": humidity,
+                "ENVWINDS": round(wind * 0.514444, 6),
+                "ENVWINDD": direction,
+            }
+        raise ValueError(f"the CFHT weather archive has no reading for {stamp} HST")
 
     site_conditions._diag_name = "site_conditions"
+
+    def mirror_temperatures(self):
+        """M1TMP, M2TMP: primary and secondary mirror temperatures [deg C]."""
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
+        return {
+            "M1TMP": round(float(hdr["PRIMTEMP"]), 6),
+            "M2TMP": round(float(hdr["SECMTEMP"]), 6),
+        }
+
+    mirror_temperatures._diag_name = "mirror_temperatures"
 
     def solar_lunar_geometry(self):
         """SUNEL, MOONEL, MOONANG, MOONILLU: Sun and Moon geometry [deg, %].

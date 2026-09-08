@@ -767,6 +767,7 @@ _UNREGISTERED = {
     "M1TMPT": "EPRV-optional; every environment card is sampled at DATE-MID",
     "OUTTMPT": "EPRV-optional; KPF has no OUTTMP to timestamp",
     "OUTHUMT": "EPRV-optional; KPF has no OUTHUM to timestamp",
+    "ROTANG": "EPRV-optional; KPF ha no rotator angle",
 }
 
 _PER_EXTENSION_TABLES = [

@@ -26,6 +26,7 @@ from kpfpipe.quality_control.diagnostics import (
     ExposureMeter,
     Guider,
     Telemetry,
+    telemetry,
 )
 
 from . import _applicability
@@ -1104,53 +1105,110 @@ class TestTelemetryMoonRadialVelocity:
 
 
 class TestTelemetrySiteConditions:
-    """Humidity, pressure, dewpoint and mirror temperatures off the native cards."""
+    """In-dome cards off the native header, outside weather off the CFHT archive."""
 
-    def _make_l0_with_conditions(self, **cards):
+    # Consecutive HST minutes as the archive serves them, bracketed by the half rows
+    # the Range request cuts: the first loses its timestamp, the last its readings.
+    _ARCHIVE = "\n".join(
+        [
+            "0.30 6 617.3 421.13",
+            "2024 04 05 00 48 12 130 2.95 6 617.3 421.13",
+            "2024 04 05 00 49 14 132 3.00 6 617.2 421.13",
+            "2024 04 05 00 50 16 134",
+        ]
+    )
+
+    def _make_l0(self, monkeypatch, date_mid="2024-04-05T10:49:26", **cards):
+        monkeypatch.setattr(telemetry, "cfht_weather", lambda date: self._ARCHIVE)
         l0 = _make_l0_pointing()
         native = l0.headers["INSTRUMENT_HEADER"]
-        native.update(
-            {
-                "RELH": 12.25,
-                "PRES": 620.881,
-                "PRIMTEMP": 1.403147,
-                "SECMTEMP": -0.288888,
-                "DIFFPTDW": 39.103147,
-            }
-        )
+        native.update({"RELH": 12.25, "PRES": 620.881, "DATE-MID": date_mid})
         native.update(cards)
         return l0
 
-    def test_values_copy_the_native_cards(self):
-        results = Telemetry(self._make_l0_with_conditions()).site_conditions()
+    def test_in_dome_values_copy_the_native_cards(self, monkeypatch):
+        results = Telemetry(self._make_l0(monkeypatch)).site_conditions()
         assert results["INHUM"] == pytest.approx(12.25)
-        assert results["M1TMP"] == pytest.approx(1.403147)
-        assert results["M2TEMP"] == pytest.approx(-0.288888)
 
-    def test_pressure_is_converted_to_kilopascals(self):
+    def test_pressure_is_converted_to_kilopascals(self, monkeypatch):
         # The Vaisala reads hPa; OUTPRES is registered in kPa.
-        l0 = self._make_l0_with_conditions(PRES=620.881)
+        l0 = self._make_l0(monkeypatch, PRES=620.881)
         assert Telemetry(l0).site_conditions()["OUTPRES"] == pytest.approx(62.0881)
 
-    def test_dewpoint_is_the_offset_below_the_primary_mirror(self):
-        # The DCS reports only DIFFPTDW, to a tenth of a degree.
-        results = Telemetry(self._make_l0_with_conditions()).site_conditions()
-        assert results["DEWPOINT"] == -37.7
+    def test_outside_reading_is_taken_in_hst(self, monkeypatch):
+        # 10:49 UT is 00:49 HST, the archive's own timescale.
+        results = Telemetry(self._make_l0(monkeypatch)).site_conditions()
+        assert results["OUTTMP"] == pytest.approx(3.00)
+        assert results["OUTHUM"] == pytest.approx(6)
+        assert results["ENVWINDD"] == pytest.approx(132)
 
-    def test_written_to_primary(self):
-        l0 = self._make_l0_with_conditions()
+    def test_wind_speed_is_converted_to_metres_per_second(self, monkeypatch):
+        # The archive reports knots; ENVWINDS is registered in m/s.
+        l0 = self._make_l0(monkeypatch)
+        assert Telemetry(l0).site_conditions()["ENVWINDS"] == pytest.approx(
+            14 * 0.514444
+        )
+
+    def test_a_dropped_minute_falls_back_to_the_nearest_row(self, monkeypatch):
+        # 01:15 HST is 26 minutes past the last complete row, inside tolerance.
+        l0 = self._make_l0(monkeypatch, date_mid="2024-04-05T11:15:00")
+        assert Telemetry(l0).site_conditions()["OUTTMP"] == pytest.approx(3.00)
+
+    def test_a_row_the_range_cut_short_is_not_read(self, monkeypatch):
+        # 00:50 HST is in the archive but its readings are past the Range boundary,
+        # so the reading comes from 00:49 rather than from the half row.
+        l0 = self._make_l0(monkeypatch, date_mid="2024-04-05T10:50:00")
+        assert Telemetry(l0).site_conditions()["OUTTMP"] == pytest.approx(3.00)
+
+    def test_an_outage_longer_than_the_tolerance_raises(self, monkeypatch):
+        # 01:30 HST is 41 minutes from the nearest row: a station outage, not a
+        # dropped minute, and not something to interpolate across.
+        l0 = self._make_l0(monkeypatch, date_mid="2024-04-05T11:30:00")
+        with pytest.raises(ValueError, match="no reading"):
+            Telemetry(l0).site_conditions()
+
+    def test_written_to_primary(self, monkeypatch):
+        l0 = self._make_l0(monkeypatch)
         results = Telemetry(l0).run()
-        for key in ("INHUM", "DEWPOINT", "OUTPRES", "M1TMP", "M2TEMP"):
+        for key in ("INHUM", "OUTPRES", "OUTTMP", "OUTHUM", "ENVWINDS", "ENVWINDD"):
             assert l0.headers["PRIMARY"][key] == results[key][0]
 
-    def test_missing_native_card_emits_nothing(self):
+    def test_missing_native_card_emits_nothing(self, monkeypatch):
         # One method, one native source: a frame short a card writes no card.
-        l0 = self._make_l0_with_conditions()
+        l0 = self._make_l0(monkeypatch)
         del l0.headers["INSTRUMENT_HEADER"]["RELH"]
-        assert Telemetry(l0).run().keys().isdisjoint({"INHUM", "OUTPRES"})
+        assert Telemetry(l0).run().keys().isdisjoint({"INHUM", "OUTPRES", "OUTTMP"})
 
     def test_diag_name_correct(self):
         assert Telemetry.__dict__["site_conditions"]._diag_name == "site_conditions"
+
+
+class TestTelemetryMirrorTemperatures:
+    """Primary and secondary mirror temperatures, copied from the native cards."""
+
+    def _make_l0(self):
+        l0 = _make_l0_pointing()
+        l0.headers["INSTRUMENT_HEADER"].update(
+            {"PRIMTEMP": 1.403147, "SECMTEMP": -0.288888}
+        )
+        return l0
+
+    def test_values_copy_the_native_cards(self):
+        results = Telemetry(self._make_l0()).mirror_temperatures()
+        assert results["M1TMP"] == pytest.approx(1.403147)
+        assert results["M2TMP"] == pytest.approx(-0.288888)
+
+    def test_written_to_primary(self):
+        l0 = self._make_l0()
+        results = Telemetry(l0).run()
+        for key in ("M1TMP", "M2TMP"):
+            assert l0.headers["PRIMARY"][key] == results[key][0]
+
+    def test_diag_name_correct(self):
+        assert (
+            Telemetry.__dict__["mirror_temperatures"]._diag_name
+            == "mirror_temperatures"
+        )
 
 
 class TestGuiderAirmass:

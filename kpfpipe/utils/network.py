@@ -5,6 +5,7 @@ import random
 import socket
 import time
 
+import requests
 from astroquery.exceptions import RemoteServiceError
 from astroquery.exceptions import TimeoutError as AstroqueryTimeoutError
 from pyvo.dal import DALServiceError
@@ -148,3 +149,28 @@ def simbad_client(fields, timeout=None):
         client._session.mount("http://", adapter)
     client.add_votable_fields(*fields)
     return client
+
+
+def cfht_weather(date, timeout=30):
+    """The Mauna Kea Weather Center's CFHT tower readings for one HST ``date``.
+
+    Returned as the archive's own text: one row per minute, fields documented at
+    http://mkwc.ifa.hawaii.edu/archive/wx/cfht/format.txt. The archive stores a
+    whole year per file, so the day is cut out with a Range request rather than
+    downloading 21 MB -- rows average 42.3 bytes and the running offset drifts up
+    to 131 kB from that over a year, which the 256 kB of padding covers. The rows
+    bounding the range are cut in half and so match no timestamp.
+    """
+    day = date.timetuple().tm_yday - 1
+    start = max(int(day * 1440 * 42.3) - 262144, 0)
+    end = int((day + 1) * 1440 * 42.3) + 262144
+    url = f"http://mkwc.ifa.hawaii.edu/archive/wx/cfht/cfht-wx.{date.year}.dat"
+
+    def fetch():
+        response = requests.get(
+            url, headers={"Range": f"bytes={start}-{end}"}, timeout=timeout
+        )
+        response.raise_for_status()
+        return response.text
+
+    return retry_request(fetch, "CFHT weather")

@@ -262,11 +262,15 @@ translator; vNext may differ by design — confirm each is intended):
 7. **Environment block.** vNext registers none of the standard's five environment timestamps
    (`INHUMT`, `OUTTMPT`, `OUTHUMT`, `OUTPREST`, `M1TMPT`). The KPF L0 header samples every
    environment card in one `keyheader [ExposureMiddle]` snapshot, so `DATE-MID` already
-   timestamps the three values vNext supplies, and `OUTTMP`/`OUTHUM` have nothing to
-   timestamp — the native header records no outside temperature, humidity or wind at all.
-   The exclusion is declared in `_UNREGISTERED` (`tests/regression/test_data_models_l2.py`).
-   Two KPF-specific cards are added in their place: `M2TEMP` (native `SECMTEMP`) and
-   `DEWPOINT` (`PRIMTEMP - DIFFPTDW`, the only form the DCS reports a dewpoint in).
+   timestamps them all. The native header records no outside temperature, humidity or wind
+   at all: `OUTTMP`, `OUTHUM`, `ENVWINDS` and `ENVWINDD` come instead from the CFHT tower's
+   Mauna Kea Weather Center archive (`Telemetry.outside_conditions`), a neighbouring-summit
+   proxy named in their card comments and outside the science chain. One KPF-specific card
+   is added: `M2TMP` (native `SECMTEMP`).
+8. **`ROTANG` not registered.** EPRV-optional, KPF does not have a rotator.
+
+The exclusions in 7 and 8 are declared in `_UNREGISTERED`
+(`tests/regression/test_data_models_l2.py`).
 
 **Instrument eras (`INSTERA`)**: the KPF era table is vendored at
 `reference/instrument_eras.csv` (era tag, UT

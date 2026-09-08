@@ -90,9 +90,8 @@ class QC:
         standardization, making a blank -- not a missing key -- the failure this
         reports.
 
-        Known gap: thirteen L0 cards (DQLVL0, FULLCOMP, the six *FLAG summaries,
-        ROTANG, OUTTMP, OUTHUM, ENVWINDS, ENVWINDD) have no writer yet, so this
-        fails on every frame until they get one.
+        Known gap: eight L0 cards (DQLVL0, FULLCOMP and the six *FLAG summaries)
+        have no writer yet, so this fails on every frame until they get one.
         """
         header = self.kpf_obj.headers["PRIMARY"]
         for keyword in self.kpf_obj.keyword_registry.primary_seed(self.LEVEL):
