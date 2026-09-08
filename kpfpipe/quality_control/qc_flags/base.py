@@ -31,13 +31,11 @@ class QC:
     def run(self):
         """Run all checks and write each 0/1 result.
 
+        Resets ``self.results`` at the start so repeated calls are deterministic.
         A check the applicability table does not declare for this frame type is
-        skipped before it runs, writing no flag.
-        Each result is logged as it is written: DEBUG on a pass, WARNING on a
-        fail, ERROR on a check that raised (counted as a fail -- this layer never
-        aborts; halting is the checkpoint layer's role). ``NotImplementedError``
-        from a placeholder check writes no flag.
-        ``self.results`` is reset at the start so repeated calls are deterministic.
+        skipped before it runs, as is one raising ``NotImplementedError``; neither
+        writes a flag. Any other exception counts as a fail -- this layer never
+        aborts; halting is the checkpoint layer's role.
 
         Returns
         -------
@@ -85,18 +83,17 @@ class QC:
     def _primary_keywords_populated(self):
         """Every PRIMARY keyword an upstream stage owes this level carries a value.
 
-        ``primary_seed`` is cumulative (L0 through ``LEVEL``), so a card an
-        upstream stage left blank fails here too. The seed stamps every card at
-        standardization, making a blank -- not a missing key -- the failure this
-        reports.
+        The seed stamps every card at standardization, so a blank -- not a missing
+        key -- is what this reports, and it is cumulative (L0 through ``LEVEL``),
+        so a card an upstream stage left blank fails here too.
 
-        A card the quality-control suite writes itself is not required: those
-        stages run beside these checks under the same applicability tables, so
-        requiring one would fail every frame its writer is not declared for --
-        every solar frame, for the pointing and Sun/Moon cards.
+        Cards the quality-control suite writes itself are exempt: those stages run
+        beside these checks under the same applicability tables, so requiring one
+        would fail every frame its writer is not declared for -- every solar frame,
+        for the pointing and Sun/Moon cards.
 
-        Known gap: eight L0 cards (DQLVL0, FULLCOMP and the six *FLAG summaries)
-        have no writer yet, so this fails on every frame it runs on.
+        Known gap: eight L0 cards (DQLVL0, FULLCOMP, the six *FLAG summaries) have
+        no writer yet, so this fails on every frame it runs on.
         """
         registry = self.kpf_obj.keyword_registry
         header = self.kpf_obj.headers["PRIMARY"]
@@ -109,11 +106,7 @@ class QC:
         return True
 
     def _iter_checks(self):
-        """Yield each ``(name, method)`` tagged ``_qc_key``.
-
-        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
-        subclass first.
-        """
+        """Yield each ``(name, method)`` tagged ``_qc_key``, subclass first."""
         seen = set()
         for cls in type(self).__mro__:
             for name, attr in cls.__dict__.items():

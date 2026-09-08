@@ -95,15 +95,12 @@ class Telemetry(Diagnostics):
         its fields are documented at
         http://mkwc.ifa.hawaii.edu/archive/wx/cfht/format.txt.
 
-        A year is one 21 MB file, sorted by time and carrying no index, so the
-        minute is sought rather than downloaded: each window reports the timestamps
-        it holds, and their distance from the one wanted places the next seek, which
-        settles within three. Nothing assumes a row size or rate, because the
-        station's outages leave gaps that make either drift over a year. The first
-        seek reads the tail, which both sizes the file and dates its last row: the
-        file for the current year stops at today, so a search spanning the whole
-        year would fall short of every target in it. A row the window cut is
-        dropped, having lost either its leading fields or a trailing reading.
+        A year is one 21 MB file, sorted but unindexed, so the minute is sought
+        rather than downloaded, each window's own timestamps placing the next seek.
+        Nothing infers a row size or rate: the station's outages leave gaps that
+        make either drift over a year. The first seek reads the tail because the
+        current year's file stops at today, so the bracket must be dated rather
+        than assumed to span the year. A row either cut left partial is dropped.
 
         The station also drops a minute here and there, so the nearest row within
         half an hour stands in. Conditions move about 0.3 C and 2% humidity over

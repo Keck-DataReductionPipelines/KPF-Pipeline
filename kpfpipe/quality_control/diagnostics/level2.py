@@ -14,13 +14,7 @@ class DiagL2(Diagnostics):
     LEVEL = "L2"
 
     def nan_counts(self):
-        """Count NaN pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, summed across chips.
-
-        Returns
-        -------
-        dict
-            Maps each per-fiber NaN-count keyword to its value.
-        """
+        """NAN{FIBER}: NaN pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, both chips."""
         results = {}
         for fiber in _FIBERS:
             results[f"NAN{fiber}"] = sum(
@@ -32,14 +26,7 @@ class DiagL2(Diagnostics):
     nan_counts._diag_name = "nan_counts"
 
     def zero_counts(self):
-        """Count non-positive pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, summed
-        across chips.
-
-        Returns
-        -------
-        dict
-            Maps each per-fiber non-positive-count keyword to its value.
-        """
+        """ZERO{FIBER}: non-positive pixels per fiber in ``{CHIP}_{FIBER}_FLUX``."""
         results = {}
         for fiber in _FIBERS:
             results[f"ZERO{fiber}"] = sum(

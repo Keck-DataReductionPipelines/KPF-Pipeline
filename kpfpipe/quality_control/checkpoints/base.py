@@ -98,11 +98,7 @@ class Checkpoint:
     raise_on_fatal_qc_flag._checkpoint_name = "raise_on_fatal_qc_flag"
 
     def _iter_checkpoints(self):
-        """Yield each ``(name, method)`` tagged ``_checkpoint_name``.
-
-        Walks ``type(self).__mro__``, subclass before base, so the tag rather than
-        any call site is what makes a method a checkpoint.
-        """
+        """Yield each ``(name, method)`` tagged ``_checkpoint_name``, subclass first."""
         seen = set()
         for cls in type(self).__mro__:
             for name, attr in cls.__dict__.items():

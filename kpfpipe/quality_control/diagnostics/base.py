@@ -32,12 +32,11 @@ class Diagnostics:
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.
 
-        Resets ``self.results`` at the start so calling ``run()`` repeatedly
-        is deterministic. A method the applicability table does not declare for
-        this frame type is skipped before it runs, emitting no keyword.
-        A method that raises is logged at ERROR (naming it) and
-        skipped: this layer is informational and never aborts the pipeline, so its
-        keywords are simply not written. Halting is the checkpoint layer's role.
+        Resets ``self.results`` at the start so calling ``run()`` repeatedly is
+        deterministic. A method the applicability table does not declare for this
+        frame type is skipped before it runs, emitting no keyword. A method that
+        raises is logged at ERROR and skipped: this layer is informational and
+        never aborts the pipeline. Halting is the checkpoint layer's role.
 
         A keyword the header rejects is skipped on its own, so it takes neither
         the siblings its method computed nor its own ``self.results`` entry.
@@ -86,11 +85,7 @@ class Diagnostics:
         return self.results
 
     def _iter_methods(self):
-        """Yield each ``(name, method)`` tagged ``_diag_name``.
-
-        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
-        subclass first.
-        """
+        """Yield each ``(name, method)`` tagged ``_diag_name``, subclass first."""
         seen = set()
         for cls in type(self).__mro__:
             for name, attr in cls.__dict__.items():

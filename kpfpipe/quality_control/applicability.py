@@ -7,10 +7,9 @@ that was never meaningful.
 Source of truth: ``config/{class}-applicability.csv``, one per ``QC`` or
 ``Diagnostics`` subclass, discovered from the filenames. Rows are keyed by
 ``Method`` (``<Class>.<method>``, the name the base classes' MRO walk yields) and
-carry one 0/1 column per frame type. The rest is documentation, checked for drift
-by the tests but not read here: ``RequiredData`` (the extensions the check reads,
-``|``-separated), ``Description``, and -- on the diagnostics tables, whose methods
-each emit several -- a ``Keywords`` column listing every keyword the method writes.
+carry one 0/1 column per frame type. The remaining columns -- ``Description``,
+``RequiredData``, and the diagnostics tables' ``Keywords`` -- document each check
+for a reader; the tests check them for drift, nothing here reads them.
 """
 
 from types import MappingProxyType
@@ -19,17 +18,14 @@ import pandas as pd
 
 from kpfpipe.quality_control.config import PATH as _config_path
 
-# Every frame type a check can be declared applicable to; the boolean columns.
+# The 0/1 columns every applicability table must carry.
 FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
 
 _SUFFIX = "-applicability.csv"
 
 
 class Applicability:
-    """Owns the applicability tables and the lookups derived from them.
-
-    Built once at import (the module exposes the singleton ``applicability``).
-    """
+    """The applicability tables, read once into the ``applicability`` singleton."""
 
     def __init__(self):
         tables = {}
@@ -109,5 +105,5 @@ class Applicability:
         return frame_type in table[method]
 
 
-# Module singleton -- the one instance the base classes reach through.
+# The one instance the base classes reach through.
 applicability = Applicability()

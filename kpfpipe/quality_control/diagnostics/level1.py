@@ -11,13 +11,7 @@ class DiagL1(Diagnostics):
     LEVEL = "L1"
 
     def flux_percentiles(self):
-        """Flux percentiles (99/90/50/10) of each assembled CCD frame, in e-.
-
-        Returns
-        -------
-        dict
-            Maps each ``FFI{G,R}{pct}P`` keyword to its value.
-        """
+        """FFI{G,R}{99,90,50,10}P: flux percentiles of each assembled CCD [e-]."""
         results = {}
         for chip, prefix in (("GREEN", "FFIG"), ("RED", "FFIR")):
             arr = self.kpf_obj.data[f"{chip}_CCD"]
