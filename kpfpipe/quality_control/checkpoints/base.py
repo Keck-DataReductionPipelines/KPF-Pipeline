@@ -5,9 +5,8 @@ A Checkpoint reads the 0/1 QC flags and the product headers and emits warnings
 or raises errors -- it never writes keywords. ``run()`` also folds in the paired
 Diagnostics and QC classes first, so the recipe drives the whole
 Diagnostics -> QC -> Checkpoints sequence through one ``CheckpointL{n}(obj).run()``
-call. Two base checkpoints are inherited by every level: ``unregistered_keywords``
-(structural header validation) and ``qc_flags`` (raise on a failed flag named in
-the subclass's ``RAISE_FLAGS``, else summarize every failing flag in a warning).
+call. Two base checkpoints are inherited by every level:
+``raise_on_unregistered_keyword`` and ``raise_on_fatal_qc_flag``.
 """
 
 import logging
@@ -56,16 +55,12 @@ class Checkpoint:
             "%s checkpoints passed (%d QC flag(s))", self.LEVEL, len(self.qc_results)
         )
 
-    def unregistered_keywords(self):
-        """Raise on any non-structural card not registered for its extension.
+    def raise_on_unregistered_keyword(self):
+        """Raise on a card that is neither structural nor registered for its extension.
 
-        For each registry-governed extension present on the product, a card that
-        is neither structural nor registered (in ``keyword_registry.allowed[ext]``)
-        raises ``ValueError`` and names it. PRIMARY is validated at every level
-        including L0: standardize_headers runs at load, so the PRIMARY a
-        checkpoint sees is always the EPRV one. This subsumes the old WMKO-native
-        leak check: a raw instrument keyword kept in INSTRUMENT_HEADER is simply
-        unregistered for an EPRV PRIMARY.
+        PRIMARY is checked at every level, L0 included, since standardize_headers
+        runs at load: a leaked WMKO-native keyword is unregistered for an EPRV
+        PRIMARY and so is caught here.
         """
         reg = self.kpf_obj.keyword_registry
         for ext, allowed in reg.allowed.items():
@@ -82,20 +77,14 @@ class Checkpoint:
                     "the writer"
                 )
 
-    unregistered_keywords._checkpoint_name = "unregistered_keywords"
+    raise_on_unregistered_keyword._checkpoint_name = "raise_on_unregistered_keyword"
 
-    def qc_flags(self):
-        """Raise on a fatal flag failure; summarize every other failing flag.
+    def raise_on_fatal_qc_flag(self):
+        """Raise on a failed flag in this level's ``RAISE_FLAGS``; warn on any other.
 
-        The fatal check is scoped to **this level's own** ``RAISE_FLAGS``: a 0
-        there raises. The summary then names every failing QC flag on
-        QUALITY_CONTROL (the cross-level L0->L4 accumulation) by
-        bare keyword -- each was already logged with its comment by the QC stage
-        as the flag was written, so the names alone suffice here. A flag absent
-        from the header is skipped (its check did not run). QUALITY_CONTROL is a
-        default extension and ``LEVEL`` a fixed subclass constant (L0/L1/L2/L4),
-        so a missing one is a broken invariant that raises (direct access) rather
-        than passing.
+        The warning names every failing flag on QUALITY_CONTROL, which accumulates
+        L0->L4; the QC stage already logged each one with its comment. A flag the
+        header lacks did not run, so it is not a failure.
         """
         header = self.kpf_obj.headers["QUALITY_CONTROL"]
         reg = self.kpf_obj.keyword_registry
@@ -106,13 +95,13 @@ class Checkpoint:
         if failing:
             logger.warning("%s failing QC flags: %s", self.LEVEL, ", ".join(failing))
 
-    qc_flags._checkpoint_name = "qc_flags"
+    raise_on_fatal_qc_flag._checkpoint_name = "raise_on_fatal_qc_flag"
 
     def _iter_checkpoints(self):
         """Yield each ``(name, method)`` tagged ``_checkpoint_name``.
 
-        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
-        subclass first.
+        Walks ``type(self).__mro__``, subclass before base, so the tag rather than
+        any call site is what makes a method a checkpoint.
         """
         seen = set()
         for cls in type(self).__mro__:

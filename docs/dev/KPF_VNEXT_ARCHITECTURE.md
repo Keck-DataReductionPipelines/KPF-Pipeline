@@ -189,7 +189,7 @@ The architecture invariants:
   (`oscansub`, `biasfile`).
 - **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
   L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
-- **Structural header validation lives in the checkpoints layer** (`Checkpoint.unregistered_keywords`),
+- **Structural header validation lives in the checkpoints layer** (`Checkpoint.raise_on_unregistered_keyword`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
   structural card, else it raises.
 - **Every extension header is an `astropy.io.fits.Header`** (not an `OrderedDict`;
@@ -370,7 +370,7 @@ A level whose metrics span several unrelated extensions splits them into per-ext
 
 ### Checkpoints
 
-`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `unregistered_keywords` (structural header validation — see *Header standardization*) and `qc_flags`. The fatal scan is scoped to the subclass's own `RAISE_FLAGS`: a `0` there raises. The summary that follows then warns on **every** failing flag on QUALITY_CONTROL (`keyword_registry.qc_flag_keywords`, the cross-level L0→L4 accumulation), so a propagated lower-level `0` is still named. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
+`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `raise_on_unregistered_keyword` (structural header validation — see *Header standardization*) and `raise_on_fatal_qc_flag`. The fatal scan is scoped to the subclass's own `RAISE_FLAGS`: a `0` there raises. The summary that follows then warns on **every** failing flag on QUALITY_CONTROL (`keyword_registry.qc_flag_keywords`, the cross-level L0→L4 accumulation), so a propagated lower-level `0` is still named. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
 
 ### Quicklook plots
 
