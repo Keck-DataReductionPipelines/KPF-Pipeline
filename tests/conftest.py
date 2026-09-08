@@ -38,6 +38,7 @@ _CATALOG_HOSTS = (
     "gea.esac.esa.int",  # ESA Gaia TAP
     "simbad.cds.unistra.fr",  # SIMBAD, and its Harvard mirror below
     "simbad.harvard.edu",
+    "mkwc.ifa.hawaii.edu",  # Mauna Kea Weather Center, the CFHT tower archive
 )
 
 # Reference data with no local alternative. Each entry is here because something

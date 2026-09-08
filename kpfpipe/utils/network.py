@@ -151,26 +151,18 @@ def simbad_client(fields, timeout=None):
     return client
 
 
-def cfht_weather(date, timeout=30):
-    """The Mauna Kea Weather Center's CFHT tower readings for one HST ``date``.
+def cfht_archive(year, start, length, timeout=30):
+    """Return ``length`` bytes of the CFHT tower's weather archive for ``year``.
 
-    Returned as the archive's own text: one row per minute, fields documented at
-    http://mkwc.ifa.hawaii.edu/archive/wx/cfht/format.txt. The archive stores a
-    whole year per file, so the day is cut out with a Range request rather than
-    downloading 21 MB -- rows average 42.3 bytes and the running offset drifts up
-    to 131 kB from that over a year, which the 256 kB of padding covers. The rows
-    bounding the range are cut in half and so match no timestamp.
+    ``start`` counts back from the end of the file when negative. Returned with the
+    file's total length, which the range response reports, so a caller seeking
+    through the file need not ask for it separately.
     """
-    day = date.timetuple().tm_yday - 1
-    start = max(int(day * 1440 * 42.3) - 262144, 0)
-    end = int((day + 1) * 1440 * 42.3) + 262144
-    url = f"http://mkwc.ifa.hawaii.edu/archive/wx/cfht/cfht-wx.{date.year}.dat"
-
-    def fetch():
-        response = requests.get(
-            url, headers={"Range": f"bytes={start}-{end}"}, timeout=timeout
-        )
-        response.raise_for_status()
-        return response.text
-
-    return retry_request(fetch, "CFHT weather")
+    span = f"-{length}" if start < 0 else f"{start}-{start + length - 1}"
+    response = requests.get(
+        f"http://mkwc.ifa.hawaii.edu/archive/wx/cfht/cfht-wx.{year}.dat",
+        headers={"Range": f"bytes={span}"},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.text, int(response.headers["Content-Range"].rpartition("/")[2])

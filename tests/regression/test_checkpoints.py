@@ -267,7 +267,9 @@ class TestCheckpointL2:
 
 @pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL0:
-    def test_run_good_product_passes_and_writes_flags(self, tmp_path, caplog):
+    def test_run_good_product_passes_and_writes_flags(
+        self, tmp_path, caplog, stub_cfht_weather
+    ):
         # A science frame carrying everything QCL0 requires: pointing, timing,
         # exposure-meter tables and resolved astrometry. This is the only
         # in-process exercise of QCL0.run().

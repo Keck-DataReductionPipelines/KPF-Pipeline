@@ -2,6 +2,8 @@
 
 import logging
 import types
+from datetime import datetime, timedelta
+from functools import cache
 
 import numpy as np
 import pytest
@@ -975,7 +977,7 @@ class TestTelemetrySolarLunarGeometry:
         l0 = self._make_l0("2024-04-24T00:00:00.000")
         assert Telemetry(l0).solar_lunar_geometry()["MOONILLU"] > 99
 
-    def test_written_to_primary(self):
+    def test_written_to_primary(self, stub_cfht_weather):
         # EPRV-defined, so these route to PRIMARY, not QUALITY_CONTROL.
         l0 = _make_l0_with_catalog()
         l0.headers["INSTRUMENT_HEADER"]["DATE-MID"] = "2024-04-05T11:09:11.082"
@@ -1094,7 +1096,7 @@ class TestTelemetryMoonRadialVelocity:
         results = Telemetry(l0).moon_radial_velocity()
         assert results["MOONRV"] == pytest.approx(1.509830, abs=1e-4)
 
-    def test_written_to_primary(self):
+    def test_written_to_primary(self, stub_cfht_weather):
         l0 = self._make_l0("2024-04-05T11:09:11.082")
         results = Telemetry(l0).run()
         assert l0.headers["PRIMARY"]["MOONRV"] == results["MOONRV"][0]
@@ -1107,80 +1109,150 @@ class TestTelemetryMoonRadialVelocity:
 class TestTelemetrySiteConditions:
     """In-dome cards off the native header, outside weather off the CFHT archive."""
 
-    # Consecutive HST minutes as the archive serves them, bracketed by the half rows
-    # the Range request cuts: the first loses its timestamp, the last its readings.
-    _ARCHIVE = "\n".join(
-        [
-            "0.30 6 617.3 421.13",
-            "2024 04 05 00 48 12 130 2.95 6 617.3 421.13",
-            "2024 04 05 00 49 14 132 3.00 6 617.2 421.13",
-            "2024 04 05 00 50 16 134",
-        ]
-    )
-
-    def _make_l0(self, monkeypatch, date_mid="2024-04-05T10:49:26", **cards):
-        monkeypatch.setattr(telemetry, "cfht_weather", lambda date: self._ARCHIVE)
+    @staticmethod
+    def _make_l0(**cards):
         l0 = _make_l0_pointing()
         native = l0.headers["INSTRUMENT_HEADER"]
-        native.update({"RELH": 12.25, "PRES": 620.881, "DATE-MID": date_mid})
+        native.update(
+            {"RELH": 12.25, "PRES": 620.881, "DATE-MID": "2024-04-05T10:49:26"}
+        )
         native.update(cards)
         return l0
 
-    def test_in_dome_values_copy_the_native_cards(self, monkeypatch):
-        results = Telemetry(self._make_l0(monkeypatch)).site_conditions()
+    def test_in_dome_values_copy_the_native_cards(self, stub_cfht_weather):
+        results = Telemetry(self._make_l0()).site_conditions()
         assert results["INHUM"] == pytest.approx(12.25)
 
-    def test_pressure_is_converted_to_kilopascals(self, monkeypatch):
+    def test_pressure_is_converted_to_kilopascals(self, stub_cfht_weather):
         # The Vaisala reads hPa; OUTPRES is registered in kPa.
-        l0 = self._make_l0(monkeypatch, PRES=620.881)
+        l0 = self._make_l0(PRES=620.881)
         assert Telemetry(l0).site_conditions()["OUTPRES"] == pytest.approx(62.0881)
 
-    def test_outside_reading_is_taken_in_hst(self, monkeypatch):
-        # 10:49 UT is 00:49 HST, the archive's own timescale.
-        results = Telemetry(self._make_l0(monkeypatch)).site_conditions()
-        assert results["OUTTMP"] == pytest.approx(3.00)
-        assert results["OUTHUM"] == pytest.approx(6)
-        assert results["ENVWINDD"] == pytest.approx(132)
+    def test_the_outside_cards_come_from_the_archive(self, stub_cfht_weather):
+        results = Telemetry(self._make_l0()).site_conditions()
+        for key, value in stub_cfht_weather.items():
+            assert results[key] == pytest.approx(value)
 
-    def test_wind_speed_is_converted_to_metres_per_second(self, monkeypatch):
-        # The archive reports knots; ENVWINDS is registered in m/s.
-        l0 = self._make_l0(monkeypatch)
-        assert Telemetry(l0).site_conditions()["ENVWINDS"] == pytest.approx(
-            14 * 0.514444
-        )
-
-    def test_a_dropped_minute_falls_back_to_the_nearest_row(self, monkeypatch):
-        # 01:15 HST is 26 minutes past the last complete row, inside tolerance.
-        l0 = self._make_l0(monkeypatch, date_mid="2024-04-05T11:15:00")
-        assert Telemetry(l0).site_conditions()["OUTTMP"] == pytest.approx(3.00)
-
-    def test_a_row_the_range_cut_short_is_not_read(self, monkeypatch):
-        # 00:50 HST is in the archive but its readings are past the Range boundary,
-        # so the reading comes from 00:49 rather than from the half row.
-        l0 = self._make_l0(monkeypatch, date_mid="2024-04-05T10:50:00")
-        assert Telemetry(l0).site_conditions()["OUTTMP"] == pytest.approx(3.00)
-
-    def test_an_outage_longer_than_the_tolerance_raises(self, monkeypatch):
-        # 01:30 HST is 41 minutes from the nearest row: a station outage, not a
-        # dropped minute, and not something to interpolate across.
-        l0 = self._make_l0(monkeypatch, date_mid="2024-04-05T11:30:00")
-        with pytest.raises(ValueError, match="no reading"):
-            Telemetry(l0).site_conditions()
-
-    def test_written_to_primary(self, monkeypatch):
-        l0 = self._make_l0(monkeypatch)
+    def test_written_to_primary(self, stub_cfht_weather):
+        l0 = self._make_l0()
         results = Telemetry(l0).run()
         for key in ("INHUM", "OUTPRES", "OUTTMP", "OUTHUM", "ENVWINDS", "ENVWINDD"):
             assert l0.headers["PRIMARY"][key] == results[key][0]
 
-    def test_missing_native_card_emits_nothing(self, monkeypatch):
+    def test_missing_native_card_emits_nothing(self, stub_cfht_weather):
         # One method, one native source: a frame short a card writes no card.
-        l0 = self._make_l0(monkeypatch)
+        l0 = self._make_l0()
         del l0.headers["INSTRUMENT_HEADER"]["RELH"]
         assert Telemetry(l0).run().keys().isdisjoint({"INHUM", "OUTPRES", "OUTTMP"})
 
     def test_diag_name_correct(self):
         assert Telemetry.__dict__["site_conditions"]._diag_name == "site_conditions"
+
+
+class TestTelemetryCfhtWeather:
+    """Seeking one minute out of the CFHT tower's one-file-per-year archive."""
+
+    @staticmethod
+    @cache
+    def _archive(year=2024, days=366):
+        """A year of rows, thinned and ragged so no fixed byte rate locates a minute.
+
+        The station drops six minutes in seven here: that irregularity is the drift
+        which defeats a constant bytes-per-row estimate, and is what the seek exists
+        to handle. Each row's temperature encodes its own HST time as HH.MM, so a
+        reading identifies the row it came from.
+        """
+        rows = []
+        stamp = datetime(year, 1, 1)
+        while stamp < datetime(year, 1, 1) + timedelta(days=days):
+            if stamp.minute % 7:
+                rows.append(
+                    f"{stamp:%Y %m %d %H %M} 14 132 "
+                    f"{stamp.hour + stamp.minute / 100:.2f} 6 617.2 421.13"
+                    + " "
+                    * (stamp.day % 5)
+                )
+            stamp += timedelta(minutes=1)
+        return ("\n".join(rows) + "\n").encode()
+
+    def _serve(self, monkeypatch, body):
+        """Stand in for cfht_archive, honouring its byte-range contract."""
+        reads = []
+
+        def archive(year, start, length, timeout=30):
+            start = max(len(body) - length, 0) if start < 0 else start
+            reads.append(start)
+            return body[start : start + length].decode(), len(body)
+
+        monkeypatch.setattr(telemetry, "cfht_archive", archive)
+        return reads
+
+    @staticmethod
+    def _utc(**hst):
+        """The UTC instant whose HST minute is the one named."""
+        return datetime(2024, **hst) + timedelta(hours=10)
+
+    @pytest.mark.parametrize(
+        "hst",
+        [
+            {"month": 1, "day": 1, "hour": 0, "minute": 1},
+            {"month": 2, "day": 29, "hour": 12, "minute": 30},
+            {"month": 7, "day": 15, "hour": 3, "minute": 1},
+            {"month": 12, "day": 31, "hour": 23, "minute": 58},
+        ],
+    )
+    def test_any_minute_of_the_year_is_found(self, monkeypatch, hst):
+        reads = self._serve(monkeypatch, self._archive())
+        reading = Telemetry._cfht_weather(self._utc(**hst))
+        assert reading["OUTTMP"] == pytest.approx(hst["hour"] + hst["minute"] / 100)
+        assert len(reads) <= 4  # The tail, then the seeks that follow from it.
+
+    def test_a_partial_year_is_still_searched(self, monkeypatch):
+        # The file for the current year stops at today, so a seek that assumed a
+        # full year would land short of every target in it.
+        self._serve(monkeypatch, self._archive(days=250))
+        target = self._utc(month=8, day=20, hour=4, minute=1)
+        assert Telemetry._cfht_weather(target)["OUTTMP"] == pytest.approx(4.01)
+
+    def test_the_reading_is_taken_in_hst(self, monkeypatch):
+        # The archive stamps rows in HST, so 13:01 UT must read the 03:01 row.
+        self._serve(monkeypatch, self._archive())
+        reading = Telemetry._cfht_weather(datetime(2024, 7, 15, 13, 1))
+        assert reading["OUTTMP"] == pytest.approx(3.01)
+
+    def test_a_dropped_minute_falls_back_to_the_nearest_row(self, monkeypatch):
+        # Minutes divisible by seven are absent, so 03:14 comes from a neighbour.
+        self._serve(monkeypatch, self._archive())
+        reading = Telemetry._cfht_weather(self._utc(month=7, day=15, hour=3, minute=14))
+        assert reading["OUTTMP"] == pytest.approx(3.13) or reading[
+            "OUTTMP"
+        ] == pytest.approx(3.15)
+
+    def test_an_outage_longer_than_the_tolerance_raises(self, monkeypatch):
+        # A whole day missing is a station outage, not a dropped minute, and not
+        # something to interpolate across.
+        kept = [
+            r for r in self._archive().split(b"\n") if not r.startswith(b"2024 07 15")
+        ]
+        self._serve(monkeypatch, b"\n".join(kept) + b"\n")
+        with pytest.raises(ValueError, match="no reading near"):
+            Telemetry._cfht_weather(self._utc(month=7, day=15, hour=12, minute=1))
+
+    def test_only_whole_rows_are_read(self, monkeypatch):
+        # A row the window cut has lost either its leading fields or a trailing
+        # reading; using one would return a time that is not the one asked for.
+        self._serve(monkeypatch, self._archive())
+        for hour in (0, 6, 12, 18):
+            hst = {"month": 5, "day": 9, "hour": hour, "minute": 1}
+            reading = Telemetry._cfht_weather(self._utc(**hst))
+            assert reading["OUTTMP"] == pytest.approx(hour + 0.01)
+            assert reading["ENVWINDD"] == pytest.approx(132.0)
+
+    def test_wind_speed_is_converted_to_metres_per_second(self, monkeypatch):
+        # The archive reports knots; ENVWINDS is registered in m/s.
+        self._serve(monkeypatch, self._archive())
+        reading = Telemetry._cfht_weather(self._utc(month=7, day=15, hour=3, minute=1))
+        assert reading["ENVWINDS"] == pytest.approx(14 * 0.514444)
 
 
 class TestTelemetryMirrorTemperatures:

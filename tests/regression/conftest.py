@@ -31,6 +31,22 @@ def _close_figures():
 
 
 @pytest.fixture
+def stub_cfht_weather(monkeypatch):
+    """Stand in for the CFHT tower lookup, returning the reading it yields.
+
+    ``Telemetry.site_conditions`` applies to every Star and Sun frame, so any test
+    driving ``Telemetry.run()`` or ``CheckpointL0.run()`` reaches the Mauna Kea
+    Weather Center unless this replaces the lookup. Tests exercising the lookup
+    itself patch ``cfht_archive`` below it instead.
+    """
+    from kpfpipe.quality_control.diagnostics.telemetry import Telemetry
+
+    reading = {"OUTTMP": 3.0, "OUTHUM": 6.0, "ENVWINDS": 7.2, "ENVWINDD": 132.0}
+    monkeypatch.setattr(Telemetry, "_cfht_weather", staticmethod(lambda mid: reading))
+    return reading
+
+
+@pytest.fixture
 def mini_detector(monkeypatch):
     """Shrink ``DETECTOR['ccd']`` to a 20x20, overscan-free detector.
 
