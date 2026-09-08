@@ -92,6 +92,11 @@ class Applicability:
             )
         return obstype
 
+    @property
+    def classes(self):
+        """The QC and diagnostics classes declaring an applicability table."""
+        return frozenset(self._tables)
+
     def methods(self, class_name):
         """``class_name``'s declared method names, unqualified."""
         return frozenset(self._table(class_name))

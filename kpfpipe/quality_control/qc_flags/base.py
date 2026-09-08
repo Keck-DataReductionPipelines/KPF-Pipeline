@@ -83,18 +83,26 @@ class QC:
         return self.results
 
     def _primary_keywords_populated(self):
-        """Every PRIMARY keyword registered through this level carries a value.
+        """Every PRIMARY keyword an upstream stage owes this level carries a value.
 
         ``primary_seed`` is cumulative (L0 through ``LEVEL``), so a card an
         upstream stage left blank fails here too. The seed stamps every card at
         standardization, making a blank -- not a missing key -- the failure this
         reports.
 
+        A card the quality-control suite writes itself is not required: those
+        stages run beside these checks under the same applicability tables, so
+        requiring one would fail every frame its writer is not declared for --
+        every solar frame, for the pointing and Sun/Moon cards.
+
         Known gap: eight L0 cards (DQLVL0, FULLCOMP and the six *FLAG summaries)
-        have no writer yet, so this fails on every frame until they get one.
+        have no writer yet, so this fails on every frame it runs on.
         """
+        registry = self.kpf_obj.keyword_registry
         header = self.kpf_obj.headers["PRIMARY"]
-        for keyword in self.kpf_obj.keyword_registry.primary_seed(self.LEVEL):
+        for keyword in registry.primary_seed(self.LEVEL):
+            if registry.populated_by(keyword, "PRIMARY") in applicability.classes:
+                continue
             value = header.get(keyword)
             if value is None or (isinstance(value, str) and not value.strip()):
                 return False

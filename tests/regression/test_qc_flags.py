@@ -443,6 +443,23 @@ class TestQCL0:
         l0.headers["PRIMARY"]["OBSTYPE"] = "  "
         assert QCL0(l0).header_keywords_present() is False
 
+    def test_cards_the_qc_suite_writes_are_not_required(self, tmp_path):
+        # The diagnostics run beside this check under the same applicability
+        # tables, so a card one of them owns cannot be a prerequisite for it --
+        # a solar frame is declared for neither the pointing nor the Sun/Moon
+        # diagnostics and would otherwise fail on every card they write.
+        l0 = fill_primary(_make_kpf0(tmp_path), "L0")
+        registry = l0.keyword_registry
+        written = [
+            keyword
+            for keyword in registry.primary_seed("L0")
+            if registry.populated_by(keyword, "PRIMARY") in applicability.classes
+        ]
+        assert {"SEEING", "AIRMASS", "SUNEL", "MOONRV"} <= set(written)
+        for keyword in written:
+            l0.headers["PRIMARY"][keyword] = "  "
+        assert QCL0(l0).header_keywords_present() is True
+
     def _make_kpf0_with_telemetry(self, tmp_path, nrows):
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00003.00.fits",
@@ -2007,7 +2024,7 @@ class TestQCKeyRegistration:
             )
             assert key in registry.qc_flag_keywords_by_level[level], (
                 f"{key} is not tagged as a {level} QC flag in the registry, so "
-                "Checkpoint.qc_flags would never scan it"
+                "Checkpoint.raise_on_fatal_qc_flag would never scan it"
             )
 
     @pytest.mark.parametrize("level", sorted(_CLASSES))

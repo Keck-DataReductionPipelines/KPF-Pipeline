@@ -158,6 +158,7 @@ class KeywordRegistry:
         )
 
         cards = {}  # (keyword, extension) -> (comment, DataType)
+        producers = {}  # (keyword, extension) -> PopulatedBy
         allowed = {}  # extension -> {keyword}
         homes = {}  # keyword -> {extension it is registered on}
         qc_all = set()
@@ -167,6 +168,7 @@ class KeywordRegistry:
                 self._compose_comment(row.Description, row.Units),
                 row.DataType,
             )
+            producers[(row.Keyword, row.Extension)] = str(row.PopulatedBy).strip()
             allowed.setdefault(row.Extension, set()).add(row.Keyword)
             homes.setdefault(row.Keyword, set()).add(row.Extension)
             if (
@@ -180,6 +182,7 @@ class KeywordRegistry:
         # The one per-card index: comment and DataType together. Read through
         # comment_for / datatype_for / is_registered.
         self.cards = MappingProxyType(cards)
+        self._producers = MappingProxyType(producers)
         self.allowed = MappingProxyType(
             {ext: frozenset(kws) for ext, kws in allowed.items()}
         )
@@ -342,6 +345,18 @@ class KeywordRegistry:
             extension = self.routing.get(name)
         card = self.cards.get((name, extension))
         return None if card is None else card[0]
+
+    def populated_by(self, keyword, extension=None):
+        """The stage registered as writing ``keyword`` on ``extension``.
+
+        Mirrors ``comment_for``: the keyword's routed home when ``extension`` is
+        omitted, None when it is not registered there, and ``""`` when the row
+        declares no writer.
+        """
+        name = str(keyword).strip()
+        if extension is None:
+            extension = self.routing.get(name)
+        return self._producers.get((name, extension))
 
     def datatype_for(self, keyword, extension):
         """Registry ``DataType`` for ``keyword`` on ``extension``.
