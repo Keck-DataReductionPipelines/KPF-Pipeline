@@ -11,7 +11,7 @@ import pandas as pd
 from astropy.stats import mad_std
 from numpy.polynomial import legendre
 
-from kpfpipe import DETECTOR, FIBERS, REPO_ROOT, SCI_FIBERS
+from kpfpipe import FIBERS, REPO_ROOT, SCI_FIBERS
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
@@ -82,12 +82,10 @@ class WLS(BaseMasterModule):
         # physical echelle order per row (bluest first), cached per chip;
         # e.g. GREEN 137..103. "order" means this echelle order throughout.
         self._echelle_orders = {
-            chip: np.linspace(
-                *DETECTOR["echelle_orders"][chip], DETECTOR["norder"][chip]
-            )
+            chip: np.linspace(*self.echelle_orders[chip], self.norder[chip])
             .round()
             .astype(int)
-            for chip in DETECTOR["echelle_orders"]
+            for chip in self.echelle_orders
         }
 
         self._load_rough_wls()
@@ -133,7 +131,7 @@ class WLS(BaseMasterModule):
             logger.info("reading rough WLS from %s", self.rough_wls_file)
             df = pd.read_csv(self.rough_wls_file)
 
-            ncol = DETECTOR["ccd"]["ncol"]
+            ncol = self.ncol
             # Per-order Legendre coefficients (C0..Cn) evaluated on the
             # normalized pixel grid; see scripts/build_rough_wls_from_legacy_wls.py.
             coeff_cols = sorted(
@@ -463,7 +461,7 @@ class WLS(BaseMasterModule):
                 f"poly_degree_f={poly_degree_f}, fibers={sorted(fibers)})"
             )
 
-        ncol = DETECTOR["ccd"]["ncol"]
+        ncol = self.ncol
 
         # rescale position variables to [-1,1] for Legendre fitting
         blue, red = orders[0], orders[-1]
@@ -475,9 +473,7 @@ class WLS(BaseMasterModule):
 
         if len(fibers) != 1:
             # map fibers to their positional rank then rescale to [-1, 1]
-            canonical = sorted(
-                expected_fibers, key=lambda fb: DETECTOR["fiber_positions"][fb]
-            )
+            canonical = sorted(expected_fibers, key=lambda fb: self.fiber_positions[fb])
             fiber_pos = {fb: i for i, fb in enumerate(canonical)}
             f = np.array([fiber_pos[fb] for fb in fiber_names], dtype=int)
             f = 2 * f / (len(canonical) - 1) - 1
@@ -512,7 +508,7 @@ class WLS(BaseMasterModule):
         2D).
         """
         blue, red = orders[0], orders[-1]
-        x = np.linspace(-1, 1, DETECTOR["ccd"]["ncol"])
+        x = np.linspace(-1, 1, self.ncol)
         y = 2 * (orders - red) / (blue - red) - 1
         z = np.linspace(-1, 1, nfiber)
 
@@ -820,9 +816,7 @@ class WLS(BaseMasterModule):
             # planes in that order). Assign by that same canonical order, not
             # self.fibers' (config-overridable) order, so a reordered self.fibers
             # cannot mis-route a solution (e.g. SKY's onto CAL).
-            canonical = sorted(
-                self.fibers, key=lambda fb: DETECTOR["fiber_positions"][fb]
-            )
+            canonical = sorted(self.fibers, key=lambda fb: self.fiber_positions[fb])
             for i, fiber in enumerate(canonical):
                 # set_data, not data[...]: only set_data checks the manifest's
                 # declared BitDepth, which is what keeps master WAVE float64.

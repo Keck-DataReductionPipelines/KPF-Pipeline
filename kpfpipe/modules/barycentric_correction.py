@@ -78,9 +78,12 @@ class BarycentricCorrection:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._info = None
         self._ccd_bjd = None  # Per-CCD [GREEN, RED] arrays for _set_headers
@@ -525,8 +528,8 @@ class BarycentricCorrection:
         # Weight each order by its SCI2 brightness (``weight_percentile``, robust
         # to cosmics); NaN/failed orders get zero weight, uniform if SCI2_FLUX
         # absent.
-        norder_green = DETECTOR["norder"]["GREEN"]
-        norder = norder_green + DETECTOR["norder"]["RED"]
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
         flux = self.l2_obj.data["SCI2_FLUX"]
         if flux is None or np.size(flux) == 0:
             weights = np.ones(norder)

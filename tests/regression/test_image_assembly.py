@@ -490,7 +490,8 @@ class TestOverscanMethods:
         module = ImageAssembly(standardized_l0(path))
         module.namp["GREEN"] = 4
         module.dims["GREEN"] = (8, 8)
-        module.prescan = 2
+        # Rebind, not mutate: self.ccd is DETECTOR's own dict.
+        module.ccd = {**module.ccd, "prescan": 2}
         return module
 
     def _set_serial_overscan(self, ia, values):

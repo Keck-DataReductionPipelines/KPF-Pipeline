@@ -56,9 +56,12 @@ class RadialVelocity:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         # CCF caches loaded from the L4 by _load_ccfs(), keyed by f'{chip}_{fiber}'.
         self._ccf = {}  # per-chip CCF cube
@@ -276,7 +279,7 @@ class RadialVelocity:
         # pixel scale for the photon-noise velocity scale.
         rep = int(np.argmax(np.nansum(ccf, axis=1)))
         rep_scale = self._pixel_velocity_scale(
-            wave_start[rep], wave_end[rep], DETECTOR["ccd"]["ncol"]
+            wave_start[rep], wave_end[rep], self.ncol
         )
         return velocity_grid, ccf_weighted, ccf_summed, ccf_summed_var, rep_scale
 
@@ -335,7 +338,7 @@ class RadialVelocity:
         wave_start = np.asarray(table["WAVE_START"], dtype=np.float64)
         wave_end = np.asarray(table["WAVE_END"], dtype=np.float64)
         mask_width = self._ccf_mask_width
-        ncol = DETECTOR["ccd"]["ncol"]
+        ncol = self.ncol
         rv = np.full(ccf.shape[0], np.nan)
         rv_err = np.full(ccf.shape[0], np.nan)
         for o in range(ccf.shape[0]):
@@ -524,8 +527,8 @@ class RadialVelocity:
             f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}"
         )
         lines.append("  " + "-" * 86)
-        norder_green = DETECTOR["norder"]["GREEN"]
-        norder = norder_green + DETECTOR["norder"]["RED"]
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
         for chip, rows in (
             ("GREEN", slice(0, norder_green)),
             ("RED", slice(norder_green, norder)),
@@ -664,8 +667,8 @@ class RadialVelocity:
         chips = [c.upper() for c in chips]
         fibers = [f.upper() for f in fibers]
 
-        norder_green = DETECTOR["norder"]["GREEN"]
-        norder = norder_green + DETECTOR["norder"]["RED"]
+        norder_green = self.norder["GREEN"]
+        norder = norder_green + self.norder["RED"]
         l4_obj = self.l4_obj
 
         self._load_ccfs(chips, fibers)

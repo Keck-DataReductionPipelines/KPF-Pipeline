@@ -78,12 +78,12 @@ class ImageAssembly:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
 
-        for k, v in DETECTOR["ccd"].items():
+        for k, v in DETECTOR.items():
             setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._info = None
         self.orientation = {}  # amp ext -> flip; set by _parse_amplifier_reference()
@@ -109,7 +109,7 @@ class ImageAssembly:
         """
         for chip in self.chips:
             chip = chip.upper()
-            df = pd.DataFrame(DETECTOR["amplifiers"][chip]).set_index("channel_id")
+            df = pd.DataFrame(self.amplifiers[chip]).set_index("channel_id")
             self.orientation.update(dict(zip(df["ext_name"], df["flip"], strict=False)))
             self.gain.update(dict(zip(df["ext_name"], df["gain"], strict=False)))
 
@@ -121,7 +121,7 @@ class ImageAssembly:
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
-        ncol_prescan = self.prescan
+        ncol_prescan = self.ccd["prescan"]
         nrow_imaging, ncol_imaging = self.dims[chip]
 
         oscan_pix_srl = full_amplifier[:nrow_imaging, ncol_prescan + ncol_imaging :]
@@ -143,7 +143,7 @@ class ImageAssembly:
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
-        ncol_prescan = self.prescan
+        ncol_prescan = self.ccd["prescan"]
         nrow_imaging, ncol_imaging = self.dims[chip]
 
         image_pix = full_amplifier[

@@ -82,9 +82,12 @@ class CrossCorrelation:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         # Lazily-populated caches; the per-orderlet ones are keyed by f'{chip}_{fiber}'.
         self._illumination_source = {}  # set by _resolve_illumination_source()
@@ -92,8 +95,6 @@ class CrossCorrelation:
         self._velocity_grid = {}  # set by _build_velocity_grid()
         self._ccf = {}  # CCF cube, set by compute_ccfs()
         self._ccf_var = {}  # per-bin CCF variance cube, set by compute_ccfs()
-        self._ccf_mask_width = self.ccf_mask_width  # width behind the cached CCFs
-        self._ccf_step_size = self.ccf_step_size  # step behind the cached grids
         self._order_weights = None  # order-weight table, loaded by _get_order_weights()
         self._chips_done = []  # chips processed, for _set_headers/_track_info
         self._fibers_done = []  # illuminated fibers written, for _set_headers
@@ -114,7 +115,7 @@ class CrossCorrelation:
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
             return self._illumination_source[key]
-        positions = DETECTOR["fiber_positions"]
+        positions = self.fiber_positions
         try:
             keyword = f"CLSRC{positions[fiber.upper()] + 1}"
         except KeyError:
@@ -690,10 +691,12 @@ class CrossCorrelation:
         chips = [c.upper() for c in chips]
         fibers = [f.upper() for f in fibers]
         self._chips_done = chips
+        self._ccf_mask_width = ccf_mask_width
         self._ccf_step_size = ccf_step_size
 
-        norder_green = DETECTOR["norder"]["GREEN"]
-        norder = norder_green + DETECTOR["norder"]["RED"]
+        norder_green = self.norder["GREEN"]
+        norder_red = self.norder["RED"]
+        norder = norder_green + norder_red
 
         l4_obj = self.l2_obj.to_kpf4()
 
@@ -746,15 +749,15 @@ class CrossCorrelation:
                 [
                     f"{chip}_{fiber}_{order}"
                     for chip in CHIPS
-                    for order in range(DETECTOR["norder"][chip])
+                    for order in range(self.norder[chip])
                 ]
             )
             echelle_order = np.concatenate(
                 [
                     np.linspace(
-                        DETECTOR["echelle_orders"][chip][0],
-                        DETECTOR["echelle_orders"][chip][1],
-                        DETECTOR["norder"][chip],
+                        self.echelle_orders[chip][0],
+                        self.echelle_orders[chip][1],
+                        self.norder[chip],
                     )
                     .round()
                     .astype(np.int64)

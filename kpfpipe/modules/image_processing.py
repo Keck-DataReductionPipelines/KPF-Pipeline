@@ -12,7 +12,7 @@ import os
 
 import numpy as np
 
-from kpfpipe import DEFAULT_CFG
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 
@@ -66,9 +66,12 @@ class ImageProcessing:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         # Resolved masters + paths, cached by _resolve_master() so each master
         # is read at most once.

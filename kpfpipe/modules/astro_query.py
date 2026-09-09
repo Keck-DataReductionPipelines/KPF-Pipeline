@@ -179,9 +179,12 @@ class AstroQuery:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._validate_priority()
 
@@ -850,7 +853,7 @@ class AstroQuery:
                     continue
                 value = float(value)
             for fiber in SCI_FIBERS:
-                cards[f"{base}{DETECTOR['fiber_positions'][fiber] + 1}"] = value
+                cards[f"{base}{self.fiber_positions[fiber] + 1}"] = value
         return cards
 
     # ------------------------------------------------------------------

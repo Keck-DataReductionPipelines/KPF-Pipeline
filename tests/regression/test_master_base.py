@@ -16,7 +16,6 @@ import numpy as np
 import pytest
 
 import kpfpipe.modules.masters.base as masters_base
-from kpfpipe import DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 from kpfpipe.modules.masters.dark import Dark
@@ -390,7 +389,7 @@ class TestRateEstimator:
         # for the approximate (clip-bound) pass, loading a frame twice.
         by_fn = dict(zip(file_list, frames, strict=True))
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": 2, "ncol": 2}),
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -440,7 +439,7 @@ class TestRateEstimator:
         dark.stack_sigma = 1e6
         by_fn = dict(zip(file_list, frames, strict=True))
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": 2, "ncol": 2}),
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
             patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
@@ -450,7 +449,7 @@ class TestRateEstimator:
 
         # Same frames without the flat token take the rate branch: 200/20 = 10.
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": 2, "ncol": 2}),
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
             patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
@@ -486,7 +485,7 @@ class TestPerPixelRejection:
         dark.chips = ["GREEN"]
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": nrow, "ncol": ncol}),
+            patch.multiple(dark, nrow=nrow, ncol=ncol),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -518,7 +517,7 @@ class TestPerPixelRejection:
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": 2, "ncol": 2}),
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -547,7 +546,7 @@ class TestDatacubeClipping:
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": nrow, "ncol": ncol}),
+            patch.multiple(dark, nrow=nrow, ncol=ncol),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -572,7 +571,7 @@ class TestDatacubeClipping:
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": nrow, "ncol": ncol}),
+            patch.multiple(dark, nrow=nrow, ncol=ncol),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -614,7 +613,7 @@ class TestSurvivorGate:
         # The gate is what is under test, so the later cleaning pass -- which
         # would interpolate the zeroed pixels back in -- is bypassed.
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": 2, "ncol": 2}),
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(
                 dark, "_compute_stats_from_datacube", return_value=(stats, False)
             ),
@@ -764,7 +763,7 @@ class TestStackingValidation:
         dark = self._dark(len(frames))
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": 2, "ncol": 2}),
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -999,7 +998,7 @@ class TestInputFilesProvenance:
 
         dropped = dark.l0_file_list[0]
         with (
-            patch.dict(DETECTOR["ccd"], {"nrow": 2, "ncol": 2}),
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(
                 dark,
                 "_load_frame",

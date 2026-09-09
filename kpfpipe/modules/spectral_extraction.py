@@ -50,9 +50,12 @@ class SpectralExtraction:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._order_trace = None
         self._order_trace_path = None
@@ -353,7 +356,7 @@ class SpectralExtraction:
         chip = chip.upper()
         fibers = [f.upper() for f in fibers]
 
-        norder = DETECTOR["norder"][chip]
+        norder = self.norder[chip]
         nrow, ncol = self.l1_obj.data[f"{chip}_CCD"].shape
 
         l2_arrays = {}
@@ -410,9 +413,7 @@ class SpectralExtraction:
         ]
         fibers_str = " ".join(fibers)
         for chip in chips:
-            lines.append(
-                f"  {chip:<8s} {fibers_str:<30s} {DETECTOR['norder'][chip.upper()]}"
-            )
+            lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj, extraction_method):
@@ -421,7 +422,7 @@ class SpectralExtraction:
         # CTYPEn is FITS axis order, the reverse of the numpy shape (Norder, Mpix):
         # axis 1 is the dispersion axis (NAXIS1 = Mpix), axis 2 the order axis
         # (NAXIS2 = Norder). Same pair CrossCorrelation writes on CCF#/RV#.
-        for trace in range(1, DETECTOR["numtrace"] + 1):
+        for trace in range(1, self.numtrace + 1):
             for suffix in ("FLUX", "VAR", "BLAZE"):
                 ext = f"TRACE{trace}_{suffix}"
                 l2_obj.set_keyword("CTYPE1", "Pixel", ext=ext)

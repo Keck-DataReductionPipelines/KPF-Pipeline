@@ -99,23 +99,19 @@ class BaseMasterModule:
 
         for k, v in self._DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
 
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
+
         self._l1_obj_cache = {}
-
-        # Masters output root; CalibrationAssociation reads masters from here
-        # when ``_process_frame`` associates a calibration for a stacked frame.
         self._masters_output = params.get("KPF_MASTERS_OUTPUT")
-
-        # Forwarded to CalibrationAssociation in ``_process_frame`` so an operator's
-        # configured search window is honored, not silently reset to the default.
         self._masters_search_window_days = params.get("masters_search_window_days")
 
         # One cached master (KPFMasterL1) and its path per calibration type.
-        # Frames in a stack are taken close in time and so almost always
-        # associate the same nearest master; caching lets ``_process_frame``
+        # Frames in a stack are taken close in time; caching lets ``_process_frame``
         # read each master from disk once rather than once per frame.
         self._master_ml1 = {}
         self._master_paths = {}
@@ -128,8 +124,7 @@ class BaseMasterModule:
         # L0 files that actually stacked; recorded as the master's INPUT_FILES.
         self._stacked_files = []
 
-        # Per-chip stack statistics cached by _populate_stack_info() (dict);
-        # consumed by the subclass _track_info() when it builds the info() text.
+        # Per-chip stack statistics cached by _populate_stack_info()
         self._stack_info = None
 
         # Effective per-frame calibrations (standard set masked by the resolved
@@ -342,8 +337,8 @@ class BaseMasterModule:
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
-        nrow = DETECTOR["ccd"]["nrow"]
-        ncol = DETECTOR["ccd"]["ncol"]
+        nrow = self.nrow
+        ncol = self.ncol
 
         data_cube = {}
         exptime = np.zeros(nframe, dtype=np.float32)
@@ -487,8 +482,8 @@ class BaseMasterModule:
 
         exact_stats = {}
 
-        nrow = DETECTOR["ccd"]["nrow"]
-        ncol = DETECTOR["ccd"]["ncol"]
+        nrow = self.nrow
+        ncol = self.ncol
 
         for chip in self.chips:
             for suffix in ["CCD", "VAR"]:

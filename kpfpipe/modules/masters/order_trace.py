@@ -101,9 +101,12 @@ class OrderTrace:
 
         for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
-        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
         self.chips = tuple(self.chips)
         self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._master_flat = self._load_master_flat()
         self._image = {
@@ -197,7 +200,7 @@ class OrderTrace:
         4-connected here, which a corner does not survive, leaves each speck its
         own component to drop on size; traces come through untouched.
         """
-        nrow, ncol = DETECTOR["ccd"]["nrow"], DETECTOR["ccd"]["ncol"]
+        nrow, ncol = self.nrow, self.ncol
         filled = np.nan_to_num(self._image[chip], nan=0.0, posinf=0.0, neginf=0.0)
 
         off_diagonal = np.full(nrow, -smoothing_weight)
@@ -252,7 +255,7 @@ class OrderTrace:
         detector, where every order is on the detector and the orderlets of an
         order are cleanly separated across dispersion.
         """
-        center = DETECTOR["ccd"]["ncol"] // 2
+        center = self.ncol // 2
         half_width = width // 2
         near_center = np.abs(cluster["col_indices"] - center) <= half_width
         return cluster["row_indices"][near_center], cluster["col_indices"][near_center]
@@ -631,7 +634,7 @@ class OrderTrace:
         leaves an empty row, so the result always holds one row per fiber of
         every expected order.
         """
-        norder = DETECTOR["norder"][chip]
+        norder = self.norder[chip]
         is_cal = metadata["is_cal"].to_numpy()
         index = np.cumsum(is_cal) - is_cal
 
@@ -696,7 +699,7 @@ class OrderTrace:
             return self._profiles[chip]
 
         image = self._image[chip]
-        nrow, ncol = DETECTOR["ccd"]["nrow"], DETECTOR["ccd"]["ncol"]
+        nrow, ncol = self.nrow, self.ncol
 
         columns = np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
         offsets = np.arange(-col_half_window, col_half_window + 1)
@@ -972,7 +975,7 @@ class OrderTrace:
         """
         measured = self._trace_tables[chip].query("Status != 'missing'")
         return bounded_polyval(
-            np.arange(DETECTOR["ccd"]["ncol"], dtype=float),
+            np.arange(self.ncol, dtype=float),
             measured[self._trace_fields(which="coeffs")].to_numpy(dtype=float).T,
             measured["X1"].to_numpy(dtype=float)[:, None],
             measured["X2"].to_numpy(dtype=float)[:, None],
@@ -1028,12 +1031,12 @@ class OrderTrace:
         ``Status`` from that span; no 'unknown' may survive.
         """
         table = self._trace_tables[chip]
-        nrow, ncol = DETECTOR["ccd"]["nrow"], DETECTOR["ccd"]["ncol"]
+        nrow, ncol = self.nrow, self.ncol
         if list(table.columns) != self._trace_fields():
             raise ValueError(f"{chip} output has incompatible fields")
 
         expected_traces = pd.MultiIndex.from_product(
-            [range(DETECTOR["norder"][chip]), self.fibers], names=["Order", "Fiber"]
+            [range(self.norder[chip]), self.fibers], names=["Order", "Fiber"]
         )
         produced_traces = pd.MultiIndex.from_arrays([table["Order"], table["Fiber"]])
         if len(table) != len(expected_traces) or set(produced_traces) != set(
@@ -1116,7 +1119,7 @@ class OrderTrace:
         clusters = self._reject_faint_clusters(chip, clusters)
         logger.info("%s: %d clusters survive curation", chip, len(clusters))
 
-        expected = len(self.fibers) * DETECTOR["norder"][chip]
+        expected = len(self.fibers) * self.norder[chip]
         if abs(len(clusters) - expected) > len(self.fibers) - 1:
             raise ValueError(
                 f"{chip}: {len(clusters)} traces detected, expected {expected}"
@@ -1197,7 +1200,7 @@ class OrderTrace:
             centers = self._trace_centers(chip, fiber, order)
             cluster = self._clusters[chip][int(cluster_index)]
             rows, cols = cluster["row_indices"], cluster["col_indices"]
-            clipped = cols[(rows == 0) | (rows == DETECTOR["ccd"]["nrow"] - 1)]
+            clipped = cols[(rows == 0) | (rows == self.nrow - 1)]
             usable = np.setdiff1d(cols, clipped)
             on_chip = np.isin(columns, usable)
             try:
@@ -1212,10 +1215,7 @@ class OrderTrace:
 
             # Check for partial traces that curl back on themselves and refit
             # using degree 2 polynomials
-            if (
-                np.ptp(usable) + 1 < DETECTOR["ccd"]["ncol"]
-                and int(self.poly_degree) > 2
-            ):
+            if np.ptp(usable) + 1 < self.ncol and int(self.poly_degree) > 2:
                 turns = polynomial.polyroots(polynomial.polyder(coeffs))
                 turns = turns[np.isreal(turns)].real
                 if np.any((turns > usable.min()) & (turns < usable.max())):
