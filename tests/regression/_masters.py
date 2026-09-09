@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-CHIPS = ("GREEN", "RED")
+from kpfpipe import CHIPS
+
 NROW, NCOL = 10, 10  # small arrays for unit tests
 
 

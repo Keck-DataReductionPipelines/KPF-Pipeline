@@ -71,7 +71,8 @@ docs/               Sphinx site (source/) and the governing docs (dev/)
 
 A few top-level default quantities/constants are exposed and loaded by `kpfpipe/__init__.py`:
 static detector parameters (e.g. pixel dimensions, amplifiers; `reference/detector.toml`),
-CCD/trace identifiers (`kpfpipe.DEFAULTS`), and the repo root (`kpfpipe.REPO_ROOT`).
+CCD/fiber identifiers (`kpfpipe.CHIPS`, `FIBERS`, `SCI_FIBERS`), the default pipeline
+configuration (`kpfpipe.DEFAULT_CFG`), and the repo root (`kpfpipe.REPO_ROOT`).
 
 ## Data Flow
 

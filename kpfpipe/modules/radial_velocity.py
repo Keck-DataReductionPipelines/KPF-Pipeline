@@ -14,14 +14,14 @@ import numpy as np
 from astropy.constants import c
 from astropy.stats import mad_std
 
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DEFAULT_CFG, DETECTOR, SCI_FIBERS
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import optimize_lsq
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "rv_window": [-25.0, 25.0],
 }
 
@@ -54,8 +54,11 @@ class RadialVelocity:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
 
         # CCF caches loaded from the L4 by _load_ccfs(), keyed by f'{chip}_{fiber}'.
         self._ccf = {}  # per-chip CCF cube
@@ -240,10 +243,10 @@ class RadialVelocity:
         chip = chip.upper()
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
-        if len(fibers) != 1 and set(fibers) != set(DETECTOR["sci_fibers"]):
+        if len(fibers) != 1 and set(fibers) != set(SCI_FIBERS):
             raise ValueError(
                 f"fibers must be a single fiber or exactly the three science "
-                f"fibers {list(DETECTOR['sci_fibers'])}; got {fibers}"
+                f"fibers {list(SCI_FIBERS)}; got {fibers}"
             )
         for f in fibers:
             if f"{chip}_{f}" not in self._ccf:
@@ -273,7 +276,7 @@ class RadialVelocity:
         # pixel scale for the photon-noise velocity scale.
         rep = int(np.argmax(np.nansum(ccf, axis=1)))
         rep_scale = self._pixel_velocity_scale(
-            wave_start[rep], wave_end[rep], self.ccd["ncol"]
+            wave_start[rep], wave_end[rep], DETECTOR["ccd"]["ncol"]
         )
         return velocity_grid, ccf_weighted, ccf_summed, ccf_summed_var, rep_scale
 
@@ -332,7 +335,7 @@ class RadialVelocity:
         wave_start = np.asarray(table["WAVE_START"], dtype=np.float64)
         wave_end = np.asarray(table["WAVE_END"], dtype=np.float64)
         mask_width = self._ccf_mask_width
-        ncol = self.ccd["ncol"]
+        ncol = DETECTOR["ccd"]["ncol"]
         rv = np.full(ccf.shape[0], np.nan)
         rv_err = np.full(ccf.shape[0], np.nan)
         for o in range(ccf.shape[0]):
@@ -431,10 +434,10 @@ class RadialVelocity:
         fibers = [fibers] if isinstance(fibers, str) else list(fibers)
         fibers = [f.upper() for f in fibers]
 
-        if combine_fibers and set(fibers) != set(DETECTOR["sci_fibers"]):
+        if combine_fibers and set(fibers) != set(SCI_FIBERS):
             raise ValueError(
                 f"combine_fibers=True requires the three science fibers "
-                f"{list(DETECTOR['sci_fibers'])}; got {fibers}"
+                f"{list(SCI_FIBERS)}; got {fibers}"
             )
         if not combine_fibers and len(fibers) != 1:
             raise ValueError(
@@ -516,21 +519,18 @@ class RadialVelocity:
         # Per-CCD, per-orderlet summary. MASK is the CCF mask; CCD_RV/CCD_ERV are
         # the combined per-CCD RV and its error; RV_RMS is the order-to-order
         # mad_std (a diagnostic of per-order spread), in m/s.
-        fiber_order = [f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in info]
-        fiber_order += [f for f in info if f not in fiber_order]
-
         lines.append(
             f"\n  {'CHIP':<8s}{'FIBER':<8s}{'MASK':<14s}{'NVALID':>8s}"
             f"{'CCD_RV [km/s]':>16s}{'CCD_ERV [m/s]':>16s}{'RV_RMS [m/s]':>16s}"
         )
         lines.append("  " + "-" * 86)
-        norder_green = self.norder["GREEN"]
-        norder = norder_green + self.norder["RED"]
+        norder_green = DETECTOR["norder"]["GREEN"]
+        norder = norder_green + DETECTOR["norder"]["RED"]
         for chip, rows in (
             ("GREEN", slice(0, norder_green)),
             ("RED", slice(norder_green, norder)),
         ):
-            for fiber in fiber_order:
+            for fiber in info:
                 res = info[fiber]
                 rv = res["rv"]
                 if rv is None:
@@ -664,8 +664,8 @@ class RadialVelocity:
         chips = [c.upper() for c in chips]
         fibers = [f.upper() for f in fibers]
 
-        norder_green = self.norder["GREEN"]
-        norder = norder_green + self.norder["RED"]
+        norder_green = DETECTOR["norder"]["GREEN"]
+        norder = norder_green + DETECTOR["norder"]["RED"]
         l4_obj = self.l4_obj
 
         self._load_ccfs(chips, fibers)
@@ -725,7 +725,7 @@ class RadialVelocity:
         # Final science RV: sum the science orderlets' CCFs per chip, fit, then
         # combine the two CCDs at the RV level (see compute_weighted_rvs). RVs are
         # already barycentric, so the reported BERV/BJDTDB are descriptive.
-        sci_req = [f for f in fibers if f in DETECTOR["sci_fibers"]]
+        sci_req = [f for f in fibers if f in SCI_FIBERS]
         sci = [f for f in sci_req if f in self._processed]
         if not sci_req:
             # Calibration-only run: PRIMARY RV/RVERR/BERV/BJDTDB stay UNDEFINED.

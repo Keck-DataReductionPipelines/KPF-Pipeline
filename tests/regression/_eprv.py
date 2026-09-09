@@ -10,7 +10,7 @@ import importlib.resources
 
 import pandas as pd
 
-from kpfpipe import DETECTOR
+from kpfpipe.data_models.config import TRACE_MAP
 
 _RVDATA = importlib.resources.files("rvdata.core.models.config")
 _KPF = importlib.resources.files("kpfpipe.data_models.config")
@@ -21,7 +21,7 @@ _TELESCOPE_BASES = frozenset(
     {"TELEID", "TLST", "TRA", "TDEC", "TEL", "TZA", "TAZ", "THA", "PARST", "PAREND"}
 )
 
-_INDICES = range(1, DETECTOR["numtrace"] + 1)
+_INDICES = range(1, len(TRACE_MAP) + 1)
 
 
 def rvdata_table(name):
@@ -37,7 +37,7 @@ def kpf_table(name):
 def expand(keyword):
     """The concrete keywords an rvdata table cell names.
 
-    ``BASE1 ... BASE#`` and a bare ``#`` both run 1..``DETECTOR["numtrace"]``,
+    ``BASE1 ... BASE#`` and a bare ``#`` both run 1..``len(TRACE_MAP)``,
     except the single-telescope families, which stop at 1.
     """
     keyword = str(keyword).strip()

@@ -11,7 +11,7 @@ import pandas as pd
 from astropy.stats import mad_std
 from numpy.polynomial import legendre
 
-from kpfpipe import REPO_ROOT
+from kpfpipe import DETECTOR, FIBERS, REPO_ROOT, SCI_FIBERS
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
@@ -46,8 +46,8 @@ class WLS(BaseMasterModule):
         min_stack_size (per-chip line-fit-QC survivor gate), KPF_MASTERS_OUTPUT.
     """
 
-    _DEFAULTS = {
-        **BaseMasterModule._DEFAULTS,
+    _DEFAULT_CFG = {
+        **BaseMasterModule._DEFAULT_CFG,
         "linelist": f"{REPO_ROOT}/reference/thar_line_list.csv",
         "lineprofile": "gaussian",
         "poly_degree_x": 6,
@@ -82,10 +82,12 @@ class WLS(BaseMasterModule):
         # physical echelle order per row (bluest first), cached per chip;
         # e.g. GREEN 137..103. "order" means this echelle order throughout.
         self._echelle_orders = {
-            chip: np.linspace(*self.echelle_orders[chip], self.norder[chip])
+            chip: np.linspace(
+                *DETECTOR["echelle_orders"][chip], DETECTOR["norder"][chip]
+            )
             .round()
             .astype(int)
-            for chip in self.echelle_orders
+            for chip in DETECTOR["echelle_orders"]
         }
 
         self._load_rough_wls()
@@ -131,7 +133,7 @@ class WLS(BaseMasterModule):
             logger.info("reading rough WLS from %s", self.rough_wls_file)
             df = pd.read_csv(self.rough_wls_file)
 
-            ncol = self.ccd["ncol"]
+            ncol = DETECTOR["ccd"]["ncol"]
             # Per-order Legendre coefficients (C0..Cn) evaluated on the
             # normalized pixel grid; see scripts/build_rough_wls_from_legacy_wls.py.
             coeff_cols = sorted(
@@ -439,9 +441,9 @@ class WLS(BaseMasterModule):
             raise ValueError(f"expected 1, 3, or 5 fibers, got {len(fibers)}")
 
         if len(fibers) == 3:
-            expected_fibers = ["SCI1", "SCI2", "SCI3"]
+            expected_fibers = list(SCI_FIBERS)
         elif len(fibers) == 5:
-            expected_fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
+            expected_fibers = list(FIBERS)
 
         if len(fibers) != 1 and not (
             np.all(np.isin(fibers, expected_fibers))
@@ -461,7 +463,7 @@ class WLS(BaseMasterModule):
                 f"poly_degree_f={poly_degree_f}, fibers={sorted(fibers)})"
             )
 
-        ncol = self.ccd["ncol"]
+        ncol = DETECTOR["ccd"]["ncol"]
 
         # rescale position variables to [-1,1] for Legendre fitting
         blue, red = orders[0], orders[-1]
@@ -473,7 +475,9 @@ class WLS(BaseMasterModule):
 
         if len(fibers) != 1:
             # map fibers to their positional rank then rescale to [-1, 1]
-            canonical = sorted(expected_fibers, key=lambda fb: self.fiber_positions[fb])
+            canonical = sorted(
+                expected_fibers, key=lambda fb: DETECTOR["fiber_positions"][fb]
+            )
             fiber_pos = {fb: i for i, fb in enumerate(canonical)}
             f = np.array([fiber_pos[fb] for fb in fiber_names], dtype=int)
             f = 2 * f / (len(canonical) - 1) - 1
@@ -508,7 +512,7 @@ class WLS(BaseMasterModule):
         2D).
         """
         blue, red = orders[0], orders[-1]
-        x = np.linspace(-1, 1, self.ccd["ncol"])
+        x = np.linspace(-1, 1, DETECTOR["ccd"]["ncol"])
         y = 2 * (orders - red) / (blue - red) - 1
         z = np.linspace(-1, 1, nfiber)
 
@@ -816,7 +820,9 @@ class WLS(BaseMasterModule):
             # planes in that order). Assign by that same canonical order, not
             # self.fibers' (config-overridable) order, so a reordered self.fibers
             # cannot mis-route a solution (e.g. SKY's onto CAL).
-            canonical = sorted(self.fibers, key=lambda fb: self.fiber_positions[fb])
+            canonical = sorted(
+                self.fibers, key=lambda fb: DETECTOR["fiber_positions"][fb]
+            )
             for i, fiber in enumerate(canonical):
                 # set_data, not data[...]: only set_data checks the manifest's
                 # declared BitDepth, which is what keeps master WAVE float64.

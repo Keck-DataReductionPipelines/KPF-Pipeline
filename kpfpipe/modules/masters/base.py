@@ -7,7 +7,7 @@ import os
 
 import numpy as np
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.modules.calibration_association import CalibrationAssociation
@@ -43,13 +43,13 @@ class BaseMasterModule:
         bias, dark, flat, masters_search_window_days, KPF_MASTERS_OUTPUT.
     """
 
-    # Module defaults; subclasses extend via ``{**BaseMasterModule._DEFAULTS, ...}``.
+    # Module defaults; subclasses extend via ``{**BaseMasterModule._DEFAULT_CFG, ...}``.
     # bias/dark/flat are the globally-enabled calibrations (the no-config
     # fallback; in practice resolved from the shared [MODULE_IMAGE_PROCESSING]
     # config and make_master kwargs). Keep in sync with the same keys in
-    # image_processing._DEFAULTS.
-    _DEFAULTS = {
-        **DEFAULTS,
+    # image_processing._DEFAULT_CFG.
+    _DEFAULT_CFG = {
+        **DEFAULT_CFG,
         "stack_sigma": 5.0,
         "min_stack_size": 5,
         "bias": True,
@@ -97,8 +97,11 @@ class BaseMasterModule:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in self._DEFAULTS.items():
+        for k, v in self._DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
 
         self._l1_obj_cache = {}
 
@@ -339,8 +342,8 @@ class BaseMasterModule:
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
-        nrow = self.ccd["nrow"]
-        ncol = self.ccd["ncol"]
+        nrow = DETECTOR["ccd"]["nrow"]
+        ncol = DETECTOR["ccd"]["ncol"]
 
         data_cube = {}
         exptime = np.zeros(nframe, dtype=np.float32)
@@ -484,8 +487,8 @@ class BaseMasterModule:
 
         exact_stats = {}
 
-        nrow = self.ccd["nrow"]
-        ncol = self.ccd["ncol"]
+        nrow = DETECTOR["ccd"]["nrow"]
+        ncol = DETECTOR["ccd"]["ncol"]
 
         for chip in self.chips:
             for suffix in ["CCD", "VAR"]:

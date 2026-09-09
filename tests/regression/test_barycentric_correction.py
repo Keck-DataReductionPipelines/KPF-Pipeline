@@ -14,7 +14,7 @@ from astropy.coordinates import Distance, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.barycentric_correction import BarycentricCorrection
 from kpfpipe.utils.astro import KECK_LOCATION
@@ -94,9 +94,9 @@ def synthetic_kpf2():
 
     kpf2.set_data("EXPMETER_SCI", _make_expmeter_table())
 
-    for chip in ["GREEN", "RED"]:
+    for chip in CHIPS:
         n = NORDER_GREEN if chip == "GREEN" else NORDER_RED
-        for fiber in ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]:
+        for fiber in FIBERS:
             kpf2.set_data(
                 f"{chip}_{fiber}_WAVE", np.full((n, NCOL), 5000.0, dtype=np.float64)
             )
@@ -825,8 +825,8 @@ class TestPerform:
         kpf2 = bc_monkeypatched.l2_obj
         orig = {
             f"{chip}_{fiber}_WAVE": kpf2.data[f"{chip}_{fiber}_WAVE"].copy()
-            for chip in ["GREEN", "RED"]
-            for fiber in ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
+            for chip in CHIPS
+            for fiber in FIBERS
         }
 
         bc_monkeypatched.perform()

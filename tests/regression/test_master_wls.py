@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 import kpfpipe.modules.masters.base as base_module
-from kpfpipe import DETECTOR
+from kpfpipe import DETECTOR, FIBERS
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
 from kpfpipe.utils.kpf import get_obs_id
@@ -765,7 +765,7 @@ class TestCalculateWlsCoeffs:
     def test_underconstrained_multi_fiber_raises(self):
         # 5-fiber: 7*7*3 = 147 free params; 10 lines per fiber * 5 = 50 < 147
         wls = WLS(FILE_LIST)
-        lines = self._make_lines(10, fibers=("SKY", "SCI1", "SCI2", "SCI3", "CAL"))
+        lines = self._make_lines(10, fibers=FIBERS)
         with pytest.raises(ValueError, match=r"underconstrained"):
             wls._calculate_wls_coeffs(lines, wls._echelle_orders["GREEN"])
 
@@ -778,7 +778,7 @@ class TestCalculateWlsCoeffs:
     def test_mlambda_roundtrip_recovers_wavelength(self):
         wls = WLS(FILE_LIST)
         orders = wls._echelle_orders["GREEN"]
-        ncol = wls.ccd["ncol"]
+        ncol = DETECTOR["ccd"]["ncol"]
 
         # The fit models m*lambda as a Legendre surface, so a surface built from
         # known low-degree coefficients must be recovered exactly.
@@ -1032,8 +1032,8 @@ class TestFitLinePositions:
         # A NaN-filled orderlet (extraction failure) is skipped rather than
         # crashing scipy's least_squares.
         wls = WLS(FILE_LIST)
-        ncol = wls.ccd["ncol"]
-        norder = wls.norder["RED"]
+        ncol = DETECTOR["ccd"]["ncol"]
+        norder = DETECTOR["norder"]["RED"]
 
         flux = np.ones((norder, ncol))
         flux[0, :] = np.nan
@@ -1107,8 +1107,8 @@ class TestFitLinePositions:
 
     def test_all_nan_fiber_emits_fiber_level_warning(self, caplog):
         wls = WLS(FILE_LIST)
-        ncol = wls.ccd["ncol"]
-        norder = wls.norder["RED"]
+        ncol = DETECTOR["ccd"]["ncol"]
+        norder = DETECTOR["norder"]["RED"]
 
         flux = np.full((norder, ncol), np.nan)
 

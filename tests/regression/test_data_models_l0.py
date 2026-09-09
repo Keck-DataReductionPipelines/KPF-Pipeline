@@ -16,7 +16,7 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import DETECTOR
+from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
@@ -656,7 +656,7 @@ class TestFiveTraceShape:
         return {
             f"{base}{i}"
             for base in _TRACE_FAMILIES
-            for i in range(1, DETECTOR["numtrace"] + 1)
+            for i in range(1, len(TRACE_MAP) + 1)
         }
 
     @staticmethod

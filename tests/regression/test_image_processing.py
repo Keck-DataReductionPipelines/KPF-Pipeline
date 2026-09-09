@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 from astropy.io import fits
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.modules.image_processing import ImageProcessing
@@ -81,7 +82,7 @@ def _make_module(bias_file=None, bias_dir=None, dark_file=None, dark_dir=None):
 def _write_master(path, value, snr):
     """Write a minimal master FITS file: per-chip IMG = value, SNR = snr."""
     hdus = [fits.PrimaryHDU()]
-    for chip in ("GREEN", "RED"):
+    for chip in CHIPS:
         hdus.append(
             fits.ImageHDU(
                 data=np.full(_SHAPE, value, dtype=np.float32), name=f"{chip}_IMG"
@@ -149,12 +150,12 @@ class TestDtypeProvenance:
 class TestInit:
     def test_none_config(self):
         ip = ImageProcessing(MockL1())
-        assert ip.chips == ["GREEN", "RED"]
+        assert ip.chips == ("GREEN", "RED")  # oracle for DEFAULT_CFG; not CHIPS
 
     def test_dict_config_overrides_chips(self):
         l1 = MockL1()
         ip = ImageProcessing(l1, config={"chips": ["GREEN"]})
-        assert ip.chips == ["GREEN"]
+        assert ip.chips == ("GREEN",)
 
     def test_invalid_config_raises(self):
         with pytest.raises(TypeError, match="config must be"):
@@ -214,7 +215,7 @@ class TestSubtractBias:
         snr = np.full(_SHAPE, _BIAS_SNR, dtype=np.float32)
         snr[0, 0] = 0.0
         hdus = [fits.PrimaryHDU()]
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             hdus.append(
                 fits.ImageHDU(
                     data=np.full(_SHAPE, _BIAS_VALUE, dtype=np.float32),

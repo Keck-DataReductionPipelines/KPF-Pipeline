@@ -11,12 +11,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.flat import Flat
 from kpfpipe.utils.io import FileHandler
 
 from ._dtype_policy import MASK_MEM, assert_dtype
-from ._masters import CHIPS, FILE_LIST, make_mocked_master
+from ._masters import FILE_LIST, make_mocked_master
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 

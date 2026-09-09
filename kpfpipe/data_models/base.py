@@ -29,15 +29,11 @@ from rvdata.core.models.definitions import (
 
 # Reference-data singletons, re-exported so level2/4 import them via base.
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
-from kpfpipe.data_models.config import PATH as _config_path
+from kpfpipe.data_models.config import EXTENSION_ALIASES, TRACE_MAP
 from kpfpipe.data_models.extension_manifest import extension_manifest
 from kpfpipe.data_models.keyword_registry import keyword_registry
 from kpfpipe.utils.io import check_filename_convention, kpf_filename
 from kpfpipe.utils.kpf import is_obs_id
-
-# Trace index -> fiber name, and the 1:1 KPF -> EPRV extension synonyms.
-TRACE_MAP = pd.read_csv(_config_path / "trace-map.csv")
-EXTENSION_ALIASES = pd.read_csv(_config_path / "extension-aliases.csv")
 
 # Data-model conversion/serialization receipts, excluded from DRPSTATU so it
 # names the last real pipeline stage. ``from_fits`` is here too: reading a

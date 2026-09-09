@@ -13,7 +13,7 @@ import pytest
 from astropy.io import fits
 
 import kpfpipe.modules.spectral_extraction as se_module
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -128,8 +128,8 @@ class TestDtypeProvenance:
         norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
         arrays = {
             f"{chip}_{fiber}_{q}": np.ones((norder[chip], NCOL), dtype=np.float32)
-            for chip in ("GREEN", "RED")
-            for fiber in ("CAL", "SCI1", "SCI2", "SCI3", "SKY")
+            for chip in CHIPS
+            for fiber in FIBERS
             for q in ("FLUX", "VAR")
         }
         monkeypatch.setattr(
@@ -172,8 +172,8 @@ class TestPerformShapes:
     @pytest.fixture
     def mock_ffi_arrays(self):
         """Pre-built (chip, fiber) arrays matching real detector dimensions."""
-        chips = ["GREEN", "RED"]
-        fibers = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
+        chips = CHIPS
+        fibers = FIBERS
         norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
         arrays = {}
         for chip in chips:
@@ -543,7 +543,7 @@ class TestExtractFfiFailureTolerance:
     zero CCF.
     """
 
-    def _make_se(self, n_traced):
+    def _make_se(self, n_traced, monkeypatch):
         """SpectralExtraction over 2 GREEN orders with only ``n_traced`` traced."""
 
         class StubL1:
@@ -586,13 +586,11 @@ class TestExtractFfiFailureTolerance:
         se = SpectralExtraction(StubL1())
         se._order_trace = {"GREEN": trace}
         se._order_trace_path = "<stub>"
-        # Rebind rather than mutate: self.norder is the shared DETECTOR dict, so
-        # an item assignment here would resize every later test's detector.
-        se.norder = dict(se.norder, GREEN=2)
+        monkeypatch.setitem(DETECTOR["norder"], "GREEN", 2)
         return se
 
-    def test_one_missing_trace_leaves_a_nan_row(self, caplog):
-        se = self._make_se(n_traced=1)
+    def test_one_missing_trace_leaves_a_nan_row(self, caplog, monkeypatch):
+        se = self._make_se(n_traced=1, monkeypatch=monkeypatch)
         with caplog.at_level(logging.WARNING):
             arrays = se.extract_ffi("GREEN", ["SCI1"])
         flux = arrays["GREEN_SCI1_FLUX"]
@@ -600,8 +598,8 @@ class TestExtractFfiFailureTolerance:
         assert np.all(np.isnan(flux[1]))
         assert "1 orderlet failed" in caplog.text
 
-    def test_two_missing_traces_raise(self):
-        se = self._make_se(n_traced=0)
+    def test_two_missing_traces_raise(self, monkeypatch):
+        se = self._make_se(n_traced=0, monkeypatch=monkeypatch)
         with pytest.raises(LookupError, match="Failed to extract 2"):
             se.extract_ffi("GREEN", ["SCI1"])
 

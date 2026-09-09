@@ -8,6 +8,7 @@ import pytest
 from astropy.io import fits
 from PIL import Image
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.level0 import KPF0
 
 from ._data_models import write_amp_l0
@@ -222,7 +223,7 @@ class TestStitchedImage2To16:
         primary.header["OFNAME"] = os.path.basename(fn)
         primary.header["PROGNAME"] = "K123"
         hdus = [primary]
-        for chip in ["GREEN", "RED"]:
+        for chip in CHIPS:
             for amp in range(1, 5):
                 data = np.full((100, 100), high_val, dtype=np.float64)
                 hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))

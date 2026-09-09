@@ -11,7 +11,7 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import DETECTOR
+from kpfpipe import DETECTOR, FIBERS
 from kpfpipe.data_models.aliased_dict import AliasedOrderedDict
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
@@ -382,7 +382,7 @@ class TestKPF2Aliases:
 
     def test_chip_prefix_all_fibers(self):
         kpf2 = KPF2()
-        for fiber in ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]:
+        for fiber in FIBERS:
             for suffix in ["FLUX", "WAVE", "VAR", "BLAZE"]:
                 assert f"GREEN_{fiber}_{suffix}" in kpf2.data
                 assert f"RED_{fiber}_{suffix}" in kpf2.data

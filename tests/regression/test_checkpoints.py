@@ -18,7 +18,7 @@ import logging
 import numpy as np
 import pytest
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -303,7 +303,7 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
     l1 = fill_primary(stamp_frame_type(KPF1()), "L1")
     l1.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
     if ccd:
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             l1.set_data(f"{chip}_CCD", np.ones(shape, dtype=np.float32))
             l1.set_data(f"{chip}_VAR", np.ones(shape, dtype=np.float32))
 

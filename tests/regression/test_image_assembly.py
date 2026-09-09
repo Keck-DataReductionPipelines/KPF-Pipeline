@@ -13,6 +13,7 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
@@ -71,7 +72,7 @@ class TestImageAssemblyBias:
         assert isinstance(l1, KPF1)
         assert l1.level == 1
 
-    @pytest.mark.parametrize("chip", ["GREEN", "RED"])
+    @pytest.mark.parametrize("chip", CHIPS)
     def test_ccd_shape(self, l1_bias, chip):
         l1, _ = l1_bias
         assert l1.data[f"{chip}_CCD"].shape == (4080, 4080)
@@ -330,7 +331,7 @@ class TestOrientFFI:
         np.testing.assert_array_equal(self.BASE, original)
 
     def test_double_application_is_identity(self):
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             once = ImageAssembly.orient_ffi(self.BASE, chip, 2)
             twice = ImageAssembly.orient_ffi(once, chip, 2)
             np.testing.assert_array_equal(twice, self.BASE)
@@ -343,7 +344,7 @@ class TestOrientFFI:
         rows = np.broadcast_to(np.arange(3)[:, None], (3, 4)).astype(np.float32)
         cols = np.broadcast_to(np.arange(4)[None, :], (3, 4)).astype(np.float32)
 
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             f = ImageAssembly.orient_ffi(flux, chip, 2)
             r = ImageAssembly.orient_ffi(rows, chip, 2)
             c = ImageAssembly.orient_ffi(cols, chip, 2)
@@ -623,7 +624,7 @@ class TestImageAssemblyRoundTrip:
         assembled.to_fits(fn)
         l1_read = KPF1.from_fits(fn)
 
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             ext = f"{chip}_CCD"
             assert l1_read.data[ext].shape == (4080, 4080)
             np.testing.assert_array_almost_equal(

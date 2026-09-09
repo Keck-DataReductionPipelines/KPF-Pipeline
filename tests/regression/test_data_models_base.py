@@ -16,7 +16,8 @@ import pandas as pd
 import pytest
 from astropy.io import fits
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS, SCI_FIBERS
+from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -558,6 +559,30 @@ class TestConfigTables:
         assert "*.csv" in package_data["kpfpipe.data_models.config"]
         assert "*.csv" in package_data["kpfpipe.quality_control.config"]
 
+    def test_trace_map_matches_the_detector_fiber_positions(self):
+        # Two tables, deliberately kept separate: trace-map.csv is bookkeeping
+        # (which fiber label names TRACE{N}), detector.toml [fiber_positions] is
+        # physics (where each fiber sits on the slicer). They are identical by
+        # construction -- trace N is slicer position N-1 -- so this pins the
+        # agreement rather than collapsing either onto the other.
+        trace_map = dict(
+            zip(TRACE_MAP["Fiber"].str.strip(), TRACE_MAP["Trace"], strict=True)
+        )
+        assert trace_map == {
+            fiber: position + 1
+            for fiber, position in DETECTOR["fiber_positions"].items()
+        }
+
+    def test_the_fiber_and_chip_constants_match_the_detector(self):
+        # CHIPS/FIBERS/SCI_FIBERS are spelled out in kpfpipe/__init__.py rather
+        # than derived -- five short tuples read better than the derivation. This
+        # is what stops them drifting from detector.toml.
+        positions = DETECTOR["fiber_positions"]
+        assert FIBERS == tuple(sorted(positions, key=positions.get))
+        assert SCI_FIBERS == tuple(f for f in FIBERS if f.startswith("SCI"))
+        assert CHIPS == tuple(DETECTOR["norder"])
+        assert DETECTOR["numtrace"] == len(FIBERS)
+
 
 class TestHeaderMap:
     """``header-map.csv`` supplies native sources and defaults for PRIMARY
@@ -604,7 +629,7 @@ class TestRouting:
 
     def test_the_per_ccd_rv_set_is_registered_on_every_rv_extension(self):
         registry = KPF1.keyword_registry
-        for i in range(1, DETECTOR["numtrace"] + 1):
+        for i in range(1, len(TRACE_MAP) + 1):
             assert {"RVGREEN", "RVRED", "ERVGREEN", "ERVRED"} <= registry.allowed[
                 f"RV{i}"
             ]

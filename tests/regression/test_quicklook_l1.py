@@ -6,6 +6,7 @@ import pytest
 from astropy.io import fits
 from PIL import Image
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.level1 import KPF1
 
 # Quicklook/QLP render suite: slow PNG rendering, so it is excluded from
@@ -42,7 +43,7 @@ def _build_synthetic_l1(
     primary.header["EXPTIME"] = 300.0
 
     hdus = [primary]
-    for chip in ["GREEN", "RED"]:
+    for chip in CHIPS:
         ccd = (1000.0 + rng.normal(0, 3.0, shape)).astype(np.float32)
         var = np.abs(ccd).astype(np.float32)
         ccd_hdu = fits.ImageHDU(data=ccd, name=f"{chip}_CCD")

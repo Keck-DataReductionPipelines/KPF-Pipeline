@@ -22,15 +22,15 @@ from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DEFAULT_CFG, DETECTOR, SCI_FIBERS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import gaia_client, retry_request, simbad_client
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "do_gaia_query": True,
     "do_simbad_query": True,
     "astrometry_priority": ("gaia", "simbad"),
@@ -177,8 +177,11 @@ class AstroQuery:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
 
         self._validate_priority()
 
@@ -811,8 +814,8 @@ class AstroQuery:
     def _catalog_primary_cards(self):
         """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
 
-        Returns ``{C-keyword: value}`` for every science fiber (the trace indices
-        ``DETECTOR["sci_traces"]``) -- a
+        Returns ``{C-keyword: value}`` for every science fiber, at its 1-based
+        trace index -- a
         direct copy of the canonical row's already-EPRV-format cells, skipping any
         missing value (NaN / "") so the card keeps the blank the seed stamped rather
         than carrying 'nan'. Warns when the canonical astrometry was assembled from
@@ -846,8 +849,8 @@ class AstroQuery:
                 if np.isnan(value):
                     continue
                 value = float(value)
-            for i in DETECTOR["sci_traces"]:
-                cards[f"{base}{i}"] = value
+            for fiber in SCI_FIBERS:
+                cards[f"{base}{DETECTOR['fiber_positions'][fiber] + 1}"] = value
         return cards
 
     # ------------------------------------------------------------------

@@ -12,13 +12,13 @@ import os
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
+from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import bounded_polyval
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
+_DEFAULT_CFG = {**DEFAULT_CFG, "extraction_method": "box"}
 
 
 class SpectralExtraction:
@@ -48,8 +48,11 @@ class SpectralExtraction:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
 
         self._order_trace = None
         self._order_trace_path = None
@@ -350,7 +353,7 @@ class SpectralExtraction:
         chip = chip.upper()
         fibers = [f.upper() for f in fibers]
 
-        norder = self.norder[chip]
+        norder = DETECTOR["norder"][chip]
         nrow, ncol = self.l1_obj.data[f"{chip}_CCD"].shape
 
         l2_arrays = {}
@@ -407,7 +410,9 @@ class SpectralExtraction:
         ]
         fibers_str = " ".join(fibers)
         for chip in chips:
-            lines.append(f"  {chip:<8s} {fibers_str:<30s} {self.norder[chip.upper()]}")
+            lines.append(
+                f"  {chip:<8s} {fibers_str:<30s} {DETECTOR['norder'][chip.upper()]}"
+            )
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
     def _set_headers(self, l2_obj, extraction_method):

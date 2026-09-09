@@ -4,9 +4,8 @@ Builders only -- nothing here asserts. ``_dtype_policy.py`` is the one contract
 module; if a cross-cutting contract needs assertions, promote it to a new
 contract module rather than growing one here.
 
-Detector-derived constants are read from the production ``DETECTOR`` table so
-they cannot drift. ``FIBERS`` is in canonical slicer order (``fiber_positions``
-in ``reference/detector.toml``); a test asserting a production default's fiber
+Constants are re-exported from ``kpfpipe`` (``CHIPS``, ``FIBERS``) and
+``DETECTOR`` so they cannot drift. A test asserting a production default's fiber
 *ordering* is an oracle and must keep spelling the order out literally.
 
 Deliberately absent: a shared array width. Every consumer picks its own ncol for
@@ -20,18 +19,15 @@ import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS, SCI_FIBERS
 
 # --- detector-derived constants --------------------------------------------
 
-CHIPS = ("GREEN", "RED")
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER_TOTAL = DETECTOR["numorder"]
 NORDER = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
 
-# Canonical slicer order: SKY=0, SCI1=1, SCI2=2, SCI3=3, CAL=4.
-FIBERS = tuple(sorted(DETECTOR["fiber_positions"], key=DETECTOR["fiber_positions"].get))
 
 # Self-consistent raw timing cards (END - BEG == ELAPSED), for the DATTIMOK check.
 GOOD_DATES = {
@@ -361,7 +357,7 @@ def make_l4(
                 return np.zeros(NORDER_TOTAL)
             return rng.normal(0, width, NORDER_TOTAL)
 
-        for fiber in ("SCI1", "SCI2", "SCI3"):
+        for fiber in SCI_FIBERS:
             if not rv_filled:
                 rv_col = np.full(NORDER_TOTAL, np.nan)
             else:

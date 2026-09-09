@@ -123,10 +123,10 @@ Notes section citing papers — see radial_velocity.py / barycentric_correction.
 
 import os                                   # 1. stdlib
 import numpy as np                          # 2. third-party
-from kpfpipe import DEFAULTS                 # 3. first-party (absolute only)
+from kpfpipe import DEFAULT_CFG              # 3. first-party (absolute only)
 from kpfpipe.utils.config import ConfigHandler
 
-_DEFAULTS = {**DEFAULTS, "module_param": ...}   # module constants are private (leading _)
+_DEFAULT_CFG = {**DEFAULT_CFG, "module_param": ...}  # module constants are private (leading _)
 
 
 class StageName:
@@ -207,7 +207,7 @@ modules — follow *its* conventions:
   keyword-only shape as `perform()` (§C.3) and `l0_file_list` as the sole positional.
 - **Thin subclasses over `BaseMasterModule`.** `Bias`/`Dark`/`Flat`/`WLS` add only an `__init__`
   (selecting the config section), the `make_master_*` entry point, and an `info()` ASCII-table
-  summary; `_DEFAULTS` extends the base (`{**BaseMasterModule._DEFAULTS, ...}`).
+  summary; `_DEFAULT_CFG` extends the base (`{**BaseMasterModule._DEFAULT_CFG, ...}`).
 - **Public API is `make_master*`, `save*`, `stack_frames`, `info`**; every other method is
   underscored (tests patch the underscored names directly).
 
@@ -260,7 +260,9 @@ but its values are EPRV targets.)*
   separated, single header row, read with `pandas.read_csv`, always ending in a `Description`
   column. Extension manifests (`L0-extensions.csv`, …) are `HDU,Name,DataType,Required,Description`;
   mapping tables are `extension-aliases.csv` (`KPF,EPRV,…`) and `trace-map.csv` (`Trace,Fiber,…`).
-- **Keep fiber names in sync** across `trace-map.csv`, `[TRACES].fibers`, and `detector.toml`.
+- **Keep fiber names in sync** across `trace-map.csv` and `detector.toml`; `TestConfigTables` pins
+  the two against each other and against `FIBERS`/`SCI_FIBERS`. `[TRACES].fibers` is not a sync
+  target — it is the override surface, and may name a subset.
 
 #### Headers
 
@@ -390,16 +392,17 @@ Cross-cutting conventions that apply regardless of subsystem.
 | Per-level classes | compact level suffix `L0/L1/L2`, **not** `Level0` | `DiagL0`, `QCL1`, `KPF2` |
 | Predicates | `is_*`, return `bool` | `is_obs_id`, `is_timestamp` |
 | Converters | `<x>_to_<y>` | `air_to_vac`, `utc_to_hst` |
-| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `DEFAULTS`, `DETECTOR`, `NORDER_GREEN` |
-| Module constants | `_UPPER_SNAKE`; modules export **no** importable constants (lone exception: `ImageAssembly.RN_KEYS`) | `_DEFAULTS`, `_OBS_ID_PATTERN` |
+| Public constants | `UPPER_SNAKE`; allowed in `data_models/` and the package root, **never in `modules/`** | `DEFAULT_CFG`, `DETECTOR`, `CHIPS` |
+| Module constants | `_UPPER_SNAKE`; modules export **no** importable constants (lone exception: `ImageAssembly.RN_KEYS`) | `_DEFAULT_CFG`, `_OBS_ID_PATTERN` |
 
 - **One public class per module**, its name = CamelCase of the filename.
 - **Math-heavy locals may be terse single capitals** mirroring a published algorithm (Horne 1986
   `D, V, S, F, P, M, W`) — only in numerical code, only when documented in the surrounding
   docstring. Use descriptive names everywhere else.
 - **Modules define no public constants.** Every `kpfpipe/modules/` module-level constant is
-  `_`-private; pull detector geometry from `DETECTOR` (exposed on every instance as `self.norder`
-  etc.) and physical constants from `astropy` rather than re-declaring them.
+  `_`-private; pull detector geometry from `DETECTOR`, CCD/fiber identifiers from `kpfpipe`
+  (`CHIPS`, `FIBERS`, `SCI_FIBERS`), and physical constants from `astropy` rather than
+  re-declaring them.
 
 ### C.2 Class design
 
@@ -418,11 +421,11 @@ Cross-cutting conventions that apply regardless of subsystem.
       params = config.get_params(["DATA_DIRS", "TRACES", "MODULE_<NAME>"])
   else:
       raise TypeError("config must be None, dict, or ConfigHandler")
-  for k, v in _DEFAULTS.items():
+  for k, v in _DEFAULT_CFG.items():
       setattr(self, k, params.get(k, v))
   ```
-  `_DEFAULTS` merges the globals (`{**DEFAULTS, ...}`). Resolution is a three-tier chain, lowest
-  first: `_DEFAULTS` (in-module default) → config (TOML) → a direct method kwarg (the developer/
+  `_DEFAULT_CFG` merges the globals (`{**DEFAULT_CFG, ...}`). Resolution is a three-tier chain,
+  lowest first: `_DEFAULT_CFG` (in-module default) → config (TOML) → a direct method kwarg (the developer/
   interactive override, not used in production).
 - **Declare every lazily-populated attribute in `__init__`** (to `None`/`{}`), with a trailing
   `# populated by …` comment only where the filler isn't obvious (no hidden state):
@@ -442,7 +445,7 @@ Cross-cutting conventions that apply regardless of subsystem.
   `chips`, `fibers` are the only positionals (omit either if unused; a module whose primary selector
   is something else keeps it in the same slot). Everything else is keyword-only after a bare `*`, in
   two groups: **configurable** params (`=None`, resolving to `self.<attr>`) first, then **semi-hidden**
-  knobs with a real literal default (e.g. `min_npts=9`) that are absent from `_DEFAULTS`/config. The
+  knobs with a real literal default (e.g. `min_npts=9`) that are absent from `_DEFAULT_CFG`/config. The
   tier must be legible from the signature — `=None` ⇒ configurable, literal ⇒ semi-hidden — so a
   semi-hidden sequence default is an immutable tuple (`clip_edge_pixels=(500, 500)`), never a
   `None`-sentinel + in-body list. `make_master_*` follows the same shape with `l0_file_list` as the
@@ -502,7 +505,7 @@ Cross-cutting conventions that apply regardless of subsystem.
   (`hst_to_utc`), and a staged-ahead helper already covered by tests (`air_to_vac`). Anything else
   unused is dead code.
 - **A `utils/` IO/discovery handler is a lighter class variant** (e.g. `io.FileHandler`): it takes the
-  already-extracted `[DATA_DIRS]` dict (not a `ConfigHandler`) and omits the `_DEFAULTS` loop when
+  already-extracted `[DATA_DIRS]` dict (not a `ConfigHandler`) and omits the `_DEFAULT_CFG` loop when
   nothing is tunable, keeping per-call knobs as method arguments.
 
 ### C.6 Imports
@@ -550,8 +553,12 @@ Cross-cutting conventions that apply regardless of subsystem.
   state, and never depend on a fixed on-disk path or test order.
 - **Git-receipt constraint**: never `chdir` outside the repo (it breaks the receipt's git-SHA
   stamping); CLI subprocess tests run with `cwd`/`PYTHONPATH = _REPO_ROOT`.
-- **Determinism**: `np.random.default_rng(<int>)`, never `np.random.seed()`. Constants come from
-  `DETECTOR`, never hardcoded.
+- **Determinism**: `np.random.default_rng(<int>)`, never `np.random.seed()`.
+- **Constants** are imported, not hardcoded: `CHIPS`/`FIBERS`/`SCI_FIBERS` and detector geometry
+  from `kpfpipe`; trace counts follow the layer split — `DETECTOR["numtrace"]` in module tests,
+  `len(TRACE_MAP)` in data-model tests. Two kinds stay literal: an **oracle** pinning a production
+  default or module-local literal (deriving it asserts nothing), and a **deliberately non-canonical
+  ordering** where the order is the assertion. Say which in a comment.
 - **Dtype provenance**: a `TestDtypeProvenance` class per module asserts the §C.4 policy at the
   extension boundaries, internal math, and across a FITS round-trip (via `_dtype_policy.py`); assert
   *precision* (kind + itemsize), **not** the exact dtype object.

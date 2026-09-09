@@ -15,11 +15,14 @@ import pytest
 from scipy.ndimage import label
 
 import kpfpipe.modules.masters.order_trace as order_trace_module
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.modules.masters import OrderTrace
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 from kpfpipe.utils.config import ConfigHandler
 
-_FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
+# Slicer order, bottom to top; a list because the trace fixtures slice and
+# concatenate it to build out-of-order and duplicated trace sequences.
+_FIBERS = list(FIBERS)
 _TRACE_FIELDS = [
     "Chip",
     "Fiber",
@@ -132,25 +135,33 @@ def master_path(tmp_path, monkeypatch):
     return path
 
 
+def _shrink_detector(monkeypatch, *, norder=None, nrow=None, ncol=None):
+    """Point DETECTOR at a synthetic geometry, as conftest's mini_detector does.
+
+    Detector geometry is not module-configurable -- it is a property of the
+    instrument, not a pipeline setting -- so a test wanting a 3-order 400-column
+    CCD patches the table the modules read.
+    """
+    if norder is not None:
+        monkeypatch.setitem(DETECTOR["norder"], "GREEN", norder)
+    if nrow is not None:
+        monkeypatch.setitem(DETECTOR["ccd"], "nrow", nrow)
+    if ncol is not None:
+        monkeypatch.setitem(DETECTOR["ccd"], "ncol", ncol)
+
+
 def _tracer(tmp_path, image, monkeypatch, norder=3, **config):
     """Return an OrderTrace wired to a synthetic single-chip master flat."""
     master_path = tmp_path / "KP.20240405.00020.86_master_flat_L1.fits"
     master_path.touch()
     nrow, ncol = image.shape
+    _shrink_detector(monkeypatch, norder=norder, nrow=nrow, ncol=ncol)
     monkeypatch.setattr(
         order_trace_module,
         "KPFMasterL1",
         _stub_master_class(StubMasterFlat({"GREEN": image})),
     )
-    return OrderTrace(
-        master_path,
-        {
-            "chips": ["GREEN"],
-            "norder": {"GREEN": norder},
-            "ccd": {"nrow": nrow, "ncol": ncol},
-            **config,
-        },
-    )
+    return OrderTrace(master_path, {"chips": ["GREEN"], **config})
 
 
 def _fiber_metadata(rows, cal_indices):
@@ -567,11 +578,12 @@ class TestTraceIdentity:
         assert "edge-clipped orderlet at detector row 262" in caplog.text
 
     def test_discards_a_lone_orderlet_beyond_the_expected_orders(
-        self, master_path, caplog
+        self, master_path, caplog, monkeypatch
     ):
         rows = [100, 119, 138, 157, 176, 191, 210, 229, 248, 267, 282]
         metadata = _fiber_metadata(rows, cal_indices={4, 9})
-        tracer = OrderTrace(master_path, {"norder": {"GREEN": 2}})
+        _shrink_detector(monkeypatch, norder=2)
+        tracer = OrderTrace(master_path)
         metadata = tracer._assign_fiber_identities("GREEN", metadata)
 
         with caplog.at_level("WARNING"):
@@ -581,7 +593,9 @@ class TestTraceIdentity:
         assert identities["cluster"].notna().all()
         assert "3 orders detected but 2 expected" in caplog.text
 
-    def test_discards_a_lone_orderlet_at_each_edge(self, master_path, caplog):
+    def test_discards_a_lone_orderlet_at_each_edge(
+        self, master_path, caplog, monkeypatch
+    ):
         # Both edge orders open off the detector, leaving a lone CAL apiece. One
         # discard cannot settle this: the count has to be walked down twice.
         # Phasing is fed rather than run: two lone CALs put the CAL count two
@@ -591,7 +605,8 @@ class TestTraceIdentity:
         metadata = _fiber_metadata(rows, cal_indices=cal_indices)
         metadata["is_cal"] = [index in cal_indices for index in range(len(rows))]
         metadata["Fiber"] = ["CAL"] + _FIBERS * 2 + ["CAL"]
-        tracer = OrderTrace(master_path, {"norder": {"GREEN": 2}})
+        _shrink_detector(monkeypatch, norder=2)
+        tracer = OrderTrace(master_path)
 
         with caplog.at_level("WARNING"):
             identities = tracer._assign_order_indexes("GREEN", metadata)
@@ -705,7 +720,7 @@ class TestConfiguration:
 
         tracer = OrderTrace(master_path, ConfigHandler(config_path))
 
-        assert tracer.chips == ["GREEN", "RED"]
+        assert tracer.chips == ("GREEN", "RED")
         assert tracer.poly_degree == 2
 
     def test_rejects_an_unusable_config(self, master_path):
@@ -861,11 +876,9 @@ def _fitted_tracer(tmp_path, monkeypatch, **kwargs):
 
 
 class TestApertureConstraint:
-    def _make_tracer(self, master_path, norder=1, ncol=400):
-        return OrderTrace(
-            master_path,
-            {"ccd": {"nrow": 400, "ncol": ncol}, "norder": {"GREEN": norder}},
-        )
+    def _make_tracer(self, master_path, monkeypatch, norder=1, ncol=400):
+        _shrink_detector(monkeypatch, norder=norder, nrow=400, ncol=ncol)
+        return OrderTrace(master_path)
 
     def test_clamps_contended_neighbours_and_keeps_roomy_ones(
         self, tmp_path, monkeypatch
@@ -923,7 +936,7 @@ class TestApertureConstraint:
         fitted = tracer._trace_tables["GREEN"]
         crossing = fitted.index[fitted["Fiber"] == "SCI1"][0]
         fitted.loc[crossing, "Coeff1"] -= (
-            2 * _ORDERLET_SPACING / (tracer.ccd["ncol"] - 1)
+            2 * _ORDERLET_SPACING / (DETECTOR["ccd"]["ncol"] - 1)
         )
 
         with pytest.raises(ValueError, match="orderlet gap"):
@@ -1021,7 +1034,7 @@ class TestApertureConstraint:
         assert (fitted["Status"] == "unknown").all()
         # X1-X2 arrives as the span the fit was constrained over.
         assert (fitted["X1"] == 0).all()
-        assert (fitted["X2"] == tracer.ccd["ncol"] - 1).all()
+        assert (fitted["X2"] == DETECTOR["ccd"]["ncol"] - 1).all()
 
         # What the fit accepted at the sampled columns stays with them.
         sampled = tracer._profiles["GREEN"]
@@ -1086,8 +1099,8 @@ class TestApertureConstraint:
         # The profiles are a property of the image, so they survive.
         assert sampled["profiles"] is profiles
 
-    def test_validation_rejects_overlapping_apertures(self, master_path):
-        tracer = self._make_tracer(master_path, norder=1)
+    def test_validation_rejects_overlapping_apertures(self, master_path, monkeypatch):
+        tracer = self._make_tracer(master_path, monkeypatch, norder=1)
         centers = [100.0, 120.0, 140.0, 160.0, 180.0]
         edges = [(6.0, 6.0), (6.0, 6.0), (6.0, 25.0), (25.0, 6.0), (6.0, 6.0)]
         rows = [
@@ -1110,8 +1123,10 @@ class TestApertureConstraint:
         with pytest.raises(ValueError, match="apertures overlap"):
             tracer._validate_trace_table("GREEN")
 
-    def test_validation_rejects_a_trace_that_leaves_and_returns(self, master_path):
-        tracer = self._make_tracer(master_path, norder=1)
+    def test_validation_rejects_a_trace_that_leaves_and_returns(
+        self, master_path, monkeypatch
+    ):
+        tracer = self._make_tracer(master_path, monkeypatch, norder=1)
         rows = [
             {
                 **_straight_trace(100.0 + 20.0 * position, 0.0, 6.0, 6.0),
@@ -1133,9 +1148,9 @@ class TestApertureConstraint:
             tracer._validate_trace_table("GREEN")
 
     def test_neighbours_sharing_no_fitted_column_are_left_unclamped(
-        self, master_path, caplog
+        self, master_path, caplog, monkeypatch
     ):
-        tracer = self._make_tracer(master_path, norder=1)
+        tracer = self._make_tracer(master_path, monkeypatch, norder=1)
         rows = [
             {
                 **_straight_trace(100.0 + 20.0 * position, 0.0, 6.0, 6.0),
@@ -1176,7 +1191,7 @@ class TestRealData:
 
         tracer = OrderTrace(masters[0])
         combined = tracer.make_master(output_dir=tmp_path)
-        tables = {chip: combined[combined["Chip"] == chip] for chip in ("GREEN", "RED")}
+        tables = {chip: combined[combined["Chip"] == chip] for chip in CHIPS}
 
         # Resolve the reference through the same era lookup extraction uses. A
         # masters product goes through no to_kpf1, so it carries neither JD_UTC
@@ -1197,9 +1212,9 @@ class TestRealData:
         obs_id = masters[0].name.split("_master_flat")[0]
         assert (tmp_path / f"{obs_id}_master_order_trace.csv").is_file()
 
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             assert np.nanmedian(tables[chip]["PolyfitRMS"]) < 1.0
-            _assert_apertures_disjoint(tables[chip], tracer.ccd["ncol"])
+            _assert_apertures_disjoint(tables[chip], DETECTOR["ccd"]["ncol"])
             assert np.nanmax(tables[chip]["PolyfitRMS"]) < 2.0
 
             reference = vetted[

@@ -13,6 +13,7 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
+from kpfpipe import CHIPS, FIBERS, SCI_FIBERS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -115,7 +116,7 @@ def _make_kpf1(
     primary.header["EXPTIME"] = 300.0
 
     hdus = [primary]
-    for chip in ["GREEN", "RED"]:
+    for chip in CHIPS:
         data = np.ones(shape, dtype=np.float32)
         if not finite_ccd:
             data[0, 0] = np.nan
@@ -159,8 +160,8 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
     chip-prefix __setitem__ rejects any other shape. ``nan_frac`` and ``zero_frac``
     are the fractions of total pixels reported via the NAN* and ZERO* headers.
     """
-    chips = ["GREEN", "RED"]
-    fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
+    chips = CHIPS
+    fibers = FIBERS
     ncols = _NCOLS
 
     kpf2 = stamp_frame_type(KPF2())
@@ -375,7 +376,7 @@ class TestQCL0:
         primary.header["OFNAME"] = os.path.basename(fn)
         primary.header["PROGNAME"] = "K123"
         hdus = [primary]
-        for chip in ["GREEN", "RED"]:
+        for chip in CHIPS:
             for amp in range(1, 5):
                 # data=None: KPF0 stores array(None, dtype=object), treated as absent.
                 hdus.append(fits.ImageHDU(data=None, name=f"{chip}_AMP{amp}"))
@@ -392,7 +393,7 @@ class TestQCL0:
         primary.header["OFNAME"] = os.path.basename(fn)
         primary.header["PROGNAME"] = "K123"
         hdus = [primary]
-        for chip in ["GREEN", "RED"]:
+        for chip in CHIPS:
             for amp in (1, 2):
                 data = np.ones((20, 10), dtype=np.float32)
                 hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
@@ -424,7 +425,7 @@ class TestQCL0:
         primary.header["OFNAME"] = os.path.basename(fn)
         primary.header["PROGNAME"] = "K123"
         hdus = [primary]
-        for chip in ["GREEN", "RED"]:
+        for chip in CHIPS:
             for amp in (1, 2, 3):  # 3 amps -> not a valid 2/4-amp readout
                 data = np.ones((10, 10), dtype=np.float32)
                 hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
@@ -1928,7 +1929,7 @@ class TestQCL4:
         # The EPRV-required columns, and the per-order BJD_TDB/BERV/WEIGHT the
         # DiagL4 dispersion metrics consume, are absent: the product is incomplete.
         l4 = KPF4()
-        for fiber in ("SCI1", "SCI2", "SCI3"):
+        for fiber in SCI_FIBERS:
             l4.set_data(f"{fiber}_CCF", np.ones((NORDER_TOTAL, 5)))
             l4.set_data(f"{fiber}_CCF_VAR", np.ones((NORDER_TOTAL, 5)))
             l4.set_data(

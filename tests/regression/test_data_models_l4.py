@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from kpfpipe import DETECTOR
+from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
@@ -154,7 +155,7 @@ class TestKPF4:
         # A dark fiber must ship the same table shape as an illuminated one, so
         # the skeleton comes from the manifest rather than from what was filled.
         kpf4 = KPF4()
-        for trace in range(1, DETECTOR["numtrace"] + 1):
+        for trace in range(1, len(TRACE_MAP) + 1):
             table = kpf4.data[f"RV{trace}"]
             assert len(table.columns) == 12, (f"RV{trace}", list(table.columns))
 

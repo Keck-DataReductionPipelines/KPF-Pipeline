@@ -13,8 +13,9 @@ import numpy as np
 import pandas as pd
 from astropy.coordinates import Angle
 
-from kpfpipe import DETECTOR, REPO_ROOT, __githash__, __version__
+from kpfpipe import REPO_ROOT, __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.kpf import get_obs_id
@@ -303,7 +304,7 @@ class KPF0(KPFDataModel):
             ("solar" if is_solar else "sci") if obstype == "Object" else "cal",
         )
 
-        for trace in range(1, DETECTOR["numtrace"] + 1):
+        for trace in range(1, len(TRACE_MAP) + 1):
             source = prim.get(f"TRACE{trace}")
             if not source:
                 continue

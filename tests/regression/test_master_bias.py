@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.modules.masters.bias import Bias
 from kpfpipe.utils.io import kpf_filepath
@@ -17,7 +18,6 @@ from kpfpipe.utils.kpf import get_obs_id
 
 from ._dtype_policy import L1_IMAGE, assert_dtype
 from ._masters import (
-    CHIPS,
     FILE_LIST,
     MASTER_NAME,
     NCOL,
@@ -133,7 +133,7 @@ class TestMasterBiasRegression:
     def test_snr_never_negative(self, master_bias):
         # SNR is non-negative by construction (|counts| / sqrt(var)); bad pixels
         # are exactly zero, never negative.
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             assert np.all(master_bias.data[f"{chip}_SNR"] >= 0)
 
     def test_mask_has_good_pixels(self, master_bias):

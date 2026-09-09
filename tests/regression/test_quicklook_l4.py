@@ -21,6 +21,7 @@ NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER = DETECTOR["numorder"]
 NVEL = 21  # small velocity grid for fast tests
 
+# Mirrors level4.py's own _FIBERS -- SCI-first panel order, not FIBERS'.
 _FIBERS = ["SCI1", "SCI2", "SCI3", "CAL", "SKY"]
 _CHIPS = ["GREEN", "RED"]
 _VELSTART = -10.0

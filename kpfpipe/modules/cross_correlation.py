@@ -36,15 +36,15 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
+from kpfpipe import CHIPS, DEFAULT_CFG, DETECTOR, REPO_ROOT
 from kpfpipe.utils.astro import color_to_teff, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "ccf_mask_width": 1.0,
     "ccf_step_size": 0.25,
     "ccf_window": [-100.0, 100.0],
@@ -80,8 +80,11 @@ class CrossCorrelation:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        # chips/fibers arrive as TOML lists but default to tuples; pin the type.
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
 
         # Lazily-populated caches; the per-orderlet ones are keyed by f'{chip}_{fiber}'.
         self._illumination_source = {}  # set by _resolve_illumination_source()
@@ -585,13 +588,10 @@ class CrossCorrelation:
         )
 
         # SOURCE = illumination source; NCCF = orders with a non-zero CCF, per chip.
-        fiber_order = [f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in info]
-        fiber_order += [f for f in info if f not in fiber_order]
-
         lines.append(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NCCF':>8s}")
         lines.append("  " + "-" * 34)
-        for chip in ("GREEN", "RED"):
-            for fiber in fiber_order:
+        for chip in chips:
+            for fiber in info:
                 res = info[fiber]
                 nccf = res.get("nccf", {}).get(chip)
                 if not nccf:
@@ -692,8 +692,8 @@ class CrossCorrelation:
         self._chips_done = chips
         self._ccf_step_size = ccf_step_size
 
-        norder_green = self.norder["GREEN"]
-        norder = norder_green + self.norder["RED"]
+        norder_green = DETECTOR["norder"]["GREEN"]
+        norder = norder_green + DETECTOR["norder"]["RED"]
 
         l4_obj = self.l2_obj.to_kpf4()
 
@@ -745,20 +745,20 @@ class CrossCorrelation:
             order_id = np.array(
                 [
                     f"{chip}_{fiber}_{order}"
-                    for chip in ("GREEN", "RED")
-                    for order in range(self.norder[chip])
+                    for chip in CHIPS
+                    for order in range(DETECTOR["norder"][chip])
                 ]
             )
             echelle_order = np.concatenate(
                 [
                     np.linspace(
-                        self.echelle_orders[chip][0],
-                        self.echelle_orders[chip][1],
-                        self.norder[chip],
+                        DETECTOR["echelle_orders"][chip][0],
+                        DETECTOR["echelle_orders"][chip][1],
+                        DETECTOR["norder"][chip],
                     )
                     .round()
                     .astype(np.int64)
-                    for chip in ("GREEN", "RED")
+                    for chip in CHIPS
                 ]
             )
             wave = np.asarray(self.l2_obj.data[f"{fiber}_WAVE"], dtype=np.float64)
