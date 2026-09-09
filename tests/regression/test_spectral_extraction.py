@@ -4,6 +4,7 @@ Extraction-algorithm and perform() tests run on synthetic arrays, the latter wit
 extract_ffi monkeypatched; the real-L0 regression class is marked slow.
 """
 
+import io
 import logging
 from pathlib import Path
 
@@ -634,13 +635,23 @@ _STUB_TRACE = (
 
 
 def _stub_reference_tree(tmp_path, monkeypatch):
-    """Stub the repo reference tree: three instrument eras, three order traces."""
+    """Stub the repo reference tree: three instrument eras, three order traces.
+
+    The eras are the loaded table, not a file, so they are patched on the module
+    rather than written under the stub REPO_ROOT the traces are globbed from.
+    """
     traces = tmp_path / "reference" / "order_traces"
     traces.mkdir(parents=True)
-    (tmp_path / "reference" / "instrument_eras.csv").write_text(_STUB_ERAS)
     for datecode in ("20231101", "20240301", "20240501"):
         (traces / f"order_trace_{datecode}.csv").write_text(_STUB_TRACE)
     monkeypatch.setattr(se_module, "REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        se_module,
+        "INSTRUMENT_ERAS",
+        pd.read_csv(
+            io.StringIO(_STUB_ERAS), parse_dates=["UT_start_date", "UT_end_date"]
+        ),
+    )
     return traces
 
 

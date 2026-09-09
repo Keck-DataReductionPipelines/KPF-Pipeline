@@ -10,10 +10,10 @@ import importlib.resources
 
 import pandas as pd
 
+from kpfpipe.data_models.config import PATH as _KPF_CFG_PATH
 from kpfpipe.data_models.config import TRACE_MAP
 
-_RVDATA = importlib.resources.files("rvdata.core.models.config")
-_KPF = importlib.resources.files("kpfpipe.data_models.config")
+_RVDATA_CFG_PATH = importlib.resources.files("rvdata.core.models.config")
 
 # rvdata numbers its per-telescope families ``BASE1 ... BASE#``. KPF observes on
 # one telescope, so those expand to index 1 alone.
@@ -26,12 +26,12 @@ _INDICES = range(1, len(TRACE_MAP) + 1)
 
 def rvdata_table(name):
     """An installed rvdata reference table, by filename stem."""
-    return pd.read_csv(_RVDATA / f"{name}.csv")
+    return pd.read_csv(_RVDATA_CFG_PATH / f"{name}.csv")
 
 
 def kpf_table(name):
     """A KPF config table, by filename stem."""
-    return pd.read_csv(_KPF / f"{name}.csv")
+    return pd.read_csv(_KPF_CFG_PATH / f"{name}.csv")
 
 
 def expand(keyword):

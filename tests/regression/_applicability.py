@@ -10,16 +10,13 @@ normalization (the class-prefix split, the boolean coercion, the BOM handling).
 NaN, so the comparison turns on the text the file holds.
 """
 
-import importlib.resources
 import re
 
 import pandas as pd
 
+from kpfpipe.data_models.config import PATH as _KEYWORD_CFG_PATH
 from kpfpipe.data_models.extension_manifest import extension_manifest
-
-_KEYWORD_CFG = importlib.resources.files("kpfpipe.data_models.config")
-
-_CFG = importlib.resources.files("kpfpipe.quality_control.config")
+from kpfpipe.quality_control.config import PATH as _QC_CFG_PATH
 
 # The boolean columns, spelled out rather than imported so a silent edit to
 # ``applicability.FRAME_TYPES`` cannot pass unnoticed.
@@ -35,7 +32,7 @@ DESCRIPTION = re.compile(r"^(?P<keyword>[A-Z0-9_-]{1,8}): (?P<text>.+)$")
 def table(class_name):
     """``class_name``'s applicability CSV as a DataFrame, columns unmodified."""
     return pd.read_csv(
-        _CFG / f"{class_name}-applicability.csv",
+        _QC_CFG_PATH / f"{class_name}-applicability.csv",
         encoding="utf-8-sig",
         keep_default_na=False,
     )
@@ -82,7 +79,7 @@ def registered_keywords(populated_by):
     template) and the oracle does not inherit the registry's expansion.
     """
     rows = {}
-    for path in sorted(_KEYWORD_CFG.iterdir(), key=lambda p: p.name):
+    for path in sorted(_KEYWORD_CFG_PATH.iterdir(), key=lambda p: p.name):
         if not path.name.endswith("-keywords.csv"):
             continue
         table = pd.read_csv(path, keep_default_na=False)

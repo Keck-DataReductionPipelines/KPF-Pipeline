@@ -7,7 +7,6 @@ KPF2/KPF4 round-trip guards live in test_data_models_l{2,4}.py.
 """
 
 import importlib.metadata
-import importlib.resources
 import tomllib
 from pathlib import Path
 
@@ -17,6 +16,7 @@ import pytest
 from astropy.io import fits
 
 from kpfpipe import CHIPS, DETECTOR, FIBERS, SCI_FIBERS
+from kpfpipe.data_models.config import PATH as _CFG_PATH
 from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
@@ -489,7 +489,6 @@ class TestBareModelDefaults:
         assert DETECTOR["numorder"] == 67
 
 
-_CFG = importlib.resources.files("kpfpipe.data_models.config")
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _KEYWORD_COLUMNS = [
@@ -507,7 +506,7 @@ _DATA_MODELS = ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
 
 def _keyword_files():
     return sorted(
-        (p for p in _CFG.iterdir() if p.name.endswith("-keywords.csv")),
+        (p for p in _CFG_PATH.iterdir() if p.name.endswith("-keywords.csv")),
         key=lambda p: p.name,
     )
 
@@ -537,7 +536,9 @@ class TestConfigTables:
 
     def test_every_data_model_has_a_manifest_with_the_manifest_schema(self):
         for data_model in _DATA_MODELS:
-            columns = list(pd.read_csv(_CFG / f"{data_model}-extensions.csv").columns)
+            columns = list(
+                pd.read_csv(_CFG_PATH / f"{data_model}-extensions.csv").columns
+            )
             assert columns == _MANIFEST_COLUMNS, data_model
 
     def test_keyword_filenames_use_a_known_data_model(self):
@@ -591,7 +592,7 @@ class TestHeaderMap:
 
     @staticmethod
     def _map():
-        return pd.read_csv(_CFG / "header-map.csv")
+        return pd.read_csv(_CFG_PATH / "header-map.csv")
 
     def test_keys_are_unique(self):
         keys = self._map()["EPRV_KEY"].astype(str).str.strip()
@@ -606,7 +607,7 @@ class TestHeaderMap:
         registered = {
             member
             for level in ("L0", "L1", "L2", "L4")
-            for keyword in pd.read_csv(_CFG / f"{level}-PRIMARY-keywords.csv")[
+            for keyword in pd.read_csv(_CFG_PATH / f"{level}-PRIMARY-keywords.csv")[
                 "Keyword"
             ]
             for member in expand(keyword)

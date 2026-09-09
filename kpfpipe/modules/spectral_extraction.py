@@ -12,7 +12,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT
+from kpfpipe import DEFAULT_CFG, DETECTOR, INSTRUMENT_ERAS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import bounded_polyval
 
@@ -80,10 +80,7 @@ class SpectralExtraction:
         instera = str(primary["INSTERA"])
         obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
 
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
+        eras = INSTRUMENT_ERAS
         match = eras[eras["INSTERA"].astype(str) == instera]
         if match.empty:
             raise ValueError(

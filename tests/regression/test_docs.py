@@ -8,12 +8,12 @@ here against the config registries it documents.
 """
 
 import csv
-import importlib.resources
 from pathlib import Path
 
 import pandas as pd
 
-_CFG = importlib.resources.files("kpfpipe.data_models.config")
+from kpfpipe.data_models.config import PATH as _CFG_PATH
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DOCS_TABLE = _REPO_ROOT / "docs" / "source" / "data_products" / "PRIMARY-keywords.csv"
 
@@ -52,7 +52,7 @@ def _registered():
     rows = {}
     for level in _LEVELS:
         table = pd.read_csv(
-            _CFG / f"{level}-PRIMARY-keywords.csv", keep_default_na=False
+            _CFG_PATH / f"{level}-PRIMARY-keywords.csv", keep_default_na=False
         )
         for _, row in table.iterrows():
             rows[row["Keyword"].strip()] = tuple(

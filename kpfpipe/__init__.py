@@ -6,6 +6,8 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import pandas as pd
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 try:
@@ -66,11 +68,22 @@ def load_observatory_config():
     return tomllib.loads(path.read_text())
 
 
+def load_instrument_era_reference():
+    """The KPF instrument eras, one row per era, dated bounds parsed.
+
+    INSTERA is left as read (a float, e.g. 2.0); consumers that compare it to a
+    header value cast to str, as the keyword carries it.
+    """
+    path = Path(REPO_ROOT) / "reference/instrument_eras.csv"
+    return pd.read_csv(path, parse_dates=["UT_start_date", "UT_end_date"])
+
+
 CHIPS = ("GREEN", "RED")
 FIBERS = ("SKY", "SCI1", "SCI2", "SCI3", "CAL")
 SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 DETECTOR = load_detector_config()
 OBSERVATORY = load_observatory_config()
+INSTRUMENT_ERAS = load_instrument_era_reference()
 
 # By default use both CCDs and all five fibers
 DEFAULT_CFG = {
