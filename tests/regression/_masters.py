@@ -33,9 +33,9 @@ def make_l1_arrays(rng=None, chips=CHIPS, shape=(NROW, NCOL)):
 # masters modules (the largest is 5), so a stack succeeds unless a test makes it fail.
 FILE_LIST = [f"KP.20240101.{i:05d}.00.fits" for i in range(8)]
 
-# Convention-conforming master name, for tests that need a write target on disk.
-# Never asserted against production naming -- it is a destination, not an oracle.
-MASTER_NAME = "KP.20240113.23249.10_master_bias_L1.fits"
+# The master-bias name a stack of FILE_LIST produces: the DRP-RUN-05 name built
+# from the first stacked frame, which is what the modules write into output_dir.
+MASTER_NAME = f"{FILE_LIST[0][:-5]}_master_bias_L1.fits"
 
 
 @contextmanager
@@ -65,7 +65,7 @@ def make_mocked_master(cls, *, files=FILE_LIST, arrays=None, config=None, **kwar
     """Build a master of type ``cls`` with ``stack_frames`` mocked out.
 
     Returns the master L1. ``kwargs`` pass through to ``make_master_l1``, so a
-    caller can exercise ``master_path=`` or the per-subclass calibration flags.
+    caller can exercise ``output_dir=`` or the per-subclass calibration flags.
     """
     module = cls(files) if config is None else cls(files, config=config)
     with mocked_stack(module, arrays):

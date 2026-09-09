@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import kpf_directory, kpf_filepath
+from kpfpipe.utils.io import kpf_directory, kpf_filename, kpf_filepath
 from kpfpipe.utils.kpf import get_obs_id
 from recipes._logging import masters_run_summary
 
@@ -84,7 +84,7 @@ STACK_LIMITS = {
     "thar": ("time_of_day", 5, 20),
 }
 
-# Output level per stage, i.e. which kpf_filepath level token the recipe must use.
+# Output level per stage, i.e. the level token in each master's standard filename.
 STACK_LEVELS = {"bias": "L1", "dark": "L1", "flat": "L1", "thar": "L2"}
 
 
@@ -97,11 +97,12 @@ def _wire_recipe(tmp_path, monkeypatch, stacks):
     ``min_stack_size``).
 
     Returns ``(recipe, config, args, record)``. ``record["calls"]`` holds one
-    ``(stage, files, master_path, stack_kwargs)`` tuple per stage in call order;
+    ``(stage, files, output_path, stack_kwargs)`` tuple per stage in call order;
     ``stack_kwargs`` are the keywords the stage's stack source was called with.
+    ``record["output_dirs"]`` holds the directory each stage was handed.
     """
     recipe = _load_masters_recipe()
-    record = {"calls": [], "built": []}
+    record = {"calls": [], "built": [], "output_dirs": {}}
     stack_kwargs = {}
 
     (tmp_path / "L0" / "20240405").mkdir(parents=True, exist_ok=True)
@@ -124,17 +125,25 @@ def _wire_recipe(tmp_path, monkeypatch, stacks):
         class StubStage:
             def __init__(self, files, config):
                 self._files = files
+                self.output_path = None
 
-            def _record(self, master_path):
-                record["calls"].append(
-                    (name, tuple(self._files), master_path, stack_kwargs[name])
+            def _record(self, level, output_dir):
+                # Stand in for the module naming its own output: the standard
+                # name for the first frame it stacked, in the directory given.
+                self.output_path = os.path.join(
+                    str(output_dir),
+                    kpf_filename(get_obs_id(self._files[0]), level, master=name),
                 )
+                record["calls"].append(
+                    (name, tuple(self._files), self.output_path, stack_kwargs[name])
+                )
+                record["output_dirs"][name] = output_dir
 
-            def make_master_l1(self, master_path=None):
-                self._record(master_path)
+            def make_master_l1(self, output_dir=None):
+                self._record("L1", output_dir)
 
-            def make_master_l2(self, master_path=None):
-                self._record(master_path)
+            def make_master_l2(self, output_dir=None):
+                self._record("L2", output_dir)
 
         return StubStage
 
@@ -150,7 +159,7 @@ def _wire_recipe(tmp_path, monkeypatch, stacks):
             record["calls"].append(
                 ("order_trace", (self._flat_path,), self.output_path, {})
             )
-            record["trace_output_dir"] = output_dir
+            record["output_dirs"]["order_trace"] = output_dir
 
     monkeypatch.setattr(recipe, "FileHandler", StubFileHandler)
     monkeypatch.setattr(recipe, "Bias", _stage("bias"))
@@ -231,11 +240,14 @@ class TestMastersRecipeStages:
         flat = [call for call in run["calls"] if call[0] == "flat"][0]
         assert traced[1] == (flat[2],)
 
-    def test_writes_the_trace_into_the_masters_directory(self, run, tmp_path):
+    def test_every_stage_writes_into_the_masters_directory(self, run, tmp_path):
+        # The recipe hands out a directory; each module names its own file.
         expected = kpf_directory(
             kind="masters", data_root=str(tmp_path), datecode="20240405"
         )
-        assert str(run["trace_output_dir"]) == str(expected)
+        assert set(run["output_dirs"]) == {*STACK_LEVELS, "order_trace"}
+        for output_dir in run["output_dirs"].values():
+            assert str(output_dir) == str(expected)
 
     def test_run_summary_lists_every_master_built(self, run):
         assert [entry[0] for entry in run["built"]] == [

@@ -149,9 +149,9 @@ class TestMasterBiasRegression:
     def test_receipt_chain(self, master_bias):
         assert "master_bias" in master_bias.receipt["FUNCTION"].values
 
-    # The persisted product: written through kpf_filepath, as the masters
-    # recipe writes it, then read back. These assertions arrived from a
-    # recipe test that re-stacked this same five-frame bias to reach them.
+    # The persisted product: written to its convention path, then read back.
+    # These assertions arrived from a recipe test that re-stacked this same
+    # five-frame bias to reach them.
 
     @pytest.fixture(scope="class")
     def master_bias_on_disk(self, master_bias, tmp_path_factory):
@@ -182,12 +182,9 @@ class TestMasterBiasRegression:
         assert "INPUT_FILES" in read_back.extensions
 
     def test_input_files_records_the_stacked_frames(self, master_bias_on_disk):
-        # NOTE: production records the *requested* file list, not the frames that
-        # survived stacking -- masters/base.py passes l0_file_list into
-        # set_input_files unchanged, while _load_frame may drop QC failures within
-        # the tolerated budget. All five frames here pass, so the count is the
-        # same under either semantic; when that provenance defect is fixed, this
-        # is the assertion that will need revisiting.
+        # INPUT_FILES records the frames that survived stacking, which is also
+        # what names the master. All five frames here pass, so every requested
+        # file is present.
         _, read_back = master_bias_on_disk
         assert len(read_back.data["INPUT_FILES"]) == len(TESTDATA_BIAS_FILES)
 

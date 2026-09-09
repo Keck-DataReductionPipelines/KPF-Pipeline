@@ -907,20 +907,19 @@ class TestDtypeProvenance:
 class TestSaveMaster:
     """The shared write path, exercised through Bias (the simplest master)."""
 
-    def test_master_path_writes_fits(self, tmp_path):
-        master_path = tmp_path / MASTER_NAME
-        make_mocked_master(Bias, master_path=str(master_path))
-        assert master_path.exists()
+    def test_output_dir_writes_the_standard_name(self, tmp_path):
+        make_mocked_master(Bias, output_dir=str(tmp_path))
+        assert (tmp_path / MASTER_NAME).exists()
 
-    def test_master_path_creates_parent_dir(self, tmp_path):
-        master_path = tmp_path / "nested" / "subdir" / MASTER_NAME
-        make_mocked_master(Bias, master_path=str(master_path))
-        assert master_path.exists()
+    def test_output_dir_creates_parent_dir(self, tmp_path):
+        output_dir = tmp_path / "nested" / "subdir"
+        make_mocked_master(Bias, output_dir=str(output_dir))
+        assert (output_dir / MASTER_NAME).exists()
 
-    def test_master_path_overwrites_existing(self, tmp_path):
+    def test_output_dir_overwrites_existing(self, tmp_path):
         master_path = tmp_path / MASTER_NAME
         master_path.touch()
-        make_mocked_master(Bias, master_path=str(master_path))
+        make_mocked_master(Bias, output_dir=str(tmp_path))
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
     def test_save_master_before_make_raises(self, tmp_path):

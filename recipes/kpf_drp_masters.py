@@ -4,8 +4,8 @@ KPF masters construction recipe.
 Builds the nightly calibration master products for a single datecode from its
 raw L0 frames: master bias, master dark, and master flat (L1), and master
 wavelength solution (L2) from ThAr exposures. Each master is stacked by the
-corresponding module under `kpfpipe.modules.masters` and written to the output
-data root via the pipeline path helpers.
+corresponding module under `kpfpipe.modules.masters`, which writes it into the
+night's masters output directory under its standard filename.
 """
 
 import logging
@@ -13,8 +13,7 @@ import os
 import time
 
 from kpfpipe.modules.masters import WLS, Bias, Dark, Flat, OrderTrace
-from kpfpipe.utils.io import FileHandler, kpf_directory, kpf_filepath
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.io import FileHandler, kpf_directory
 from recipes._logging import masters_run_summary
 
 # Explicit name: the CLI execs recipes with __name__ == "recipe", so __name__
@@ -48,6 +47,10 @@ def main(config, args):
     file_handler = FileHandler(data_dirs)
     file_handler.build_mini_database(datecode, cache="r")
 
+    masters_dir = kpf_directory(
+        kind="masters", data_root=data_root_masters, datecode=datecode
+    )
+
     built = []  # (cal_type, path, n_frames) per master stacked, for the run summary
 
     # Stack the bias frames into a master bias used to remove the detector
@@ -58,13 +61,10 @@ def main(config, args):
         max_stack_size=config.get_params(["BIAS"])["max_stack_size"],
         groupby="time_of_day",
     ):
-        bias_path = kpf_filepath(
-            get_obs_id(files[0]), "L1", data_root=data_root_masters, master="bias"
-        )
-        logger.info("stacking %d bias frames -> %s", len(files), bias_path)
         bias = Bias(files, config)
-        bias.make_master_l1(master_path=bias_path)
-        built.append(("bias", bias_path, len(files)))
+        bias.make_master_l1(output_dir=masters_dir)
+        logger.info("stacked %d bias frames -> %s", len(files), bias.output_path)
+        built.append(("bias", bias.output_path, len(files)))
 
     # Stack the dark frames into a master dark used to remove dark current.
     # Runs after the master bias so CalibrationAssociation can subtract that
@@ -75,13 +75,10 @@ def main(config, args):
         max_stack_size=config.get_params(["DARK"])["max_stack_size"],
         groupby="obs_night",
     ):
-        dark_path = kpf_filepath(
-            get_obs_id(files[0]), "L1", data_root=data_root_masters, master="dark"
-        )
-        logger.info("stacking %d dark frames -> %s", len(files), dark_path)
         dark = Dark(files, config)
-        dark.make_master_l1(master_path=dark_path)
-        built.append(("dark", dark_path, len(files)))
+        dark.make_master_l1(output_dir=masters_dir)
+        logger.info("stacked %d dark frames -> %s", len(files), dark.output_path)
+        built.append(("dark", dark.output_path, len(files)))
 
     # Stack the flat frames into a master flat. Runs after the master bias and
     # dark so CalibrationAssociation can subtract both from each flat frame (via
@@ -92,20 +89,14 @@ def main(config, args):
         max_stack_size=config.get_params(["FLAT"])["max_stack_size"],
         groupby="time_of_day",
     ):
-        flat_path = kpf_filepath(
-            get_obs_id(files[0]), "L1", data_root=data_root_masters, master="flat"
-        )
-        logger.info("stacking %d flat frames -> %s", len(files), flat_path)
         flat = Flat(files, config)
-        flat.make_master_l1(master_path=flat_path)
-        built.append(("flat", flat_path, len(files)))
+        flat.make_master_l1(output_dir=masters_dir)
+        logger.info("stacked %d flat frames -> %s", len(files), flat.output_path)
+        built.append(("flat", flat.output_path, len(files)))
 
     # Trace the orderlets on each master flat. Runs after the flats, whose
     # geometry is the only input, and writes one CSV covering all CCDs beside
     # the flat it was measured from.
-    masters_dir = kpf_directory(
-        kind="masters", data_root=data_root_masters, datecode=datecode
-    )
     for flat_path in [entry[1] for entry in built if entry[0] == "flat"]:
         logger.info("building order trace from master flat %s", flat_path)
         order_trace = OrderTrace(flat_path, config)
@@ -120,14 +111,10 @@ def main(config, args):
         max_stack_size=config.get_params(["WLS"])["max_stack_size"],
         groupby="time_of_day",
     ):
-        obs_id = get_obs_id(files[0])
-        wls_path = kpf_filepath(
-            obs_id, "L2", data_root=data_root_masters, master="thar"
-        )
-        logger.info("building WLS from %d ThAr frames -> %s", len(files), wls_path)
         wls = WLS(files, config)
-        wls.make_master_l2(master_path=wls_path)
-        built.append(("thar", wls_path, len(files)))
+        wls.make_master_l2(output_dir=masters_dir)
+        logger.info("built WLS from %d ThAr frames -> %s", len(files), wls.output_path)
+        built.append(("thar", wls.output_path, len(files)))
 
     logger.info(masters_run_summary(datecode, built, time.monotonic() - t0))
     logger.info("exiting kpf_drp_masters pipeline")

@@ -685,7 +685,7 @@ class WLS(BaseMasterModule):
         bias=None,
         dark=None,
         flat=None,
-        master_path=None,
+        output_dir=None,
     ):
         """
         Build a master wavelength solution from a stack of L0 frames.
@@ -696,9 +696,9 @@ class WLS(BaseMasterModule):
         solutions (``_combine_coeffs_stack``). The resulting wavelength arrays are
         written to the per-fiber _WAVE extensions of a KPFMasterL2 object,
         which is returned and cached on ``self.ml2_obj``. Per-frame diagnostics
-        are always stashed on ``self._frame_diagnostics``; pass ``master_path``
-        to persist the master and, into the ``thar_L2/`` subdirectory
-        beside it, the per-frame L2s and the diagnostics HDF5.
+        are always stashed on ``self._frame_diagnostics``; pass ``output_dir``
+        to persist the master under its standard name, along with the per-frame
+        L2s and the diagnostics HDF5.
 
         Parameters
         ----------
@@ -721,12 +721,11 @@ class WLS(BaseMasterModule):
             bool, a master filepath, or a KPFMasterL1 object), clamped by the WLS
             standard of bias+dark. E.g. ``dark=False`` extracts with bias only, and
             ``dark="/path/master_dark.fits"`` uses a specific master.
-        master_path : str, optional
-            If provided, persists the master L2 to this FITS path via
-            ``save_master('L2', ...)`` and, into a ``thar_L2/`` subdirectory
-            beside it, each processed ThAr frame's L2
-            (``save_reduced_frames()``) and the per-frame diagnostics HDF5
-            (``save_diagnostics()``).
+        output_dir : str, optional
+            If provided, write the master L2 into this directory under its
+            standard DRP-RUN-05 filename via ``save_master('L2', ...)``, and
+            persist each processed ThAr frame's L2 (``save_reduced_frames()``)
+            and the per-frame diagnostics HDF5 (``save_diagnostics()``).
 
         Returns
         -------
@@ -790,9 +789,9 @@ class WLS(BaseMasterModule):
 
         # Persist diagnostics before the gate, so a night that fails it still
         # leaves its per-frame L2s and HDF5 on disk (only the master is withheld).
-        if master_path is not None:
-            self.save_reduced_frames(master_path, overwrite=True)
-            self.save_diagnostics(master_path, overwrite=True)
+        if output_dir is not None:
+            self.save_reduced_frames(overwrite=True)
+            self.save_diagnostics(overwrite=True)
 
         self._track_info()
         logger.info("%s", self._info)
@@ -840,16 +839,21 @@ class WLS(BaseMasterModule):
 
         self.ml2_obj.receipt_add_entry("master_wls", "", "PASS")
 
-        if master_path is not None:
-            self.save_master("L2", master_path, overwrite=True)
+        if output_dir is not None:
+            self.save_master(
+                "L2",
+                os.path.join(output_dir, self.ml2_obj.generate_standard_filename()),
+                overwrite=True,
+            )
 
         return self.ml2_obj
 
-    def save_diagnostics(self, master_path, *, overwrite=False):
+    def save_diagnostics(self, *, overwrite=False):
         """
-        Write the per-frame WLS diagnostics to an HDF5 file in the
-        ``thar_L2/`` subdirectory beside ``master_path``, named
-        ``{obs_id}_master_thar_diagnostics.h5`` (obs_id from ``master_path``).
+        Write the per-frame WLS diagnostics to an HDF5 file in the ThAr
+        ``cal_stack`` directory under the configured masters output, named
+        ``{obs_id}_master_thar_diagnostics.h5`` (obs_id from the first
+        stacked frame).
 
         Layout: /<obs_id>/<chip>/ per input frame and chip, each holding a
         ``coeffs`` dataset (per-frame Legendre coefficients; omitted for a
@@ -860,9 +864,6 @@ class WLS(BaseMasterModule):
 
         Parameters
         ----------
-        master_path : str
-            The master L2 output path; its directory anchors the
-            ``thar_L2/`` subdirectory and its obs_id names the file.
         overwrite : bool, optional
             Refuse to clobber an existing file unless True.
 
@@ -877,17 +878,16 @@ class WLS(BaseMasterModule):
         if not self._frame_diagnostics:
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
+        obs_id = get_obs_id(self._stacked_files[0])
         directory = kpf_directory(
             kind="cal_stack",
             data_root=self._masters_output,
             level="L2",
-            obs_id=get_obs_id(master_path),
+            obs_id=obs_id,
             cal_type="thar",
         )
         os.makedirs(directory, exist_ok=True)
-        path = os.path.join(
-            directory, f"{get_obs_id(master_path)}_master_thar_diagnostics.h5"
-        )
+        path = os.path.join(directory, f"{obs_id}_master_thar_diagnostics.h5")
         if not overwrite and os.path.exists(path):
             raise FileExistsError(
                 f"{path} already exists; pass overwrite=True to replace it"
@@ -913,10 +913,11 @@ class WLS(BaseMasterModule):
                             lines_group.create_dataset(key, data=arr)
         logger.info("wrote WLS diagnostics to %s", path)
 
-    def save_reduced_frames(self, master_path, *, overwrite=False):
+    def save_reduced_frames(self, *, overwrite=False):
         """
-        Write each processed ThAr frame's L2 to a ``thar_L2/`` subdirectory
-        beside ``master_path``, as ``{obs_id}_thar_L2.fits``.
+        Write each processed ThAr frame's L2 to the ThAr ``cal_stack``
+        directory under the configured masters output, as
+        ``{obs_id}_thar_L2.fits``.
 
         Persists the per-frame L2 objects cached by make_master_l2() (every
         frame that loaded, processed, and extracted), for follow-up ThAr
@@ -924,9 +925,6 @@ class WLS(BaseMasterModule):
 
         Parameters
         ----------
-        master_path : str
-            The master L2 output path; its directory anchors the
-            ``thar_L2/`` subdirectory.
         overwrite : bool, optional
             Refuse to clobber an existing per-frame file unless True.
 
@@ -945,7 +943,7 @@ class WLS(BaseMasterModule):
             kind="cal_stack",
             data_root=self._masters_output,
             level="L2",
-            obs_id=get_obs_id(master_path),
+            obs_id=get_obs_id(self._stacked_files[0]),
             cal_type="thar",
         )
         os.makedirs(directory, exist_ok=True)

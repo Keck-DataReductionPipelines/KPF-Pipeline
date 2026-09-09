@@ -120,6 +120,8 @@ class BaseMasterModule:
         self.ml1_obj = None
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
         self.ml2_obj = None
+        # where save_master() last wrote the master
+        self.output_path = None
 
         # L0 files that actually stacked; recorded as the master's INPUT_FILES.
         self._stacked_files = []
@@ -768,7 +770,8 @@ class BaseMasterModule:
 
     def save_master(self, level, path, *, overwrite=False):
         """
-        Write the cached master object to a FITS file at ``path``.
+        Write the cached master object to a FITS file at ``path``, recording it
+        on ``self.output_path``.
 
         Parameters
         ----------
@@ -808,3 +811,4 @@ class BaseMasterModule:
 
         # obj.to_fits creates the parent directory as needed.
         obj.to_fits(path)
+        self.output_path = path

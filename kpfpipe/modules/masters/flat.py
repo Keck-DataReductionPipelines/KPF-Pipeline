@@ -1,6 +1,7 @@
 """KPF Master Flat construction module."""
 
 import logging
+import os
 
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
@@ -65,14 +66,14 @@ class Flat(BaseMasterModule):
         sigma=None,
         bias=None,
         dark=None,
-        master_path=None,
+        output_dir=None,
     ):
         """
         Build master flat from stack.
 
         The constructed KPFMasterL1 is returned and cached on
-        ``self.ml1_obj``; pass ``master_path`` to also persist it to disk
-        via ``save_master('L1', ...)``.
+        ``self.ml1_obj``; pass ``output_dir`` to also persist it to disk
+        under its standard name via ``save_master('L1', ...)``.
 
         Parameters
         ----------
@@ -91,8 +92,9 @@ class Flat(BaseMasterModule):
             Per-call master-dark override (same forms as ``bias``). A flat's
             standard is bias- and dark-subtraction; flat division is never
             applied when building a master flat, so no flat override is accepted.
-        master_path : str, optional
-            If provided, persist the master L1 to a FITS file at this path.
+        output_dir : str, optional
+            If provided, write the master L1 into this directory under its
+            standard DRP-RUN-05 filename.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -112,8 +114,12 @@ class Flat(BaseMasterModule):
         self._populate_stack_info(l1_arrays)
         self._track_info()
 
-        if master_path is not None:
-            self.save_master("L1", master_path, overwrite=True)
+        if output_dir is not None:
+            self.save_master(
+                "L1",
+                os.path.join(output_dir, self.ml1_obj.generate_standard_filename()),
+                overwrite=True,
+            )
 
         logger.info("%s", self._info)
 
