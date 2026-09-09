@@ -299,7 +299,8 @@ class TestScienceRecipe:
         """
         prim = l2.headers["PRIMARY"]
         expected = _CATALOG_CAPTURE["kpf-drp"]
-        # SCI1-3 are traces 2-4 and carry identical astrometry.
+        # SCI1-3 are traces 2-4 and carry identical astrometry. Traces 1 (SKY) and
+        # 5 (CAL) are blank by design -- no object on the fiber, no "N/A" to write.
         for column, base in (
             ("object", "CID"),
             ("radec_src", "CSRC"),

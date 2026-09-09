@@ -222,7 +222,8 @@ class CrossCorrelation:
         centers on 0 with a warning, matching BarycentricCorrection, since a fast
         star can fall outside a zero-centered window.
         """
-        # The C*# cards are written identically to all science fibers (traces 2-4).
+        # The C*# cards are written identically to all science fibers (traces 2-4),
+        # and to those only: SKY (1) and CAL (5) hold no object, so they stay blank.
         primary = self.l2_obj.headers.get("PRIMARY", {})
         try:
             star_rv = float(primary.get("CRV3"))

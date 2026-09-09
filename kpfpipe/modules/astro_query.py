@@ -852,6 +852,9 @@ class AstroQuery:
                 if np.isnan(value):
                     continue
                 value = float(value)
+            # SCI traces only. SKY and CAL have no object on the fiber, so their
+            # catalog cards stay blank by design -- not a gap. (Most C*# types
+            # admit no "N/A", so a blank is the only way to say "not applicable".)
             for fiber in SCI_FIBERS:
                 cards[f"{base}{self.fiber_positions[fiber] + 1}"] = value
         return cards

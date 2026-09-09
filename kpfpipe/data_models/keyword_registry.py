@@ -201,6 +201,9 @@ class KeywordRegistry:
         ``#`` means exactly the trace-map's indices wherever it appears (keyword
         or family stem), with no family exceptions. A name without ``#`` expands
         to itself.
+
+        Every index is *declared*; only the SCI traces are *populated* for the
+        catalog ``C*#`` families, since SKY and CAL carry no object.
         """
         if "#" not in name:
             return [name]

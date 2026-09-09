@@ -339,7 +339,8 @@ class TestKeywordRegistry:
 
     def test_primary_seed_covers_every_member_of_a_family(self):
         # The five-trace rule at the header level: no Required filter, so every
-        # index of every # family is seeded.
+        # index of every # family is seeded. Seeded, not populated: the catalog
+        # C*# cards are written for the SCI traces only (SKY/CAL hold no object).
         seed = KPF1.keyword_registry.primary_seed("L0")
         for base in ("TRACE", "CRA", "CDEC", "CSRC", "CID", "CZ", "CCLR"):
             for i in range(1, 6):

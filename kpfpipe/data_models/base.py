@@ -149,6 +149,9 @@ class KPFDataModel(RVDataModel):
         it has one and blank otherwise, each carrying the registry comment.
         Later writers overlay what they know. Masters land on their own
         minimal ``ML*`` skeleton, not the science one.
+
+        The catalog ``C*#`` cards are overlaid on the SCI traces only, so the
+        SKY and CAL indices keep this blank by design -- not a gap.
         """
         seed = self.keyword_registry.primary_seed(self._data_model)
         for keyword, value in seed.items():

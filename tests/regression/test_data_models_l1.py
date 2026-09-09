@@ -226,6 +226,8 @@ class TestToKpf1:
 
     def test_catalog_overlay_populates_sci_cards(self):
         # Direct copy of the canonical row onto every SCI fiber (2,3,4), no conversion.
+        # Traces 1 (SKY) and 5 (CAL) are deliberately left blank: no object on those
+        # fibers, and most C*# types admit no "N/A".
         p = self._l0_with_catalog(dict(self._KPF_DRP)).to_kpf1().headers["PRIMARY"]
         for i in (2, 3, 4):
             assert p[f"CID{i}"] == "Gaia DR3 12345"
