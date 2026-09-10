@@ -11,6 +11,7 @@ views for the CCF cubes (``GREEN_SCI2_CCF``, ``RED_SCI2_CCF``).
 
 import pandas as pd
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.aliased_dict import (
     NORDER_GREEN,
     ChipPrefixDict,
@@ -30,7 +31,7 @@ for _, _row in TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in ("CCF", "CCF_VAR", "RV"):
         _fiber_alias = f"{_fiber}_{_suffix}"
-        for _chip in ("GREEN", "RED"):
+        for _chip in CHIPS:
             _L4_CHIP_PREFIX_KEYS[f"{_chip}_{_fiber_alias}"] = (_fiber_alias, _chip)
 
 

@@ -6,6 +6,8 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import pandas as pd
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 try:
@@ -29,12 +31,6 @@ try:
     ).stdout.strip()
 except (subprocess.CalledProcessError, OSError):
     __githash__ = "UNKNOWN"
-
-# By default use both CCDs and all five fibers
-DEFAULTS = {
-    "chips": ["GREEN", "RED"],
-    "fibers": ["SKY", "SCI1", "SCI2", "SCI3", "CAL"],
-}
 
 
 def load_detector_config():
@@ -64,15 +60,6 @@ def load_detector_config():
     _detector["numorder"] = sum(_detector["norder"].values())
     _detector["numtrace"] = len(_detector["fiber_positions"])
 
-    # The science fibers -- the ones carrying starlight, as opposed to SKY and
-    # CAL -- and their 1-based trace indices (trace N is slicer position N-1,
-    # which is what config/trace-map.csv tabulates). Derived here so the catalog
-    # overlay, the RV/CCF modules and the quicklooks read one definition rather
-    # than respelling the list.
-    _positions = _detector["fiber_positions"]
-    _detector["sci_fibers"] = tuple(f for f in _positions if f.startswith("SCI"))
-    _detector["sci_traces"] = tuple(_positions[f] + 1 for f in _detector["sci_fibers"])
-
     return _detector
 
 
@@ -81,6 +68,25 @@ def load_observatory_config():
     return tomllib.loads(path.read_text())
 
 
+def load_instrument_era_reference():
+    """The KPF instrument eras, one row per era, dated bounds parsed.
+
+    INSTERA is left as read (a float, e.g. 2.0); consumers that compare it to a
+    header value cast to str, as the keyword carries it.
+    """
+    path = Path(REPO_ROOT) / "reference/instrument_eras.csv"
+    return pd.read_csv(path, parse_dates=["UT_start_date", "UT_end_date"])
+
+
+CHIPS = ("GREEN", "RED")
+FIBERS = ("SKY", "SCI1", "SCI2", "SCI3", "CAL")
+SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 DETECTOR = load_detector_config()
 OBSERVATORY = load_observatory_config()
-DEFAULTS.update(DETECTOR)
+INSTRUMENT_ERAS = load_instrument_era_reference()
+
+# By default use both CCDs and all five fibers
+DEFAULT_CFG = {
+    "chips": CHIPS,
+    "fibers": FIBERS,
+}

@@ -2,11 +2,8 @@
 
 import numpy as np
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.quality_control.qc_flags.base import QC
-
-_CHIPS = ["GREEN", "RED"]
-_FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 
 class QCL2(QC):
@@ -30,8 +27,8 @@ class QCL2(QC):
         """
         norder = DETECTOR["norder"]
         ncol = DETECTOR["ccd"]["ncol"]
-        for chip in _CHIPS:
-            for fiber in _FIBERS:
+        for chip in CHIPS:
+            for fiber in FIBERS:
                 for suffix in ("FLUX", "VAR", "WAVE"):
                     arr = self.kpf_obj.data.get(f"{chip}_{fiber}_{suffix}")
                     if np.shape(arr) != (norder[chip], ncol):
@@ -58,10 +55,10 @@ class QCL2(QC):
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         total_pixels = sum(
             np.size(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])
-            for chip in _CHIPS
-            for fiber in _FIBERS
+            for chip in CHIPS
+            for fiber in FIBERS
         )
-        nan_total = sum(float(hdr[f"NAN{fiber}"]) for fiber in _FIBERS)
+        nan_total = sum(float(hdr[f"NAN{fiber}"]) for fiber in FIBERS)
         return (nan_total / total_pixels) <= 0.01
 
     flux_finite_fraction._qc_key = "L2NANOK"
@@ -71,10 +68,10 @@ class QCL2(QC):
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         total_pixels = sum(
             np.size(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])
-            for chip in _CHIPS
-            for fiber in _FIBERS
+            for chip in CHIPS
+            for fiber in FIBERS
         )
-        zero_total = sum(float(hdr[f"ZERO{fiber}"]) for fiber in _FIBERS)
+        zero_total = sum(float(hdr[f"ZERO{fiber}"]) for fiber in FIBERS)
         return (zero_total / total_pixels) < 0.5
 
     nonzero_flux._qc_key = "L2FLXOK"
@@ -88,8 +85,8 @@ class QCL2(QC):
         whose shape disagrees with its FLUX is a malformed product, not a state to
         skip: the comparison below then raises (fail loud).
         """
-        for chip in _CHIPS:
-            for fiber in _FIBERS:
+        for chip in CHIPS:
+            for fiber in FIBERS:
                 flux = np.asarray(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])
                 var = np.asarray(self.kpf_obj.data[f"{chip}_{fiber}_VAR"])
                 if np.any(np.isfinite(flux) & np.isfinite(var) & (var < 0)):

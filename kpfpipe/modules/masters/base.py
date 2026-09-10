@@ -7,7 +7,7 @@ import os
 
 import numpy as np
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.modules.calibration_association import CalibrationAssociation
@@ -43,13 +43,13 @@ class BaseMasterModule:
         bias, dark, flat, masters_search_window_days, KPF_MASTERS_OUTPUT.
     """
 
-    # Module defaults; subclasses extend via ``{**BaseMasterModule._DEFAULTS, ...}``.
+    # Module defaults; subclasses extend via ``{**BaseMasterModule._DEFAULT_CFG, ...}``.
     # bias/dark/flat are the globally-enabled calibrations (the no-config
     # fallback; in practice resolved from the shared [MODULE_IMAGE_PROCESSING]
     # config and make_master kwargs). Keep in sync with the same keys in
-    # image_processing._DEFAULTS.
-    _DEFAULTS = {
-        **DEFAULTS,
+    # image_processing._DEFAULT_CFG.
+    _DEFAULT_CFG = {
+        **DEFAULT_CFG,
         "stack_sigma": 5.0,
         "min_stack_size": 5,
         "bias": True,
@@ -97,22 +97,21 @@ class BaseMasterModule:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in self._DEFAULTS.items():
+        for k, v in self._DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._l1_obj_cache = {}
-
-        # Masters output root; CalibrationAssociation reads masters from here
-        # when ``_process_frame`` associates a calibration for a stacked frame.
         self._masters_output = params.get("KPF_MASTERS_OUTPUT")
-
-        # Forwarded to CalibrationAssociation in ``_process_frame`` so an operator's
-        # configured search window is honored, not silently reset to the default.
         self._masters_search_window_days = params.get("masters_search_window_days")
 
         # One cached master (KPFMasterL1) and its path per calibration type.
-        # Frames in a stack are taken close in time and so almost always
-        # associate the same nearest master; caching lets ``_process_frame``
+        # Frames in a stack are taken close in time; caching lets ``_process_frame``
         # read each master from disk once rather than once per frame.
         self._master_ml1 = {}
         self._master_paths = {}
@@ -121,12 +120,13 @@ class BaseMasterModule:
         self.ml1_obj = None
         # populated by subclass make_master_l2(); used by save_master('L2', ...)
         self.ml2_obj = None
+        # where save_master() last wrote the master
+        self.output_path = None
 
         # L0 files that actually stacked; recorded as the master's INPUT_FILES.
         self._stacked_files = []
 
-        # Per-chip stack statistics cached by _populate_stack_info() (dict);
-        # consumed by the subclass _track_info() when it builds the info() text.
+        # Per-chip stack statistics cached by _populate_stack_info()
         self._stack_info = None
 
         # Effective per-frame calibrations (standard set masked by the resolved
@@ -339,8 +339,8 @@ class BaseMasterModule:
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
 
-        nrow = self.ccd["nrow"]
-        ncol = self.ccd["ncol"]
+        nrow = self.nrow
+        ncol = self.ncol
 
         data_cube = {}
         exptime = np.zeros(nframe, dtype=np.float32)
@@ -484,8 +484,8 @@ class BaseMasterModule:
 
         exact_stats = {}
 
-        nrow = self.ccd["nrow"]
-        ncol = self.ccd["ncol"]
+        nrow = self.nrow
+        ncol = self.ncol
 
         for chip in self.chips:
             for suffix in ["CCD", "VAR"]:
@@ -770,7 +770,8 @@ class BaseMasterModule:
 
     def save_master(self, level, path, *, overwrite=False):
         """
-        Write the cached master object to a FITS file at ``path``.
+        Write the cached master object to a FITS file at ``path``, recording it
+        on ``self.output_path``.
 
         Parameters
         ----------
@@ -810,3 +811,4 @@ class BaseMasterModule:
 
         # obj.to_fits creates the parent directory as needed.
         obj.to_fits(path)
+        self.output_path = path

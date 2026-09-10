@@ -6,11 +6,10 @@ from datetime import datetime
 
 import numpy as np
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
-_CHIPS = ["GREEN", "RED"]
 _SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 
 
@@ -29,7 +28,7 @@ class QCL0(QC):
         an all-NaN placeholder is not mistaken for good data.
         """
         ccd = DETECTOR["ccd"]
-        for chip in _CHIPS:
+        for chip in CHIPS:
             amps = []
             for i in range(1, 5):  # GREEN_AMP1..4 / RED_AMP1..4
                 arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")

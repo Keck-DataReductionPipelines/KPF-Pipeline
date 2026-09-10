@@ -384,12 +384,12 @@ class TestRateEstimator:
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
         dark = Dark(file_list)
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": 2, "ncol": 2}
         dark.stack_sigma = 1e6  # effectively no clipping
         # Keyed by filename because the streaming path re-reads its first frames
         # for the approximate (clip-bound) pass, loading a frame twice.
         by_fn = dict(zip(file_list, frames, strict=True))
         with (
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -436,10 +436,10 @@ class TestRateEstimator:
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
         dark = Dark(file_list)
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": 2, "ncol": 2}
         dark.stack_sigma = 1e6
         by_fn = dict(zip(file_list, frames, strict=True))
         with (
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
             patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
@@ -449,6 +449,7 @@ class TestRateEstimator:
 
         # Same frames without the flat token take the rate branch: 200/20 = 10.
         with (
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
             patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
@@ -482,9 +483,9 @@ class TestPerPixelRejection:
 
         dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": nrow, "ncol": ncol}
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
+            patch.multiple(dark, nrow=nrow, ncol=ncol),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -513,10 +514,10 @@ class TestPerPixelRejection:
 
         dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": 2, "ncol": 2}
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -542,10 +543,10 @@ class TestDatacubeClipping:
 
         dark = Dark(sorted(f"f{i}.fits" for i in range(len(frames))))
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": nrow, "ncol": ncol}
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
+            patch.multiple(dark, nrow=nrow, ncol=ncol),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -567,10 +568,10 @@ class TestDatacubeClipping:
 
         dark = Dark(sorted(f"f{i}.fits" for i in range(len(frames))))
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": nrow, "ncol": ncol}
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
+            patch.multiple(dark, nrow=nrow, ncol=ncol),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -609,10 +610,10 @@ class TestSurvivorGate:
     def _stack(self, stats, nrequested=4):
         dark = Dark(sorted(f"f{i}.fits" for i in range(nrequested)))
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": 2, "ncol": 2}
         # The gate is what is under test, so the later cleaning pass -- which
         # would interpolate the zeroed pixels back in -- is bypassed.
         with (
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(
                 dark, "_compute_stats_from_datacube", return_value=(stats, False)
             ),
@@ -756,13 +757,13 @@ class TestStackingValidation:
     def _dark(n):
         dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": 2, "ncol": 2}
         return dark
 
     def _stack_with_frames(self, frames):
         dark = self._dark(len(frames))
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
         with (
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
@@ -906,20 +907,19 @@ class TestDtypeProvenance:
 class TestSaveMaster:
     """The shared write path, exercised through Bias (the simplest master)."""
 
-    def test_master_path_writes_fits(self, tmp_path):
-        master_path = tmp_path / MASTER_NAME
-        make_mocked_master(Bias, master_path=str(master_path))
-        assert master_path.exists()
+    def test_output_dir_writes_the_standard_name(self, tmp_path):
+        make_mocked_master(Bias, output_dir=str(tmp_path))
+        assert (tmp_path / MASTER_NAME).exists()
 
-    def test_master_path_creates_parent_dir(self, tmp_path):
-        master_path = tmp_path / "nested" / "subdir" / MASTER_NAME
-        make_mocked_master(Bias, master_path=str(master_path))
-        assert master_path.exists()
+    def test_output_dir_creates_parent_dir(self, tmp_path):
+        output_dir = tmp_path / "nested" / "subdir"
+        make_mocked_master(Bias, output_dir=str(output_dir))
+        assert (output_dir / MASTER_NAME).exists()
 
-    def test_master_path_overwrites_existing(self, tmp_path):
+    def test_output_dir_overwrites_existing(self, tmp_path):
         master_path = tmp_path / MASTER_NAME
         master_path.touch()
-        make_mocked_master(Bias, master_path=str(master_path))
+        make_mocked_master(Bias, output_dir=str(tmp_path))
         assert master_path.read_bytes()[:6] == b"SIMPLE"
 
     def test_save_master_before_make_raises(self, tmp_path):
@@ -994,10 +994,10 @@ class TestInputFilesProvenance:
         # Eight frames, so one drop stays inside the tolerated failure budget.
         dark = Dark(sorted(f"f{i}.fits" for i in range(8)))
         dark.chips = ["GREEN"]
-        dark.ccd = {"nrow": 2, "ncol": 2}
 
         dropped = dark.l0_file_list[0]
         with (
+            patch.multiple(dark, nrow=2, ncol=2),
             patch.object(
                 dark,
                 "_load_frame",

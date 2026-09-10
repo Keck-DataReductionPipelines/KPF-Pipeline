@@ -9,15 +9,15 @@ the masters directory and selecting the nearest-in-time match.
 import logging
 from datetime import datetime, timedelta
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler
 from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "masters_search_window_days": [-1, 0],
 }
 
@@ -74,8 +74,14 @@ class CalibrationAssociation:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._masters_output = params.get("KPF_MASTERS_OUTPUT")
         self._file_handler = FileHandler(params)  # masters discovery

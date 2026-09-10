@@ -7,7 +7,6 @@ KPF2/KPF4 round-trip guards live in test_data_models_l{2,4}.py.
 """
 
 import importlib.metadata
-import importlib.resources
 import tomllib
 from pathlib import Path
 
@@ -16,7 +15,9 @@ import pandas as pd
 import pytest
 from astropy.io import fits
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS, SCI_FIBERS
+from kpfpipe.data_models.config import PATH as _CFG_PATH
+from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -338,7 +339,8 @@ class TestKeywordRegistry:
 
     def test_primary_seed_covers_every_member_of_a_family(self):
         # The five-trace rule at the header level: no Required filter, so every
-        # index of every # family is seeded.
+        # index of every # family is seeded. Seeded, not populated: the catalog
+        # C*# cards are written for the SCI traces only (SKY/CAL hold no object).
         seed = KPF1.keyword_registry.primary_seed("L0")
         for base in ("TRACE", "CRA", "CDEC", "CSRC", "CID", "CZ", "CCLR"):
             for i in range(1, 6):
@@ -487,7 +489,6 @@ class TestBareModelDefaults:
         assert DETECTOR["numorder"] == 67
 
 
-_CFG = importlib.resources.files("kpfpipe.data_models.config")
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _KEYWORD_COLUMNS = [
@@ -505,7 +506,7 @@ _DATA_MODELS = ("L0", "L1", "L2", "L4", "ML1", "ML2-flat", "ML2-wls")
 
 def _keyword_files():
     return sorted(
-        (p for p in _CFG.iterdir() if p.name.endswith("-keywords.csv")),
+        (p for p in _CFG_PATH.iterdir() if p.name.endswith("-keywords.csv")),
         key=lambda p: p.name,
     )
 
@@ -535,7 +536,9 @@ class TestConfigTables:
 
     def test_every_data_model_has_a_manifest_with_the_manifest_schema(self):
         for data_model in _DATA_MODELS:
-            columns = list(pd.read_csv(_CFG / f"{data_model}-extensions.csv").columns)
+            columns = list(
+                pd.read_csv(_CFG_PATH / f"{data_model}-extensions.csv").columns
+            )
             assert columns == _MANIFEST_COLUMNS, data_model
 
     def test_keyword_filenames_use_a_known_data_model(self):
@@ -558,6 +561,30 @@ class TestConfigTables:
         assert "*.csv" in package_data["kpfpipe.data_models.config"]
         assert "*.csv" in package_data["kpfpipe.quality_control.config"]
 
+    def test_trace_map_matches_the_detector_fiber_positions(self):
+        # Two tables, deliberately kept separate: trace-map.csv is bookkeeping
+        # (which fiber label names TRACE{N}), detector.toml [fiber_positions] is
+        # physics (where each fiber sits on the slicer). They are identical by
+        # construction -- trace N is slicer position N-1 -- so this pins the
+        # agreement rather than collapsing either onto the other.
+        trace_map = dict(
+            zip(TRACE_MAP["Fiber"].str.strip(), TRACE_MAP["Trace"], strict=True)
+        )
+        assert trace_map == {
+            fiber: position + 1
+            for fiber, position in DETECTOR["fiber_positions"].items()
+        }
+
+    def test_the_fiber_and_chip_constants_match_the_detector(self):
+        # CHIPS/FIBERS/SCI_FIBERS are spelled out in kpfpipe/__init__.py rather
+        # than derived -- five short tuples read better than the derivation. This
+        # is what stops them drifting from detector.toml.
+        positions = DETECTOR["fiber_positions"]
+        assert FIBERS == tuple(sorted(positions, key=positions.get))
+        assert SCI_FIBERS == tuple(f for f in FIBERS if f.startswith("SCI"))
+        assert CHIPS == tuple(DETECTOR["norder"])
+        assert DETECTOR["numtrace"] == len(FIBERS)
+
 
 class TestHeaderMap:
     """``header-map.csv`` supplies native sources and defaults for PRIMARY
@@ -565,7 +592,7 @@ class TestHeaderMap:
 
     @staticmethod
     def _map():
-        return pd.read_csv(_CFG / "header-map.csv")
+        return pd.read_csv(_CFG_PATH / "header-map.csv")
 
     def test_keys_are_unique(self):
         keys = self._map()["EPRV_KEY"].astype(str).str.strip()
@@ -580,7 +607,7 @@ class TestHeaderMap:
         registered = {
             member
             for level in ("L0", "L1", "L2", "L4")
-            for keyword in pd.read_csv(_CFG / f"{level}-PRIMARY-keywords.csv")[
+            for keyword in pd.read_csv(_CFG_PATH / f"{level}-PRIMARY-keywords.csv")[
                 "Keyword"
             ]
             for member in expand(keyword)
@@ -604,7 +631,7 @@ class TestRouting:
 
     def test_the_per_ccd_rv_set_is_registered_on_every_rv_extension(self):
         registry = KPF1.keyword_registry
-        for i in range(1, DETECTOR["numtrace"] + 1):
+        for i in range(1, len(TRACE_MAP) + 1):
             assert {"RVGREEN", "RVRED", "ERVGREEN", "ERVRED"} <= registry.allowed[
                 f"RV{i}"
             ]

@@ -18,14 +18,14 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "overscan_method": "rowmedian",
     "readnoise_sigma": 10.0,
 }
@@ -76,11 +76,14 @@ class ImageAssembly:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
 
-        for k, v in self.ccd.items():
+        for k, v in DETECTOR.items():
             setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._info = None
         self.orientation = {}  # amp ext -> flip; set by _parse_amplifier_reference()
@@ -118,7 +121,7 @@ class ImageAssembly:
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
-        ncol_prescan = self.prescan
+        ncol_prescan = self.ccd["prescan"]
         nrow_imaging, ncol_imaging = self.dims[chip]
 
         oscan_pix_srl = full_amplifier[:nrow_imaging, ncol_prescan + ncol_imaging :]
@@ -140,7 +143,7 @@ class ImageAssembly:
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
-        ncol_prescan = self.prescan
+        ncol_prescan = self.ccd["prescan"]
         nrow_imaging, ncol_imaging = self.dims[chip]
 
         image_pix = full_amplifier[

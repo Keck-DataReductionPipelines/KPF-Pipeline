@@ -3,6 +3,7 @@ KPF Master Bias construction module.
 """
 
 import logging
+import os
 
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.utils.config import ConfigHandler
@@ -56,14 +57,14 @@ class Bias(BaseMasterModule):
         *,
         nstream=6,
         sigma=None,
-        master_path=None,
+        output_dir=None,
     ):
         """
         Build master bias from stack.
 
         The constructed KPFMasterL1 is returned and cached on
-        ``self.ml1_obj``; pass ``master_path`` to also persist it to disk
-        via ``save_master('L1', ...)``.
+        ``self.ml1_obj``; pass ``output_dir`` to also persist it to disk
+        under its standard name via ``save_master('L1', ...)``.
 
         A bias receives no calibrations, so there are no bias/dark/
         flat overrides (unlike Dark/WLS).
@@ -76,8 +77,9 @@ class Bias(BaseMasterModule):
             Stream threshold passed to stack_frames.
         sigma : float, optional
             Outlier rejection threshold passed to stack_frames.
-        master_path : str, optional
-            If provided, persist the master L1 to a FITS file at this path.
+        output_dir : str, optional
+            If provided, write the master L1 into this directory under its
+            standard DRP-RUN-05 filename.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -95,8 +97,12 @@ class Bias(BaseMasterModule):
         self._populate_stack_info(l1_arrays)
         self._track_info()
 
-        if master_path is not None:
-            self.save_master("L1", master_path, overwrite=True)
+        if output_dir is not None:
+            self.save_master(
+                "L1",
+                os.path.join(output_dir, self.ml1_obj.generate_standard_filename()),
+                overwrite=True,
+            )
 
         logger.info("%s", self._info)
 

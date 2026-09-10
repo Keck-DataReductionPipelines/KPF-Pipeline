@@ -12,7 +12,7 @@ from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.data_models.level2 import KPF2
@@ -45,7 +45,6 @@ NORDER_RED = DETECTOR["norder"]["RED"]
 _NCOL_TEST = 8  # DiagL2 metrics are pixel aggregates, so the real detector width
 # is moot
 
-_FIBERS = ("SCI1", "SCI2", "SCI3", "SKY", "CAL")
 _NAN_KEYS = ("NANSCI1", "NANSCI2", "NANSCI3", "NANSKY", "NANCAL")
 _ZERO_KEYS = ("ZEROSCI1", "ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL")
 # Clean exposure-meter flux: 4 readings x 25 wavelength channels per fiber.
@@ -1312,7 +1311,7 @@ def _make_kpf1(date_obs="2024-04-05T11:08:33"):
     """
     l1 = stamp_frame_type(KPF1())
     l1.headers["PRIMARY"]["DATE-OBS"] = date_obs
-    for chip in ("GREEN", "RED"):
+    for chip in CHIPS:
         l1.data[f"{chip}_CCD"] = np.ones((4, 4), dtype=float)
     return l1
 
@@ -1376,8 +1375,8 @@ def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True, var=0.25):
 
     norder = {"GREEN": NORDER_GREEN, "RED": NORDER_RED}
     rng = np.random.default_rng(42)
-    for chip in ("GREEN", "RED"):
-        for fiber in _FIBERS:
+    for chip in CHIPS:
+        for fiber in FIBERS:
             n = norder[chip]
             arr = np.ones((n, _NCOL_TEST), dtype=np.float32)
             mask = rng.random(arr.shape)
@@ -1544,7 +1543,7 @@ class TestDiagL2OrderletFluxRatios:
         # A fiber whose WAVE runs the other way carries the same spectrum, so the
         # ratio must survive the interpolation onto SCI2's grid.
         kpf2 = _make_kpf2_nan_pixels()
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             wave = np.asarray(kpf2.data[f"{chip}_SCI1_WAVE"])
             kpf2.set_data(f"{chip}_SCI1_WAVE", wave[:, ::-1].copy())
             flux = np.asarray(kpf2.data[f"{chip}_SCI1_FLUX"])

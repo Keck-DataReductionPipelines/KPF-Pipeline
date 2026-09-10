@@ -9,7 +9,7 @@ use-cases it serves (below). ``KeywordRegistry`` builds every lookup once in
 Source of truth: ``self.table``, unioning every
 ``config/{prefix}-{EXTENSION}-keywords.csv``. ``prefix`` (``L0 L1 L2 L4 ML1
 ML2-flat ML2-wls``) gives the ``Level``; ``EXTENSION`` is the extension name,
-literal or a family stem expanded over ``1..DETECTOR["numtrace"]``
+literal or a family stem expanded over ``1..len(TRACE_MAP)``
 (``L2-TRACE_FLUX`` -> ``TRACE1_FLUX``..``TRACE5_FLUX``). ``#`` in a *keyword*
 is the same template marker and is reserved; the CSVs carry no comment rows.
 
@@ -41,7 +41,7 @@ from types import MappingProxyType
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DETECTOR
+from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.extension_manifest import extension_manifest
 
 logger = logging.getLogger(__name__)
@@ -196,15 +196,18 @@ class KeywordRegistry:
 
     @classmethod
     def _expand_template(cls, name):
-        """Expand a ``#`` template to its ``1..DETECTOR["numtrace"]`` members.
+        """Expand a ``#`` template to its ``1..len(TRACE_MAP)`` members.
 
-        ``#`` means exactly ``1..numtrace`` wherever it appears (keyword or
-        family stem), with no family exceptions. A name without ``#`` expands
+        ``#`` means exactly the trace-map's indices wherever it appears (keyword
+        or family stem), with no family exceptions. A name without ``#`` expands
         to itself.
+
+        Every index is *declared*; only the SCI traces are *populated* for the
+        catalog ``C*#`` families, since SKY and CAL carry no object.
         """
         if "#" not in name:
             return [name]
-        return [name.replace("#", str(i)) for i in range(1, DETECTOR["numtrace"] + 1)]
+        return [name.replace("#", str(i)) for i in range(1, len(TRACE_MAP) + 1)]
 
     @classmethod
     def _resolve_extensions(cls, extension, names, source):

@@ -9,6 +9,7 @@ name (``TRACE3_FLUX``) or KPF name (``SCI2_FLUX``), including per-chip views
 
 import pandas as pd
 
+from kpfpipe import CHIPS
 from kpfpipe.data_models.aliased_dict import (
     NORDER_GREEN,
     ChipPrefixDict,
@@ -37,10 +38,10 @@ for _, _row in TRACE_MAP.iterrows():
     _fiber = str(_row["Fiber"]).strip()
     for _suffix in _TRACE_SUFFIXES:
         _fiber_alias = f"{_fiber}_{_suffix}"
-        for _chip in ("GREEN", "RED"):
+        for _chip in CHIPS:
             _L2_CHIP_PREFIX_KEYS[f"{_chip}_{_fiber}_{_suffix}"] = (_fiber_alias, _chip)
 for _ext in _ANCILLARY_PER_ORDER:
-    for _chip in ("GREEN", "RED"):
+    for _chip in CHIPS:
         _L2_CHIP_PREFIX_KEYS[f"{_chip}_{_ext}"] = (_ext, _chip)
 
 

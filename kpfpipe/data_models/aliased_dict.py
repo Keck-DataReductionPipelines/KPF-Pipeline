@@ -16,6 +16,8 @@ import numpy as np
 from kpfpipe import DETECTOR
 
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
+NORDER_RED = DETECTOR["norder"]["RED"]
+NUMORDER = DETECTOR["numorder"]
 
 
 class AliasedOrderedDict(OrderedDict):
@@ -119,7 +121,7 @@ class ChipPrefixDict(AliasedOrderedDict):
             super().__getitem__(resolved) if super().__contains__(resolved) else None
         )
         if existing is None or np.size(existing) == 0:
-            full = np.zeros((DETECTOR["numorder"], *value.shape[1:]), dtype=value.dtype)
+            full = np.zeros((NUMORDER, *value.shape[1:]), dtype=value.dtype)
             super().__setitem__(resolved, full)
         self._chip_view(super().__getitem__(resolved), chip)[:] = value
 

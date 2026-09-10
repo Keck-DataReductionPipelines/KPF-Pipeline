@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
@@ -33,9 +33,6 @@ from ._science import (
 
 NORDER = DETECTOR["numorder"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-# Fiber order is the module's own config-overridable default, not the canonical
-# slicer order -- spelled out so a reordering in production shows up here.
-_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +60,7 @@ def _make_l4(
     lam_obs = MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS)
     flux_1d = absorption_spectrum(wave_1d, lam_obs)
     for chip, n in [("GREEN", NORDER_GREEN), ("RED", NORDER_RED)]:
-        for fiber in _FIBERS:
+        for fiber in FIBERS:
             kpf2.set_data(
                 f"{chip}_{fiber}_WAVE", np.tile(wave_1d, (n, 1)).astype(np.float64)
             )
@@ -299,7 +296,7 @@ def rv_module(rv_l4):
 @pytest.fixture
 def rv_loaded(rv_module):
     """RadialVelocity with the L4 CCFs loaded into the caches."""
-    rv_module._load_ccfs(["GREEN", "RED"], _FIBERS)
+    rv_module._load_ccfs(CHIPS, FIBERS)
     return rv_module
 
 
@@ -338,7 +335,7 @@ class TestComputeRVPublic:
     def test_combine_ccds_returns_tuple_and_recovers_injected(self, rv_loaded):
         # combine_ccds=True combines at the RV level, not the CCF level.
         out = rv_loaded.compute_weighted_rvs(
-            ["GREEN", "RED"], "SCI2", combine_fibers=False, combine_ccds=True
+            CHIPS, "SCI2", combine_fibers=False, combine_ccds=True
         )
         assert isinstance(out, tuple) and len(out) == 2
         assert out[0] == pytest.approx(V_INJECT, abs=0.1)

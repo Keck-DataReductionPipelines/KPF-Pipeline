@@ -10,13 +10,13 @@ import os
 
 import numpy as np
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.utils.config import ConfigHandler
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {**DEFAULTS}
+_DEFAULT_CFG = {**DEFAULT_CFG}
 
 
 class WavelengthCalibration:
@@ -49,8 +49,14 @@ class WavelengthCalibration:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._wls_path = None  # set by load_wls()
         self._info = None

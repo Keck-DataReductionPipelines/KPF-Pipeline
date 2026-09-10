@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from kpfpipe import DETECTOR
+from kpfpipe import DETECTOR, SCI_FIBERS
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
@@ -299,7 +299,8 @@ class TestScienceRecipe:
         """
         prim = l2.headers["PRIMARY"]
         expected = _CATALOG_CAPTURE["kpf-drp"]
-        # SCI1-3 are traces 2-4 and carry identical astrometry.
+        # SCI1-3 are traces 2-4 and carry identical astrometry. Traces 1 (SKY) and
+        # 5 (CAL) are blank by design -- no object on the fiber, no "N/A" to write.
         for column, base in (
             ("object", "CID"),
             ("radec_src", "CSRC"),
@@ -379,7 +380,7 @@ class TestScienceRecipe:
         # method, and are born in the dtypes the EPRV standard requires. No
         # radial-velocity VALUE is pinned anywhere in this suite.
         assert l4.headers["PRIMARY"].get("RVMETHOD") == "CCF"
-        for fiber in ("SCI1", "SCI2", "SCI3"):
+        for fiber in SCI_FIBERS:
             assert_dtype(l4.data[f"{fiber}_CCF"], CCF, f"{fiber}_CCF")
             table = l4.data[f"{fiber}_RV"]
             assert set(table.colnames) >= {"RV", "RV_ERR", "BJD_TDB", "BERV"}

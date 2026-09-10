@@ -12,13 +12,13 @@ import os
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
+from kpfpipe import DEFAULT_CFG, DETECTOR, INSTRUMENT_ERAS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import bounded_polyval
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {**DEFAULTS, "extraction_method": "box"}
+_DEFAULT_CFG = {**DEFAULT_CFG, "extraction_method": "box"}
 
 
 class SpectralExtraction:
@@ -48,8 +48,14 @@ class SpectralExtraction:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._order_trace = None
         self._order_trace_path = None
@@ -74,10 +80,7 @@ class SpectralExtraction:
         instera = str(primary["INSTERA"])
         obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
 
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
+        eras = INSTRUMENT_ERAS
         match = eras[eras["INSTERA"].astype(str) == instera]
         if match.empty:
             raise ValueError(
@@ -416,7 +419,7 @@ class SpectralExtraction:
         # CTYPEn is FITS axis order, the reverse of the numpy shape (Norder, Mpix):
         # axis 1 is the dispersion axis (NAXIS1 = Mpix), axis 2 the order axis
         # (NAXIS2 = Norder). Same pair CrossCorrelation writes on CCF#/RV#.
-        for trace in range(1, DETECTOR["numtrace"] + 1):
+        for trace in range(1, self.numtrace + 1):
             for suffix in ("FLUX", "VAR", "BLAZE"):
                 ext = f"TRACE{trace}_{suffix}"
                 l2_obj.set_keyword("CTYPE1", "Pixel", ext=ext)

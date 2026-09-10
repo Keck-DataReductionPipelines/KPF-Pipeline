@@ -22,6 +22,7 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+# Lowercase: these name the output PNGs.
 _CHIPS = ("green", "red")
 _DPI = 200
 

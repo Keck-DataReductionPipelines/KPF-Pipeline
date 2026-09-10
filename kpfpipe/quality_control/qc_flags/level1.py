@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR
 from kpfpipe.modules.image_assembly import RN_KEYS
 from kpfpipe.quality_control.qc_flags.base import QC
 
@@ -21,7 +21,7 @@ class QCL1(QC):
         an all-NaN frame is present but not populated, and fails too.
         """
         shape = (DETECTOR["ccd"]["nrow"], DETECTOR["ccd"]["ncol"])
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             for suffix in ("CCD", "VAR"):
                 arr = self.kpf_obj.data.get(f"{chip}_{suffix}")
                 # A None-data extension is stored as array(None, dtype=object).
@@ -112,7 +112,7 @@ class QCL1(QC):
 
     def variance_positive(self):
         """No negative GREEN_VAR/RED_VAR where the flux is finite."""
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             flux = np.asarray(self.kpf_obj.data[f"{chip}_CCD"])
             var = np.asarray(self.kpf_obj.data[f"{chip}_VAR"])
             if np.any(np.isfinite(flux) & np.isfinite(var) & (var < 0)):
@@ -123,7 +123,7 @@ class QCL1(QC):
 
     def negative_snr_fraction(self):
         """Pixels below -5 sigma at most 1% on each chip."""
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             ccd = self.kpf_obj.data[f"{chip}_CCD"]
             var = self.kpf_obj.data[f"{chip}_VAR"]
             snr = ccd / np.sqrt(var)

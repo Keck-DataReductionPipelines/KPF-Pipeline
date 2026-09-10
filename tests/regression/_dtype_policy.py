@@ -17,17 +17,15 @@ if a cross-cutting contract genuinely needs assertions, promote it to a new cont
 module and justify the contract.
 """
 
-import importlib.resources
-
 import numpy as np
 import pandas as pd
 
-_CFG = importlib.resources.files("kpfpipe.data_models.config")
+from kpfpipe.data_models.config import PATH as _CFG_PATH
 
 
 def _float(table, name):
     """The float dtype ``table``'s ``name`` row declares."""
-    rows = pd.read_csv(_CFG / f"{table}.csv")
+    rows = pd.read_csv(_CFG_PATH / f"{table}.csv")
     bits = int(rows.loc[rows["Name"] == name, "BitDepth"].iloc[0])
     return np.dtype(f"float{bits}")
 

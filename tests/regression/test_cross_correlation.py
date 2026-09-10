@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from kpfpipe import DETECTOR
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
@@ -36,9 +36,6 @@ from ._science import (
 
 NORDER = DETECTOR["numorder"]
 NORDER_RED = DETECTOR["norder"]["RED"]
-# Fiber order is the module's own config-overridable default, not the canonical
-# slicer order -- spelled out so a reordering in production shows up here.
-_FIBERS = ["CAL", "SCI1", "SCI2", "SCI3", "SKY"]
 
 
 # ---------------------------------------------------------------------------
@@ -383,7 +380,7 @@ def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
     ]:
         wave = np.stack([rows[start + i][0] for i in range(n)]).astype(np.float64)
         flux = np.stack([rows[start + i][1] for i in range(n)]).astype(np.float32)
-        for fiber in _FIBERS:
+        for fiber in FIBERS:
             kpf2.set_data(f"{chip}_{fiber}_WAVE", wave.copy())
             kpf2.set_data(f"{chip}_{fiber}_FLUX", flux.copy())
             kpf2.set_data(f"{chip}_{fiber}_VAR", flux.copy())
@@ -474,7 +471,7 @@ class TestComputeCCFPublic:
         cc = CrossCorrelation(
             _build_cc_kpf2(berv=berv), config={"ccf_window": RANGE_KMS}
         )
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             res = cc.compute_ccfs(chip, "SCI2")
             vel, ccf = res["velocity"], res["ccf"]
             recovered = vel[np.argmin(ccf, axis=1)]

@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from kpfpipe import DETECTOR
+from kpfpipe import DETECTOR, SCI_FIBERS
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 from kpfpipe.modules.wavelength_calibration import WavelengthCalibration
@@ -26,8 +26,10 @@ OBS_ID = "KP.20240405.40113.57"  # a bright G-type RV-standard exposure
 NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 
-_FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
-_CHIPS = ["GREEN", "RED"]
+# Oracles for DEFAULT_CFG and the shipped TOML: asserted against mod.fibers /
+# mod.chips below, so importing FIBERS/CHIPS here would assert nothing.
+_FIBERS = ("SKY", "SCI1", "SCI2", "SCI3", "CAL")
+_CHIPS = ("GREEN", "RED")
 
 # Small detector width for fast tests; the WLS copy is agnostic to NCOL.
 NCOL = 32
@@ -103,8 +105,8 @@ class TestConstructor:
             _make_science_l2(),
             config={"chips": ["GREEN"], "fibers": ["SCI2"]},
         )
-        assert mod.chips == ["GREEN"]
-        assert mod.fibers == ["SCI2"]
+        assert mod.chips == ("GREEN",)
+        assert mod.fibers == ("SCI2",)
 
     def test_config_handler_accepted(self):
         config = ConfigHandler(str(_SCIENCE_CONFIG_PATH))
@@ -281,8 +283,6 @@ _FRAUNHOFER_AIR = {
     "H-alpha": 6562.79,
 }
 
-_SCI_FIBERS = ["SCI1", "SCI2", "SCI3"]
-
 
 def _trough_depth(wave_order, flux_order, lambda_air, halfwin=3.0):
     """Continuum-normalized absorption depth at a catalog line.
@@ -336,7 +336,7 @@ class TestSpectrumOrientation:
         config = {
             "KPF_MASTERS_OUTPUT": str(TESTDATA_DIR),
             "chips": _CHIPS,
-            "fibers": _SCI_FIBERS,
+            "fibers": SCI_FIBERS,
         }
         l0 = KPF0.from_fits(kpf_filepath(OBS_ID, "L0", data_root=str(TESTDATA_DIR)))
         l0.standardize_headers()
@@ -353,7 +353,7 @@ class TestSpectrumOrientation:
         cases = []
         for name, lambda_air in _FRAUNHOFER_AIR.items():
             for chip in _CHIPS:
-                for fiber in _SCI_FIBERS:
+                for fiber in SCI_FIBERS:
                     wave = np.asarray(l2.data[f"{chip}_{fiber}_WAVE"])
                     flux = np.asarray(l2.data[f"{chip}_{fiber}_FLUX"], dtype=float)
                     for o in range(wave.shape[0]):

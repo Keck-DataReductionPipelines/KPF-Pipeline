@@ -10,19 +10,16 @@ and the oracle it is checked against comes from here.
 Two resolution rules are replicated by hand rather than imported, so the
 independence is real:
 
-* a ``#`` in a keyword expands to ``1..DETECTOR["numtrace"]``;
+* a ``#`` in a keyword expands to ``1..len(TRACE_MAP)``;
 * a filename whose extension part is a family stem names that family's members
   (``L2-TRACE_WAVE`` -> ``TRACE1_WAVE`` .. ``TRACE5_WAVE``; ``L4-CCF`` ->
   ``CCF1`` .. ``CCF5``).
 """
 
-import importlib.resources
-
 import pandas as pd
 
-from kpfpipe import DETECTOR
-
-_CFG = importlib.resources.files("kpfpipe.data_models.config")
+from kpfpipe.data_models.config import PATH as _CFG_PATH
+from kpfpipe.data_models.config import TRACE_MAP
 
 # The science-chain data models. The masters are deliberately out: their
 # keywords are not part of the science routing contract this oracle checks.
@@ -38,13 +35,13 @@ _FAMILY_STEMS = {
     "RV": "RV{i}",
 }
 
-_INDICES = range(1, DETECTOR["numtrace"] + 1)
+_INDICES = range(1, len(TRACE_MAP) + 1)
 
 
 def _homes():
     """``{keyword: set of extensions}`` implied by the science keyword CSVs."""
     homes = {}
-    for path in sorted(_CFG.iterdir(), key=lambda p: p.name):
+    for path in sorted(_CFG_PATH.iterdir(), key=lambda p: p.name):
         if not path.name.endswith("-keywords.csv"):
             continue
         data_model, _, stem = path.name[: -len("-keywords.csv")].rpartition("-")

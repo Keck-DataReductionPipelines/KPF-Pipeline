@@ -7,7 +7,7 @@ result is a 0/1 flag written to QUALITY_CONTROL.
 
 import numpy as np
 
-from kpfpipe import DETECTOR
+from kpfpipe import DETECTOR, SCI_FIBERS
 from kpfpipe.quality_control.qc_flags.base import QC
 
 _REQUIRED_RV_COLUMNS = frozenset(
@@ -36,7 +36,7 @@ class QCL4(QC):
         consume.
         """
         norder = DETECTOR["numorder"]
-        for fiber in DETECTOR["sci_fibers"]:
+        for fiber in SCI_FIBERS:
             ccf = self.kpf_obj.data.get(f"{fiber}_CCF")
             rv = self.kpf_obj.data.get(f"{fiber}_RV")
             if np.shape(ccf)[:1] != (norder,):

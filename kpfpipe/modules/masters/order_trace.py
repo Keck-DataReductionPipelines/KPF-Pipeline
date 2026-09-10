@@ -37,7 +37,7 @@ from numpy.polynomial import polynomial
 from scipy.linalg import solve_banded
 from scipy.ndimage import gaussian_filter1d, label
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import bounded_polyval, robust_polyfit
@@ -45,8 +45,8 @@ from kpfpipe.utils.stats import bounded_polyval, robust_polyfit
 logger = logging.getLogger(__name__)
 
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "poly_degree": 3,
 }
 
@@ -99,8 +99,14 @@ class OrderTrace:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._master_flat = self._load_master_flat()
         self._image = {
@@ -194,7 +200,7 @@ class OrderTrace:
         4-connected here, which a corner does not survive, leaves each speck its
         own component to drop on size; traces come through untouched.
         """
-        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
+        nrow, ncol = self.nrow, self.ncol
         filled = np.nan_to_num(self._image[chip], nan=0.0, posinf=0.0, neginf=0.0)
 
         off_diagonal = np.full(nrow, -smoothing_weight)
@@ -249,7 +255,7 @@ class OrderTrace:
         detector, where every order is on the detector and the orderlets of an
         order are cleanly separated across dispersion.
         """
-        center = self.ccd["ncol"] // 2
+        center = self.ncol // 2
         half_width = width // 2
         near_center = np.abs(cluster["col_indices"] - center) <= half_width
         return cluster["row_indices"][near_center], cluster["col_indices"][near_center]
@@ -693,7 +699,7 @@ class OrderTrace:
             return self._profiles[chip]
 
         image = self._image[chip]
-        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
+        nrow, ncol = self.nrow, self.ncol
 
         columns = np.unique(np.linspace(0, ncol - 1, sample_count, dtype=int))
         offsets = np.arange(-col_half_window, col_half_window + 1)
@@ -969,7 +975,7 @@ class OrderTrace:
         """
         measured = self._trace_tables[chip].query("Status != 'missing'")
         return bounded_polyval(
-            np.arange(self.ccd["ncol"], dtype=float),
+            np.arange(self.ncol, dtype=float),
             measured[self._trace_fields(which="coeffs")].to_numpy(dtype=float).T,
             measured["X1"].to_numpy(dtype=float)[:, None],
             measured["X2"].to_numpy(dtype=float)[:, None],
@@ -1025,7 +1031,7 @@ class OrderTrace:
         ``Status`` from that span; no 'unknown' may survive.
         """
         table = self._trace_tables[chip]
-        nrow, ncol = self.ccd["nrow"], self.ccd["ncol"]
+        nrow, ncol = self.nrow, self.ncol
         if list(table.columns) != self._trace_fields():
             raise ValueError(f"{chip} output has incompatible fields")
 
@@ -1194,7 +1200,7 @@ class OrderTrace:
             centers = self._trace_centers(chip, fiber, order)
             cluster = self._clusters[chip][int(cluster_index)]
             rows, cols = cluster["row_indices"], cluster["col_indices"]
-            clipped = cols[(rows == 0) | (rows == self.ccd["nrow"] - 1)]
+            clipped = cols[(rows == 0) | (rows == self.nrow - 1)]
             usable = np.setdiff1d(cols, clipped)
             on_chip = np.isin(columns, usable)
             try:
@@ -1209,7 +1215,7 @@ class OrderTrace:
 
             # Check for partial traces that curl back on themselves and refit
             # using degree 2 polynomials
-            if np.ptp(usable) + 1 < self.ccd["ncol"] and int(self.poly_degree) > 2:
+            if np.ptp(usable) + 1 < self.ncol and int(self.poly_degree) > 2:
                 turns = polynomial.polyroots(polynomial.polyder(coeffs))
                 turns = turns[np.isreal(turns)].real
                 if np.any((turns > usable.min()) & (turns < usable.max())):

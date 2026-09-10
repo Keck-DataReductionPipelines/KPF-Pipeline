@@ -13,8 +13,9 @@ import numpy as np
 import pandas as pd
 from astropy.coordinates import Angle
 
-from kpfpipe import DETECTOR, REPO_ROOT, __githash__, __version__
+from kpfpipe import INSTRUMENT_ERAS, __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
+from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.kpf import get_obs_id
@@ -239,7 +240,7 @@ class KPF0(KPFDataModel):
         return "UNKNOWN"
 
     def _instrument_era(self):
-        """Stamp INSTERA from JD_UTC against ``reference/instrument_eras.csv``.
+        """Stamp INSTERA from JD_UTC against ``INSTRUMENT_ERAS``.
 
         Runs after the tabular fill, which is what supplies JD_UTC. A frame no
         era covers -- an undated one included, since its JD_UTC parses to NaT,
@@ -249,10 +250,7 @@ class KPF0(KPFDataModel):
         obs_time = pd.to_datetime(
             self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
         )
-        eras = pd.read_csv(
-            f"{REPO_ROOT}/reference/instrument_eras.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
+        eras = INSTRUMENT_ERAS
         in_era = eras[
             (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
         ]
@@ -303,7 +301,7 @@ class KPF0(KPFDataModel):
             ("solar" if is_solar else "sci") if obstype == "Object" else "cal",
         )
 
-        for trace in range(1, DETECTOR["numtrace"] + 1):
+        for trace in range(1, len(TRACE_MAP) + 1):
             source = prim.get(f"TRACE{trace}")
             if not source:
                 continue

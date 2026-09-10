@@ -36,15 +36,15 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULTS, DETECTOR, REPO_ROOT
+from kpfpipe import CHIPS, DEFAULT_CFG, DETECTOR, REPO_ROOT
 from kpfpipe.utils.astro import color_to_teff, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "ccf_mask_width": 1.0,
     "ccf_step_size": 0.25,
     "ccf_window": [-100.0, 100.0],
@@ -80,8 +80,14 @@ class CrossCorrelation:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         # Lazily-populated caches; the per-orderlet ones are keyed by f'{chip}_{fiber}'.
         self._illumination_source = {}  # set by _resolve_illumination_source()
@@ -89,8 +95,6 @@ class CrossCorrelation:
         self._velocity_grid = {}  # set by _build_velocity_grid()
         self._ccf = {}  # CCF cube, set by compute_ccfs()
         self._ccf_var = {}  # per-bin CCF variance cube, set by compute_ccfs()
-        self._ccf_mask_width = self.ccf_mask_width  # width behind the cached CCFs
-        self._ccf_step_size = self.ccf_step_size  # step behind the cached grids
         self._order_weights = None  # order-weight table, loaded by _get_order_weights()
         self._chips_done = []  # chips processed, for _set_headers/_track_info
         self._fibers_done = []  # illuminated fibers written, for _set_headers
@@ -111,7 +115,7 @@ class CrossCorrelation:
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
             return self._illumination_source[key]
-        positions = DETECTOR["fiber_positions"]
+        positions = self.fiber_positions
         try:
             keyword = f"CLSRC{positions[fiber.upper()] + 1}"
         except KeyError:
@@ -218,7 +222,8 @@ class CrossCorrelation:
         centers on 0 with a warning, matching BarycentricCorrection, since a fast
         star can fall outside a zero-centered window.
         """
-        # The C*# cards are written identically to all science fibers (traces 2-4).
+        # The C*# cards are written identically to all science fibers (traces 2-4),
+        # and to those only: SKY (1) and CAL (5) hold no object, so they stay blank.
         primary = self.l2_obj.headers.get("PRIMARY", {})
         try:
             star_rv = float(primary.get("CRV3"))
@@ -585,13 +590,10 @@ class CrossCorrelation:
         )
 
         # SOURCE = illumination source; NCCF = orders with a non-zero CCF, per chip.
-        fiber_order = [f for f in ("SCI1", "SCI2", "SCI3", "SKY", "CAL") if f in info]
-        fiber_order += [f for f in info if f not in fiber_order]
-
         lines.append(f"\n  {'CHIP':<8s}{'FIBER':<8s}{'SOURCE':<10s}{'NCCF':>8s}")
         lines.append("  " + "-" * 34)
-        for chip in ("GREEN", "RED"):
-            for fiber in fiber_order:
+        for chip in chips:
+            for fiber in info:
                 res = info[fiber]
                 nccf = res.get("nccf", {}).get(chip)
                 if not nccf:
@@ -690,10 +692,12 @@ class CrossCorrelation:
         chips = [c.upper() for c in chips]
         fibers = [f.upper() for f in fibers]
         self._chips_done = chips
+        self._ccf_mask_width = ccf_mask_width
         self._ccf_step_size = ccf_step_size
 
         norder_green = self.norder["GREEN"]
-        norder = norder_green + self.norder["RED"]
+        norder_red = self.norder["RED"]
+        norder = norder_green + norder_red
 
         l4_obj = self.l2_obj.to_kpf4()
 
@@ -745,7 +749,7 @@ class CrossCorrelation:
             order_id = np.array(
                 [
                     f"{chip}_{fiber}_{order}"
-                    for chip in ("GREEN", "RED")
+                    for chip in CHIPS
                     for order in range(self.norder[chip])
                 ]
             )
@@ -758,7 +762,7 @@ class CrossCorrelation:
                     )
                     .round()
                     .astype(np.int64)
-                    for chip in ("GREEN", "RED")
+                    for chip in CHIPS
                 ]
             )
             wave = np.asarray(self.l2_obj.data[f"{fiber}_WAVE"], dtype=np.float64)

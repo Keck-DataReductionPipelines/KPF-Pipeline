@@ -8,7 +8,7 @@ from Gaia (by GAIAID, whose release prefix picks the data release queried) and S
 astrometry (no query), merges them into a canonical ``kpf-drp`` row, and writes all
 four rows to the L0 ``CATALOG_RECORD`` extension.
 
-All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_COLUMNS``), so
+All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_SCHEMA``), so
 the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards; the resolved names
 are joined into ``ALIASES``. Those two families are the only PRIMARY cards AstroQuery
 writes.
@@ -22,118 +22,19 @@ from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
-from kpfpipe import DEFAULTS, DETECTOR
+from kpfpipe import DEFAULT_CFG, DETECTOR, SCI_FIBERS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import gaia_client, retry_request, simbad_client
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {
-    **DEFAULTS,
+_DEFAULT_CFG = {
+    **DEFAULT_CFG,
     "do_gaia_query": True,
     "do_simbad_query": True,
     "astrometry_priority": ("gaia", "simbad"),
     "query_timeout": 30,
-}
-
-# Sources that can supply a CATALOG_RECORD row, highest catalog priority first.
-_SOURCES = ("gaia", "simbad", "wmko")
-
-# The astrometric block the merge takes whole from one source: proper motion is
-# meaningless without the parallax it was measured against, and both need the
-# frame/epoch that qualify the coordinates. equinox and rv are handled separately.
-_ASTROMETRY = ("ra", "dec", "pmra", "pmdec", "parallax", "epoch", "frame")
-
-# Expected result units, verified by _verify_units so a silent upstream schema
-# change fails loudly.
-_GAIA_UNITS = {
-    "ra": u.deg,
-    "dec": u.deg,
-    "pmra": u.mas / u.yr,
-    "pmdec": u.mas / u.yr,
-    "parallax": u.mas,
-    "radial_velocity": u.km / u.s,
-    "ref_epoch": u.yr,
-    "phot_bp_mean_mag": u.mag,
-    "phot_rp_mean_mag": u.mag,
-}
-_SIMBAD_UNITS = {
-    "ra": u.deg,
-    "dec": u.deg,
-    "pmra": u.mas / u.yr,
-    "pmdec": u.mas / u.yr,
-    "plx_value": u.mas,
-    "rvz_radvel": u.km / u.s,
-    "B": None,
-    "V": None,
-    "main_id": None,
-    "ids": None,
-}
-
-# Votable fields asked of SIMBAD, beyond the ra/dec/main_id every query returns. Spelled
-# out rather than derived from _SIMBAD_UNITS, so the two can be seen to diverge.
-_SIMBAD_FIELDS = ("pmra", "pmdec", "plx_value", "rvz_radvel", "B", "V", "ids")
-
-# Queryable Gaia release -> its gaia_source table, newest last. DR1 and EDR3 are
-# excluded (no radial_velocity or BP/RP photometry, and superseded, respectively).
-# A release absent here is neither probed nor accepted.
-_GAIA_TABLES = {
-    "DR2": "gaiadr2.gaia_source",
-    "DR3": "gaiadr3.gaia_source",
-}
-
-# CATALOG_RECORD write schema (AstroQuery is the sole populator): one row per resolved
-# source (wmko/gaia/simbad) plus the merged 'kpf-drp' row. radec_src/plx_src/rv_src
-# name the source each value block came from -- its own for a source row, the winner
-# (or "" if none) for the merged row. Values are in the EPRV C*# PRIMARY format: RA/Dec
-# sexagesimal strings (ICRS), PM [arcsec/yr] (RA incl. cos Dec), parallax [mas], rv
-# [km/s], z the redshift derived from rv, epoch/equinox [Julian yr]. color is a color
-# index and color_name labels it (Gaia "Gaia BP-RP", SIMBAD "B-V", WMKO "G-J"), both
-# blank when a magnitude is missing. Missing floats -> NaN, strings -> "".
-_CATALOG_COLUMNS = (
-    "source",
-    "object",
-    "radec_src",
-    "plx_src",
-    "rv_src",
-    "ra",
-    "dec",
-    "pmra",
-    "pmdec",
-    "parallax",
-    "rv",
-    "z",
-    "frame",
-    "epoch",
-    "equinox",
-    "color",
-    "color_name",
-)
-_CATALOG_STR_COLUMNS = frozenset(
-    {
-        "source",
-        "object",
-        "radec_src",
-        "plx_src",
-        "rv_src",
-        "frame",
-        "ra",
-        "dec",
-        "color_name",
-    }
-)
-
-# RA / DEC are sexagesimal strings, so not subject to astropy unit conversion
-_CATALOG_UNITS = {
-    "pmra": u.arcsec / u.yr,
-    "pmdec": u.arcsec / u.yr,
-    "parallax": u.mas,
-    "rv": u.km / u.s,
-    "z": u.dimensionless_unscaled,
-    "epoch": u.yr,
-    "equinox": u.yr,
-    "color": u.mag,
 }
 
 
@@ -177,8 +78,14 @@ class AstroQuery:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._validate_priority()
 
@@ -193,6 +100,9 @@ class AstroQuery:
     # Private helpers
     # ------------------------------------------------------------------
 
+    # Sources that can supply a CATALOG_RECORD row, highest catalog priority first.
+    _SOURCES = ("gaia", "simbad", "wmko")
+
     def _validate_priority(self):
         """Reject an astrometry_priority naming an unknown or no source.
 
@@ -205,13 +115,20 @@ class AstroQuery:
             ``astrometry_priority`` is empty or names a source outside ``_SOURCES``.
         """
         self.astrometry_priority = tuple(self.astrometry_priority)
-        unknown = [s for s in self.astrometry_priority if s not in _SOURCES]
+        unknown = [s for s in self.astrometry_priority if s not in self._SOURCES]
         if unknown or not self.astrometry_priority:
             raise ValueError(
                 f"astrometry_priority={list(self.astrometry_priority)} must be a "
-                f"non-empty ordered subset of {list(_SOURCES)}"
+                f"non-empty ordered subset of {list(self._SOURCES)}"
                 + (f"; unknown source(s) {unknown}" if unknown else "")
             )
+
+    # Queryable Gaia release -> its gaia_source table, newest last. DR1 and EDR3
+    # are excluded. A release absent here is neither probed nor accepted.
+    _GAIA_TABLES = {
+        "DR2": "gaiadr2.gaia_source",
+        "DR3": "gaiadr3.gaia_source",
+    }
 
     def _gaia_source(self):
         """``(release, source_id)`` from L0 GAIAID, or None if absent/unusable.
@@ -232,7 +149,7 @@ class AstroQuery:
         if len(tokens) == 1:
             return None, source_id
         release = tokens[-2].upper()
-        return (release, source_id) if release in _GAIA_TABLES else None
+        return (release, source_id) if release in self._GAIA_TABLES else None
 
     def _resolve_gaia_release(self, source_id):
         """The newest Gaia release whose gaia_source contains ``source_id``.
@@ -259,9 +176,9 @@ class AstroQuery:
         ValueError
             No queryable release contains ``source_id``.
         """
-        for release in sorted(_GAIA_TABLES, reverse=True):
+        for release in sorted(self._GAIA_TABLES, reverse=True):
             query = (
-                f"SELECT source_id FROM {_GAIA_TABLES[release]} "
+                f"SELECT source_id FROM {self._GAIA_TABLES[release]} "
                 f"WHERE source_id = {source_id}"
             )
             try:
@@ -284,9 +201,9 @@ class AstroQuery:
                 logger.warning("resolved bare GAIAID %s to Gaia %s", source_id, release)
                 return release
         raise ValueError(
-            f"GAIAID {source_id} carries no data release and no queryable Gaia release "
-            f"({', '.join(sorted(_GAIA_TABLES))}) contains that source_id; refusing to "
-            "guess which release it belongs to."
+            f"GAIAID {source_id} carries no data release and no queryable Gaia "
+            f"release ({', '.join(sorted(self._GAIA_TABLES))}) contains that "
+            "source_id; refusing to guess which release it belongs to."
         )
 
     def _simbad_resolvable_name(self):
@@ -396,6 +313,37 @@ class AstroQuery:
                 "assumptions must be revalidated before use."
             )
 
+    # CATALOG_RECORD write schema (AstroQuery is the sole populator): one row per
+    # resolved source (wmko/gaia/simbad) plus the merged 'kpf-drp' row, in column
+    # order. A None unit marks a string column -- RA/Dec are sexagesimal strings, so
+    # not subject to astropy unit conversion. radec_src/plx_src/rv_src name the
+    # source each value block came from -- its own for a source row, the winner (or
+    # "" if none) for the merged row. Values are in the EPRV C*# PRIMARY format:
+    # RA/Dec sexagesimal strings (ICRS), PM [arcsec/yr] (RA incl. cos Dec), parallax
+    # [mas], rv [km/s], z the redshift derived from rv, epoch/equinox [Julian yr].
+    # color is a color index and color_name labels it (Gaia "Gaia BP-RP", SIMBAD
+    # "B-V", WMKO "G-J"), both blank when a magnitude is missing. Missing floats ->
+    # NaN, strings -> "".
+    _CATALOG_SCHEMA = {
+        "source": None,
+        "object": None,
+        "radec_src": None,
+        "plx_src": None,
+        "rv_src": None,
+        "ra": None,
+        "dec": None,
+        "pmra": u.arcsec / u.yr,
+        "pmdec": u.arcsec / u.yr,
+        "parallax": u.mas,
+        "rv": u.km / u.s,
+        "z": u.dimensionless_unscaled,
+        "frame": None,
+        "epoch": u.yr,
+        "equinox": u.yr,
+        "color": u.mag,
+        "color_name": None,
+    }
+
     def _write_catalog_record(self, source, record):
         """Upsert one source's row into the L0 CATALOG_RECORD extension.
 
@@ -411,7 +359,7 @@ class AstroQuery:
         if table.colnames:
             for row in table:
                 rows[str(row["source"])] = {
-                    name: row[name] for name in _CATALOG_COLUMNS
+                    name: row[name] for name in self._CATALOG_SCHEMA
                 }
         if record is None:
             rows.pop(source, None)
@@ -428,8 +376,8 @@ class AstroQuery:
 
         ordered = list(rows.values())
         new_table = Table()
-        for name in _CATALOG_COLUMNS:
-            if name in _CATALOG_STR_COLUMNS:
+        for name, unit in self._CATALOG_SCHEMA.items():
+            if unit is None:
                 new_table[name] = np.array(
                     ["" if r.get(name) is None else r.get(name) for r in ordered],
                     dtype=str,
@@ -439,12 +387,26 @@ class AstroQuery:
                     [np.nan if r.get(name) is None else r.get(name) for r in ordered],
                     dtype=float,
                 )
-                new_table[name].unit = _CATALOG_UNITS[name]
+                new_table[name].unit = unit
         l0.set_data("CATALOG_RECORD", new_table)
 
     # ------------------------------------------------------------------
     # Algorithm steps
     # ------------------------------------------------------------------
+
+    # Expected units, checked by _verify_units so an upstream schema
+    # change fails loudly.
+    _GAIA_UNITS = {
+        "ra": u.deg,
+        "dec": u.deg,
+        "pmra": u.mas / u.yr,
+        "pmdec": u.mas / u.yr,
+        "parallax": u.mas,
+        "radial_velocity": u.km / u.s,
+        "ref_epoch": u.yr,
+        "phot_bp_mean_mag": u.mag,
+        "phot_rp_mean_mag": u.mag,
+    }
 
     def query_gaia(self):
         """Query Gaia for the target's ICRS astrometry, or None (fail-soft).
@@ -464,7 +426,7 @@ class AstroQuery:
                 "no usable GAIAID on L0 PRIMARY (%r); Gaia astrometry unavailable "
                 "(queryable releases: %s)",
                 self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID"),
-                ", ".join(sorted(_GAIA_TABLES)),
+                ", ".join(sorted(self._GAIA_TABLES)),
             )
             return None
         release, gaia_id = source
@@ -477,7 +439,7 @@ class AstroQuery:
         query = f"""
         SELECT ra, dec, pmra, pmdec, parallax, radial_velocity, ref_epoch,
                phot_bp_mean_mag, phot_rp_mean_mag
-        FROM {_GAIA_TABLES[release]}
+        FROM {self._GAIA_TABLES[release]}
         WHERE source_id = {gaia_id}
         """
         logger.info("querying Gaia %s for source_id %s", release, gaia_id)
@@ -502,7 +464,7 @@ class AstroQuery:
                 gaia_id,
             )
             return None
-        self._verify_units(results, _GAIA_UNITS, f"Gaia {release}")
+        self._verify_units(results, self._GAIA_UNITS, f"Gaia {release}")
         row = results[0]
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
@@ -535,6 +497,22 @@ class AstroQuery:
         self._write_catalog_record("gaia", record)
         return record
 
+    # Expected result units, verified by _verify_units so a silent upstream schema
+    # change fails loudly. The votable fields asked of SIMBAD are these keys less
+    # ra/dec/main_id, which every query returns unasked.
+    _SIMBAD_UNITS = {
+        "ra": u.deg,
+        "dec": u.deg,
+        "pmra": u.mas / u.yr,
+        "pmdec": u.mas / u.yr,
+        "plx_value": u.mas,
+        "rvz_radvel": u.km / u.s,
+        "B": None,
+        "V": None,
+        "main_id": None,
+        "ids": None,
+    }
+
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
@@ -552,11 +530,12 @@ class AstroQuery:
             )
             return None
         logger.info("querying SIMBAD for %r", name)
+        fields = tuple(
+            f for f in self._SIMBAD_UNITS if f not in ("ra", "dec", "main_id")
+        )
         try:
             result = retry_request(
-                lambda: simbad_client(_SIMBAD_FIELDS, self.query_timeout).query_object(
-                    name
-                ),
+                lambda: simbad_client(fields, self.query_timeout).query_object(name),
                 "SIMBAD",
                 timeout=self.query_timeout,
             )
@@ -572,7 +551,7 @@ class AstroQuery:
                 "SIMBAD returned no match for %r; SIMBAD astrometry unavailable", name
             )
             return None
-        self._verify_units(result, _SIMBAD_UNITS, "SIMBAD")
+        self._verify_units(result, self._SIMBAD_UNITS, "SIMBAD")
         row = result[0]
         self._common_name = self._simbad_common_name(row)
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
@@ -707,9 +686,15 @@ class AstroQuery:
         """
         candidates = [
             (source, getattr(self, f"_{source}"))
-            for source in _SOURCES
+            for source in self._SOURCES
             if getattr(self, f"_{source}") is not None
         ]
+
+        # The astrometric block the merge takes whole from one source: proper motion
+        # is meaningless without the parallax it was measured against, and both need
+        # the frame/epoch that qualify the coordinates. equinox and rv are handled
+        # separately.
+        astrometry = ("ra", "dec", "pmra", "pmdec", "parallax", "epoch", "frame")
 
         # First candidate in astrometry_priority order with a complete block wins;
         # an incomplete one ahead of it is demoted with a warning.
@@ -718,7 +703,7 @@ class AstroQuery:
             record = getattr(self, f"_{source}")
             if record is None:
                 continue
-            missing = [field for field in _ASTROMETRY if record[field] is None]
+            missing = [field for field in astrometry if record[field] is None]
             if not missing:
                 base_source, base_record = source, record
                 break
@@ -811,8 +796,8 @@ class AstroQuery:
     def _catalog_primary_cards(self):
         """Map the merged CATALOG_RECORD 'kpf-drp' row onto the SCI-fiber C*# cards.
 
-        Returns ``{C-keyword: value}`` for every science fiber (the trace indices
-        ``DETECTOR["sci_traces"]``) -- a
+        Returns ``{C-keyword: value}`` for every science fiber, at its 1-based
+        trace index -- a
         direct copy of the canonical row's already-EPRV-format cells, skipping any
         missing value (NaN / "") so the card keeps the blank the seed stamped rather
         than carrying 'nan'. Warns when the canonical astrometry was assembled from
@@ -846,8 +831,11 @@ class AstroQuery:
                 if np.isnan(value):
                     continue
                 value = float(value)
-            for i in DETECTOR["sci_traces"]:
-                cards[f"{base}{i}"] = value
+            # SCI traces only. SKY and CAL have no object on the fiber, so their
+            # catalog cards stay blank by design -- not a gap. (Most C*# types
+            # admit no "N/A", so a blank is the only way to say "not applicable".)
+            for fiber in SCI_FIBERS:
+                cards[f"{base}{self.fiber_positions[fiber] + 1}"] = value
         return cards
 
     # ------------------------------------------------------------------

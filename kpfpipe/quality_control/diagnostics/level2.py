@@ -2,10 +2,8 @@
 
 import numpy as np
 
+from kpfpipe import CHIPS, FIBERS, SCI_FIBERS
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
-
-_CHIPS = ["GREEN", "RED"]
-_FIBERS = ["SCI1", "SCI2", "SCI3", "SKY", "CAL"]
 
 
 class DiagL2(Diagnostics):
@@ -16,10 +14,10 @@ class DiagL2(Diagnostics):
     def nan_counts(self):
         """NAN{FIBER}: NaN pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, both chips."""
         results = {}
-        for fiber in _FIBERS:
+        for fiber in FIBERS:
             results[f"NAN{fiber}"] = sum(
                 int(np.sum(np.isnan(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])))
-                for chip in _CHIPS
+                for chip in CHIPS
             )
         return results
 
@@ -28,10 +26,10 @@ class DiagL2(Diagnostics):
     def zero_counts(self):
         """ZERO{FIBER}: non-positive pixels per fiber in ``{CHIP}_{FIBER}_FLUX``."""
         results = {}
-        for fiber in _FIBERS:
+        for fiber in FIBERS:
             results[f"ZERO{fiber}"] = sum(
                 int(np.sum(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"] <= 0))
-                for chip in _CHIPS
+                for chip in CHIPS
             )
         return results
 
@@ -44,7 +42,7 @@ class DiagL2(Diagnostics):
         index, since the order-to-wavelength mapping shifts across instrument
         eras.
         """
-        for chip in _CHIPS:
+        for chip in CHIPS:
             wave = np.asarray(self.kpf_obj.data[f"{chip}_SCI2_WAVE"])
             for order in range(wave.shape[0]):
                 if (
@@ -67,7 +65,7 @@ class DiagL2(Diagnostics):
         for index, wavelength in enumerate((452, 548, 652, 747, 852), start=1):
             chip, order = self._order_at(wavelength)
             for code, fibers in (
-                ("SC", ("SCI1", "SCI2", "SCI3")),
+                ("SC", SCI_FIBERS),
                 ("SK", ("SKY",)),
                 ("CL", ("CAL",)),
             ):

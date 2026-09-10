@@ -71,7 +71,7 @@ class PlotL0(Plot):
             ia.count_amplifiers(chip)
             ia.orient_channels(chip)
 
-            prescan = ia.prescan
+            prescan = ia.ccd["prescan"]
             nrow_img = ia.nrow // 2
             ncol_img = ia.ncol // 2
 

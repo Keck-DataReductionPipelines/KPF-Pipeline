@@ -18,6 +18,7 @@ NORDER_GREEN = DETECTOR["norder"]["GREEN"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL = 32  # small detector width for fast tests
 
+# Mirrors level2.py's own _FIBERS; quicklook imports nothing from kpfpipe.
 _FIBERS = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 _CHIPS = ["GREEN", "RED"]
 _PLOT_METHODS = (

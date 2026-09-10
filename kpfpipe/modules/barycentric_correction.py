@@ -25,18 +25,20 @@ from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
-from kpfpipe import DEFAULTS
+from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.utils.astro import KECK_LOCATION, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = {**DEFAULTS}
+_DEFAULT_CFG = {**DEFAULT_CFG}
 
 # The position block the correction cannot proceed without; an absent card means
 # AstroQuery never ran. The trailing 3 (also CPLX3/CSRC3/CRV3) selects the SCI2
-# trace: the C*# cards are identical across science fibers (SCI1-3 = traces 2-4).
+# trace: the C*# cards are identical across science fibers (SCI1-3 = traces 2-4)
+# and written for those only -- SKY (1) and CAL (5) have no object, so their
+# catalog cards are blank by design.
 _REQUIRED_CARDS = ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3")
 
 
@@ -76,8 +78,14 @@ class BarycentricCorrection:
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
 
-        for k, v in _DEFAULTS.items():
+        for k, v in _DEFAULT_CFG.items():
             setattr(self, k, params.get(k, v))
+        self.chips = tuple(self.chips)
+        self.fibers = tuple(self.fibers)
+
+        for k, v in DETECTOR.items():
+            setattr(self, k, v)
+        self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._info = None
         self._ccd_bjd = None  # Per-CCD [GREEN, RED] arrays for _set_headers
