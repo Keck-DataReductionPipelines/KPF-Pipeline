@@ -209,9 +209,7 @@ class TestBatchConsoleFilter:
 
     def test_info_from_scripts_passes(self):
         assert self._flt.filter(self._rec("scripts.processing.masters", logging.INFO))
-        assert self._flt.filter(
-            self._rec("scripts.plots.plot_timeseries", logging.INFO)
-        )
+        assert self._flt.filter(self._rec("scripts.plotting.timeseries", logging.INFO))
 
     def test_info_from_main_passes(self):
         # A driver launched as `python -m scripts.processing.<name>` logs as __main__.

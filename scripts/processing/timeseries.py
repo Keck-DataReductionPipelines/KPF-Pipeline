@@ -9,7 +9,7 @@ star and an inclusive datecode range, it
   2. infers the unique nights (datecodes) those frames span,
   3. builds the nightly calibration masters (``kpfpipe masters``),
   4. reduces every science frame end-to-end, L0 -> L4 (``kpfpipe science``),
-  5. plots the RV timeseries from those L4 products (``plot_timeseries``).
+  5. plots the RV timeseries from those L4 products (``PlotTimeseries``).
 
 It reimplements no pipeline logic: this script owns only discovery (steps 1-2) and
 dispatch; steps 3-5 each run one subprocess (the two orchestrators, which fan out
@@ -43,6 +43,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
+from scripts.plotting.timeseries import PlotTimeseries
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
@@ -387,21 +388,16 @@ def main(argv=None):
     # science -- with --no-science it plots whatever L4 is already on disk.
     plots_rc = None
     if args.plots:
-        plot_argv = [
-            sys.executable,
-            "-m",
-            "scripts.plots.plot_timeseries",
-            "--target",
-            args.target,
-            "--data_dir",
-            science_output,
-            "--plot_dir",
-            plot_dir,
-            "--obs_ids",
-            *obs_ids,
-        ]
         logger.info("dispatching plots for %d frame(s) -> %s", len(obs_ids), plot_dir)
-        plots_rc = _run_stage(plot_argv)
+        # In-process, unlike the two orchestrators: the plotter is a library call, not
+        # a fan-out. Catching broadly keeps the stage fail-soft the way the subprocess
+        # boundary used to -- a plotting failure is reported, never fatal to the run.
+        try:
+            PlotTimeseries(args.target, obs_ids, science_output, plot_dir).run()
+            plots_rc = 0
+        except Exception:
+            logger.exception("plots stage failed")
+            plots_rc = 1
     else:
         logger.info("skipping plots stage (--no-plots)")
 

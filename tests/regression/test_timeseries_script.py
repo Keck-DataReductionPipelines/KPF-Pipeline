@@ -11,6 +11,7 @@ Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -317,6 +318,15 @@ class TestMainDispatch:
             return 0
 
         monkeypatch.setattr(ts, "_run_stage", _run_stage)
+
+        # The plots stage is an in-process call, not a subprocess, so it is recorded
+        # into the same log in the same position -- keeping the stage-ordering
+        # assertions below meaningful across all three stages.
+        def _plot_stage(target, obs_ids, data_dir, plot_dir):
+            calls.append(["plotting.timeseries", target, *obs_ids, data_dir, plot_dir])
+            return SimpleNamespace(run=lambda: None)
+
+        monkeypatch.setattr(ts, "PlotTimeseries", _plot_stage)
         return calls
 
     def test_missing_log_dir_exits(self, ts, monkeypatch, tmp_path):
@@ -356,7 +366,7 @@ class TestMainDispatch:
             assert stage[stage.index("--cache") + 1] == "r"
         # The plot stage reads the science output root and writes to its default
         # {KPF_SCIENCE_OUTPUT}/QLP/timeseries.
-        assert "scripts.plots.plot_timeseries" in calls[2]
+        assert "plotting.timeseries" in calls[2]
         assert a in calls[2] and b in calls[2]
         assert "/sci" in calls[2]
         assert "/sci/QLP/timeseries" in calls[2]
@@ -367,7 +377,7 @@ class TestMainDispatch:
 
         ts.main(_BASE_ARGS + ["--plot_dir", "/custom/plots"])
 
-        assert "scripts.plots.plot_timeseries" in calls[2]
+        assert "plotting.timeseries" in calls[2]
         assert "/custom/plots" in calls[2]
 
     def test_jobs_rides_science_not_masters(self, ts, monkeypatch, tmp_path):
@@ -391,7 +401,7 @@ class TestMainDispatch:
 
         assert len(calls) == 2
         assert "scripts.processing.science" in calls[0] and a in calls[0]
-        assert "scripts.plots.plot_timeseries" in calls[1]
+        assert "plotting.timeseries" in calls[1]
         assert not any("scripts.processing.masters" in c for c in calls)
 
     def test_no_science_still_plots(self, ts, monkeypatch, tmp_path):
@@ -403,7 +413,7 @@ class TestMainDispatch:
 
         assert len(calls) == 2
         assert "scripts.processing.masters" in calls[0]
-        assert "scripts.plots.plot_timeseries" in calls[1]
+        assert "plotting.timeseries" in calls[1]
         assert not any("scripts.processing.science" in c for c in calls)
 
     def test_no_plots_skips_plot_stage(self, ts, monkeypatch, tmp_path):
@@ -413,7 +423,7 @@ class TestMainDispatch:
         ts.main(_BASE_ARGS + ["--no-plots"])
 
         assert len(calls) == 2
-        assert not any("scripts.plots.plot_timeseries" in c for c in calls)
+        assert not any("plotting.timeseries" in c for c in calls)
 
     def test_all_stages_skipped_runs_nothing(self, ts, monkeypatch, tmp_path):
         _write_l0(str(tmp_path), "20240101", 3600, "10700")
@@ -440,3 +450,21 @@ class TestMainDispatch:
         with pytest.raises(SystemExit) as exc:
             ts.main(_BASE_ARGS)
         assert exc.value.code == 1
+
+    def test_plot_failure_is_fail_soft(self, ts, monkeypatch, tmp_path, caplog):
+        # The plots stage lost its subprocess boundary, so the wrapper must catch
+        # whatever the plotter raises: the run still reaches its summary line and
+        # exits 1, rather than dying with the plotter's traceback.
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        self._patch(ts, monkeypatch, tmp_path)
+
+        def _boom(*a, **k):
+            raise RuntimeError("no finite RV points to plot")
+
+        monkeypatch.setattr(ts, "PlotTimeseries", _boom)
+        with caplog.at_level("INFO"):
+            with pytest.raises(SystemExit) as exc:
+                ts.main(_BASE_ARGS)
+        assert exc.value.code == 1
+        assert "plots stage failed" in caplog.text
+        assert "plots exit 1" in caplog.text

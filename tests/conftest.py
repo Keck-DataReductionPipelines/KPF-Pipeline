@@ -142,14 +142,15 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "quicklook: exercises kpfpipe.quality_control.quicklook -- the "
-        "PlotL0/L1/L2/L4 renderers; excluded from the fast pre-commit subset "
+        "quicklook: exercises a PNG-rendering plot module -- the PlotL0/L1/L2/L4 "
+        "renderers in kpfpipe.quality_control.quicklook, and the RV-timeseries "
+        "plotter in scripts/plotting; excluded from the fast pre-commit subset "
         "because the PNG rendering is slow. Names the MODULE under test, not "
         "the technique: a test elsewhere in the tree that happens to render a "
         "figure does not get this marker, so `-m quicklook` collects exactly "
-        "the quicklook plots a developer is working on and nothing else. "
-        "(scripts/quality_control/qlp.py drives these renderers, but its test "
-        "is scripts-layer and so carries `cli`.) Run in the full suite or "
+        "the plots a developer is working on and nothing else. "
+        "(scripts/quality_control/qlp.py drives these renderers, but it is a "
+        "reporting entry point and so carries `cli`.) Run in the full suite or "
         "focused with `-m quicklook`",
     )
 

@@ -543,8 +543,10 @@ Cross-cutting conventions that apply regardless of subsystem.
   `Path(__file__).parent / "testdata" / …`. Two tiers (synthetic in-memory vs. real `testdata/`)
   documented in the module docstring. Never commit testdata and don't build a fixture-generation
   script (there is none, by design); regenerate a missing frame locally and flag it in the response.
-- **Markers**: `@pytest.mark.slow` (integration/heavy) and `@pytest.mark.requires_testdata`
-  (auto-skipped when absent).
+- **Markers**: `slow` (integration/heavy), `cli` (scripts/tools layer) and `quicklook`
+  (PNG-rendering plot modules) are the three the fast pre-commit subset excludes
+  (`-m "not slow and not cli and not quicklook"`); `requires_testdata` is orthogonal, auto-skipped
+  when the frames are absent. Each is registered with its rationale in `tests/conftest.py`.
 - **Tolerances**: analytic recovery `assert_allclose(rtol=1e-5, atol=1e-5)`; FITS round-trips
   `assert_array_almost_equal(decimal=4)`; scalars `pytest.approx`; real-data sanity bare ranges.
 - **Assertions**: bare `assert` for scalars/shapes; `np.testing.*` for arrays; exceptions via

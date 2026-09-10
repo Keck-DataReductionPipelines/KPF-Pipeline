@@ -51,8 +51,8 @@ class TestUnknownCommand:
         assert "unknown command" in err and "frobnicate" in err
 
     def test_plot_timeseries_is_not_a_command(self, capsys):
-        # The plotter runs only via `scripts.plots.plot_timeseries` (as a script and
-        # from the timeseries stage); it is deliberately not a CLI command.
+        # The plotter is a library the timeseries stage imports, not a driver; it
+        # is deliberately not a CLI command and has no entry point of its own.
         assert "plot-timeseries" not in cli._COMMANDS
         with pytest.raises(SystemExit) as exc:
             cli.main(["plot-timeseries", "--target", "10700"])
