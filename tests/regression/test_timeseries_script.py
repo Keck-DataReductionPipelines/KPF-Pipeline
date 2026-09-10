@@ -18,7 +18,7 @@ import pytest
 
 from scripts.processing import timeseries as _ts
 
-from ._scripts import write_l0_tree
+from ._scripts import add_junk_obs_id, write_l0_tree
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
@@ -44,19 +44,8 @@ def _write_l0(data_input, datecode, seconds, obj, imtype="Object", junk=False):
     timeseries discovery tests need."""
     obs_id = write_l0_tree(data_input, datecode, seconds, obj=obj, imtype=imtype)
     if junk:
-        _add_junk(data_input, obs_id)
+        add_junk_obs_id(data_input, obs_id)
     return obs_id
-
-
-def _add_junk(data_input, obs_id):
-    """Append obs_id to the WMKO junk list under {data_input}/vNext/reference/."""
-    ref = Path(data_input) / "vNext" / "reference"
-    ref.mkdir(parents=True, exist_ok=True)
-    junk_csv = ref / "junk_obs.csv"
-    if not junk_csv.exists():
-        junk_csv.write_text("Junk Observations for KPF\nobservation_id\n")
-    with junk_csv.open("a") as fh:
-        fh.write(f"{obs_id}\n")
 
 
 # ---------------------------------------------------------------------------

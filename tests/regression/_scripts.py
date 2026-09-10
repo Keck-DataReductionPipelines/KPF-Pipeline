@@ -92,11 +92,14 @@ def write_l0_tree(
     targname=None,
     exptime=60.0,
     elapsed=60.0,
+    extra_cards=None,
 ):
     """Write one PRIMARY-only L0 frame under ``{data_input}/L0/{datecode}``.
 
     Enough header for a mini-db header scan and nothing more; returns the obs_id.
     ``targname`` defaults to ``obj`` (calibration frames set them independently).
+    ``extra_cards`` adds instrument cards past the mini-db set, for the analysis
+    scripts that read their own (the ThAr lamp cards, say).
     """
     l0_dir = Path(data_input) / "L0" / datecode
     l0_dir.mkdir(parents=True, exist_ok=True)
@@ -108,7 +111,19 @@ def write_l0_tree(
             "TARGNAME": obj if targname is None else targname,
             "EXPTIME": exptime,
             "ELAPSED": elapsed,
+            **(extra_cards or {}),
         }
     )
     fits.PrimaryHDU(header=header).writeto(l0_dir / f"{obs_id}.fits")
     return obs_id
+
+
+def add_junk_obs_id(data_input, obs_id):
+    """Append obs_id to the WMKO junk list under ``{data_input}/vNext/reference/``."""
+    ref = Path(data_input) / "vNext" / "reference"
+    ref.mkdir(parents=True, exist_ok=True)
+    junk_csv = ref / "junk_obs.csv"
+    if not junk_csv.exists():
+        junk_csv.write_text("Junk Observations for KPF\nobservation_id\n")
+    with junk_csv.open("a") as fh:
+        fh.write(f"{obs_id}\n")
