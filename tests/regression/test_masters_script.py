@@ -3,7 +3,7 @@
 Covers the driver's own surface: arg parsing and the two input forms, the
 ``_cli_task`` argv it fans out, datecode resolution, and the ``main`` exit-code
 contract (nonzero iff at least one night failed). The shared fan-out engine and
-the ``datecode_dirs_in_range`` helper are tested in test_dispatch_script.py and
+the ``datecode_dirs_in_range`` helper are tested in test_script_helpers.py and
 test_io.py.
 
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.

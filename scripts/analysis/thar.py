@@ -28,9 +28,9 @@ import kpfpipe
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
 from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
-from scripts.processing._argparse import analysis_parser, resolve_dir_shortcuts
-from scripts.processing._dispatch import _default_science_jobs
-from scripts.processing._scan import scan_datecodes, scan_night_to_cache
+from scripts._argparse import analysis_parser, resolve_dir_shortcuts
+from scripts._dispatch import _default_science_jobs
+from scripts._scan import scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
 

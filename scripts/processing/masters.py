@@ -34,8 +34,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range, read_token_file
 from kpfpipe.utils.kpf import is_datecode
 from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
-from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
-from scripts.processing._argparse import (
+from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
     logging_parser,
@@ -43,13 +42,14 @@ from scripts.processing._argparse import (
     recipe_and_config_parser,
     resolve_dir_shortcuts,
 )
-from scripts.processing._dispatch import (
+from scripts._dispatch import (
     _MASTERS_JOBS,
     _default_masters_jobs,
     configure_runtime,
     run_stage,
 )
-from scripts.processing._scan import warm_mini_db_caches
+from scripts._scan import warm_mini_db_caches
+from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 
 logger = logging.getLogger(__name__)
 

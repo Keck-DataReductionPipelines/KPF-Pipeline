@@ -38,17 +38,17 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import build_run_log_dir, setup_logging
+from scripts._argparse import (
+    data_dirs_parser,
+    logging_parser,
+    recipe_and_config_parser,
+    resolve_dir_shortcuts,
+)
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
     DEFAULT_SCIENCE_CONFIG,
     DEFAULT_SCIENCE_RECIPE,
-)
-from scripts.processing._argparse import (
-    data_dirs_parser,
-    logging_parser,
-    recipe_and_config_parser,
-    resolve_dir_shortcuts,
 )
 
 logger = logging.getLogger("kpfpipe.cli")

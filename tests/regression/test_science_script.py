@@ -3,7 +3,7 @@
 Covers the driver's own surface: arg parsing and obs_id validation, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
 at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
-is tested in test_dispatch_script.py. Stubs only -- no real testdata needed.
+is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
 import sys

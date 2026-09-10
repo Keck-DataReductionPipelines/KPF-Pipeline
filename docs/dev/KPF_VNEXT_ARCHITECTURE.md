@@ -253,7 +253,7 @@ never up: `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose 
 imports `scripts.processing.*`, but **the scripts must never import `tools`**. All four are
 installed, importable packages; code shared across a layer's siblings goes **down** into
 `kpfpipe/`, or — when it is layer-specific — lives beside them as a `_`-prefixed private helper
-(e.g. `scripts/processing/_argparse.py`, `recipes/_logging.py`) that only its own layer imports.
+(e.g. `scripts/_argparse.py`, `recipes/_logging.py`) that only its own layer imports.
 
 ### Modules
 
@@ -286,7 +286,8 @@ is runnable on its own (`python -m scripts.processing.<name>`), with no knowledg
 above it; its flags are documented by `kpfpipe <command> --help`. The plotter is not a driver: it
 has no CLI and is imported by the `timeseries` wrapper as a library.
 
-The processing drivers share a set of **`tools`-free** orchestration helpers:
+The drivers share a set of **`tools`-free** orchestration helpers, which sit at the
+`scripts/` root rather than inside `processing/` because more than one sub-package composes them:
 
 - `_argparse.py` — shared argparse parent-parsers composed via `parents=[…]`, so each common flag
   (recipe/config, data dirs, logging, pool, cache) is declared once; `resolve_dir_shortcuts`

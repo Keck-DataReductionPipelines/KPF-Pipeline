@@ -31,8 +31,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf import get_datecode, is_obs_id
 from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
-from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
-from scripts.processing._argparse import (
+from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
     logging_parser,
@@ -40,12 +39,13 @@ from scripts.processing._argparse import (
     recipe_and_config_parser,
     resolve_dir_shortcuts,
 )
-from scripts.processing._dispatch import (
+from scripts._dispatch import (
     _default_science_jobs,
     configure_runtime,
     run_stage,
 )
-from scripts.processing._scan import warm_mini_db_caches
+from scripts._scan import warm_mini_db_caches
+from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 
 logger = logging.getLogger(__name__)
 
