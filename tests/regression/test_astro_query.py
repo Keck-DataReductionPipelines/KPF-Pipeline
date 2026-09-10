@@ -21,7 +21,7 @@ from astropy.coordinates import Angle, SkyCoord
 from astropy.table import Column, Table
 
 from kpfpipe.data_models import KPF0
-from kpfpipe.modules.astro_query import _GAIA_UNITS, _SIMBAD_UNITS, AstroQuery
+from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import _RETRY_WAITS
@@ -495,12 +495,12 @@ def _units_table(unit_map, value_map, unit_overrides=None):
 
 def _gaia_table(values=None, units=None):
     vals = {**_GAIA_VALUES, **(values or {})}
-    return _units_table(_GAIA_UNITS, vals, units)
+    return _units_table(AstroQuery._GAIA_UNITS, vals, units)
 
 
 def _simbad_table(values=None, units=None):
     vals = {**_SIMBAD_VALUES, **(values or {})}
-    return _units_table(_SIMBAD_UNITS, vals, units)
+    return _units_table(AstroQuery._SIMBAD_UNITS, vals, units)
 
 
 def _gaia_job(table):
@@ -620,14 +620,15 @@ class TestExternalQueries:
         assert aq._aliases() == "HD 219134"
 
     def test_verify_units_missing_and_mismatch_raises(self):
-        AstroQuery._verify_units(_gaia_table(), _GAIA_UNITS, "Gaia DR3")  # no raise
+        units = AstroQuery._GAIA_UNITS
+        AstroQuery._verify_units(_gaia_table(), units, "Gaia DR3")  # no raise
         dropped = _gaia_table()
         dropped.remove_column("parallax")
         with pytest.raises(ValueError, match="unexpected column units"):
-            AstroQuery._verify_units(dropped, _GAIA_UNITS, "Gaia DR3")
+            AstroQuery._verify_units(dropped, units, "Gaia DR3")
         bad = _gaia_table(units={"parallax": u.arcsec})
         with pytest.raises(ValueError, match="unexpected column units"):
-            AstroQuery._verify_units(bad, _GAIA_UNITS, "Gaia DR3")
+            AstroQuery._verify_units(bad, units, "Gaia DR3")
 
     # -- Gaia --------------------------------------------------------------
 
@@ -792,16 +793,18 @@ def _adql_select_columns(query):
 class TestRequestMatchesParse:
     """Each query asks for exactly the columns its parser reads.
 
-    The mocked tables are built from the parser's own _GAIA_UNITS/_SIMBAD_UNITS, so
-    they answer whatever was asked and a drifted request (asking SIMBAD for the
-    deprecated 'plx' while reading 'plx_value') leaves every other test green.
+    The mocked tables are built from the parser's own unit schemas, so they answer
+    whatever was asked and a drifted request (asking SIMBAD for the deprecated
+    'plx' while reading 'plx_value') leaves every other test green.
     """
 
     def test_gaia_select_list_matches_parsed_columns(self):
         aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
             aq.query_gaia()
-        assert _adql_select_columns(launch_job.call_args.args[0]) == set(_GAIA_UNITS)
+        assert _adql_select_columns(launch_job.call_args.args[0]) == set(
+            AstroQuery._GAIA_UNITS
+        )
 
     @pytest.mark.parametrize(
         ("gaiaid", "table", "designation"),
@@ -828,8 +831,19 @@ class TestRequestMatchesParse:
         aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
         with _patch_simbad(_simbad_instance(_simbad_table())) as simbad_client:
             aq.query_simbad()
+        # Spelled out rather than derived from _SIMBAD_UNITS, which is what the
+        # module builds the request from: a derived expectation would follow a
+        # renamed field instead of catching it.
         requested = set(simbad_client.call_args.args[0])
-        assert requested == set(_SIMBAD_UNITS) - {"ra", "dec", "main_id"}
+        assert requested == {
+            "pmra",
+            "pmdec",
+            "plx_value",
+            "rvz_radvel",
+            "B",
+            "V",
+            "ids",
+        }
 
 
 def _release_aware_launch_job(present=(), failing=()):
