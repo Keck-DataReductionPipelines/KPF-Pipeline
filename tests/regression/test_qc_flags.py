@@ -5,7 +5,6 @@ CLI smoke tests live in test_qc_script.py.
 """
 
 import logging
-import os
 import types
 
 import numpy as np
@@ -370,36 +369,19 @@ class TestQCL0:
         assert QCL0(l0).data_l0_red_green() is False
 
     def test_data_l0_red_green_fail_empty(self, tmp_path):
-        fn = str(tmp_path / "KP.20240405.00002.00.fits")
-        primary = fits.PrimaryHDU()
-        primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-        primary.header["OFNAME"] = os.path.basename(fn)
-        primary.header["PROGNAME"] = "K123"
-        hdus = [primary]
-        for chip in CHIPS:
-            for amp in range(1, 5):
-                # data=None: KPF0 stores array(None, dtype=object), treated as absent.
-                hdus.append(fits.ImageHDU(data=None, name=f"{chip}_AMP{amp}"))
-        fits.HDUList(hdus).writeto(fn, overwrite=True)
-        l0 = KPF0.from_fits(fn)
-        assert QCL0(l0).data_l0_red_green() is False
+        # data=None: KPF0 stores array(None, dtype=object), treated as absent.
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00002.00.fits", shape=(10, 10), with_data=False
+        )
+        assert QCL0(standardized_l0(fn)).data_l0_red_green() is False
 
     def test_data_l0_red_green_pass_two_amp(self, tmp_path):
         # 2-amp readout (AMP1/AMP2 only) is the truth-frame layout and must pass.
         # Two amps split the detector by column alone, so each is full height.
-        fn = str(tmp_path / "KP.20240405.00003.00.fits")
-        primary = fits.PrimaryHDU()
-        primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-        primary.header["OFNAME"] = os.path.basename(fn)
-        primary.header["PROGNAME"] = "K123"
-        hdus = [primary]
-        for chip in CHIPS:
-            for amp in (1, 2):
-                data = np.ones((20, 10), dtype=np.float32)
-                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-        fits.HDUList(hdus).writeto(fn, overwrite=True)
-        l0 = KPF0.from_fits(fn)
-        assert QCL0(l0).data_l0_red_green() is True
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00003.00.fits", namps=2, shape=(20, 10)
+        )
+        assert QCL0(standardized_l0(fn)).data_l0_red_green() is True
 
     def test_data_l0_red_green_fail_wrong_amp_shape(self, tmp_path):
         # Four amps that do not tile the detector: a truncated readout.
@@ -419,19 +401,11 @@ class TestQCL0:
         assert QCL0(l0).data_l0_red_green() is False
 
     def test_data_l0_red_green_fail_partial_amp(self, tmp_path):
-        fn = str(tmp_path / "KP.20240405.00004.00.fits")
-        primary = fits.PrimaryHDU()
-        primary.header["DATE-OBS"] = "2024-04-05T01:00:37"
-        primary.header["OFNAME"] = os.path.basename(fn)
-        primary.header["PROGNAME"] = "K123"
-        hdus = [primary]
-        for chip in CHIPS:
-            for amp in (1, 2, 3):  # 3 amps -> not a valid 2/4-amp readout
-                data = np.ones((10, 10), dtype=np.float32)
-                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-        fits.HDUList(hdus).writeto(fn, overwrite=True)
-        l0 = KPF0.from_fits(fn)
-        assert QCL0(l0).data_l0_red_green() is False
+        # 3 amps -> not a valid 2/4-amp readout
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00004.00.fits", namps=3, shape=(10, 10)
+        )
+        assert QCL0(standardized_l0(fn)).data_l0_red_green() is False
 
     def test_header_keywords_present(self, tmp_path):
         l0 = _make_kpf0(tmp_path)

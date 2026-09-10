@@ -7,6 +7,7 @@ meter, guide camera, telemetry, and telescope metadata.
 
 import importlib.metadata
 import logging
+from datetime import datetime
 
 import astropy.units as u
 import numpy as np
@@ -135,6 +136,7 @@ class KPF0(KPFDataModel):
         self._program_identification()
         self._instrument_era()
         self._observing_mode()
+        self._readout()
         self._site_coordinates()
         self._tcs_pointing()
         self._drp_metadata()
@@ -308,6 +310,46 @@ class KPF0(KPFDataModel):
             self.set_keyword(
                 f"CLSRC{trace}", _EPRV_SOURCES.get(str(source).strip().lower(), source)
             )
+
+    def _readout(self):
+        """Stamp how each CCD was read out: NAMPGRN/NAMPRED, TRT#, READMODE.
+
+        Only the amps a readout used carry data, and KPF0 stores an absent one
+        as ``array(None, dtype=object)``. TRT{chip} is the shutter-close to
+        file-write duration. The ACF waveform filenames name the read mode
+        outright, and failing that that duration separates ~12 s fast readout
+        from ~48 s regular; a frame carrying neither leaves READMODE blank.
+        """
+        native = self.headers["INSTRUMENT_HEADER"]
+        read_time = {}
+
+        for chip, namp_key, prefix in (
+            ("GREEN", "NAMPGRN", "GR"),
+            ("RED", "NAMPRED", "RD"),
+        ):
+            namp = 0
+            for i in range(1, 5):
+                arr = self.data.get(f"{chip}_AMP{i}")
+                if arr is None or arr.dtype == np.dtype(object) or np.size(arr) == 0:
+                    continue
+                namp += 1
+            self.set_keyword(namp_key, namp)
+
+            if native.get(f"{prefix}DATE") and native.get(f"{prefix}DATE-E"):
+                read_time[chip] = (
+                    datetime.fromisoformat(native[f"{prefix}DATE"])
+                    - datetime.fromisoformat(native[f"{prefix}DATE-E"])
+                ).total_seconds()
+                self.set_keyword(f"TRT{chip}", round(read_time[chip], 3))
+
+        acf = f"{native.get('GRACFFLN', '')} {native.get('RDACFFLN', '')}"
+        if "fast" in acf:
+            self.set_keyword("READMODE", "fast")
+        elif "regular" in acf:
+            self.set_keyword("READMODE", "regular")
+        elif read_time:
+            fast = min(read_time.values()) < 20
+            self.set_keyword("READMODE", "fast" if fast else "regular")
 
     def _site_coordinates(self):
         """Stamp the observatory location onto PRIMARY from ``KECK_LOCATION``.

@@ -496,7 +496,7 @@ Cross-cutting conventions that apply regardless of subsystem.
 ### C.5 Shared utilities & helpers
 
 - **Utils-first: import shared helpers, don't duplicate.** Reusable stats/validation/geometry live in
-  `kpfpipe/utils/` (detector geometry — `count_amplifiers`, `orient_channels`, `RN_KEYS` — on
+  `kpfpipe/utils/` (detector geometry — `orient_channels`, `RN_KEYS` — on
   `ImageAssembly`) and are imported, never re-implemented. `scipy` is the numerical backend; shared
   numerics (`flag_outliers`, `optimize_lsq`, `interpolate_bad_pixels`, `compute_redshift`) live in
   utils.
