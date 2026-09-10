@@ -9,6 +9,7 @@ reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
 import argparse
 import logging
 import os
+import re
 
 import pytest
 
@@ -105,6 +106,39 @@ class TestDirShortcuts:
         data_input, masters, science, log_dir = sentinel.read_text().split("|")
         assert data_input == "/cfg/in"  # untouched by --output_dir
         assert masters == "/out" and science == "/out" and log_dir == "/out/logs"
+
+
+class TestRunLogDir:
+    """One run, one log directory -- created here, or joined from a parent script."""
+
+    def _log_dir(self, monkeypatch, tmp_path, extra):
+        seen = {}
+        monkeypatch.setattr(
+            red, "setup_logging", lambda **kw: seen.update(kw) or "/dev/null"
+        )
+        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
+        red.main(
+            [
+                "--science",
+                "-r",
+                str(recipe),
+                "-c",
+                str(_base_cfg(tmp_path)),
+                "-o",
+                "KP.x",
+                *extra,
+            ]  # fmt: skip
+        )
+        return seen["log_dir"]
+
+    def test_standalone_run_makes_its_own(self, monkeypatch, tmp_path):
+        log_dir = self._log_dir(monkeypatch, tmp_path, [])
+        assert re.fullmatch(r"/cfg/l/run_\d{8}T\d{6}", log_dir)
+
+    def test_log_run_dir_is_used_verbatim(self, monkeypatch, tmp_path):
+        # What an orchestrator forwards: join its run, never nest inside it.
+        parent = "/cfg/l/masters_20240405T010203"
+        assert self._log_dir(monkeypatch, tmp_path, ["--log_run_dir", parent]) == parent
 
 
 class TestShortcutOverride:

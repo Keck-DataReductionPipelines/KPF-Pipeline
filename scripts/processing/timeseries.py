@@ -42,7 +42,7 @@ import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
-from kpfpipe.utils.logger import setup_batch_logging
+from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
 from scripts.plotting.timeseries import PlotTimeseries
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
@@ -284,7 +284,11 @@ def main(argv=None):
     science_dirs = ConfigHandler(science_config).get_params(["DATA_DIRS"])
     logger_params = ConfigHandler(science_config).get_params(["LOGGER"])
     data_input = args.kpf_data_input or science_dirs["KPF_DATA_INPUT"]
-    log_dir = args.log_dir or logger_params.get("log_dir")
+    # One run, one log directory: this wrapper, both stage orchestrators, and
+    # every reduce they launch (forwarded below as --log_run_dir).
+    log_dir = args.log_run_dir or build_run_log_dir(
+        args.log_dir or logger_params.get("log_dir"), "timeseries"
+    )
     if not log_dir:
         sys.exit(
             "error: no log directory configured; set [LOGGER] log_dir in the "
@@ -303,7 +307,7 @@ def main(argv=None):
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
         (args.kpf_masters_output, "--kpf_masters_output"),
-        (args.log_dir, "--log_dir"),
+        (log_dir, "--log_run_dir"),
         (args.log_level, "--log_level"),
     ):
         if value:

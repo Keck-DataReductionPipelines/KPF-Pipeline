@@ -84,18 +84,49 @@ def get_level(name):
         ) from None
 
 
-def build_log_path(log_dir, recipe_name, target, start_time=None):
-    """Build the unique per-invocation log path (does not create the file).
+def build_run_log_dir(log_dir, label, start_time=None):
+    """Build one CLI run's own log directory (does not create it).
 
-    The layout is ``{log_dir}/{YYYYMMDD}/kpf_{recipe_name}_{target}_
-    {YYYYMMDDTHHMMSS}.log`` with both date components in UT. The date
-    subdirectory keeps every log under the one configured parent directory
-    (DRP-RUN-09) while the per-invocation filename records what ran and when.
+    The layout is ``{log_dir}/{label}_{YYYYMMDDTHHMMSS}``, the stamp in UT. Every
+    log of that run is written here whatever UT day each one starts on, so a batch
+    crossing UT midnight still lands in one place and two batches on one day never
+    share a directory. A script that launches another passes its own directory down
+    instead of calling this, binding the whole process tree to one run.
 
     Parameters
     ----------
     log_dir : str
         The configured parent log directory (DRP-RUN-07).
+    label : str
+        The launching command: 'masters', 'science', 'timeseries', or 'run'.
+    start_time : time.struct_time or None
+        UT start time of the run; None means ``time.gmtime()`` now.
+
+    Returns
+    -------
+    str or None
+        The absolute run-directory path, or None when ``log_dir`` is falsy --
+        leaving the "not configured" error to the caller (DRP-RUN-07).
+    """
+    if not log_dir:
+        return None
+    stamp = time.strftime("%Y%m%dT%H%M%S", start_time or time.gmtime())
+    return os.path.abspath(os.path.join(log_dir, f"{label}_{stamp}"))
+
+
+def build_log_path(log_dir, recipe_name, target, start_time=None):
+    """Build the unique per-invocation log path (does not create the file).
+
+    The layout is ``{log_dir}/kpf_{recipe_name}_{target}_{YYYYMMDDTHHMMSS}.log``,
+    the stamp in UT. Callers pass the run's own directory (the scripts layer
+    builds it as ``{configured log_dir}/{label}_{stamp}``), so every log of one
+    run lands together while staying under the one configured parent
+    (DRP-RUN-09).
+
+    Parameters
+    ----------
+    log_dir : str
+        This run's own log directory, from ``build_run_log_dir``.
     recipe_name : str
         Short recipe identifier, e.g. 'science' or 'masters'.
     target : str
@@ -117,10 +148,9 @@ def build_log_path(log_dir, recipe_name, target, start_time=None):
         raise ValueError(f"log_dir must be a non-empty string; got {log_dir!r}")
     if start_time is None:
         start_time = time.gmtime()
-    datecode = time.strftime("%Y%m%d", start_time)
     stamp = time.strftime("%Y%m%dT%H%M%S", start_time)
     fn = f"kpf_{recipe_name}_{target}_{stamp}.log"
-    return os.path.abspath(os.path.join(log_dir, datecode, fn))
+    return os.path.abspath(os.path.join(log_dir, fn))
 
 
 def setup_logging(
@@ -136,7 +166,7 @@ def setup_logging(
 
     - Tears down any handlers a previous setup_logging installed, so
       repeated calls never duplicate handlers.
-    - Creates the ``{log_dir}/{YYYYMMDD}/`` directory as needed.
+    - Creates ``log_dir`` as needed.
     - Opens the log file with exclusive create; on a name collision (two
       instances starting the same second) it retries with a numeric suffix
       (``.1``, ``.2``, ...) so concurrent instances never share a file
@@ -151,7 +181,7 @@ def setup_logging(
     Parameters
     ----------
     log_dir : str
-        The configured parent log directory (DRP-RUN-07).
+        This run's own log directory, from ``build_run_log_dir``.
     recipe_name : str
         Short recipe identifier, e.g. 'science' or 'masters'.
     target : str
@@ -226,7 +256,7 @@ def setup_batch_logging(log_dir, label, level="INFO", console=True):
     wrapper (``label`` is the stage name). Sibling to ``setup_logging``: same
     root-handler machinery and file layout, but for the fan-out drivers rather
     than one recipe. Writes
-    ``{log_dir}/{YYYYMMDD}/kpf_{label}_batch_{stamp}.log``, recording the batch's
+    ``{log_dir}/kpf_{label}_batch_{stamp}.log``, recording the batch's
     own decision points -- units dispatched, canary result, per-unit ok/failed,
     and the failure sentinels -- alongside (not replacing) each unit's
     per-reduction log. The console echo is pinned to ``sys.stdout`` so an operator
@@ -241,7 +271,7 @@ def setup_batch_logging(log_dir, label, level="INFO", console=True):
     Parameters
     ----------
     log_dir : str
-        The configured parent log directory (DRP-RUN-07).
+        This run's own log directory, from ``build_run_log_dir``.
     label : str
         Short orchestrator identifier, e.g. 'masters' or 'science'.
     level : str

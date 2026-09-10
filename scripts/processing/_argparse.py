@@ -106,6 +106,11 @@ def logging_parser():
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--log_dir", help="override [LOGGER] log_dir")
     p.add_argument("--log_level", help="override [LOGGER] log_level (e.g. DEBUG)")
+    p.add_argument(
+        "--log_run_dir",
+        help="log into this exact directory instead of creating a run directory "
+        "under --log_dir; set automatically when one script launches another",
+    )
     return p
 
 

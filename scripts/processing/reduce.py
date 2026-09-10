@@ -37,7 +37,7 @@ import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
 from kpfpipe.utils.kpf import is_obs_id
-from kpfpipe.utils.logger import setup_logging
+from kpfpipe.utils.logger import build_run_log_dir, setup_logging
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
@@ -139,6 +139,11 @@ def main(argv=None):
         log_params = resolve_logging(config, args.recipe, args.obs_id, args.datecode)
     except ValueError as e:
         parser.error(str(e))
+    # One run, one log directory: a parent script forwards its own; standalone
+    # `kpfpipe run` makes its own.
+    log_params["log_dir"] = args.log_run_dir or build_run_log_dir(
+        log_params["log_dir"], "run"
+    )
     log_path = setup_logging(**log_params)
 
     # Invocation banner: the start of the DRP-RUN-08 reduction-step trail.

@@ -9,6 +9,7 @@ orchestrator argv it builds, and the main() dispatch order.
 Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 """
 
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -339,6 +340,26 @@ class TestMainDispatch:
         )
         with pytest.raises(SystemExit, match="no log directory configured"):
             ts.main(_BASE_ARGS)
+
+    def test_both_stages_join_one_run_directory(self, ts, monkeypatch, tmp_path):
+        # One CLI run, one log directory: the wrapper creates it and binds both
+        # orchestrators (and, through them, every reduce) to the same one.
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        seen = []
+        calls = self._patch(ts, monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            ts,
+            "setup_batch_logging",
+            lambda d, *a, **k: seen.append(d) or "/logs/x.log",
+        )
+
+        ts.main(_BASE_ARGS)
+
+        assert re.fullmatch(
+            rf"{re.escape(str(tmp_path))}/timeseries_\d{{8}}T\d{{6}}", seen[0]
+        )
+        for argv in calls[:2]:  # masters, science
+            assert argv[argv.index("--log_run_dir") + 1] == seen[0]
 
     def test_masters_science_plots_dispatch(self, ts, monkeypatch, tmp_path):
         # Stages run in order: masters, then science over every discovered frame,

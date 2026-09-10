@@ -401,9 +401,14 @@ every record. Orchestrators (and the shared `_dispatch.py` engine) narrate throu
 never `print()`. Because they still fan `reduce` out as one subprocess per unit, **each reduction
 also gets its own `setup_logging` per-unit log** — the batch log sits alongside, not in place of, it.
 
-Both siblings write one UT-timestamped file per invocation under the `[LOGGER] log_dir` config key
-(`log_level`/`console` also honored; CLI `--log_dir`/`--log_level` override); a missing `log_dir` is
-fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__name__)` and must work
+**One CLI run, one log directory.** Each entry point resolves `{[LOGGER] log_dir}/{command}_{stamp}/`
+(`build_run_log_dir`, stamp in UT) and writes its own UT-timestamped file there, so a
+batch that crosses UT midnight still lands in one place and two batches on one day never share a
+directory. A script that launches another forwards its resolved directory as `--log_run_dir`, which
+the child uses verbatim rather than creating its own — so a `timeseries` run, both stage
+orchestrators, and every `reduce` they fan out log side by side. `[LOGGER] log_dir` stays the single
+parent for every log (DRP-RUN-09); `log_level`/`console` are also honored, CLI
+`--log_dir`/`--log_level` override, and a missing `log_dir` is fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__name__)` and must work
 with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
 setup must never move into recipes. Recoverable/degraded conditions use `logger.warning` (not
 `warnings.warn`); `logging.captureWarnings` still funnels any third-party/stdlib `warnings.warn` into

@@ -130,9 +130,24 @@ class TestResolveDirShortcuts:
 class TestLoggingParser:
     def test_adds_log_flags(self):
         ns = _parse(
-            [_argparse.logging_parser()], ["--log_dir", "/l", "--log_level", "DEBUG"]
+            [_argparse.logging_parser()],
+            ["--log_dir", "/l", "--log_level", "DEBUG", "--log_run_dir", "/l/run_x"],
         )
         assert ns.log_dir == "/l" and ns.log_level == "DEBUG"
+        assert ns.log_run_dir == "/l/run_x"
+
+    def test_log_run_dir_defaults_to_none(self):
+        assert _parse([_argparse.logging_parser()], []).log_run_dir is None
+
+    def test_output_dir_does_not_fill_log_run_dir(self):
+        # --output_dir names the parent; only a parent *script* sets the run dir.
+        ns = _argparse.resolve_dir_shortcuts(
+            _parse(
+                [_argparse.data_dirs_parser(), _argparse.logging_parser()],
+                ["--output_dir", "/out"],
+            )
+        )
+        assert ns.log_dir == "/out/logs" and ns.log_run_dir is None
 
 
 class TestPoolParser:

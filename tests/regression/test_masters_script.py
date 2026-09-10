@@ -9,6 +9,7 @@ test_io.py.
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
 
+import re
 import sys
 
 import pytest
@@ -288,12 +289,51 @@ class TestMainExitCode:
         tasks = calls[0]["args"][1]
         assert len(tasks) == 1
         _, argv = tasks[0]
-        assert argv[-8:] == [
+        assert argv[-8:-3] == [
             "--kpf_data_input", "/in",
             "--kpf_masters_output", "/out",
-            "--log_dir", "/out/logs",
-            "--log_level", "DEBUG",
+            "--log_run_dir",
         ]  # fmt: skip
+        # Children join this run's directory, not the parent log dir.
+        assert re.fullmatch(r"/out/logs/masters_\d{8}T\d{6}", argv[-3])
+        assert argv[-2:] == ["--log_level", "DEBUG"]
+
+    def _log_dirs(self, m, monkeypatch, argv, calls):
+        """Run main() and return the log_dir setup_batch_logging was handed."""
+        seen = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        monkeypatch.setattr(
+            m, "setup_batch_logging", lambda d, *a, **k: seen.append(d) or "/l/x.log"
+        )
+        m.main(argv)
+        return seen[0]
+
+    def test_creates_a_run_directory_under_log_dir(self, m, monkeypatch):
+        # One run, one directory: --log_dir is the parent, not the destination.
+        calls = []
+        log_dir = self._log_dirs(
+            m, monkeypatch, ["--dates", "20240405", "--log_dir", "/logs"], calls
+        )
+        assert re.fullmatch(r"/logs/masters_\d{8}T\d{6}", log_dir)
+        assert calls[0]["args"][3] == log_dir  # run_stage's failure hints too
+
+    def test_log_run_dir_is_used_verbatim_and_reforwarded(self, m, monkeypatch):
+        # A parent script's run directory: joined, never nested inside a new one.
+        calls = []
+        log_dir = self._log_dirs(
+            m,
+            monkeypatch,
+            [
+                "--dates",
+                "20240405",
+                "--log_run_dir",
+                "/logs/timeseries_20240405T010203",
+            ],
+            calls,
+        )
+        assert log_dir == "/logs/timeseries_20240405T010203"
+        _, argv = calls[0]["args"][1][0]
+        assert argv[-2:] == ["--log_run_dir", log_dir]
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out.

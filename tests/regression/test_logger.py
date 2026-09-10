@@ -43,13 +43,25 @@ class TestGetLevel:
             kpflog.get_level("chatty")
 
 
+class TestBuildRunLogDir:
+    """One CLI run, one directory -- named for the script and its UT start."""
+
+    def test_names_the_directory_by_label_and_ut_stamp(self):
+        path = kpflog.build_run_log_dir("/logs", "masters", start_time=_UT_FROZEN)
+        assert path == "/logs/masters_20260702T140322"
+
+    def test_falsy_log_dir_passes_through(self):
+        # So each command still raises its own "not configured" error (DRP-RUN-07).
+        assert kpflog.build_run_log_dir(None, "masters") is None
+
+
 class TestBuildLogPath:
     def test_layout_and_ut_components(self, tmp_path):
         path = kpflog.build_log_path(
             str(tmp_path), "science", "KP.20240923.33129.48", start_time=_UT_FROZEN
         )
         fn = "kpf_science_KP.20240923.33129.48_20260702T140322.log"
-        assert path == str(tmp_path / "20260702" / fn)
+        assert path == str(tmp_path / fn)
 
     def test_empty_log_dir_raises(self):
         with pytest.raises(ValueError, match="log_dir"):
@@ -58,11 +70,11 @@ class TestBuildLogPath:
 
 class TestSetupLogging:
     def test_creates_file_and_returns_path(self, tmp_path, monkeypatch):
-        # Freeze the clock: recomputing the datecode after the call races UT
+        # Freeze the clock: recomputing the stamp after the call races UT
         # midnight, a once-a-day flake in a CI-scheduled suite.
         monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         path = kpflog.setup_logging(str(tmp_path), "science", "KP.1.2.3")
-        assert path.startswith(str(tmp_path / "20260702"))
+        assert path.startswith(str(tmp_path))
         assert re.search(r"kpf_science_KP\.1\.2\.3_\d{8}T\d{6}\.log$", path)
         assert _read(path) == ""  # created, empty until a record arrives
 
@@ -152,7 +164,7 @@ class TestSetupBatchLogging:
         # Frozen for the same UT-midnight reason as TestSetupLogging's twin.
         monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         path = kpflog.setup_batch_logging(str(tmp_path), "masters")
-        assert path.startswith(str(tmp_path / "20260702"))
+        assert path.startswith(str(tmp_path))
         assert re.search(r"kpf_masters_batch_\d{8}T\d{6}\.log$", path)
         assert _read(path) == ""  # created, empty until a record arrives
 

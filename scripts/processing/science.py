@@ -30,7 +30,7 @@ import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf import get_datecode, is_obs_id
-from kpfpipe.utils.logger import setup_batch_logging
+from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
 from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 from scripts.processing._argparse import (
     cache_parser,
@@ -151,7 +151,10 @@ def main(argv=None):
     data_input = (
         args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
     )
-    log_dir = args.log_dir or logger_params.get("log_dir")
+    # One run, one log directory: this batch and every reduce it launches.
+    log_dir = args.log_run_dir or build_run_log_dir(
+        args.log_dir or logger_params.get("log_dir"), "science"
+    )
     if not log_dir:
         sys.exit(
             "error: no log directory configured; set [LOGGER] log_dir in the "
@@ -168,7 +171,7 @@ def main(argv=None):
         (args.kpf_data_input, "--kpf_data_input"),
         (args.kpf_masters_output, "--kpf_masters_output"),
         (args.kpf_science_output, "--kpf_science_output"),
-        (args.log_dir, "--log_dir"),
+        (log_dir, "--log_run_dir"),
         (args.log_level, "--log_level"),
     ):
         if value:
