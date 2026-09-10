@@ -1,15 +1,11 @@
 """Diagnostics for KPF Level 0 (raw CCD) data products."""
 
-import logging
-
 import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
-
-logger = logging.getLogger(__name__)
 
 
 class DiagL0(Diagnostics):
@@ -39,14 +35,6 @@ class DiagL0(Diagnostics):
         parallax = float(rec["parallax"])
         pm_missing = np.isnan(pmra) or np.isnan(pmdec)
         plx_missing = np.isnan(parallax) or parallax <= 0
-        if pm_missing or plx_missing:
-            logger.debug(
-                "%s record missing %s; using PM=0, parallax=0 for the offset",
-                rec["source"],
-                " and ".join(
-                    n for n, m in (("PM", pm_missing), ("parallax", plx_missing)) if m
-                ),
-            )
         kwargs = {
             "ra": rec["ra"],
             "dec": rec["dec"],
