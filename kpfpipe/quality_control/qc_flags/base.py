@@ -8,18 +8,13 @@ separate Checkpoints layer.
 
 import logging
 
+from kpfpipe.quality_control.applicability import applicability
+
 logger = logging.getLogger(__name__)
 
 
 class QC:
     """Base runner for per-level pass/fail QC check methods.
-
-    Every level carries a required-PRIMARY-keyword placeholder check (e.g. L0's
-    KWRDPRL0): REQUIRED is now a compliance label, not a decision about what must
-    be on a product, so the registry-derived notion of "required" these checks
-    would read is gone. Until a KPF-owned definition replaces it, each raises
-    ``NotImplementedError`` (writing no flag, per ``run``) while its registry row
-    stays so the comment lookup still resolves.
 
     Parameters
     ----------
@@ -36,11 +31,11 @@ class QC:
     def run(self):
         """Run all checks and write each 0/1 result.
 
-        Each result is logged as it is written: DEBUG on a pass, WARNING on a
-        fail, ERROR on a check that raised (counted as a fail -- this layer never
-        aborts; halting is the checkpoint layer's role). ``NotImplementedError``
-        from a placeholder check writes no flag.
-        ``self.results`` is reset at the start so repeated calls are deterministic.
+        Resets ``self.results`` at the start so repeated calls are deterministic.
+        A check the applicability table does not declare for this frame type is
+        skipped before it runs, as is one raising ``NotImplementedError``; neither
+        writes a flag. Any other exception counts as a fail -- this layer never
+        aborts; halting is the checkpoint layer's role.
 
         Returns
         -------
@@ -49,11 +44,18 @@ class QC:
             checks only).
         """
         self.results = {}
+        frame = applicability.frame_type(self.kpf_obj)
 
         for name, fn in self._iter_checks():
+            if not applicability.applies(type(self).__name__, name, frame):
+                logger.debug(
+                    "%s QC check %r does not apply to a %s frame; skipped",
+                    self.LEVEL,
+                    name,
+                    frame,
+                )
+                continue
             kw = fn._qc_key
-            # Mirror the registry Description into results (the FITS comment
-            # source; see ``_tag``). The _qc_key must be registered.
             comment = self.kpf_obj.keyword_registry.comment_for(kw)
             try:
                 passed = fn()
@@ -78,12 +80,33 @@ class QC:
 
         return self.results
 
-    def _iter_checks(self):
-        """Yield each ``(name, method)`` tagged ``_qc_key``.
+    def _primary_keywords_populated(self):
+        """Every PRIMARY keyword an upstream stage owes this level carries a value.
 
-        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
-        subclass first.
+        The seed stamps every card at standardization, so a blank -- not a missing
+        key -- is what this reports, and it is cumulative (L0 through ``LEVEL``),
+        so a card an upstream stage left blank fails here too.
+
+        Cards the quality-control suite writes itself are exempt: those stages run
+        beside these checks under the same applicability tables, so requiring one
+        would fail every frame its writer is not declared for -- every solar frame,
+        for the pointing and Sun/Moon cards.
+
+        Known gap: eight L0 cards (DQLVL0, FULLCOMP, the six *FLAG summaries) have
+        no writer yet, so this fails on every frame it runs on.
         """
+        registry = self.kpf_obj.keyword_registry
+        header = self.kpf_obj.headers["PRIMARY"]
+        for keyword in registry.primary_seed(self.LEVEL):
+            if registry.populated_by(keyword, "PRIMARY") in applicability.classes:
+                continue
+            value = header.get(keyword)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                return False
+        return True
+
+    def _iter_checks(self):
+        """Yield each ``(name, method)`` tagged ``_qc_key``, subclass first."""
         seen = set()
         for cls in type(self).__mro__:
             for name, attr in cls.__dict__.items():

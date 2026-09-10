@@ -48,10 +48,8 @@ class QCL2(QC):
     extraction_present._qc_key = "DATAPRL2"
 
     def required_keywords_present(self):
-        """Required PRIMARY keywords present -- not yet implemented; see ``QC``."""
-        raise NotImplementedError(
-            "KWRDPRL2 is pending a KPF-owned definition of a required keyword"
-        )
+        """Every PRIMARY keyword registered through L2 is populated."""
+        return self._primary_keywords_populated()
 
     required_keywords_present._qc_key = "KWRDPRL2"
 

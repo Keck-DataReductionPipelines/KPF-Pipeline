@@ -38,6 +38,7 @@ _CATALOG_HOSTS = (
     "gea.esac.esa.int",  # ESA Gaia TAP
     "simbad.cds.unistra.fr",  # SIMBAD, and its Harvard mirror below
     "simbad.harvard.edu",
+    "mkwc.ifa.hawaii.edu",  # Mauna Kea Weather Center, the CFHT tower archive
 )
 
 # Reference data with no local alternative. Each entry is here because something
@@ -178,8 +179,7 @@ def _catalog_record_hdu():
     from kpfpipe.modules.astro_query import AstroQuery
 
     l0 = KPF0()
-    # AstroQuery reads the native instrument header, not the EPRV PRIMARY.
-    l0.headers["INSTRUMENT_HEADER"]["IMTYPE"] = "Object"
+    l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
     AstroQuery(l0)._write_catalog_record(
         "kpf-drp",
         {

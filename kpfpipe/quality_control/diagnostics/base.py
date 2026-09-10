@@ -8,6 +8,8 @@ extensions. QC then reads those metrics and applies pass/fail thresholds.
 
 import logging
 
+from kpfpipe.quality_control.applicability import applicability
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,24 +29,14 @@ class Diagnostics:
         self.kpf_obj = kpf_obj
         self.results = {}  # Populated by run(): maps keyword to (value, comment).
 
-    def _tag(self, **values):
-        """Pair each ``keyword=value`` with its registry-sourced FITS comment.
-
-        Sources the comment from the keyword registry (single source of truth) so
-        ``self.results`` stays in sync with the ``set_keyword`` header write. Every
-        emitted keyword must be registered; an unregistered one raises rather than
-        getting a blank comment.
-        """
-        registry = self.kpf_obj.keyword_registry
-        return {kw: (value, registry.comment_for(kw)) for kw, value in values.items()}
-
     def run(self):
         """Run all diagnostic methods, writing each result via set_keyword.
 
-        Resets ``self.results`` at the start so calling ``run()`` repeatedly
-        is deterministic. A method that raises is logged at ERROR (naming it) and
-        skipped: this layer is informational and never aborts the pipeline, so its
-        keywords are simply not written. Halting is the checkpoint layer's role.
+        Resets ``self.results`` at the start so calling ``run()`` repeatedly is
+        deterministic. A method the applicability table does not declare for this
+        frame type is skipped before it runs, emitting no keyword. A method that
+        raises is logged at ERROR and skipped: this layer is informational and
+        never aborts the pipeline. Halting is the checkpoint layer's role.
 
         A keyword the header rejects is skipped on its own, so it takes neither
         the siblings its method computed nor its own ``self.results`` entry.
@@ -55,17 +47,23 @@ class Diagnostics:
             Maps each FITS keyword to its ``(value, comment)`` pair.
         """
         self.results = {}
+        frame = applicability.frame_type(self.kpf_obj)
 
         for name, fn in self._iter_methods():
+            if not applicability.applies(type(self).__name__, name, frame):
+                logger.debug(
+                    "%s diagnostic %r does not apply to a %s frame; skipped",
+                    self.LEVEL,
+                    name,
+                    frame,
+                )
+                continue
             try:
                 output = list(fn().items())
             except Exception as e:
                 logger.error("%s diagnostic %r raised: %s", self.LEVEL, name, e)
                 continue
-            for kw, (value, comment) in output:
-                # set_keyword routes each metric to its registry home; the FITS
-                # comment is the registry Description (the metric-dict comment is
-                # retained in self.results only).
+            for kw, value in output:
                 try:
                     self.kpf_obj.set_keyword(kw, value)
                 except Exception as e:
@@ -77,18 +75,17 @@ class Diagnostics:
                         e,
                     )
                     continue
-                self.results[kw] = (value, comment)
+                self.results[kw] = (
+                    value,
+                    self.kpf_obj.keyword_registry.comment_for(kw),
+                )
 
         for kw, (value, comment) in self.results.items():
             logger.debug("%s %s = %s — %s", self.LEVEL, kw, value, comment)
         return self.results
 
     def _iter_methods(self):
-        """Yield each ``(name, method)`` tagged ``_diag_name``.
-
-        MRO-walk discovery: walk ``type(self).__mro__``, collect tagged methods,
-        subclass first.
-        """
+        """Yield each ``(name, method)`` tagged ``_diag_name``, subclass first."""
         seen = set()
         for cls in type(self).__mro__:
             for name, attr in cls.__dict__.items():

@@ -57,7 +57,7 @@ class ExposureMeter(Diagnostics):
             )
             values[f"EM{fiber}NEG"] = self._longest_run(flux.sum(axis=0) < 0)
             values[f"EM{fiber}INF"] = self._longest_run(~np.isfinite(flux).all(axis=0))
-        return self._tag(**values)
+        return values
 
     expmeter_channel_metrics._diag_name = "expmeter_channel_metrics"
 
@@ -81,7 +81,7 @@ class ExposureMeter(Diagnostics):
                 ("78", (waves >= 763.75) & (waves < 870.0)),
             ):
                 values[f"EM{fiber}CT{band}"] = int(np.nansum(per_channel[mask]))
-        return self._tag(**values)
+        return values
 
     expmeter_counts._diag_name = "expmeter_counts"
 
@@ -93,6 +93,6 @@ class ExposureMeter(Diagnostics):
         """
         sci = np.nansum(self._expmeter_flux("EXPMETER_SCI")[1])
         sky = np.nansum(self._expmeter_flux("EXPMETER_SKY")[1])
-        return self._tag(SKYSCIMS=round(float(sky / 14.1 / sci), 6))
+        return {"SKYSCIMS": round(float(sky / 14.1 / sci), 6)}
 
     sky_sci_flux_ratio._diag_name = "sky_sci_flux_ratio"

@@ -21,7 +21,13 @@ import pytest
 import requests
 from pyvo.dal import DALQueryError, DALServiceError
 
-from kpfpipe.utils.network import _RETRY_WAITS, _RETRYABLE, retry_request, simbad_client
+from kpfpipe.utils.network import (
+    _RETRY_WAITS,
+    _RETRYABLE,
+    cfht_archive,
+    retry_request,
+    simbad_client,
+)
 
 from ._scripts import REPO_ROOT
 
@@ -293,3 +299,39 @@ def _raise(exc):
         raise exc
 
     return func
+
+
+class TestCfhtArchive:
+    """Byte-range reads of the CFHT tower's one-file-per-year weather archive."""
+
+    @staticmethod
+    def _response(text="rows\n", total=4096):
+        response = MagicMock()
+        response.text = text
+        response.headers = {"Content-Range": f"bytes 0-{len(text) - 1}/{total}"}
+        return response
+
+    def test_range_counts_from_the_start(self):
+        with patch("kpfpipe.utils.network.requests.get") as get:
+            get.return_value = self._response()
+            cfht_archive(2024, 1000, 256)
+        assert get.call_args.kwargs["headers"] == {"Range": "bytes=1000-1255"}
+        assert "cfht-wx.2024.dat" in get.call_args.args[0]
+
+    def test_a_negative_start_reads_the_tail(self):
+        with patch("kpfpipe.utils.network.requests.get") as get:
+            get.return_value = self._response()
+            cfht_archive(2024, -256, 256)
+        assert get.call_args.kwargs["headers"] == {"Range": "bytes=-256"}
+
+    def test_the_files_total_length_is_returned(self):
+        with patch("kpfpipe.utils.network.requests.get") as get:
+            get.return_value = self._response(total=21886)
+            assert cfht_archive(2024, 0, 256) == ("rows\n", 21886)
+
+    def test_an_http_error_propagates(self):
+        response = MagicMock()
+        response.raise_for_status.side_effect = requests.HTTPError("416")
+        with patch("kpfpipe.utils.network.requests.get", return_value=response):
+            with pytest.raises(requests.HTTPError):
+                cfht_archive(2024, 0, 256)

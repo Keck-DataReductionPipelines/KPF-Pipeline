@@ -1,0 +1,109 @@
+"""Frame-type applicability tables for the QC and diagnostics layers.
+
+Which checks run on which exposures. Without this, a pointing check runs on a
+Bias and fails, polluting the QUALITY_CONTROL header and the logs with a result
+that was never meaningful.
+
+Source of truth: ``config/{class}-applicability.csv``, one per ``QC`` or
+``Diagnostics`` subclass, discovered from the filenames. Rows are keyed by
+``Method`` (``<Class>.<method>``, the name the base classes' MRO walk yields) and
+carry one 0/1 column per frame type. The remaining columns -- ``Description``,
+``RequiredData``, and the diagnostics tables' ``Keywords`` -- document each check
+for a reader; the tests check them for drift, nothing here reads them.
+"""
+
+from types import MappingProxyType
+
+import pandas as pd
+
+from kpfpipe.quality_control.config import PATH as _config_path
+
+# The 0/1 columns every applicability table must carry.
+FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
+
+_SUFFIX = "-applicability.csv"
+
+
+class Applicability:
+    """The applicability tables, read once into the ``applicability`` singleton."""
+
+    def __init__(self):
+        tables = {}
+        paths = sorted(
+            (p for p in _config_path.iterdir() if p.name.endswith(_SUFFIX)),
+            key=lambda p: p.name,
+        )
+        for path in paths:
+            class_name = path.name[: -len(_SUFFIX)]
+            # utf-8-sig: a BOM would otherwise become part of the first column name.
+            table = pd.read_csv(path, encoding="utf-8-sig")
+            missing = [c for c in FRAME_TYPES if c not in table.columns]
+            if missing:
+                raise ValueError(f"{path.name} has no {missing} column(s)")
+            tables[class_name] = MappingProxyType(
+                {
+                    self._method_name(row.Method, class_name, path.name): frozenset(
+                        frame for frame in FRAME_TYPES if getattr(row, frame)
+                    )
+                    for row in table.itertuples(index=False)
+                }
+            )
+        self._tables = MappingProxyType(tables)
+
+    @staticmethod
+    def _method_name(method, class_name, source):
+        """Split a ``<Class>.<method>`` cell, requiring ``<Class>`` to be its own."""
+        owner, _, name = str(method).strip().rpartition(".")
+        if owner != class_name or not name:
+            raise ValueError(
+                f"{source}: {method!r} is not a {class_name} method; every row "
+                f"must name '{class_name}.<method>'"
+            )
+        return name
+
+    def _table(self, class_name):
+        if class_name not in self._tables:
+            raise ValueError(
+                f"no config/{class_name}{_SUFFIX}; every QC and diagnostics class "
+                "must declare which frame types its checks apply to"
+            )
+        return self._tables[class_name]
+
+    @staticmethod
+    def frame_type(kpf_obj):
+        """``kpf_obj``'s column: its OBSTYPE, with Object split on ISSOLAR.
+
+        Star and Sun share an OBSTYPE but not a check list -- nothing points or
+        guides at the Sun -- so the gate resolves them here rather than in the
+        dozen methods that differ.
+        """
+        prim = kpf_obj.headers["PRIMARY"]
+        obstype = str(prim.get("OBSTYPE", "")).strip()
+        if obstype == "Object":
+            return "Sun" if prim.get("ISSOLAR") else "Star"
+        if obstype not in FRAME_TYPES:
+            raise ValueError(
+                f"OBSTYPE {obstype!r} names no frame type; run "
+                "KPF0.standardize_headers before the quality-control layers"
+            )
+        return obstype
+
+    @property
+    def classes(self):
+        """The QC and diagnostics classes declaring an applicability table."""
+        return frozenset(self._tables)
+
+    def methods(self, class_name):
+        """``class_name``'s declared method names, unqualified."""
+        return frozenset(self._table(class_name))
+
+    def applies(self, class_name, method, frame_type):
+        """Whether ``class_name.method`` runs on a ``frame_type`` exposure."""
+        table = self._table(class_name)
+        if method not in table:
+            raise ValueError(f"config/{class_name}{_SUFFIX} has no row for {method!r}")
+        return frame_type in table[method]
+
+
+# The one instance the base classes reach through.
+applicability = Applicability()

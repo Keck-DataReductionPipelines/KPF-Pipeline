@@ -72,12 +72,10 @@ class BaseMasterModule:
         "flat": "electrons",
     }
 
-    # QCL0 flags a frame must pass to enter a stack: data present and not
-    # observer-junk. A frame failing either is dropped in ``_load_frame`` and
-    # counted as a load failure. Deliberately loosened while the QC suite is
-    # overhauled: KWRDPRL0 writes no card (its check is stubbed) and EXPTIMOK
-    # leaves the tuple with it, since a flag with no card raises a bare KeyError
-    # at the `qc[kw][0]` read below rather than rejecting the frame.
+    # QCL0 flags a frame must pass to enter a stack. KWRDPRL0 cannot join them:
+    # it is not declared for calibration frames, so it writes no card on the
+    # frames a stack is built from, and the `qc[kw][0]` read below would raise a
+    # bare KeyError rather than reject the frame.
     _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
 
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
@@ -196,9 +194,9 @@ class BaseMasterModule:
         """
         Load an L0 file and assemble it to an L1 object; None on failure.
 
-        Failure means the frame could not be read/assembled or failed a required
-        QCL0 flag (``_REQUIRED_L0_QC_FLAGS``, incl. the EXPTIME/ELAPSED consistency
-        check); a warning names the cause and callers detect it via ``is None``.
+        Failure means the frame could not be read/assembled or failed one of
+        ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause and callers detect it
+        via ``is None``.
         With ``cache=True`` the assembled L1 is retained for reuse (the streaming
         stats path caches its approximation-pass frames so the exact pass reuses
         them); an already-cached frame is returned regardless of the flag.

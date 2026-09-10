@@ -3,11 +3,11 @@
 Checkpoints are the third QC stage: they read the 0/1 QC flags and the product
 headers, then warn or raise (never write). This pins:
 
-  - ``unregistered_keywords`` -- raises on a card not registered for a governed
+  - ``raise_on_unregistered_keyword`` -- raises on a card not registered for a governed
     extension (including a raw WMKO native leaked onto an EPRV PRIMARY); skips the
     raw WMKO L0 PRIMARY; passes a clean product.
-  - ``qc_flags`` -- a failed (0) flag named in the level's ``RAISE_FLAGS`` raises;
-    any other failed flag warns; all-pass is silent.
+  - ``raise_on_fatal_qc_flag`` -- a failed (0) flag named in the level's
+    ``RAISE_FLAGS`` raises; any other failed flag warns; all-pass is silent.
 
 ``run()`` additionally folds in the paired Diagnostics + QC stages before the
 checkpoint methods; that orchestration is pinned in ``TestRunFoldsDiagnosticsAndQC``.
@@ -31,10 +31,12 @@ from kpfpipe.quality_control.checkpoints import (
 )
 
 from ._data_models import (
+    fill_primary,
     make_l4,
     seed_catalog_record,
     set_fiber_arrays,
     set_wave_bands,
+    stamp_frame_type,
     standardized_l0,
     write_science_l0,
 )
@@ -51,15 +53,15 @@ class TestUnregisteredKeywords:
         l2 = KPF2()
         with caplog.at_level(logging.WARNING):
             chk = CheckpointL2(l2)
-            chk.unregistered_keywords()
-            chk.qc_flags()
+            chk.raise_on_unregistered_keyword()
+            chk.raise_on_fatal_qc_flag()
         assert not caplog.records
 
     def test_unexpected_keyword_on_governed_extension_raises(self):
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["BOGUSKEY"] = (1, "not registered")
         with pytest.raises(ValueError, match="unregistered keyword 'BOGUSKEY'"):
-            CheckpointL2(l2).unregistered_keywords()
+            CheckpointL2(l2).raise_on_unregistered_keyword()
 
     def test_native_wmko_leak_on_primary_raises(self):
         l2 = KPF2()
@@ -68,12 +70,12 @@ class TestUnregisteredKeywords:
         # dedicated WMKO-leak branch needed.
         l2.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
         with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
-            CheckpointL2(l2).unregistered_keywords()
+            CheckpointL2(l2).raise_on_unregistered_keyword()
 
     def test_registered_keyword_on_its_extension_passes(self):
         l2 = KPF2()
         l2.set_keyword("NANSCI1", 3)  # registered -> QUALITY_CONTROL
-        CheckpointL2(l2).unregistered_keywords()  # no raise
+        CheckpointL2(l2).raise_on_unregistered_keyword()  # no raise
 
     def test_l0_primary_is_validated_too(self):
         # standardize_headers runs at load, so the PRIMARY a checkpoint sees is
@@ -82,7 +84,7 @@ class TestUnregisteredKeywords:
         l0 = KPF0()
         l0.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
         with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
-            CheckpointL0(l0).unregistered_keywords()
+            CheckpointL0(l0).raise_on_unregistered_keyword()
 
 
 @pytest.mark.usefixtures("mini_detector")
@@ -92,7 +94,7 @@ class TestQCFlags:
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (0, "data present")
         with pytest.raises(ValueError, match="DATAPRL2 = 0"):
-            CheckpointL2(l2).qc_flags()
+            CheckpointL2(l2).raise_on_fatal_qc_flag()
 
     def test_nonraise_flag_zero_warns(self, caplog):
         # L2VAROK is not a RAISE_FLAG, so a 0 lands in the warning summary rather
@@ -102,7 +104,7 @@ class TestQCFlags:
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (1, "required present")
         l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "variance positive")
         with caplog.at_level(logging.WARNING):
-            CheckpointL2(l2).qc_flags()
+            CheckpointL2(l2).raise_on_fatal_qc_flag()
         assert "failing QC flags" in caplog.text
         assert "L2VAROK" in caplog.text
 
@@ -111,7 +113,7 @@ class TestQCFlags:
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (1, "data present")
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (1, "required present")
         with caplog.at_level(logging.WARNING):
-            CheckpointL2(l2).qc_flags()
+            CheckpointL2(l2).raise_on_fatal_qc_flag()
         assert not caplog.records
 
     def test_lower_level_fatal_flag_warns_not_raises(self, caplog):
@@ -126,7 +128,7 @@ class TestQCFlags:
         l2.headers["QUALITY_CONTROL"]["KWRDPRL2"] = (1, "required present")
         l2.headers["QUALITY_CONTROL"]["DATAPRL1"] = (0, "L1 data (propagated)")
         with caplog.at_level(logging.WARNING):
-            CheckpointL2(l2).qc_flags()  # must not raise
+            CheckpointL2(l2).raise_on_fatal_qc_flag()  # must not raise
         assert "DATAPRL1" in caplog.text
 
     def test_summary_lists_all_failing_flags_cross_level(self, caplog):
@@ -141,7 +143,7 @@ class TestQCFlags:
         l2.headers["QUALITY_CONTROL"]["RNOK"] = (0, "L1 read noise (propagated)")
         l2.headers["QUALITY_CONTROL"]["L2VAROK"] = (0, "L2 variance positive")
         with caplog.at_level(logging.WARNING):
-            CheckpointL2(l2).qc_flags()
+            CheckpointL2(l2).raise_on_fatal_qc_flag()
         assert "L2VAROK" in caplog.text
         assert "RNOK" in caplog.text
 
@@ -194,7 +196,8 @@ class TestRunFoldsDiagnosticsAndQC:
     def test_missing_paired_classes_skip_those_stages(self, caplog):
         # A concrete-level checkpoint with no DIAGNOSTICS and no QC: run() does the
         # checkpoint methods only and leaves qc_results empty. (LEVEL must be a
-        # recognized level -- qc_flags() looks it up directly, no silent default.)
+        # recognized level -- raise_on_fatal_qc_flag() looks it up directly, no
+        # silent default.)
         class NoStageCheckpoint(Checkpoint):
             LEVEL = "L2"
 
@@ -221,7 +224,7 @@ class TestRunFoldsDiagnosticsAndQC:
 def _make_l2(*, populate=True):
     """KPF2 good enough for CheckpointL2.run(): clean FLUX/VAR on every fiber and
     the required PRIMARY keywords seeded so KWRDPRL2 passes."""
-    l2 = KPF2()
+    l2 = stamp_frame_type(KPF2())
     if populate:
         set_fiber_arrays(l2, "FLUX", 1.0, ncol=_NCOL)
         set_fiber_arrays(l2, "VAR", 0.25, ncol=_NCOL)
@@ -264,18 +267,20 @@ class TestCheckpointL2:
 
 @pytest.mark.usefixtures("mini_detector")
 class TestCheckpointL0:
-    def test_run_good_product_passes_and_writes_flags(self, tmp_path, caplog):
+    def test_run_good_product_passes_and_writes_flags(
+        self, tmp_path, caplog, stub_cfht_weather
+    ):
         # A science frame carrying everything QCL0 requires: pointing, timing,
         # exposure-meter tables and resolved astrometry. This is the only
         # in-process exercise of QCL0.run().
         fn = str(tmp_path / "KP.20240405.00001.00.fits")
         write_science_l0(fn, namps=4, shape=(10, 10), primary_cards={"PROGNAME": None})
-        l0 = seed_catalog_record(standardized_l0(fn))
+        l0 = fill_primary(seed_catalog_record(standardized_l0(fn)), "L0")
         with caplog.at_level(logging.WARNING):
             CheckpointL0(l0).run()
         qc = l0.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL0"] == 1
-        assert "KWRDPRL0" not in qc  # its check is stubbed, so it writes no flag
+        assert qc["KWRDPRL0"] == 1
         assert qc["DEADPXOK"] == 1
         assert qc["SATPXOK"] == 1
         assert qc["TCSOFF"] < 1.0
@@ -295,7 +300,7 @@ def _make_l1(*, ccd=True, shape=(20, 20)):
     deliberately round-trips through from_fits to reproduce the sparse-PRIMARY
     case its KWRDPRL1 test needs; here the skeleton PRIMARY is what is wanted.
     """
-    l1 = KPF1()
+    l1 = fill_primary(stamp_frame_type(KPF1()), "L1")
     l1.headers["PRIMARY"]["DATE-OBS"] = "2024-04-05T01:00:37"
     if ccd:
         for chip in ("GREEN", "RED"):
@@ -327,7 +332,7 @@ class TestCheckpointL1:
         assert not caplog.records
         qc = l1.headers["QUALITY_CONTROL"]
         assert qc["DATAPRL1"] == 1
-        assert "KWRDPRL1" not in qc  # its check is stubbed, so it writes no flag
+        assert qc["KWRDPRL1"] == 1
 
     def test_run_raises_when_ccd_data_missing(self):
         # No assembled CCDs: DiagL1's flux percentiles have no pixels to measure,
@@ -362,8 +367,7 @@ def _make_l4(*, sci=True):
     header-stuffing; passing ``bervrng=``/``bjdrng=`` instead would write the
     metrics directly and do the same damage.
     """
-    l4 = make_l4(sci=sci, jitter=1e-7, berv=7.9, seed=3)
-    return l4
+    return fill_primary(make_l4(sci=sci, jitter=1e-7, berv=7.9, seed=3), "L4")
 
 
 class TestCheckpointL4:

@@ -14,39 +14,26 @@ class DiagL2(Diagnostics):
     LEVEL = "L2"
 
     def nan_counts(self):
-        """Count NaN pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, summed across chips.
-
-        Returns
-        -------
-        dict
-            Maps each per-fiber NaN-count keyword to its ``(value, comment)``.
-        """
+        """NAN{FIBER}: NaN pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, both chips."""
         results = {}
         for fiber in _FIBERS:
             results[f"NAN{fiber}"] = sum(
                 int(np.sum(np.isnan(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"])))
                 for chip in _CHIPS
             )
-        return self._tag(**results)
+        return results
 
     nan_counts._diag_name = "nan_counts"
 
     def zero_counts(self):
-        """Count non-positive pixels per fiber in ``{CHIP}_{FIBER}_FLUX``, summed
-        across chips.
-
-        Returns
-        -------
-        dict
-            Maps each per-fiber non-positive-count keyword to its ``(value, comment)``.
-        """
+        """ZERO{FIBER}: non-positive pixels per fiber in ``{CHIP}_{FIBER}_FLUX``."""
         results = {}
         for fiber in _FIBERS:
             results[f"ZERO{fiber}"] = sum(
                 int(np.sum(self.kpf_obj.data[f"{chip}_{fiber}_FLUX"] <= 0))
                 for chip in _CHIPS
             )
-        return self._tag(**results)
+        return results
 
     zero_counts._diag_name = "zero_counts"
 
@@ -97,7 +84,7 @@ class DiagL2(Diagnostics):
                 )
             out[f"EXSNR{index}"] = out[f"SNRSC{wavelength}"]
             out[f"EXSNRW{index}"] = wavelength * 10.0
-        return self._tag(**out)
+        return out
 
     snr._diag_name = "snr"
 
@@ -113,12 +100,10 @@ class DiagL2(Diagnostics):
             chip, order = self._order_at(wavelength)
             flux = self.kpf_obj.data[f"{chip}_SCI2_FLUX"][order]
             peak[wavelength] = float(np.nanpercentile(flux, 95))
-        return self._tag(
-            **{
-                f"FR{wavelength}652": round(peak[wavelength] / peak[652], 6)
-                for wavelength in (452, 548, 747, 852)
-            }
-        )
+        return {
+            f"FR{wavelength}652": round(peak[wavelength] / peak[652], 6)
+            for wavelength in (452, 548, 747, 852)
+        }
 
     order_flux_ratios._diag_name = "order_flux_ratios"
 
@@ -155,6 +140,6 @@ class DiagL2(Diagnostics):
                 out[f"{code}U{wavelength}"] = round(
                     float(1.2533 * np.std(ratio) / np.sqrt(np.size(ratio))), 6
                 )
-        return self._tag(**out)
+        return out
 
     orderlet_flux_ratios._diag_name = "orderlet_flux_ratios"

@@ -5,6 +5,7 @@ import random
 import socket
 import time
 
+import requests
 from astroquery.exceptions import RemoteServiceError
 from astroquery.exceptions import TimeoutError as AstroqueryTimeoutError
 from pyvo.dal import DALServiceError
@@ -148,3 +149,20 @@ def simbad_client(fields, timeout=None):
         client._session.mount("http://", adapter)
     client.add_votable_fields(*fields)
     return client
+
+
+def cfht_archive(year, start, length, timeout=30):
+    """Return ``length`` bytes of the CFHT tower's weather archive for ``year``.
+
+    ``start`` counts back from the end of the file when negative. Returned with the
+    file's total length, which the range response reports, so a caller seeking
+    through the file need not ask for it separately.
+    """
+    span = f"-{length}" if start < 0 else f"{start}-{start + length - 1}"
+    response = requests.get(
+        f"http://mkwc.ifa.hawaii.edu/archive/wx/cfht/cfht-wx.{year}.dat",
+        headers={"Range": f"bytes={span}"},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.text, int(response.headers["Content-Range"].rpartition("/")[2])

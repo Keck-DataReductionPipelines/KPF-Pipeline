@@ -1,0 +1,6 @@
+Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+DiagL2.nan_counts,NAN#,NaN pixel count in each extracted orderlet,TRACE#_FLUX,1,1,0,0,1,1,1,1,1
+DiagL2.zero_counts,ZERO#,Non-positive pixel count in each extracted orderlet,TRACE#_FLUX,1,1,0,0,1,1,1,1,1
+DiagL2.snr,SNR#|EXSNR#|EXSNRW#,"Per-band SNR of each orderlet, with the summed-SCI values mirrored to PRIMARY",TRACE#_FLUX|TRACE#_VAR|TRACE#_WAVE,1,1,0,0,1,1,1,1,1
+DiagL2.order_flux_ratios,FR452652|FR548652|FR747652|FR852652,SCI2 flux ratios between wavelength bands,TRACE#_FLUX|TRACE#_WAVE,1,1,0,0,1,1,1,1,1
+DiagL2.orderlet_flux_ratios,FR#M#|FR#U#,"Median orderlet/SCI2 flux ratios and their uncertainties, per band",TRACE#_FLUX|TRACE#_WAVE,1,1,0,0,1,1,1,1,1

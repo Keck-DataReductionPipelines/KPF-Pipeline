@@ -556,6 +556,7 @@ class TestConfigTables:
         with open(_REPO_ROOT / "pyproject.toml", "rb") as fh:
             package_data = tomllib.load(fh)["tool"]["setuptools"]["package-data"]
         assert "*.csv" in package_data["kpfpipe.data_models.config"]
+        assert "*.csv" in package_data["kpfpipe.quality_control.config"]
 
 
 class TestHeaderMap:

@@ -1,0 +1,11 @@
+Method,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+QCL1.data_present,DATAPRL1: GREEN/RED CCD+VAR present and populated,GREEN_CCD|GREEN_VAR|RED_CCD|RED_VAR,1,1,1,1,1,1,1,1,1
+QCL1.required_keywords_present,KWRDPRL1: required L1 PRIMARY keywords present,PRIMARY,1,1,0,0,0,0,0,0,0
+QCL1.read_noise_ok,RNOK: per-amp read noise 2-6 e-,QUALITY_CONTROL,1,1,1,1,1,1,1,1,1
+QCL1.read_noise_nongauss_ok,RNNGOK: non-Gaussian read noise (MAD/STD) 0.8-1.5,QUALITY_CONTROL,1,1,1,1,1,1,1,1,1
+QCL1.bias_ok,BIASOK: bias subtracted & master age <= 5 days,QUALITY_CONTROL,1,1,0,1,1,1,1,1,1
+QCL1.dark_ok,DARKOK: dark subtracted & master age <= 5 days,QUALITY_CONTROL,1,1,0,0,1,1,1,1,1
+QCL1.flat_ok,FLATOK: flat divided & master age <= 5 days,QUALITY_CONTROL,1,1,0,0,0,1,1,1,1
+QCL1.ffi_finite,L1NANOK: GREEN/RED CCDs all finite,GREEN_CCD|RED_CCD,1,1,1,1,1,1,1,1,1
+QCL1.variance_positive,L1VAROK: no negative L1 variance where flux finite,GREEN_CCD|GREEN_VAR|RED_CCD|RED_VAR,1,1,1,1,1,1,1,1,1
+QCL1.negative_snr_fraction,L1SNROK: L1 pixel fraction below -5 sigma <= 1%,GREEN_CCD|GREEN_VAR|RED_CCD|RED_VAR,1,1,0,0,1,1,1,1,1

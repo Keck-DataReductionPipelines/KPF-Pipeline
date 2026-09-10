@@ -1,0 +1,28 @@
+Method,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+QCL0.data_l0_red_green,DATAPRL0: GREEN/RED amps present and populated,GREEN_AMP#|RED_AMP#,1,1,1,1,1,1,1,1,1
+QCL0.header_keywords_present,KWRDPRL0: required L0 PRIMARY keywords present,PRIMARY,1,1,0,0,0,0,0,0,0
+QCL0.telemetry_present,TELEPR: TELEMETRY extension present and populated,TELEMETRY,1,1,1,1,1,1,1,1,1
+QCL0.cahk_present,CAHKPR: CA_HK extension present and populated,CA_HK,1,1,0,0,0,0,0,0,0
+QCL0.expmeter_sci_present,EMSCIPR: EXPMETER_SCI extension present and populated,EXPMETER_SCI,1,1,0,0,0,0,0,0,0
+QCL0.expmeter_sky_present,EMSKYPR: EXPMETER_SKY extension present and populated,EXPMETER_SKY,1,1,0,0,0,0,0,0,0
+QCL0.times_consistent,DATTIMOK: Dates/times consistent (DATE-BEG/MID/END/ELAPSED),INSTRUMENT_HEADER,1,1,1,1,1,1,1,1,1
+QCL0.ntp_timing,NTPOK: NTP clock error < 100 ms,INSTRUMENT_HEADER,1,1,1,1,1,1,1,1,1
+QCL0.exptime_sane,"EXPTIMOK: EXPTIME finite/non-neg, matches ELAPSED",INSTRUMENT_HEADER,1,1,1,1,1,1,1,1,1
+QCL0.good_readout,READOK: CCD read properly (not a smeared 6-6.7 s readout),INSTRUMENT_HEADER,1,1,1,1,1,1,1,1,1
+QCL0.ccd_temps_within_10mk,TEMP10: both CCDs within 10 mK of their temperature setpoints,QUALITY_CONTROL,1,1,1,1,1,1,1,1,1
+QCL0.ccd_temps_within_100mk,TEMP100: both CCDs within 100 mK of their temperature setpoints,QUALITY_CONTROL,1,1,1,1,1,1,1,1,1
+QCL0.ccd_temps_within_1000mk,TEMP1000: both CCDs within 1000 mK of their temperature setpoints,QUALITY_CONTROL,1,1,1,1,1,1,1,1,1
+QCL0.guiding_ok,GUIDEROK: guiding error RMS/bias within 50 mas,QUALITY_CONTROL,1,0,0,0,0,0,0,0,0
+QCL0.guide_camera_ok,GDRCAMOK: guide camera not saturated,QUALITY_CONTROL,1,0,0,0,0,0,0,0,0
+QCL0.seeing_ok,SEEINGOK: V-band seeing < 1.5 arcsec,QUALITY_CONTROL,1,0,0,0,0,0,0,0,0
+QCL0.elevation_ok,ELEVOK: telescope elevation above 30 deg (ADC working range),INSTRUMENT_HEADER,1,0,0,0,0,0,0,0,0
+QCL0.etalon_at_temp,ETATMPOK: etalon chamber temperatures at their setpoints,QUALITY_CONTROL,0,0,0,0,0,0,0,0,1
+QCL0.agitator_operating,AGITOK: agitator running above minimum speed,INSTRUMENT_HEADER|TELEMETRY,1,1,0,0,1,1,1,1,1
+QCL0.not_junk,NOTJUNK: obs_id not in junk list,,1,1,1,1,1,1,1,1,1
+QCL0.radec_consistent,TARGETOK: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,1,0,0,0,0,0,0,0,0
+QCL0.catalog_astrometry_sane,ASTROMOK: catalog epoch/equinox/rv/parallax/PM in physical range,CATALOG_RECORD,1,0,0,0,0,0,0,0,0
+QCL0.catalog_color_sane,COLOROK: catalog color present and in physical range,CATALOG_RECORD,1,0,0,0,0,0,0,0,0
+QCL0.expmeter_times_consistent,EMTIMEOK: exposure meter times consistent with shutter window,EXPMETER_SCI|INSTRUMENT_HEADER,1,1,0,0,0,0,0,0,0
+QCL0.expmeter_flux_sane,EMFLUXOK: exposure meter flux not saturated or negative,QUALITY_CONTROL,1,1,0,0,0,0,0,0,0
+QCL0.dead_pixels_ok,DEADPXOK: dead pixel fraction within limits on both CCDs,QUALITY_CONTROL,1,1,1,1,1,1,1,1,1
+QCL0.saturated_pixels_ok,SATPXOK: over-exposed pixel fraction within limits on both CCDs,QUALITY_CONTROL,1,1,1,1,1,1,1,1,1

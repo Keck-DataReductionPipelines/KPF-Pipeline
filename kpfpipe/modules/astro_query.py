@@ -145,14 +145,14 @@ class AstroQuery:
     the native ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry, and writes all
     three rows to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV ``C*#``
     catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science
-    frames are supported: the constructor raises on a non-``Object`` IMTYPE. Fail-soft
+    frames are supported: the constructor raises on a non-``Object`` OBSTYPE. Fail-soft
     otherwise -- a missing GAIAID/OBJECT or a failed lookup yields a ``None`` record.
 
     Parameters
     ----------
     l0_obj : KPF0
-        Raw L0 science frame (IMTYPE ``Object``). Its PRIMARY header (IMTYPE, GAIAID,
-        OBJECT, TARG*) is read but never modified.
+        Standardized L0 science frame (OBSTYPE ``Object``). Its PRIMARY header
+        (OBSTYPE, GAIAID, OBJECT, TARG*) is read but never modified.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: do_gaia_query, do_simbad_query,
         astrometry_priority, query_timeout.
@@ -161,11 +161,11 @@ class AstroQuery:
     def __init__(self, l0_obj, config=None):
         self.l0_obj = l0_obj
 
-        imtype = l0_obj.headers["INSTRUMENT_HEADER"].get("IMTYPE")
-        if str(imtype).strip().lower() != "object":
+        obstype = l0_obj.headers["PRIMARY"].get("OBSTYPE")
+        if obstype != "Object":
             raise ValueError(
-                f"AstroQuery runs only on science frames (IMTYPE 'Object'); got "
-                f"IMTYPE={imtype!r}. It must not be called on a calibration frame."
+                f"AstroQuery runs only on science frames (OBSTYPE 'Object'); got "
+                f"OBSTYPE={obstype!r}. It must not be called on a calibration frame."
             )
 
         if config is None:
