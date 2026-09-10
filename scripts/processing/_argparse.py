@@ -1,10 +1,12 @@
-"""Shared argparse parent parsers for the batch processing CLI commands.
+"""Shared argparse parent parsers for the ``kpfpipe`` CLI commands.
 
 Common flag groups -- recipe/config selection, data-dir overrides, logging
 overrides, the fan-out pool controls, and the mini-db ``--cache`` mode -- factored
 out so the subcommand parsers (``reduce``/``masters``/``science``) compose them via
 ``parents=[...]`` instead of each re-declaring the same flags. Every factory
-returns a fresh ``add_help=False`` parser to slot in as a parent.
+returns a fresh ``add_help=False`` parser to slot in as a parent. The
+``kpfpipe analyze`` scripts compose one parent, `analysis_parser`, which is itself
+built from these same groups.
 
 Depends only on ``argparse`` -- never on ``tools`` -- so, like ``_dispatch.py``,
 the scripts layer stays ignorant of the CLI dispatcher above it.
@@ -70,15 +72,17 @@ def data_dirs_parser(science_output=True):
 
 
 # Where each --output_dir slot lands beneath the given root. The masters/science
-# outputs take the root verbatim (their path builders add the substructure); the
-# log dir and plot dir each get a conventional subdirectory so --output_dir yields
-# the same layout an explicit --log_dir/--plot_dir would (the plot subdir matches
-# the timeseries default of {science_output}/QLP/timeseries).
+# outputs take the root verbatim (their path builders add the substructure); every
+# directory a flag names outright -- log, plot, analysis -- gets its conventional
+# subdirectory here, so --output_dir yields the same layout an explicit
+# --log_dir/--plot_dir/--analysis_dir would (the plot subdir matches the timeseries
+# default of {science_output}/QLP/timeseries).
 _OUTPUT_DIR_SLOTS = {
     "kpf_masters_output": (),
     "kpf_science_output": (),
     "log_dir": ("logs",),
     "plot_dir": ("QLP", "timeseries"),
+    "analysis_dir": ("analysis",),
 }
 
 
@@ -152,5 +156,52 @@ def pool_parser(jobs_help):
         "subprocess (default: %(default)s). A job exceeding this is treated as "
         "wedged: its process group is killed and the job counts as a failure "
         "rather than hanging the whole batch",
+    )
+    return p
+
+
+def analysis_parser():
+    """The single parent parser the ``kpfpipe analyze`` scripts compose: their own
+    date range and directories, over the logging/pool/cache groups above.
+
+    The analysis scripts read no recipe TOML (those configs belong to the recipes),
+    so their directories come from the CLI alone: ``--input_dir`` is required, and
+    ``--analysis_dir``/``--log_dir`` -- or the ``--output_dir`` they fall back to --
+    say where the reports and logs land. Validated post-parse by each script's
+    ``parse_args``, as with the processing commands.
+    """
+    p = argparse.ArgumentParser(
+        add_help=False,
+        parents=[
+            logging_parser(),
+            pool_parser(jobs_help="max concurrent per-night header scans"),
+            cache_parser(default="rw"),
+        ],
+    )
+    p.add_argument(
+        "--date_range",
+        nargs=2,
+        metavar=("START", "END"),
+        required=True,
+        help="inclusive datecode range to analyze, e.g. --date_range 20240727 20241022",
+    )
+    p.add_argument(
+        "--kpf_data_input",
+        "--input_dir",
+        dest="kpf_data_input",
+        required=True,
+        help="root of the raw L0 input tree to read (--input_dir is an alias)",
+    )
+    p.add_argument(
+        "--analysis_dir",
+        default=None,
+        help="directory for the analysis reports (default: {output_dir}/analysis)",
+    )
+    p.add_argument(
+        "--output_dir",
+        default=None,
+        help="shortcut: root for every output directory not given its own explicit "
+        "flag -- the analysis dir ({output_dir}/analysis) and the log dir "
+        "({output_dir}/logs)",
     )
     return p

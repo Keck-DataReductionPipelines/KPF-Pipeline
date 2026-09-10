@@ -9,6 +9,11 @@ its own argument parsing:
     kpfpipe masters     -- build nightly master calibrations for a set of datecodes
     kpfpipe science     -- reduce a set of science frames end-to-end (L0 -> L4)
     kpfpipe timeseries  -- reduce a star's RV timeseries over a datecode range
+    kpfpipe analyze     -- track instrument/calibrator behavior over a date range
+
+``analyze`` is the one command with a second level: it reduces nothing, and routes
+to an ``scripts/analysis`` script named by its subject (``analyze thar``,
+``analyze flat``, ...), each of which reports on how that subject changes over time.
 
 Examples:
 
@@ -16,6 +21,7 @@ Examples:
     kpfpipe masters --dates 20240405 20240712         # batch (fans out `run`)
     kpfpipe science --obs_ids KP.20240405.40113.57
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
+    kpfpipe analyze thar --date_range 20240727 20241022
 
 Run ``kpfpipe <command> -h`` for a command's own options.
 
@@ -25,13 +31,43 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 
 import sys
 
+from scripts.analysis import thar
 from scripts.processing import masters, reduce, science, timeseries
+
+# The `analyze` subcommands, keyed by subject. Kept here rather than in
+# scripts/analysis so the scripts stay ignorant of the dispatcher above them, as
+# the processing drivers are.
+_ANALYSES = {
+    "thar": thar.main,
+}
+
+
+def _analyze(argv):
+    """Route ``kpfpipe analyze <subject>`` to its analysis script.
+
+    A second dispatcher of the same shape as `main`: it owns only the subject
+    lookup and forwards the rest verbatim, so each analysis script parses its own
+    options and stays runnable as ``python -m scripts.analysis.<subject>``.
+    """
+    if not argv or argv[0] in ("-h", "--help"):
+        print(_analyze_usage())
+        return 0
+
+    subject, rest = argv[0], argv[1:]
+    if subject not in _ANALYSES:
+        print(f"kpfpipe analyze: unknown subject {subject!r}\n", file=sys.stderr)
+        print(_analyze_usage(), file=sys.stderr)
+        raise SystemExit(2)
+
+    return _ANALYSES[subject](rest)
+
 
 _COMMANDS = {
     "run": reduce.main,
     "masters": masters.main,
     "science": science.main,
     "timeseries": timeseries.main,
+    "analyze": _analyze,
 }
 
 
@@ -43,8 +79,19 @@ def _usage():
         "  run         reduce one recipe on one unit, in-process (the leaf)\n"
         "  masters     build nightly master calibrations for a set of datecodes\n"
         "  science     reduce a set of science frames end-to-end (L0 -> L4)\n"
-        "  timeseries  reduce a star's RV timeseries over a datecode range\n\n"
+        "  timeseries  reduce a star's RV timeseries over a datecode range\n"
+        "  analyze     track instrument/calibrator behavior over a date range\n\n"
         "Run `kpfpipe <command> -h` for a command's own options."
+    )
+
+
+def _analyze_usage():
+    """The ``analyze`` usage banner listing the available subjects."""
+    return (
+        "usage: kpfpipe analyze <subject> [options]\n\n"
+        "subjects:\n"
+        "  thar        which ThAr lamp (HCLSN) was in use, night by night\n\n"
+        "Run `kpfpipe analyze <subject> -h` for a subject's own options."
     )
 
 
