@@ -1,17 +1,11 @@
 """Tests for L0 quicklook plots."""
 
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from astropy.io import fits
 from PIL import Image
 
-from kpfpipe import CHIPS
-from kpfpipe.data_models.level0 import KPF0
-
-from ._data_models import write_amp_l0
+from ._data_models import standardized_l0, write_amp_l0
 
 # Quicklook/QLP render suite: slow PNG rendering, so excluded from
 # `make test-fast`. Run in the full suite or `make test-qlp`.
@@ -41,7 +35,7 @@ def synthetic_4amp_l0(tmp_path):
             "DATE-OBS": "2024-04-05T01:00:37",
         },
     )
-    return KPF0.from_fits(fn)
+    return standardized_l0(fn)
 
 
 @pytest.fixture
@@ -59,7 +53,7 @@ def synthetic_2amp_l0(tmp_path):
             "DATE-OBS": "2024-04-05T01:00:38",
         },
     )
-    return KPF0.from_fits(fn)
+    return standardized_l0(fn)
 
 
 @pytest.fixture
@@ -77,7 +71,7 @@ def fullres_4amp_l0(tmp_path):
             "DATE-OBS": "2024-04-05T01:00:37",
         },
     )
-    return KPF0.from_fits(fn)
+    return standardized_l0(fn)
 
 
 @pytest.fixture
@@ -94,7 +88,7 @@ def fullres_2amp_l0(tmp_path):
             "DATE-OBS": "2024-04-05T01:00:38",
         },
     )
-    return KPF0.from_fits(fn)
+    return standardized_l0(fn)
 
 
 @pytest.fixture
@@ -111,7 +105,7 @@ def small_2amp_l0(tmp_path):
             "DATE-OBS": "2024-04-05T01:00:39",
         },
     )
-    return KPF0.from_fits(fn)
+    return standardized_l0(fn)
 
 
 # ---------------------------------------------------------------------------
@@ -215,24 +209,15 @@ class TestStitchedImage2Amp:
 class TestStitchedImage2To16:
     def test_scales_high_values(self, tmp_path):
         # A median above the 200 * 2^16 threshold triggers the 2^16 rescale.
-        fn = str(tmp_path / "KP.20240405.00003.00.fits")
-        high_val = 300 * 2**16
-
-        primary = fits.PrimaryHDU()
-        primary.header["OBJECT"] = "high-value"
-        primary.header["OFNAME"] = os.path.basename(fn)
-        primary.header["PROGNAME"] = "K123"
-        hdus = [primary]
-        for chip in CHIPS:
-            for amp in range(1, 5):
-                data = np.full((100, 100), high_val, dtype=np.float64)
-                hdus.append(fits.ImageHDU(data=data, name=f"{chip}_AMP{amp}"))
-
-        hdul = fits.HDUList(hdus)
-        hdul.writeto(fn, overwrite=True)
-        hdul.close()
-
-        l0 = KPF0.from_fits(fn)
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00003.00.fits",
+            namps=4,
+            shape=(100, 100),
+            bias_level=300 * 2**16,
+            seed=11,
+            primary_cards={"OBJECT": "high-value"},
+        )
+        l0 = standardized_l0(fn)
 
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 
@@ -345,7 +330,7 @@ class TestPlotL0Run:
             seed=7,
             primary_cards={"OBJECT": "green-only"},
         )
-        l0 = KPF0.from_fits(fn)
+        l0 = standardized_l0(fn)
 
         from kpfpipe.quality_control.quicklook.level0 import PlotL0
 

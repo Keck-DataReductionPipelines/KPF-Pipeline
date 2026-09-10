@@ -193,7 +193,7 @@ class TestImageAssembly4Amp:
     def l1_4amp(self, synthetic_4amp_l0):
         """Assemble the synthetic 4-amp L0 once, shared read-only across the class.
 
-        perform() counts the amplifiers, so ia.namp/ia.dims come back populated.
+        ia.namp/ia.dims come from the L0 header at construction.
         """
         l0 = standardized_l0(synthetic_4amp_l0)
         ia = ImageAssembly(l0)
@@ -483,7 +483,7 @@ class TestOverscanMethods:
     def ia(self, tmp_path):
         """ImageAssembly on a tiny 4-amp frame, with the geometry set by hand.
 
-        ``dims``/``prescan`` normally come from count_amplifiers(); setting
+        ``dims``/``prescan`` normally come from the detector reference; setting
         them directly keeps the overscan slicing arithmetic in view.
         """
         path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12))
@@ -529,65 +529,6 @@ class TestOverscanMethods:
         assert ia._receipt_args() == f"oscansub={expected}"
 
 
-class TestReadMode:
-    """READMODE classification: the ACF filename first, readout duration after."""
-
-    def _infer(self, tmp_path, cards):
-        path = write_amp_l0(
-            tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12), primary_cards=cards
-        )
-        return ImageAssembly(standardized_l0(path)).infer_read_mode()
-
-    @pytest.mark.parametrize(
-        "green_acf, red_acf, expected",
-        [
-            ("regular-read-green.acf", "regular-read-red.acf", "regular"),
-            ("fast-read-green.acf", "fast-read-red.acf", "fast"),
-            ("fast-read-green.acf", "regular-read-red.acf", "fast"),
-        ],
-    )
-    def test_acf_filename_names_the_mode(self, tmp_path, green_acf, red_acf, expected):
-        cards = {"GRACFFLN": green_acf, "RDACFFLN": red_acf}
-        assert self._infer(tmp_path, cards) == expected
-
-    @pytest.mark.parametrize("read_time, expected", [(12.0, "fast"), (48.0, "regular")])
-    def test_falls_back_to_readout_duration(self, tmp_path, read_time, expected):
-        # An ACF named after neither mode leaves the shutter-close to file-write
-        # interval as the only discriminator.
-        shutter_close = "2024-01-01T00:00:00"
-        file_write = f"2024-01-01T00:00:{read_time:04.1f}"
-        cards = {
-            "GRACFFLN": "unknown.acf",
-            "RDACFFLN": "unknown.acf",
-            "GRDATE": file_write,
-            "GRDATE-E": shutter_close,
-            "RDDATE": file_write,
-            "RDDATE-E": shutter_close,
-        }
-        assert self._infer(tmp_path, cards) == expected
-
-    def test_read_time_measured_for_both_chips(self, tmp_path):
-        path = write_amp_l0(
-            tmp_path / "KP.20240101.00001.00.fits",
-            shape=(12, 12),
-            primary_cards={
-                "GRDATE-E": "2024-01-01T00:00:00",
-                "GRDATE": "2024-01-01T00:00:47.5",
-                "RDDATE-E": "2024-01-01T00:00:00",
-                "RDDATE": "2024-01-01T00:00:12.0",
-            },
-        )
-        assembly = ImageAssembly(standardized_l0(path))
-        assembly.infer_read_mode()
-        assert assembly.read_time == {"GREEN": 47.5, "RED": 12.0}
-
-    def test_read_time_only_for_processed_chips(self, tmp_path):
-        path = write_amp_l0(tmp_path / "KP.20240101.00002.00.fits", shape=(12, 12))
-        assembly = ImageAssembly(standardized_l0(path), config={"chips": ["GREEN"]})
-        assembly.infer_read_mode()
-        assert set(assembly.read_time) == {"GREEN"}
-
-
 class TestAmplifierGuards:
     """The two fail-loud guards on an unexpected readout geometry."""
 
@@ -595,14 +536,13 @@ class TestAmplifierGuards:
         path = write_amp_l0(
             tmp_path / "KP.20240101.00001.00.fits", namps=1, shape=(10, 10)
         )
-        module = ImageAssembly(standardized_l0(path))
+        l0 = standardized_l0(path)
         with pytest.raises(ValueError, match="Only 2-amp and 4-amp"):
-            module.count_amplifiers("GREEN")
+            ImageAssembly(l0)
 
     def test_unexpected_flip_entry_raises(self, tmp_path):
         path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
         module = ImageAssembly(standardized_l0(path))
-        module.count_amplifiers("GREEN")
         module.orientation["GREEN_AMP1"] = "sideways"
         with pytest.raises(ValueError, match="unexpected 'flip' entry"):
             module.orient_channels("GREEN")
@@ -644,7 +584,7 @@ class TestImageAssemblyRoundTrip:
 
 @pytest.mark.requires_testdata
 class TestNativeReadsUseTheInstrumentHeader:
-    """``infer_read_mode`` reads native cards, and every L0 module now runs after
+    """``_readout`` reads native cards, and every L0 module now runs after
     standardization -- so PRIMARY no longer carries them.
 
     ``EXPTIMOK`` is the direct assertion the exit checklist asks for: it left
@@ -654,7 +594,7 @@ class TestNativeReadsUseTheInstrumentHeader:
 
     def test_read_mode_is_inferred_from_the_native_header(self):
         l0 = standardized_l0(L0_BIAS)
-        assert ImageAssembly(l0).infer_read_mode() in ("fast", "regular")
+        assert l0.headers["PRIMARY"]["READMODE"] in ("fast", "regular")
 
     def test_exptimok_is_written_and_true(self):
         from kpfpipe.quality_control.qc_flags.level0 import QCL0

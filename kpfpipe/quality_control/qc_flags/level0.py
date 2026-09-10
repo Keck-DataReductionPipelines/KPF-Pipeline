@@ -6,11 +6,9 @@ from datetime import datetime
 
 import numpy as np
 
-from kpfpipe import CHIPS, DETECTOR
+from kpfpipe import DETECTOR
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
-
-_SUPPORTED_NAMP = (2, 4)  # valid KPF readout modes (see ImageAssembly.count_amplifiers)
 
 
 class QCL0(QC):
@@ -21,34 +19,24 @@ class QCL0(QC):
     def data_l0_red_green(self):
         """Raw CCD data present: each of GREEN/RED is a supported amp readout.
 
-        KPF reads out 2 or 4 amplifiers per chip (``_SUPPORTED_NAMP``), mirroring
-        ``ImageAssembly.count_amplifiers``. Each present amp must match the shape
-        ``ImageAssembly.dims`` implies for that readout mode (prescan/overscan
-        included) and hold at least one finite value, so a truncated readout or
-        an all-NaN placeholder is not mistaken for good data.
+        KPF reads out 2 or 4 amplifiers per chip, the count
+        ``KPF0.standardize_headers`` stamped as NAMPGRN/NAMPRED. Each amp must
+        match the shape ``ImageAssembly.dims`` implies for that readout mode
+        (prescan/overscan included) and hold at least one finite value, so a
+        truncated readout or an all-NaN placeholder is not mistaken for good data.
         """
         ccd = DETECTOR["ccd"]
-        for chip in CHIPS:
-            amps = []
-            for i in range(1, 5):  # GREEN_AMP1..4 / RED_AMP1..4
-                arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
-                # KPF0 stores None-data as array(None, dtype=object); skip absent.
-                if (
-                    arr is None
-                    or getattr(arr, "dtype", None) == np.dtype(object)
-                    or np.size(arr) == 0
-                ):
-                    continue
-                amps.append(arr)
-            if len(amps) not in _SUPPORTED_NAMP:
+        primary = self.kpf_obj.headers["PRIMARY"]
+        for chip, keyword in (("GREEN", "NAMPGRN"), ("RED", "NAMPRED")):
+            namp = primary[keyword]
+            if namp not in (2, 4):
                 return False
-            nrow = ccd["nrow"] // (2 if len(amps) == 4 else 1) + ccd["oscan_prl"]
+            nrow = ccd["nrow"] // (2 if namp == 4 else 1) + ccd["oscan_prl"]
             ncol = ccd["ncol"] // 2 + ccd["prescan"] + ccd["oscan_srl"]
-            if any(
-                arr.shape != (nrow, ncol) or not np.any(np.isfinite(arr))
-                for arr in amps
-            ):
-                return False
+            for i in range(1, namp + 1):
+                arr = self.kpf_obj.data[f"{chip}_AMP{i}"]
+                if arr.shape != (nrow, ncol) or not np.any(np.isfinite(arr)):
+                    return False
         return True
 
     data_l0_red_green._qc_key = "DATAPRL0"

@@ -103,21 +103,14 @@ class DiagL0(Diagnostics):
     object_ra_dec_offset._diag_name = "object_ra_dec_offset"
 
     def _present_amps(self, chip):
-        """Yield ``(i, array)`` for each present, non-empty ``{chip}_AMP{i}``.
+        """Yield ``(i, array)`` for each amplifier the ``chip`` readout used.
 
-        Only the amps a readout actually used carry data, so 2-amp and 4-amp
-        frames both work.
+        NAMPGRN/NAMPRED carry the count, so 2-amp and 4-amp frames both work.
         """
-        for i in range(1, 5):
-            arr = self.kpf_obj.data.get(f"{chip}_AMP{i}")
-            # KPF0 stores None-data as array(None, dtype=object); skip absent.
-            if (
-                arr is None
-                or getattr(arr, "dtype", None) == np.dtype(object)
-                or np.size(arr) == 0
-            ):
-                continue
-            yield i, arr
+        primary = self.kpf_obj.headers["PRIMARY"]
+        namp = {"GREEN": primary["NAMPGRN"], "RED": primary["NAMPRED"]}[chip]
+        for i in range(1, namp + 1):
+            yield i, self.kpf_obj.data[f"{chip}_AMP{i}"]
 
     def _amp_pixel_fraction(self, chip, compare, level):
         """Largest fraction of any present amp on ``chip`` satisfying ``compare``.

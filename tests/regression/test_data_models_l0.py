@@ -22,7 +22,7 @@ from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
 
 from ._catalog import catalog_record_table
-from ._data_models import standardized_l0, write_minimal_l0
+from ._data_models import standardized_l0, write_amp_l0, write_minimal_l0
 from ._dtype_policy import assert_not_float64
 from ._eprv import kpf_table
 
@@ -641,6 +641,77 @@ class TestObservingMode:
 
     def test_clsrc_is_blank_when_the_trace_names_no_source(self):
         assert self._standardize("Bias")["CLSRC5"] is None
+
+
+class TestReadout:
+    """NAMPGRN/NAMPRED, TRT{chip} and READMODE, all stamped by ``_readout``.
+
+    READMODE is classified from the ACF filename first, the readout duration
+    after.
+    """
+
+    def _primary(self, tmp_path, cards=None, namps=4):
+        path = write_amp_l0(
+            tmp_path / "KP.20240101.00001.00.fits",
+            namps=namps,
+            shape=(12, 12),
+            primary_cards=cards,
+        )
+        return standardized_l0(path).headers["PRIMARY"]
+
+    @pytest.mark.parametrize("namps, expected", [(2, 2), (4, 4)])
+    def test_amplifiers_are_counted_per_chip(self, tmp_path, namps, expected):
+        prim = self._primary(tmp_path, namps=namps)
+        assert prim["NAMPGRN"] == expected
+        assert prim["NAMPRED"] == expected
+
+    @pytest.mark.parametrize(
+        "green_acf, red_acf, expected",
+        [
+            ("regular-read-green.acf", "regular-read-red.acf", "regular"),
+            ("fast-read-green.acf", "fast-read-red.acf", "fast"),
+            ("fast-read-green.acf", "regular-read-red.acf", "fast"),
+        ],
+    )
+    def test_acf_filename_names_the_mode(self, tmp_path, green_acf, red_acf, expected):
+        cards = {"GRACFFLN": green_acf, "RDACFFLN": red_acf}
+        assert self._primary(tmp_path, cards)["READMODE"] == expected
+
+    @pytest.mark.parametrize("read_time, expected", [(12.0, "fast"), (48.0, "regular")])
+    def test_falls_back_to_readout_duration(self, tmp_path, read_time, expected):
+        # An ACF named after neither mode leaves the shutter-close to file-write
+        # interval as the only discriminator.
+        shutter_close = "2024-01-01T00:00:00"
+        file_write = f"2024-01-01T00:00:{read_time:04.1f}"
+        cards = {
+            "GRACFFLN": "unknown.acf",
+            "RDACFFLN": "unknown.acf",
+            "GRDATE": file_write,
+            "GRDATE-E": shutter_close,
+            "RDDATE": file_write,
+            "RDDATE-E": shutter_close,
+        }
+        assert self._primary(tmp_path, cards)["READMODE"] == expected
+
+    def test_read_mode_is_blank_without_acf_or_dates(self):
+        l0 = KPF0()
+        l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
+        assert l0.standardize_headers().headers["PRIMARY"]["READMODE"] is None
+
+    def test_read_time_measured_for_both_chips(self, tmp_path):
+        cards = {
+            "GRDATE-E": "2024-01-01T00:00:00",
+            "GRDATE": "2024-01-01T00:00:47.5",
+            "RDDATE-E": "2024-01-01T00:00:00",
+            "RDDATE": "2024-01-01T00:00:12.0",
+        }
+        path = write_amp_l0(
+            tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12), primary_cards=cards
+        )
+        qc = standardized_l0(path).headers["QUALITY_CONTROL"]
+        assert qc["TRTGREEN"] == 47.5
+        assert qc["TRTRED"] == 12.0
 
 
 class TestFiveTraceShape:

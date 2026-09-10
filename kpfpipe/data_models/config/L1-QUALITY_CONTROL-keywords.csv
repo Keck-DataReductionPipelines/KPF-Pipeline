@@ -13,8 +13,6 @@ BIASAGE,Master bias age,days,float,0.35,CalibrationAssociation
 DARKAGE,Master dark age,days,float,0.35,CalibrationAssociation
 FLATAGE,Master flat age,days,float,0.35,
 WLSAGE,WLS master age,days,float,0.35,CalibrationAssociation
-TRTGREEN,GREEN chip total read time,seconds,float,47.5,ImageAssembly
-TRTRED,RED chip total read time,seconds,float,47.5,ImageAssembly
 RNGREEN1,Read noise GREEN amp 1,e-,float,4.12,ImageAssembly
 RNGREEN2,Read noise GREEN amp 2,e-,float,4.08,ImageAssembly
 RNGREEN3,Read noise GREEN amp 3,e-,float,4.15,ImageAssembly

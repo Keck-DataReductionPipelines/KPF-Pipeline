@@ -26,6 +26,9 @@ ISSOLAR,True if the observation is of the Sun,,Boolean,F,KPF0.standardize_header
 
 EXPTIME,Exposure time,s,Float,75.022,KPF0.standardize_headers
 BINNING,Binning mode,,String,1x1,KPF0.standardize_headers
+READMODE,Readout mode,,String,normal,KPF0.standardize_headers
+NAMPGRN,Number of GREEN amplifiers,,Int,2,KPF0.standardize_headers
+NAMPRED,Number of RED amplifiers,,Int,2,KPF0.standardize_headers
 NUMORDER,Number of orders,,Uint,67,KPF0.standardize_headers
 NUMTRACE,Number of object-indexed keyword families,,UInt,5,KPF0.standardize_headers
 TRACE#,Type of object in trace #,,String,SCI,KPF0.standardize_headers

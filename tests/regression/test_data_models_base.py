@@ -299,16 +299,15 @@ class TestKeywordRegistry:
         assert units("DATAPRL1", "QUALITY_CONTROL") == ""
 
     def test_primary_seed_is_cumulative_by_level(self):
-        # Each level adds its own DQLVL bitfield; L1 also READMODE and the
-        # master-calibration paths, L2 the extraction SNR cards, L4 the RV
-        # summary. Membership is the registration, not the header map, so the
-        # KPF-only keywords are in these deltas too.
+        # Each level adds its own DQLVL bitfield; L1 also the master-calibration
+        # paths, L2 the extraction SNR cards, L4 the RV summary. Membership is
+        # the registration, not the header map, so the KPF-only keywords are in
+        # these deltas too.
         reg = KPF1.keyword_registry
         l0, l1, l2, l4 = (reg.primary_seed(p) for p in ("L0", "L1", "L2", "L4"))
         assert set(l0) < set(l1) < set(l2) < set(l4)
         assert set(l1) - set(l0) == {
             "DQLVL1",
-            "READMODE",
             "BIASFILE",
             "DARKFILE",
             "FLATFILE",

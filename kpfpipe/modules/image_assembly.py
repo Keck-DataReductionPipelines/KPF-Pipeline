@@ -1,8 +1,8 @@
 """
 KPF Image Assembly module.
 
-Assembles a raw L0 readout into a single L1 full-frame image (FFI). Automatically
-detects whether observations were obtained in 2- or 4-amplifier mode, subtracts
+Assembles a raw L0 readout into a single L1 full-frame image (FFI). Reads the
+2- or 4-amplifier readout mode from the L0 header (NAMPGRN/NAMPRED), subtracts
 per-amplifier overscan bias, measures read noise, and stitches together the FFI
 (4080 x 4080 arrays) for both GREEN and RED CCDs.
 
@@ -13,7 +13,6 @@ gated per file type by the masters modules.
 """
 
 import logging
-from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -51,9 +50,8 @@ class ImageAssembly:
     Assemble a raw L0 readout into an L1 full-frame image.
 
     Orients amplifier channels, applies gain conversion (ADU --> photo-electrons),
-    measures read noise, infers the CCD readout mode, subtracts overscan bias, and
-    stitches the per-chip FFI; also converts EXPMETER_SCI/SKY wavelengths from nm to
-    Angstroms.
+    measures read noise, subtracts overscan bias, and stitches the per-chip FFI;
+    also converts EXPMETER_SCI/SKY wavelengths from nm to Angstroms.
 
     Parameters
     ----------
@@ -86,27 +84,41 @@ class ImageAssembly:
         self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
 
         self._info = None
-        self.orientation = {}  # amp ext -> flip; set by _parse_amplifier_reference()
-        self.gain = {}  # amp ext -> gain; set by _parse_amplifier_reference()
-        self.namp = {}  # chip -> n amps; set by count_amplifiers()
-        self.dims = {}  # chip -> amp shape; set by count_amplifiers()
-        self.read_time = {}  # chip -> readout seconds; set by infer_read_mode()
-        self.readnoise = {}  # channel ext -> RN std; set by measure_read_noise()
-        # channel ext -> sqrt(2/pi)*std/mad; set by measure_read_noise()
-        self.rn_nongauss = {}
-        self._parse_amplifier_reference()
+        self.namp = {}  # number of amplifiers; set by _infer_amplifier_settings()
+        self.dims = {}  # amplifier dimensions; set by _infer_amplifier_settings()
+        self.gain = {}  # per-amp gain; set by _infer_amplifier_settings()
+        self.orientation = {}  # amp ext -> flip; set by _infer_amplifier_settings()
+        self.readnoise = {}  # set by measure_read_noise()
+        self.rn_nongauss = {}  # non-gaussian read noise ~ std/mad
+
+        self._infer_amplifier_settings()
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _parse_amplifier_reference(self):
+    def _infer_amplifier_settings(self):
         """
-        Cache per-channel orientation flips and gains from the amplifier
-        reference into ``self.orientation`` / ``self.gain``. Orientation maps
-        each channel to standard orientation (serial overscan right, parallel
-        overscan bottom).
+        Cache amplifier count (namp) and per-channel dimensions, orientation,
+        and gain. Orientation maps each channel to standard orientation
+        (serial overscan right, parallel overscan bottom).
         """
+        primary = self.l0_obj.headers["PRIMARY"]
+        self.namp = {"GREEN": primary["NAMPGRN"], "RED": primary["NAMPRED"]}
+
+        for chip, namp in self.namp.items():
+            if namp == 0:  # chip not read out; nothing to assemble
+                continue
+            if namp == 2:
+                self.dims[chip] = (self.nrow, self.ncol // 2)
+            elif namp == 4:
+                self.dims[chip] = (self.nrow // 2, self.ncol // 2)
+            else:
+                raise ValueError(
+                    f"Only 2-amp and 4-amp mode supported, "
+                    f"detected {namp} on {chip} CCD"
+                )
+
         for chip in self.chips:
             chip = chip.upper()
             df = pd.DataFrame(self.amplifiers[chip]).set_index("channel_id")
@@ -203,41 +215,6 @@ class ImageAssembly:
     # ------------------------------------------------------------------
     # Public helpers
     # ------------------------------------------------------------------
-
-    def count_amplifiers(self, chip):
-        """
-        Count the number of amplifier extensions present for a given CCD and
-        determine their channel dimensions.
-
-        Parameters
-        ----------
-        chip : str
-            CCD identifier, e.g., 'GREEN' or 'RED'.
-
-        Notes
-        -----
-        Sets ``self.namp[chip]`` (amplifier count) and ``self.dims[chip]`` (per-channel
-        shape). Only 2-amp and 4-amp configurations are supported.
-        """
-        chip = chip.upper()
-
-        self.namp[chip] = 0
-        for i in range(4):
-            if f"{chip}_AMP{i + 1}" in self.l0_obj.extensions:
-                if np.size(self.l0_obj.data[f"{chip}_AMP{i + 1}"]) > 0:
-                    self.namp[chip] += 1
-
-        if self.namp[chip] == 2:
-            self.dims[chip] = (self.nrow, self.ncol // 2)
-        elif self.namp[chip] == 4:
-            self.dims[chip] = (self.nrow // 2, self.ncol // 2)
-        else:
-            raise ValueError(
-                f"Only 2-amp and 4-amp mode supported, "
-                f"detected {self.namp[chip]} on {chip} CCD"
-            )
-
-        logger.debug("%s CCD: %d-amplifier mode", chip, self.namp[chip])
 
     def orient_channels(self, chip):
         """
@@ -451,36 +428,6 @@ class ImageAssembly:
             image = np.flip(image, axis=0)
         return image
 
-    def infer_read_mode(self):
-        """
-        Infer CCD readout speed from the raw L0 header, and record each chip's
-        shutter-close to file-write readout duration in ``self.read_time``.
-
-        Returns
-        -------
-        read_mode : str
-            'fast' or 'regular'.
-
-        Notes
-        -----
-        The ACF waveform filenames name the mode outright, and failing that the
-        readout duration separates ~12 s fast readout from ~48 s regular.
-        """
-        header = self.l0_obj.headers["INSTRUMENT_HEADER"]
-        for chip in self.chips:
-            prefix = {"GREEN": "GR", "RED": "RD"}[chip.upper()]
-            self.read_time[chip.upper()] = (
-                datetime.fromisoformat(header[f"{prefix}DATE"])
-                - datetime.fromisoformat(header[f"{prefix}DATE-E"])
-            ).total_seconds()
-
-        acf = f"{header['GRACFFLN']} {header['RDACFFLN']}"
-        if "fast" in acf:
-            return "fast"
-        if "regular" in acf:
-            return "regular"
-        return "fast" if min(self.read_time.values()) < 20 else "regular"
-
     # ------------------------------------------------------------------
     # Private helpers - module execution
     # ------------------------------------------------------------------
@@ -508,18 +455,12 @@ class ImageAssembly:
     def _set_headers(self, l1_obj):
         """
         Write assembly metadata to ``l1_obj``: per-amplifier read noise
-        (RN_KEYS), the non-Gaussian factor, READMODE, and the per-chip read
-        time. ``infer_read_mode`` supplies both READMODE and the
-        ``self.read_time`` the ``TRT{chip}`` writes read.
+        (RN_KEYS) and the non-Gaussian factor.
         """
         for channel_ext, rn in self.readnoise.items():
             key_read, key_rnng = RN_KEYS[channel_ext]
             l1_obj.set_keyword(key_read, round(float(rn), 4))
             l1_obj.set_keyword(key_rnng, round(float(self.rn_nongauss[channel_ext]), 4))
-
-        l1_obj.set_keyword("READMODE", self.infer_read_mode())
-        for chip, read_time in self.read_time.items():
-            l1_obj.set_keyword(f"TRT{chip}", round(read_time, 3))
 
     def _receipt_args(self):
         """Whether overscan was subtracted; "zero" strips it but subtracts none."""
@@ -569,7 +510,6 @@ class ImageAssembly:
         l1_obj = self.l0_obj.to_kpf1()
 
         for chip in chips:
-            self.count_amplifiers(chip)
             self.apply_gain_conversion(chip)
             self.measure_read_noise(chip, readnoise_sigma)
             self.subtract_overscan(chip, overscan_method)

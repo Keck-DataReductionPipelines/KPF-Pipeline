@@ -14,9 +14,9 @@ class PlotL0(Plot):
     """Quicklook plots for KPF L0 (raw CCD) data.
 
     Takes a KPF0 object and generates plots of the raw detector images.
-    Pure visualization -- no science computation. Amplifier counting and
-    orientation delegate to ImageAssembly so detector-geometry knowledge
-    has a single home.
+    Pure visualization -- no science computation. Amplifier orientation
+    delegates to ImageAssembly so detector-geometry knowledge has a single
+    home.
 
     Parameters
     ----------
@@ -37,27 +37,22 @@ class PlotL0(Plot):
         self.full_res = full_res
 
     def _has_chip(self, chip):
-        """Return True if any AMP extension for the chip holds data."""
-        for i in range(1, 5):
-            ext = f"{chip.upper()}_AMP{i}"
-            arr = self.kpf_obj.data.get(ext)
-            if arr is not None and np.size(arr) > 0:
-                return True
-        return False
+        """Return True if the chip read out any amplifiers."""
+        primary = self.kpf_obj.headers["PRIMARY"]
+        namp = {"GREEN": primary["NAMPGRN"], "RED": primary["NAMPRED"]}[chip.upper()]
+        return namp > 0
 
     def _stitch(self, chip):
         """Concatenate raw amplifier arrays into a single display image.
 
-        Delegates amp counting/orientation to ImageAssembly (on a deepcopy, since
+        Delegates orientation to ImageAssembly (on a deepcopy, since
         orient_channels mutates l0.data), then applies the same blue -> red FFI
         orientation so the L0 display matches the assembled output.
         """
         chip = chip.upper()
 
-        # Count amplifiers via ImageAssembly (non-destructive).
-        ia = ImageAssembly(self.kpf_obj)
-        ia.count_amplifiers(chip)
-        namp = ia.namp[chip]
+        primary = self.kpf_obj.headers["PRIMARY"]
+        namp = {"GREEN": primary["NAMPGRN"], "RED": primary["NAMPRED"]}[chip]
 
         if namp == 2:
             image = np.concatenate(
@@ -68,7 +63,6 @@ class PlotL0(Plot):
             # orient_channels mutates l0.data, so operate on a copy.
             l0_copy = deepcopy(self.kpf_obj)
             ia = ImageAssembly(l0_copy)
-            ia.count_amplifiers(chip)
             ia.orient_channels(chip)
 
             prescan = ia.ccd["prescan"]

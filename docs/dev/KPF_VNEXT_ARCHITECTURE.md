@@ -267,7 +267,7 @@ resolves which master calibrations a frame uses. The `masters/` submodule
 (`bias`/`dark`/`flat`/`wls` over a shared `base.py` stacking engine) builds the calibration
 products (see *Masters Pipeline*).
 
-**Detector geometry.** Helpers like `count_amplifiers`, `orient_channels`, and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic.
+**Detector geometry.** Helpers like `orient_channels` and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic. The readout itself — amplifier count (`NAMPGRN`/`NAMPRED`), read time and `READMODE` — is stamped once by `KPF0.standardize_headers` and read from the header thereafter.
 
 ### Recipes & configs
 

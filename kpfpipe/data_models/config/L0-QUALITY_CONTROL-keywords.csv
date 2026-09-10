@@ -26,6 +26,8 @@ AGITOK,QC: agitator running above minimum speed,,int,1,QCL0
 DEADPXOK,QC: dead pixel fraction within limits on both CCDs,,int,1,QCL0
 SATPXOK,QC: over-exposed pixel fraction within limits on both CCDs,,int,1,QCL0
 NOTJUNK,QC: obs_id not in junk list,,int,1,QCL0
+TRTGREEN,GREEN chip total read time,seconds,float,47.5,KPF0.standardize_headers
+TRTRED,RED chip total read time,seconds,float,47.5,KPF0.standardize_headers
 TCSOFF,Pointing offset from TCS/DCS target (arcsec),,float,0.12,DiagL0
 OBJOFF,Pointing offset from OBJECT SIMBAD position (arcsec),,float,0.31,DiagL0
 GAIAOFF,Pointing offset from GAIAID position (arcsec),,float,0.28,DiagL0
