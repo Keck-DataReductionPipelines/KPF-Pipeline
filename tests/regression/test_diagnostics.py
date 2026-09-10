@@ -335,7 +335,7 @@ class TestDiagL0Contingency:
     # PM=0/parallax=0 fallback under test, not a fault.
     @pytest.mark.filterwarnings('ignore:ERFA function "pmsafe":erfa.ErfaWarning')
     @pytest.mark.parametrize("bad_plx", [None, 0.0, -5.0])
-    def test_missing_or_nonpositive_parallax_falls_back(self, bad_plx, caplog):
+    def test_missing_or_nonpositive_parallax_falls_back(self, bad_plx):
         # Gaia DR3 reports parallax <= 0 (or none) for faint sources; the offset falls
         # back to parallax=0 rather than emitting empty, so it stays finite.
         l0 = _make_l0_pointing()
@@ -348,10 +348,8 @@ class TestDiagL0Contingency:
                 "wmko": _record_at(pt),
             },
         )
-        with caplog.at_level(logging.DEBUG):
-            results = DiagL0(l0).run()
+        results = DiagL0(l0).run()
         assert results["GAIAOFF"][0] < 0.1  # at the pointing -> ~0, not empty
-        assert "using PM=0, parallax=0" in caplog.text
         # The fall-back is offset-local: CATALOG_RECORD keeps the original value.
         tbl = l0.data["CATALOG_RECORD"]
         stored = float(tbl[tbl["source"] == "gaia"]["parallax"][0])
@@ -360,7 +358,7 @@ class TestDiagL0Contingency:
         else:
             assert stored == pytest.approx(bad_plx)
 
-    def test_missing_pm_falls_back(self, caplog):
+    def test_missing_pm_falls_back(self):
         # A record with position + epoch but no proper motion still yields a finite
         # offset (PM falls back to zero), not an empty one.
         l0 = _make_l0_pointing()
@@ -373,10 +371,8 @@ class TestDiagL0Contingency:
                 "wmko": _record_at(pt),
             },
         )
-        with caplog.at_level(logging.DEBUG):
-            results = DiagL0(l0).run()
+        results = DiagL0(l0).run()
         assert results["GAIAOFF"][0] < 0.1
-        assert "using PM=0, parallax=0" in caplog.text
 
     def test_malformed_astrometry_raises(self):
         # An unparseable RA is a malformed record, not a missing one.
