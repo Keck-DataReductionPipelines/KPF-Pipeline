@@ -9,7 +9,6 @@ reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
 import argparse
 import logging
 import os
-import re
 
 import pytest
 
@@ -111,7 +110,7 @@ class TestDirShortcuts:
 class TestRunLogDir:
     """One run, one log directory -- created here, or joined from a parent script."""
 
-    def _log_dir(self, monkeypatch, tmp_path, extra):
+    def _setup_kwargs(self, monkeypatch, tmp_path, extra):
         seen = {}
         monkeypatch.setattr(
             red, "setup_logging", lambda **kw: seen.update(kw) or "/dev/null"
@@ -129,16 +128,27 @@ class TestRunLogDir:
                 *extra,
             ]  # fmt: skip
         )
-        return seen["log_dir"]
+        return seen
 
-    def test_standalone_run_makes_its_own(self, monkeypatch, tmp_path):
-        log_dir = self._log_dir(monkeypatch, tmp_path, [])
-        assert re.fullmatch(r"/cfg/l/run_\d{8}T\d{6}", log_dir)
+    def test_standalone_run_passes_no_run_id(self, monkeypatch, tmp_path):
+        # The leaf knows nothing of run directories: it hands the configured parent
+        # through untouched and leaves both minting and the join to setup_logging.
+        seen = self._setup_kwargs(monkeypatch, tmp_path, [])
+        assert seen["log_dir"] == "/cfg/l"
+        assert seen["run_id"] is None
 
-    def test_log_run_dir_is_used_verbatim(self, monkeypatch, tmp_path):
-        # What an orchestrator forwards: join its run, never nest inside it.
-        parent = "/cfg/l/masters_20240405T010203"
-        assert self._log_dir(monkeypatch, tmp_path, ["--log_run_dir", parent]) == parent
+    def test_forwarded_run_id_is_used_verbatim(self, monkeypatch, tmp_path):
+        # What an orchestrator forwards: join its run, never mint another.
+        parent = "masters_20240405T010203"
+        seen = self._setup_kwargs(monkeypatch, tmp_path, ["--run_id", parent])
+        assert seen["run_id"] == parent
+
+    def test_forwarded_log_dir_overrides_the_config(self, monkeypatch, tmp_path):
+        # A parent forwards both halves; --log_dir arrives as a [LOGGER] override.
+        seen = self._setup_kwargs(
+            monkeypatch, tmp_path, ["--log_dir", "/parent", "--run_id", "masters_x"]
+        )
+        assert seen["log_dir"] == "/parent"
 
 
 class TestShortcutOverride:

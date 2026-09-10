@@ -290,9 +290,9 @@ The drivers share a set of **`tools`-free** orchestration helpers, which sit at 
 `scripts/` root rather than inside `processing/` because more than one sub-package composes them:
 
 - `_argparse.py` — shared argparse parent-parsers composed via `parents=[…]`, so each common flag
-  (recipe/config, data dirs, logging, pool, cache) is declared once; `resolve_dir_shortcuts`
-  post-parse expands the `--input_dir`/`--output_dir` convenience shortcuts into their
-  per-directory slots.
+  (recipe/config, data dirs, logging, pool, cache) is declared once, plus two post-parse resolvers:
+  `resolve_dir_shortcuts` expands the `--input_dir`/`--output_dir` convenience shortcuts into their
+  per-directory slots, and `resolve_log_settings` settles the log dir/level (see *Logging*).
 - `_dispatch.py` — the process-pool engine that fans units out as subprocesses.
 - `_scan.py` — the up-front, parallel-by-datecode L0 mini-db cache **pre-scan** the orchestrators
   run before fan-out (gated by `--cache`). It is deliberately the sole `kpfpipe.utils.io`
@@ -393,7 +393,8 @@ recipes/modules/tests. Two sibling entry points configure it:
   `label` ∈ `science`/`masters`/`timeseries`). It writes a `kpf_{label}_batch_{stamp}.log` of the
   *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels; for
   `timeseries`, its discovery + per-stage dispatch trail), with the console echo pinned to **stdout**
-  so an operator can watch fan-out live.
+  so an operator can watch fan-out live. It also returns this run's id, which the driver forwards to
+  bind every unit it launches to the same run directory.
 
 The batch stdout echo is **source-filtered** (`_BatchConsoleFilter`, console handler only): below
 WARNING only the driver's own narration (`scripts.*` / `__main__`) reaches the terminal, keeping
@@ -402,14 +403,17 @@ every record. Orchestrators (and the shared `_dispatch.py` engine) narrate throu
 never `print()`. Because they still fan `reduce` out as one subprocess per unit, **each reduction
 also gets its own `setup_logging` per-unit log** — the batch log sits alongside, not in place of, it.
 
-**One CLI run, one log directory.** Each entry point resolves `{[LOGGER] log_dir}/{command}_{stamp}/`
-(`build_run_log_dir`, stamp in UT) and writes its own UT-timestamped file there, so a
-batch that crosses UT midnight still lands in one place and two batches on one day never share a
-directory. A script that launches another forwards its resolved directory as `--log_run_dir`, which
-the child uses verbatim rather than creating its own — so a `timeseries` run, both stage
-orchestrators, and every `reduce` they fan out log side by side. `[LOGGER] log_dir` stays the single
-parent for every log (DRP-RUN-09); `log_level`/`console` are also honored, CLI
-`--log_dir`/`--log_level` override, and a missing `log_dir` is fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__name__)` and must work
+**One CLI run, one log directory.** Every log of a run lands in
+`{[LOGGER] log_dir}/{run_id}/`, where the **run id** is `{command}_{stamp}` (stamp in UT) minted by
+`setup_logging`/`setup_batch_logging` — so a batch that crosses UT midnight still lands in one place
+and two batches on one day never share a directory. A script that launches another forwards its
+resolved `--log_dir` **and** its `--run_id`, which the child joins rather than minting its own — so a
+`timeseries` run, both stage orchestrators, and every `reduce` they fan out log side by side.
+`[LOGGER] log_dir` stays the single parent for every log (DRP-RUN-09); `log_level`/`console` are also
+honored, CLI `--log_dir`/`--log_level` override, and a missing `log_dir` is fatal (DRP-RUN-07). The
+scripts layer resolves that parent once, in `_argparse.py`'s `resolve_log_settings`, to an *absolute*
+path — fanned-out children run from `REPO_ROOT`, not the operator's cwd, so a relative one would name
+two different places. Library code only declares `logger = logging.getLogger(__name__)` and must work
 with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
 setup must never move into recipes. Recoverable/degraded conditions use `logger.warning` (not
 `warnings.warn`); `logging.captureWarnings` still funnels any third-party/stdlib `warnings.warn` into

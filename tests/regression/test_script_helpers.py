@@ -163,23 +163,61 @@ class TestLoggingParser:
     def test_adds_log_flags(self):
         ns = _parse(
             [_argparse.logging_parser()],
-            ["--log_dir", "/l", "--log_level", "DEBUG", "--log_run_dir", "/l/run_x"],
+            ["--log_dir", "/l", "--log_level", "DEBUG", "--run_id", "masters_x"],
         )
         assert ns.log_dir == "/l" and ns.log_level == "DEBUG"
-        assert ns.log_run_dir == "/l/run_x"
+        assert ns.run_id == "masters_x"
 
-    def test_log_run_dir_defaults_to_none(self):
-        assert _parse([_argparse.logging_parser()], []).log_run_dir is None
+    def test_run_id_defaults_to_none(self):
+        assert _parse([_argparse.logging_parser()], []).run_id is None
 
-    def test_output_dir_does_not_fill_log_run_dir(self):
-        # --output_dir names the parent; only a parent *script* sets the run dir.
+    def test_output_dir_does_not_fill_run_id(self):
+        # --output_dir names the parent; only a parent *script* sets the run id.
         ns = _argparse.resolve_dir_shortcuts(
             _parse(
                 [_argparse.data_dirs_parser(), _argparse.logging_parser()],
                 ["--output_dir", "/out"],
             )
         )
-        assert ns.log_dir == "/out/logs" and ns.log_run_dir is None
+        assert ns.log_dir == "/out/logs" and ns.run_id is None
+
+
+class TestResolveLogSettings:
+    """CLI over [LOGGER], with the parent-relative path hazard closed."""
+
+    def _args(self, log_dir=None, log_level=None):
+        return _parse(
+            [_argparse.logging_parser()],
+            [a for pair in (("--log_dir", log_dir), ("--log_level", log_level))
+             for a in pair if pair[1]],
+        )  # fmt: skip
+
+    def test_config_supplies_both(self):
+        got = _argparse.resolve_log_settings(
+            self._args(), {"log_dir": "/l", "log_level": "DEBUG"}
+        )
+        assert got == ("/l", "DEBUG")
+
+    def test_cli_wins_over_config(self):
+        got = _argparse.resolve_log_settings(
+            self._args("/cli", "WARNING"), {"log_dir": "/l", "log_level": "DEBUG"}
+        )
+        assert got == ("/cli", "WARNING")
+
+    def test_level_defaults_to_info(self):
+        assert _argparse.resolve_log_settings(self._args(), {"log_dir": "/l"})[1] == (
+            "INFO"
+        )
+
+    def test_relative_log_dir_is_made_absolute(self):
+        # The orchestrators forward this to children running from REPO_ROOT, not
+        # the operator's cwd -- a relative path would mean two different places.
+        log_dir, _ = _argparse.resolve_log_settings(self._args("rel/logs"), {})
+        assert log_dir == os.path.join(os.getcwd(), "rel/logs")
+
+    def test_unset_log_dir_exits(self):
+        with pytest.raises(SystemExit, match="no log directory configured"):
+            _argparse.resolve_log_settings(self._args(), {})
 
 
 class TestPoolParser:

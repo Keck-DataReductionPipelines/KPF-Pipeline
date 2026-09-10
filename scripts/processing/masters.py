@@ -33,7 +33,7 @@ import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range, read_token_file
 from kpfpipe.utils.kpf import is_datecode
-from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
+from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
@@ -41,6 +41,7 @@ from scripts._argparse import (
     pool_parser,
     recipe_and_config_parser,
     resolve_dir_shortcuts,
+    resolve_log_settings,
 )
 from scripts._dispatch import (
     _MASTERS_JOBS,
@@ -203,26 +204,19 @@ def main(argv=None):
     data_input = (
         args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
     )
-    # One run, one log directory: this batch and every reduce it launches.
-    log_dir = args.log_run_dir or build_run_log_dir(
-        args.log_dir or logger_params.get("log_dir"), "masters"
-    )
-    if not log_dir:
-        sys.exit(
-            "error: no log directory configured; set [LOGGER] log_dir in the "
-            "config file or pass --log_dir"
-        )
-
-    # The batch-summary log: this orchestrator's own DRP-RUN-08 decision trail,
-    # echoed live to stdout, alongside each night's per-reduction log.
-    level = args.log_level or logger_params.get("log_level", "INFO")
-    log_path = setup_batch_logging(log_dir, "masters", level=level)
+    # One run, one log directory: this batch's own DRP-RUN-08 decision trail and
+    # every night's per-reduction log land together in {log_dir}/{run_id}.
+    log_dir, level = resolve_log_settings(args, logger_params)
+    run_id, log_path = setup_batch_logging(log_dir, "masters", args.run_id, level=level)
+    run_dir = os.path.join(log_dir, run_id)
 
     forward = []
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
         (args.kpf_masters_output, "--kpf_masters_output"),
-        (log_dir, "--log_run_dir"),
+        # Both halves of the run directory, which the child rejoins.
+        (log_dir, "--log_dir"),
+        (run_id, "--run_id"),
         (args.log_level, "--log_level"),
     ):
         if value:
@@ -253,7 +247,7 @@ def main(argv=None):
         "masters",
         tasks,
         args.jobs,
-        log_dir,
+        run_dir,
         job_timeout=args.job_timeout,
         abort_on_failure=False,
         launch_interval=_LAUNCH_INTERVAL,

@@ -27,7 +27,7 @@ from astropy.io import fits
 import kpfpipe
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
-from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
+from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import analysis_parser, resolve_dir_shortcuts
 from scripts._dispatch import _default_science_jobs
 from scripts._scan import scan_datecodes, scan_night_to_cache
@@ -135,9 +135,8 @@ def main(argv=None):
     args = parse_args(argv)
     start, end = args.date_range
 
-    log_dir = args.log_run_dir or build_run_log_dir(args.log_dir, "analyze_thar")
-    log_path = setup_batch_logging(
-        log_dir, "analyze_thar", level=args.log_level or "INFO"
+    _, log_path = setup_batch_logging(
+        args.log_dir, "analyze_thar", args.run_id, level=args.log_level or "INFO"
     )
 
     logger.info("kpfpipe %s thar lamp analysis starting", kpfpipe.__version__)

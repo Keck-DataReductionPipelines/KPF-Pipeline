@@ -42,13 +42,14 @@ import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
-from kpfpipe.utils.logger import build_run_log_dir, setup_batch_logging
+from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
     resolve_dir_shortcuts,
+    resolve_log_settings,
 )
 from scripts._dispatch import _default_science_jobs, configure_runtime
 from scripts._scan import scan_datecodes, scan_night_to_cache
@@ -284,22 +285,13 @@ def main(argv=None):
     science_dirs = ConfigHandler(science_config).get_params(["DATA_DIRS"])
     logger_params = ConfigHandler(science_config).get_params(["LOGGER"])
     data_input = args.kpf_data_input or science_dirs["KPF_DATA_INPUT"]
-    # One run, one log directory: this wrapper, both stage orchestrators, and
-    # every reduce they launch (forwarded below as --log_run_dir).
-    log_dir = args.log_run_dir or build_run_log_dir(
-        args.log_dir or logger_params.get("log_dir"), "timeseries"
+    # One run, one log directory: this wrapper's own DRP-RUN-08 decision trail
+    # (discovery, dispatch), both stage orchestrators' batch logs, and every
+    # reduce they launch all land in {log_dir}/{run_id}.
+    log_dir, level = resolve_log_settings(args, logger_params)
+    run_id, log_path = setup_batch_logging(
+        log_dir, "timeseries", args.run_id, level=level
     )
-    if not log_dir:
-        sys.exit(
-            "error: no log directory configured; set [LOGGER] log_dir in the "
-            "config file or pass --log_dir"
-        )
-
-    # The batch-summary log: this wrapper's own DRP-RUN-08 decision trail
-    # (discovery, dispatch), echoed to stdout and persisted alongside each stage's
-    # own batch log and each unit's reduction log.
-    level = args.log_level or logger_params.get("log_level", "INFO")
-    log_path = setup_batch_logging(log_dir, "timeseries", level=level)
 
     # Overrides forwarded to the orchestrators. Both parsers accept the common set;
     # --jobs and --kpf_science_output ride science_forward only (see below).
@@ -307,7 +299,9 @@ def main(argv=None):
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
         (args.kpf_masters_output, "--kpf_masters_output"),
-        (log_dir, "--log_run_dir"),
+        # Both halves of the run directory, which each stage rejoins.
+        (log_dir, "--log_dir"),
+        (run_id, "--run_id"),
         (args.log_level, "--log_level"),
     ):
         if value:

@@ -14,6 +14,7 @@ the scripts layer stays ignorant of the CLI dispatcher above it.
 
 import argparse
 import os
+import sys
 
 
 def recipe_and_config_parser():
@@ -106,16 +107,33 @@ def resolve_dir_shortcuts(args):
 
 
 def logging_parser():
-    """[LOGGER] log_dir / log_level override flags, shared by all three commands."""
+    """[LOGGER] log_dir / log_level overrides, plus the ``--run_id`` a launching
+    script forwards to bind its children to its own run directory."""
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--log_dir", help="override [LOGGER] log_dir")
     p.add_argument("--log_level", help="override [LOGGER] log_level (e.g. DEBUG)")
     p.add_argument(
-        "--log_run_dir",
-        help="log into this exact directory instead of creating a run directory "
-        "under --log_dir; set automatically when one script launches another",
+        "--run_id",
+        help="name of the run directory under --log_dir, instead of minting a "
+        "fresh one; set automatically when one script launches another",
     )
     return p
+
+
+def resolve_log_settings(args, params):
+    """This run's ``(log_dir, level)``: the CLI flags over the ``[LOGGER]`` config.
+
+    Exits when neither supplies a log directory (DRP-RUN-07). Absolute, because the
+    orchestrators forward this to children that run from ``kpfpipe.REPO_ROOT``, not
+    the operator's cwd -- relative, it would name two different places.
+    """
+    log_dir = args.log_dir or params.get("log_dir")
+    if not log_dir:
+        sys.exit(
+            "error: no log directory configured; set [LOGGER] log_dir in the "
+            "config file or pass --log_dir"
+        )
+    return os.path.abspath(log_dir), args.log_level or params.get("log_level", "INFO")
 
 
 def cache_parser(default="r"):

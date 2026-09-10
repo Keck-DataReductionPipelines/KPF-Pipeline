@@ -280,7 +280,11 @@ class TestMain:
     def test_writes_report_under_output_dir(self, thar, tmp_path, monkeypatch):
         # setup_batch_logging installs root handlers; stub it so the run's logging
         # cannot leak into the rest of the suite.
-        monkeypatch.setattr(thar, "setup_batch_logging", lambda *a, **k: "/logs/x.log")
+        monkeypatch.setattr(
+            thar,
+            "setup_batch_logging",
+            lambda *a, **k: ("analyze_thar_x", "/logs/x.log"),
+        )
         data_input, out = tmp_path / "in", tmp_path / "out"
         _write_thar(str(data_input), "20240101", 3600)
         _write_thar(str(data_input), "20240102", 3600, HCLSN="L82906")

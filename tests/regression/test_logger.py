@@ -13,6 +13,7 @@ from kpfpipe.utils.config import ConfigHandler
 from scripts.processing.reduce import resolve_logging
 
 _UT_FROZEN = time.struct_time((2026, 7, 2, 14, 3, 22, 2, 183, 0))
+_RUN_ID = "run_20260702T140322"
 
 
 @pytest.fixture(autouse=True)
@@ -43,21 +44,9 @@ class TestGetLevel:
             kpflog.get_level("chatty")
 
 
-class TestBuildRunLogDir:
-    """One CLI run, one directory -- named for the script and its UT start."""
-
-    def test_names_the_directory_by_label_and_ut_stamp(self):
-        path = kpflog.build_run_log_dir("/logs", "masters", start_time=_UT_FROZEN)
-        assert path == "/logs/masters_20260702T140322"
-
-    def test_falsy_log_dir_passes_through(self):
-        # So each command still raises its own "not configured" error (DRP-RUN-07).
-        assert kpflog.build_run_log_dir(None, "masters") is None
-
-
 class TestBuildLogPath:
     def test_layout_and_ut_components(self, tmp_path):
-        path = kpflog.build_log_path(
+        path = kpflog.log_filename(
             str(tmp_path), "science", "KP.20240923.33129.48", start_time=_UT_FROZEN
         )
         fn = "kpf_science_KP.20240923.33129.48_20260702T140322.log"
@@ -65,7 +54,7 @@ class TestBuildLogPath:
 
     def test_empty_log_dir_raises(self):
         with pytest.raises(ValueError, match="log_dir"):
-            kpflog.build_log_path("", "science", "x")
+            kpflog.log_filename("", "science", "x")
 
 
 class TestSetupLogging:
@@ -73,13 +62,15 @@ class TestSetupLogging:
         # Freeze the clock: recomputing the stamp after the call races UT
         # midnight, a once-a-day flake in a CI-scheduled suite.
         monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
-        path = kpflog.setup_logging(str(tmp_path), "science", "KP.1.2.3")
+        path = kpflog.setup_logging(str(tmp_path), "science", "KP.1.2.3", _RUN_ID)
         assert path.startswith(str(tmp_path))
         assert re.search(r"kpf_science_KP\.1\.2\.3_\d{8}T\d{6}\.log$", path)
         assert _read(path) == ""  # created, empty until a record arrives
 
     def test_record_format(self, tmp_path):
-        path = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        path = kpflog.setup_logging(
+            str(tmp_path), "science", "t", _RUN_ID, console=False
+        )
         logging.getLogger("kpfpipe.x").info("hello world")
         line = _read(path).splitlines()[0]
         assert re.fullmatch(
@@ -90,14 +81,14 @@ class TestSetupLogging:
 
     def test_ut_timestamps(self, tmp_path):
         # Assert the converter rather than comparing wall clocks (TZ-robust).
-        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
         handlers = logging.getLogger().handlers
         (handler,) = [h for h in handlers if h.name == "kpfpipe_file"]
         assert handler.formatter.converter is time.gmtime
 
     def test_level_filtering(self, tmp_path):
         path = kpflog.setup_logging(
-            str(tmp_path), "science", "t", level="INFO", console=False
+            str(tmp_path), "science", "t", _RUN_ID, level="INFO", console=False
         )
         logging.getLogger("kpfpipe.x").debug("too quiet")
         logging.getLogger("kpfpipe.x").info("loud enough")
@@ -107,8 +98,12 @@ class TestSetupLogging:
 
     def test_unique_filename_on_collision(self, tmp_path, monkeypatch):
         monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
-        first = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
-        second = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        first = kpflog.setup_logging(
+            str(tmp_path), "science", "t", _RUN_ID, console=False
+        )
+        second = kpflog.setup_logging(
+            str(tmp_path), "science", "t", _RUN_ID, console=False
+        )
         assert second == f"{first}.1"
 
     def test_collision_retries_are_exhausted_loudly(self, tmp_path, monkeypatch):
@@ -116,60 +111,100 @@ class TestSetupLogging:
         # a run forever instead of failing it.
         monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         monkeypatch.setattr(kpflog, "_MAX_COLLISION_RETRIES", 1)
-        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
-        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
         with pytest.raises(FileExistsError, match="unique log file"):
-            kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+            kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
 
     def test_repeated_setup_no_duplicate_handlers(self, tmp_path):
         root = logging.getLogger()
         before = len(root.handlers)
-        first = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
-        kpflog.setup_logging(str(tmp_path), "masters", "20240923", console=False)
+        first = kpflog.setup_logging(
+            str(tmp_path), "science", "t", _RUN_ID, console=False
+        )
+        kpflog.setup_logging(
+            str(tmp_path), "masters", "20240923", _RUN_ID, console=False
+        )
         assert len(root.handlers) == before + 1
         (handler,) = [h for h in root.handlers if h.name == "kpfpipe_file"]
         assert handler.baseFilename != first  # the survivor is the second file
 
     def test_console_handler_optional(self, tmp_path):
         root = logging.getLogger()
-        kpflog.setup_logging(str(tmp_path), "science", "t", console=True)
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=True)
         assert any(h.name == "kpfpipe_console" for h in root.handlers)
-        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
         assert not any(h.name == "kpfpipe_console" for h in root.handlers)
 
     def test_console_defaults_to_stderr(self, tmp_path):
         # The leaf runner's console echo stays on stderr (stream=None default).
-        kpflog.setup_logging(str(tmp_path), "science", "t", console=True)
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=True)
         (console,) = [
             h for h in logging.getLogger().handlers if h.name == "kpfpipe_console"
         ]
         assert console.stream is sys.stderr
 
     def test_third_party_pins(self, tmp_path):
-        kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
         assert logging.getLogger("matplotlib").level == logging.WARNING
         assert logging.getLogger("PIL").level == logging.WARNING
 
     def test_bad_level_raises_before_side_effects(self, tmp_path):
         with pytest.raises(ValueError, match="unknown log level"):
-            kpflog.setup_logging(str(tmp_path), "science", "t", level="chatty")
+            kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, level="chatty")
         assert list(tmp_path.iterdir()) == []
+
+    def test_writes_into_the_run_directory(self, tmp_path, monkeypatch):
+        # log_dir is the configured *parent*; the run gets its own directory under
+        # it, so a whole process tree sharing one run_id logs side by side.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
+        path = kpflog.setup_logging(
+            str(tmp_path), "science", "t", _RUN_ID, console=False
+        )
+        assert path == str(tmp_path / _RUN_ID / "kpf_science_t_20260702T140322.log")
+
+    def test_mints_its_own_run_directory_when_unset(self, tmp_path, monkeypatch):
+        # A standalone `kpfpipe run`: the leaf passes its --run_id straight through,
+        # so an unset one is minted here rather than on the fly in the script.
+        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
+        path = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        assert path == str(
+            tmp_path / "run_20260702T140322" / "kpf_science_t_20260702T140322.log"
+        )
+
+    def test_missing_log_dir_raises(self, tmp_path):
+        # The guard must precede the run-dir join: os.path.join("", run_id) is a
+        # truthy *relative* path, so log_filename's own check would never fire and
+        # an unset log_dir would silently write beside the cwd (DRP-RUN-07).
+        for unset in ("", None):
+            with pytest.raises(ValueError, match="log_dir"):
+                kpflog.setup_logging(unset, "science", "t", _RUN_ID, console=False)
+        assert not list(tmp_path.iterdir())
 
 
 class TestSetupBatchLogging:
     """A per-invocation ``_batch_`` log echoed to stdout so an operator can watch
     fan-out progress live."""
 
-    def test_creates_batch_file_and_returns_path(self, tmp_path, monkeypatch):
+    def test_mints_the_run_id_and_returns_it_with_the_path(self, tmp_path, monkeypatch):
         # Frozen for the same UT-midnight reason as TestSetupLogging's twin.
         monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
-        path = kpflog.setup_batch_logging(str(tmp_path), "masters")
-        assert path.startswith(str(tmp_path))
-        assert re.search(r"kpf_masters_batch_\d{8}T\d{6}\.log$", path)
+        run_id, path = kpflog.setup_batch_logging(str(tmp_path), "masters")
+        assert run_id == "masters_20260702T140322"
+        assert path == str(tmp_path / run_id / "kpf_masters_batch_20260702T140322.log")
         assert _read(path) == ""  # created, empty until a record arrives
 
+    def test_forwarded_run_id_is_used_verbatim(self, tmp_path):
+        # What a launching script passes down: join its run, never mint another.
+        parent = "timeseries_20240405T010203"
+        run_id, path = kpflog.setup_batch_logging(
+            str(tmp_path), "masters", parent, console=False
+        )
+        assert run_id == parent
+        assert path.startswith(str(tmp_path / parent) + "/")
+
     def test_module_logger_record_lands_in_file(self, tmp_path):
-        path = kpflog.setup_batch_logging(str(tmp_path), "masters", console=False)
+        _, path = kpflog.setup_batch_logging(str(tmp_path), "masters", console=False)
         logging.getLogger("scripts.processing.masters").info("dispatching 3 job(s)")
         assert "dispatching 3 job(s)" in _read(path)
 
@@ -195,7 +230,7 @@ class TestSetupBatchLogging:
         # driver's narration and any WARNING still show; the file keeps everything.
         # thirdparty.io is a neutral name -- astropy sets propagate=False on its
         # logger, so its records never reach the root handlers.
-        path = kpflog.setup_batch_logging(str(tmp_path), "masters")
+        _, path = kpflog.setup_batch_logging(str(tmp_path), "masters")
         logging.getLogger("scripts.processing.masters").info("driver narration")
         logging.getLogger("thirdparty.io").info("library chatter")
         logging.getLogger("thirdparty.io").warning("library warning")
@@ -249,7 +284,7 @@ class TestTeardown:
         root = logging.getLogger()
         before_handlers = list(root.handlers)
         before_showwarning = warnings.showwarning
-        kpflog.setup_logging(str(tmp_path), "science", "t")
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID)
         kpflog.teardown_logging()
         assert root.handlers == before_handlers
         assert warnings.showwarning is before_showwarning
@@ -257,7 +292,7 @@ class TestTeardown:
     def test_teardown_restores_root_level(self, tmp_path):
         root = logging.getLogger()
         before = root.level
-        kpflog.setup_logging(str(tmp_path), "science", "t", level="DEBUG")
+        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, level="DEBUG")
         kpflog.teardown_logging()
         assert root.level == before
 
@@ -334,7 +369,9 @@ class TestResolveLogging:
 class TestWarningsBridge:
     @pytest.mark.filterwarnings("always")
     def test_capturewarnings_lands_in_file_with_source(self, tmp_path):
-        path = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        path = kpflog.setup_logging(
+            str(tmp_path), "science", "t", _RUN_ID, console=False
+        )
         warnings.warn("bridged boom", stacklevel=1)  # 1: attribute to THIS line
         text = _read(path)
         assert "WARNING  py.warnings:" in text
@@ -346,7 +383,9 @@ class TestWarningsBridge:
         # Inside pytest.warns the recorder wins and the record never reaches the
         # log: captureWarnings only swaps showwarning, while pytest.warns uses
         # catch_warnings(record=True).
-        path = kpflog.setup_logging(str(tmp_path), "science", "t", console=False)
+        path = kpflog.setup_logging(
+            str(tmp_path), "science", "t", _RUN_ID, console=False
+        )
         with pytest.warns(UserWarning, match="recorded boom"):
             warnings.warn("recorded boom", stacklevel=2)
         assert "recorded boom" not in _read(path)
