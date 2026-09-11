@@ -151,6 +151,18 @@ class TestRunRecordStart:
         assert rr.read_run_record(rec.path)["argv"] == ["prog", "-o", "x"]
         rec.finish(0)
 
+    def test_realtime_kind_accepted(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
+        rec = rr.RunRecord.start(
+            _log(tmp_path),
+            kind="realtime",
+            recipe="science",
+            target="realtime",
+            config="c",
+        )
+        assert rr.read_run_record(rec.path)["kind"] == "realtime"
+        rec.finish(0)
+
     def test_bad_kind_raises(self, tmp_path):
         with pytest.raises(ValueError):
             rr.RunRecord.start(
