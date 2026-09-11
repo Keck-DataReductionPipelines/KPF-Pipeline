@@ -38,6 +38,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory, kpf_filepath
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
+from kpfpipe.utils.run_record import RunRecord
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
@@ -141,6 +142,16 @@ def main(argv=None):
         parser.error(str(e))
     log_path = setup_logging(**log_params)
 
+    # The run.json sidecar: started now (status running), finished below. It is
+    # the machine-readable twin of this log for operations tooling.
+    record = RunRecord.start(
+        log_path,
+        kind="run",
+        recipe=log_params["recipe_name"],
+        target=log_params["target"],
+        config=args.config,
+    )
+
     # Invocation banner: the start of the DRP-RUN-08 reduction-step trail.
     logger.info("kpfpipe %s starting", kpfpipe.__version__)
     logger.info("argv: %s", " ".join(sys.argv))
@@ -148,6 +159,7 @@ def main(argv=None):
     logger.info("config: %s", args.config)
     logger.info("data dirs: %s", config.get_params(["DATA_DIRS"]))
     logger.info("log file: %s", log_path)
+    logger.info("run record: %s", record.path)
 
     if not os.path.isfile(args.recipe):
         raise SystemExit(f"Recipe file not found: {args.recipe}")
@@ -169,7 +181,9 @@ def main(argv=None):
         # ensure the traceback reaches the log before the nonzero exit. The
         # SystemExit usage errors above bypass this on purpose.
         logger.critical("uncaught exception; pipeline aborted", exc_info=True)
+        record.finish(1, failed=1)
         raise
+    record.finish(0, done=1)
     logger.info("pipeline completed successfully")
 
 
