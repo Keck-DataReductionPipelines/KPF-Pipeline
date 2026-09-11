@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 SCHEMA = 1
 
+# Record kinds: the single-unit leaf, a batch orchestrator, the realtime watcher.
+KINDS = ("run", "batch", "realtime")
+
 # Environment variables that link records together. An orchestrator exports
 # PARENT_ENV (its own run.json path) before fanning out; each child records it as
 # ``parent``. FLOW_RUN_ENV is set by KPF-Ops flows so a record can be joined to the
@@ -154,8 +157,9 @@ class RunRecord:
         log_path : str
             The invocation's log file (from ``setup_logging``); the record is
             written beside it (``run_json_path``).
-        kind : {'run', 'batch'}
-            ``run`` for the single-unit leaf, ``batch`` for an orchestrator.
+        kind : {'run', 'batch', 'realtime'}
+            ``run`` for the single-unit leaf, ``batch`` for an orchestrator,
+            ``realtime`` for the continuous-mode watcher.
         recipe : str
             Short recipe/orchestrator name, e.g. ``science``/``masters``.
         target : str
@@ -165,8 +169,8 @@ class RunRecord:
         argv : list of str or None
             The command line; ``None`` means ``sys.argv``.
         """
-        if kind not in ("run", "batch"):
-            raise ValueError(f"kind must be 'run' or 'batch', got {kind!r}")
+        if kind not in KINDS:
+            raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
         argv = list(sys.argv if argv is None else argv)
         record = {
             "schema": SCHEMA,

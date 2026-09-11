@@ -9,6 +9,7 @@ its own argument parsing:
     kpfpipe masters     -- build nightly master calibrations for a set of datecodes
     kpfpipe science     -- reduce a set of science frames end-to-end (L0 -> L4)
     kpfpipe timeseries  -- reduce a star's RV timeseries over a datecode range
+    kpfpipe realtime    -- watch the L0 tree and reduce new science frames as they land
 
 Examples:
 
@@ -25,13 +26,14 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 
 import sys
 
-from scripts.processing import masters, reduce, science, timeseries
+from scripts.processing import masters, realtime, reduce, science, timeseries
 
 _COMMANDS = {
     "run": reduce.main,
     "masters": masters.main,
     "science": science.main,
     "timeseries": timeseries.main,
+    "realtime": realtime.main,
 }
 
 
@@ -43,7 +45,8 @@ def _usage():
         "  run         reduce one recipe on one unit, in-process (the leaf)\n"
         "  masters     build nightly master calibrations for a set of datecodes\n"
         "  science     reduce a set of science frames end-to-end (L0 -> L4)\n"
-        "  timeseries  reduce a star's RV timeseries over a datecode range\n\n"
+        "  timeseries  reduce a star's RV timeseries over a datecode range\n"
+        "  realtime    watch the L0 tree and reduce new science frames as they land\n\n"
         "Run `kpfpipe <command> -h` for a command's own options."
     )
 
