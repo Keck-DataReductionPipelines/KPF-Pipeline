@@ -6,10 +6,13 @@ at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
 is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
+import os
 import sys
+import tempfile
 
 import pytest
 
+from kpfpipe.utils import run_record as rr
 from scripts.processing import science as _science
 
 from ._scripts import _FakeConfig, _NoLogDirConfig
@@ -24,6 +27,22 @@ _OID2 = "KP.20240405.40237.36"
 @pytest.fixture(scope="module")
 def s():
     return _science
+
+
+def _stub_batch_log(monkeypatch, mod):
+    """Stub setup_batch_logging with a real-looking .log path in a temp dir.
+
+    The batch run.json sidecar is written beside the log, so the stub must return
+    a writable path ending in .log (never a placeholder like /l/x.log).
+    """
+    base = tempfile.mkdtemp()
+    fake_log = os.path.join(base, "logs", "20240405", "kpf_batch_x_20240405T000000.log")
+    os.makedirs(os.path.dirname(fake_log), exist_ok=True)
+    label = mod.__name__.rsplit(".", 1)[-1]
+    monkeypatch.setattr(
+        mod, "setup_batch_logging", lambda *a, **k: (f"{label}_x", fake_log)
+    )
+    return fake_log
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +191,7 @@ class TestMainExitCode:
         # -> exit code.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
-        monkeypatch.setattr(
-            s, "setup_batch_logging", lambda *a, **k: ("science_x", "/l/x.log")
-        )
+        _stub_batch_log(monkeypatch, s)
         monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
 
         def fake_run_stage(*args, **kwargs):
@@ -273,3 +290,67 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             s.main(["--obs_ids", _OID1])
         assert "log directory" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# batch run.json sidecar
+# ---------------------------------------------------------------------------
+
+
+class TestBatchRunRecord:
+    def test_batch_record_written_with_counts_and_children(
+        self, s, monkeypatch, tmp_path
+    ):
+        log_dir = tmp_path / "logs"
+        fake_log = log_dir / "20240405" / "kpf_science_batch_20240405T000000.log"
+        fake_log.parent.mkdir(parents=True)
+        monkeypatch.setattr(s, "configure_runtime", lambda: None)
+        monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
+        monkeypatch.setattr(
+            s, "setup_batch_logging", lambda *a, **k: ("science_x", str(fake_log))
+        )
+        monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
+        monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
+        monkeypatch.delenv(rr.PARENT_ENV, raising=False)
+
+        seen_env = {}
+        child = os.path.join(
+            str(log_dir), "20240405", f"kpf_science_{_OID2}_x.run.json"
+        )
+
+        def fake_run_stage(label, tasks, jobs, log_dir_arg, **kw):
+            # Children inherit the environment: the parent pointer must be set
+            # by the time the fan-out starts.
+            seen_env["parent"] = os.environ.get(rr.PARENT_ENV)
+            # Simulate one child having written its record.
+            rr.write_json_atomic(
+                child,
+                {
+                    "schema": rr.SCHEMA,
+                    "kind": "run",
+                    "status": "failed",
+                    "target": _OID2,
+                    "exit_status": 1,
+                    "parent": seen_env["parent"],
+                },
+            )
+            return {_OID2}
+
+        monkeypatch.setattr(s, "run_stage", fake_run_stage)
+
+        with pytest.raises(SystemExit) as ei:
+            s.main(["--obs_ids", _OID1, _OID2, "--log_dir", str(log_dir)])
+        assert ei.value.code == 1
+
+        path = rr.run_json_path(str(fake_log))
+        data = rr.read_run_record(path)
+        assert data["kind"] == "batch"
+        assert data["recipe"] == "science"
+        assert data["target"] == "batch"
+        assert data["status"] == "failed"
+        assert data["counts"] == {"done": 1, "failed": 1, "skipped": 0}
+        assert seen_env["parent"] == path
+        assert data["children"] == [
+            {"tag": _OID2, "exit_status": 1, "status": "failed", "run_json": child}
+        ]
+        assert os.environ.get(rr.PARENT_ENV) is None  # restored after the batch

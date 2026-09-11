@@ -42,6 +42,16 @@ class TestUsage:
         assert "usage: kpfpipe <command>" in capsys.readouterr().out
 
 
+class TestRealtimeCommand:
+    def test_realtime_is_routed_and_listed(self, monkeypatch, capsys):
+        seen = []
+        monkeypatch.setitem(cli._COMMANDS, "realtime", lambda rest: seen.append(rest))
+        cli.main(["realtime", "--once"])
+        assert seen == [["--once"]]
+        cli.main([])
+        assert "  realtime    " in capsys.readouterr().out
+
+
 class TestUnknownCommand:
     def test_unknown_command_exits_two(self, capsys):
         with pytest.raises(SystemExit) as exc:

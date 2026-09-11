@@ -14,6 +14,7 @@ its own argument parsing:
 ``analyze`` is the one command with a second level: it reduces nothing, and routes
 to an ``scripts/analysis`` script named by its subject (``analyze thar``,
 ``analyze flat``, ...), each of which reports on how that subject changes over time.
+    kpfpipe realtime    -- watch the L0 tree and reduce new science frames as they land
 
 Examples:
 
@@ -32,7 +33,7 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 import sys
 
 from scripts.analysis import thar
-from scripts.processing import masters, reduce, science, timeseries
+from scripts.processing import masters, realtime, reduce, science, timeseries
 
 # The `analyze` subcommands, keyed by subject. Kept here rather than in
 # scripts/analysis so the scripts stay ignorant of the dispatcher above them, as
@@ -68,6 +69,7 @@ _COMMANDS = {
     "science": science.main,
     "timeseries": timeseries.main,
     "analyze": _analyze,
+    "realtime": realtime.main,
 }
 
 
@@ -81,6 +83,7 @@ def _usage():
         "  science     reduce a set of science frames end-to-end (L0 -> L4)\n"
         "  timeseries  reduce a star's RV timeseries over a datecode range\n"
         "  analyze     track instrument/calibrator behavior over a date range\n\n"
+        "  realtime    watch the L0 tree and reduce new science frames as they land\n\n"
         "Run `kpfpipe <command> -h` for a command's own options."
     )
 
