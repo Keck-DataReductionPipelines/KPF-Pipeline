@@ -7,8 +7,14 @@ the masters build crashes (``notes/thar_lamp_health.md``). The lamp is named per
 frame by the PRIMARY card ``HCLSN`` ("S/N of lamp in use"), so a swap is visible in
 the raw headers -- but only to someone looking across nights.
 
-Over an inclusive datecode range this writes one row per ThAr frame to
-``{analysis_dir}/thar/thar_lamps_{START}_{END}.csv``. Frames come from the L0
+Over an inclusive datecode range this writes, under ``{analysis_dir}/thar/``:
+
+- ``thar_exposures_{START}_{END}.csv`` -- one row per ThAr frame;
+- ``thar_lamp_history_{START}_{END}.csv`` -- one row per consecutive stretch of a
+  lamp serial in the daily all-fiber frames (a reinstalled lamp gets a new row;
+  a blank ``HCLSN`` is reported as ``(none)``).
+
+Frames come from the L0
 mini-database (``--cache``), so only the ThAr ones are reopened for their lamp
 cards; nothing is reduced and no data product written.
 
@@ -43,6 +49,12 @@ _MINI_DB_COLUMNS = ["OBJECT", "EXPTIME", "ELAPSED"]
 _LAMP_KEYS = ["OCTAGON", "HCLSN", "THDAYON", "THDAYTON", "THAUON", "THAUTON"]
 
 CSV_COLUMNS = ["OBS_ID", "DATECODE"] + _MINI_DB_COLUMNS + _LAMP_KEYS
+
+# The lamp history follows the daily lamp through its all-fiber frames; OBJECT is a
+# prefix because later nights suffix it with -morn/-eve/-night.
+_HISTORY_OBJECT = "autocal-thar-all"
+_HISTORY_OCTAGON = "Th_daily"
+HISTORY_COLUMNS = ["HCLSN", "FIRST_DATECODE", "LAST_DATECODE", "N_OBS"]
 
 
 def parse_args(argv=None):
@@ -120,15 +132,42 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
     return rows
 
 
-def write_csv(rows, out_dir, start, end):
-    """Write `rows` to ``{out_dir}/thar_lamps_{start}_{end}.csv``; return the path."""
-    os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f"thar_lamps_{start}_{end}.csv")
+def lamp_history(rows):
+    """Consecutive-HCLSN stretches over the daily all-fiber frames in `rows`.
+
+    `rows` must be chronological, as ``scan_lamp_serial_numbers`` returns them; a
+    new stretch starts wherever the serial changes from one frame to the next.
+    """
+    history = []
+    for r in rows:
+        if not (
+            str(r["OBJECT"]).strip().startswith(_HISTORY_OBJECT)
+            and r["OCTAGON"] == _HISTORY_OCTAGON
+        ):
+            continue
+        lamp = r["HCLSN"] or "(none)"
+        if history and history[-1]["HCLSN"] == lamp:
+            history[-1]["LAST_DATECODE"] = r["DATECODE"]
+            history[-1]["N_OBS"] += 1
+        else:
+            history.append(
+                {
+                    "HCLSN": lamp,
+                    "FIRST_DATECODE": r["DATECODE"],
+                    "LAST_DATECODE": r["DATECODE"],
+                    "N_OBS": 1,
+                }
+            )
+    return history
+
+
+def write_csv(path, rows, columns):
+    """Write `rows` under header `columns` to `path`, creating its directory."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
-    return path
 
 
 def main(argv=None):
@@ -148,8 +187,21 @@ def main(argv=None):
     rows = scan_lamp_serial_numbers(
         args.kpf_data_input, start, end, jobs, cache=args.cache
     )
-    path = write_csv(rows, os.path.join(args.analysis_dir, "thar"), start, end)
-    logger.info("done: %d ThAr frame(s) -> %s", len(rows), path)
+    out_dir = os.path.join(args.analysis_dir, "thar")
+    path = os.path.join(out_dir, f"thar_exposures_{start}_{end}.csv")
+    write_csv(path, rows, CSV_COLUMNS)
+    logger.info("%d ThAr frame(s) -> %s", len(rows), path)
+
+    history = lamp_history(rows)
+    if not history:
+        logger.warning(
+            "no OBJECT=%s*, OCTAGON=%s frames: lamp history is empty",
+            _HISTORY_OBJECT,
+            _HISTORY_OCTAGON,
+        )
+    path = os.path.join(out_dir, f"thar_lamp_history_{start}_{end}.csv")
+    write_csv(path, history, HISTORY_COLUMNS)
+    logger.info("done: %d lamp stretch(es) -> %s", len(history), path)
 
 
 if __name__ == "__main__":

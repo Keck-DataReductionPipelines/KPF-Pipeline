@@ -248,6 +248,63 @@ class TestScanLampSerialNumbers:
 
 
 # ---------------------------------------------------------------------------
+# lamp_history
+# ---------------------------------------------------------------------------
+
+
+def _history_row(datecode, hclsn, obj="autocal-thar-all-eve", octagon="Th_daily"):
+    return {"DATECODE": datecode, "OBJECT": obj, "OCTAGON": octagon, "HCLSN": hclsn}
+
+
+def _stretch(hclsn, first, last, n_obs):
+    return {
+        "HCLSN": hclsn,
+        "FIRST_DATECODE": first,
+        "LAST_DATECODE": last,
+        "N_OBS": n_obs,
+    }
+
+
+class TestLampHistory:
+    def test_reinstalled_lamp_starts_new_stretch(self, thar):
+        rows = [
+            _history_row("20240101", "L82884"),
+            _history_row("20240102", "L82884"),
+            _history_row("20240103", "L74828"),
+            _history_row("20240104", "L82884"),
+        ]
+        assert thar.lamp_history(rows) == [
+            _stretch("L82884", "20240101", "20240102", 2),
+            _stretch("L74828", "20240103", "20240103", 1),
+            _stretch("L82884", "20240104", "20240104", 1),
+        ]
+
+    def test_blank_serial_reported_as_none(self, thar):
+        history = thar.lamp_history([_history_row("20240101", "")])
+        assert history == [_stretch("(none)", "20240101", "20240101", 1)]
+
+    @pytest.mark.parametrize(
+        "obj", ["autocal-thar-all", "autocal-thar-all-morn", "autocal-thar-all-night"]
+    )
+    def test_every_all_fiber_variant_counts(self, thar, obj):
+        assert len(thar.lamp_history([_history_row("20240101", "L74828", obj)])) == 1
+
+    @pytest.mark.parametrize(
+        "obj, octagon",
+        [("autocal-thar-sci", "Th_daily"), ("autocal-thar-all", "Th_gold")],
+    )
+    def test_other_frames_neither_count_nor_split(self, thar, obj, octagon):
+        rows = [
+            _history_row("20240101", "L74828"),
+            _history_row("20240102", "L82884", obj, octagon),
+            _history_row("20240103", "L74828"),
+        ]
+        assert thar.lamp_history(rows) == [
+            _stretch("L74828", "20240101", "20240103", 2)
+        ]
+
+
+# ---------------------------------------------------------------------------
 # write_csv
 # ---------------------------------------------------------------------------
 
@@ -256,9 +313,9 @@ class TestWriteCsv:
     def test_schema_and_contents_round_trip(self, thar, tmp_path):
         row = dict.fromkeys(thar.CSV_COLUMNS, "")
         row.update({"OBS_ID": "KP.20240101.03600.00", "HCLSN": "L74828"})
-        path = thar.write_csv([row], str(tmp_path / "thar"), "20240101", "20240131")
+        path = tmp_path / "thar" / "thar_exposures_20240101_20240131.csv"
+        thar.write_csv(str(path), [row], thar.CSV_COLUMNS)
 
-        assert Path(path).name == "thar_lamps_20240101_20240131.csv"
         with open(path, newline="") as f:
             reader = csv.DictReader(f)
             # Pins the report schema: a reader of last year's CSV must still parse.
@@ -267,7 +324,7 @@ class TestWriteCsv:
 
     def test_creates_missing_output_directory(self, thar, tmp_path):
         out_dir = tmp_path / "analysis" / "thar"
-        thar.write_csv([], str(out_dir), "20240101", "20240131")
+        thar.write_csv(str(out_dir / "report.csv"), [], thar.CSV_COLUMNS)
         assert out_dir.is_dir()
 
 
@@ -277,7 +334,7 @@ class TestWriteCsv:
 
 
 class TestMain:
-    def test_writes_report_under_output_dir(self, thar, tmp_path, monkeypatch):
+    def test_writes_both_reports_under_output_dir(self, thar, tmp_path, monkeypatch):
         # setup_batch_logging installs root handlers; stub it so the run's logging
         # cannot leak into the rest of the suite.
         monkeypatch.setattr(
@@ -301,10 +358,16 @@ class TestMain:
             ]  # fmt: skip
         )
 
-        report = out / "analysis" / "thar" / "thar_lamps_20240101_20240131.csv"
-        with open(report, newline="") as f:
+        out_dir = out / "analysis" / "thar"
+        with open(out_dir / "thar_exposures_20240101_20240131.csv", newline="") as f:
             rows = list(csv.DictReader(f))
         assert [r["HCLSN"] for r in rows] == ["L74828", "L82906"]
+
+        with open(out_dir / "thar_lamp_history_20240101_20240131.csv", newline="") as f:
+            reader = csv.DictReader(f)
+            assert reader.fieldnames == thar.HISTORY_COLUMNS
+            history = [(r["HCLSN"], r["FIRST_DATECODE"], r["N_OBS"]) for r in reader]
+        assert history == [("L74828", "20240101", "1"), ("L82906", "20240102", "1")]
 
 
 # ---------------------------------------------------------------------------
