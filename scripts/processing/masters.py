@@ -34,6 +34,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range, read_token_file
 from kpfpipe.utils.kpf import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
+from kpfpipe.utils.run_record import PARENT_ENV, RunRecord, collect_child_records
 from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 from scripts.processing._argparse import (
     cache_parser,
@@ -214,6 +215,16 @@ def main(argv=None):
     # echoed live to stdout, alongside each night's per-reduction log.
     level = args.log_level or logger_params.get("log_level", "INFO")
     log_path = setup_batch_logging(log_dir, "masters", level=level)
+    # The batch run.json sidecar; see science.py for why the path is exported.
+    record = RunRecord.start(
+        log_path,
+        kind="batch",
+        recipe="masters",
+        target="batch",
+        config=args.config or DEFAULT_MASTERS_CONFIG,
+    )
+    prior_parent = os.environ.get(PARENT_ENV)
+    os.environ[PARENT_ENV] = record.path
 
     forward = []
     for value, flag in (
@@ -232,6 +243,7 @@ def main(argv=None):
     logger.info("data input: %s", data_input)
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
+    logger.info("run record: %s", record.path)
 
     datecodes = resolve_datecodes(args, data_input)
     logger.info(
@@ -256,8 +268,19 @@ def main(argv=None):
         launch_interval=_LAUNCH_INTERVAL,
     )
 
+    if prior_parent is None:
+        os.environ.pop(PARENT_ENV, None)
+    else:
+        os.environ[PARENT_ENV] = prior_parent
+
     built = len(datecodes) - len(failed)
     logger.info("done: built masters for %d/%d night(s)", built, len(datecodes))
+    record.finish(
+        1 if failed else 0,
+        done=built,
+        failed=len(failed),
+        children=collect_child_records(log_dir, record.path),
+    )
     if failed:
         sys.exit(1)
 

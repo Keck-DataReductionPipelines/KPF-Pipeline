@@ -7,11 +7,15 @@ reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
 """
 
 import argparse
+import glob
 import logging
 import os
+import tempfile
 
 import pytest
 
+from kpfpipe.utils import run_record as rr
+from kpfpipe.utils.logger import teardown_logging
 from scripts.processing import reduce as red
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
@@ -29,9 +33,22 @@ def _stub_recipe(tmp_path, sentinel):
     return recipe
 
 
+def _stub_logging(monkeypatch):
+    """Stub setup_logging: no real handlers, but a real-looking .log path.
+
+    The run.json sidecar is written beside the log, so the stub must return a
+    path ending in .log inside a writable temp dir (never /dev/null).
+    """
+    base = tempfile.mkdtemp()
+    fake_log = os.path.join(base, "logs", "20240405", "kpf_rec_x_20240405T000000.log")
+    os.makedirs(os.path.dirname(fake_log), exist_ok=True)
+    monkeypatch.setattr(red, "setup_logging", lambda **kw: fake_log)
+    return fake_log
+
+
 def _run(monkeypatch, argv):
     # Only config resolution is asserted; keep the real logging stack untouched.
-    monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+    _stub_logging(monkeypatch)
     red.main(argv)
 
 
@@ -173,7 +190,7 @@ class TestRecipeLoading:
 
     def test_missing_recipe_file_exits(self, monkeypatch, tmp_path):
         cfg = _base_cfg(tmp_path)
-        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        _stub_logging(monkeypatch)
         with pytest.raises(SystemExit, match="Recipe file not found"):
             red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", "KP.x"])
 
@@ -181,7 +198,7 @@ class TestRecipeLoading:
         cfg = _base_cfg(tmp_path)
         recipe = tmp_path / "nomain.py"
         recipe.write_text("VALUE = 1\n")
-        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        _stub_logging(monkeypatch)
         with pytest.raises(SystemExit, match="has no main"):
             red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
 
@@ -194,7 +211,7 @@ class TestRecipeLoading:
         cfg = _base_cfg(tmp_path)
         recipe = tmp_path / "boom.py"
         recipe.write_text("def main(config, args):\n    raise RuntimeError('boom')\n")
-        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        _stub_logging(monkeypatch)
         caplog.set_level(logging.CRITICAL)
 
         with pytest.raises(RuntimeError, match="boom"):
@@ -220,7 +237,7 @@ class TestRecipeLoading:
         os.makedirs(os.path.dirname(product), exist_ok=True)
         open(product, "w").close()
 
-        monkeypatch.setattr(red, "setup_logging", lambda **kw: "/dev/null")
+        _stub_logging(monkeypatch)
         with pytest.raises(SystemExit, match="Recipe file not found"):
             red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", oid])
 
@@ -340,3 +357,74 @@ class TestClearStaleOutputs:
         red.clear_stale_outputs(
             _Config({"KPF_MASTERS_OUTPUT": str(tmp_path)}), _args(datecode="20240405")
         )
+
+
+# ---------------------------------------------------------------------------
+# run.json sidecar
+# ---------------------------------------------------------------------------
+
+
+def _record_cfg(tmp_path):
+    cfg = tmp_path / "rec.toml"
+    cfg.write_text(
+        "[DATA_DIRS]\n"
+        f'KPF_DATA_INPUT = "{tmp_path / "in"}"\n'
+        f'KPF_MASTERS_OUTPUT = "{tmp_path / "m"}"\n'
+        f'KPF_SCIENCE_OUTPUT = "{tmp_path / "s"}"\n'
+        "[LOGGER]\n"
+        f'log_dir = "{tmp_path / "logs"}"\n'
+        "console = false\n"
+    )
+    return cfg
+
+
+class TestRunRecordSidecar:
+    """reduce.py writes a run.json beside its log: succeeded on a clean recipe,
+    failed (and still re-raised) when the recipe throws. These run the real
+    logging stack so the sidecar lands next to a real log file."""
+
+    _OID = "KP.20240405.40113.57"
+
+    def _run_real_logging(self, monkeypatch, argv):
+        monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: "deadbeef")
+        try:
+            red.main(argv)
+        finally:
+            teardown_logging()
+
+    def _records(self, tmp_path):
+        return sorted(glob.glob(str(tmp_path / "logs" / "*" / "*.run.json")))
+
+    def test_success_writes_succeeded_record(self, monkeypatch, tmp_path):
+        cfg = _record_cfg(tmp_path)
+        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
+        self._run_real_logging(
+            monkeypatch, ["-r", str(recipe), "-c", str(cfg), "-o", self._OID]
+        )
+        (path,) = self._records(tmp_path)
+        data = rr.read_run_record(path)
+        assert data["kind"] == "run"
+        assert data["status"] == "succeeded"
+        assert data["recipe"] == "rec"
+        assert data["target"] == self._OID
+        assert data["config"] == str(cfg)
+        assert data["git_sha"] == "deadbeef"
+        assert data["counts"] == {"done": 1, "failed": 0, "skipped": 0}
+        assert data["log_path"].endswith(".log")
+        assert path == rr.run_json_path(data["log_path"])
+
+    def test_recipe_exception_writes_failed_record_and_reraises(
+        self, monkeypatch, tmp_path
+    ):
+        cfg = _record_cfg(tmp_path)
+        recipe = tmp_path / "boom.py"
+        recipe.write_text("def main(config, args):\n    raise RuntimeError('boom')\n")
+        with pytest.raises(RuntimeError, match="boom"):
+            self._run_real_logging(
+                monkeypatch, ["-r", str(recipe), "-c", str(cfg), "-o", self._OID]
+            )
+        (path,) = self._records(tmp_path)
+        data = rr.read_run_record(path)
+        assert data["status"] == "failed"
+        assert data["exit_status"] == 1
+        assert data["counts"]["failed"] == 1

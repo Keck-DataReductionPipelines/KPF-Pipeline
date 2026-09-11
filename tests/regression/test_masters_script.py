@@ -9,10 +9,13 @@ test_io.py.
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
 
+import os
 import sys
+import tempfile
 
 import pytest
 
+from kpfpipe.utils import run_record as rr
 from scripts.processing import masters as _masters
 
 from ._scripts import _FakeConfig, _NoLogDirConfig
@@ -24,6 +27,19 @@ pytestmark = pytest.mark.cli
 @pytest.fixture(scope="module")
 def m():
     return _masters
+
+
+def _stub_batch_log(monkeypatch, mod):
+    """Stub setup_batch_logging with a real-looking .log path in a temp dir.
+
+    The batch run.json sidecar is written beside the log, so the stub must return
+    a writable path ending in .log (never a placeholder like /l/x.log).
+    """
+    base = tempfile.mkdtemp()
+    fake_log = os.path.join(base, "logs", "20240405", "kpf_batch_x_20240405T000000.log")
+    os.makedirs(os.path.dirname(fake_log), exist_ok=True)
+    monkeypatch.setattr(mod, "setup_batch_logging", lambda *a, **k: fake_log)
+    return fake_log
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +232,7 @@ class TestMainExitCode:
         # run_stage's kwargs for wiring assertions.
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
-        monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: "/l/x.log")
+        _stub_batch_log(monkeypatch, m)
         monkeypatch.setattr(m, "resolve_datecodes", lambda args, di: ["20240405"])
         monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
 
@@ -302,3 +318,51 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             m.main(["--dates", "20240405"])
         assert "log directory" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# batch run.json sidecar
+# ---------------------------------------------------------------------------
+
+
+class TestBatchRunRecord:
+    def test_batch_record_written_with_counts_and_children(
+        self, m, monkeypatch, tmp_path
+    ):
+        log_dir = tmp_path / "logs"
+        fake_log = log_dir / "20240405" / "kpf_masters_batch_20240405T000000.log"
+        fake_log.parent.mkdir(parents=True)
+        monkeypatch.setattr(m, "configure_runtime", lambda: None)
+        monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
+        monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: str(fake_log))
+        monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
+        monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
+        monkeypatch.delenv(rr.PARENT_ENV, raising=False)
+
+        def fake_run_stage(label, tasks, jobs, log_dir_arg, **kw):
+            child = os.path.join(
+                log_dir_arg, "20240405", "kpf_masters_20240406_x.run.json"
+            )
+            rr.write_json_atomic(
+                child,
+                {
+                    "schema": rr.SCHEMA,
+                    "kind": "run",
+                    "status": "succeeded",
+                    "target": "20240406",
+                    "exit_status": 0,
+                    "parent": os.environ.get(rr.PARENT_ENV),
+                },
+            )
+            return set()
+
+        monkeypatch.setattr(m, "run_stage", fake_run_stage)
+        m.main(["--dates", "20240405", "20240406", "--log_dir", str(log_dir)])
+
+        data = rr.read_run_record(rr.run_json_path(str(fake_log)))
+        assert data["kind"] == "batch"
+        assert data["recipe"] == "masters"
+        assert data["status"] == "succeeded"
+        assert data["counts"] == {"done": 2, "failed": 0, "skipped": 0}
+        assert [c["tag"] for c in data["children"]] == ["20240406"]
+        assert os.environ.get(rr.PARENT_ENV) is None

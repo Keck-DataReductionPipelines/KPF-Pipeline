@@ -31,6 +31,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf import get_datecode, is_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
+from kpfpipe.utils.run_record import PARENT_ENV, RunRecord, collect_child_records
 from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 from scripts.processing._argparse import (
     cache_parser,
@@ -162,6 +163,18 @@ def main(argv=None):
     # echoed live to stdout, alongside each frame's per-reduction log.
     level = args.log_level or logger_params.get("log_level", "INFO")
     log_path = setup_batch_logging(log_dir, "science", level=level)
+    # The batch run.json sidecar. Exporting its path lets every fanned-out reduce
+    # child (which inherits our environment) record this batch as its parent, so
+    # the two levels of records link both ways.
+    record = RunRecord.start(
+        log_path,
+        kind="batch",
+        recipe="science",
+        target="batch",
+        config=args.config or DEFAULT_SCIENCE_CONFIG,
+    )
+    prior_parent = os.environ.get(PARENT_ENV)
+    os.environ[PARENT_ENV] = record.path
 
     forward = []
     for value, flag in (
@@ -182,6 +195,7 @@ def main(argv=None):
     logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
+    logger.info("run record: %s", record.path)
     logger.info("reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids))
 
     # Warm the L0 mini-db caches up front, one thread per night (--cache, rw
@@ -202,8 +216,19 @@ def main(argv=None):
         launch_interval=_LAUNCH_INTERVAL,
     )
 
+    if prior_parent is None:
+        os.environ.pop(PARENT_ENV, None)
+    else:
+        os.environ[PARENT_ENV] = prior_parent
+
     reduced = len(obs_ids) - len(failed)
     logger.info("done: reduced %d/%d frame(s)", reduced, len(obs_ids))
+    record.finish(
+        1 if failed else 0,
+        done=reduced,
+        failed=len(failed),
+        children=collect_child_records(log_dir, record.path),
+    )
     if failed:
         sys.exit(1)
 
