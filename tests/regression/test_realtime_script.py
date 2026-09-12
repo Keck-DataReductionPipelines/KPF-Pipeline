@@ -1,4 +1,4 @@
-"""Tests for scripts/processing/realtime.py: the continuous-mode L0 watcher.
+"""Tests for scripts/process/realtime.py: the continuous-mode L0 watcher.
 
 Covers arg parsing, UT night selection, the settled-frame scan, IMTYPE
 classification, the exactly-once ledger, and one-pass (``--once``) runs with the
@@ -13,7 +13,7 @@ import os
 import pytest
 
 from kpfpipe.utils import run_record as rr
-from scripts.processing import realtime as rt
+from scripts.process import realtime as rt
 
 from ._scripts import write_l0_tree
 

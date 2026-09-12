@@ -1,6 +1,6 @@
 """Render a target's RV timeseries plots from its L4 products.
 
-Driven by ``scripts.processing.timeseries``, which hands over the frames it has
+Driven by ``scripts.process.timeseries``, which hands over the frames it has
 already discovered. Reads headers only.
 
 Bursts of rapid-succession frames collapse to one RVERR-weighted point over a faint

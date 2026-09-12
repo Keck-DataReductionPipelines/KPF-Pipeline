@@ -10,7 +10,7 @@ import pytest
 
 from kpfpipe.utils import logger as kpflog
 from kpfpipe.utils.config import ConfigHandler
-from scripts.processing.reduce import resolve_logging
+from scripts.process.reduce import resolve_logging
 
 _UT_FROZEN = time.struct_time((2026, 7, 2, 14, 3, 22, 2, 183, 0))
 _RUN_ID = "run_20260702T140322"
@@ -205,7 +205,7 @@ class TestSetupBatchLogging:
 
     def test_module_logger_record_lands_in_file(self, tmp_path):
         _, path = kpflog.setup_batch_logging(str(tmp_path), "masters", console=False)
-        logging.getLogger("scripts.processing.masters").info("dispatching 3 job(s)")
+        logging.getLogger("scripts.process.masters").info("dispatching 3 job(s)")
         assert "dispatching 3 job(s)" in _read(path)
 
     def test_console_echo_is_stdout(self, tmp_path):
@@ -231,7 +231,7 @@ class TestSetupBatchLogging:
         # thirdparty.io is a neutral name -- astropy sets propagate=False on its
         # logger, so its records never reach the root handlers.
         _, path = kpflog.setup_batch_logging(str(tmp_path), "masters")
-        logging.getLogger("scripts.processing.masters").info("driver narration")
+        logging.getLogger("scripts.process.masters").info("driver narration")
         logging.getLogger("thirdparty.io").info("library chatter")
         logging.getLogger("thirdparty.io").warning("library warning")
 
@@ -255,11 +255,11 @@ class TestBatchConsoleFilter:
         return logging.LogRecord(name, level, __file__, 1, "m", None, None)
 
     def test_info_from_scripts_passes(self):
-        assert self._flt.filter(self._rec("scripts.processing.masters", logging.INFO))
-        assert self._flt.filter(self._rec("scripts.plotting.timeseries", logging.INFO))
+        assert self._flt.filter(self._rec("scripts.process.masters", logging.INFO))
+        assert self._flt.filter(self._rec("scripts.plot.timeseries", logging.INFO))
 
     def test_info_from_main_passes(self):
-        # A driver launched as `python -m scripts.processing.<name>` logs as __main__.
+        # A driver launched as `python -m scripts.process.<name>` logs as __main__.
         assert self._flt.filter(self._rec("__main__", logging.INFO))
 
     def test_info_from_library_dropped(self):
@@ -270,7 +270,7 @@ class TestBatchConsoleFilter:
     def test_debug_is_source_filtered_too(self):
         # Below WARNING covers DEBUG as well, not just INFO.
         assert not self._flt.filter(self._rec("astropy", logging.DEBUG))
-        assert self._flt.filter(self._rec("scripts.processing.science", logging.DEBUG))
+        assert self._flt.filter(self._rec("scripts.process.science", logging.DEBUG))
 
     def test_warning_and_above_always_pass(self):
         # Per-unit failures and warnings from anywhere are never hidden.
@@ -320,7 +320,7 @@ def _config(tmp_path, body):
     return path
 
 
-# resolve_logging lives in scripts/processing/reduce.py, so this class belongs to
+# resolve_logging lives in scripts/process/reduce.py, so this class belongs to
 # the scripts/CLI layer -- without the mark `make test-cli` collects none of it.
 @pytest.mark.cli
 class TestResolveLogging:

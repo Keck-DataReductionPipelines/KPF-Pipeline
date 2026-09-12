@@ -5,7 +5,7 @@ Reads the config, applies CLI overrides, configures logging, loads the recipe,
 clears the unit's stale L1/L2/L4 products (see ``clear_stale_outputs``), and execs
 the recipe's ``main(config, args)``. It is both the in-process target of
 ``kpfpipe run`` and the leaf the orchestrators (``masters.py``/``science.py``) fan
-out as ``python -m scripts.processing.reduce`` subprocesses.
+out as ``python -m scripts.process.reduce`` subprocesses.
 
 Recipe + config come from ``--masters``/``--science`` (repo-relative shortcuts,
 usable from any cwd) or an explicit ``-r/-c`` pair; the shortcuts supply defaults
@@ -45,7 +45,7 @@ from scripts._argparse import (
     recipe_and_config_parser,
     resolve_dir_shortcuts,
 )
-from scripts.processing import (
+from scripts.process import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
     DEFAULT_SCIENCE_CONFIG,

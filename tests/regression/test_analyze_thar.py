@@ -1,4 +1,4 @@
-"""Tests for scripts/analysis/thar.py: the ThAr lamp-serial analysis.
+"""Tests for scripts/analyze/thar.py: the ThAr lamp-serial analysis.
 
 thar is a read-only scan: it picks each night's ThAr frames out of the L0 mini
 database, reopens them for their lamp cards, and writes one CSV row per frame.
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 import tools.cli as cli
-from scripts.analysis import thar as _thar
+from scripts.analyze import thar as _thar
 
 from ._scripts import add_junk_obs_id, write_l0_tree
 

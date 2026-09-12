@@ -1,7 +1,7 @@
 """KPF Pipeline CLI entry point: the ``kpfpipe`` command dispatcher.
 
 ``kpfpipe`` is the single front door to the pipeline. It is a thin, git-style
-dispatcher that routes a subcommand to its ``processing/`` orchestrator under
+dispatcher that routes a subcommand to its ``process/`` orchestrator under
 ``scripts/`` and forwards the remaining arguments verbatim -- the subcommand owns
 its own argument parsing:
 
@@ -14,7 +14,7 @@ its own argument parsing:
     kpfpipe realtime    -- watch the L0 tree and reduce new science frames as they land
 
 ``analyze`` and ``fetch`` are the two commands with a second level. Neither reduces
-anything: ``analyze`` routes to a ``scripts/analysis`` script named by its subject
+anything: ``analyze`` routes to a ``scripts/analyze`` script named by its subject
 (``analyze thar``, ``analyze flat``, ...), each reporting how that subject changes
 over time; ``fetch`` routes to a ``scripts/fetch`` script named by the data it
 pulls (``fetch masters``, ...), each a thin wrapper over ``rsync``.
@@ -36,12 +36,12 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 
 import sys
 
-from scripts.analysis import thar
+from scripts.analyze import thar
 from scripts.fetch import masters as fetch_masters
-from scripts.processing import masters, realtime, reduce, science, timeseries
+from scripts.process import masters, realtime, reduce, science, timeseries
 
 # The `analyze` subcommands, keyed by subject. Kept here rather than in
-# scripts/analysis so the scripts stay ignorant of the dispatcher above them, as
+# scripts/analyze so the scripts stay ignorant of the dispatcher above them, as
 # the processing drivers are.
 _ANALYSES = {
     "thar": thar.main,
@@ -59,7 +59,7 @@ def _analyze(argv):
 
     A second dispatcher of the same shape as `main`: it owns only the subject
     lookup and forwards the rest verbatim, so each analysis script parses its own
-    options and stays runnable as ``python -m scripts.analysis.<subject>``.
+    options and stays runnable as ``python -m scripts.analyze.<subject>``.
     """
     if not argv or argv[0] in ("-h", "--help"):
         print(_analyze_usage())

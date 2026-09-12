@@ -2,7 +2,7 @@
 """Reduce a set of science frames end-to-end, L0 -> L4 (``kpfpipe science``).
 
 A lightweight, fail-loud orchestrator: it dispatches each frame as a separate
-``python -m scripts.processing.reduce --science -o <obs_id>`` subprocess (the
+``python -m scripts.process.reduce --science -o <obs_id>`` subprocess (the
 ``kpfpipe run`` leaf), so every frame gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which frames to reduce (discovering a target's frames from the L0 tree lives in
@@ -47,7 +47,7 @@ from scripts._dispatch import (
     run_stage,
 )
 from scripts._scan import warm_mini_db_caches
-from scripts.processing import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
+from scripts.process import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ def _cli_task(obs_id, forward, config=None, recipe=None):
     argv = [
         sys.executable,
         "-m",
-        "scripts.processing.reduce",
+        "scripts.process.reduce",
         "-r",
         recipe or DEFAULT_SCIENCE_RECIPE,
         "-c",

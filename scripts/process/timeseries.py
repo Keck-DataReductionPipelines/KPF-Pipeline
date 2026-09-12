@@ -54,8 +54,8 @@ from scripts._argparse import (
 )
 from scripts._dispatch import _default_science_jobs, configure_runtime
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
-from scripts.plotting.timeseries import PlotTimeseries
-from scripts.processing import (
+from scripts.plot.timeseries import PlotTimeseries
+from scripts.process import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
     DEFAULT_SCIENCE_CONFIG,
@@ -198,12 +198,12 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
 def _orchestrator_argv(module, unit_flag, units, forward, recipe=None, config=None):
     """Build the argv for one orchestrator subprocess (masters or science).
 
-    Runs ``python -m scripts.processing.{module} {unit_flag} {units...}`` with the
+    Runs ``python -m scripts.process.{module} {unit_flag} {units...}`` with the
     dir/log/pool overrides in `forward`, plus ``-r``/``-c`` when a recipe/config is
     given. The unit list precedes `forward` so the ``--dates``/``--obs_ids``
     ``nargs`` stops at the first forwarded flag.
     """
-    argv = [sys.executable, "-m", f"scripts.processing.{module}"]
+    argv = [sys.executable, "-m", f"scripts.process.{module}"]
     if recipe:
         argv += ["-r", recipe]
     if config:

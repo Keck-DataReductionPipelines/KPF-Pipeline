@@ -1,4 +1,4 @@
-"""Tests for scripts/processing/masters.py: the nightly-masters build driver.
+"""Tests for scripts/process/masters.py: the nightly-masters build driver.
 
 Covers the driver's own surface: arg parsing and the two input forms, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff at
@@ -16,7 +16,7 @@ import tempfile
 import pytest
 
 from kpfpipe.utils import run_record as rr
-from scripts.processing import masters as _masters
+from scripts.process import masters as _masters
 
 from ._scripts import _FakeConfig, _NoLogDirConfig
 
@@ -170,7 +170,7 @@ class TestCliTask:
         tag, argv = m._cli_task("20240405", ["--log_level", "DEBUG"])
         assert tag == "20240405"
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", m.DEFAULT_MASTERS_CONFIG,
             "-d", "20240405", "--log_level", "DEBUG",
         ]  # fmt: skip
@@ -178,21 +178,21 @@ class TestCliTask:
     def test_recipe_and_config_overrides(self, m):
         _, argv = m._cli_task("20240405", [], config="/c.toml", recipe="/x.py")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", "/x.py", "-c", "/c.toml", "-d", "20240405",
         ]  # fmt: skip
 
     def test_recipe_override_keeps_default_config(self, m):
         _, argv = m._cli_task("20240405", [], recipe="/x.py")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", "/x.py", "-c", m.DEFAULT_MASTERS_CONFIG, "-d", "20240405",
         ]  # fmt: skip
 
     def test_config_override_keeps_default_recipe(self, m):
         _, argv = m._cli_task("20240405", [], config="/c.toml")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", "/c.toml", "-d", "20240405",
         ]  # fmt: skip
 

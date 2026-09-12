@@ -1,4 +1,4 @@
-"""Tests for scripts/processing/science.py: the science-reduction driver.
+"""Tests for scripts/process/science.py: the science-reduction driver.
 
 Covers the driver's own surface: arg parsing and obs_id validation, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
@@ -13,7 +13,7 @@ import tempfile
 import pytest
 
 from kpfpipe.utils import run_record as rr
-from scripts.processing import science as _science
+from scripts.process import science as _science
 
 from ._scripts import _FakeConfig, _NoLogDirConfig
 
@@ -151,7 +151,7 @@ class TestCliTask:
         tag, argv = s._cli_task(_OID1, ["--log_level", "DEBUG"])
         assert tag == _OID1
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", s.DEFAULT_SCIENCE_RECIPE, "-c", s.DEFAULT_SCIENCE_CONFIG,
             "-o", _OID1, "--log_level", "DEBUG",
         ]  # fmt: skip
@@ -159,21 +159,21 @@ class TestCliTask:
     def test_recipe_and_config_overrides(self, s):
         _, argv = s._cli_task(_OID1, [], config="/c.toml", recipe="/x.py")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", "/x.py", "-c", "/c.toml", "-o", _OID1,
         ]  # fmt: skip
 
     def test_recipe_override_keeps_default_config(self, s):
         _, argv = s._cli_task(_OID1, [], recipe="/x.py")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", "/x.py", "-c", s.DEFAULT_SCIENCE_CONFIG, "-o", _OID1,
         ]  # fmt: skip
 
     def test_config_override_keeps_default_recipe(self, s):
         _, argv = s._cli_task(_OID1, [], config="/c.toml")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", s.DEFAULT_SCIENCE_RECIPE, "-c", "/c.toml", "-o", _OID1,
         ]  # fmt: skip
 

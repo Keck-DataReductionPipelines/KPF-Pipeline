@@ -1,7 +1,7 @@
-"""Tests for scripts/plotting/timeseries.py: the RV-timeseries plotter.
+"""Tests for scripts/plot/timeseries.py: the RV-timeseries plotter.
 
 PlotTimeseries reads a target's L4 products off disk -- the frames handed to it by
-scripts.processing.timeseries -- and renders the RV-vs-date plot; bursts are always
+scripts.process.timeseries -- and renders the RV-vs-date plot; bursts are always
 grouped, and per-night panels are written only for nights with multiple observations.
 These cover what the module owns: the L4 read and its per-frame filtering, the burst
 grouping, the observing-mode split, and that the plot files actually get written.
@@ -16,7 +16,7 @@ import pytest
 from astropy.io import fits
 
 from kpfpipe.utils.io import kpf_filepath
-from scripts.plotting import timeseries as _pt
+from scripts.plot import timeseries as _pt
 
 # Quicklook render suite: excluded from `make test-fast`, run by `make test-qlp`.
 pytestmark = pytest.mark.quicklook

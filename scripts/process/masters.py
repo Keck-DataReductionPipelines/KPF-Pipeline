@@ -2,7 +2,7 @@
 """Build nightly master calibrations for a set of datecodes (``kpfpipe masters``).
 
 A lightweight, fail-loud orchestrator: it dispatches each night as a separate
-``python -m scripts.processing.reduce --masters -d <datecode>`` subprocess (the
+``python -m scripts.process.reduce --masters -d <datecode>`` subprocess (the
 ``kpfpipe run`` leaf), so every night gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which nights to build, via two mutually exclusive input forms:
@@ -51,7 +51,7 @@ from scripts._dispatch import (
     run_stage,
 )
 from scripts._scan import datecodes_in_range, warm_mini_db_caches
-from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
+from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ def _cli_task(datecode, forward, config=None, recipe=None):
     argv = [
         sys.executable,
         "-m",
-        "scripts.processing.reduce",
+        "scripts.process.reduce",
         "-r",
         recipe or DEFAULT_MASTERS_RECIPE,
         "-c",
