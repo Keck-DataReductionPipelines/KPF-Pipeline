@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Copy nightly master calibrations off the remote host (``kpfpipe fetch masters``).
+"""Copy reduced L4 data off the remote host (``kpfpipe fetch L4``).
 
 A developer convenience, not a pipeline stage: it reduces nothing and writes no
 log: it shells out to ``rsync``, one invocation per night, and lets rsync's own
 progress output go straight to the terminal. Nights are selected exactly as
-``kpfpipe masters`` selects them:
+``kpfpipe fetch masters`` selects them:
 
-    kpfpipe fetch masters -u <user> --dates 20240405 20240712 --local_dir ~/masters
-    kpfpipe fetch masters -u <user> --dates nights.txt --local_dir ~/masters
-    kpfpipe fetch masters -u <user> --date_range 20240101 20240131 --local_dir ~/masters
+    kpfpipe fetch L4 -u <user> --dates 20240405 20240712 --local_dir ~/L4
+    kpfpipe fetch L4 -u <user> --dates nights.txt --local_dir ~/L4
+    kpfpipe fetch L4 -u <user> --date_range 20240101 20240131 --local_dir ~/L4
 
-The range form enumerates the datecode dirs present under the *remote* masters
-root within [START, END], mirroring how ``kpfpipe masters`` enumerates local L0.
+The range form enumerates the datecode dirs present under the *remote* L4 root
+within [START, END].
 
 Each night lands in ``{local_dir}/{datecode}/``, the same layout it has on the
 remote. The whole run rides on one multiplexed SSH connection, so a batch
@@ -25,8 +25,8 @@ import sys
 
 from scripts.fetch import _fetch
 
-SUBJECT = "masters"
-DEFAULT_REMOTE_DIR = "/data/kpf/vNext/masters"
+SUBJECT = "L4"
+DEFAULT_REMOTE_DIR = "/data/kpf/vNext/L4"
 
 
 def main(argv=None):

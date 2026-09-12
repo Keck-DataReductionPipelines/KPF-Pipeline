@@ -17,7 +17,8 @@ its own argument parsing:
 anything: ``analyze`` routes to a ``scripts/analyze`` script named by its subject
 (``analyze thar``, ``analyze flat``, ...), each reporting how that subject changes
 over time; ``fetch`` routes to a ``scripts/fetch`` script named by the data it
-pulls (``fetch masters``, ...), each a thin wrapper over ``rsync``.
+pulls (``fetch masters``, ``fetch L0``, ``fetch L2``, ...), each a thin wrapper
+over ``rsync``.
 
 Examples:
 
@@ -37,6 +38,9 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 import sys
 
 from scripts.analyze import thar
+from scripts.fetch import L0 as fetch_l0
+from scripts.fetch import L2 as fetch_l2
+from scripts.fetch import L4 as fetch_l4
 from scripts.fetch import masters as fetch_masters
 from scripts.process import masters, realtime, reduce, science, timeseries
 
@@ -51,6 +55,9 @@ _ANALYSES = {
 # reason, as _ANALYSES above.
 _FETCHES = {
     "masters": fetch_masters.main,
+    "L0": fetch_l0.main,
+    "L2": fetch_l2.main,
+    "L4": fetch_l4.main,
 }
 
 
@@ -136,7 +143,10 @@ def _fetch_usage():
     return (
         "usage: kpfpipe fetch <subject> [options]\n\n"
         "subjects:\n"
-        "  masters     nightly master calibrations, by datecode\n\n"
+        "  masters     nightly master calibrations, by datecode\n"
+        "  L0          raw L0 data, by datecode\n"
+        "  L2          reduced L2 data, by datecode\n"
+        "  L4          reduced L4 data, by datecode\n\n"
         "Run `kpfpipe fetch <subject> -h` for a subject's own options."
     )
 
