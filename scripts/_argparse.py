@@ -178,9 +178,12 @@ def pool_parser(jobs_help):
     return p
 
 
-def analysis_parser():
+def analysis_parser(default_date_range=None):
     """The single parent parser the ``kpfpipe analyze`` scripts compose: their own
     date range and directories, over the logging/pool/cache groups above.
+
+    A script whose natural scope is the whole archive passes `default_date_range`
+    as a ``(START, END)`` pair, which makes ``--date_range`` optional.
 
     The analysis scripts read no recipe TOML (those configs belong to the recipes),
     so their directories come from the CLI alone: ``--input_dir`` is required, and
@@ -200,8 +203,10 @@ def analysis_parser():
         "--date_range",
         nargs=2,
         metavar=("START", "END"),
-        required=True,
-        help="inclusive datecode range to analyze, e.g. --date_range 20240727 20241022",
+        required=default_date_range is None,
+        default=list(default_date_range) if default_date_range else None,
+        help="inclusive datecode range to analyze, e.g. --date_range 20240727 20241022"
+        + (f" (default: {' '.join(default_date_range)})" if default_date_range else ""),
     )
     p.add_argument(
         "--kpf_data_input",

@@ -14,9 +14,9 @@ Over an inclusive datecode range this writes, under ``{analysis_dir}/thar/``:
   lamp serial in the daily all-fiber frames (a reinstalled lamp gets a new row;
   a blank ``HCLSN`` is reported as ``(none)``).
 
-Frames come from the L0
-mini-database (``--cache``), so only the ThAr ones are reopened for their lamp
-cards; nothing is reduced and no data product written.
+Frames come from the L0 mini-database (``--cache``), so only the ThAr ones are
+reopened for their lamp cards; nothing is reduced and no data product written.
+``--date_range`` defaults to the whole archive: first light through tomorrow.
 
     kpfpipe analyze thar --date_range 20240727 20241022 \
         --input_dir /data/kpf --output_dir /data/kpf-next
@@ -27,6 +27,7 @@ import csv
 import logging
 import os
 import sys
+import time
 
 from astropy.io import fits
 
@@ -40,21 +41,38 @@ from scripts._scan import scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
 
-# Mini-database columns carried into the report: OBJECT's morn/eve suffix and the
-# exposure times bear on how bright a frame should be (notes/thar_lamp_health.md).
-_MINI_DB_COLUMNS = ["OBJECT", "EXPTIME", "ELAPSED"]
-
-# PRIMARY cards read per frame: the lamp's serial, which lamp position was selected,
-# and how long each had been powered -- a cold lamp is dim without being faulty.
-_LAMP_KEYS = ["OCTAGON", "HCLSN", "THDAYON", "THDAYTON", "THAUON", "THAUTON"]
-
-CSV_COLUMNS = ["OBS_ID", "DATECODE"] + _MINI_DB_COLUMNS + _LAMP_KEYS
+# Mini-database columns (OBJECT's morn/eve suffix and the exposure times bear on how
+# bright a frame should be, notes/thar_lamp_health.md), then the PRIMARY cards read
+# per frame: the lamp's serial, which lamp position was selected, and how long each
+# had been powered -- a cold lamp is dim without being faulty.
+_EXPOSURE_CSV_COLUMNS = [
+    "OBS_ID",
+    "DATECODE",
+    "OBJECT",
+    "EXPTIME",
+    "ELAPSED",
+    "OCTAGON",
+    "HCLSN",
+    "THDAYON",
+    "THDAYTON",
+    "THAUON",
+    "THAUTON",
+]
 
 # The lamp history follows the daily lamp through its all-fiber frames; OBJECT is a
 # prefix because later nights suffix it with -morn/-eve/-night.
-_HISTORY_OBJECT = "autocal-thar-all"
-_HISTORY_OCTAGON = "Th_daily"
-HISTORY_COLUMNS = ["HCLSN", "FIRST_DATECODE", "LAST_DATECODE", "N_OBS"]
+_OBJECT = "autocal-thar-all"
+_OCTAGON = "Th_daily"
+_LAMP_HISTORY_CSV_COLUMNS = ["HCLSN", "FIRST_DATECODE", "LAST_DATECODE", "N_OBS"]
+
+
+def default_date_range():
+    """First light through tomorrow -- the whole archive.
+
+    The end is UTC-dated a day ahead so it never falls behind the newest HST night
+    on disk; a datecode dir that does not exist yet simply contributes nothing.
+    """
+    return "20221109", time.strftime("%Y%m%d", time.gmtime(time.time() + 86400))
 
 
 def parse_args(argv=None):
@@ -62,7 +80,7 @@ def parse_args(argv=None):
         prog="kpfpipe analyze thar",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        parents=[analysis_parser()],
+        parents=[analysis_parser(default_date_range=default_date_range())],
     )
     args = ap.parse_args(argv)
 
@@ -90,8 +108,13 @@ def _frame_row(record):
     path = record["FILENAME"]
     header = fits.getheader(path, ext=0)
     row = {"OBS_ID": get_obs_id(path), "DATECODE": get_datecode(path)}
-    row.update({k: record[k] for k in _MINI_DB_COLUMNS})
-    row.update({k: str(header.get(k, "")).strip() for k in _LAMP_KEYS})
+    row.update({k: record[k] for k in ("OBJECT", "EXPTIME", "ELAPSED")})
+    row.update(
+        {
+            k: str(header.get(k, "")).strip()
+            for k in ("OCTAGON", "HCLSN", "THDAYON", "THDAYTON", "THAUON", "THAUTON")
+        }
+    )
     return row
 
 
@@ -141,8 +164,7 @@ def lamp_history(rows):
     history = []
     for r in rows:
         if not (
-            str(r["OBJECT"]).strip().startswith(_HISTORY_OBJECT)
-            and r["OCTAGON"] == _HISTORY_OCTAGON
+            str(r["OBJECT"]).strip().startswith(_OBJECT) and r["OCTAGON"] == _OCTAGON
         ):
             continue
         lamp = r["HCLSN"] or "(none)"
@@ -189,18 +211,18 @@ def main(argv=None):
     )
     out_dir = os.path.join(args.analysis_dir, "thar")
     path = os.path.join(out_dir, f"thar_exposures_{start}_{end}.csv")
-    write_csv(path, rows, CSV_COLUMNS)
+    write_csv(path, rows, _EXPOSURE_CSV_COLUMNS)
     logger.info("%d ThAr frame(s) -> %s", len(rows), path)
 
     history = lamp_history(rows)
     if not history:
         logger.warning(
             "no OBJECT=%s*, OCTAGON=%s frames: lamp history is empty",
-            _HISTORY_OBJECT,
-            _HISTORY_OCTAGON,
+            _OBJECT,
+            _OCTAGON,
         )
     path = os.path.join(out_dir, f"thar_lamp_history_{start}_{end}.csv")
-    write_csv(path, history, HISTORY_COLUMNS)
+    write_csv(path, history, _LAMP_HISTORY_CSV_COLUMNS)
     logger.info("done: %d lamp stretch(es) -> %s", len(history), path)
 
 

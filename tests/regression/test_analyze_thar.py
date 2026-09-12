@@ -10,6 +10,7 @@ Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 """
 
 import csv
+import time
 from pathlib import Path
 
 import pytest
@@ -103,21 +104,17 @@ class TestParseArgs:
         assert exc.value.code == 2
         assert extra[0] in capsys.readouterr().err
 
-    @pytest.mark.parametrize(
-        "argv, missing",
-        [
-            (["--input_dir", "/in", "--output_dir", "/out"], "--date_range"),
-            (
-                ["--date_range", "20240101", "20240131", "--output_dir", "/out"],
-                "--kpf_data_input",
-            ),
-        ],
-    )
-    def test_required_flags(self, thar, capsys, argv, missing):
+    def test_input_dir_is_required(self, thar, capsys):
+        argv = ["--date_range", "20240101", "20240131", "--output_dir", "/out"]
         with pytest.raises(SystemExit) as exc:
             thar.parse_args(argv)
         assert exc.value.code == 2
-        assert missing in capsys.readouterr().err
+        assert "--kpf_data_input" in capsys.readouterr().err
+
+    def test_date_range_defaults_to_whole_archive(self, thar):
+        args = thar.parse_args(["--input_dir", "/in", "--output_dir", "/out"])
+        tomorrow = time.strftime("%Y%m%d", time.gmtime(time.time() + 86400))
+        assert args.date_range == ["20221109", tomorrow]  # first light
 
     def test_no_output_dirs_at_all_exits(self, thar, capsys):
         # Analysis reads no recipe TOML, so nothing else can supply these.
@@ -156,7 +153,7 @@ class TestFrameRow:
         assert row["OBS_ID"] == obs_id and row["DATECODE"] == "20240101"
         assert row["OBJECT"] == "autocal-thar-all-eve" and row["EXPTIME"] == 20.0
         assert row["HCLSN"] == "L74828" and row["OCTAGON"] == "Th_daily"
-        assert set(row) == set(thar.CSV_COLUMNS)
+        assert set(row) == set(thar._EXPOSURE_CSV_COLUMNS)
 
     def test_absent_card_becomes_empty_field(self, thar, tmp_path):
         # HCLSN is genuinely absent on some early nights; the row must still be
@@ -311,20 +308,20 @@ class TestLampHistory:
 
 class TestWriteCsv:
     def test_schema_and_contents_round_trip(self, thar, tmp_path):
-        row = dict.fromkeys(thar.CSV_COLUMNS, "")
+        row = dict.fromkeys(thar._EXPOSURE_CSV_COLUMNS, "")
         row.update({"OBS_ID": "KP.20240101.03600.00", "HCLSN": "L74828"})
         path = tmp_path / "thar" / "thar_exposures_20240101_20240131.csv"
-        thar.write_csv(str(path), [row], thar.CSV_COLUMNS)
+        thar.write_csv(str(path), [row], thar._EXPOSURE_CSV_COLUMNS)
 
         with open(path, newline="") as f:
             reader = csv.DictReader(f)
             # Pins the report schema: a reader of last year's CSV must still parse.
-            assert reader.fieldnames == thar.CSV_COLUMNS
+            assert reader.fieldnames == thar._EXPOSURE_CSV_COLUMNS
             assert [r["HCLSN"] for r in reader] == ["L74828"]
 
     def test_creates_missing_output_directory(self, thar, tmp_path):
         out_dir = tmp_path / "analysis" / "thar"
-        thar.write_csv(str(out_dir / "report.csv"), [], thar.CSV_COLUMNS)
+        thar.write_csv(str(out_dir / "report.csv"), [], thar._EXPOSURE_CSV_COLUMNS)
         assert out_dir.is_dir()
 
 
@@ -365,7 +362,7 @@ class TestMain:
 
         with open(out_dir / "thar_lamp_history_20240101_20240131.csv", newline="") as f:
             reader = csv.DictReader(f)
-            assert reader.fieldnames == thar.HISTORY_COLUMNS
+            assert reader.fieldnames == thar._LAMP_HISTORY_CSV_COLUMNS
             history = [(r["HCLSN"], r["FIRST_DATECODE"], r["N_OBS"]) for r in reader]
         assert history == [("L74828", "20240101", "1"), ("L82906", "20240102", "1")]
 
