@@ -10,11 +10,14 @@ its own argument parsing:
     kpfpipe science     -- reduce a set of science frames end-to-end (L0 -> L4)
     kpfpipe timeseries  -- reduce a star's RV timeseries over a datecode range
     kpfpipe analyze     -- track instrument/calibrator behavior over a date range
-
-``analyze`` is the one command with a second level: it reduces nothing, and routes
-to an ``scripts/analysis`` script named by its subject (``analyze thar``,
-``analyze flat``, ...), each of which reports on how that subject changes over time.
+    kpfpipe fetch       -- copy KPF data from the remote archive host to a local tree
     kpfpipe realtime    -- watch the L0 tree and reduce new science frames as they land
+
+``analyze`` and ``fetch`` are the two commands with a second level. Neither reduces
+anything: ``analyze`` routes to a ``scripts/analysis`` script named by its subject
+(``analyze thar``, ``analyze flat``, ...), each reporting how that subject changes
+over time; ``fetch`` routes to a ``scripts/fetch`` script named by the data it
+pulls (``fetch masters``, ...), each a thin wrapper over ``rsync``.
 
 Examples:
 
@@ -23,6 +26,7 @@ Examples:
     kpfpipe science --obs_ids KP.20240405.40113.57
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
     kpfpipe analyze thar --date_range 20240727 20241022
+    kpfpipe fetch masters -u <user> --dates 20240405 --local_dir ~/masters
 
 Run ``kpfpipe <command> -h`` for a command's own options.
 
@@ -33,6 +37,7 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 import sys
 
 from scripts.analysis import thar
+from scripts.fetch import masters as fetch_masters
 from scripts.processing import masters, realtime, reduce, science, timeseries
 
 # The `analyze` subcommands, keyed by subject. Kept here rather than in
@@ -40,6 +45,12 @@ from scripts.processing import masters, realtime, reduce, science, timeseries
 # the processing drivers are.
 _ANALYSES = {
     "thar": thar.main,
+}
+
+# The `fetch` subcommands, keyed by the data they pull. Same arrangement, and same
+# reason, as _ANALYSES above.
+_FETCHES = {
+    "masters": fetch_masters.main,
 }
 
 
@@ -63,12 +74,33 @@ def _analyze(argv):
     return _ANALYSES[subject](rest)
 
 
+def _fetch(argv):
+    """Route ``kpfpipe fetch <subject>`` to its fetch script.
+
+    The same shape as `_analyze`: subject lookup only, the rest forwarded verbatim,
+    so each fetch script parses its own options and stays runnable as
+    ``python -m scripts.fetch.<subject>``.
+    """
+    if not argv or argv[0] in ("-h", "--help"):
+        print(_fetch_usage())
+        return 0
+
+    subject, rest = argv[0], argv[1:]
+    if subject not in _FETCHES:
+        print(f"kpfpipe fetch: unknown subject {subject!r}\n", file=sys.stderr)
+        print(_fetch_usage(), file=sys.stderr)
+        raise SystemExit(2)
+
+    return _FETCHES[subject](rest)
+
+
 _COMMANDS = {
     "run": reduce.main,
     "masters": masters.main,
     "science": science.main,
     "timeseries": timeseries.main,
     "analyze": _analyze,
+    "fetch": _fetch,
     "realtime": realtime.main,
 }
 
@@ -83,6 +115,7 @@ def _usage():
         "  science     reduce a set of science frames end-to-end (L0 -> L4)\n"
         "  timeseries  reduce a star's RV timeseries over a datecode range\n"
         "  analyze     track instrument/calibrator behavior over a date range\n\n"
+        "  fetch       copy KPF data from the remote archive host to a local tree\n"
         "  realtime    watch the L0 tree and reduce new science frames as they land\n\n"
         "Run `kpfpipe <command> -h` for a command's own options."
     )
@@ -95,6 +128,16 @@ def _analyze_usage():
         "subjects:\n"
         "  thar        which ThAr lamp (HCLSN) was in use, night by night\n\n"
         "Run `kpfpipe analyze <subject> -h` for a subject's own options."
+    )
+
+
+def _fetch_usage():
+    """The ``fetch`` usage banner listing the available subjects."""
+    return (
+        "usage: kpfpipe fetch <subject> [options]\n\n"
+        "subjects:\n"
+        "  masters     nightly master calibrations, by datecode\n\n"
+        "Run `kpfpipe fetch <subject> -h` for a subject's own options."
     )
 
 
