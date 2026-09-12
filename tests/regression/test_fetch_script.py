@@ -41,6 +41,10 @@ def _parse(argv, subject="L2", remote_dir="/data/kpf/vNext/L2"):
     return _fetch.parse_args(argv, subject, remote_dir, "desc")
 
 
+def _boom(*a, **k):
+    raise AssertionError("should not have prompted")
+
+
 class TestParseArgs:
     def test_explicit_dates_are_sorted_and_deduped(self):
         args = _parse([*_BASE, "--dates", "20240712", "20240405", "20240405"])
@@ -192,6 +196,67 @@ class TestMain:
         assert local.is_dir()
 
 
+class TestConfirmVolume:
+    """The size gate in front of a large subject (L0). Only subjects that pass a
+    per-night estimate get it, so the others are unaffected."""
+
+    def _run(self, monkeypatch, tmp_path, *extra, fetched=None):
+        monkeypatch.setattr(
+            _fetch, "fetch_night", lambda *a: fetched.append(a[3]) is None or True
+        )
+        monkeypatch.setattr(_fetch, "close_ssh_connection", lambda *a: None)
+        return _fetch.main(
+            ["-u", "someone", "--local_dir", str(tmp_path), *extra],
+            "L0",
+            "/data/kpf/L0",
+            "desc",
+            70,
+        )
+
+    def test_estimate_scales_with_the_night_count(self, monkeypatch, capsys):
+        monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+        _fetch.confirm_volume("L0", ["20240405", "20240712", "20240713"], 70, "/out")
+        out = capsys.readouterr().out
+        assert "3 night(s) x ~70 GB = ~210 GB into /out" in out
+
+    def test_yes_answer_continues(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+        fetched = []
+        rc = self._run(monkeypatch, tmp_path, "--dates", "20240405", fetched=fetched)
+        assert rc == 0 and fetched == ["20240405"]
+
+    def test_anything_else_aborts_before_transferring(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _: "")
+        fetched = []
+        with pytest.raises(SystemExit, match="aborted"):
+            self._run(monkeypatch, tmp_path, "--dates", "20240405", fetched=fetched)
+        assert fetched == []
+        # Aborting must not leave an empty local root behind.
+        assert not (tmp_path / "20240405").exists()
+
+    def test_yes_flag_skips_the_prompt(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", _boom)
+        fetched = []
+        rc = self._run(
+            monkeypatch, tmp_path, "--yes", "--dates", "20240405", fetched=fetched
+        )
+        assert rc == 0 and fetched == ["20240405"]
+
+    def test_non_interactive_run_refuses_without_yes(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: False)
+        monkeypatch.setattr("builtins.input", _boom)
+        with pytest.raises(SystemExit, match="refusing to start unattended"):
+            self._run(monkeypatch, tmp_path, "--dates", "20240405", fetched=[])
+
+    def test_subjects_without_an_estimate_have_no_yes_flag(self):
+        with pytest.raises(SystemExit):
+            _parse([*_BASE, "--dates", "20240405", "--yes"])
+
+
 class TestSubjects:
     """Each subject script owns only its name and its remote tree."""
 
@@ -206,7 +271,7 @@ class TestSubjects:
     ):
         seen = {}
 
-        def _main(argv, subj, default_remote_dir, description):
+        def _main(argv, subj, default_remote_dir, description, *rest):
             seen.update(
                 argv=argv, subject=subj, remote_dir=default_remote_dir, desc=description
             )

@@ -23,8 +23,12 @@ from scripts._argparse import dates_parser, resolve_dates
 REMOTE_HOST = "{user}@shrek.caltech.edu"
 
 
-def parse_args(argv, subject, default_remote_dir, description):
-    """The flags every fetch subject takes, with `subject` naming the tree pulled."""
+def parse_args(argv, subject, default_remote_dir, description, gb_per_night=None):
+    """The flags every fetch subject takes, with `subject` naming the tree pulled.
+
+    A subject with a `gb_per_night` estimate also gets ``--yes``, which skips the
+    size confirmation `confirm_volume` would otherwise ask for.
+    """
     ap = argparse.ArgumentParser(
         prog=f"kpfpipe fetch {subject}",
         description=description,
@@ -49,7 +53,32 @@ def parse_args(argv, subject, default_remote_dir, description):
         default=default_remote_dir,
         help=f"{subject} root on the remote host (default: %(default)s)",
     )
+    if gb_per_night:
+        ap.add_argument(
+            "-y",
+            "--yes",
+            action="store_true",
+            help=f"skip the size confirmation (~{gb_per_night} GB per night)",
+        )
     return resolve_dates(ap, ap.parse_args(argv))
+
+
+def confirm_volume(subject, datecodes, gb_per_night, local_dir):
+    """Report the estimated transfer size and require a yes before continuing.
+
+    Exits rather than prompting when stdin is not a terminal: a fetch this large
+    should never start unattended by accident, and a piped run would otherwise read
+    EOF and look like a refusal.
+    """
+    total = len(datecodes) * gb_per_night
+    print(
+        f"fetch {subject}: {len(datecodes)} night(s) x ~{gb_per_night} GB "
+        f"= ~{total} GB into {local_dir}"
+    )
+    if not sys.stdin.isatty():
+        sys.exit("error: refusing to start unattended; re-run with --yes")
+    if input("continue? [y/N] ").strip().lower() not in ("y", "yes"):
+        sys.exit("aborted")
 
 
 def ssh_command():
@@ -138,10 +167,13 @@ def fetch_night(ssh, remote, remote_dir, datecode, local_dir):
     return result.returncode == 0
 
 
-def main(argv, subject, default_remote_dir, description):
-    """Fetch every selected night of `subject`; the entry point each script wraps."""
-    args = parse_args(argv, subject, default_remote_dir, description)
-    os.makedirs(args.local_dir, exist_ok=True)
+def main(argv, subject, default_remote_dir, description, gb_per_night=None):
+    """Fetch every selected night of `subject`; the entry point each script wraps.
+
+    `gb_per_night`, where a subject is large enough to warrant it, gates the
+    transfer behind `confirm_volume` once the night count is known.
+    """
+    args = parse_args(argv, subject, default_remote_dir, description, gb_per_night)
 
     remote = REMOTE_HOST.format(user=args.user)
     ssh = ssh_command()
@@ -149,6 +181,9 @@ def main(argv, subject, default_remote_dir, description):
         datecodes = args.dates or remote_datecodes(
             ssh, remote, args.remote_dir, *args.date_range
         )
+        if gb_per_night and not args.yes:
+            confirm_volume(subject, datecodes, gb_per_night, args.local_dir)
+        os.makedirs(args.local_dir, exist_ok=True)
         failed = []
         for datecode in datecodes:
             print(f"=== {datecode}")

@@ -12,8 +12,9 @@ progress output go straight to the terminal. Nights are selected exactly as
 
 The range form enumerates the datecode dirs present under the *remote* L0 root
 within [START, END]. Unlike the reduced products, L0 is the shared raw archive
-rather than a vNext output tree, so a night here is whole-night raw data and the
-transfer is correspondingly large.
+rather than a vNext output tree, so a night here is whole-night raw data --
+roughly 70 GB. The run therefore reports its estimated total and asks for
+confirmation before transferring anything; pass ``--yes`` to skip the prompt.
 
 Each night lands in ``{local_dir}/{datecode}/``, the same layout it has on the
 remote. The whole run rides on one multiplexed SSH connection, so a batch
@@ -30,9 +31,13 @@ from scripts.fetch import _fetch
 SUBJECT = "L0"
 DEFAULT_REMOTE_DIR = "/data/kpf/L0"
 
+# Approximate size of one full night of raw L0. Only an order-of-magnitude guide
+# for the up-front confirmation -- a short or weathered-out night is far smaller.
+GB_PER_NIGHT = 70
+
 
 def main(argv=None):
-    return _fetch.main(argv, SUBJECT, DEFAULT_REMOTE_DIR, __doc__)
+    return _fetch.main(argv, SUBJECT, DEFAULT_REMOTE_DIR, __doc__, GB_PER_NIGHT)
 
 
 if __name__ == "__main__":
