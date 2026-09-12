@@ -590,6 +590,36 @@ def _cache_path(data_input, datecode):
 
 
 # ---------------------------------------------------------------------------
+# datecodes_in_range: the L0 tree walk behind every --date_range
+# ---------------------------------------------------------------------------
+
+
+class TestDatecodesInRange:
+    def test_returns_nights_present_in_range(self, tmp_path):
+        for name in ["20240101", "20240115", "20240201"]:
+            (tmp_path / "L0" / name).mkdir(parents=True)
+        nights = _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+        assert nights == ["20240101", "20240115"]
+
+    def test_missing_l0_root_exits(self, tmp_path):
+        with pytest.raises(SystemExit, match="L0 input directory not found"):
+            _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+
+    def test_no_nights_in_range_exits(self, tmp_path):
+        (tmp_path / "L0" / "20250101").mkdir(parents=True)
+        with pytest.raises(SystemExit, match="no datecode dirs"):
+            _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+
+    def test_non_datecode_entries_are_noted_and_skipped(self, tmp_path, caplog):
+        (tmp_path / "L0" / "20240101").mkdir(parents=True)
+        (tmp_path / "L0" / "scratch").mkdir()
+        with caplog.at_level(logging.INFO, logger="scripts._scan"):
+            nights = _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+        assert nights == ["20240101"]
+        assert "scratch" in caplog.text
+
+
+# ---------------------------------------------------------------------------
 # scan_night_to_cache
 # ---------------------------------------------------------------------------
 

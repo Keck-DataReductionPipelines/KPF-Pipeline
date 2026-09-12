@@ -8,13 +8,18 @@ returns a fresh ``add_help=False`` parser to slot in as a parent. The
 ``kpfpipe analyze`` scripts compose one parent, `analysis_parser`, which is itself
 built from these same groups.
 
-Depends only on ``argparse`` -- never on ``tools`` -- so, like ``_dispatch.py``,
-the scripts layer stays ignorant of the CLI dispatcher above it.
+This layer parses arguments and hands the values on; it never asks the filesystem
+what data exists. Resolving a datecode range against the data tree is ``_scan.py``'s
+job. Depends only on stdlib + ``kpfpipe`` -- never on ``tools`` -- so, like
+``_dispatch.py``, the scripts layer stays ignorant of the CLI dispatcher above it.
 """
 
 import argparse
 import os
 import sys
+
+from kpfpipe.utils.io import read_token_file
+from kpfpipe.utils.kpf import is_datecode
 
 
 def recipe_and_config_parser():
@@ -39,6 +44,77 @@ def recipe_and_config_parser():
         help="TOML config to use; overrides the default config",
     )
     return p
+
+
+def dates_parser(dates_help, range_help):
+    """The mutually exclusive ``--dates`` / ``--date_range`` night-selection pair.
+
+    Every command that acts on a set of nights offers the same three input forms --
+    explicit datecode(s), a text file of datecodes, or an inclusive range -- so the
+    flags are declared once here and validated once in `resolve_dates`. Only the
+    help text is command-specific (what the datecodes are acted *on*, and where a
+    range is enumerated from), so the caller supplies both strings.
+    """
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument(
+        "--dates",
+        nargs="*",
+        default=None,
+        metavar="DATECODE_OR_FILE",
+        help=dates_help,
+    )
+    p.add_argument(
+        "--date_range",
+        nargs=2,
+        metavar=("START", "END"),
+        default=None,
+        help=range_help,
+    )
+    return p
+
+
+def resolve_dates(ap, args):
+    """Validate a command's night selection, expanding ``--dates`` in place.
+
+    A command offering both forms must give exactly one; a range-only command has no
+    ``--dates`` attribute, and argparse has already required its range. A range is
+    checked but not expanded -- that needs a data root, so `resolve_datecodes` does
+    it later. Each ``--dates`` value is either a datecode, used as-is, or a text file
+    of datecodes expanded in place; a valid datecode is always read as such, even if
+    a like-named file exists. The result is sorted and deduplicated.
+
+    Takes the command's own `ap` so a bad value reports as its usage error. Returns
+    `args`.
+    """
+    if hasattr(args, "dates") and bool(args.dates) == bool(args.date_range):
+        ap.error("give either --dates or --date_range, not both or neither")
+
+    if args.date_range:
+        start, end = args.date_range
+        for dc in (start, end):
+            if not is_datecode(dc):
+                ap.error(f"--date_range value is not a valid datecode: {dc!r}")
+        if start > end:
+            ap.error(f"--date_range START must be <= END (got {start} > {end})")
+        return args
+
+    datecodes = []
+    for entry in args.dates:
+        if is_datecode(entry):
+            datecodes.append(entry)
+        elif os.path.isfile(entry):
+            for dc in read_token_file(entry):
+                if not is_datecode(dc):
+                    ap.error(f"not a valid datecode in {entry}: {dc!r}")
+                datecodes.append(dc)
+        else:
+            ap.error(
+                f"--dates entry is neither a datecode nor a readable file: {entry!r}"
+            )
+    if not datecodes:
+        ap.error(f"--dates produced no datecodes (empty file?): {args.dates}")
+    args.dates = sorted(set(datecodes))
+    return args
 
 
 def data_dirs_parser(science_output=True):

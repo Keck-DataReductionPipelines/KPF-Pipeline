@@ -40,19 +40,19 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import datecode_dirs_in_range
-from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
+from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
+    resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
 )
 from scripts._dispatch import _default_science_jobs, configure_runtime
-from scripts._scan import scan_datecodes, scan_night_to_cache
+from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 from scripts.plotting.timeseries import PlotTimeseries
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
@@ -150,14 +150,8 @@ def parse_args(argv=None):
         help="science recipe TOML forwarded to the science stage (default: the "
         "science stage's own default config)",
     )
-    args = ap.parse_args(argv)
+    args = resolve_dates(ap, ap.parse_args(argv))
 
-    start, end = args.date_range
-    for dc in (start, end):
-        if not is_datecode(dc):
-            ap.error(f"--date_range value is not a valid datecode: {dc!r}")
-    if start > end:
-        ap.error(f"--date_range START must be <= END (got {start} > {end})")
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
     if args.jobs is not None and args.jobs < 1:
@@ -177,26 +171,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     note; observer-flagged junk frames (the ISJUNK column) are dropped. Exits loudly
     when the tree is missing or nothing matches.
     """
-    l0_root = os.path.join(data_input, "L0")
-    if not os.path.isdir(l0_root):
-        sys.exit(f"error: L0 input directory not found: {l0_root}")
-
-    non_datecode = [
-        e
-        for e in sorted(os.listdir(l0_root))
-        if os.path.isdir(os.path.join(l0_root, e)) and not is_datecode(e)
-    ]
-    if non_datecode:
-        logger.info(
-            "  note: ignoring %d non-datecode entr(y/ies) under %s: %s",
-            len(non_datecode),
-            l0_root,
-            ", ".join(non_datecode),
-        )
-
-    nights = datecode_dirs_in_range(l0_root, start, end)
-    if not nights:
-        sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
+    nights = datecodes_in_range(data_input, start, end)
 
     def _scan_night(dc):
         df = scan_night_to_cache(data_input, dc, cache=cache)
@@ -220,7 +195,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     if not obs_ids:
         sys.exit(
             f"error: no science frames for target {target!r} in range "
-            f"{start}..{end} under {l0_root}"
+            f"{start}..{end} under {data_input}"
         )
     return obs_ids
 
