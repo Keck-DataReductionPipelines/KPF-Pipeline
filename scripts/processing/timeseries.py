@@ -9,7 +9,7 @@ star and an inclusive datecode range, it
   2. infers the unique nights (datecodes) those frames span,
   3. builds the nightly calibration masters (``kpfpipe masters``),
   4. reduces every science frame end-to-end, L0 -> L4 (``kpfpipe science``),
-  5. plots the RV timeseries from those L4 products (``plot_timeseries``).
+  5. plots the RV timeseries from those L4 products (``PlotTimeseries``).
 
 It reimplements no pipeline logic: this script owns only discovery (steps 1-2) and
 dispatch; steps 3-5 each run one subprocess (the two orchestrators, which fan out
@@ -43,21 +43,23 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
+from scripts._argparse import (
+    cache_parser,
+    data_dirs_parser,
+    logging_parser,
+    pool_parser,
+    resolve_dir_shortcuts,
+    resolve_log_settings,
+)
+from scripts._dispatch import _default_science_jobs, configure_runtime
+from scripts._scan import scan_datecodes, scan_night_to_cache
+from scripts.plotting.timeseries import PlotTimeseries
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
     DEFAULT_SCIENCE_CONFIG,
     DEFAULT_SCIENCE_RECIPE,
 )
-from scripts.processing._argparse import (
-    cache_parser,
-    data_dirs_parser,
-    logging_parser,
-    pool_parser,
-    resolve_dir_shortcuts,
-)
-from scripts.processing._dispatch import _default_science_jobs, configure_runtime
-from scripts.processing._scan import scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
 
@@ -283,18 +285,13 @@ def main(argv=None):
     science_dirs = ConfigHandler(science_config).get_params(["DATA_DIRS"])
     logger_params = ConfigHandler(science_config).get_params(["LOGGER"])
     data_input = args.kpf_data_input or science_dirs["KPF_DATA_INPUT"]
-    log_dir = args.log_dir or logger_params.get("log_dir")
-    if not log_dir:
-        sys.exit(
-            "error: no log directory configured; set [LOGGER] log_dir in the "
-            "config file or pass --log_dir"
-        )
-
-    # The batch-summary log: this wrapper's own DRP-RUN-08 decision trail
-    # (discovery, dispatch), echoed to stdout and persisted alongside each stage's
-    # own batch log and each unit's reduction log.
-    level = args.log_level or logger_params.get("log_level", "INFO")
-    log_path = setup_batch_logging(log_dir, "timeseries", level=level)
+    # One run, one log directory: this wrapper's own DRP-RUN-08 decision trail
+    # (discovery, dispatch), both stage orchestrators' batch logs, and every
+    # reduce they launch all land in {log_dir}/{run_id}.
+    log_dir, level = resolve_log_settings(args, logger_params)
+    run_id, log_path = setup_batch_logging(
+        log_dir, "timeseries", args.run_id, level=level
+    )
 
     # Overrides forwarded to the orchestrators. Both parsers accept the common set;
     # --jobs and --kpf_science_output ride science_forward only (see below).
@@ -302,7 +299,9 @@ def main(argv=None):
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
         (args.kpf_masters_output, "--kpf_masters_output"),
-        (args.log_dir, "--log_dir"),
+        # Both halves of the run directory, which each stage rejoins.
+        (log_dir, "--log_dir"),
+        (run_id, "--run_id"),
         (args.log_level, "--log_level"),
     ):
         if value:
@@ -387,21 +386,16 @@ def main(argv=None):
     # science -- with --no-science it plots whatever L4 is already on disk.
     plots_rc = None
     if args.plots:
-        plot_argv = [
-            sys.executable,
-            "-m",
-            "scripts.plots.plot_timeseries",
-            "--target",
-            args.target,
-            "--data_dir",
-            science_output,
-            "--plot_dir",
-            plot_dir,
-            "--obs_ids",
-            *obs_ids,
-        ]
         logger.info("dispatching plots for %d frame(s) -> %s", len(obs_ids), plot_dir)
-        plots_rc = _run_stage(plot_argv)
+        # In-process, unlike the two orchestrators: the plotter is a library call, not
+        # a fan-out. Catching broadly keeps the stage fail-soft the way the subprocess
+        # boundary used to -- a plotting failure is reported, never fatal to the run.
+        try:
+            PlotTimeseries(args.target, obs_ids, science_output, plot_dir).run()
+            plots_rc = 0
+        except Exception:
+            logger.exception("plots stage failed")
+            plots_rc = 1
     else:
         logger.info("skipping plots stage (--no-plots)")
 

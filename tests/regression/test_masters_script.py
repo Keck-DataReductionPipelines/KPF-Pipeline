@@ -3,7 +3,7 @@
 Covers the driver's own surface: arg parsing and the two input forms, the
 ``_cli_task`` argv it fans out, datecode resolution, and the ``main`` exit-code
 contract (nonzero iff at least one night failed). The shared fan-out engine and
-the ``datecode_dirs_in_range`` helper are tested in test_dispatch_script.py and
+the ``datecode_dirs_in_range`` helper are tested in test_script_helpers.py and
 test_io.py.
 
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
@@ -38,7 +38,10 @@ def _stub_batch_log(monkeypatch, mod):
     base = tempfile.mkdtemp()
     fake_log = os.path.join(base, "logs", "20240405", "kpf_batch_x_20240405T000000.log")
     os.makedirs(os.path.dirname(fake_log), exist_ok=True)
-    monkeypatch.setattr(mod, "setup_batch_logging", lambda *a, **k: fake_log)
+    label = mod.__name__.rsplit(".", 1)[-1]
+    monkeypatch.setattr(
+        mod, "setup_batch_logging", lambda *a, **k: (f"{label}_x", fake_log)
+    )
     return fake_log
 
 
@@ -304,12 +307,56 @@ class TestMainExitCode:
         tasks = calls[0]["args"][1]
         assert len(tasks) == 1
         _, argv = tasks[0]
-        assert argv[-8:] == [
-            "--kpf_data_input", "/in",
-            "--kpf_masters_output", "/out",
-            "--log_dir", "/out/logs",
-            "--log_level", "DEBUG",
-        ]  # fmt: skip
+        # Looked up by flag rather than by position: this tail has churned twice.
+        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
+        assert fwd["--kpf_data_input"] == "/in"
+        assert fwd["--kpf_masters_output"] == "/out"
+        assert fwd["--log_level"] == "DEBUG"
+        # Both halves of the run directory, so the child joins the same one.
+        assert fwd["--log_dir"] == "/out/logs"
+        assert fwd["--run_id"] == "masters_x"
+
+    def _batch_args(self, m, monkeypatch, argv, calls):
+        """Run main(); return the (log_dir, label, run_id) setup_batch_logging got."""
+        seen = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        # The batch run.json is written beside the log, so the stubbed path must
+        # be writable (never a placeholder like /l/x.log).
+        fake_log = os.path.join(tempfile.mkdtemp(), "kpf_masters_batch_x.log")
+        monkeypatch.setattr(
+            m,
+            "setup_batch_logging",
+            lambda d, label, rid=None, **k: (
+                seen.append((d, label, rid))
+                or (rid or "masters_20240405T010203", fake_log)
+            ),
+        )
+        m.main(argv)
+        return seen[0]
+
+    def test_passes_the_parent_log_dir_and_mints_no_run_id(self, m, monkeypatch):
+        # One run, one directory: --log_dir is the parent, not the destination.
+        # Minting belongs to logger.py now, so masters passes no run id of its own.
+        calls = []
+        assert self._batch_args(
+            m, monkeypatch, ["--dates", "20240405", "--log_dir", "/logs"], calls
+        ) == ("/logs", "masters", None)
+        # run_stage's failure hints point at the run directory, not the parent.
+        assert calls[0]["args"][3] == "/logs/masters_20240405T010203"
+
+    def test_forwarded_run_id_is_used_verbatim_and_reforwarded(self, m, monkeypatch):
+        # A parent script's run id: joined, never nested inside a new one.
+        calls = []
+        parent = "timeseries_20240405T010203"
+        log_dir, _, run_id = self._batch_args(
+            m,
+            monkeypatch,
+            ["--dates", "20240405", "--log_dir", "/logs", "--run_id", parent],
+            calls,
+        )
+        assert (log_dir, run_id) == ("/logs", parent)
+        _, argv = calls[0]["args"][1][0]
+        assert argv[-4:] == ["--log_dir", "/logs", "--run_id", parent]
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out.
@@ -334,15 +381,16 @@ class TestBatchRunRecord:
         fake_log.parent.mkdir(parents=True)
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
-        monkeypatch.setattr(m, "setup_batch_logging", lambda *a, **k: str(fake_log))
+        monkeypatch.setattr(
+            m, "setup_batch_logging", lambda *a, **k: ("masters_x", str(fake_log))
+        )
         monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
         monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
         monkeypatch.delenv(rr.PARENT_ENV, raising=False)
 
         def fake_run_stage(label, tasks, jobs, log_dir_arg, **kw):
-            child = os.path.join(
-                log_dir_arg, "20240405", "kpf_masters_20240406_x.run.json"
-            )
+            # Children log straight into the run directory (one run, one dir).
+            child = os.path.join(log_dir_arg, "kpf_masters_20240406_x.run.json")
             rr.write_json_atomic(
                 child,
                 {

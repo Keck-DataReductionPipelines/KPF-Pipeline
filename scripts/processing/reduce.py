@@ -39,17 +39,17 @@ from kpfpipe.utils.io import kpf_directory, kpf_filepath
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
 from kpfpipe.utils.run_record import RunRecord
+from scripts._argparse import (
+    data_dirs_parser,
+    logging_parser,
+    recipe_and_config_parser,
+    resolve_dir_shortcuts,
+)
 from scripts.processing import (
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
     DEFAULT_SCIENCE_CONFIG,
     DEFAULT_SCIENCE_RECIPE,
-)
-from scripts.processing._argparse import (
-    data_dirs_parser,
-    logging_parser,
-    recipe_and_config_parser,
-    resolve_dir_shortcuts,
 )
 
 logger = logging.getLogger("kpfpipe.cli")
@@ -140,7 +140,9 @@ def main(argv=None):
         log_params = resolve_logging(config, args.recipe, args.obs_id, args.datecode)
     except ValueError as e:
         parser.error(str(e))
-    log_path = setup_logging(**log_params)
+    # One run, one log directory: an orchestrator forwards its run id to pull this
+    # reduction into its run; unset, setup_logging mints this run its own.
+    log_path = setup_logging(run_id=args.run_id, **log_params)
 
     # The run.json sidecar: started now (status running), finished below. It is
     # the machine-readable twin of this log for operations tooling.

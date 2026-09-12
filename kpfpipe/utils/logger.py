@@ -16,7 +16,8 @@ install them, never at import time:
 - ``setup_batch_logging`` -- the fan-out orchestrators (masters.py/science.py)
   call it once per invocation, writing a batch-summary log of the dispatch's own
   decision points; its console echo is pinned to stdout so an operator can watch
-  batch progress live. It is a thin wrapper over ``setup_logging``.
+  batch progress live. A thin wrapper over ``setup_logging`` that also returns
+  this run's id, which the orchestrator forwards to bind its children to it.
 
 Library code only ever calls ``logging.getLogger(__name__)``; with no handlers
 installed (e.g. recipes driven directly by tests) records are simply dropped.
@@ -84,18 +85,23 @@ def get_level(name):
         ) from None
 
 
-def build_log_path(log_dir, recipe_name, target, start_time=None):
+def _ut_stamp(start_time=None):
+    """UT ``YYYYMMDDTHHMMSS`` -- the stamp in every run directory and log filename."""
+    return time.strftime("%Y%m%dT%H%M%S", start_time or time.gmtime())
+
+
+def log_filename(log_dir, recipe_name, target, start_time=None):
     """Build the unique per-invocation log path (does not create the file).
 
-    The layout is ``{log_dir}/{YYYYMMDD}/kpf_{recipe_name}_{target}_
-    {YYYYMMDDTHHMMSS}.log`` with both date components in UT. The date
-    subdirectory keeps every log under the one configured parent directory
-    (DRP-RUN-09) while the per-invocation filename records what ran and when.
+    The layout is ``{log_dir}/kpf_{recipe_name}_{target}_{YYYYMMDDTHHMMSS}.log``,
+    the stamp in UT.
 
     Parameters
     ----------
     log_dir : str
-        The configured parent log directory (DRP-RUN-07).
+        This run's own directory, ``{configured log_dir}/{run_id}`` as
+        ``setup_logging`` joins it: one run's logs land together, under the one
+        configured parent (DRP-RUN-09).
     recipe_name : str
         Short recipe identifier, e.g. 'science' or 'masters'.
     target : str
@@ -115,18 +121,15 @@ def build_log_path(log_dir, recipe_name, target, start_time=None):
     """
     if not log_dir or not isinstance(log_dir, str):
         raise ValueError(f"log_dir must be a non-empty string; got {log_dir!r}")
-    if start_time is None:
-        start_time = time.gmtime()
-    datecode = time.strftime("%Y%m%d", start_time)
-    stamp = time.strftime("%Y%m%dT%H%M%S", start_time)
-    fn = f"kpf_{recipe_name}_{target}_{stamp}.log"
-    return os.path.abspath(os.path.join(log_dir, datecode, fn))
+    fn = f"kpf_{recipe_name}_{target}_{_ut_stamp(start_time)}.log"
+    return os.path.abspath(os.path.join(log_dir, fn))
 
 
 def setup_logging(
     log_dir,
     recipe_name,
     target,
+    run_id=None,
     level="INFO",
     console=True,
     stream=None,
@@ -134,9 +137,11 @@ def setup_logging(
 ):
     """Install per-invocation file (+ optional console) handlers on root.
 
+    Writes ``{log_dir}/{run_id}/kpf_{recipe_name}_{target}_{stamp}.log``, creating
+    the run directory as needed.
+
     - Tears down any handlers a previous setup_logging installed, so
       repeated calls never duplicate handlers.
-    - Creates the ``{log_dir}/{YYYYMMDD}/`` directory as needed.
     - Opens the log file with exclusive create; on a name collision (two
       instances starting the same second) it retries with a numeric suffix
       (``.1``, ``.2``, ...) so concurrent instances never share a file
@@ -151,11 +156,14 @@ def setup_logging(
     Parameters
     ----------
     log_dir : str
-        The configured parent log directory (DRP-RUN-07).
+        The configured parent log directory (DRP-RUN-07/09).
     recipe_name : str
         Short recipe identifier, e.g. 'science' or 'masters'.
     target : str
         The reduction target: obs_id, datecode, or 'run' when neither applies.
+    run_id : str or None
+        This run's directory name: a launching script forwards its own so the
+        whole process tree logs together; None mints ``run_{stamp}``.
     level : str
         Logging level name; INFO is the production level.
     console : bool
@@ -186,7 +194,12 @@ def setup_logging(
     teardown_logging()
 
     level_int = get_level(level)
-    log_path = build_log_path(log_dir, recipe_name, target)
+    # Before the join, which would mask an unset log_dir: os.path.join("", run_id)
+    # is a truthy relative path, so log_filename's own check would never fire.
+    if not log_dir or not isinstance(log_dir, str):
+        raise ValueError(f"log_dir must be a non-empty string; got {log_dir!r}")
+    run_dir = os.path.join(log_dir, run_id or f"run_{_ut_stamp()}")
+    log_path = log_filename(run_dir, recipe_name, target)
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
     file_handler = _open_file_handler(log_path)
@@ -219,31 +232,26 @@ def setup_logging(
     return log_path
 
 
-def setup_batch_logging(log_dir, label, level="INFO", console=True):
-    """Install per-invocation handlers for a batch driver.
+def setup_batch_logging(log_dir, label, run_id=None, level="INFO", console=True):
+    """Resolve this run's id and install per-invocation handlers for a batch driver.
 
-    Called by the ``masters``/``science`` orchestrators and the ``timeseries``
-    wrapper (``label`` is the stage name). Sibling to ``setup_logging``: same
-    root-handler machinery and file layout, but for the fan-out drivers rather
-    than one recipe. Writes
-    ``{log_dir}/{YYYYMMDD}/kpf_{label}_batch_{stamp}.log``, recording the batch's
-    own decision points -- units dispatched, canary result, per-unit ok/failed,
-    and the failure sentinels -- alongside (not replacing) each unit's
-    per-reduction log. The console echo is pinned to ``sys.stdout`` so an operator
-    can watch batch progress live, while each record is also persisted to the
-    batch log file. The stdout echo is
-    filtered (``_BatchConsoleFilter``) so that below WARNING only the driver's own
-    ``scripts.*``/``__main__`` narration reaches the terminal -- library INFO
-    chatter is kept out of the live view but still written to the batch log file.
-    Called once at the top of an orchestrator's ``main()``; ``setup_logging``
-    stays the leaf-only, per-recipe entry.
+    Sibling to ``setup_logging``, which stays the leaf-only, per-recipe entry:
+    same machinery and layout, but for the fan-out drivers. Called once at the top
+    of an orchestrator's ``main()`` (``masters``/``science``/``timeseries``;
+    ``label`` is the stage name). Writes ``kpf_{label}_batch_{stamp}.log`` -- the
+    batch's own decision points, from units dispatched to the failure sentinels --
+    alongside each unit's per-reduction log, never in place of it. Its console echo
+    goes to ``sys.stdout``, filtered by ``_BatchConsoleFilter`` so the live view
+    stays the driver's narration while the file keeps every record.
 
     Parameters
     ----------
     log_dir : str
-        The configured parent log directory (DRP-RUN-07).
+        The configured parent log directory (DRP-RUN-07/09).
     label : str
         Short orchestrator identifier, e.g. 'masters' or 'science'.
+    run_id : str or None
+        A launching script's run id, used verbatim; None mints ``{label}_{stamp}``.
     level : str
         Logging level name; INFO is the production level.
     console : bool
@@ -251,13 +259,16 @@ def setup_batch_logging(log_dir, label, level="INFO", console=True):
 
     Returns
     -------
-    str
-        The absolute path of the created batch log file.
+    (str, str)
+        This run's id -- forward it to child scripts as ``--run_id`` so they log
+        beside this batch -- and the absolute path of the created batch log file.
     """
-    return setup_logging(
+    run_id = run_id or f"{label}_{_ut_stamp()}"
+    return run_id, setup_logging(
         log_dir,
         recipe_name=label,
         target="batch",
+        run_id=run_id,
         level=level,
         console=console,
         stream=sys.stdout,

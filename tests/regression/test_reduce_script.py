@@ -124,6 +124,54 @@ class TestDirShortcuts:
         assert masters == "/out" and science == "/out" and log_dir == "/out/logs"
 
 
+class TestRunLogDir:
+    """One run, one log directory -- created here, or joined from a parent script."""
+
+    def _setup_kwargs(self, monkeypatch, tmp_path, extra):
+        seen = {}
+        # The run.json sidecar is written beside the log, so the stub must hand
+        # back a writable .log path (never /dev/null).
+        fake_log = tmp_path / "logs" / "kpf_rec_x_20240405T000000.log"
+        fake_log.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(
+            red, "setup_logging", lambda **kw: seen.update(kw) or str(fake_log)
+        )
+        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
+        red.main(
+            [
+                "--science",
+                "-r",
+                str(recipe),
+                "-c",
+                str(_base_cfg(tmp_path)),
+                "-o",
+                "KP.x",
+                *extra,
+            ]  # fmt: skip
+        )
+        return seen
+
+    def test_standalone_run_passes_no_run_id(self, monkeypatch, tmp_path):
+        # The leaf knows nothing of run directories: it hands the configured parent
+        # through untouched and leaves both minting and the join to setup_logging.
+        seen = self._setup_kwargs(monkeypatch, tmp_path, [])
+        assert seen["log_dir"] == "/cfg/l"
+        assert seen["run_id"] is None
+
+    def test_forwarded_run_id_is_used_verbatim(self, monkeypatch, tmp_path):
+        # What an orchestrator forwards: join its run, never mint another.
+        parent = "masters_20240405T010203"
+        seen = self._setup_kwargs(monkeypatch, tmp_path, ["--run_id", parent])
+        assert seen["run_id"] == parent
+
+    def test_forwarded_log_dir_overrides_the_config(self, monkeypatch, tmp_path):
+        # A parent forwards both halves; --log_dir arrives as a [LOGGER] override.
+        seen = self._setup_kwargs(
+            monkeypatch, tmp_path, ["--log_dir", "/parent", "--run_id", "masters_x"]
+        )
+        assert seen["log_dir"] == "/parent"
+
+
 class TestShortcutOverride:
     def test_c_and_r_override_are_accepted(self, monkeypatch, tmp_path):
         # --science supplies the kind; -r/-c override its defaults rather than erroring.

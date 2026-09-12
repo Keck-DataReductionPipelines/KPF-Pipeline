@@ -62,7 +62,7 @@ kpfpipe/            scientist-facing building blocks (importable, no orchestrati
   utils/            shared helpers (io, logger, config, stats, astro, kpf)
 recipes/            compose modules into an end-to-end reduction (kpf_drp_{science,masters}.py)
 configs/            default recipe parameters (kpf_drp_{science,masters}.toml)
-scripts/            run recipes many times (processing/, plots/, quality_control/)
+scripts/            run recipes many times (processing/, plotting/)
 tools/              the `kpfpipe` CLI dispatcher (cli.py) and operator tools
 reference/          static reference data (detector.toml, line lists, order traces, etc.)
 tests/              regression/ (test suite) + profiling/ (performance harnesses)
@@ -253,7 +253,7 @@ never up: `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose 
 imports `scripts.processing.*`, but **the scripts must never import `tools`**. All four are
 installed, importable packages; code shared across a layer's siblings goes **down** into
 `kpfpipe/`, or — when it is layer-specific — lives beside them as a `_`-prefixed private helper
-(e.g. `scripts/processing/_argparse.py`, `recipes/_logging.py`) that only its own layer imports.
+(e.g. `scripts/_argparse.py`, `recipes/_logging.py`) that only its own layer imports.
 
 ### Modules
 
@@ -281,22 +281,24 @@ setup lives in the scripts layer, never in recipes. Default parameters live in
 
 `scripts/` run recipes many times, over batches of units: `processing/` holds the reduction
 drivers (the CLI leaf, the orchestrators, and the timeseries wrapper — see *Command line
-interface*), `plots/` the post-reduction plotter (`plot_timeseries.py`), and `quality_control/`
-the reporting entry points (`qc.py`/`qlp.py`). Every driver is runnable on its own (`python -m scripts.processing.<name>`),
-with no knowledge of the dispatcher above it; its flags are documented by `kpfpipe <command> --help`.
+interface*) and `plotting/` the post-reduction plotter (`timeseries.py`). Every *processing* driver
+is runnable on its own (`python -m scripts.processing.<name>`), with no knowledge of the dispatcher
+above it; its flags are documented by `kpfpipe <command> --help`. The plotter is not a driver: it
+has no CLI and is imported by the `timeseries` wrapper as a library.
 
-The processing drivers share a set of **`tools`-free** orchestration helpers:
+The drivers share a set of **`tools`-free** orchestration helpers, which sit at the
+`scripts/` root rather than inside `processing/` because more than one sub-package composes them:
 
 - `_argparse.py` — shared argparse parent-parsers composed via `parents=[…]`, so each common flag
-  (recipe/config, data dirs, logging, pool, cache) is declared once; `resolve_dir_shortcuts`
-  post-parse expands the `--input_dir`/`--output_dir` convenience shortcuts into their
-  per-directory slots.
+  (recipe/config, data dirs, logging, pool, cache) is declared once, plus two post-parse resolvers:
+  `resolve_dir_shortcuts` expands the `--input_dir`/`--output_dir` convenience shortcuts into their
+  per-directory slots, and `resolve_log_settings` settles the log dir/level (see *Logging*).
 - `_dispatch.py` — the process-pool engine that fans units out as subprocesses.
 - `_scan.py` — the up-front, parallel-by-datecode L0 mini-db cache **pre-scan** the orchestrators
   run before fan-out (gated by `--cache`). It is deliberately the sole `kpfpipe.utils.io`
   (`FileHandler`) importer, so `_dispatch.py` stays io-free.
 
-The default recipe/config path constants live in `kpfpipe/__init__.py`
+The default recipe/config path constants live in `scripts/processing/__init__.py`
 (`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source the `--masters`/`--science`
 shortcuts resolve against.
 
@@ -324,12 +326,11 @@ the remaining argv verbatim (each subcommand owns its own argparse). Full flag u
   batch of units out as one `python -m scripts.processing.reduce` subprocess each (own log, clean
   process state, independent exit) via `_dispatch.py`.
 - **`kpfpipe timeseries`** (→ `timeseries.py`) — a **thin wrapper** above the orchestrators: discovers
-  a target's frames from the L0 tree, then runs the masters, science, and `plot_timeseries` stages as
-  subprocesses. Each stage is independently skippable and fail-soft — a frame is handed to science
+  a target's frames from the L0 tree, then runs the masters and science stages as subprocesses and
+  the plots stage as an in-process call (`PlotTimeseries(...).run()` — the plotter is a
+  library, not an orchestrator, so it needs no fan-out; the wrapper catches its failures to keep the
+  stage fail-soft). Each stage is independently skippable and fail-soft — a frame is handed to science
   regardless of its masters result.
-- **`kpfpipe plot-timeseries`** (→ `scripts/plots/plot_timeseries.py`) — the standalone **plotter**:
-  renders a target's RV timeseries from its L4 products (the same stage the `timeseries` wrapper runs
-  last).
 
 ## Quality control
 
@@ -347,8 +348,8 @@ prior wrote, driven by the recipe through a **single `CheckpointL{n}(obj).run()`
   place a level's diagnostics are declared: `CheckpointL1.DIAGNOSTICS = (DiagL1,)`,
   `CheckpointL0.DIAGNOSTICS = (DiagL0, Guider, ExposureMeter, Telemetry)`. No class reads another's
   output, so the order is presentational.
-- The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting (e.g.
-  `scripts/quality_control/qc.py`). A level with no paired class skips that stage.
+- The folded `QC.run()` result dict is captured on `Checkpoint.qc_results` for reporting. A level
+  with no paired class skips that stage.
 
 The recipe runs `CheckpointL0(l0).run()` **before assembly**, on purpose: QCL0 writes the L0 QC flags
 onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/L2/L4
@@ -392,7 +393,8 @@ recipes/modules/tests. Two sibling entry points configure it:
   `label` ∈ `science`/`masters`/`timeseries`). It writes a `kpf_{label}_batch_{stamp}.log` of the
   *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels; for
   `timeseries`, its discovery + per-stage dispatch trail), with the console echo pinned to **stdout**
-  so an operator can watch fan-out live.
+  so an operator can watch fan-out live. It also returns this run's id, which the driver forwards to
+  bind every unit it launches to the same run directory.
 
 The batch stdout echo is **source-filtered** (`_BatchConsoleFilter`, console handler only): below
 WARNING only the driver's own narration (`scripts.*` / `__main__`) reaches the terminal, keeping
@@ -401,9 +403,17 @@ every record. Orchestrators (and the shared `_dispatch.py` engine) narrate throu
 never `print()`. Because they still fan `reduce` out as one subprocess per unit, **each reduction
 also gets its own `setup_logging` per-unit log** — the batch log sits alongside, not in place of, it.
 
-Both siblings write one UT-timestamped file per invocation under the `[LOGGER] log_dir` config key
-(`log_level`/`console` also honored; CLI `--log_dir`/`--log_level` override); a missing `log_dir` is
-fatal (DRP-RUN-07). Library code only declares `logger = logging.getLogger(__name__)` and must work
+**One CLI run, one log directory.** Every log of a run lands in
+`{[LOGGER] log_dir}/{run_id}/`, where the **run id** is `{command}_{stamp}` (stamp in UT) minted by
+`setup_logging`/`setup_batch_logging` — so a batch that crosses UT midnight still lands in one place
+and two batches on one day never share a directory. A script that launches another forwards its
+resolved `--log_dir` **and** its `--run_id`, which the child joins rather than minting its own — so a
+`timeseries` run, both stage orchestrators, and every `reduce` they fan out log side by side.
+`[LOGGER] log_dir` stays the single parent for every log (DRP-RUN-09); `log_level`/`console` are also
+honored, CLI `--log_dir`/`--log_level` override, and a missing `log_dir` is fatal (DRP-RUN-07). The
+scripts layer resolves that parent once, in `_argparse.py`'s `resolve_log_settings`, to an *absolute*
+path — fanned-out children run from `REPO_ROOT`, not the operator's cwd, so a relative one would name
+two different places. Library code only declares `logger = logging.getLogger(__name__)` and must work
 with no handlers installed — tests call `recipe.main(config, args)` directly with none configured, so
 setup must never move into recipes. Recoverable/degraded conditions use `logger.warning` (not
 `warnings.warn`); `logging.captureWarnings` still funnels any third-party/stdlib `warnings.warn` into
@@ -475,7 +485,8 @@ marker) and the real frames under the gitignored `tests/testdata/`.
 `data_models/`, e.g. `test_quicklook_l0.py`), plus the non-collected helpers `_masters.py`
 (synthetic fixtures) and `_dtype_policy.py` (the dtype rubric). The `slow` marker carves the
 real-`testdata` integration and heavy-compute tests (full L0→L2, real-frame assembly/overscan,
-master stacking, WLS orientation) off from the fast `-m "not slow"` subset.
+master stacking, WLS orientation) off from the fast subset, which also drops the `cli` and
+`quicklook` markers (`-m "not slow and not cli and not quicklook"`).
 
 The masters tests mirror the masters subpackage by *responsibility*: `test_master_base.py` covers
 the shared stacking engine (`BaseMasterModule`), `test_master_bias.py`/`test_master_dark.py` the

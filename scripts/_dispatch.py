@@ -362,7 +362,7 @@ def _report_failures(failures, log_dir, *, header):
     rule = "=" * 72
     logger.error("%s\n%s\n%s", rule, header, rule)
     for label, tag, rc, stderr in failures:
-        hint = os.path.join(log_dir, "*", f"kpf_{label}_{tag}_*.log")
+        hint = os.path.join(log_dir, f"kpf_{label}_{tag}_*.log")
         lines = [f"FAILED [{label}] {tag} (exit {rc})", f"  inspect log: {hint}"]
         tail = (stderr or "").strip().splitlines()[-20:]
         if tail:

@@ -3,7 +3,7 @@
 Covers the driver's own surface: arg parsing and obs_id validation, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
 at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
-is tested in test_dispatch_script.py. Stubs only -- no real testdata needed.
+is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
 import os
@@ -38,7 +38,10 @@ def _stub_batch_log(monkeypatch, mod):
     base = tempfile.mkdtemp()
     fake_log = os.path.join(base, "logs", "20240405", "kpf_batch_x_20240405T000000.log")
     os.makedirs(os.path.dirname(fake_log), exist_ok=True)
-    monkeypatch.setattr(mod, "setup_batch_logging", lambda *a, **k: fake_log)
+    label = mod.__name__.rsplit(".", 1)[-1]
+    monkeypatch.setattr(
+        mod, "setup_batch_logging", lambda *a, **k: (f"{label}_x", fake_log)
+    )
     return fake_log
 
 
@@ -253,6 +256,33 @@ class TestMainExitCode:
         assert "--kpf_science_output" in argv
         assert argv[argv.index("--kpf_science_output") + 1] == "/out"
 
+    def test_forwards_dir_and_log_overrides_to_each_child(self, s, monkeypatch):
+        # The sibling of masters' forwarding test: every override the orchestrator
+        # resolved must reach each fanned-out reduce, or a child silently falls
+        # back to its own config.
+        calls = []
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        s.main(
+            [
+                "--obs_ids",
+                _OID1,
+                "--input_dir",
+                "/in",
+                "--output_dir",
+                "/out",
+                "--log_level",
+                "DEBUG",
+            ]
+        )
+        _, argv = calls[0][0][1][0]
+        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
+        assert fwd["--kpf_data_input"] == "/in"
+        assert fwd["--kpf_science_output"] == "/out"
+        assert fwd["--log_level"] == "DEBUG"
+        # Both halves of the run directory, so the child joins the same one.
+        assert fwd["--log_dir"] == "/out/logs"
+        assert fwd["--run_id"] == "science_x"
+
     def test_errors_when_log_dir_unset(self, s, monkeypatch):
         # A missing log_dir is fatal before any fan-out.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
@@ -276,7 +306,9 @@ class TestBatchRunRecord:
         fake_log.parent.mkdir(parents=True)
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
-        monkeypatch.setattr(s, "setup_batch_logging", lambda *a, **k: str(fake_log))
+        monkeypatch.setattr(
+            s, "setup_batch_logging", lambda *a, **k: ("science_x", str(fake_log))
+        )
         monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
         monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
         monkeypatch.delenv(rr.PARENT_ENV, raising=False)

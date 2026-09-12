@@ -52,20 +52,21 @@ from kpfpipe.utils.run_record import (
     collect_child_records,
     write_json_atomic,
 )
-from scripts.processing import DEFAULT_SCIENCE_CONFIG
-from scripts.processing._argparse import (
+from scripts._argparse import (
     data_dirs_parser,
     logging_parser,
     pool_parser,
     recipe_and_config_parser,
     resolve_dir_shortcuts,
+    resolve_log_settings,
 )
-from scripts.processing._dispatch import (
+from scripts._dispatch import (
     _default_science_jobs,
     _run_one,
     _terminate_all_children,
     configure_runtime,
 )
+from scripts.processing import DEFAULT_SCIENCE_CONFIG
 from scripts.processing.science import _cli_task
 
 logger = logging.getLogger(__name__)
@@ -271,7 +272,7 @@ class Ledger:
 class Realtime:
     """The watcher: scan -> classify -> dispatch -> reap -> heartbeat, on a loop."""
 
-    def __init__(self, args, config, *, log_dir, log_path):
+    def __init__(self, args, config, *, log_dir, log_path, run_id=None):
         self.args = args
         self.log_dir = log_dir
         self.data_input = (
@@ -289,7 +290,9 @@ class Realtime:
             (args.kpf_data_input, "--kpf_data_input"),
             (args.kpf_masters_output, "--kpf_masters_output"),
             (args.kpf_science_output, "--kpf_science_output"),
-            (args.log_dir, "--log_dir"),
+            # Both halves of the run directory, which each child rejoins.
+            (log_dir, "--log_dir"),
+            (run_id, "--run_id"),
             (args.log_level, "--log_level"),
         ):
             if value:
@@ -497,21 +500,19 @@ def main(argv=None):
 
     config = ConfigHandler(args.config or DEFAULT_SCIENCE_CONFIG)
     logger_params = config.get_params(["LOGGER"])
-    log_dir = args.log_dir or logger_params.get("log_dir")
-    if not log_dir:
-        sys.exit(
-            "error: no log directory configured; set [LOGGER] log_dir in the "
-            "config file or pass --log_dir"
-        )
-    level = args.log_level or logger_params.get("log_level", "INFO")
-    log_path = setup_batch_logging(log_dir, "realtime", level=level)
+    # One run, one log directory: the watcher's own log and every frame's
+    # per-reduction log land together in {log_dir}/{run_id}.
+    log_dir, level = resolve_log_settings(args, logger_params)
+    run_id, log_path = setup_batch_logging(
+        log_dir, "realtime", args.run_id, level=level
+    )
 
     logger.info("kpfpipe %s realtime starting", kpfpipe.__version__)
     logger.info("argv: %s", " ".join(sys.argv))
     logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
     logger.info("log: %s", log_path)
 
-    rt = Realtime(args, config, log_dir=log_dir, log_path=log_path)
+    rt = Realtime(args, config, log_dir=log_dir, log_path=log_path, run_id=run_id)
     logger.info("run record: %s", rt.record.path)
     logger.info("status file: %s", rt.status_file)
     logger.info("ledger: %s", rt.ledger.path)

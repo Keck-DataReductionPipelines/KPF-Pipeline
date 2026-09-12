@@ -35,22 +35,23 @@ from kpfpipe.utils.io import datecode_dirs_in_range, read_token_file
 from kpfpipe.utils.kpf import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from kpfpipe.utils.run_record import PARENT_ENV, RunRecord, collect_child_records
-from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
-from scripts.processing._argparse import (
+from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
     recipe_and_config_parser,
     resolve_dir_shortcuts,
+    resolve_log_settings,
 )
-from scripts.processing._dispatch import (
+from scripts._dispatch import (
     _MASTERS_JOBS,
     _default_masters_jobs,
     configure_runtime,
     run_stage,
 )
-from scripts.processing._scan import warm_mini_db_caches
+from scripts._scan import warm_mini_db_caches
+from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 
 logger = logging.getLogger(__name__)
 
@@ -204,18 +205,14 @@ def main(argv=None):
     data_input = (
         args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
     )
-    log_dir = args.log_dir or logger_params.get("log_dir")
-    if not log_dir:
-        sys.exit(
-            "error: no log directory configured; set [LOGGER] log_dir in the "
-            "config file or pass --log_dir"
-        )
-
-    # The batch-summary log: this orchestrator's own DRP-RUN-08 decision trail,
-    # echoed live to stdout, alongside each night's per-reduction log.
-    level = args.log_level or logger_params.get("log_level", "INFO")
-    log_path = setup_batch_logging(log_dir, "masters", level=level)
-    # The batch run.json sidecar; see science.py for why the path is exported.
+    # One run, one log directory: this batch's own DRP-RUN-08 decision trail and
+    # every night's per-reduction log land together in {log_dir}/{run_id}.
+    log_dir, level = resolve_log_settings(args, logger_params)
+    run_id, log_path = setup_batch_logging(log_dir, "masters", args.run_id, level=level)
+    run_dir = os.path.join(log_dir, run_id)
+    # The batch run.json sidecar. Exporting its path lets every fanned-out reduce
+    # child (which inherits our environment) record this batch as its parent, so
+    # the two levels of records link both ways.
     record = RunRecord.start(
         log_path,
         kind="batch",
@@ -230,7 +227,9 @@ def main(argv=None):
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
         (args.kpf_masters_output, "--kpf_masters_output"),
-        (args.log_dir, "--log_dir"),
+        # Both halves of the run directory, which the child rejoins.
+        (log_dir, "--log_dir"),
+        (run_id, "--run_id"),
         (args.log_level, "--log_level"),
     ):
         if value:
@@ -262,7 +261,7 @@ def main(argv=None):
         "masters",
         tasks,
         args.jobs,
-        log_dir,
+        run_dir,
         job_timeout=args.job_timeout,
         abort_on_failure=False,
         launch_interval=_LAUNCH_INTERVAL,

@@ -192,7 +192,9 @@ def _once(monkeypatch, tmp_path, data, fake, extra=(), now=_NOW):
     fake_log = log_dir / _NIGHT / "kpf_realtime_batch_x.log"
     fake_log.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(rt, "configure_runtime", lambda: None)
-    monkeypatch.setattr(rt, "setup_batch_logging", lambda *a, **k: str(fake_log))
+    monkeypatch.setattr(
+        rt, "setup_batch_logging", lambda *a, **k: ("realtime_x", str(fake_log))
+    )
     monkeypatch.setattr(rt, "_run_one", fake)
     monkeypatch.setattr(rt.time, "time", lambda: now)
     monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
