@@ -259,6 +259,57 @@ class TestCacheParser:
             _parse([_argparse.cache_parser()], ["--cache", "rr"])
 
 
+def _unwrapped_help(parser):
+    """A parser's help with argparse's line wrapping collapsed, so an assertion can
+    match a phrase without caring where the column break lands."""
+    return " ".join(parser.format_help().split())
+
+
+class TestDatesParser:
+    """The night-selection flags every command composes. One factory serves three
+    shapes: both input forms, a required range, and a range with a default."""
+
+    def test_both_forms_are_optional_by_default(self):
+        args = _parse([_argparse.dates_parser("builds every L0 night in it")], [])
+        assert args.dates is None and args.date_range is None
+
+    def test_range_only_omits_the_dates_flag(self):
+        p = _argparse.dates_parser("reduces every L0 night in it", dates=False)
+        args = _parse([p], ["--date_range", "20240101", "20240131"])
+        assert not hasattr(args, "dates")
+
+    def test_range_only_requires_a_range(self):
+        p = _argparse.dates_parser("reduces every L0 night in it", dates=False)
+        with pytest.raises(SystemExit):
+            _parse([p], [])
+
+    def test_default_range_makes_it_optional(self):
+        p = _argparse.dates_parser(
+            "analyzes every L0 night in it",
+            dates=False,
+            default_date_range=("20221109", "20240101"),
+        )
+        assert _parse([p], []).date_range == ["20221109", "20240101"]
+
+    def test_help_states_the_action_and_the_default(self):
+        p = _argparse.dates_parser(
+            "fetches every night present on the remote in it",
+            dates=False,
+            default_date_range=("20221109", "20240101"),
+        )
+        help_text = _unwrapped_help(p)
+        assert "fetches every night present on the remote in it" in help_text
+        assert "default: 20221109 20240101" in help_text
+
+    def test_mutual_exclusion_is_noted_only_when_dates_exists(self):
+        both = _unwrapped_help(_argparse.dates_parser("builds every L0 night in it"))
+        range_only = _unwrapped_help(
+            _argparse.dates_parser("builds every L0 night in it", dates=False)
+        )
+        assert "mutually exclusive with --dates" in both
+        assert "mutually exclusive" not in range_only
+
+
 # ===========================================================================
 # _dispatch.py -- shared subprocess fan-out engine
 # ===========================================================================

@@ -41,14 +41,7 @@ def parse_args(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            dates_parser(
-                dates_help="one or more datecodes to fetch, or a text file listing "
-                "one datecode per line, e.g. --dates 20240405 20240712 or --dates "
-                "nights.txt (mutually exclusive with --date_range)",
-                range_help="inclusive datecode range; fetches every night present "
-                "on the remote in it, e.g. --date_range 20240101 20240131 (mutually "
-                "exclusive with --dates)",
-            ),
+            dates_parser("fetches every night present on the remote in it"),
         ],
     )
     ap.add_argument(

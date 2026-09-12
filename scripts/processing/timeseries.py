@@ -45,6 +45,7 @@ from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
+    dates_parser,
     logging_parser,
     pool_parser,
     resolve_dates,
@@ -83,19 +84,13 @@ def parse_args(argv=None):
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
+            dates_parser("reduces every L0 night in it", dates=False),
         ],
     )
     ap.add_argument(
         "--target",
         required=True,
         help="star id as it appears in the L0 OBJECT header, e.g. 10700",
-    )
-    ap.add_argument(
-        "--date_range",
-        nargs=2,
-        metavar=("START", "END"),
-        required=True,
-        help="inclusive datecode range, e.g. --date_range 20240101 20240131",
     )
     # Stage toggles (which *stage* to run) -- unrelated to reduce's
     # --masters/--science recipe shortcuts, which live only on that leaf's parser.

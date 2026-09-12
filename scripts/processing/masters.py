@@ -89,14 +89,7 @@ def parse_args(argv=None):
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
-            dates_parser(
-                dates_help="one or more datecodes to build, or a text file listing "
-                "one datecode per line, e.g. --dates 20240405 20240712 or --dates "
-                "nights.txt (mutually exclusive with --date_range)",
-                range_help="inclusive datecode range; builds every L0 night in it, "
-                "e.g. --date_range 20240101 20240131 (mutually exclusive with "
-                "--dates)",
-            ),
+            dates_parser("builds every L0 night in it"),
         ],
     )
     args = resolve_dates(ap, ap.parse_args(argv))

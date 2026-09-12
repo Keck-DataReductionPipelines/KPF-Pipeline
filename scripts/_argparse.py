@@ -46,28 +46,43 @@ def recipe_and_config_parser():
     return p
 
 
-def dates_parser(dates_help, range_help):
-    """The mutually exclusive ``--dates`` / ``--date_range`` night-selection pair.
+def dates_parser(range_action, *, dates=True, default_date_range=None):
+    """The night-selection flags, declared and documented once for every command.
 
-    Every command that acts on a set of nights offers the same three input forms --
-    explicit datecode(s), a text file of datecodes, or an inclusive range -- so the
-    flags are declared once here and validated once in `resolve_dates`. Only the
-    help text is command-specific (what the datecodes are acted *on*, and where a
-    range is enumerated from), so the caller supplies both strings.
+    `range_action` is the only command-specific wording: the predicate describing
+    what a range covers, e.g. "builds every L0 night in it". The surrounding help --
+    the example, the mutual-exclusion note, the stated default -- is assembled here,
+    so the same flag reads the same way everywhere. Validated by `resolve_dates`.
+
+    Commands offering both input forms take the default `dates=True` and must give
+    exactly one. A range-only command passes ``dates=False``, which makes
+    ``--date_range`` required unless `default_date_range` supplies a ``(START, END)``
+    fallback.
     """
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument(
-        "--dates",
-        nargs="*",
-        default=None,
-        metavar="DATECODE_OR_FILE",
-        help=dates_help,
+    if dates:
+        p.add_argument(
+            "--dates",
+            nargs="*",
+            default=None,
+            metavar="DATECODE_OR_FILE",
+            help="one or more datecodes, or a text file listing one datecode per "
+            "line, e.g. --dates 20240405 20240712 or --dates nights.txt (mutually "
+            "exclusive with --date_range)",
+        )
+    range_help = (
+        f"inclusive datecode range; {range_action}, e.g. --date_range 20240101 20240131"
     )
+    if dates:
+        range_help += " (mutually exclusive with --dates)"
+    if default_date_range:
+        range_help += f" (default: {' '.join(default_date_range)})"
     p.add_argument(
         "--date_range",
         nargs=2,
         metavar=("START", "END"),
-        default=None,
+        required=not dates and default_date_range is None,
+        default=list(default_date_range) if default_date_range else None,
         help=range_help,
     )
     return p
@@ -273,16 +288,12 @@ def analysis_parser(default_date_range=None):
             logging_parser(),
             pool_parser(jobs_help="max concurrent per-night header scans"),
             cache_parser(default="rw"),
+            dates_parser(
+                "analyzes every L0 night in it",
+                dates=False,
+                default_date_range=default_date_range,
+            ),
         ],
-    )
-    p.add_argument(
-        "--date_range",
-        nargs=2,
-        metavar=("START", "END"),
-        required=default_date_range is None,
-        default=list(default_date_range) if default_date_range else None,
-        help="inclusive datecode range to analyze, e.g. --date_range 20240727 20241022"
-        + (f" (default: {' '.join(default_date_range)})" if default_date_range else ""),
     )
     p.add_argument(
         "--kpf_data_input",
