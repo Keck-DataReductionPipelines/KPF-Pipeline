@@ -17,19 +17,23 @@ import subprocess
 import sys
 
 from kpfpipe.utils.kpf import is_datecode
-from scripts._argparse import dates_parser, resolve_dates
+from scripts._argparse import dates_parser
 
 # ``{user}`` is filled in from --user.
 REMOTE_HOST = "{user}@shrek.caltech.edu"
 
 
-def parse_args(argv, subject, default_remote_dir, description, gb_per_night=None):
-    """The flags every fetch subject takes, with `subject` naming the tree pulled.
+def subject_parser(subject, default_remote_dir, description, gb_per_night=None):
+    """The argument parser for a fetch subject, complete but not yet parsed.
 
     A subject with a `gb_per_night` estimate also gets ``--yes``, which skips the
-    size confirmation `confirm_volume` would otherwise ask for.
+    size confirmation `confirm_volume` would otherwise ask for. A subject needing
+    flags of its own adds them to this and parses for itself (see ``masters.py``).
+
+    The subject's name and estimate ride along on the parsed namespace, so `run`
+    takes nothing the parser did not already know.
     """
-    ap = argparse.ArgumentParser(
+    p = argparse.ArgumentParser(
         prog=f"kpfpipe fetch {subject}",
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -37,30 +41,31 @@ def parse_args(argv, subject, default_remote_dir, description, gb_per_night=None
             dates_parser("fetches every night present on the remote in it"),
         ],
     )
-    ap.add_argument(
+    p.add_argument(
         "-u",
         "--user",
         required=True,
         help="your username on the remote host",
     )
-    ap.add_argument(
+    p.add_argument(
         "--local_dir",
         required=True,
         help="local root to fetch into; each night lands in {local_dir}/{datecode}/",
     )
-    ap.add_argument(
+    p.add_argument(
         "--remote_dir",
         default=default_remote_dir,
         help=f"{subject} root on the remote host (default: %(default)s)",
     )
     if gb_per_night:
-        ap.add_argument(
+        p.add_argument(
             "-y",
             "--yes",
             action="store_true",
             help=f"skip the size confirmation (~{gb_per_night} GB per night)",
         )
-    return resolve_dates(ap, ap.parse_args(argv))
+    p.set_defaults(subject=subject, gb_per_night=gb_per_night)
+    return p
 
 
 def confirm_volume(subject, datecodes, gb_per_night, local_dir):
@@ -143,11 +148,13 @@ def remote_datecodes(ssh, remote, remote_dir, start, end):
     return nights
 
 
-def fetch_night(ssh, remote, remote_dir, datecode, local_dir):
+def fetch_night(ssh, remote, remote_dir, datecode, local_dir, filters=()):
     """rsync one night's dir into ``{local_dir}/{datecode}/``; True on success.
 
     Inherits stdout/stderr so rsync's ``--progress`` reports live. ``--partial``
-    keeps a part-transferred file so an interrupted run resumes into it.
+    keeps a part-transferred file so an interrupted run resumes into it. `filters`
+    are extra rsync arguments -- the ``--include``/``--exclude`` rules a subject
+    uses to pull part of a night; empty means the whole directory.
     """
     source = f"{remote}:{shlex.quote(f'{remote_dir}/{datecode}')}/"
     destination = os.path.join(local_dir, datecode)
@@ -159,6 +166,7 @@ def fetch_night(ssh, remote, remote_dir, datecode, local_dir):
             "--progress",
             "-e",
             shlex.join(ssh),
+            *filters,
             source,
             destination,
         ],
@@ -167,27 +175,28 @@ def fetch_night(ssh, remote, remote_dir, datecode, local_dir):
     return result.returncode == 0
 
 
-def main(argv, subject, default_remote_dir, description, gb_per_night=None):
-    """Fetch every selected night of `subject`; the entry point each script wraps.
+def run(args, filters=()):
+    """Fetch every selected night from a parsed `subject_parser` namespace.
 
-    `gb_per_night`, where a subject is large enough to warrant it, gates the
-    transfer behind `confirm_volume` once the night count is known.
+    A subject carrying a ``gb_per_night`` estimate gates the transfer behind
+    `confirm_volume` once the night count is known. `filters` are rsync rules
+    narrowing what each night yields (see `fetch_night`).
     """
-    args = parse_args(argv, subject, default_remote_dir, description, gb_per_night)
-
     remote = REMOTE_HOST.format(user=args.user)
     ssh = ssh_command()
     try:
         datecodes = args.dates or remote_datecodes(
             ssh, remote, args.remote_dir, *args.date_range
         )
-        if gb_per_night and not args.yes:
-            confirm_volume(subject, datecodes, gb_per_night, args.local_dir)
+        if args.gb_per_night and not args.yes:
+            confirm_volume(args.subject, datecodes, args.gb_per_night, args.local_dir)
         os.makedirs(args.local_dir, exist_ok=True)
         failed = []
         for datecode in datecodes:
             print(f"=== {datecode}")
-            if not fetch_night(ssh, remote, args.remote_dir, datecode, args.local_dir):
+            if not fetch_night(
+                ssh, remote, args.remote_dir, datecode, args.local_dir, filters
+            ):
                 print(f"  !! {datecode}: transfer failed", file=sys.stderr)
                 failed.append(datecode)
     except KeyboardInterrupt:

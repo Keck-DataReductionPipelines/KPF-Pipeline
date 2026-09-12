@@ -23,6 +23,7 @@ exits nonzero if any night failed.
 
 import sys
 
+from scripts._argparse import resolve_dates
 from scripts.fetch import _fetch
 
 SUBJECT = "L2"
@@ -30,7 +31,8 @@ DEFAULT_REMOTE_DIR = "/data/kpf/vNext/L2"
 
 
 def main(argv=None):
-    return _fetch.main(argv, SUBJECT, DEFAULT_REMOTE_DIR, __doc__)
+    ap = _fetch.subject_parser(SUBJECT, DEFAULT_REMOTE_DIR, __doc__)
+    return _fetch.run(resolve_dates(ap, ap.parse_args(argv)))
 
 
 if __name__ == "__main__":

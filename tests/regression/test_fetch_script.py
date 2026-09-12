@@ -2,9 +2,10 @@
 
 ``scripts/fetch/_fetch.py`` holds everything the subject scripts share -- the
 flags, the remote listing, the rsync argv and the driver loop -- so it is tested
-once here against a stand-in subject. The subject modules themselves only declare
-a name and a remote directory, so they are checked as a parametrized set: the
-right constants, and that they hand both to the shared driver.
+once here against a stand-in subject. L0/L2/L4 only declare a name and a remote
+directory, so they are checked as a parametrized set: the right constants, and
+that they hand both to the shared driver. ``masters`` adds calibration-kind
+selection on top, which has its own class.
 
 Nothing here reaches the network -- ``subprocess.run`` is stubbed, so the tests
 assert on the commands the scripts *would* run. The shared ``--dates`` validation
@@ -13,14 +14,15 @@ is tested in test_script_helpers.py.
 
 import pytest
 
+from scripts._argparse import resolve_dates
 from scripts.fetch import L0, L2, L4, _fetch, masters
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
 
-# Every subject script, and the two facts each one owns.
+# The subjects that are nothing but a name and a remote tree. `masters` is not one
+# of them -- it adds calibration-kind selection -- so it has its own class below.
 SUBJECTS = [
-    (masters, "masters", "/data/kpf/vNext/masters"),
     # L0 is the shared raw archive, not a vNext output tree.
     (L0, "L0", "/data/kpf/L0"),
     (L2, "L2", "/data/kpf/vNext/L2"),
@@ -37,8 +39,9 @@ class _FakeCompleted:
         self.stderr = stderr
 
 
-def _parse(argv, subject="L2", remote_dir="/data/kpf/vNext/L2"):
-    return _fetch.parse_args(argv, subject, remote_dir, "desc")
+def _parse(argv, subject="L2", remote_dir="/data/kpf/vNext/L2", gb_per_night=None):
+    ap = _fetch.subject_parser(subject, remote_dir, "desc", gb_per_night)
+    return resolve_dates(ap, ap.parse_args(argv))
 
 
 def _boom(*a, **k):
@@ -141,7 +144,7 @@ class TestMain:
         """Stub every subprocess call; record (remote, night) rsync was asked for."""
         fetched = []
 
-        def _fetch_night(ssh, remote, remote_dir, datecode, local_dir):
+        def _fetch_night(ssh, remote, remote_dir, datecode, local_dir, filters=()):
             fetched.append((remote, remote_dir, datecode))
             return datecode not in failures
 
@@ -149,13 +152,12 @@ class TestMain:
         monkeypatch.setattr(_fetch, "close_ssh_connection", lambda *a: None)
         return fetched
 
-    def _run(self, tmp_path, *extra):
-        return _fetch.main(
+    def _run(self, tmp_path, *extra, gb_per_night=None):
+        args = _parse(
             ["-u", "someone", "--local_dir", str(tmp_path), *extra],
-            "L2",
-            "/data/kpf/vNext/L2",
-            "desc",
+            gb_per_night=gb_per_night,
         )
+        return _fetch.run(args)
 
     def test_exits_zero_when_all_transferred(self, monkeypatch, tmp_path):
         fetched = self._stub(monkeypatch)
@@ -187,12 +189,7 @@ class TestMain:
     def test_creates_the_local_root(self, monkeypatch, tmp_path):
         self._stub(monkeypatch)
         local = tmp_path / "new" / "tree"
-        _fetch.main(
-            ["-u", "someone", "--local_dir", str(local), "--dates", "20240405"],
-            "L2",
-            "/data/kpf/vNext/L2",
-            "desc",
-        )
+        self._run(local, "--dates", "20240405")
         assert local.is_dir()
 
 
@@ -205,13 +202,13 @@ class TestConfirmVolume:
             _fetch, "fetch_night", lambda *a: fetched.append(a[3]) is None or True
         )
         monkeypatch.setattr(_fetch, "close_ssh_connection", lambda *a: None)
-        return _fetch.main(
+        args = _parse(
             ["-u", "someone", "--local_dir", str(tmp_path), *extra],
-            "L0",
-            "/data/kpf/L0",
-            "desc",
-            70,
+            subject="L0",
+            remote_dir="/data/kpf/L0",
+            gb_per_night=70,
         )
+        return _fetch.run(args)
 
     def test_estimate_scales_with_the_night_count(self, monkeypatch, capsys):
         monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: True)
@@ -269,17 +266,87 @@ class TestSubjects:
     def test_main_hands_both_to_the_shared_driver(
         self, module, subject, remote_dir, monkeypatch
     ):
+        # Both facts ride on the namespace, so `run` needs no arguments of its own.
         seen = {}
-
-        def _main(argv, subj, default_remote_dir, description, *rest):
-            seen.update(
-                argv=argv, subject=subj, remote_dir=default_remote_dir, desc=description
-            )
-            return 0
-
-        monkeypatch.setattr(_fetch, "main", _main)
-        assert module.main(["--dates", "20240405"]) == 0
-        assert seen["argv"] == ["--dates", "20240405"]
+        monkeypatch.setattr(_fetch, "run", lambda args, **kw: seen.update(vars(args)))
+        module.main(["-u", "someone", "--local_dir", "/out", "--dates", "20240405"])
         assert seen["subject"] == subject
         assert seen["remote_dir"] == remote_dir
-        assert subject in seen["desc"]
+
+
+class TestMastersSelection:
+    """`fetch masters` must be told which calibration kinds to pull: a night holds
+    every kind together and they differ in size by orders of magnitude."""
+
+    def _parse(self, *extra):
+        return masters.parse_args(
+            ["-u", "someone", "--local_dir", "/out", "--dates", "20240405", *extra]
+        )
+
+    def test_naming_no_kind_is_an_error(self):
+        with pytest.raises(SystemExit):
+            self._parse()
+
+    def test_all_takes_the_whole_night_unfiltered(self):
+        assert masters.rsync_filters(self._parse("--all")) == []
+
+    @pytest.mark.parametrize(
+        "flag,expected",
+        [
+            ("--bias", ["--include=*_master_bias_L1.fits"]),
+            ("--dark", ["--include=*_master_dark_L1.fits"]),
+            ("--flat", ["--include=*_master_flat_L1.fits"]),
+            ("--order_trace", ["--include=*_master_order_trace.csv"]),
+            (
+                "--thar",
+                [
+                    "--include=*_master_thar_*",
+                    "--include=thar_L2/",
+                    "--include=thar_L2/**",
+                ],
+            ),
+        ],
+    )
+    def test_each_kind_selects_its_own_patterns(self, flag, expected):
+        # Everything not named is excluded, so the include list must be exhaustive.
+        assert masters.rsync_filters(self._parse(flag)) == expected + ["--exclude=*"]
+
+    def test_kinds_combine(self):
+        filters = masters.rsync_filters(self._parse("--flat", "--order_trace"))
+        assert filters == [
+            "--include=*_master_flat_L1.fits",
+            "--include=*_master_order_trace.csv",
+            "--exclude=*",
+        ]
+
+    def test_thar_brings_the_sidecar_and_diagnostics(self):
+        filters = masters.rsync_filters(self._parse("--thar"))
+        # The master L2 and the diagnostics .h5 share the _master_thar_ stem.
+        assert "--include=*_master_thar_*" in filters
+        # The sidecar dir needs both rules to be descended into.
+        assert "--include=thar_L2/" in filters
+        assert "--include=thar_L2/**" in filters
+
+    @pytest.mark.parametrize("kind", ["lfc", "etalon"])
+    def test_future_wls_kinds_follow_the_thar_pattern(self, kind):
+        filters = masters.rsync_filters(self._parse(f"--{kind}"))
+        assert filters == [
+            f"--include=*_master_{kind}_*",
+            f"--include={kind}_L2/",
+            f"--include={kind}_L2/**",
+            "--exclude=*",
+        ]
+
+    def test_filters_reach_the_driver(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(
+            _fetch, "run", lambda args, **kw: seen.update(kw, subject=args.subject) or 0
+        )
+        masters.main(
+            ["-u", "someone", "--local_dir", "/out", "--dates", "20240405", "--bias"]
+        )
+        assert seen["subject"] == "masters"
+        assert seen["filters"] == [
+            "--include=*_master_bias_L1.fits",
+            "--exclude=*",
+        ]

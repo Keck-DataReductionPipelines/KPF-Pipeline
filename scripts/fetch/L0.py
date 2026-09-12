@@ -26,6 +26,7 @@ exits nonzero if any night failed.
 
 import sys
 
+from scripts._argparse import resolve_dates
 from scripts.fetch import _fetch
 
 SUBJECT = "L0"
@@ -37,7 +38,8 @@ GB_PER_NIGHT = 70
 
 
 def main(argv=None):
-    return _fetch.main(argv, SUBJECT, DEFAULT_REMOTE_DIR, __doc__, GB_PER_NIGHT)
+    ap = _fetch.subject_parser(SUBJECT, DEFAULT_REMOTE_DIR, __doc__, GB_PER_NIGHT)
+    return _fetch.run(resolve_dates(ap, ap.parse_args(argv)))
 
 
 if __name__ == "__main__":
