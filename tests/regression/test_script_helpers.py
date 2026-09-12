@@ -310,6 +310,69 @@ class TestDatesParser:
         assert "mutually exclusive" not in range_only
 
 
+def _resolve(argv, **kwargs):
+    p = _argparse.dates_parser("builds every L0 night in it", **kwargs)
+    ap = argparse.ArgumentParser(parents=[p])
+    return _argparse.resolve_dates(ap, ap.parse_args(argv))
+
+
+class TestResolveDates:
+    """The validator every night-selecting command shares. A bad selection must be
+    a usage error, not a run that quietly does the wrong thing."""
+
+    def test_datecodes_pass_through_sorted_and_deduped(self):
+        args = _resolve(["--dates", "20240712", "20240405", "20240712"])
+        assert args.dates == ["20240405", "20240712"]
+
+    def test_a_file_of_datecodes_expands_in_place(self, tmp_path):
+        nights = tmp_path / "nights.txt"
+        nights.write_text("20240712\n20240405\n")
+        assert _resolve(["--dates", str(nights)]).dates == ["20240405", "20240712"]
+
+    def test_both_forms_is_an_error(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", "20240405", "--date_range", "20240101", "20240131"])
+        assert "not both or neither" in capsys.readouterr().err
+
+    def test_neither_form_is_an_error(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve([])
+        assert "not both or neither" in capsys.readouterr().err
+
+    def test_range_endpoint_must_be_a_datecode(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--date_range", "2024-01-01", "20240131"])
+        assert "--date_range value is not a valid datecode" in capsys.readouterr().err
+
+    def test_range_must_not_run_backwards(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--date_range", "20240131", "20240101"])
+        assert "START must be <= END" in capsys.readouterr().err
+
+    def test_a_bad_datecode_in_a_file_is_an_error(self, tmp_path, capsys):
+        nights = tmp_path / "nights.txt"
+        nights.write_text("20240405\nlast-tuesday\n")
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", str(nights)])
+        assert "not a valid datecode in" in capsys.readouterr().err
+
+    def test_an_unreadable_entry_is_an_error(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", "nope.txt"])
+        assert "neither a datecode nor a readable file" in capsys.readouterr().err
+
+    def test_an_empty_file_is_an_error(self, tmp_path, capsys):
+        nights = tmp_path / "nights.txt"
+        nights.write_text("\n")
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", str(nights)])
+        assert "produced no datecodes" in capsys.readouterr().err
+
+    def test_a_range_only_command_skips_the_exclusion_check(self):
+        args = _resolve(["--date_range", "20240101", "20240131"], dates=False)
+        assert args.date_range == ["20240101", "20240131"]
+
+
 # ===========================================================================
 # _dispatch.py -- shared subprocess fan-out engine
 # ===========================================================================

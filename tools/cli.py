@@ -121,7 +121,7 @@ def _usage():
         "  masters     build nightly master calibrations for a set of datecodes\n"
         "  science     reduce a set of science frames end-to-end (L0 -> L4)\n"
         "  timeseries  reduce a star's RV timeseries over a datecode range\n"
-        "  analyze     track instrument/calibrator behavior over a date range\n\n"
+        "  analyze     track instrument/calibrator behavior over a date range\n"
         "  fetch       copy KPF data from the remote archive host to a local tree\n"
         "  realtime    watch the L0 tree and reduce new science frames as they land\n\n"
         "Run `kpfpipe <command> -h` for a command's own options."

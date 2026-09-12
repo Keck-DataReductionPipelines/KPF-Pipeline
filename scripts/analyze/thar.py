@@ -138,7 +138,7 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
     # Nights complete out of order; an obs_id sorts chronologically.
     rows = sorted((r for night in results for r in night), key=lambda r: r["OBS_ID"])
     if not rows:
-        sys.exit(f"error: no ThAr frames under {data_input} in range {start}..{end}")
+        sys.exit(f"error: no ThAr frames under {data_input}/L0 in range {start}..{end}")
     return rows
 
 

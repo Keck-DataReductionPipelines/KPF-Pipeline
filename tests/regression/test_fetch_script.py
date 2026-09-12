@@ -48,6 +48,10 @@ def _boom(*a, **k):
     raise AssertionError("should not have prompted")
 
 
+def _interrupt(*a, **k):
+    raise KeyboardInterrupt
+
+
 class TestParseArgs:
     def test_explicit_dates_are_sorted_and_deduped(self):
         args = _parse([*_BASE, "--dates", "20240712", "20240405", "20240405"])
@@ -78,9 +82,12 @@ class TestParseArgs:
         args = _parse([*_BASE, "--dates", "20240405", "--remote_dir", "/data/x"])
         assert args.remote_dir == "/data/x"
 
-    def test_subject_names_the_program_and_the_remote_dir_help(self):
+    def test_subject_names_the_program_and_the_remote_dir_help(self, capsys):
         with pytest.raises(SystemExit):
             _parse(["--help"], subject="L4", remote_dir="/data/kpf/vNext/L4")
+        help_text = " ".join(capsys.readouterr().out.split())
+        assert "usage: kpfpipe fetch L4" in help_text
+        assert "L4 root on the remote host (default: /data/kpf/vNext/L4)" in help_text
 
 
 class TestRemoteDatecodes:
@@ -192,6 +199,14 @@ class TestMain:
         self._run(local, "--dates", "20240405")
         assert local.is_dir()
 
+    def test_interrupt_exits_130_and_closes_the_connection(self, monkeypatch, tmp_path):
+        """Ctrl-C mid-transfer: the multiplexed socket must still be torn down."""
+        closed = []
+        monkeypatch.setattr(_fetch, "close_ssh_connection", lambda *a: closed.append(a))
+        monkeypatch.setattr(_fetch, "fetch_night", _interrupt)
+        assert self._run(tmp_path, "--dates", "20240405") == 130
+        assert len(closed) == 1
+
 
 class TestConfirmVolume:
     """The size gate in front of a large subject (L0). Only subjects that pass a
@@ -228,11 +243,12 @@ class TestConfirmVolume:
         monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr("builtins.input", lambda _: "")
         fetched = []
+        local = tmp_path / "new" / "tree"
         with pytest.raises(SystemExit, match="aborted"):
-            self._run(monkeypatch, tmp_path, "--dates", "20240405", fetched=fetched)
+            self._run(monkeypatch, local, "--dates", "20240405", fetched=fetched)
         assert fetched == []
-        # Aborting must not leave an empty local root behind.
-        assert not (tmp_path / "20240405").exists()
+        # The prompt comes first, so aborting leaves no local root behind.
+        assert not local.exists()
 
     def test_yes_flag_skips_the_prompt(self, monkeypatch, tmp_path):
         monkeypatch.setattr(_fetch.sys.stdin, "isatty", lambda: True)

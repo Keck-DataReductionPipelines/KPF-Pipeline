@@ -93,10 +93,10 @@ def resolve_dates(ap, args):
 
     A command offering both forms must give exactly one; a range-only command has no
     ``--dates`` attribute, and argparse has already required its range. A range is
-    checked but not expanded -- that needs a data root, so `resolve_datecodes` does
-    it later. Each ``--dates`` value is either a datecode, used as-is, or a text file
-    of datecodes expanded in place; a valid datecode is always read as such, even if
-    a like-named file exists. The result is sorted and deduplicated.
+    checked but not expanded -- that needs a data root, so `_scan.datecodes_in_range`
+    does it later. Each ``--dates`` value is either a datecode, used as-is, or a text
+    file of datecodes expanded in place; a valid datecode is always read as such, even
+    if a like-named file exists. The result is sorted and deduplicated.
 
     Takes the command's own `ap` so a bad value reports as its usage error. Returns
     `args`.
