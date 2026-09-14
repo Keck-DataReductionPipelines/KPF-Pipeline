@@ -27,7 +27,7 @@ Examples:
     kpfpipe science --obs_ids KP.20240405.40113.57
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
     kpfpipe analyze thar --date_range 20240727 20241022
-    kpfpipe fetch masters -u <user> --dates 20240405 --local_dir ~/masters
+    kpfpipe fetch masters -u <user> --dates 20240405 --local_dir ~/data
 
 Run ``kpfpipe <command> -h`` for a command's own options.
 

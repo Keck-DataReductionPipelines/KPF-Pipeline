@@ -6,14 +6,14 @@ log: it shells out to ``rsync``, one invocation per night, and lets rsync's own
 progress output go straight to the terminal. Nights are selected exactly as
 ``kpfpipe fetch masters`` selects them:
 
-    kpfpipe fetch L4 -u <user> --dates 20240405 20240712 --local_dir ~/L4
-    kpfpipe fetch L4 -u <user> --dates nights.txt --local_dir ~/L4
-    kpfpipe fetch L4 -u <user> --date_range 20240101 20240131 --local_dir ~/L4
+    kpfpipe fetch L4 -u <user> --dates 20240405 20240712 --local_dir ~/data
+    kpfpipe fetch L4 -u <user> --dates nights.txt --local_dir ~/data
+    kpfpipe fetch L4 -u <user> --date_range 20240101 20240131 --local_dir ~/data
 
 The range form enumerates the datecode dirs present under the *remote* L4 root
 within [START, END].
 
-Each night lands in ``{local_dir}/{datecode}/``, the same layout it has on the
+Each night lands in ``{local_dir}/L4/{datecode}/``, the same layout it has on the
 remote. The whole run rides on one multiplexed SSH connection, so a batch
 authenticates once. rsync skips files already present at the right size and time,
 so re-running is cheap and an interrupted run resumes where it stopped. The run is
@@ -27,7 +27,7 @@ from scripts._argparse import resolve_dates
 from scripts.fetch import _fetch
 
 SUBJECT = "L4"
-DEFAULT_REMOTE_DIR = "/data/kpf/vNext/L4"
+DEFAULT_REMOTE_DIR = "/data/kpf/vNext"
 
 
 def main(argv=None):

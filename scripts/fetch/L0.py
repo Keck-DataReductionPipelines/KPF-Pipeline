@@ -6,9 +6,9 @@ log: it shells out to ``rsync``, one invocation per night, and lets rsync's own
 progress output go straight to the terminal. Nights are selected exactly as
 ``kpfpipe fetch masters`` selects them:
 
-    kpfpipe fetch L0 -u <user> --dates 20240405 20240712 --local_dir ~/L0
-    kpfpipe fetch L0 -u <user> --dates nights.txt --local_dir ~/L0
-    kpfpipe fetch L0 -u <user> --date_range 20240101 20240131 --local_dir ~/L0
+    kpfpipe fetch L0 -u <user> --dates 20240405 20240712 --local_dir ~/data
+    kpfpipe fetch L0 -u <user> --dates nights.txt --local_dir ~/data
+    kpfpipe fetch L0 -u <user> --date_range 20240101 20240131 --local_dir ~/data
 
 The range form enumerates the datecode dirs present under the *remote* L0 root
 within [START, END]. Unlike the reduced products, L0 is the shared raw archive
@@ -16,7 +16,7 @@ rather than a vNext output tree, so a night here is whole-night raw data --
 roughly 70 GB. The run therefore reports its estimated total and asks for
 confirmation before transferring anything; pass ``--yes`` to skip the prompt.
 
-Each night lands in ``{local_dir}/{datecode}/``, the same layout it has on the
+Each night lands in ``{local_dir}/L0/{datecode}/``, the same layout it has on the
 remote. The whole run rides on one multiplexed SSH connection, so a batch
 authenticates once. rsync skips files already present at the right size and time,
 so re-running is cheap and an interrupted run resumes where it stopped. The run is
@@ -30,7 +30,7 @@ from scripts._argparse import resolve_dates
 from scripts.fetch import _fetch
 
 SUBJECT = "L0"
-DEFAULT_REMOTE_DIR = "/data/kpf/L0"
+DEFAULT_REMOTE_DIR = "/data/kpf"
 
 # Approximate size of one full night of raw L0. Only an order-of-magnitude guide
 # for the up-front confirmation -- a short or weathered-out night is far smaller.

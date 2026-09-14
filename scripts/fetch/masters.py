@@ -6,10 +6,10 @@ log: it shells out to ``rsync``, one invocation per night, and lets rsync's own
 progress output go straight to the terminal. Nights are selected exactly as
 ``kpfpipe masters`` selects them:
 
-    kpfpipe fetch masters -u <user> --flat --dates 20240405 --local_dir ~/masters
-    kpfpipe fetch masters -u <user> --all --dates nights.txt --local_dir ~/masters
+    kpfpipe fetch masters -u <user> --flat --dates 20240405 --local_dir ~/data
+    kpfpipe fetch masters -u <user> --all --dates nights.txt --local_dir ~/data
     kpfpipe fetch masters -u <user> --bias --dark \\
-        --date_range 20240101 20240131 --local_dir ~/masters
+        --date_range 20240101 20240131 --local_dir ~/data
 
 A night holds every calibration kind together, and they differ in size by orders
 of magnitude, so at least one kind must be named: ``--all``, or any combination of
@@ -26,7 +26,7 @@ they start working as soon as the masters pipeline writes them.
 The range form enumerates the datecode dirs present under the *remote* masters
 root within [START, END], mirroring how ``kpfpipe masters`` enumerates local L0.
 
-Each night lands in ``{local_dir}/{datecode}/``, the same layout it has on the
+Each night lands in ``{local_dir}/masters/{datecode}/``, the same layout it has on the
 remote. The whole run rides on one multiplexed SSH connection, so a batch
 authenticates once. rsync skips files already present at the right size and time,
 so re-running is cheap and an interrupted run resumes where it stopped. The run is
@@ -40,7 +40,7 @@ from scripts._argparse import resolve_dates
 from scripts.fetch import _fetch
 
 SUBJECT = "masters"
-DEFAULT_REMOTE_DIR = "/data/kpf/vNext/masters"
+DEFAULT_REMOTE_DIR = "/data/kpf/vNext"
 
 # What each --<kind> flag pulls out of a night, as rsync include patterns. Masters
 # are named KP.<datecode>.<seconds>_master_<kind>_<level>.<ext>, so one glob per

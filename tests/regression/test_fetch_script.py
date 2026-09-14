@@ -24,9 +24,9 @@ pytestmark = pytest.mark.cli
 # of them -- it adds calibration-kind selection -- so it has its own class below.
 SUBJECTS = [
     # L0 is the shared raw archive, not a vNext output tree.
-    (L0, "L0", "/data/kpf/L0"),
-    (L2, "L2", "/data/kpf/vNext/L2"),
-    (L4, "L4", "/data/kpf/vNext/L4"),
+    (L0, "L0", "/data/kpf"),
+    (L2, "L2", "/data/kpf/vNext"),
+    (L4, "L4", "/data/kpf/vNext"),
 ]
 
 _BASE = ["-u", "someone", "--local_dir", "/out"]
@@ -39,7 +39,7 @@ class _FakeCompleted:
         self.stderr = stderr
 
 
-def _parse(argv, subject="L2", remote_dir="/data/kpf/vNext/L2", gb_per_night=None):
+def _parse(argv, subject="L2", remote_dir="/data/kpf/vNext", gb_per_night=None):
     ap = _fetch.subject_parser(subject, remote_dir, "desc", gb_per_night)
     return resolve_dates(ap, ap.parse_args(argv))
 
@@ -76,18 +76,16 @@ class TestParseArgs:
             _parse(_BASE)
 
     def test_remote_dir_defaults_and_overrides(self):
-        assert _parse([*_BASE, "--dates", "20240405"]).remote_dir == (
-            "/data/kpf/vNext/L2"
-        )
+        assert _parse([*_BASE, "--dates", "20240405"]).remote_dir == "/data/kpf/vNext"
         args = _parse([*_BASE, "--dates", "20240405", "--remote_dir", "/data/x"])
         assert args.remote_dir == "/data/x"
 
     def test_subject_names_the_program_and_the_remote_dir_help(self, capsys):
         with pytest.raises(SystemExit):
-            _parse(["--help"], subject="L4", remote_dir="/data/kpf/vNext/L4")
+            _parse(["--help"], subject="L4", remote_dir="/data/kpf/vNext")
         help_text = " ".join(capsys.readouterr().out.split())
         assert "usage: kpfpipe fetch L4" in help_text
-        assert "L4 root on the remote host (default: /data/kpf/vNext/L4)" in help_text
+        assert "data root on the remote host (default: /data/kpf/vNext)" in help_text
 
 
 class TestRemoteDatecodes:
@@ -197,7 +195,16 @@ class TestMain:
         self._stub(monkeypatch)
         local = tmp_path / "new" / "tree"
         self._run(local, "--dates", "20240405")
-        assert local.is_dir()
+        assert (local / "L2").is_dir()
+
+    def test_subject_subdir_is_joined_on_both_roots(self, monkeypatch, tmp_path):
+        seen = []
+        monkeypatch.setattr(_fetch, "fetch_night", lambda *a: seen.append(a) or True)
+        monkeypatch.setattr(_fetch, "close_ssh_connection", lambda *a: None)
+        self._run(tmp_path, "--dates", "20240405")
+        _, _, remote_dir, _, local_dir, _ = seen[0]
+        assert remote_dir == "/data/kpf/vNext/L2"
+        assert local_dir == str(tmp_path / "L2")
 
     def test_interrupt_exits_130_and_closes_the_connection(self, monkeypatch, tmp_path):
         """Ctrl-C mid-transfer: the multiplexed socket must still be torn down."""
@@ -220,7 +227,7 @@ class TestConfirmVolume:
         args = _parse(
             ["-u", "someone", "--local_dir", str(tmp_path), *extra],
             subject="L0",
-            remote_dir="/data/kpf/L0",
+            remote_dir="/data/kpf",
             gb_per_night=70,
         )
         return _fetch.run(args)

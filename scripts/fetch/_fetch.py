@@ -50,12 +50,13 @@ def subject_parser(subject, default_remote_dir, description, gb_per_night=None):
     p.add_argument(
         "--local_dir",
         required=True,
-        help="local root to fetch into; each night lands in {local_dir}/{datecode}/",
+        help="local root to fetch into; each night lands in "
+        f"{{local_dir}}/{subject}/{{datecode}}/",
     )
     p.add_argument(
         "--remote_dir",
         default=default_remote_dir,
-        help=f"{subject} root on the remote host (default: %(default)s)",
+        help="data root on the remote host (default: %(default)s)",
     )
     if gb_per_night:
         p.add_argument(
@@ -183,20 +184,20 @@ def run(args, filters=()):
     narrowing what each night yields (see `fetch_night`).
     """
     remote = REMOTE_HOST.format(user=args.user)
+    remote_dir = f"{args.remote_dir}/{args.subject}"
+    local_dir = os.path.join(args.local_dir, args.subject)
     ssh = ssh_command()
     try:
         datecodes = args.dates or remote_datecodes(
-            ssh, remote, args.remote_dir, *args.date_range
+            ssh, remote, remote_dir, *args.date_range
         )
         if args.gb_per_night and not args.yes:
-            confirm_volume(args.subject, datecodes, args.gb_per_night, args.local_dir)
-        os.makedirs(args.local_dir, exist_ok=True)
+            confirm_volume(args.subject, datecodes, args.gb_per_night, local_dir)
+        os.makedirs(local_dir, exist_ok=True)
         failed = []
         for datecode in datecodes:
             print(f"=== {datecode}")
-            if not fetch_night(
-                ssh, remote, args.remote_dir, datecode, args.local_dir, filters
-            ):
+            if not fetch_night(ssh, remote, remote_dir, datecode, local_dir, filters):
                 print(f"  !! {datecode}: transfer failed", file=sys.stderr)
                 failed.append(datecode)
     except KeyboardInterrupt:
@@ -204,7 +205,7 @@ def run(args, filters=()):
     finally:
         close_ssh_connection(ssh, remote)
 
-    print(f"\n=== {len(datecodes)} night(s) -> {args.local_dir}")
+    print(f"\n=== {len(datecodes)} night(s) -> {local_dir}")
     if failed:
         print(f"failed: {' '.join(failed)}", file=sys.stderr)
         return 1
