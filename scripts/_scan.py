@@ -1,4 +1,9 @@
-"""Up-front L0 mini-database cache warming for the batch orchestrators.
+"""L0 tree inspection for the batch scripts: which nights exist, and warming them.
+
+Every question that requires looking at the data tree lives here, so ``_argparse.py``
+above can parse arguments without knowing what is on disk: `datecodes_in_range`
+answers which nights a ``--date_range`` actually names, and the cache warmers below
+prepare them.
 
 The masters and science orchestrators warm the on-disk mini-database cache
 (``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``) once, up front, in parallel
@@ -16,10 +21,45 @@ of a ``kpfpipe.utils.io`` import.
 
 import concurrent.futures
 import logging
+import os
+import sys
 
-from kpfpipe.utils.io import FileHandler
+from kpfpipe.utils.io import FileHandler, datecode_dirs_in_range
+from kpfpipe.utils.kpf import is_datecode
 
 logger = logging.getLogger(__name__)
+
+
+def datecodes_in_range(data_input, start, end):
+    """The datecode dirs present under ``{data_input}/L0`` within [start, end].
+
+    A range names whichever nights actually exist, so a gap in the archive is
+    skipped rather than attempted. Anything under L0 that is not a datecode dir is
+    ignored with a note, so a typo'd or stray directory is visible rather than
+    silently absent. A missing tree or an empty range is fatal: silently doing
+    nothing would read as success.
+    """
+    l0_root = os.path.join(data_input, "L0")
+    if not os.path.isdir(l0_root):
+        sys.exit(f"error: L0 input directory not found: {l0_root}")
+
+    non_datecode = [
+        e
+        for e in sorted(os.listdir(l0_root))
+        if os.path.isdir(os.path.join(l0_root, e)) and not is_datecode(e)
+    ]
+    if non_datecode:
+        logger.info(
+            "  note: ignoring %d non-datecode entr(y/ies) under %s: %s",
+            len(non_datecode),
+            l0_root,
+            ", ".join(non_datecode),
+        )
+
+    nights = datecode_dirs_in_range(l0_root, start, end)
+    if not nights:
+        sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
+    return nights
 
 
 def scan_night_to_cache(data_input, datecode, cache="rw"):

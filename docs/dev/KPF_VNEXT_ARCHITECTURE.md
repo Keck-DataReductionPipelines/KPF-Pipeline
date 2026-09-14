@@ -250,7 +250,7 @@ The master filename (`{KOAID}_master_{type}_L{N}.fits`, WMKO DRP-RUN-05) is set 
 The pipeline is built in strictly one-directional layers — each layer may import *down* but
 never up: `kpfpipe/` (scientist-facing building blocks) ← `recipes/` (compose modules) ←
 `scripts/` (run a recipe many times) ← `tools/` (the CLI interface). So `tools/cli.py`
-imports `scripts.processing.*`, but **the scripts must never import `tools`**. All four are
+imports `scripts.process.*`, but **the scripts must never import `tools`**. All four are
 installed, importable packages; code shared across a layer's siblings goes **down** into
 `kpfpipe/`, or — when it is layer-specific — lives beside them as a `_`-prefixed private helper
 (e.g. `scripts/_argparse.py`, `recipes/_logging.py`) that only its own layer imports.
@@ -279,15 +279,15 @@ setup lives in the scripts layer, never in recipes. Default parameters live in
 
 ### Scripts
 
-`scripts/` run recipes many times, over batches of units: `processing/` holds the reduction
+`scripts/` run recipes many times, over batches of units: `process/` holds the reduction
 drivers (the CLI leaf, the orchestrators, and the timeseries wrapper — see *Command line
-interface*) and `plotting/` the post-reduction plotter (`timeseries.py`). Every *processing* driver
-is runnable on its own (`python -m scripts.processing.<name>`), with no knowledge of the dispatcher
+interface*) and `plot/` the post-reduction plotter (`timeseries.py`). Every *process* driver
+is runnable on its own (`python -m scripts.process.<name>`), with no knowledge of the dispatcher
 above it; its flags are documented by `kpfpipe <command> --help`. The plotter is not a driver: it
 has no CLI and is imported by the `timeseries` wrapper as a library.
 
 The drivers share a set of **`tools`-free** orchestration helpers, which sit at the
-`scripts/` root rather than inside `processing/` because more than one sub-package composes them:
+`scripts/` root rather than inside `process/` because more than one sub-package composes them:
 
 - `_argparse.py` — shared argparse parent-parsers composed via `parents=[…]`, so each common flag
   (recipe/config, data dirs, logging, pool, cache) is declared once, plus two post-parse resolvers:
@@ -298,7 +298,7 @@ The drivers share a set of **`tools`-free** orchestration helpers, which sit at 
   run before fan-out (gated by `--cache`). It is deliberately the sole `kpfpipe.utils.io`
   (`FileHandler`) importer, so `_dispatch.py` stays io-free.
 
-The default recipe/config path constants live in `scripts/processing/__init__.py`
+The default recipe/config path constants live in `scripts/process/__init__.py`
 (`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source the `--masters`/`--science`
 shortcuts resolve against.
 
@@ -323,7 +323,7 @@ the remaining argv verbatim (each subcommand owns its own argparse). Full flag u
 - **`kpfpipe run`** (→ `reduce.py`) — the **leaf**: runs one recipe on one unit, in-process. Owns
   config-override assembly, `setup_logging`, the DRP-RUN-08 banner, and the recipe `exec`.
 - **`kpfpipe science` / `kpfpipe masters`** (→ `science.py`/`masters.py`) — **orchestrators**: fan a
-  batch of units out as one `python -m scripts.processing.reduce` subprocess each (own log, clean
+  batch of units out as one `python -m scripts.process.reduce` subprocess each (own log, clean
   process state, independent exit) via `_dispatch.py`.
 - **`kpfpipe timeseries`** (→ `timeseries.py`) — a **thin wrapper** above the orchestrators: discovers
   a target's frames from the L0 tree, then runs the masters and science stages as subprocesses and
@@ -385,7 +385,7 @@ Logging follows WMKO DRP-RUN-07/08/09 (issue #1408). Handler/level configuration
 exactly one *module*, `kpfpipe.utils.logger`, and never runs at import time or in
 recipes/modules/tests. Two sibling entry points configure it:
 
-- **`setup_logging`** — called only by the single-recipe leaf runner (`scripts/processing/reduce.py`,
+- **`setup_logging`** — called only by the single-recipe leaf runner (`scripts/process/reduce.py`,
   the `kpfpipe run` entry) before the recipe runs, writing that reduction's per-unit log with a
   stderr console echo.
 - **`setup_batch_logging`** — a thin wrapper called once at the top of each fan-out driver's `main()`

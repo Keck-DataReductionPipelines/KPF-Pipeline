@@ -1,4 +1,4 @@
-"""Tests for scripts/processing/reduce.py: the ``kpfpipe run`` leaf.
+"""Tests for scripts/process/reduce.py: the ``kpfpipe run`` leaf.
 
 Covers the shortcut/`-r`/`-c` resolution, the recipe-kind guards, and
 clear_stale_outputs. Each test drives ``main(argv)`` against a tiny stub recipe
@@ -16,7 +16,7 @@ import pytest
 
 from kpfpipe.utils import run_record as rr
 from kpfpipe.utils.logger import teardown_logging
-from scripts.processing import reduce as red
+from scripts.process import reduce as red
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli

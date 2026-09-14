@@ -66,8 +66,8 @@ from scripts._dispatch import (
     _terminate_all_children,
     configure_runtime,
 )
-from scripts.processing import DEFAULT_SCIENCE_CONFIG
-from scripts.processing.science import _cli_task
+from scripts.process import DEFAULT_SCIENCE_CONFIG
+from scripts.process.science import _cli_task
 
 logger = logging.getLogger(__name__)
 

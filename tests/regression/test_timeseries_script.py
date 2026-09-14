@@ -1,4 +1,4 @@
-"""Tests for scripts/processing/timeseries.py: the RV-timeseries wrapper.
+"""Tests for scripts/process/timeseries.py: the RV-timeseries wrapper.
 
 timeseries is a thin discovery + dispatch wrapper: it combs the L0 tree for a
 target's science frames over a datecode range, then runs one masters
@@ -15,7 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.processing import timeseries as _ts
+from scripts.process import timeseries as _ts
 
 from ._scripts import add_junk_obs_id, write_l0_tree
 
@@ -167,7 +167,7 @@ class TestOrchestratorArgv:
             "masters", "--dates", ["20240101", "20240102"], ["--log_dir", "/l"]
         )
         assert argv == [
-            sys.executable, "-m", "scripts.processing.masters",
+            sys.executable, "-m", "scripts.process.masters",
             "--dates", "20240101", "20240102", "--log_dir", "/l",
         ]  # fmt: skip
 
@@ -177,7 +177,7 @@ class TestOrchestratorArgv:
             recipe="/s.py", config="/s.toml",
         )  # fmt: skip
         assert argv == [
-            sys.executable, "-m", "scripts.processing.science",
+            sys.executable, "-m", "scripts.process.science",
             "-r", "/s.py", "-c", "/s.toml", "--obs_ids", _OID1, "--jobs", "3",
         ]  # fmt: skip
 
@@ -364,9 +364,9 @@ class TestMainDispatch:
         ts.main(_BASE_ARGS)
 
         assert len(calls) == 3
-        assert "scripts.processing.masters" in calls[0]
+        assert "scripts.process.masters" in calls[0]
         assert "20240101" in calls[0] and "20240102" in calls[0]  # both nights
-        assert "scripts.processing.science" in calls[1]
+        assert "scripts.process.science" in calls[1]
         assert a in calls[1] and b in calls[1]  # every frame reduced
         # Each stage's default recipe+config is routed explicitly rather than
         # left to the orchestrator's own default.
@@ -402,9 +402,9 @@ class TestMainDispatch:
 
         ts.main(_BASE_ARGS + ["--jobs", "8"])
 
-        assert "scripts.processing.masters" in calls[0]
+        assert "scripts.process.masters" in calls[0]
         assert "--jobs" not in calls[0]  # masters keeps its own capped sizing
-        assert "scripts.processing.science" in calls[1]
+        assert "scripts.process.science" in calls[1]
         assert "--jobs" in calls[1] and "8" in calls[1]  # science gets it
 
     def test_no_masters_skips_masters_stage(self, ts, monkeypatch, tmp_path):
@@ -414,9 +414,9 @@ class TestMainDispatch:
         ts.main(_BASE_ARGS + ["--no-masters"])
 
         assert len(calls) == 2
-        assert "scripts.processing.science" in calls[0] and a in calls[0]
+        assert "scripts.process.science" in calls[0] and a in calls[0]
         assert "plotting.timeseries" in calls[1]
-        assert not any("scripts.processing.masters" in c for c in calls)
+        assert not any("scripts.process.masters" in c for c in calls)
 
     def test_no_science_still_plots(self, ts, monkeypatch, tmp_path):
         # --no-science still plots, from the L4 already on disk.
@@ -426,9 +426,9 @@ class TestMainDispatch:
         ts.main(_BASE_ARGS + ["--no-science"])
 
         assert len(calls) == 2
-        assert "scripts.processing.masters" in calls[0]
+        assert "scripts.process.masters" in calls[0]
         assert "plotting.timeseries" in calls[1]
-        assert not any("scripts.processing.science" in c for c in calls)
+        assert not any("scripts.process.science" in c for c in calls)
 
     def test_no_plots_skips_plot_stage(self, ts, monkeypatch, tmp_path):
         _write_l0(str(tmp_path), "20240101", 3600, "10700")

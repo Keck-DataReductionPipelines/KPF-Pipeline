@@ -144,7 +144,7 @@ def pytest_configure(config):
         "markers",
         "quicklook: exercises a PNG-rendering plot module -- the PlotL0/L1/L2/L4 "
         "renderers in kpfpipe.quality_control.quicklook, and the RV-timeseries "
-        "plotter in scripts/plotting; excluded from the fast pre-commit subset "
+        "plotter in scripts/plot; excluded from the fast pre-commit subset "
         "because the PNG rendering is slow. Names the MODULE under test, not "
         "the technique: a test elsewhere in the tree that happens to render a "
         "figure does not get this marker, so `-m quicklook` collects exactly "

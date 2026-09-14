@@ -10,7 +10,7 @@ third-party libraries all reach the same file. Two sibling entry points
 install them, never at import time:
 
 - ``setup_logging`` -- the single-recipe leaf runner
-  (scripts/processing/reduce.py, the ``kpfpipe run`` entry) calls it once per
+  (scripts/process/reduce.py, the ``kpfpipe run`` entry) calls it once per
   reduction, writing that recipe's per-unit log; its console echo defaults to
   stderr.
 - ``setup_batch_logging`` -- the fan-out orchestrators (masters.py/science.py)
@@ -62,7 +62,7 @@ class _BatchConsoleFilter(logging.Filter):
     process (discovery, FITS/astropy chatter) make it noisy. So below WARNING,
     only records from the orchestrator's own code reach the console -- the
     ``scripts.*`` namespace (masters/science/_dispatch/plots) or ``__main__`` (a
-    driver launched as ``python -m scripts.processing.<name>``, whose module
+    driver launched as ``python -m scripts.process.<name>``, whose module
     logger is named ``__main__``). WARNING and above always pass, so per-unit
     failures and warnings are never hidden. Attached to the console handler only,
     so the batch *log file* keeps every record.

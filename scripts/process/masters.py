@@ -2,7 +2,7 @@
 """Build nightly master calibrations for a set of datecodes (``kpfpipe masters``).
 
 A lightweight, fail-loud orchestrator: it dispatches each night as a separate
-``python -m scripts.processing.reduce --masters -d <datecode>`` subprocess (the
+``python -m scripts.process.reduce --masters -d <datecode>`` subprocess (the
 ``kpfpipe run`` leaf), so every night gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which nights to build, via two mutually exclusive input forms:
@@ -31,16 +31,16 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import datecode_dirs_in_range, read_token_file
-from kpfpipe.utils.kpf import is_datecode
 from kpfpipe.utils.logger import setup_batch_logging
 from kpfpipe.utils.run_record import PARENT_ENV, RunRecord, collect_child_records
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
+    dates_parser,
     logging_parser,
     pool_parser,
     recipe_and_config_parser,
+    resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
 )
@@ -50,8 +50,8 @@ from scripts._dispatch import (
     configure_runtime,
     run_stage,
 )
-from scripts._scan import warm_mini_db_caches
-from scripts.processing import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
+from scripts._scan import datecodes_in_range, warm_mini_db_caches
+from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 
 logger = logging.getLogger(__name__)
 
@@ -89,58 +89,10 @@ def parse_args(argv=None):
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
+            dates_parser("builds every L0 night in it"),
         ],
     )
-    ap.add_argument(
-        "--dates",
-        nargs="*",
-        default=None,
-        metavar="DATECODE_OR_FILE",
-        help="one or more datecodes to build, or a text file listing one datecode "
-        "per line, e.g. --dates 20240405 20240712 or --dates nights.txt (mutually "
-        "exclusive with --date_range)",
-    )
-    ap.add_argument(
-        "--date_range",
-        nargs=2,
-        metavar=("START", "END"),
-        help="inclusive datecode range; builds every L0 night in it, e.g. "
-        "--date_range 20240101 20240131 (mutually exclusive with --dates)",
-    )
-    args = ap.parse_args(argv)
-
-    # Exactly one input form: an explicit datecode list, or a range.
-    if bool(args.dates) == bool(args.date_range):
-        ap.error("give either --dates or --date_range, not both or neither")
-
-    if args.date_range:
-        start, end = args.date_range
-        for dc in (start, end):
-            if not is_datecode(dc):
-                ap.error(f"--date_range value is not a valid datecode: {dc!r}")
-        if start > end:
-            ap.error(f"--date_range START must be <= END (got {start} > {end})")
-    else:
-        # Each --dates value is a datecode (built as-is) or a text file of
-        # datecodes; expand file entries in place. A valid datecode is always read
-        # as such, even if a like-named file exists.
-        datecodes = []
-        for entry in args.dates:
-            if is_datecode(entry):
-                datecodes.append(entry)
-            elif os.path.isfile(entry):
-                for dc in read_token_file(entry):
-                    if not is_datecode(dc):
-                        ap.error(f"not a valid datecode in {entry}: {dc!r}")
-                    datecodes.append(dc)
-            else:
-                ap.error(
-                    f"--dates entry is neither a datecode nor a readable file: "
-                    f"{entry!r}"
-                )
-        if not datecodes:
-            ap.error(f"--dates produced no datecodes (empty file?): {args.dates}")
-        args.dates = sorted(set(datecodes))
+    args = resolve_dates(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
@@ -149,25 +101,6 @@ def parse_args(argv=None):
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
     return resolve_dir_shortcuts(args)
-
-
-def resolve_datecodes(args, data_input):
-    """The datecodes to build, from either input form.
-
-    The explicit list is already validated and sorted in parse_args. A range is
-    expanded here, since it needs the resolved L0 input root: the datecode dirs
-    under {data_input}/L0 within the range. Either way an empty result is fatal.
-    """
-    if args.dates:
-        return args.dates
-    l0_root = os.path.join(data_input, "L0")
-    if not os.path.isdir(l0_root):
-        sys.exit(f"error: L0 input directory not found: {l0_root}")
-    start, end = args.date_range
-    nights = datecode_dirs_in_range(l0_root, start, end)
-    if not nights:
-        sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
-    return nights
 
 
 def _cli_task(datecode, forward, config=None, recipe=None):
@@ -182,7 +115,7 @@ def _cli_task(datecode, forward, config=None, recipe=None):
     argv = [
         sys.executable,
         "-m",
-        "scripts.processing.reduce",
+        "scripts.process.reduce",
         "-r",
         recipe or DEFAULT_MASTERS_RECIPE,
         "-c",
@@ -244,7 +177,7 @@ def main(argv=None):
     logger.info("batch log: %s", log_path)
     logger.info("run record: %s", record.path)
 
-    datecodes = resolve_datecodes(args, data_input)
+    datecodes = args.dates or datecodes_in_range(data_input, *args.date_range)
     logger.info(
         "building masters for %d night(s): %s", len(datecodes), ", ".join(datecodes)
     )

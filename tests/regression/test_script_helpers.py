@@ -259,6 +259,120 @@ class TestCacheParser:
             _parse([_argparse.cache_parser()], ["--cache", "rr"])
 
 
+def _unwrapped_help(parser):
+    """A parser's help with argparse's line wrapping collapsed, so an assertion can
+    match a phrase without caring where the column break lands."""
+    return " ".join(parser.format_help().split())
+
+
+class TestDatesParser:
+    """The night-selection flags every command composes. One factory serves three
+    shapes: both input forms, a required range, and a range with a default."""
+
+    def test_both_forms_are_optional_by_default(self):
+        args = _parse([_argparse.dates_parser("builds every L0 night in it")], [])
+        assert args.dates is None and args.date_range is None
+
+    def test_range_only_omits_the_dates_flag(self):
+        p = _argparse.dates_parser("reduces every L0 night in it", dates=False)
+        args = _parse([p], ["--date_range", "20240101", "20240131"])
+        assert not hasattr(args, "dates")
+
+    def test_range_only_requires_a_range(self):
+        p = _argparse.dates_parser("reduces every L0 night in it", dates=False)
+        with pytest.raises(SystemExit):
+            _parse([p], [])
+
+    def test_default_range_makes_it_optional(self):
+        p = _argparse.dates_parser(
+            "analyzes every L0 night in it",
+            dates=False,
+            default_date_range=("20221109", "20240101"),
+        )
+        assert _parse([p], []).date_range == ["20221109", "20240101"]
+
+    def test_help_states_the_action_and_the_default(self):
+        p = _argparse.dates_parser(
+            "fetches every night present on the remote in it",
+            dates=False,
+            default_date_range=("20221109", "20240101"),
+        )
+        help_text = _unwrapped_help(p)
+        assert "fetches every night present on the remote in it" in help_text
+        assert "default: 20221109 20240101" in help_text
+
+    def test_mutual_exclusion_is_noted_only_when_dates_exists(self):
+        both = _unwrapped_help(_argparse.dates_parser("builds every L0 night in it"))
+        range_only = _unwrapped_help(
+            _argparse.dates_parser("builds every L0 night in it", dates=False)
+        )
+        assert "mutually exclusive with --dates" in both
+        assert "mutually exclusive" not in range_only
+
+
+def _resolve(argv, **kwargs):
+    p = _argparse.dates_parser("builds every L0 night in it", **kwargs)
+    ap = argparse.ArgumentParser(parents=[p])
+    return _argparse.resolve_dates(ap, ap.parse_args(argv))
+
+
+class TestResolveDates:
+    """The validator every night-selecting command shares. A bad selection must be
+    a usage error, not a run that quietly does the wrong thing."""
+
+    def test_datecodes_pass_through_sorted_and_deduped(self):
+        args = _resolve(["--dates", "20240712", "20240405", "20240712"])
+        assert args.dates == ["20240405", "20240712"]
+
+    def test_a_file_of_datecodes_expands_in_place(self, tmp_path):
+        nights = tmp_path / "nights.txt"
+        nights.write_text("20240712\n20240405\n")
+        assert _resolve(["--dates", str(nights)]).dates == ["20240405", "20240712"]
+
+    def test_both_forms_is_an_error(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", "20240405", "--date_range", "20240101", "20240131"])
+        assert "not both or neither" in capsys.readouterr().err
+
+    def test_neither_form_is_an_error(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve([])
+        assert "not both or neither" in capsys.readouterr().err
+
+    def test_range_endpoint_must_be_a_datecode(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--date_range", "2024-01-01", "20240131"])
+        assert "--date_range value is not a valid datecode" in capsys.readouterr().err
+
+    def test_range_must_not_run_backwards(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--date_range", "20240131", "20240101"])
+        assert "START must be <= END" in capsys.readouterr().err
+
+    def test_a_bad_datecode_in_a_file_is_an_error(self, tmp_path, capsys):
+        nights = tmp_path / "nights.txt"
+        nights.write_text("20240405\nlast-tuesday\n")
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", str(nights)])
+        assert "not a valid datecode in" in capsys.readouterr().err
+
+    def test_an_unreadable_entry_is_an_error(self, capsys):
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", "nope.txt"])
+        assert "neither a datecode nor a readable file" in capsys.readouterr().err
+
+    def test_an_empty_file_is_an_error(self, tmp_path, capsys):
+        nights = tmp_path / "nights.txt"
+        nights.write_text("\n")
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", str(nights)])
+        assert "produced no datecodes" in capsys.readouterr().err
+
+    def test_a_range_only_command_skips_the_exclusion_check(self):
+        args = _resolve(["--date_range", "20240101", "20240131"], dates=False)
+        assert args.date_range == ["20240101", "20240131"]
+
+
 # ===========================================================================
 # _dispatch.py -- shared subprocess fan-out engine
 # ===========================================================================
@@ -587,6 +701,36 @@ class TestConfigureRuntime:
 
 def _cache_path(data_input, datecode):
     return Path(data_input) / "vNext" / "mini_db" / f"{datecode}_L0.csv"
+
+
+# ---------------------------------------------------------------------------
+# datecodes_in_range: the L0 tree walk behind every --date_range
+# ---------------------------------------------------------------------------
+
+
+class TestDatecodesInRange:
+    def test_returns_nights_present_in_range(self, tmp_path):
+        for name in ["20240101", "20240115", "20240201"]:
+            (tmp_path / "L0" / name).mkdir(parents=True)
+        nights = _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+        assert nights == ["20240101", "20240115"]
+
+    def test_missing_l0_root_exits(self, tmp_path):
+        with pytest.raises(SystemExit, match="L0 input directory not found"):
+            _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+
+    def test_no_nights_in_range_exits(self, tmp_path):
+        (tmp_path / "L0" / "20250101").mkdir(parents=True)
+        with pytest.raises(SystemExit, match="no datecode dirs"):
+            _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+
+    def test_non_datecode_entries_are_noted_and_skipped(self, tmp_path, caplog):
+        (tmp_path / "L0" / "20240101").mkdir(parents=True)
+        (tmp_path / "L0" / "scratch").mkdir()
+        with caplog.at_level(logging.INFO, logger="scripts._scan"):
+            nights = _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
+        assert nights == ["20240101"]
+        assert "scratch" in caplog.text
 
 
 # ---------------------------------------------------------------------------

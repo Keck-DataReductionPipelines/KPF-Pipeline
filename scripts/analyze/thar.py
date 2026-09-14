@@ -32,12 +32,11 @@ import time
 from astropy.io import fits
 
 import kpfpipe
-from kpfpipe.utils.io import datecode_dirs_in_range
-from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_datecode
+from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
-from scripts._argparse import analysis_parser, resolve_dir_shortcuts
+from scripts._argparse import analysis_parser, resolve_dates, resolve_dir_shortcuts
 from scripts._dispatch import _default_science_jobs
-from scripts._scan import scan_datecodes, scan_night_to_cache
+from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
 
@@ -82,14 +81,8 @@ def parse_args(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[analysis_parser(default_date_range=default_date_range())],
     )
-    args = ap.parse_args(argv)
+    args = resolve_dates(ap, ap.parse_args(argv))
 
-    start, end = args.date_range
-    for dc in (start, end):
-        if not is_datecode(dc):
-            ap.error(f"--date_range value is not a valid datecode: {dc!r}")
-    if start > end:
-        ap.error(f"--date_range START must be <= END (got {start} > {end})")
     if args.jobs is not None and args.jobs < 1:
         ap.error("--jobs must be >= 1")
 
@@ -125,13 +118,7 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
     is missing, the range covers no nights, or nothing was found -- an empty report
     would read as "no lamp changes" rather than "nothing was looked at".
     """
-    l0_root = os.path.join(data_input, "L0")
-    if not os.path.isdir(l0_root):
-        sys.exit(f"error: L0 input directory not found: {l0_root}")
-
-    nights = datecode_dirs_in_range(l0_root, start, end)
-    if not nights:
-        sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
+    nights = datecodes_in_range(data_input, start, end)
 
     def _scan_night(dc):
         df = scan_night_to_cache(data_input, dc, cache=cache)
@@ -151,7 +138,7 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
     # Nights complete out of order; an obs_id sorts chronologically.
     rows = sorted((r for night in results for r in night), key=lambda r: r["OBS_ID"])
     if not rows:
-        sys.exit(f"error: no ThAr frames under {l0_root} in range {start}..{end}")
+        sys.exit(f"error: no ThAr frames under {data_input}/L0 in range {start}..{end}")
     return rows
 
 

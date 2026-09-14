@@ -1,10 +1,10 @@
-"""Tests for scripts/processing/masters.py: the nightly-masters build driver.
+"""Tests for scripts/process/masters.py: the nightly-masters build driver.
 
 Covers the driver's own surface: arg parsing and the two input forms, the
-``_cli_task`` argv it fans out, datecode resolution, and the ``main`` exit-code
-contract (nonzero iff at least one night failed). The shared fan-out engine and
-the ``datecode_dirs_in_range`` helper are tested in test_script_helpers.py and
-test_io.py.
+``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff at
+least one night failed). The shared fan-out engine, the ``--dates`` validation and
+the ``datecodes_in_range`` L0 walk are tested in test_script_helpers.py; the
+``datecode_dirs_in_range`` helper beneath it, in test_io.py.
 
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
@@ -16,7 +16,7 @@ import tempfile
 import pytest
 
 from kpfpipe.utils import run_record as rr
-from scripts.processing import masters as _masters
+from scripts.process import masters as _masters
 
 from ._scripts import _FakeConfig, _NoLogDirConfig
 
@@ -160,7 +160,7 @@ class TestParseArgs:
 
 
 # ---------------------------------------------------------------------------
-# _cli_task / resolve_datecodes
+# _cli_task
 # ---------------------------------------------------------------------------
 
 
@@ -170,7 +170,7 @@ class TestCliTask:
         tag, argv = m._cli_task("20240405", ["--log_level", "DEBUG"])
         assert tag == "20240405"
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", m.DEFAULT_MASTERS_CONFIG,
             "-d", "20240405", "--log_level", "DEBUG",
         ]  # fmt: skip
@@ -178,48 +178,23 @@ class TestCliTask:
     def test_recipe_and_config_overrides(self, m):
         _, argv = m._cli_task("20240405", [], config="/c.toml", recipe="/x.py")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", "/x.py", "-c", "/c.toml", "-d", "20240405",
         ]  # fmt: skip
 
     def test_recipe_override_keeps_default_config(self, m):
         _, argv = m._cli_task("20240405", [], recipe="/x.py")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", "/x.py", "-c", m.DEFAULT_MASTERS_CONFIG, "-d", "20240405",
         ]  # fmt: skip
 
     def test_config_override_keeps_default_recipe(self, m):
         _, argv = m._cli_task("20240405", [], config="/c.toml")
         assert argv == [
-            sys.executable, "-m", "scripts.processing.reduce",
+            sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", "/c.toml", "-d", "20240405",
         ]  # fmt: skip
-
-
-class TestResolveDatecodes:
-    def test_explicit_list_passes_through(self, m, tmp_path):
-        args = m.parse_args(["--dates", "20240405", "20240712"])
-        # data_input is ignored for the explicit-list form.
-        assert m.resolve_datecodes(args, str(tmp_path)) == ["20240405", "20240712"]
-
-    def test_range_scans_l0_tree(self, m, tmp_path):
-        l0 = tmp_path / "L0"
-        for name in ["20240101", "20240115", "20240201"]:
-            (l0 / name).mkdir(parents=True)
-        args = m.parse_args(["--date_range", "20240101", "20240131"])
-        assert m.resolve_datecodes(args, str(tmp_path)) == ["20240101", "20240115"]
-
-    def test_range_missing_l0_root_exits(self, m, tmp_path):
-        args = m.parse_args(["--date_range", "20240101", "20240131"])
-        with pytest.raises(SystemExit, match="L0 input directory not found"):
-            m.resolve_datecodes(args, str(tmp_path))  # no L0/ dir
-
-    def test_range_no_nights_in_range_exits(self, m, tmp_path):
-        (tmp_path / "L0" / "20250101").mkdir(parents=True)
-        args = m.parse_args(["--date_range", "20240101", "20240131"])
-        with pytest.raises(SystemExit, match="no datecode dirs"):
-            m.resolve_datecodes(args, str(tmp_path))
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +211,7 @@ class TestMainExitCode:
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
         _stub_batch_log(monkeypatch, m)
-        monkeypatch.setattr(m, "resolve_datecodes", lambda args, di: ["20240405"])
+        monkeypatch.setattr(m, "datecodes_in_range", lambda di, s, e: ["20240405"])
         monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
 
         def _fake_run_stage(*a, **k):
