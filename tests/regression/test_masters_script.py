@@ -9,7 +9,6 @@ the ``datecodes_in_range`` L0 walk are tested in test_script_helpers.py; the
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
 
-import logging
 import os
 import sys
 import tempfile
@@ -331,9 +330,7 @@ class TestMainExitCode:
         )
         assert (log_dir, run_id) == ("/logs", parent)
         _, argv = calls[0]["args"][1][0]
-        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
-        assert (fwd["--log_dir"], fwd["--run_id"]) == ("/logs", parent)
-        assert fwd["--parent_run"].endswith(".log")  # this batch's own log
+        assert argv[-4:] == ["--log_dir", "/logs", "--run_id", parent]
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out.
@@ -342,50 +339,3 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             m.main(["--dates", "20240405"])
         assert "log directory" in str(exc.value)
-
-
-# ---------------------------------------------------------------------------
-# batch provenance: flags forwarded to children, banner lines logged
-# ---------------------------------------------------------------------------
-
-
-class TestBatchProvenance:
-    def test_flags_forwarded_and_logged(self, m, monkeypatch, tmp_path, caplog):
-        caplog.set_level(logging.INFO)
-        log_dir = tmp_path / "logs"
-        fake_log = log_dir / "masters_x" / "kpf_masters_batch_20240405T000000.log"
-        fake_log.parent.mkdir(parents=True)
-        monkeypatch.setattr(m, "configure_runtime", lambda: None)
-        monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
-        monkeypatch.setattr(
-            m, "setup_batch_logging", lambda *a, **k: ("masters_x", str(fake_log))
-        )
-        monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
-
-        seen = {}
-
-        def fake_run_stage(label, tasks, jobs, log_dir_arg, **kw):
-            seen["argv"] = tasks[0][1]
-            return set()
-
-        monkeypatch.setattr(m, "run_stage", fake_run_stage)
-        m.main(
-            [
-                "--dates",
-                "20240405",
-                "20240406",
-                "--log_dir",
-                str(log_dir),
-                "--flow_run_id",
-                "flow-9",
-            ]
-        )
-
-        # Children are linked by command line: this batch's log is their parent,
-        # and the flow id the batch was given rides along verbatim.
-        argv = seen["argv"]
-        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
-        assert fwd["--parent_run"] == str(fake_log)
-        assert fwd["--flow_run_id"] == "flow-9"
-        assert "flow run: flow-9" in caplog.text
-        assert "parent run: -" in caplog.text

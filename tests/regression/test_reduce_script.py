@@ -7,15 +7,12 @@ reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
 """
 
 import argparse
-import glob
 import logging
 import os
-import re
 import tempfile
 
 import pytest
 
-from kpfpipe.utils.logger import teardown_logging
 from scripts.process import reduce as red
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
@@ -424,52 +421,3 @@ def _record_cfg(tmp_path):
         "console = false\n"
     )
     return cfg
-
-
-class TestProvenanceBanner:
-    """reduce.py records who launched it in its own log: the --parent_run and
-    --flow_run_id it was handed, and the host. These run the real logging stack
-    so the lines land in a real log file."""
-
-    _OID = "KP.20240405.40113.57"
-
-    def _run_real_logging(self, argv):
-        try:
-            red.main(argv)
-        finally:
-            teardown_logging()
-
-    def _log_text(self, tmp_path):
-        (path,) = sorted(glob.glob(str(tmp_path / "logs" / "*" / "*.log")))
-        with open(path) as fh:
-            return fh.read()
-
-    def test_forwarded_provenance_is_logged(self, tmp_path):
-        cfg = _record_cfg(tmp_path)
-        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
-        self._run_real_logging(
-            [
-                "-r",
-                str(recipe),
-                "-c",
-                str(cfg),
-                "-o",
-                self._OID,
-                "--parent_run",
-                "/l/batch.log",
-                "--flow_run_id",
-                "flow-7",
-            ]
-        )
-        text = self._log_text(tmp_path)
-        assert "parent run: /l/batch.log" in text
-        assert "flow run: flow-7" in text
-        assert re.search(r"host: \S+", text)
-        assert "pipeline completed successfully" in text
-
-    def test_hand_run_logs_no_parent(self, tmp_path):
-        cfg = _record_cfg(tmp_path)
-        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
-        self._run_real_logging(["-r", str(recipe), "-c", str(cfg), "-o", self._OID])
-        text = self._log_text(tmp_path)
-        assert "parent run: -" in text and "flow run: -" in text

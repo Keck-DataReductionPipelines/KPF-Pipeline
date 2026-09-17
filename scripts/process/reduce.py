@@ -31,7 +31,6 @@ import importlib.util
 import logging
 import os
 import shutil
-import socket
 import sys
 
 import kpfpipe
@@ -151,9 +150,6 @@ def main(argv=None):
     logger.info("config: %s", args.config)
     logger.info("data dirs: %s", config.get_params(["DATA_DIRS"]))
     logger.info("log file: %s", log_path)
-    logger.info("host: %s", socket.gethostname())
-    logger.info("parent run: %s", args.parent_run or "-")
-    logger.info("flow run: %s", args.flow_run_id or "-")
 
     if not os.path.isfile(args.recipe):
         raise SystemExit(f"Recipe file not found: {args.recipe}")

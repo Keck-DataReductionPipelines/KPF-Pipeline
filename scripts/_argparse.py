@@ -208,18 +208,6 @@ def logging_parser():
         help="name of the run directory under --log_dir, instead of minting a "
         "fresh one; set automatically when one script launches another",
     )
-    # Run provenance, logged in this run's startup banner. Linkage is by
-    # command line, never by environment variable.
-    p.add_argument(
-        "--parent_run",
-        help="log path of the script that launched this one; set automatically "
-        "when one script launches another",
-    )
-    p.add_argument(
-        "--flow_run_id",
-        help="opaque id from an external orchestrator (e.g. KPF-Ops); recorded "
-        "and forwarded verbatim to every child",
-    )
     return p
 
 

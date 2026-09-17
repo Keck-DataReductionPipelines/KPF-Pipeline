@@ -231,12 +231,8 @@ class TestOnce:
 
         dispatched = sorted(a[a.index("-o") + 1] for a in fake.calls)
         assert dispatched == sorted([o1, o2])
-        # The leaf is told the same dir overrides the watcher got, and which
-        # log launched it.
+        # The leaf is told the same dir overrides the watcher got.
         assert "--kpf_data_input" in fake.calls[0]
-        argv = fake.calls[0]
-        assert argv[argv.index("--parent_run") + 1] == fake_log
-        assert "--flow_run_id" not in argv
 
         ledger = rt.Ledger(str(log_dir / "realtime_ledger.json")).load()
         states = {e["obs_id"]: e["state"] for e in ledger.entries.values()}

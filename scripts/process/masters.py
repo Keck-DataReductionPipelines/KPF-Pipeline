@@ -27,7 +27,6 @@ but exits nonzero if any night failed.
 import argparse
 import logging
 import os
-import socket
 import sys
 
 import kpfpipe
@@ -152,8 +151,6 @@ def main(argv=None):
         (log_dir, "--log_dir"),
         (run_id, "--run_id"),
         (args.log_level, "--log_level"),
-        (log_path, "--parent_run"),
-        (args.flow_run_id, "--flow_run_id"),
     ):
         if value:
             forward += [flag, value]
@@ -165,9 +162,6 @@ def main(argv=None):
     logger.info("data input: %s", data_input)
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
-    logger.info("host: %s", socket.gethostname())
-    logger.info("parent run: %s", args.parent_run or "-")
-    logger.info("flow run: %s", args.flow_run_id or "-")
 
     datecodes = args.dates or datecodes_in_range(data_input, *args.date_range)
     logger.info(

@@ -24,7 +24,6 @@ the others continue) but exits nonzero if any frame failed.
 import argparse
 import logging
 import os
-import socket
 import sys
 
 import kpfpipe
@@ -168,8 +167,6 @@ def main(argv=None):
         (log_dir, "--log_dir"),
         (run_id, "--run_id"),
         (args.log_level, "--log_level"),
-        (log_path, "--parent_run"),
-        (args.flow_run_id, "--flow_run_id"),
     ):
         if value:
             forward += [flag, value]
@@ -182,9 +179,6 @@ def main(argv=None):
     logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
-    logger.info("host: %s", socket.gethostname())
-    logger.info("parent run: %s", args.parent_run or "-")
-    logger.info("flow run: %s", args.flow_run_id or "-")
     logger.info("reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids))
 
     # Warm the L0 mini-db caches up front, one thread per night (--cache, rw

@@ -6,7 +6,6 @@ at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
 is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
-import logging
 import os
 import sys
 import tempfile
@@ -290,52 +289,3 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             s.main(["--obs_ids", _OID1])
         assert "log directory" in str(exc.value)
-
-
-# ---------------------------------------------------------------------------
-# batch provenance: flags forwarded to children, banner lines logged
-# ---------------------------------------------------------------------------
-
-
-class TestBatchProvenance:
-    def test_flags_forwarded_and_logged(self, s, monkeypatch, tmp_path, caplog):
-        caplog.set_level(logging.INFO)
-        log_dir = tmp_path / "logs"
-        fake_log = log_dir / "science_x" / "kpf_science_batch_20240405T000000.log"
-        fake_log.parent.mkdir(parents=True)
-        monkeypatch.setattr(s, "configure_runtime", lambda: None)
-        monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
-        monkeypatch.setattr(
-            s, "setup_batch_logging", lambda *a, **k: ("science_x", str(fake_log))
-        )
-        monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
-
-        seen = {}
-
-        def fake_run_stage(label, tasks, jobs, log_dir_arg, **kw):
-            seen["argv"] = tasks[0][1]
-            return {_OID2}
-
-        monkeypatch.setattr(s, "run_stage", fake_run_stage)
-        with pytest.raises(SystemExit) as ei:
-            s.main(
-                [
-                    "--obs_ids",
-                    _OID1,
-                    _OID2,
-                    "--log_dir",
-                    str(log_dir),
-                    "--flow_run_id",
-                    "flow-9",
-                ]
-            )
-        assert ei.value.code == 1
-
-        # Children are linked by command line: this batch's log is their parent,
-        # and the flow id the batch was given rides along verbatim.
-        argv = seen["argv"]
-        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
-        assert fwd["--parent_run"] == str(fake_log)
-        assert fwd["--flow_run_id"] == "flow-9"
-        assert "flow run: flow-9" in caplog.text
-        assert "parent run: -" in caplog.text

@@ -27,8 +27,7 @@ Only science frames (PRIMARY ``IMTYPE == 'Object'``, the same test the timeserie
 wrapper uses) are reduced; calibration frames are recorded as ``skipped``. A
 heartbeat status file (``--status_file``, default ``{log_dir}/realtime_status.json``)
 is rewritten every pass so operations tooling can see the watcher is alive and what
-it has done. The daemon's own log is named as ``--parent_run`` on every child
-reduction, so provenance links by command line.
+it has done.
 """
 
 import argparse
@@ -305,9 +304,6 @@ class Realtime:
             (log_dir, "--log_dir"),
             (run_id, "--run_id"),
             (args.log_level, "--log_level"),
-            # Provenance: this log is each child's parent; any flow id rides along.
-            (log_path, "--parent_run"),
-            (args.flow_run_id, "--flow_run_id"),
         ):
             if value:
                 self.forward += [flag, value]
@@ -507,9 +503,6 @@ def main(argv=None):
     logger.info("argv: %s", " ".join(sys.argv))
     logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
     logger.info("log: %s", log_path)
-    logger.info("host: %s", socket.gethostname())
-    logger.info("parent run: %s", args.parent_run or "-")
-    logger.info("flow run: %s", args.flow_run_id or "-")
 
     rt = Realtime(args, config, log_dir=log_dir, log_path=log_path, run_id=run_id)
     logger.info("status file: %s", rt.status_file)
