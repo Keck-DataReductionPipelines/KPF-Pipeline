@@ -27,8 +27,8 @@ Only science frames (PRIMARY ``IMTYPE == 'Object'``, the same test the timeserie
 wrapper uses) are reduced; calibration frames are recorded as ``skipped``. A
 heartbeat status file (``--status_file``, default ``{log_dir}/realtime_status.json``)
 is rewritten every pass so operations tooling can see the watcher is alive and what
-it has done. The daemon's own run.json (kind ``realtime``) is the parent of every
-child reduction's record.
+it has done. The daemon's own log (``RUN_START`` kind ``realtime``) is named as
+``--parent_run`` on every child reduction, so provenance links by command line.
 """
 
 import argparse
@@ -37,6 +37,7 @@ import json
 import logging
 import os
 import signal
+import socket
 import sys
 import time
 
@@ -46,12 +47,7 @@ import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
-from kpfpipe.utils.run_record import (
-    PARENT_ENV,
-    RunRecord,
-    collect_child_records,
-    write_json_atomic,
-)
+from kpfpipe.utils.run_events import RunEvents
 from scripts._argparse import (
     data_dirs_parser,
     logging_parser,
@@ -70,6 +66,20 @@ from scripts.process import DEFAULT_SCIENCE_CONFIG
 from scripts.process.science import _cli_task
 
 logger = logging.getLogger(__name__)
+
+
+def _write_json_atomic(path, data):
+    """Write ``data`` as JSON to ``path`` atomically (temp file + ``os.replace``),
+    so a reader of the ledger or status file never sees a partial write."""
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    tmp = f"{path}.tmp.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+    os.replace(tmp, path)
+
 
 STATUS_SCHEMA = 1
 LEDGER_SCHEMA = 1
@@ -244,7 +254,9 @@ class Ledger:
         return self
 
     def save(self):
-        write_json_atomic(self.path, {"schema": LEDGER_SCHEMA, "entries": self.entries})
+        _write_json_atomic(
+            self.path, {"schema": LEDGER_SCHEMA, "entries": self.entries}
+        )
 
     @staticmethod
     def key(path, mtime, size):
@@ -294,18 +306,23 @@ class Realtime:
             (log_dir, "--log_dir"),
             (run_id, "--run_id"),
             (args.log_level, "--log_level"),
+            # Provenance: this log is each child's parent; any flow id rides along.
+            (log_path, "--parent_run"),
+            (args.flow_run_id, "--flow_run_id"),
         ):
             if value:
                 self.forward += [flag, value]
-        self.record = RunRecord.start(
+        self.log_path = log_path
+        self.host = socket.gethostname()
+        self.events = RunEvents.start(
             log_path,
             kind="realtime",
             recipe="science",
             target="realtime",
             config=args.config or DEFAULT_SCIENCE_CONFIG,
+            parent=args.parent_run,
+            flow_run_id=args.flow_run_id,
         )
-        self._prior_parent = os.environ.get(PARENT_ENV)
-        os.environ[PARENT_ENV] = self.record.path
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs)
         self.futures = {}  # future -> ledger key
         self.stop = False
@@ -392,12 +409,12 @@ class Realtime:
 
     def write_status(self, dirs):
         c = self.ledger.counts()
-        write_json_atomic(
+        _write_json_atomic(
             self.status_file,
             {
                 "schema": STATUS_SCHEMA,
                 "pid": os.getpid(),
-                "host": self.record.record["host"],
+                "host": self.host,
                 "started_utc": self.started_utc,
                 "updated_utc": _utc_now(),
                 "last_scan_utc": self.last_scan_utc,
@@ -414,7 +431,7 @@ class Realtime:
                 "succeeded": c["succeeded"],
                 "failed": c["failed"],
                 "ledger": self.ledger.path,
-                "run_json": self.record.path,
+                "log_path": self.log_path,
             },
         )
 
@@ -438,22 +455,14 @@ class Realtime:
         return True
 
     def finish(self):
-        """Reap, restore the environment, finalize the record; return exit status."""
+        """Reap, write the final status, log RUN_END; return the exit status."""
         self._reap()
-        if self._prior_parent is None:
-            os.environ.pop(PARENT_ENV, None)
-        else:
-            os.environ[PARENT_ENV] = self._prior_parent
         self.pool.shutdown(wait=False, cancel_futures=True)
         c = self.ledger.counts()
         self.write_status(self.watched_dirs())
         exit_status = 0 if c["failed"] == 0 else 1
-        self.record.finish(
-            exit_status,
-            done=c["succeeded"],
-            failed=c["failed"],
-            skipped=c["skipped"],
-            children=collect_child_records(self.log_dir, self.record.path),
+        self.events.finish(
+            exit_status, done=c["succeeded"], failed=c["failed"], skipped=c["skipped"]
         )
         logger.info(
             "done: %d succeeded, %d failed, %d skipped",
@@ -513,7 +522,6 @@ def main(argv=None):
     logger.info("log: %s", log_path)
 
     rt = Realtime(args, config, log_dir=log_dir, log_path=log_path, run_id=run_id)
-    logger.info("run record: %s", rt.record.path)
     logger.info("status file: %s", rt.status_file)
     logger.info("ledger: %s", rt.ledger.path)
 

@@ -14,7 +14,7 @@ import tempfile
 
 import pytest
 
-from kpfpipe.utils import run_record as rr
+from kpfpipe.utils import run_events as re_
 from kpfpipe.utils.logger import teardown_logging
 from scripts.process import reduce as red
 
@@ -426,44 +426,66 @@ def _record_cfg(tmp_path):
     return cfg
 
 
-class TestRunRecordSidecar:
-    """reduce.py writes a run.json beside its log: succeeded on a clean recipe,
-    failed (and still re-raised) when the recipe throws. These run the real
-    logging stack so the sidecar lands next to a real log file."""
+class TestRunEventsInLog:
+    """reduce.py logs RUN_START at startup and RUN_END at exit: succeeded on a
+    clean recipe, failed (and still re-raised) when the recipe throws. These run
+    the real logging stack so the two lines land in a real log file."""
 
     _OID = "KP.20240405.40113.57"
 
     def _run_real_logging(self, monkeypatch, argv):
-        monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: "deadbeef")
+        monkeypatch.setattr(re_, "git_sha", lambda repo_root=None: "deadbeef")
         try:
             red.main(argv)
         finally:
             teardown_logging()
 
-    def _records(self, tmp_path):
-        return sorted(glob.glob(str(tmp_path / "logs" / "*" / "*.run.json")))
+    def _events(self, tmp_path):
+        (path,) = sorted(glob.glob(str(tmp_path / "logs" / "*" / "*.log")))
+        with open(path) as fh:
+            start, end = re_.parse_run_events(fh)
+        return path, start, end
 
-    def test_success_writes_succeeded_record(self, monkeypatch, tmp_path):
+    def test_success_logs_succeeded_end(self, monkeypatch, tmp_path):
+        cfg = _record_cfg(tmp_path)
+        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
+        self._run_real_logging(
+            monkeypatch,
+            [
+                "-r",
+                str(recipe),
+                "-c",
+                str(cfg),
+                "-o",
+                self._OID,
+                "--parent_run",
+                "/l/batch.log",
+                "--flow_run_id",
+                "flow-7",
+            ],
+        )
+        path, start, end = self._events(tmp_path)
+        assert start["kind"] == "run"
+        assert start["recipe"] == "rec"
+        assert start["target"] == self._OID
+        assert start["config"] == str(cfg)
+        assert start["git_sha"] == "deadbeef"
+        assert start["log_path"] == path
+        assert start["parent"] == "/l/batch.log"
+        assert start["flow_run_id"] == "flow-7"
+        assert end["status"] == "succeeded"
+        assert end["counts"] == {"done": 1, "failed": 0, "skipped": 0}
+
+    def test_hand_run_has_no_parent(self, monkeypatch, tmp_path):
         cfg = _record_cfg(tmp_path)
         recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
         self._run_real_logging(
             monkeypatch, ["-r", str(recipe), "-c", str(cfg), "-o", self._OID]
         )
-        (path,) = self._records(tmp_path)
-        data = rr.read_run_record(path)
-        assert data["kind"] == "run"
-        assert data["status"] == "succeeded"
-        assert data["recipe"] == "rec"
-        assert data["target"] == self._OID
-        assert data["config"] == str(cfg)
-        assert data["git_sha"] == "deadbeef"
-        assert data["counts"] == {"done": 1, "failed": 0, "skipped": 0}
-        assert data["log_path"].endswith(".log")
-        assert path == rr.run_json_path(data["log_path"])
+        _, start, _ = self._events(tmp_path)
+        assert start["parent"] is None and start["flow_run_id"] is None
 
-    def test_recipe_exception_writes_failed_record_and_reraises(
-        self, monkeypatch, tmp_path
-    ):
+    def test_recipe_exception_logs_failed_end_and_reraises(self, monkeypatch, tmp_path):
         cfg = _record_cfg(tmp_path)
         recipe = tmp_path / "boom.py"
         recipe.write_text("def main(config, args):\n    raise RuntimeError('boom')\n")
@@ -471,8 +493,7 @@ class TestRunRecordSidecar:
             self._run_real_logging(
                 monkeypatch, ["-r", str(recipe), "-c", str(cfg), "-o", self._OID]
             )
-        (path,) = self._records(tmp_path)
-        data = rr.read_run_record(path)
-        assert data["status"] == "failed"
-        assert data["exit_status"] == 1
-        assert data["counts"]["failed"] == 1
+        _, _, end = self._events(tmp_path)
+        assert end["status"] == "failed"
+        assert end["exit_status"] == 1
+        assert end["counts"]["failed"] == 1

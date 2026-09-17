@@ -9,13 +9,14 @@ the ``datecodes_in_range`` L0 walk are tested in test_script_helpers.py; the
 Unit tests use synthetic dir trees in tmp_path -- no real testdata needed.
 """
 
+import logging
 import os
 import sys
 import tempfile
 
 import pytest
 
-from kpfpipe.utils import run_record as rr
+from kpfpipe.utils import run_events as re_
 from scripts.process import masters as _masters
 
 from ._scripts import _FakeConfig, _NoLogDirConfig
@@ -331,7 +332,9 @@ class TestMainExitCode:
         )
         assert (log_dir, run_id) == ("/logs", parent)
         _, argv = calls[0]["args"][1][0]
-        assert argv[-4:] == ["--log_dir", "/logs", "--run_id", parent]
+        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
+        assert (fwd["--log_dir"], fwd["--run_id"]) == ("/logs", parent)
+        assert fwd["--parent_run"].endswith(".log")  # this batch's own log
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out.
@@ -343,16 +346,17 @@ class TestMainExitCode:
 
 
 # ---------------------------------------------------------------------------
-# batch run.json sidecar
+# batch RUN_START / RUN_END provenance
 # ---------------------------------------------------------------------------
 
 
-class TestBatchRunRecord:
-    def test_batch_record_written_with_counts_and_children(
-        self, m, monkeypatch, tmp_path
+class TestBatchRunEvents:
+    def test_batch_logs_events_and_links_children_by_argv(
+        self, m, monkeypatch, tmp_path, caplog
     ):
+        caplog.set_level(logging.INFO, logger=re_.logger.name)
         log_dir = tmp_path / "logs"
-        fake_log = log_dir / "20240405" / "kpf_masters_batch_20240405T000000.log"
+        fake_log = log_dir / "masters_x" / "kpf_masters_batch_20240405T000000.log"
         fake_log.parent.mkdir(parents=True)
         monkeypatch.setattr(m, "configure_runtime", lambda: None)
         monkeypatch.setattr(m, "ConfigHandler", _FakeConfig)
@@ -360,32 +364,40 @@ class TestBatchRunRecord:
             m, "setup_batch_logging", lambda *a, **k: ("masters_x", str(fake_log))
         )
         monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
-        monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
-        monkeypatch.delenv(rr.PARENT_ENV, raising=False)
+        monkeypatch.setattr(re_, "git_sha", lambda repo_root=None: None)
+
+        seen = {}
 
         def fake_run_stage(label, tasks, jobs, log_dir_arg, **kw):
-            # Children log straight into the run directory (one run, one dir).
-            child = os.path.join(log_dir_arg, "kpf_masters_20240406_x.run.json")
-            rr.write_json_atomic(
-                child,
-                {
-                    "schema": rr.SCHEMA,
-                    "kind": "run",
-                    "status": "succeeded",
-                    "target": "20240406",
-                    "exit_status": 0,
-                    "parent": os.environ.get(rr.PARENT_ENV),
-                },
-            )
+            seen["argv"] = tasks[0][1]
             return set()
 
         monkeypatch.setattr(m, "run_stage", fake_run_stage)
-        m.main(["--dates", "20240405", "20240406", "--log_dir", str(log_dir)])
+        m.main(
+            [
+                "--dates",
+                "20240405",
+                "20240406",
+                "--log_dir",
+                str(log_dir),
+                "--flow_run_id",
+                "flow-9",
+            ]
+        )
 
-        data = rr.read_run_record(rr.run_json_path(str(fake_log)))
-        assert data["kind"] == "batch"
-        assert data["recipe"] == "masters"
-        assert data["status"] == "succeeded"
-        assert data["counts"] == {"done": 2, "failed": 0, "skipped": 0}
-        assert [c["tag"] for c in data["children"]] == ["20240406"]
-        assert os.environ.get(rr.PARENT_ENV) is None
+        # Children are linked by command line: this batch's log is their parent,
+        # and the flow id the batch was given rides along verbatim.
+        argv = seen["argv"]
+        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
+        assert fwd["--parent_run"] == str(fake_log)
+        assert fwd["--flow_run_id"] == "flow-9"
+
+        start, end = re_.parse_run_events(r.getMessage() for r in caplog.records)
+        assert start["kind"] == "batch"
+        assert start["recipe"] == "masters"
+        assert start["target"] == "batch"
+        assert start["log_path"] == str(fake_log)
+        assert start["parent"] is None
+        assert start["flow_run_id"] == "flow-9"
+        assert end["status"] == "succeeded"
+        assert end["counts"] == {"done": 2, "failed": 0, "skipped": 0}
