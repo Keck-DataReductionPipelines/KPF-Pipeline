@@ -13,7 +13,6 @@ import tempfile
 
 import pytest
 
-from kpfpipe.utils import run_events as re_
 from scripts.process import science as _science
 
 from ._scripts import _FakeConfig, _NoLogDirConfig
@@ -294,15 +293,13 @@ class TestMainExitCode:
 
 
 # ---------------------------------------------------------------------------
-# batch RUN_START / RUN_END provenance
+# batch provenance: flags forwarded to children, banner lines logged
 # ---------------------------------------------------------------------------
 
 
-class TestBatchRunEvents:
-    def test_batch_logs_events_and_links_children_by_argv(
-        self, s, monkeypatch, tmp_path, caplog
-    ):
-        caplog.set_level(logging.INFO, logger=re_.logger.name)
+class TestBatchProvenance:
+    def test_flags_forwarded_and_logged(self, s, monkeypatch, tmp_path, caplog):
+        caplog.set_level(logging.INFO)
         log_dir = tmp_path / "logs"
         fake_log = log_dir / "science_x" / "kpf_science_batch_20240405T000000.log"
         fake_log.parent.mkdir(parents=True)
@@ -312,7 +309,6 @@ class TestBatchRunEvents:
             s, "setup_batch_logging", lambda *a, **k: ("science_x", str(fake_log))
         )
         monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
-        monkeypatch.setattr(re_, "git_sha", lambda repo_root=None: None)
 
         seen = {}
 
@@ -341,13 +337,5 @@ class TestBatchRunEvents:
         fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
         assert fwd["--parent_run"] == str(fake_log)
         assert fwd["--flow_run_id"] == "flow-9"
-
-        start, end = re_.parse_run_events(r.getMessage() for r in caplog.records)
-        assert start["kind"] == "batch"
-        assert start["recipe"] == "science"
-        assert start["target"] == "batch"
-        assert start["log_path"] == str(fake_log)
-        assert start["parent"] is None
-        assert start["flow_run_id"] == "flow-9"
-        assert end["status"] == "failed"
-        assert end["counts"] == {"done": 1, "failed": 1, "skipped": 0}
+        assert "flow run: flow-9" in caplog.text
+        assert "parent run: -" in caplog.text

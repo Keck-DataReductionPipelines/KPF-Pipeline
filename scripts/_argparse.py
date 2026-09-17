@@ -208,7 +208,7 @@ def logging_parser():
         help="name of the run directory under --log_dir, instead of minting a "
         "fresh one; set automatically when one script launches another",
     )
-    # Run provenance, recorded in this run's RUN_START log line. Linkage is by
+    # Run provenance, logged in this run's startup banner. Linkage is by
     # command line, never by environment variable.
     p.add_argument(
         "--parent_run",

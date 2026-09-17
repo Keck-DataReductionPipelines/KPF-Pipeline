@@ -27,8 +27,8 @@ Only science frames (PRIMARY ``IMTYPE == 'Object'``, the same test the timeserie
 wrapper uses) are reduced; calibration frames are recorded as ``skipped``. A
 heartbeat status file (``--status_file``, default ``{log_dir}/realtime_status.json``)
 is rewritten every pass so operations tooling can see the watcher is alive and what
-it has done. The daemon's own log (``RUN_START`` kind ``realtime``) is named as
-``--parent_run`` on every child reduction, so provenance links by command line.
+it has done. The daemon's own log is named as ``--parent_run`` on every child
+reduction, so provenance links by command line.
 """
 
 import argparse
@@ -47,7 +47,6 @@ import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
-from kpfpipe.utils.run_events import RunEvents
 from scripts._argparse import (
     data_dirs_parser,
     logging_parser,
@@ -314,15 +313,6 @@ class Realtime:
                 self.forward += [flag, value]
         self.log_path = log_path
         self.host = socket.gethostname()
-        self.events = RunEvents.start(
-            log_path,
-            kind="realtime",
-            recipe="science",
-            target="realtime",
-            config=args.config or DEFAULT_SCIENCE_CONFIG,
-            parent=args.parent_run,
-            flow_run_id=args.flow_run_id,
-        )
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs)
         self.futures = {}  # future -> ledger key
         self.stop = False
@@ -455,15 +445,12 @@ class Realtime:
         return True
 
     def finish(self):
-        """Reap, write the final status, log RUN_END; return the exit status."""
+        """Reap, write the final status; return the exit status."""
         self._reap()
         self.pool.shutdown(wait=False, cancel_futures=True)
         c = self.ledger.counts()
         self.write_status(self.watched_dirs())
         exit_status = 0 if c["failed"] == 0 else 1
-        self.events.finish(
-            exit_status, done=c["succeeded"], failed=c["failed"], skipped=c["skipped"]
-        )
         logger.info(
             "done: %d succeeded, %d failed, %d skipped",
             c["succeeded"],
@@ -520,6 +507,9 @@ def main(argv=None):
     logger.info("argv: %s", " ".join(sys.argv))
     logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
     logger.info("log: %s", log_path)
+    logger.info("host: %s", socket.gethostname())
+    logger.info("parent run: %s", args.parent_run or "-")
+    logger.info("flow run: %s", args.flow_run_id or "-")
 
     rt = Realtime(args, config, log_dir=log_dir, log_path=log_path, run_id=run_id)
     logger.info("status file: %s", rt.status_file)

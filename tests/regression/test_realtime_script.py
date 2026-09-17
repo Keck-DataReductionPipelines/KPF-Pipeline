@@ -8,12 +8,10 @@ tree dispatches nothing. Synthetic L0 trees only -- no real reduction runs.
 """
 
 import json
-import logging
 import os
 
 import pytest
 
-from kpfpipe.utils import run_events as re_
 from scripts.process import realtime as rt
 
 from ._scripts import write_l0_tree
@@ -198,7 +196,6 @@ def _once(monkeypatch, tmp_path, data, fake, extra=(), now=_NOW):
     )
     monkeypatch.setattr(rt, "_run_one", fake)
     monkeypatch.setattr(rt.time, "time", lambda: now)
-    monkeypatch.setattr(re_, "git_sha", lambda repo_root=None: None)
     argv = [
         "--once",
         "--input_dir",
@@ -225,9 +222,8 @@ def _once(monkeypatch, tmp_path, data, fake, extra=(), now=_NOW):
 
 class TestOnce:
     def test_dispatches_science_skips_cal_writes_status_and_record(
-        self, monkeypatch, tmp_path, caplog
+        self, monkeypatch, tmp_path
     ):
-        caplog.set_level(logging.INFO, logger=re_.logger.name)
         data, o1, o2, b1 = _setup_tree(tmp_path)
         fake = _FakeRunOne()
         code, log_dir, fake_log = _once(monkeypatch, tmp_path, data, fake)
@@ -259,12 +255,6 @@ class TestOnce:
         assert status["last_dispatch_utc"] is not None
         assert status["log_path"] == fake_log
 
-        start, end = re_.parse_run_events(r.getMessage() for r in caplog.records)
-        assert start["kind"] == "realtime" and start["log_path"] == fake_log
-        assert start["parent"] is None and start["flow_run_id"] is None
-        assert end["status"] == "succeeded"
-        assert end["counts"] == {"done": 2, "failed": 0, "skipped": 1}
-
     def test_second_pass_dispatches_nothing(self, monkeypatch, tmp_path):
         data, *_ = _setup_tree(tmp_path)
         first = _FakeRunOne()
@@ -276,9 +266,8 @@ class TestOnce:
         assert second.calls == []
 
     def test_failed_frame_gives_exit_one_and_failed_ledger_state(
-        self, monkeypatch, tmp_path, caplog
+        self, monkeypatch, tmp_path
     ):
-        caplog.set_level(logging.INFO, logger=re_.logger.name)
         data, o1, o2, _b1 = _setup_tree(tmp_path)
         fake = _FakeRunOne(rc_for={o2: 1})
         code, log_dir, fake_log = _once(monkeypatch, tmp_path, data, fake)
@@ -286,9 +275,6 @@ class TestOnce:
         ledger = rt.Ledger(str(log_dir / "realtime_ledger.json")).load()
         states = {e["obs_id"]: e["state"] for e in ledger.entries.values()}
         assert states[o1] == "succeeded" and states[o2] == "failed"
-        _, end = re_.parse_run_events(r.getMessage() for r in caplog.records)
-        assert end["status"] == "failed"
-        assert end["counts"] == {"done": 1, "failed": 1, "skipped": 1}
 
     def test_unsettled_frame_waits_for_a_later_tick(self, monkeypatch, tmp_path):
         data, o1, o2, _b1 = _setup_tree(tmp_path)
