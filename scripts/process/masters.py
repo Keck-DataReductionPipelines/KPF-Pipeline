@@ -32,7 +32,6 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.logger import setup_batch_logging
-from kpfpipe.utils.run_record import PARENT_ENV, RunRecord, collect_child_records
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
@@ -143,18 +142,6 @@ def main(argv=None):
     log_dir, level = resolve_log_settings(args, logger_params)
     run_id, log_path = setup_batch_logging(log_dir, "masters", args.run_id, level=level)
     run_dir = os.path.join(log_dir, run_id)
-    # The batch run.json sidecar. Exporting its path lets every fanned-out reduce
-    # child (which inherits our environment) record this batch as its parent, so
-    # the two levels of records link both ways.
-    record = RunRecord.start(
-        log_path,
-        kind="batch",
-        recipe="masters",
-        target="batch",
-        config=args.config or DEFAULT_MASTERS_CONFIG,
-    )
-    prior_parent = os.environ.get(PARENT_ENV)
-    os.environ[PARENT_ENV] = record.path
 
     forward = []
     for value, flag in (
@@ -175,7 +162,6 @@ def main(argv=None):
     logger.info("data input: %s", data_input)
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
-    logger.info("run record: %s", record.path)
 
     datecodes = args.dates or datecodes_in_range(data_input, *args.date_range)
     logger.info(
@@ -200,19 +186,8 @@ def main(argv=None):
         launch_interval=_LAUNCH_INTERVAL,
     )
 
-    if prior_parent is None:
-        os.environ.pop(PARENT_ENV, None)
-    else:
-        os.environ[PARENT_ENV] = prior_parent
-
     built = len(datecodes) - len(failed)
     logger.info("done: built masters for %d/%d night(s)", built, len(datecodes))
-    record.finish(
-        1 if failed else 0,
-        done=built,
-        failed=len(failed),
-        children=collect_child_records(log_dir, record.path),
-    )
     if failed:
         sys.exit(1)
 

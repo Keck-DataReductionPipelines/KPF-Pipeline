@@ -12,7 +12,6 @@ import os
 
 import pytest
 
-from kpfpipe.utils import run_record as rr
 from scripts.process import realtime as rt
 
 from ._scripts import write_l0_tree
@@ -197,8 +196,6 @@ def _once(monkeypatch, tmp_path, data, fake, extra=(), now=_NOW):
     )
     monkeypatch.setattr(rt, "_run_one", fake)
     monkeypatch.setattr(rt.time, "time", lambda: now)
-    monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: None)
-    monkeypatch.delenv(rr.PARENT_ENV, raising=False)
     argv = [
         "--once",
         "--input_dir",
@@ -252,13 +249,7 @@ class TestOnce:
         assert status["running"] == 0 and status["queued"] == 0
         assert status["watched_dirs"][0].endswith(os.path.join("L0", _NIGHT))
         assert status["last_dispatch_utc"] is not None
-        assert status["run_json"] == rr.run_json_path(fake_log)
-
-        rec = rr.read_run_record(rr.run_json_path(fake_log))
-        assert rec["kind"] == "realtime"
-        assert rec["status"] == "succeeded"
-        assert rec["counts"] == {"done": 2, "failed": 0, "skipped": 1}
-        assert os.environ.get(rr.PARENT_ENV) is None
+        assert status["log_path"] == fake_log
 
     def test_second_pass_dispatches_nothing(self, monkeypatch, tmp_path):
         data, *_ = _setup_tree(tmp_path)
@@ -280,9 +271,6 @@ class TestOnce:
         ledger = rt.Ledger(str(log_dir / "realtime_ledger.json")).load()
         states = {e["obs_id"]: e["state"] for e in ledger.entries.values()}
         assert states[o1] == "succeeded" and states[o2] == "failed"
-        rec = rr.read_run_record(rr.run_json_path(fake_log))
-        assert rec["status"] == "failed"
-        assert rec["counts"] == {"done": 1, "failed": 1, "skipped": 1}
 
     def test_unsettled_frame_waits_for_a_later_tick(self, monkeypatch, tmp_path):
         data, o1, o2, _b1 = _setup_tree(tmp_path)

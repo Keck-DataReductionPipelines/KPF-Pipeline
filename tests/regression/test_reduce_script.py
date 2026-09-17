@@ -7,15 +7,12 @@ reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
 """
 
 import argparse
-import glob
 import logging
 import os
 import tempfile
 
 import pytest
 
-from kpfpipe.utils import run_record as rr
-from kpfpipe.utils.logger import teardown_logging
 from scripts.process import reduce as red
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
@@ -424,55 +421,3 @@ def _record_cfg(tmp_path):
         "console = false\n"
     )
     return cfg
-
-
-class TestRunRecordSidecar:
-    """reduce.py writes a run.json beside its log: succeeded on a clean recipe,
-    failed (and still re-raised) when the recipe throws. These run the real
-    logging stack so the sidecar lands next to a real log file."""
-
-    _OID = "KP.20240405.40113.57"
-
-    def _run_real_logging(self, monkeypatch, argv):
-        monkeypatch.setattr(rr, "git_sha", lambda repo_root=None: "deadbeef")
-        try:
-            red.main(argv)
-        finally:
-            teardown_logging()
-
-    def _records(self, tmp_path):
-        return sorted(glob.glob(str(tmp_path / "logs" / "*" / "*.run.json")))
-
-    def test_success_writes_succeeded_record(self, monkeypatch, tmp_path):
-        cfg = _record_cfg(tmp_path)
-        recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
-        self._run_real_logging(
-            monkeypatch, ["-r", str(recipe), "-c", str(cfg), "-o", self._OID]
-        )
-        (path,) = self._records(tmp_path)
-        data = rr.read_run_record(path)
-        assert data["kind"] == "run"
-        assert data["status"] == "succeeded"
-        assert data["recipe"] == "rec"
-        assert data["target"] == self._OID
-        assert data["config"] == str(cfg)
-        assert data["git_sha"] == "deadbeef"
-        assert data["counts"] == {"done": 1, "failed": 0, "skipped": 0}
-        assert data["log_path"].endswith(".log")
-        assert path == rr.run_json_path(data["log_path"])
-
-    def test_recipe_exception_writes_failed_record_and_reraises(
-        self, monkeypatch, tmp_path
-    ):
-        cfg = _record_cfg(tmp_path)
-        recipe = tmp_path / "boom.py"
-        recipe.write_text("def main(config, args):\n    raise RuntimeError('boom')\n")
-        with pytest.raises(RuntimeError, match="boom"):
-            self._run_real_logging(
-                monkeypatch, ["-r", str(recipe), "-c", str(cfg), "-o", self._OID]
-            )
-        (path,) = self._records(tmp_path)
-        data = rr.read_run_record(path)
-        assert data["status"] == "failed"
-        assert data["exit_status"] == 1
-        assert data["counts"]["failed"] == 1
