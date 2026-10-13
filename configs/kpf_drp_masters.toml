@@ -13,17 +13,17 @@ chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
 [BIAS]
-min_stack_size = 5
+min_stack_size = 5      # min frames extracted to L1, else the master is withheld
 max_stack_size = 20
 stack_sigma = 5.0
 
 [DARK]
-min_stack_size = 3
+min_stack_size = 3      # min frames extracted to L1, else the master is withheld
 max_stack_size = 20
 stack_sigma = 5.0
 
 [FLAT]
-min_stack_size = 5
+min_stack_size = 5      # min frames extracted to L1, else the master is withheld
 max_stack_size = 20
 stack_sigma = 5.0
 
@@ -31,7 +31,7 @@ stack_sigma = 5.0
 poly_degree = 3
 
 [WLS]
-min_stack_size = 5   # min frames passing line-fit QC per chip, else the master is withheld
+min_stack_size = 5      # min frames extracted to L2, else the master is withheld
 max_stack_size = 20
 lineprofile = "gaussian"
 poly_degree_x = 6

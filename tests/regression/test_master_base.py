@@ -382,7 +382,7 @@ class TestRateEstimator:
     @staticmethod
     def _stacked_img(frames, *, nstream=6):
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
-        dark = Dark(file_list)
+        dark = Dark(file_list, config={"min_stack_size": 2})
         dark.chips = ["GREEN"]
         dark.stack_sigma = 1e6  # effectively no clipping
         # Keyed by filename because the streaming path re-reads its first frames
@@ -434,7 +434,7 @@ class TestRateEstimator:
         # master flat in test_master_flat.py.
         frames = [_stack_frame(10.0, 100.0, 10.0), _stack_frame(10.0, 100.0, 10.0)]
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
-        dark = Dark(file_list)
+        dark = Dark(file_list, config={"min_stack_size": 2})
         dark.chips = ["GREEN"]
         dark.stack_sigma = 1e6
         by_fn = dict(zip(file_list, frames, strict=True))
@@ -512,7 +512,9 @@ class TestPerPixelRejection:
             lambda arr, sigma, axis=0, **kwargs: np.zeros(arr.shape, dtype=bool),
         )
 
-        dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
+        dark = Dark(
+            sorted(f"f{i}.fits" for i in range(n)), config={"min_stack_size": 2}
+        )
         dark.chips = ["GREEN"]
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
@@ -611,12 +613,14 @@ class TestSurvivorGate:
         dark = Dark(sorted(f"f{i}.fits" for i in range(nrequested)))
         dark.chips = ["GREEN"]
         # The gate is what is under test, so the later cleaning pass -- which
-        # would interpolate the zeroed pixels back in -- is bypassed.
+        # would interpolate the zeroed pixels back in -- is bypassed, as is the
+        # stack-size check (no frames load when stats are stubbed).
         with (
             patch.multiple(dark, nrow=2, ncol=2),
             patch.object(
                 dark, "_compute_stats_from_datacube", return_value=(stats, False)
             ),
+            patch.object(dark, "_check_stack_size"),
             patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
         ):
             return dark.stack_frames()
@@ -755,7 +759,9 @@ class TestStackingValidation:
 
     @staticmethod
     def _dark(n):
-        dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
+        dark = Dark(
+            sorted(f"f{i}.fits" for i in range(n)), config={"min_stack_size": 2}
+        )
         dark.chips = ["GREEN"]
         return dark
 
@@ -784,14 +790,35 @@ class TestStackingValidation:
         with pytest.raises(ValueError, match="all zero or all non-zero"):
             self._stack_with_frames(frames)
 
-    def test_excessive_load_failures_raises(self):
-        dark = self._dark(5)
+    def _stack_with_failures(self, dark, n_fail, attempted):
+        """Stack ``dark``'s frames, the first ``n_fail`` of which fail to load,
+        recording each attempted filename in ``attempted``."""
+
+        def load(fn, **k):
+            attempted.append(fn)
+            if len(attempted) <= n_fail:
+                return None
+            return _stack_frame(10.0, 100.0, 10.0)
+
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: None),
+            patch.multiple(dark, nrow=2, ncol=2),
+            patch.object(dark, "_load_frame", load),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            with pytest.raises(ValueError, match="too many frames failed to load"):
-                dark.stack_frames()
+            return dark.stack_frames()
+
+    def test_excessive_load_failures_raises_after_every_frame_attempted(self):
+        dark = self._dark(5)
+        attempted = []
+        with pytest.raises(ValueError, match="too many frames failed to load"):
+            self._stack_with_failures(dark, 3, attempted)
+        assert attempted == dark.l0_file_list
+
+    def test_below_min_stack_size_raises(self):
+        dark = self._dark(5)
+        dark.min_stack_size = 5
+        with pytest.raises(ValueError, match=r"only 4 of 5 frames loaded"):
+            self._stack_with_failures(dark, 1, [])
 
     def test_ccd_var_frame_count_mismatch_raises(self):
         # CCD and VAR share a survivor mask, so a mismatch signals a bug and must
@@ -809,8 +836,11 @@ class TestStackingValidation:
                 "nframe": np.full((2, 2), 2, dtype=np.int32),
             },
         }
-        with patch.object(
-            dark, "_compute_stats_from_datacube", return_value=(stats, False)
+        with (
+            patch.object(
+                dark, "_compute_stats_from_datacube", return_value=(stats, False)
+            ),
+            patch.object(dark, "_check_stack_size"),
         ):
             with pytest.raises(ValueError, match="mismatched frame count"):
                 dark.stack_frames()

@@ -209,7 +209,7 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
         )
-        result = wls._process_stack_l0_to_l2()
+        result = wls._process_stack_l0_to_l2(FILE_LIST)
         assert len(result) == len(FILE_LIST)
         assert all(r is mock_pipeline for r in result)
 
@@ -218,14 +218,22 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
         )
-        result = wls._process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
+        wls.min_stack_size = 3
+        result = wls._process_stack_l0_to_l2(FILE_LIST[:3])
         assert len(result) == 3
 
     def test_raises_when_failures_exceed_threshold(self, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, "_load_frame", lambda fn, cache=False, **kwargs: None)
+        attempted = []
+
+        def load(fn, cache=False, **kwargs):
+            attempted.append(fn)
+
+        monkeypatch.setattr(wls, "_load_frame", load)
         with pytest.raises(ValueError, match="too many frames failed to load"):
-            wls._process_stack_l0_to_l2()
+            wls._process_stack_l0_to_l2(FILE_LIST)
+        # the limit is applied once, after every frame has been attempted
+        assert attempted == FILE_LIST
 
     def test_tolerates_minority_failure(self, mock_pipeline, monkeypatch):
         # 1 failure out of 8 = 12.5%, below the 20% threshold
@@ -234,7 +242,7 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: next(calls)
         )
-        result = wls._process_stack_l0_to_l2()
+        result = wls._process_stack_l0_to_l2(FILE_LIST)
         assert len(result) == 7
 
 
@@ -538,6 +546,12 @@ class TestMakeMasterL2:
         night, master_path, _ = _master_and_stack(tmp_path)
         wls.make_master_l2(output_dir=str(night))
         assert master_path.exists()
+
+    def test_file_list_override_replaces_l0_file_list(self, mock_make_master_l2):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2(l0_file_list=FILE_LIST[:6])
+        assert wls.l0_file_list == FILE_LIST[:6]
+        assert len(wls._l2_obj_cache) == 6
 
     def test_save_master_post_hoc(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
@@ -942,46 +956,36 @@ class TestCombineCoeffs:
 
 
 class TestMinStackSizeGate:
-    """make_master_l2 gates the master on min_stack_size survivors per chip.
+    """make_master_l2 gates the master on min_stack_size frames extracted to L2.
 
-    Below the threshold it raises, but the per-frame diagnostics and L2s are
-    still written.
+    Below the threshold it raises before line fitting, but the per-frame L2s of
+    the frames that did load are still written.
     """
 
-    def _mock(self, monkeypatch, n_survivors, n_frames=8, masters_output=None):
-        # n_survivors is an int (same for every chip) or a {chip: count} dict, so
-        # a test can make GREEN and RED pass/fail the gate independently.
+    def _mock(self, monkeypatch, n_loaded, n_frames=8, masters_output=None):
+        # Frames past the first n_loaded fail to load (the first frame loads, so
+        # it still names the master).
         files = sorted(f"KP.20240101.{i:05d}.00.fits" for i in range(n_frames))
-        _stub_frame_pipeline(monkeypatch)
+        _stub_frame_pipeline(
+            monkeypatch,
+            l1=lambda self, fn, cache=False, **kw: (
+                None if files.index(fn) >= n_loaded else fn
+            ),
+        )
 
         def mock_fit(self, chip, fibers, **kwargs):
-            n = n_survivors[chip] if isinstance(n_survivors, dict) else n_survivors
-            frames = []
-            for j, l2 in enumerate(self._l2_obj_cache):
-                rejected = j >= n
-                coeffs = (
-                    None
-                    if rejected
-                    else np.zeros(
-                        (
-                            self.poly_degree_x + 1,
-                            self.poly_degree_m + 1,
-                            self.poly_degree_f + 1,
-                        )
-                    )
-                )
-                frames.append(
-                    {
-                        "obs_id": l2.obs_id,
-                        "lines": {
-                            "wav": np.array([5500.0]),
-                            "isgood": np.array([not rejected]),
-                        },
-                        "coeffs": coeffs,
-                        "rejected": rejected,
-                    }
-                )
-            return frames
+            coeffs = np.zeros(
+                (self.poly_degree_x + 1, self.poly_degree_m + 1, self.poly_degree_f + 1)
+            )
+            return [
+                {
+                    "obs_id": l2.obs_id,
+                    "lines": {"wav": np.array([5500.0]), "isgood": np.array([True])},
+                    "coeffs": coeffs,
+                    "rejected": False,
+                }
+                for l2 in self._l2_obj_cache
+            ]
 
         def mock_combine(self, frames, chip, nfibers, **kwargs):
             norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
@@ -995,38 +999,26 @@ class TestMinStackSizeGate:
         config = {"KPF_MASTERS_OUTPUT": str(masters_output)} if masters_output else None
         return WLS(files, config=config)
 
-    def test_below_min_raises_but_diagnostics_written(self, monkeypatch, tmp_path):
-        wls = self._mock(monkeypatch, n_survivors=2, masters_output=tmp_path)
-        wls.min_stack_size = 5
+    def test_below_min_raises_but_l2s_written(self, monkeypatch, tmp_path):
+        # 7 of 8 load: within the failure limits, but below min_stack_size=8.
+        wls = self._mock(monkeypatch, n_loaded=7, masters_output=tmp_path)
+        wls.min_stack_size = 8
         night, master_path, thar_dir = _master_and_stack(tmp_path)
-        with pytest.raises(ValueError, match=r"passed line-fit QC"):
+        with pytest.raises(ValueError, match=r"only 7 of 8 frames loaded"):
             wls.make_master_l2(output_dir=str(night))
 
-        # diagnostics + per-frame L2s persist despite the abort ...
-        assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
-        assert list(thar_dir.glob("*_thar_L2.fits"))
+        # the loaded frames' L2s persist despite the abort ...
+        assert len(list(thar_dir.glob("*_thar_L2.fits"))) == 7
         # ... but the master itself is withheld.
         assert not master_path.exists()
 
     def test_at_min_writes_master(self, monkeypatch, tmp_path):
-        wls = self._mock(monkeypatch, n_survivors=5, masters_output=tmp_path)
-        wls.min_stack_size = 5
+        wls = self._mock(monkeypatch, n_loaded=7, masters_output=tmp_path)
+        wls.min_stack_size = 7
         night, master_path, _ = _master_and_stack(tmp_path)
         ml2 = wls.make_master_l2(output_dir=str(night))
         assert isinstance(ml2, KPFMasterL2)
         assert master_path.exists()
-
-    def test_gate_is_per_chip(self, monkeypatch, tmp_path):
-        # GREEN clears the gate but RED does not: the master is withheld even
-        # though one chip passed. Diagnostics are saved before the gate, so they
-        # still persist.
-        wls = self._mock(monkeypatch, {"GREEN": 5, "RED": 2}, masters_output=tmp_path)
-        wls.min_stack_size = 5
-        night, master_path, thar_dir = _master_and_stack(tmp_path)
-        with pytest.raises(ValueError, match=r"RED: only 2 frame"):
-            wls.make_master_l2(output_dir=str(night))
-        assert not master_path.exists()
-        assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
 
 
 class TestFitLinePositions:

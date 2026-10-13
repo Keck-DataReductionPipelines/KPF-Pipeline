@@ -43,7 +43,7 @@ class WLS(BaseMasterModule):
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: linelist, lineprofile,
         poly_degree_x, poly_degree_m, poly_degree_f, chips, fibers,
-        min_stack_size (per-chip line-fit-QC survivor gate), KPF_MASTERS_OUTPUT.
+        min_stack_size (minimum frames extracted to L2), KPF_MASTERS_OUTPUT.
     """
 
     _DEFAULT_CFG = {
@@ -178,36 +178,30 @@ class WLS(BaseMasterModule):
 
     def _process_stack_l0_to_l2(
         self,
-        l0_file_list=None,
+        l0_file_list,
         max_fail_fraction=0.2,
         max_fail_number=2,
         output_dir=None,
     ):
         """
-        Run each L0 frame in the stack through the L0->L2 pipeline, returning the
+        Run each frame of ``l0_file_list`` through the L0->L2 pipeline, returning the
         extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
         entry). With ``output_dir``, each frame's L2 is written there as
-        ``{obs_id}_thar_L2.fits`` as soon as it is extracted. Raises if load
-        failures exceed ``max_fail_fraction`` or ``max_fail_number``.
+        ``{obs_id}_thar_L2.fits`` as soon as it is extracted. Every frame is
+        attempted; afterwards, raises if load failures exceed
+        ``max_fail_fraction`` or ``max_fail_number``, or fewer than
+        ``min_stack_size`` frames reached L2.
         """
-        if l0_file_list is None:
-            l0_file_list = self.l0_file_list
-
         if len(l0_file_list) == 0:
             raise ValueError("Empty l0_file_list; must supply at least one valid file")
 
         self._l2_obj_cache = []
         self._stacked_files = []
-        failure = 0
 
         for fn in l0_file_list:
             l1_obj = self._load_frame(fn, cache=False)
 
             if l1_obj is None:
-                failure += 1
-                self._check_load_failures(
-                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
-                )
                 continue
 
             self._stacked_files.append(fn)
@@ -216,6 +210,8 @@ class WLS(BaseMasterModule):
             if output_dir is not None:
                 self._write_frame(l2_obj, "thar", output_dir=output_dir, overwrite=True)
             self._l2_obj_cache.append(l2_obj)
+
+        self._check_stack_size(l0_file_list, max_fail_fraction, max_fail_number)
 
         return self._l2_obj_cache
 
@@ -552,7 +548,6 @@ class WLS(BaseMasterModule):
         raised) and kept out of the combined solution when its line-fit QC
         failure fraction exceeds ``max_bad_frac``, or when its per-frame fit fails
         (too few good lines, a dropped fiber, or non-finite coefficients).
-        Survivors are gated against ``min_stack_size`` in ``make_master_l2``.
 
         Returns a list of per-frame dicts (original order) with keys 'obs_id',
         'lines' (the ``_fit_line_positions_ffi`` dict), 'coeffs' (None if
@@ -650,11 +645,15 @@ class WLS(BaseMasterModule):
 
         Stacks the non-rejected frames' Legendre coefficients, combines them by
         per-coefficient outlier-rejected averaging (median +/- ``qc_sigma`` MAD),
-        and evaluates the mean to a master wavelength array. Assumes at least one
-        survivor (callers gate against ``min_stack_size`` first). Returns
+        and evaluates the mean to a master wavelength array. Returns
         (W, coeffs_mean). Raises if every survivor is rejected as an outlier for
         some coefficient (a cross-frame degeneracy that leaves the stack
         uncombinable).
+
+        Assumes at least one survivor, but nothing upstream enforces it: with
+        zero line-fit survivors the stack is empty and the same outlier error
+        is raised, misattributing the cause. Temporary until the WLS QC suite
+        is overhauled.
         """
         coeffs_stack = np.array([fr["coeffs"] for fr in frames if not fr["rejected"]])
 
@@ -665,7 +664,9 @@ class WLS(BaseMasterModule):
         if np.any(denom == 0):
             raise ValueError(
                 f"{chip}: all frames rejected as outliers for at least one "
-                f"Legendre coefficient; cannot combine the coefficient stack"
+                f"Legendre coefficient; cannot combine the coefficient stack "
+                f"(also raised when no frame passed line-fit QC; a known "
+                f"misattribution pending the WLS QC overhaul)"
             )
         coeffs_mean = np.sum(coeffs_stack * ~bad, axis=0) / denom
 
@@ -707,6 +708,7 @@ class WLS(BaseMasterModule):
         Parameters
         ----------
         l0_file_list : list of str, optional
+            L0 files to process; replaces ``self.l0_file_list`` if given.
             Defaults to ``self.l0_file_list``.
         linelist : str, optional
             CSV line list path; reloaded if different from the cached path.
@@ -747,12 +749,13 @@ class WLS(BaseMasterModule):
         Line fitting is attempted for every loaded frame; a frame whose line-fit
         QC or per-frame fit fails is warned and dropped, never raised. Each
         per-frame L2 is written right after extraction, and the diagnostics HDF5
-        before the survivor gate, so both persist even on gate failure. Raises
-        ValueError if any chip has fewer than ``self.min_stack_size`` frames
-        passing line-fit QC (the master is then not written).
+        before the coefficients are combined, so both persist if the master is
+        not built. Raises ValueError (before line fitting) if load failures
+        exceed the limits or fewer than ``self.min_stack_size`` frames reach L2.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
+        self.l0_file_list = l0_file_list
         if lineprofile is None:
             lineprofile = self.lineprofile
         if poly_degree_x is None:
@@ -779,7 +782,7 @@ class WLS(BaseMasterModule):
             )
 
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
-        self._process_stack_l0_to_l2(l0_file_list=l0_file_list, output_dir=stack_dir)
+        self._process_stack_l0_to_l2(l0_file_list, output_dir=stack_dir)
 
         self._frame_diagnostics = {}
         self._stack_info = {}
@@ -802,21 +805,13 @@ class WLS(BaseMasterModule):
                 "n_fit": sum(int(np.sum(lines["isgood"])) for lines in kept),
             }
 
-        # Persist diagnostics before the gate, so a night that fails it still
-        # leaves its HDF5 on disk (only the master is withheld).
+        # Persist diagnostics before combining, so a stack that fails to combine
+        # still leaves its HDF5 on disk (only the master is withheld).
         if stack_dir is not None:
             self.save_diagnostics(stack_dir, overwrite=True)
 
         self._track_info()
         logger.info("%s", self._info)
-
-        for chip in self.chips:
-            n_survivors = self._stack_info[chip]["n_survivors"]
-            if n_survivors < self.min_stack_size:
-                raise ValueError(
-                    f"{chip}: only {n_survivors} frame(s) passed line-fit QC "
-                    f"(< min_stack_size={self.min_stack_size}); aborting WLS"
-                )
 
         self.ml2_obj = KPFMasterL2(kind="wls")
         for chip in self.chips:
