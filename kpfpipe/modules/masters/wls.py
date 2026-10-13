@@ -188,7 +188,7 @@ class WLS(BaseMasterModule):
         extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
         entry). With ``output_dir``, each frame's L2 is written there as
         ``{obs_id}_thar_L2.fits`` as soon as it is extracted. Every frame is
-        attempted; afterwards, raises if load failures exceed
+        attempted; afterwards, raises if frame failures exceed
         ``max_fail_fraction`` or ``max_fail_number``, or fewer than
         ``min_stack_size`` frames reached L2.
         """
@@ -204,11 +204,19 @@ class WLS(BaseMasterModule):
             if l1_obj is None:
                 continue
 
-            self._stacked_files.append(fn)
             l1_obj = self._process_frame(l1_obj)
+
+            if l1_obj is None:
+                continue
+
             l2_obj = self._extract_frame(l1_obj)
+
+            if l2_obj is None:
+                continue
+
             if output_dir is not None:
                 self._write_frame(l2_obj, "thar", output_dir=output_dir, overwrite=True)
+            self._stacked_files.append(fn)
             self._l2_obj_cache.append(l2_obj)
 
         self._check_stack_size(l0_file_list, max_fail_fraction, max_fail_number)

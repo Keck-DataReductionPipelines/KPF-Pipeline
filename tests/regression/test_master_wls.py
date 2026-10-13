@@ -70,7 +70,7 @@ def _memoize_rough_wls(cached_rough_wls, monkeypatch):
 
 
 class MockL1:
-    pass
+    obs_id = None
 
 
 class MockL2:
@@ -230,7 +230,7 @@ class TestProcessIndividualFrames:
             attempted.append(fn)
 
         monkeypatch.setattr(wls, "_load_frame", load)
-        with pytest.raises(ValueError, match="too many frames failed to load"):
+        with pytest.raises(ValueError, match="too many frames failed to load/process"):
             wls._process_stack_l0_to_l2(FILE_LIST)
         # the limit is applied once, after every frame has been attempted
         assert attempted == FILE_LIST
@@ -244,6 +244,36 @@ class TestProcessIndividualFrames:
         )
         result = wls._process_stack_l0_to_l2(FILE_LIST)
         assert len(result) == 7
+
+    def test_extract_failure_drops_frame_and_continues(
+        self, mock_pipeline, monkeypatch, tmp_path
+    ):
+        # The failed frame is skipped; every other frame's L2 is still written.
+        mock_se = MagicMock()
+        mock_se.return_value.perform.side_effect = [LookupError("orderlets")] + [
+            MockL2(get_obs_id(fn)) for fn in FILE_LIST[1:]
+        ]
+        monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
+        wls = WLS(FILE_LIST)
+        monkeypatch.setattr(
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
+        )
+        result = wls._process_stack_l0_to_l2(FILE_LIST, output_dir=tmp_path)
+        assert len(result) == 7
+        assert wls._stacked_files == FILE_LIST[1:]
+        assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+            f"{get_obs_id(fn)}_thar_L2.fits" for fn in FILE_LIST[1:]
+        )
+
+    def test_write_failure_raises(self, monkeypatch, tmp_path):
+        _stub_frame_pipeline(monkeypatch)
+
+        def write(self, obj, cal_type, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(WLS, "_write_frame", write)
+        with pytest.raises(OSError, match="disk full"):
+            WLS(FILE_LIST)._process_stack_l0_to_l2(FILE_LIST, output_dir=tmp_path)
 
 
 @pytest.fixture
@@ -1004,7 +1034,7 @@ class TestMinStackSizeGate:
         wls = self._mock(monkeypatch, n_loaded=7, masters_output=tmp_path)
         wls.min_stack_size = 8
         night, master_path, thar_dir = _master_and_stack(tmp_path)
-        with pytest.raises(ValueError, match=r"only 7 of 8 frames loaded"):
+        with pytest.raises(ValueError, match=r"only 7 of 8 frames processed"):
             wls.make_master_l2(output_dir=str(night))
 
         # the loaded frames' L2s persist despite the abort ...

@@ -63,6 +63,19 @@ class TestMasterBaseErrors:
         assert "Failed to load" in caplog.text
         assert l1_obj is None
 
+    def test_load_frame_standardize_error_warns_and_skips(self, caplog, monkeypatch):
+        # e.g. no instrument era covers the frame: drop it, log the traceback.
+        def from_fits(fn, standardize=False):
+            raise ValueError("no instrument era")
+
+        monkeypatch.setattr("kpfpipe.modules.masters.base.KPF0.from_fits", from_fits)
+        m = Dark(FILE_LIST)
+        with caplog.at_level(logging.WARNING):
+            l1_obj = m._load_frame(FILE_LIST[0], cache=False)
+        assert "Failed to load" in caplog.text
+        assert "Traceback" in caplog.text
+        assert l1_obj is None
+
     def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
         # NOTJUNK is the observer junk-list flag; failing a required QCL0 flag
         # drops the frame before assembly instead of raising.
@@ -155,6 +168,22 @@ class TestProcessFrame:
         )
 
         assert result is processed
+
+    def test_association_failure_warns_and_skips(self, caplog):
+        # No master within the search window: drop the frame, log the traceback.
+        dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+            caplog.at_level(logging.WARNING),
+        ):
+            mock_ca.return_value.perform.side_effect = FileNotFoundError("no bias")
+            mock_ip.calibration_applied.return_value = False
+            result = dark._process_frame(MagicMock(obs_id="KP.20240101.00001.00"))
+
+        assert result is None
+        assert "Failed to process KP.20240101.00001.00" in caplog.text
+        assert "Traceback" in caplog.text
 
     def test_explicit_override_skips_association(self):
         # A bias given as a master object (not True) needs no association.
@@ -810,14 +839,30 @@ class TestStackingValidation:
     def test_excessive_load_failures_raises_after_every_frame_attempted(self):
         dark = self._dark(5)
         attempted = []
-        with pytest.raises(ValueError, match="too many frames failed to load"):
+        with pytest.raises(ValueError, match="too many frames failed to load/process"):
             self._stack_with_failures(dark, 3, attempted)
         assert attempted == dark.l0_file_list
+
+    def test_process_failure_drops_frame_from_stack(self):
+        dark = self._dark(5)
+        frames = [_stack_frame(10.0, 100.0, 10.0) for _ in range(5)]
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.multiple(dark, nrow=2, ncol=2),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
+            patch.object(
+                dark, "_process_frame", lambda l1: None if l1 is frames[1] else l1
+            ),
+        ):
+            dark.stack_frames()
+        assert dark._stacked_files == [
+            fn for fn in dark.l0_file_list if fn != dark.l0_file_list[1]
+        ]
 
     def test_below_min_stack_size_raises(self):
         dark = self._dark(5)
         dark.min_stack_size = 5
-        with pytest.raises(ValueError, match=r"only 4 of 5 frames loaded"):
+        with pytest.raises(ValueError, match=r"only 4 of 5 frames processed"):
             self._stack_with_failures(dark, 1, [])
 
     def test_ccd_var_frame_count_mismatch_raises(self):

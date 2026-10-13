@@ -194,9 +194,9 @@ class BaseMasterModule:
         """
         Load an L0 file and assemble it to an L1 object; None on failure.
 
-        Failure means the frame could not be read/assembled or failed one of
-        ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause and callers detect it
-        via ``is None``.
+        Failure means the frame could not be read/standardized/assembled or failed
+        one of ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause (with
+        traceback for errors) and callers detect it via ``is None``.
         With ``cache=True`` the assembled L1 is retained for reuse (the streaming
         stats path caches its approximation-pass frames so the exact pass reuses
         them); an already-cached frame is returned regardless of the flag.
@@ -220,8 +220,8 @@ class BaseMasterModule:
             if cache:
                 self._l1_obj_cache[fn] = l1_obj
 
-        except (FileNotFoundError, OSError) as e:
-            logger.warning("Failed to load %s: %s", fn, e)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            logger.warning("Failed to load %s: %s", fn, e, exc_info=True)
             return None
 
         return l1_obj
@@ -234,6 +234,7 @@ class BaseMasterModule:
         modules). ``True`` calibrations are associated first (nearest-in-time
         master written to PRIMARY); explicit filepath/KPFMasterL1 overrides pass
         straight through. No active calibrations → frame returned unchanged.
+        None on failure (a warning with traceback names the cause).
         """
         calibrations = self._active_calibrations
         active = [name for name, value in calibrations.items() if value]
@@ -248,23 +249,27 @@ class BaseMasterModule:
         # Only header-driven (True) calibrations need association; explicit
         # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
         cal_types = [name for name, value in calibrations.items() if value is True]
-        if cal_types:
-            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_output}
-            if self._masters_search_window_days is not None:
-                ca_config["masters_search_window_days"] = (
-                    self._masters_search_window_days
-                )
-            calibration_association = CalibrationAssociation(l1_obj, ca_config)
-            l1_obj = calibration_association.perform(cal_types)
+        try:
+            if cal_types:
+                ca_config = {"KPF_MASTERS_OUTPUT": self._masters_output}
+                if self._masters_search_window_days is not None:
+                    ca_config["masters_search_window_days"] = (
+                        self._masters_search_window_days
+                    )
+                calibration_association = CalibrationAssociation(l1_obj, ca_config)
+                l1_obj = calibration_association.perform(cal_types)
 
-        # Load (and cache) each active master here, then hand the in-memory
-        # masters to ImageProcessing so a shared master is read once per stack.
-        image_processing = ImageProcessing(l1_obj)
-        l1_obj = image_processing.perform(
-            bias=self._load_calibration(l1_obj, "bias"),
-            dark=self._load_calibration(l1_obj, "dark"),
-            flat=self._load_calibration(l1_obj, "flat"),
-        )
+            # Load (and cache) each active master here, then hand the in-memory
+            # masters to ImageProcessing so a shared master is read once per stack.
+            image_processing = ImageProcessing(l1_obj)
+            l1_obj = image_processing.perform(
+                bias=self._load_calibration(l1_obj, "bias"),
+                dark=self._load_calibration(l1_obj, "dark"),
+                flat=self._load_calibration(l1_obj, "flat"),
+            )
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            logger.warning("Failed to process %s: %s", l1_obj.obs_id, e, exc_info=True)
+            return None
 
         return l1_obj
 
@@ -273,10 +278,15 @@ class BaseMasterModule:
         Extract an assembled frame to L2 (for spectral masters, e.g. WLS).
 
         Spectral extraction only -- calibration is not implicit; callers needing
-        bias/dark applied must run ``_process_frame`` first.
+        bias/dark applied must run ``_process_frame`` first. None on failure (a
+        warning with traceback names the cause).
         """
-        spectral_extraction = SpectralExtraction(l1_obj)
-        return spectral_extraction.perform()
+        try:
+            spectral_extraction = SpectralExtraction(l1_obj)
+            return spectral_extraction.perform()
+        except (OSError, ValueError, LookupError, TypeError) as e:
+            logger.warning("Failed to extract %s: %s", l1_obj.obs_id, e, exc_info=True)
+            return None
 
     def _write_frame(self, obj, cal_type, *, output_dir, overwrite=False):
         """
@@ -305,24 +315,24 @@ class BaseMasterModule:
     def _check_stack_size(self, l0_file_list, max_fail_fraction, max_fail_number):
         """
         Decide, once every frame of ``l0_file_list`` has been attempted,
-        whether the stack can build a master. Raise ValueError if frame-load
-        failures exceed either the fraction (``max_fail_fraction``) or absolute
-        (``max_fail_number``) limit, or if fewer than ``min_stack_size`` frames
-        loaded (``_stacked_files``).
+        whether the stack can build a master. Raise ValueError if frame
+        failures (load/process/extract) exceed either the fraction
+        (``max_fail_fraction``) or absolute (``max_fail_number``) limit, or if
+        fewer than ``min_stack_size`` frames were processed (``_stacked_files``).
         """
         n_total = len(l0_file_list)
-        n_loaded = len(self._stacked_files)
-        failure = n_total - n_loaded
+        n_processed = len(self._stacked_files)
+        failure = n_total - n_processed
         if failure / n_total > max_fail_fraction or failure > max_fail_number:
             raise ValueError(
-                f"too many frames failed to load "
+                f"too many frames failed to load/process "
                 f"({failure} of {n_total}); limits are "
                 f"max_fail_fraction={max_fail_fraction:.0%}, "
                 f"max_fail_number={max_fail_number}"
             )
-        if n_loaded < self.min_stack_size:
+        if n_processed < self.min_stack_size:
             raise ValueError(
-                f"only {n_loaded} of {n_total} frames loaded "
+                f"only {n_processed} of {n_total} frames processed "
                 f"(< min_stack_size={self.min_stack_size})"
             )
 
@@ -383,8 +393,12 @@ class BaseMasterModule:
             if l1_obj is None:
                 continue
 
-            self._stacked_files.append(fn)
             l1_obj = self._process_frame(l1_obj)
+
+            if l1_obj is None:
+                continue
+
+            self._stacked_files.append(fn)
 
             exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
@@ -540,8 +554,12 @@ class BaseMasterModule:
             if l1_obj is None:
                 continue
 
-            self._stacked_files.append(fn)
             l1_obj = self._process_frame(l1_obj)
+
+            if l1_obj is None:
+                continue
+
+            self._stacked_files.append(fn)
 
             exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
