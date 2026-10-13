@@ -4,6 +4,7 @@ All sub-module I/O is mocked; no real data or FITS files are required.
 """
 
 import logging
+import os
 from unittest.mock import MagicMock
 
 import h5py
@@ -73,10 +74,14 @@ class MockL1:
 
 
 class MockL2:
+    level = 2
+
     def __init__(self, obs_id=None):
         self.obs_id = obs_id
 
     def to_fits(self, path):
+        # mirrors the real to_fits, which creates the parent directory
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         open(path, "w").close()
 
 
@@ -494,7 +499,7 @@ class TestMakeMasterL2:
     def test_save_diagnostics_before_make_raises(self):
         wls = WLS(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_diagnostics()
+            wls.save_diagnostics("/unused")
 
     def test_save_diagnostics_with_empty_stash_raises(self, tmp_path):
         # An empty (not None) stash means the chip loop aborted before any chip
@@ -502,7 +507,7 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST)
         wls._frame_diagnostics = {}
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_diagnostics()
+            wls.save_diagnostics(str(tmp_path / "thar_L2"))
         assert not (tmp_path / "thar_L2").exists()
 
     def test_output_dir_writes_diagnostics_hdf5(self, mock_make_master_l2, tmp_path):
@@ -516,7 +521,7 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         wls.make_master_l2()  # no output_dir; diagnostics stashed on self
         _, _, thar_dir = _master_and_stack(tmp_path)
-        wls.save_diagnostics()
+        wls.save_diagnostics(str(thar_dir))
         h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         assert h5_path.exists()
 
@@ -557,17 +562,18 @@ class TestMakeMasterL2:
         wls.make_master_l2()  # no output_dir
         assert not (tmp_path / "thar_L2").exists()
 
-    def test_save_reduced_frames_before_make_raises(self):
-        wls = WLS(FILE_LIST)
-        with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_reduced_frames()
+    def test_per_frame_thar_l2_written_before_line_fitting(
+        self, mock_make_master_l2, monkeypatch, tmp_path
+    ):
+        def fit_raises(self, *args, **kwargs):
+            raise ValueError("line fitting failed")
 
-    def test_save_reduced_frames_refuses_overwrite(self, mock_make_master_l2, tmp_path):
+        monkeypatch.setattr(WLS, "_fit_and_qc_lines_stack", fit_raises)
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
-        wls.make_master_l2()  # populates _l2_obj_cache, writes nothing
-        wls.save_reduced_frames()  # first write
-        with pytest.raises(FileExistsError, match="overwrite=True"):
-            wls.save_reduced_frames()
+        night, _, thar_dir = _master_and_stack(tmp_path)
+        with pytest.raises(ValueError, match="line fitting failed"):
+            wls.make_master_l2(output_dir=str(night))
+        assert len(list(thar_dir.glob("*_thar_L2.fits"))) == len(FILE_LIST)
 
     def test_save_master_overwrite_true_replaces(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
@@ -654,7 +660,7 @@ class TestMakeMasterL2:
             ]
         }
         _, _, thar_dir = _master_and_stack(tmp_path)
-        wls.save_diagnostics()
+        wls.save_diagnostics(str(thar_dir))
         h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         with h5py.File(h5_path, "r") as h5:
             kept = h5["KP.20240101.00001.00"]["GREEN"]

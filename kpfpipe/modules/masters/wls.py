@@ -181,12 +181,14 @@ class WLS(BaseMasterModule):
         l0_file_list=None,
         max_fail_fraction=0.2,
         max_fail_number=2,
+        output_dir=None,
     ):
         """
         Run each L0 frame in the stack through the L0->L2 pipeline, returning the
         extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
-        entry). Raises if load failures exceed ``max_fail_fraction`` or
-        ``max_fail_number``.
+        entry). With ``output_dir``, each frame's L2 is written there as
+        ``{obs_id}_thar_L2.fits`` as soon as it is extracted. Raises if load
+        failures exceed ``max_fail_fraction`` or ``max_fail_number``.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -211,6 +213,8 @@ class WLS(BaseMasterModule):
             self._stacked_files.append(fn)
             l1_obj = self._process_frame(l1_obj)
             l2_obj = self._extract_frame(l1_obj)
+            if output_dir is not None:
+                self._write_frame(l2_obj, "thar", output_dir=output_dir, overwrite=True)
             self._l2_obj_cache.append(l2_obj)
 
         return self._l2_obj_cache
@@ -724,8 +728,9 @@ class WLS(BaseMasterModule):
         output_dir : str, optional
             If provided, write the master L2 into this directory under its
             standard DRP-RUN-05 filename via ``save_master('L2', ...)``, and
-            persist each processed ThAr frame's L2 (``save_reduced_frames()``)
-            and the per-frame diagnostics HDF5 (``save_diagnostics()``).
+            persist each processed ThAr frame's L2 (as it is extracted) and the
+            per-frame diagnostics HDF5 (``save_diagnostics()``) to the ThAr
+            ``cal_stack`` directory under the configured masters output.
 
         Returns
         -------
@@ -740,11 +745,11 @@ class WLS(BaseMasterModule):
         carry stale frames forward.
 
         Line fitting is attempted for every loaded frame; a frame whose line-fit
-        QC or per-frame fit fails is warned and dropped, never raised. The
-        per-frame L2s and diagnostics HDF5 are written before the survivor gate,
-        so they persist even on gate failure. Raises ValueError if any chip has
-        fewer than ``self.min_stack_size`` frames passing line-fit QC (the master
-        is then not written).
+        QC or per-frame fit fails is warned and dropped, never raised. Each
+        per-frame L2 is written right after extraction, and the diagnostics HDF5
+        before the survivor gate, so both persist even on gate failure. Raises
+        ValueError if any chip has fewer than ``self.min_stack_size`` frames
+        passing line-fit QC (the master is then not written).
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
@@ -763,8 +768,18 @@ class WLS(BaseMasterModule):
 
         self._load_linelist(linelist)
 
+        stack_dir = None
+        if output_dir is not None:
+            stack_dir = kpf_directory(
+                kind="cal_stack",
+                data_root=self._masters_output,
+                level="L2",
+                obs_id=get_obs_id(l0_file_list[0]),
+                cal_type="thar",
+            )
+
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
-        self._process_stack_l0_to_l2(l0_file_list=l0_file_list)
+        self._process_stack_l0_to_l2(l0_file_list=l0_file_list, output_dir=stack_dir)
 
         self._frame_diagnostics = {}
         self._stack_info = {}
@@ -788,10 +803,9 @@ class WLS(BaseMasterModule):
             }
 
         # Persist diagnostics before the gate, so a night that fails it still
-        # leaves its per-frame L2s and HDF5 on disk (only the master is withheld).
-        if output_dir is not None:
-            self.save_reduced_frames(overwrite=True)
-            self.save_diagnostics(overwrite=True)
+        # leaves its HDF5 on disk (only the master is withheld).
+        if stack_dir is not None:
+            self.save_diagnostics(stack_dir, overwrite=True)
 
         self._track_info()
         logger.info("%s", self._info)
@@ -848,10 +862,10 @@ class WLS(BaseMasterModule):
 
         return self.ml2_obj
 
-    def save_diagnostics(self, *, overwrite=False):
+    def save_diagnostics(self, output_dir, *, overwrite=False):
         """
-        Write the per-frame WLS diagnostics to an HDF5 file in the ThAr
-        ``cal_stack`` directory under the configured masters output, named
+        Write the per-frame WLS diagnostics to an HDF5 file in ``output_dir``
+        (``make_master_l2`` passes the ThAr ``cal_stack`` directory), named
         ``{obs_id}_master_thar_diagnostics.h5`` (obs_id from the first
         stacked frame).
 
@@ -864,6 +878,8 @@ class WLS(BaseMasterModule):
 
         Parameters
         ----------
+        output_dir : str
+            Directory to write into; created if needed.
         overwrite : bool, optional
             Refuse to clobber an existing file unless True.
 
@@ -879,15 +895,8 @@ class WLS(BaseMasterModule):
             raise RuntimeError("No diagnostics available; run make_master_l2() first")
 
         obs_id = get_obs_id(self._stacked_files[0])
-        directory = kpf_directory(
-            kind="cal_stack",
-            data_root=self._masters_output,
-            level="L2",
-            obs_id=obs_id,
-            cal_type="thar",
-        )
-        os.makedirs(directory, exist_ok=True)
-        path = os.path.join(directory, f"{obs_id}_master_thar_diagnostics.h5")
+        os.makedirs(output_dir, exist_ok=True)
+        path = os.path.join(output_dir, f"{obs_id}_master_thar_diagnostics.h5")
         if not overwrite and os.path.exists(path):
             raise FileExistsError(
                 f"{path} already exists; pass overwrite=True to replace it"
@@ -912,55 +921,6 @@ class WLS(BaseMasterModule):
                         else:
                             lines_group.create_dataset(key, data=arr)
         logger.info("wrote WLS diagnostics to %s", path)
-
-    def save_reduced_frames(self, *, overwrite=False):
-        """
-        Write each processed ThAr frame's L2 to the ThAr ``cal_stack``
-        directory under the configured masters output, as
-        ``{obs_id}_thar_L2.fits``.
-
-        Persists the per-frame L2 objects cached by make_master_l2() (every
-        frame that loaded, processed, and extracted), for follow-up ThAr
-        line/WLS-stability analysis.
-
-        Parameters
-        ----------
-        overwrite : bool, optional
-            Refuse to clobber an existing per-frame file unless True.
-
-        Raises
-        ------
-        RuntimeError
-            If make_master_l2() has not been run yet, or raised before
-            extracting any frame.
-        FileExistsError
-            If a per-frame file already exists and ``overwrite`` is False.
-        """
-        if not self._l2_obj_cache:
-            raise RuntimeError("No frames available; run make_master_l2() first")
-
-        directory = kpf_directory(
-            kind="cal_stack",
-            data_root=self._masters_output,
-            level="L2",
-            obs_id=get_obs_id(self._stacked_files[0]),
-            cal_type="thar",
-        )
-        os.makedirs(directory, exist_ok=True)
-        # These are deliberately non-EPRV diagnostic products; KPF2.to_fits' EPRV
-        # filename-convention warning for the {obs_id}_thar_L2 name is expected.
-        for l2_obj in self._l2_obj_cache:
-            path = os.path.join(directory, f"{l2_obj.obs_id}_thar_L2.fits")
-            if not overwrite and os.path.exists(path):
-                raise FileExistsError(
-                    f"{path} already exists; pass overwrite=True to replace it"
-                )
-            l2_obj.to_fits(path)
-        logger.info(
-            "wrote %d individual ThAr L2 frames to %s",
-            len(self._l2_obj_cache),
-            directory,
-        )
 
     def _track_info(self):
         """Build and cache the info() summary text from _stack_info."""

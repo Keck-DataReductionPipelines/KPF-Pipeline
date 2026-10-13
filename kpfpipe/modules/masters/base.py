@@ -278,6 +278,26 @@ class BaseMasterModule:
         spectral_extraction = SpectralExtraction(l1_obj)
         return spectral_extraction.perform()
 
+    def _write_frame(self, obj, cal_type, *, output_dir, overwrite=False):
+        """
+        Write one processed stack frame to ``output_dir`` as
+        ``{obs_id}_{cal_type}_L{level}.fits`` (e.g. ``..._thar_L2.fits``).
+
+        Callers own the directory (typically the ``cal_stack`` tree). Refuses to
+        clobber an existing file unless ``overwrite`` is True.
+        """
+        path = os.path.join(output_dir, f"{obj.obs_id}_{cal_type}_L{obj.level}.fits")
+        if not overwrite and os.path.exists(path):
+            raise FileExistsError(
+                f"{path} already exists; pass overwrite=True to replace it"
+            )
+
+        # Deliberately non-EPRV diagnostic products: skip to_fits' filename-
+        # convention warning. to_fits creates the parent directory as needed.
+        obj.check_filename_convention = lambda _: True
+        obj.to_fits(path)
+        logger.info("wrote %s frame to %s", cal_type, path)
+
     # ------------------------------------------------------------------
     # Private helpers for frame stacking.
     # ------------------------------------------------------------------

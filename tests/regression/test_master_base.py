@@ -937,6 +937,35 @@ class TestSaveMaster:
             bias.save_master("L1", str(master_path))
 
 
+class TestWriteFrame:
+    """The per-frame write path shared by every master."""
+
+    @staticmethod
+    def _frame():
+        obj = MagicMock(obs_id="KP.20240101.00000.00", level=2)
+        obj.to_fits.side_effect = lambda path: open(path, "w").close()
+        return obj
+
+    def test_writes_cal_type_and_level_name(self, tmp_path):
+        Bias(FILE_LIST)._write_frame(self._frame(), "thar", output_dir=str(tmp_path))
+        assert (tmp_path / "KP.20240101.00000.00_thar_L2.fits").exists()
+
+    def test_refuses_overwrite_by_default(self, tmp_path):
+        (tmp_path / "KP.20240101.00000.00_thar_L2.fits").touch()
+        with pytest.raises(FileExistsError, match="overwrite=True"):
+            Bias(FILE_LIST)._write_frame(
+                self._frame(), "thar", output_dir=str(tmp_path)
+            )
+
+    def test_overwrite_true_replaces(self, tmp_path):
+        (tmp_path / "KP.20240101.00000.00_thar_L2.fits").touch()
+        frame = self._frame()
+        Bias(FILE_LIST)._write_frame(
+            frame, "thar", output_dir=str(tmp_path), overwrite=True
+        )
+        frame.to_fits.assert_called_once()
+
+
 class TestConfigSectionPlumbing:
     """Every masters subclass names the config sections it reads. Dropping one
     from that list is a silent fallback to _DEFAULTS -- a stack_sigma of 5.0
