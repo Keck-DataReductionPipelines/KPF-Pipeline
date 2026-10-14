@@ -44,6 +44,7 @@ class Bias(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
+        self.master_type = "bias"
 
         self._info = None
 
@@ -90,10 +91,9 @@ class Bias(BaseMasterModule):
             l0_file_list=l0_file_list,
             nstream=nstream,
             sigma=sigma,
-            cal_type="bias",
         )
 
-        self.ml1_obj = self._build_ml1_obj(l1_arrays, master_type="bias")
+        self.ml1_obj = self._build_ml1_obj(l1_arrays)
         self._populate_stack_info(l1_arrays)
         self._track_info()
 

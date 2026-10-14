@@ -206,8 +206,14 @@ modules — follow *its* conventions:
 - **Entry points are `make_master_l1/l2(...)`**, not `perform()`, with the same positional-then-
   keyword-only shape as `perform()` (§C.3) and `l0_file_list` as the sole positional.
 - **Thin subclasses over `BaseMasterModule`.** `Bias`/`Dark`/`Flat`/`WLS` add only an `__init__`
-  (selecting the config section), the `make_master_*` entry point, and an `info()` ASCII-table
-  summary; `_DEFAULT_CFG` extends the base (`{**BaseMasterModule._DEFAULT_CFG, ...}`).
+  (selecting the config section and setting `self.master_type`), the `make_master_*` entry point,
+  and an `info()` ASCII-table summary; `_DEFAULT_CFG` extends the base
+  (`{**BaseMasterModule._DEFAULT_CFG, ...}`).
+- **`self.master_type` is module state, not a parameter.** The type being built (the `MASTYPE`
+  token: `bias`/`dark`/`flat`/`thar`) is read off `self` by the base methods that branch on it
+  (frame-type check, outlier mode, BUNIT, filenames), never threaded through arguments. Per-type
+  tables are named `_<X>_BY_MASTER_TYPE`. `cal_type` is reserved for a calibration being
+  *applied* (the bias/dark/flat masters subtracted from a frame).
 - **Public API is `make_master*`, `save*`, `stack_frames`, `info`**; every other method is
   underscored (tests patch the underscored names directly).
 

@@ -268,7 +268,7 @@ class TestProcessIndividualFrames:
     def test_write_failure_raises(self, monkeypatch, tmp_path):
         _stub_frame_pipeline(monkeypatch)
 
-        def write(self, obj, cal_type, **kwargs):
+        def write(self, obj, **kwargs):
             raise OSError("disk full")
 
         monkeypatch.setattr(WLS, "_write_frame", write)

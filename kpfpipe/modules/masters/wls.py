@@ -77,6 +77,7 @@ class WLS(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
+        self.master_type = "thar"
         self.rough_wls_file = _ROUGH_WLS_FILE
 
         # physical echelle order per row (bluest first), cached per chip;
@@ -215,7 +216,7 @@ class WLS(BaseMasterModule):
                 continue
 
             if output_dir is not None:
-                self._write_frame(l2_obj, "thar", output_dir=output_dir, overwrite=True)
+                self._write_frame(l2_obj, output_dir=output_dir, overwrite=True)
             self._stacked_files.append(fn)
             self._l2_obj_cache.append(l2_obj)
 
@@ -786,7 +787,7 @@ class WLS(BaseMasterModule):
                 data_root=self._masters_output,
                 level="L2",
                 obs_id=get_obs_id(l0_file_list[0]),
-                cal_type="thar",
+                cal_type=self.master_type,
             )
 
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
@@ -842,7 +843,7 @@ class WLS(BaseMasterModule):
 
             self.ml2_obj.set_data(f"{chip}_WLS_COEFFS", coeffs_mean)
 
-        self.ml2_obj.set_input_files(self._stacked_files, "thar")
+        self.ml2_obj.set_input_files(self._stacked_files, self.master_type)
 
         # WLS metadata is out of EPRV scope but registered in
         # ML2-wls-PRIMARY-keywords.csv,

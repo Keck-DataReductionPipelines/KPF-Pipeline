@@ -76,6 +76,21 @@ class TestMasterBaseErrors:
         assert "Traceback" in caplog.text
         assert l1_obj is None
 
+    def test_load_frame_wrong_obstype_warns_and_skips(self, caplog, monkeypatch):
+        # A frame of another type (here a Bias in a dark stack) is rejected
+        # before QC or assembly.
+        m = Dark(FILE_LIST)
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: types.SimpleNamespace(
+                headers={"PRIMARY": {"OBSTYPE": "Bias"}}
+            ),
+        )
+        with caplog.at_level(logging.WARNING):
+            l1_obj = m._load_frame(FILE_LIST[0], cache=False)
+        assert "OBSTYPE 'Bias' is not a dark frame" in caplog.text
+        assert l1_obj is None
+
     def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
         # NOTJUNK is the observer junk-list flag; failing a required QCL0 flag
         # drops the frame before assembly instead of raising.
@@ -472,11 +487,12 @@ class TestRateEstimator:
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
             patch.object(dark, "_process_frame", lambda l1: l1),
             patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
+            patch.object(dark, "master_type", "flat"),
         ):
-            arrays = dark.stack_frames(cal_type="flat")
+            arrays = dark.stack_frames()
         np.testing.assert_allclose(arrays["GREEN_IMG"], 200.0, rtol=1e-5)
 
-        # Same frames without the flat token take the rate branch: 200/20 = 10.
+        # Same frames as a dark take the rate branch: 200/20 = 10.
         with (
             patch.multiple(dark, nrow=2, ncol=2),
             patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
@@ -739,7 +755,7 @@ class TestCleanL1Arrays:
         assert bool(out["GREEN_MASK"][4, 4]) is False
 
     @pytest.mark.parametrize(
-        "cal_type,expected",
+        "master_type,expected",
         [
             # The detector is illuminated only for flats, so each master type
             # judges a pixel against a different reference: a bias against its
@@ -748,13 +764,14 @@ class TestCleanL1Arrays:
             # against the global median. Collapsing this dispatch to one mode
             # over-flags bias column structure and the flat's blaze while
             # leaving mean(mask) > 0.9 true.
-            (None, {"method": "median"}),
             ("dark", {"method": "median"}),
             ("bias", {"axis": 0, "method": "median"}),
             ("flat", {"axis": 1, "kernel_size": 32, "method": "trend"}),
         ],
     )
-    def test_cal_type_selects_the_flagging_mode(self, cal_type, expected, monkeypatch):
+    def test_master_type_selects_the_flagging_mode(
+        self, master_type, expected, monkeypatch
+    ):
         seen = {}
 
         def _spy(data, sigma, **kwargs):
@@ -766,21 +783,21 @@ class TestCleanL1Arrays:
         snr = np.full((5, 5), 20.0, dtype=np.float32)
         mask = np.ones((5, 5), dtype=bool)
 
-        self._dark()._clean_l1_arrays(
-            self._arrays(img, snr, mask), sigma=5.0, cal_type=cal_type
-        )
+        module = self._dark()
+        module.master_type = master_type
+        module._clean_l1_arrays(self._arrays(img, snr, mask), sigma=5.0)
 
         assert seen == expected
 
-    def test_unknown_cal_type_raises(self):
+    def test_unknown_master_type_raises(self):
         # Fail loud rather than silently falling back to the dark mode.
         img = np.full((5, 5), 10.0, dtype=np.float32)
         snr = np.full((5, 5), 20.0, dtype=np.float32)
         mask = np.ones((5, 5), dtype=bool)
-        with pytest.raises(ValueError, match="unknown cal_type"):
-            self._dark()._clean_l1_arrays(
-                self._arrays(img, snr, mask), sigma=5.0, cal_type="wls"
-            )
+        module = self._dark()
+        module.master_type = "wls"
+        with pytest.raises(ValueError, match="unknown master_type"):
+            module._clean_l1_arrays(self._arrays(img, snr, mask), sigma=5.0)
 
 
 class TestStackingValidation:
@@ -1021,23 +1038,19 @@ class TestWriteFrame:
         obj.to_fits.side_effect = lambda path: open(path, "w").close()
         return obj
 
-    def test_writes_cal_type_and_level_name(self, tmp_path):
-        Bias(FILE_LIST)._write_frame(self._frame(), "thar", output_dir=str(tmp_path))
-        assert (tmp_path / "KP.20240101.00000.00_thar_L2.fits").exists()
+    def test_writes_master_type_and_level_name(self, tmp_path):
+        Bias(FILE_LIST)._write_frame(self._frame(), output_dir=str(tmp_path))
+        assert (tmp_path / "KP.20240101.00000.00_bias_L2.fits").exists()
 
     def test_refuses_overwrite_by_default(self, tmp_path):
-        (tmp_path / "KP.20240101.00000.00_thar_L2.fits").touch()
+        (tmp_path / "KP.20240101.00000.00_bias_L2.fits").touch()
         with pytest.raises(FileExistsError, match="overwrite=True"):
-            Bias(FILE_LIST)._write_frame(
-                self._frame(), "thar", output_dir=str(tmp_path)
-            )
+            Bias(FILE_LIST)._write_frame(self._frame(), output_dir=str(tmp_path))
 
     def test_overwrite_true_replaces(self, tmp_path):
-        (tmp_path / "KP.20240101.00000.00_thar_L2.fits").touch()
+        (tmp_path / "KP.20240101.00000.00_bias_L2.fits").touch()
         frame = self._frame()
-        Bias(FILE_LIST)._write_frame(
-            frame, "thar", output_dir=str(tmp_path), overwrite=True
-        )
+        Bias(FILE_LIST)._write_frame(frame, output_dir=str(tmp_path), overwrite=True)
         frame.to_fits.assert_called_once()
 
 
@@ -1113,5 +1126,5 @@ class TestInputFilesProvenance:
         ):
             l1_arrays = dark.stack_frames()
 
-        ml1 = dark._build_ml1_obj(l1_arrays, master_type="dark")
+        ml1 = dark._build_ml1_obj(l1_arrays)
         assert ml1.data["INPUT_FILES"]["FILENAME"].tolist() == dark.l0_file_list[1:]

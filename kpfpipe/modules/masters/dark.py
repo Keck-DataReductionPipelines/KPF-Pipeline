@@ -51,6 +51,7 @@ class Dark(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
+        self.master_type = "dark"
 
         self._info = None
 
@@ -103,13 +104,12 @@ class Dark(BaseMasterModule):
             l0_file_list=l0_file_list,
             nstream=nstream,
             sigma=sigma,
-            cal_type="dark",
         )
 
         # Dark current is a rate: stack_frames normalizes each frame by its
         # exposure time, so the master dark IMG is in electrons/sec (BUNIT is
         # derived from master_type in _build_ml1_obj).
-        self.ml1_obj = self._build_ml1_obj(l1_arrays, master_type="dark")
+        self.ml1_obj = self._build_ml1_obj(l1_arrays)
         self._populate_stack_info(l1_arrays)
         self._track_info()
 

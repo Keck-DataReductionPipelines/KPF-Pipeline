@@ -51,6 +51,7 @@ class Flat(BaseMasterModule):
         else:
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
+        self.master_type = "flat"
 
         self._info = None
 
@@ -107,10 +108,9 @@ class Flat(BaseMasterModule):
             l0_file_list=l0_file_list,
             nstream=nstream,
             sigma=sigma,
-            cal_type="flat",
         )
 
-        self.ml1_obj = self._build_ml1_obj(l1_arrays, master_type="flat")
+        self.ml1_obj = self._build_ml1_obj(l1_arrays)
         self._populate_stack_info(l1_arrays)
         self._track_info()
 
