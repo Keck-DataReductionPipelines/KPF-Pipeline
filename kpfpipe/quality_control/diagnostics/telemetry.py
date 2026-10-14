@@ -68,6 +68,40 @@ class Telemetry(Diagnostics):
 
     etalon_temperature_offset._diag_name = "etalon_temperature_offset"
 
+    def thar_lamp(self):
+        """THARTEMP/THARPWR/THARON: temperature [C], power draw [W] and time on [s]
+        of the lit ThAr lamp.
+
+        The lamp is named as for OBSTYPE (OCTAGON on an Arclamp, else IMTYPE), and
+        must agree with the THARDAY/THARGD power status. Daily and Gold are
+        tracked separately natively but collapse onto one keyword pair here.
+        """
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
+        imtype = str(hdr.get("IMTYPE", "")).strip()
+        lamp = str(hdr.get("OCTAGON" if imtype == "Arclamp" else "IMTYPE", "")).strip()
+        lamps = {
+            "th_daily": ("THARDAY", "kpfmet.TH_DAILY", "PTHDAY", "THDAYTON"),
+            "th_gold": ("THARGD", "kpfmet.TH_GOLD", "PTHAU", "THAUTON"),
+        }
+        if lamp.lower() not in lamps:
+            raise ValueError(f"{lamp!r} names no ThAr lamp")
+        lit = {
+            card for card in ("THARDAY", "THARGD") if str(hdr.get(card)).strip() == "On"
+        }
+        status, temp_key, power_key, on_key = lamps[lamp.lower()]
+        if lit != {status}:
+            raise ValueError(
+                f"lamp {lamp!r} disagrees with THARDAY={hdr.get('THARDAY')!r}, "
+                f"THARGD={hdr.get('THARGD')!r}"
+            )
+        return {
+            "THARTEMP": round(self._telemetry_average(temp_key), 6),
+            "THARPWR": float(hdr[power_key]),
+            "THARON": float(hdr[on_key]),
+        }
+
+    thar_lamp._diag_name = "thar_lamp"
+
     def site_conditions(self):
         """INHUM, OUTPRES, OUTTMP, OUTHUM, ENVWINDS, ENVWINDD: conditions at
         mid-exposure.

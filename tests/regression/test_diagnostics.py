@@ -1070,6 +1070,68 @@ class TestTelemetryEtalonTemperature:
         assert name == "etalon_temperature_offset"
 
 
+class TestTelemetryTharLamp:
+    """Lit ThAr lamp's temperature and power, collapsed across Daily and Gold."""
+
+    def _make_l0(self, octagon="Th_daily", day="On", gold="Off", **cards):
+        l0 = KPF0()
+        l0.headers["INSTRUMENT_HEADER"].update(
+            {
+                "IMTYPE": "Arclamp",
+                "OCTAGON": octagon,
+                "THARDAY": day,
+                "THARGD": gold,
+                "PTHDAY": 1.6e-05,
+                "PTHAU": 2.0e-06,
+                "THDAYTON": 3474.5,
+                "THAUTON": 1465.7,
+                **cards,
+            }
+        )
+        l0.set_data(
+            "TELEMETRY",
+            Table(
+                {
+                    "keyword": ["kpfmet.TH_DAILY", "kpfmet.TH_GOLD"],
+                    "average": ["21.5", "18.8"],  # native TELEMETRY stores strings
+                }
+            ),
+        )
+        return l0
+
+    def test_daily_lamp(self):
+        results = Telemetry(self._make_l0()).thar_lamp()
+        assert results == {"THARTEMP": 21.5, "THARPWR": 1.6e-05, "THARON": 3474.5}
+
+    def test_gold_lamp(self):
+        l0 = self._make_l0(octagon="Th_gold", day="Off", gold="On")
+        assert Telemetry(l0).thar_lamp() == {
+            "THARTEMP": 18.8,
+            "THARPWR": 2.0e-06,
+            "THARON": 1465.7,
+        }
+
+    def test_imtype_names_lamp_off_arclamp(self):
+        l0 = self._make_l0(octagon="", IMTYPE="Th_daily")
+        assert Telemetry(l0).thar_lamp()["THARTEMP"] == 21.5
+
+    @pytest.mark.parametrize("day, gold", [("Off", "On"), ("On", "On"), ("Off", "Off")])
+    def test_power_status_mismatch_raises(self, day, gold):
+        with pytest.raises(ValueError, match="disagrees"):
+            Telemetry(self._make_l0(day=day, gold=gold)).thar_lamp()
+
+    def test_non_thar_lamp_raises(self):
+        with pytest.raises(ValueError, match="names no ThAr lamp"):
+            Telemetry(self._make_l0(octagon="U_daily")).thar_lamp()
+
+    def test_written_to_quality_control(self):
+        # ThAr frame: the only type thar_lamp is declared applicable to.
+        l0 = stamp_frame_type(self._make_l0(), "ThAr")
+        results = Telemetry(l0).run()
+        for key in ("THARTEMP", "THARPWR", "THARON"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+
 class TestTelemetryMoonRadialVelocity:
     """RV of sunlight reflected off the Moon."""
 

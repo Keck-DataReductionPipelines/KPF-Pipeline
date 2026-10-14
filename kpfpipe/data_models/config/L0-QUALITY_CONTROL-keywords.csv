@@ -55,6 +55,9 @@ EMSKCT78,Cumulative EM counts in SKY in 764-870 nm (ADU),,int,30600,ExposureMete
 GTEMPOFF,GREEN CCD temperature offset from setpoint (mK),,float,1.4,Telemetry
 RTEMPOFF,RED CCD temperature offset from setpoint (mK),,float,2.1,Telemetry
 ETATOFF,Etalon chamber temperature offset from setpoint (mK),,float,0.8,Telemetry
+THARTEMP,ThAr lamp temperature,deg C,float,21.5,Telemetry
+THARPWR,ThAr lamp power draw (Watts),W,float,1.6e-05,Telemetry
+THARON,Time the ThAr lamp has been on,s,float,3474.5,Telemetry
 GDRXRMS,Guider x-coordinate RMS guiding error (mas),,float,18.4,Guider
 GDRYRMS,Guider y-coordinate RMS guiding error (mas),,float,19.7,Guider
 GDRRRMS,Guider r-coordinate RMS guiding error (mas),,float,27.0,Guider
