@@ -9,10 +9,10 @@ FLATOK,QC: flat divided & master age <= 5 days,,int,0,QCL1
 L1NANOK,QC: GREEN/RED CCDs all finite,,int,1,QCL1
 L1VAROK,QC: no negative L1 variance where flux finite,,int,1,QCL1
 L1SNROK,QC: L1 pixel fraction below -5 sigma <= 1%,,int,1,QCL1
-BIASAGE,Master bias age,days,float,0.35,CalibrationAssociation
-DARKAGE,Master dark age,days,float,0.35,CalibrationAssociation
-FLATAGE,Master flat age,days,float,0.35,
-WLSAGE,WLS master age,days,float,0.35,CalibrationAssociation
+BIASAGE,Master bias age,day,float,0.35,CalibrationAssociation
+DARKAGE,Master dark age,day,float,0.35,CalibrationAssociation
+FLATAGE,Master flat age,day,float,0.35,
+WLSAGE,WLS master age,day,float,0.35,CalibrationAssociation
 RNGREEN1,Read noise GREEN amp 1,e-,float,4.12,ImageAssembly
 RNGREEN2,Read noise GREEN amp 2,e-,float,4.08,ImageAssembly
 RNGREEN3,Read noise GREEN amp 3,e-,float,4.15,ImageAssembly

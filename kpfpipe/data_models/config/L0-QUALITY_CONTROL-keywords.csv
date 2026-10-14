@@ -26,11 +26,11 @@ AGITOK,QC: agitator running above minimum speed,,int,1,QCL0
 DEADPXOK,QC: dead pixel fraction within limits on both CCDs,,int,1,QCL0
 SATPXOK,QC: over-exposed pixel fraction within limits on both CCDs,,int,1,QCL0
 NOTJUNK,QC: obs_id not in junk list,,int,1,QCL0
-TRTGREEN,GREEN chip total read time,seconds,float,47.5,KPF0.standardize_headers
-TRTRED,RED chip total read time,seconds,float,47.5,KPF0.standardize_headers
-TCSOFF,Pointing offset from TCS/DCS target (arcsec),,float,0.12,DiagL0
-OBJOFF,Pointing offset from OBJECT SIMBAD position (arcsec),,float,0.31,DiagL0
-GAIAOFF,Pointing offset from GAIAID position (arcsec),,float,0.28,DiagL0
+TRTGREEN,GREEN chip total read time,s,float,47.5,KPF0.standardize_headers
+TRTRED,RED chip total read time,s,float,47.5,KPF0.standardize_headers
+TCSOFF,Pointing offset from TCS/DCS target,arcsec,float,0.12,DiagL0
+OBJOFF,Pointing offset from OBJECT SIMBAD position,arcsec,float,0.31,DiagL0
+GAIAOFF,Pointing offset from GAIAID position,arcsec,float,0.28,DiagL0
 DEADPXFG,Fraction of raw GREEN pixels below 1.0e4 D.N.,,float,0.0021,DiagL0
 DEADPXFR,Fraction of raw RED pixels below 1.0e4 D.N.,,float,0.0018,DiagL0
 SATPXFG,Fraction of raw GREEN pixels above 5.0e8 D.N.,,float,0.0,DiagL0
@@ -42,58 +42,58 @@ EMSKYSAT,Saturated SKY exposure meter elements per reading,,float,0.0,ExposureMe
 EMSKYNEG,Longest run of negative SKY exposure meter channels,,int,0,ExposureMeter
 EMSKYINF,Longest run of non-finite SKY exposure meter channels,,int,0,ExposureMeter
 SKYSCIMS,SKY/SCI flux ratio in main spectrometer scaled from EM data,,float,0.0013,ExposureMeter
-EMSCCT48,Cumulative EM counts in SCI in 445-870 nm (ADU),,int,89412300,ExposureMeter
-EMSCCT45,Cumulative EM counts in SCI in 445-551 nm (ADU),,int,18324500,ExposureMeter
-EMSCCT56,Cumulative EM counts in SCI in 551-658 nm (ADU),,int,23117800,ExposureMeter
-EMSCCT67,Cumulative EM counts in SCI in 658-764 nm (ADU),,int,24980100,ExposureMeter
-EMSCCT78,Cumulative EM counts in SCI in 764-870 nm (ADU),,int,22989900,ExposureMeter
-EMSKCT48,Cumulative EM counts in SKY in 445-870 nm (ADU),,int,118400,ExposureMeter
-EMSKCT45,Cumulative EM counts in SKY in 445-551 nm (ADU),,int,24100,ExposureMeter
-EMSKCT56,Cumulative EM counts in SKY in 551-658 nm (ADU),,int,30600,ExposureMeter
-EMSKCT67,Cumulative EM counts in SKY in 658-764 nm (ADU),,int,33100,ExposureMeter
-EMSKCT78,Cumulative EM counts in SKY in 764-870 nm (ADU),,int,30600,ExposureMeter
-GTEMPOFF,GREEN CCD temperature offset from setpoint (mK),,float,1.4,Telemetry
-RTEMPOFF,RED CCD temperature offset from setpoint (mK),,float,2.1,Telemetry
-ETATOFF,Etalon chamber temperature offset from setpoint (mK),,float,0.8,Telemetry
+EMSCCT48,Cumulative EM counts in SCI in 445-870 nm,ADU,int,89412300,ExposureMeter
+EMSCCT45,Cumulative EM counts in SCI in 445-551 nm,ADU,int,18324500,ExposureMeter
+EMSCCT56,Cumulative EM counts in SCI in 551-658 nm,ADU,int,23117800,ExposureMeter
+EMSCCT67,Cumulative EM counts in SCI in 658-764 nm,ADU,int,24980100,ExposureMeter
+EMSCCT78,Cumulative EM counts in SCI in 764-870 nm,ADU,int,22989900,ExposureMeter
+EMSKCT48,Cumulative EM counts in SKY in 445-870 nm,ADU,int,118400,ExposureMeter
+EMSKCT45,Cumulative EM counts in SKY in 445-551 nm,ADU,int,24100,ExposureMeter
+EMSKCT56,Cumulative EM counts in SKY in 551-658 nm,ADU,int,30600,ExposureMeter
+EMSKCT67,Cumulative EM counts in SKY in 658-764 nm,ADU,int,33100,ExposureMeter
+EMSKCT78,Cumulative EM counts in SKY in 764-870 nm,ADU,int,30600,ExposureMeter
+GTEMPOFF,GREEN CCD temperature offset from setpoint,mK,float,1.4,Telemetry
+RTEMPOFF,RED CCD temperature offset from setpoint,mK,float,2.1,Telemetry
+ETATOFF,Etalon chamber temperature offset from setpoint,mK,float,0.8,Telemetry
 THARTEMP,ThAr lamp temperature,deg C,float,21.5,Telemetry
-THARPWR,ThAr lamp power draw (Watts),W,float,1.6e-05,Telemetry
+THARPWR,ThAr lamp power draw,W,float,1.6e-05,Telemetry
 THARON,Time the ThAr lamp has been on,s,float,3474.5,Telemetry
-GDRXRMS,Guider x-coordinate RMS guiding error (mas),,float,18.4,Guider
-GDRYRMS,Guider y-coordinate RMS guiding error (mas),,float,19.7,Guider
-GDRRRMS,Guider r-coordinate RMS guiding error (mas),,float,27.0,Guider
-GDRXBIAS,Guider x-coordinate bias guiding error (mas),,float,-2.3,Guider
-GDRYBIAS,Guider y-coordinate bias guiding error (mas),,float,1.1,Guider
+GDRXRMS,Guider x-coordinate RMS guiding error,mas,float,18.4,Guider
+GDRYRMS,Guider y-coordinate RMS guiding error,mas,float,19.7,Guider
+GDRRRMS,Guider r-coordinate RMS guiding error,mas,float,27.0,Guider
+GDRXBIAS,Guider x-coordinate bias guiding error,mas,float,-2.3,Guider
+GDRYBIAS,Guider y-coordinate bias guiding error,mas,float,1.1,Guider
 GDRFRSAT,Guider: fraction of frames within 90% saturated,,float,0.0,Guider
 GDRNSAT,Guider: num 90% saturated pix in co-added image,,int,0,Guider
-GDRSEEJZ,Seeing in J+Z-band from Moffat fit (arcsec),,float,0.74,Guider
-GDRSEEV,Scaled seeing in V-band from J+Z-band (arcsec),,float,0.87,Guider
-GDRFWMD,Guider images: median FWHM (mas),,float,742.0,Guider
-GDRFWSTD,Guider images: std FWHM (mas),,float,41.5,Guider
-GDRFXMD,Guider images: median flux (ADU),,float,151200.0,Guider
-GDRFXSTD,Guider images: std flux (ADU),,float,9800.0,Guider
-GDRPKMD,Guider images: median peak flux (ADU),,float,2140.0,Guider
-GDRPKSTD,Guider images: std peak flux (ADU),,float,180.0,Guider
-P16GAMP1,16th percentile of raw GREEN_AMP1 (D.N.),,float,7412.0,DiagL0
-P16GAMP2,16th percentile of raw GREEN_AMP2 (D.N.),,float,7398.0,DiagL0
-P16GAMP3,16th percentile of raw GREEN_AMP3 (D.N.),,float,7405.0,DiagL0
-P16GAMP4,16th percentile of raw GREEN_AMP4 (D.N.),,float,7421.0,DiagL0
-P50GAMP1,50th percentile of raw GREEN_AMP1 (D.N.),,float,7460.0,DiagL0
-P50GAMP2,50th percentile of raw GREEN_AMP2 (D.N.),,float,7447.0,DiagL0
-P50GAMP3,50th percentile of raw GREEN_AMP3 (D.N.),,float,7453.0,DiagL0
-P50GAMP4,50th percentile of raw GREEN_AMP4 (D.N.),,float,7469.0,DiagL0
-P84GAMP1,84th percentile of raw GREEN_AMP1 (D.N.),,float,7511.0,DiagL0
-P84GAMP2,84th percentile of raw GREEN_AMP2 (D.N.),,float,7498.0,DiagL0
-P84GAMP3,84th percentile of raw GREEN_AMP3 (D.N.),,float,7504.0,DiagL0
-P84GAMP4,84th percentile of raw GREEN_AMP4 (D.N.),,float,7520.0,DiagL0
-P16RAMP1,16th percentile of raw RED_AMP1 (D.N.),,float,6812.0,DiagL0
-P16RAMP2,16th percentile of raw RED_AMP2 (D.N.),,float,6798.0,DiagL0
-P16RAMP3,16th percentile of raw RED_AMP3 (D.N.),,float,6805.0,DiagL0
-P16RAMP4,16th percentile of raw RED_AMP4 (D.N.),,float,6821.0,DiagL0
-P50RAMP1,50th percentile of raw RED_AMP1 (D.N.),,float,6860.0,DiagL0
-P50RAMP2,50th percentile of raw RED_AMP2 (D.N.),,float,6847.0,DiagL0
-P50RAMP3,50th percentile of raw RED_AMP3 (D.N.),,float,6853.0,DiagL0
-P50RAMP4,50th percentile of raw RED_AMP4 (D.N.),,float,6869.0,DiagL0
-P84RAMP1,84th percentile of raw RED_AMP1 (D.N.),,float,6911.0,DiagL0
-P84RAMP2,84th percentile of raw RED_AMP2 (D.N.),,float,6898.0,DiagL0
-P84RAMP3,84th percentile of raw RED_AMP3 (D.N.),,float,6904.0,DiagL0
-P84RAMP4,84th percentile of raw RED_AMP4 (D.N.),,float,6920.0,DiagL0
+GDRSEEJZ,Seeing in J+Z-band from Moffat fit,arcsec,float,0.74,Guider
+GDRSEEV,Scaled seeing in V-band from J+Z-band,arcsec,float,0.87,Guider
+GDRFWMD,Guider images: median FWHM,mas,float,742.0,Guider
+GDRFWSTD,Guider images: std FWHM,mas,float,41.5,Guider
+GDRFXMD,Guider images: median flux,ADU,float,151200.0,Guider
+GDRFXSTD,Guider images: std flux,ADU,float,9800.0,Guider
+GDRPKMD,Guider images: median peak flux,ADU,float,2140.0,Guider
+GDRPKSTD,Guider images: std peak flux,ADU,float,180.0,Guider
+P16GAMP1,16th percentile of raw GREEN_AMP1,ADU,float,7412.0,DiagL0
+P16GAMP2,16th percentile of raw GREEN_AMP2,ADU,float,7398.0,DiagL0
+P16GAMP3,16th percentile of raw GREEN_AMP3,ADU,float,7405.0,DiagL0
+P16GAMP4,16th percentile of raw GREEN_AMP4,ADU,float,7421.0,DiagL0
+P50GAMP1,50th percentile of raw GREEN_AMP1,ADU,float,7460.0,DiagL0
+P50GAMP2,50th percentile of raw GREEN_AMP2,ADU,float,7447.0,DiagL0
+P50GAMP3,50th percentile of raw GREEN_AMP3,ADU,float,7453.0,DiagL0
+P50GAMP4,50th percentile of raw GREEN_AMP4,ADU,float,7469.0,DiagL0
+P84GAMP1,84th percentile of raw GREEN_AMP1,ADU,float,7511.0,DiagL0
+P84GAMP2,84th percentile of raw GREEN_AMP2,ADU,float,7498.0,DiagL0
+P84GAMP3,84th percentile of raw GREEN_AMP3,ADU,float,7504.0,DiagL0
+P84GAMP4,84th percentile of raw GREEN_AMP4,ADU,float,7520.0,DiagL0
+P16RAMP1,16th percentile of raw RED_AMP1,ADU,float,6812.0,DiagL0
+P16RAMP2,16th percentile of raw RED_AMP2,ADU,float,6798.0,DiagL0
+P16RAMP3,16th percentile of raw RED_AMP3,ADU,float,6805.0,DiagL0
+P16RAMP4,16th percentile of raw RED_AMP4,ADU,float,6821.0,DiagL0
+P50RAMP1,50th percentile of raw RED_AMP1,ADU,float,6860.0,DiagL0
+P50RAMP2,50th percentile of raw RED_AMP2,ADU,float,6847.0,DiagL0
+P50RAMP3,50th percentile of raw RED_AMP3,ADU,float,6853.0,DiagL0
+P50RAMP4,50th percentile of raw RED_AMP4,ADU,float,6869.0,DiagL0
+P84RAMP1,84th percentile of raw RED_AMP1,ADU,float,6911.0,DiagL0
+P84RAMP2,84th percentile of raw RED_AMP2,ADU,float,6898.0,DiagL0
+P84RAMP3,84th percentile of raw RED_AMP3,ADU,float,6904.0,DiagL0
+P84RAMP4,84th percentile of raw RED_AMP4,ADU,float,6920.0,DiagL0

@@ -186,17 +186,17 @@ L2/L4 products and the barycentric/RV path depend on:
 | `CCLR#` | Catalog color (color 1 − color 2) | mag | No |
 | `CCLRN#` | Catalog color name (e.g. `Gaia BP-RP`) | | No |
 | `OBSERVAT`,`TELESCOP` | Observatory / telescope | | Yes |
-| `OBSLON/LAT/ALT` | Observatory location | deg/deg/m | Yes |
-| `OBSGEO-X/Y/Z` | Cartesian site coordinates | m | No |
+| `OBSLON/LAT/ALT` | Observatory location | deg/deg/meters | Yes |
+| `OBSGEO-X/Y/Z` | Cartesian site coordinates | meters | No |
 | `EXTRACT` | 1-D extraction type (`sum`/`flatrelative`/`optimal`) | | No |
-| `EXSNR#`,`EXSNRW#` | Extracted SNR + its wavelength | SNR/pix, Å | No |
+| `EXSNR#`,`EXSNRW#` | Extracted SNR + its wavelength | SNR/1-D pixel, Angstroms | No |
 | `DRPTAG`,`EPRVTAG`,`VOCLASS` | DRP / EPRV-standard versions | | Yes |
 | `DRPHASH` | Git commit hash | | No |
 | `INSTERA` | Instrument-era tag (see §8) | | Yes |
 | `FULLCOMP` | EPRV-standard compliance (`Yes`/`No`) | | Yes |
 | `SUMMFLAG`,`TELFLAG`,`INSTFLAG`,`DRPFLAG` | Quality flags (`Pass`/`Fail`/`Warn`) | | Yes/No |
 | `DQLVL0/1/2` | Per-level quality-check bitfields | | Yes |
-| (L4) `RV`,`RVERR`,`BERV`,`BJDTDB`,`RVMETHOD`,`SYSVEL` | Summary RV keywords | km/s, day | — |
+| (L4) `RV`,`RVERR`,`BERV`,`BJDTDB`,`RVMETHOD`,`SYSVEL` | Summary RV keywords | km/s, JD | — |
 
 The catalog `C*#` block (systemic RV, parallax, proper motion, RA/Dec, epoch) is exactly what
 the barycentric-correction path consumes.
