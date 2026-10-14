@@ -88,6 +88,15 @@ class Applicability:
             )
         return obstype
 
+    def is_emission(self, kpf_obj):
+        """Whether ``kpf_obj`` is an emission source (LFC/ThAr/UNe/Etalon).
+
+        Emission spectra are narrow lines on a near-zero continuum, so methods
+        whose statistics assume a continuum source (Star/Sun/Bias/Dark/Flat)
+        branch on this.
+        """
+        return self.frame_type(kpf_obj) in ("LFC", "ThAr", "UNe", "Etalon")
+
     @property
     def classes(self):
         """The QC and diagnostics classes declaring an applicability table."""

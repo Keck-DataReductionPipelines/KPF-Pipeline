@@ -1588,6 +1588,20 @@ class TestDiagL2OrderFluxRatios:
         with pytest.raises(LookupError, match="452 nm"):
             DiagL2(kpf2).order_flux_ratios()
 
+    def test_emission_uses_integrated_flux(self):
+        # GREEN SCI2: one bright column (100) over a floor of 1. The continuum
+        # path takes the 95th percentile (65.35); the emission path sums the
+        # 1st-99th percentile pixels, clipping the 100 (7 against RED's 8).
+        def run(frame):
+            kpf2 = stamp_frame_type(_make_kpf2_nan_pixels(), frame)
+            flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+            flux[:, 0] = 100.0
+            kpf2.set_data("GREEN_SCI2_FLUX", flux)
+            return DiagL2(kpf2).order_flux_ratios()["FR452652"]
+
+        assert run("Star") == pytest.approx(65.35)
+        assert run("ThAr") == pytest.approx(7 / 8)
+
 
 class TestDiagL2FiberFluxRatios:
     def test_keys_written_and_unity_when_uniform(self):
@@ -1621,6 +1635,17 @@ class TestDiagL2FiberFluxRatios:
             kpf2.set_data(f"{chip}_SCI1_FLUX", flux[:, ::-1].copy())
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("FR12M652") == pytest.approx(1.0)
+
+    def test_emission_integrated_ratio_and_propagated_uncertainty(self):
+        # SCI1 flux=2 over SCI2's 1, VAR 0.25 everywhere, 8 pixels per order:
+        # F=16, S=8, sum var 2 each. U = R * sqrt(2/F^2 + 2/S^2).
+        kpf2 = stamp_frame_type(_make_kpf2_nan_pixels(), "ThAr")
+        set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1",), ncol=_NCOL_TEST)
+        out = DiagL2(kpf2).fiber_flux_ratios()
+        assert out["FR12M652"] == pytest.approx(2.0)
+        assert out["FR12U652"] == pytest.approx(2 * np.sqrt(2 / 16**2 + 2 / 8**2))
+        assert out["FR32M652"] == pytest.approx(1.0)
+        assert out["FR32U652"] == pytest.approx(0.25)
 
 
 # ---------------------------------------------------------------------------
@@ -1767,6 +1792,11 @@ class TestDiagnosticsApplicability:
             assert not unknown, (
                 f"{row.Method} requires {unknown}, no {diag_cls.LEVEL} extension"
             )
+
+    @pytest.mark.parametrize("frame", _applicability.FRAME_TYPES)
+    def test_is_emission(self, frame):
+        expected = frame in ("LFC", "ThAr", "UNe", "Etalon")
+        assert applicability.is_emission(stamp_frame_type(KPF2(), frame)) is expected
 
     def test_calibration_frame_skips_guider_metrics(self, tmp_path, caplog):
         # The point of the layer: a Bias has no guider exposure, so the metrics
