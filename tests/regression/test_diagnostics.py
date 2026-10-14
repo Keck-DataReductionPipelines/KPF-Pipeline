@@ -1668,9 +1668,9 @@ class TestDiagnosticsApplicability:
         for row in _applicability.table(diag_cls.__name__).itertuples(index=False):
             for entry in row.Keywords.split("|"):
                 covered = _applicability.matches(entry, registered)
-                assert covered, (
-                    f"{row.Method} declares {entry!r}, which covers no keyword "
-                    f"the registry lists as populated by {diag_cls.__name__}"
+                assert covered <= registered, (
+                    f"{row.Method} declares {sorted(covered - registered)}, which "
+                    f"the registry does not list as populated by {diag_cls.__name__}"
                 )
                 for keyword in covered:
                     assert keyword not in owner, (
