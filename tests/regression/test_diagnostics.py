@@ -1430,7 +1430,7 @@ class TestDiagL2ZeroCounts:
 # ---------------------------------------------------------------------------
 
 
-class TestDiagL2Snr:
+class TestDiagL2BandSnr:
     def test_keys_written_when_flux_and_var_present(self):
         kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones, all VAR 0.25
         DiagL2(kpf2).run()
@@ -1474,7 +1474,82 @@ class TestDiagL2Snr:
     def test_raises_without_var(self):
         kpf2 = _make_kpf2_nan_pixels(var=None)
         with pytest.raises(IndexError):
-            DiagL2(kpf2).snr()
+            DiagL2(kpf2).band_snr()
+
+
+class TestDiagL2BandThroughput:
+    def _sky_with_first_column(self, value):
+        # GREEN SKY (carrying 452/548) gets ``value`` in column 0 of every order.
+        kpf2 = _make_kpf2_nan_pixels()
+        flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+        flux[:, 0] = value
+        kpf2.set_data("GREEN_SKY_FLUX", flux)
+        return kpf2
+
+    def test_keys_written(self):
+        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones
+        DiagL2(kpf2).run()
+        # Constant flux sits inside its own percentile range: ncol per fiber.
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        for wavelength in (452, 548, 652, 747, 852):
+            for code, expected in (("SC", 3 * _NCOL_TEST), ("SK", _NCOL_TEST)):
+                key = f"IFX{code}{wavelength}"
+                assert qc.get(key) == pytest.approx(expected), key
+            assert qc.get(f"IFXCL{wavelength}") == pytest.approx(_NCOL_TEST)
+
+    def test_outlier_above_99th_percentile_clipped(self):
+        out = DiagL2(self._sky_with_first_column(1000.0)).band_throughput()
+        assert out["IFXSK452"] == pytest.approx(_NCOL_TEST - 1)
+        assert out["IFXSK652"] == pytest.approx(_NCOL_TEST)  # RED untouched
+
+    def test_nan_treated_as_zero(self):
+        out = DiagL2(self._sky_with_first_column(np.nan)).band_throughput()
+        assert np.isfinite(out["IFXSK452"])
+        assert out["IFXSK452"] == pytest.approx(_NCOL_TEST - 1)
+
+    def test_summed_sci_nan_in_one_orderlet_keeps_the_others(self):
+        kpf2 = _make_kpf2_nan_pixels()
+        flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+        flux[:, 0] = np.nan
+        kpf2.set_data("GREEN_SCI1_FLUX", flux)
+        # Column 0 sums to 2 (SCI1 zeroed), others to 3; 2 falls below P1.
+        out = DiagL2(kpf2).band_throughput()
+        assert out["IFXSC452"] == pytest.approx(3 * (_NCOL_TEST - 1))
+
+
+class TestDiagL2BandContinuum:
+    def _green_sky(self, columns, value):
+        # GREEN SKY (carrying 452/548) gets ``value`` in ``columns`` of every order.
+        kpf2 = _make_kpf2_nan_pixels()
+        flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+        flux[:, columns] = value
+        kpf2.set_data("GREEN_SKY_FLUX", flux)
+        return kpf2
+
+    def test_keys_written_on_emission_frames(self):
+        kpf2 = stamp_frame_type(_make_kpf2_nan_pixels(), "ThAr")  # all FLUX ones
+        DiagL2(kpf2).run()
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        for wavelength in (452, 548, 652, 747, 852):
+            for code, expected in (("SC", 3.0), ("SK", 1.0), ("CL", 1.0)):
+                assert qc.get(f"CFX{code}{wavelength}") == pytest.approx(expected)
+
+    def test_skipped_on_star_frames(self):
+        kpf2 = _make_kpf2_nan_pixels()  # stamped Star
+        DiagL2(kpf2).run()
+        assert "CFXSC452" not in kpf2.headers["QUALITY_CONTROL"]
+
+    def test_emission_line_does_not_move_continuum(self):
+        out = DiagL2(self._green_sky(slice(0, 1), 1000.0)).band_continuum()
+        assert out["CFXSK452"] == pytest.approx(1.0)
+
+    def test_nan_treated_as_zero(self):
+        # Half the pixels NaN -> zeros; median of four 0s and four 1s is 0.5.
+        out = DiagL2(
+            self._green_sky(slice(0, _NCOL_TEST // 2), np.nan)
+        ).band_continuum()
+        assert out["CFXSK452"] == pytest.approx(0.5)
+        assert out["CFXSK652"] == pytest.approx(1.0)  # RED untouched
 
 
 # ---------------------------------------------------------------------------
@@ -1514,7 +1589,7 @@ class TestDiagL2OrderFluxRatios:
             DiagL2(kpf2).order_flux_ratios()
 
 
-class TestDiagL2OrderletFluxRatios:
+class TestDiagL2FiberFluxRatios:
     def test_keys_written_and_unity_when_uniform(self):
         # All fibers flux=1 (default) -> every median ratio == 1.0 with no scatter.
         kpf2 = _make_kpf2_nan_pixels()

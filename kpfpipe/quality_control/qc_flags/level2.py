@@ -98,7 +98,7 @@ class QCL2(QC):
     def science_snr(self):
         """Summed-SCI SNR is finite and greater than 1 at all five wavelengths.
 
-        Reads the SNRSC* metrics written by ``DiagL2.snr`` (run DiagL2 before
+        Reads the SNRSC* metrics written by ``DiagL2.band_snr`` (run DiagL2 before
         QCL2, the same Diagnostics -> QC ordering every metric-backed check
         relies on). Guards against a silently failed extraction. The SKY and CAL
         metrics are excluded: neither carries starlight, so neither has a floor.

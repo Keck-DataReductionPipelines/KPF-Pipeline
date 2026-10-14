@@ -53,7 +53,7 @@ class DiagL2(Diagnostics):
                     return chip, order
         raise LookupError(f"no SCI2 order covers {wavelength_nm} nm")
 
-    def snr(self):
+    def band_snr(self):
         """95th-percentile SNR of the summed-SCI, SKY and CAL spectra at five
         wavelengths.
 
@@ -84,7 +84,58 @@ class DiagL2(Diagnostics):
             out[f"EXSNRW{index}"] = wavelength * 10.0
         return out
 
-    snr._diag_name = "snr"
+    band_snr._diag_name = "band_snr"
+
+    def band_throughput(self):
+        """Integrated flux (throughput) for summed-SCI, SKY, and CAL spectra at five
+        wavelengths; summed flux between 1st - 99th percentile. NaN pixels are treated
+        as zero. The summed-SCI spectrum is SCI1+SCI2+SCI3.
+        """
+        out = {}
+        for wavelength in (452, 548, 652, 747, 852):
+            chip, order = self._order_at(wavelength)
+            for code, fibers in (
+                ("SC", SCI_FIBERS),
+                ("SK", ("SKY",)),
+                ("CL", ("CAL",)),
+            ):
+                flux = sum(
+                    np.nan_to_num(
+                        self.kpf_obj.data[f"{chip}_{fiber}_FLUX"][order], nan=0.0
+                    )
+                    for fiber in fibers
+                )
+                low, high = np.percentile(flux, (1, 99))
+                out[f"IFX{code}{wavelength}"] = round(
+                    float(np.sum(flux[(flux >= low) & (flux <= high)])), 3
+                )
+        return out
+
+    band_throughput._diag_name = "band_throughput"
+
+    def band_continuum(self):
+        """Continuum flux for summed-SCI, SKY, and CAL emission spectra at five
+        wavelengths; estimated using a simple median. NaN pixels are treated
+        as zero. The summed-SCI spectrum is SCI1+SCI2+SCI3.
+        """
+        out = {}
+        for wavelength in (452, 548, 652, 747, 852):
+            chip, order = self._order_at(wavelength)
+            for code, fibers in (
+                ("SC", SCI_FIBERS),
+                ("SK", ("SKY",)),
+                ("CL", ("CAL",)),
+            ):
+                flux = sum(
+                    np.nan_to_num(
+                        self.kpf_obj.data[f"{chip}_{fiber}_FLUX"][order], nan=0.0
+                    )
+                    for fiber in fibers
+                )
+                out[f"CFX{code}{wavelength}"] = round(float(np.median(flux)), 3)
+        return out
+
+    band_continuum._diag_name = "band_continuum"
 
     def order_flux_ratios(self):
         """Peak SCI2 flux at four wavelengths over the peak at 652 nm.
@@ -105,7 +156,7 @@ class DiagL2(Diagnostics):
 
     order_flux_ratios._diag_name = "order_flux_ratios"
 
-    def orderlet_flux_ratios(self):
+    def fiber_flux_ratios(self):
         """Median flux ratio of each orderlet to SCI2 near five wavelengths.
 
         Each orderlet is interpolated onto SCI2's wavelength grid before the
@@ -140,4 +191,4 @@ class DiagL2(Diagnostics):
                 )
         return out
 
-    orderlet_flux_ratios._diag_name = "orderlet_flux_ratios"
+    fiber_flux_ratios._diag_name = "fiber_flux_ratios"
