@@ -194,9 +194,9 @@ class BaseMasterModule:
         """
         Load an L0 file and assemble it to an L1 object; None on failure.
 
-        Failure means the frame could not be read/assembled or failed one of
-        ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause and callers detect it
-        via ``is None``.
+        Failure means the frame could not be read/standardized/assembled or failed
+        one of ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause (with
+        traceback for errors) and callers detect it via ``is None``.
         With ``cache=True`` the assembled L1 is retained for reuse (the streaming
         stats path caches its approximation-pass frames so the exact pass reuses
         them); an already-cached frame is returned regardless of the flag.
@@ -220,8 +220,8 @@ class BaseMasterModule:
             if cache:
                 self._l1_obj_cache[fn] = l1_obj
 
-        except (FileNotFoundError, OSError) as e:
-            logger.warning("Failed to load %s: %s", fn, e)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            logger.warning("Failed to load %s: %s", fn, e, exc_info=True)
             return None
 
         return l1_obj
@@ -234,6 +234,7 @@ class BaseMasterModule:
         modules). ``True`` calibrations are associated first (nearest-in-time
         master written to PRIMARY); explicit filepath/KPFMasterL1 overrides pass
         straight through. No active calibrations → frame returned unchanged.
+        None on failure (a warning with traceback names the cause).
         """
         calibrations = self._active_calibrations
         active = [name for name, value in calibrations.items() if value]
@@ -248,23 +249,27 @@ class BaseMasterModule:
         # Only header-driven (True) calibrations need association; explicit
         # filepath / KPFMasterL1 overrides are loaded directly by ImageProcessing.
         cal_types = [name for name, value in calibrations.items() if value is True]
-        if cal_types:
-            ca_config = {"KPF_MASTERS_OUTPUT": self._masters_output}
-            if self._masters_search_window_days is not None:
-                ca_config["masters_search_window_days"] = (
-                    self._masters_search_window_days
-                )
-            calibration_association = CalibrationAssociation(l1_obj, ca_config)
-            l1_obj = calibration_association.perform(cal_types)
+        try:
+            if cal_types:
+                ca_config = {"KPF_MASTERS_OUTPUT": self._masters_output}
+                if self._masters_search_window_days is not None:
+                    ca_config["masters_search_window_days"] = (
+                        self._masters_search_window_days
+                    )
+                calibration_association = CalibrationAssociation(l1_obj, ca_config)
+                l1_obj = calibration_association.perform(cal_types)
 
-        # Load (and cache) each active master here, then hand the in-memory
-        # masters to ImageProcessing so a shared master is read once per stack.
-        image_processing = ImageProcessing(l1_obj)
-        l1_obj = image_processing.perform(
-            bias=self._load_calibration(l1_obj, "bias"),
-            dark=self._load_calibration(l1_obj, "dark"),
-            flat=self._load_calibration(l1_obj, "flat"),
-        )
+            # Load (and cache) each active master here, then hand the in-memory
+            # masters to ImageProcessing so a shared master is read once per stack.
+            image_processing = ImageProcessing(l1_obj)
+            l1_obj = image_processing.perform(
+                bias=self._load_calibration(l1_obj, "bias"),
+                dark=self._load_calibration(l1_obj, "dark"),
+                flat=self._load_calibration(l1_obj, "flat"),
+            )
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            logger.warning("Failed to process %s: %s", l1_obj.obs_id, e, exc_info=True)
+            return None
 
         return l1_obj
 
@@ -273,45 +278,77 @@ class BaseMasterModule:
         Extract an assembled frame to L2 (for spectral masters, e.g. WLS).
 
         Spectral extraction only -- calibration is not implicit; callers needing
-        bias/dark applied must run ``_process_frame`` first.
+        bias/dark applied must run ``_process_frame`` first. None on failure (a
+        warning with traceback names the cause).
         """
-        spectral_extraction = SpectralExtraction(l1_obj)
-        return spectral_extraction.perform()
+        try:
+            spectral_extraction = SpectralExtraction(l1_obj)
+            return spectral_extraction.perform()
+        except (OSError, ValueError, LookupError, TypeError) as e:
+            logger.warning("Failed to extract %s: %s", l1_obj.obs_id, e, exc_info=True)
+            return None
+
+    def _write_frame(self, obj, cal_type, *, output_dir, overwrite=False):
+        """
+        Write one processed stack frame to ``output_dir`` as
+        ``{obs_id}_{cal_type}_L{level}.fits`` (e.g. ``..._thar_L2.fits``).
+
+        Callers own the directory (typically the ``cal_stack`` tree). Refuses to
+        clobber an existing file unless ``overwrite`` is True.
+        """
+        path = os.path.join(output_dir, f"{obj.obs_id}_{cal_type}_L{obj.level}.fits")
+        if not overwrite and os.path.exists(path):
+            raise FileExistsError(
+                f"{path} already exists; pass overwrite=True to replace it"
+            )
+
+        # Deliberately non-EPRV diagnostic products: skip to_fits' filename-
+        # convention warning. to_fits creates the parent directory as needed.
+        obj.check_filename_convention = lambda _: True
+        obj.to_fits(path)
+        logger.info("wrote %s frame to %s", cal_type, path)
 
     # ------------------------------------------------------------------
     # Private helpers for frame stacking.
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _check_load_failures(failure, n_total, max_fail_fraction, max_fail_number):
+    def _check_stack_size(self, l0_file_list, max_fail_fraction, max_fail_number):
         """
-        Raise ValueError if cumulative frame-load failures exceed either the
-        fraction (``max_fail_fraction``) or absolute (``max_fail_number``) limit.
+        Decide, once every frame of ``l0_file_list`` has been attempted,
+        whether the stack can build a master. Raise ValueError if frame
+        failures (load/process/extract) exceed either the fraction
+        (``max_fail_fraction``) or absolute (``max_fail_number``) limit, or if
+        fewer than ``min_stack_size`` frames were processed (``_stacked_files``).
         """
+        n_total = len(l0_file_list)
+        n_processed = len(self._stacked_files)
+        failure = n_total - n_processed
         if failure / n_total > max_fail_fraction or failure > max_fail_number:
             raise ValueError(
-                f"too many frames failed to load "
+                f"too many frames failed to load/process "
                 f"({failure} of {n_total}); limits are "
                 f"max_fail_fraction={max_fail_fraction:.0%}, "
                 f"max_fail_number={max_fail_number}"
             )
+        if n_processed < self.min_stack_size:
+            raise ValueError(
+                f"only {n_processed} of {n_total} frames processed "
+                f"(< min_stack_size={self.min_stack_size})"
+            )
 
     def _compute_stats_from_datacube(
         self,
-        l0_file_list=None,
+        l0_file_list,
         *,
         sigma=None,
         cache=False,
-        max_fail_fraction=0.2,
-        max_fail_number=2,
     ):
         """
         Compute stacked statistics using an in-memory data cube.
 
         Stacks the full ``l0_file_list`` (caller passes the desired subset). With
         ``cache=True`` each loaded frame is retained so a later pass (the streaming
-        exact pass) reuses it. Raises when frame-load failures exceed
-        ``max_fail_fraction`` or ``max_fail_number``.
+        exact pass) reuses it. Raises if fewer than two frames load.
 
         Returns ``(stats, zero_exptime)``. ``stats`` is per-extension with 'nframe',
         'counts_sum', 'rate_mean' (equal-weight mean of per-frame rates -- the clip
@@ -329,8 +366,6 @@ class BaseMasterModule:
         frames comparable, and VAR is still summed for the SNR. Exposures must be
         all zero (≤ ``_ZERO_EXPTIME_TOL_SECONDS``) or all above it.
         """
-        if l0_file_list is None:
-            l0_file_list = self.l0_file_list
         if sigma is None:
             sigma = self.stack_sigma
 
@@ -350,21 +385,20 @@ class BaseMasterModule:
             data_cube[f"{chip}_VAR"] = np.zeros((nframe, nrow, ncol), dtype=np.float32)
 
         i = 0
-        failure_count = 0
         self._stacked_files = []
 
         for fn in l0_file_list:
             l1_obj = self._load_frame(fn, cache=cache)
 
             if l1_obj is None:
-                failure_count += 1
-                self._check_load_failures(
-                    failure_count, len(l0_file_list), max_fail_fraction, max_fail_number
-                )
+                continue
+
+            l1_obj = self._process_frame(l1_obj)
+
+            if l1_obj is None:
                 continue
 
             self._stacked_files.append(fn)
-            l1_obj = self._process_frame(l1_obj)
 
             exptime[i] = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
@@ -373,6 +407,11 @@ class BaseMasterModule:
                 data_cube[f"{chip}_VAR"][i] = l1_obj.data[f"{chip}_VAR"]
 
             i += 1
+
+        if i < 2:
+            raise ValueError(
+                f"Stacking requires at least two frames; only {i} of {nframe} loaded"
+            )
 
         if i < nframe:
             exptime = exptime[:i]
@@ -440,12 +479,10 @@ class BaseMasterModule:
 
     def _compute_stats_from_stream(
         self,
-        l0_file_list=None,
+        l0_file_list,
         *,
         nstream,
         sigma=None,
-        max_fail_fraction=0.2,
-        max_fail_number=2,
     ):
         """
         Compute stacked statistics with a single streaming pass over the frames
@@ -453,16 +490,14 @@ class BaseMasterModule:
 
         The first ``nstream - 1`` frames are stacked via the datacube method to
         estimate per-pixel rate mean/RMS, which set the clipping bounds for the
-        streaming pass. Raises when load failures exceed
-        ``max_fail_fraction``/``max_fail_number`` or exposures are inconsistent.
+        streaming pass. Raises if fewer than two of those frames load or
+        exposures are inconsistent.
 
         Returns ``(exact_stats, zero_exptime)``. ``exact_stats`` carries only
         'nframe', 'counts_sum', and (on '{chip}_CCD') 'exptime_sum' -- no
         'rate_mean'/'rate_rms', since clip bounds come from the approximation and
         the master IMG is counts_sum / exptime_sum.
         """
-        if l0_file_list is None:
-            l0_file_list = self.l0_file_list
         if sigma is None:
             sigma = self.stack_sigma
 
@@ -475,8 +510,6 @@ class BaseMasterModule:
             l0_file_list=l0_file_list[:ndirect],
             sigma=sigma,
             cache=True,
-            max_fail_fraction=max_fail_fraction,
-            max_fail_number=max_fail_number,
         )
 
         if len(l0_file_list) <= ndirect:
@@ -510,7 +543,6 @@ class BaseMasterModule:
                 (nrow, ncol), dtype=np.float32
             )
 
-        failure = 0
         clipping_mask = np.ones((nrow, ncol), dtype=bool)
         self._stacked_files = []
 
@@ -520,14 +552,14 @@ class BaseMasterModule:
             l1_obj = self._load_frame(fn, cache=False)
 
             if l1_obj is None:
-                failure += 1
-                self._check_load_failures(
-                    failure, len(l0_file_list), max_fail_fraction, max_fail_number
-                )
+                continue
+
+            l1_obj = self._process_frame(l1_obj)
+
+            if l1_obj is None:
                 continue
 
             self._stacked_files.append(fn)
-            l1_obj = self._process_frame(l1_obj)
 
             exptime = l1_obj.headers["PRIMARY"]["EXPTIME"]
 
@@ -665,7 +697,8 @@ class BaseMasterModule:
         Parameters
         ----------
         l0_file_list : list of str, optional
-            L0 FITS filenames to stack.
+            L0 FITS filenames to stack; replaces ``self.l0_file_list`` if given.
+            Defaults to ``self.l0_file_list``.
         nstream : int, optional
             Frame-count threshold for switching to the streaming path.
             Defaults to 6.
@@ -700,6 +733,7 @@ class BaseMasterModule:
             sigma = self.stack_sigma
 
         nframe = len(l0_file_list)
+        self.l0_file_list = l0_file_list
 
         if nframe < 2:
             raise ValueError(f"Stacking requires at least two frames, got {nframe}")
@@ -711,20 +745,13 @@ class BaseMasterModule:
         )
 
         if nframe < nstream:
-            stats, _ = self._compute_stats_from_datacube(
-                l0_file_list,
-                sigma=sigma,
-                max_fail_fraction=max_fail_fraction,
-                max_fail_number=max_fail_number,
-            )
+            stats, _ = self._compute_stats_from_datacube(l0_file_list, sigma=sigma)
         else:
             stats, _ = self._compute_stats_from_stream(
-                l0_file_list,
-                nstream=nstream,
-                sigma=sigma,
-                max_fail_fraction=max_fail_fraction,
-                max_fail_number=max_fail_number,
+                l0_file_list, nstream=nstream, sigma=sigma
             )
+
+        self._check_stack_size(l0_file_list, max_fail_fraction, max_fail_number)
 
         for chip in self.chips:
             if np.any(stats[f"{chip}_CCD"]["nframe"] != stats[f"{chip}_VAR"]["nframe"]):

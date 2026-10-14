@@ -4,6 +4,7 @@ All sub-module I/O is mocked; no real data or FITS files are required.
 """
 
 import logging
+import os
 from unittest.mock import MagicMock
 
 import h5py
@@ -69,14 +70,18 @@ def _memoize_rough_wls(cached_rough_wls, monkeypatch):
 
 
 class MockL1:
-    pass
+    obs_id = None
 
 
 class MockL2:
+    level = 2
+
     def __init__(self, obs_id=None):
         self.obs_id = obs_id
 
     def to_fits(self, path):
+        # mirrors the real to_fits, which creates the parent directory
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         open(path, "w").close()
 
 
@@ -204,7 +209,7 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
         )
-        result = wls._process_stack_l0_to_l2()
+        result = wls._process_stack_l0_to_l2(FILE_LIST)
         assert len(result) == len(FILE_LIST)
         assert all(r is mock_pipeline for r in result)
 
@@ -213,14 +218,22 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
         )
-        result = wls._process_stack_l0_to_l2(l0_file_list=FILE_LIST[:3])
+        wls.min_stack_size = 3
+        result = wls._process_stack_l0_to_l2(FILE_LIST[:3])
         assert len(result) == 3
 
     def test_raises_when_failures_exceed_threshold(self, monkeypatch):
         wls = WLS(FILE_LIST)
-        monkeypatch.setattr(wls, "_load_frame", lambda fn, cache=False, **kwargs: None)
-        with pytest.raises(ValueError, match="too many frames failed to load"):
-            wls._process_stack_l0_to_l2()
+        attempted = []
+
+        def load(fn, cache=False, **kwargs):
+            attempted.append(fn)
+
+        monkeypatch.setattr(wls, "_load_frame", load)
+        with pytest.raises(ValueError, match="too many frames failed to load/process"):
+            wls._process_stack_l0_to_l2(FILE_LIST)
+        # the limit is applied once, after every frame has been attempted
+        assert attempted == FILE_LIST
 
     def test_tolerates_minority_failure(self, mock_pipeline, monkeypatch):
         # 1 failure out of 8 = 12.5%, below the 20% threshold
@@ -229,8 +242,38 @@ class TestProcessIndividualFrames:
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: next(calls)
         )
-        result = wls._process_stack_l0_to_l2()
+        result = wls._process_stack_l0_to_l2(FILE_LIST)
         assert len(result) == 7
+
+    def test_extract_failure_drops_frame_and_continues(
+        self, mock_pipeline, monkeypatch, tmp_path
+    ):
+        # The failed frame is skipped; every other frame's L2 is still written.
+        mock_se = MagicMock()
+        mock_se.return_value.perform.side_effect = [LookupError("orderlets")] + [
+            MockL2(get_obs_id(fn)) for fn in FILE_LIST[1:]
+        ]
+        monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
+        wls = WLS(FILE_LIST)
+        monkeypatch.setattr(
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
+        )
+        result = wls._process_stack_l0_to_l2(FILE_LIST, output_dir=tmp_path)
+        assert len(result) == 7
+        assert wls._stacked_files == FILE_LIST[1:]
+        assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+            f"{get_obs_id(fn)}_thar_L2.fits" for fn in FILE_LIST[1:]
+        )
+
+    def test_write_failure_raises(self, monkeypatch, tmp_path):
+        _stub_frame_pipeline(monkeypatch)
+
+        def write(self, obj, cal_type, **kwargs):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(WLS, "_write_frame", write)
+        with pytest.raises(OSError, match="disk full"):
+            WLS(FILE_LIST)._process_stack_l0_to_l2(FILE_LIST, output_dir=tmp_path)
 
 
 @pytest.fixture
@@ -494,7 +537,7 @@ class TestMakeMasterL2:
     def test_save_diagnostics_before_make_raises(self):
         wls = WLS(FILE_LIST)
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_diagnostics()
+            wls.save_diagnostics("/unused")
 
     def test_save_diagnostics_with_empty_stash_raises(self, tmp_path):
         # An empty (not None) stash means the chip loop aborted before any chip
@@ -502,7 +545,7 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST)
         wls._frame_diagnostics = {}
         with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_diagnostics()
+            wls.save_diagnostics(str(tmp_path / "thar_L2"))
         assert not (tmp_path / "thar_L2").exists()
 
     def test_output_dir_writes_diagnostics_hdf5(self, mock_make_master_l2, tmp_path):
@@ -516,7 +559,7 @@ class TestMakeMasterL2:
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         wls.make_master_l2()  # no output_dir; diagnostics stashed on self
         _, _, thar_dir = _master_and_stack(tmp_path)
-        wls.save_diagnostics()
+        wls.save_diagnostics(str(thar_dir))
         h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         assert h5_path.exists()
 
@@ -533,6 +576,12 @@ class TestMakeMasterL2:
         night, master_path, _ = _master_and_stack(tmp_path)
         wls.make_master_l2(output_dir=str(night))
         assert master_path.exists()
+
+    def test_file_list_override_replaces_l0_file_list(self, mock_make_master_l2):
+        wls = WLS(FILE_LIST)
+        wls.make_master_l2(l0_file_list=FILE_LIST[:6])
+        assert wls.l0_file_list == FILE_LIST[:6]
+        assert len(wls._l2_obj_cache) == 6
 
     def test_save_master_post_hoc(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
@@ -557,17 +606,18 @@ class TestMakeMasterL2:
         wls.make_master_l2()  # no output_dir
         assert not (tmp_path / "thar_L2").exists()
 
-    def test_save_reduced_frames_before_make_raises(self):
-        wls = WLS(FILE_LIST)
-        with pytest.raises(RuntimeError, match="run make_master_l2"):
-            wls.save_reduced_frames()
+    def test_per_frame_thar_l2_written_before_line_fitting(
+        self, mock_make_master_l2, monkeypatch, tmp_path
+    ):
+        def fit_raises(self, *args, **kwargs):
+            raise ValueError("line fitting failed")
 
-    def test_save_reduced_frames_refuses_overwrite(self, mock_make_master_l2, tmp_path):
+        monkeypatch.setattr(WLS, "_fit_and_qc_lines_stack", fit_raises)
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
-        wls.make_master_l2()  # populates _l2_obj_cache, writes nothing
-        wls.save_reduced_frames()  # first write
-        with pytest.raises(FileExistsError, match="overwrite=True"):
-            wls.save_reduced_frames()
+        night, _, thar_dir = _master_and_stack(tmp_path)
+        with pytest.raises(ValueError, match="line fitting failed"):
+            wls.make_master_l2(output_dir=str(night))
+        assert len(list(thar_dir.glob("*_thar_L2.fits"))) == len(FILE_LIST)
 
     def test_save_master_overwrite_true_replaces(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
@@ -654,7 +704,7 @@ class TestMakeMasterL2:
             ]
         }
         _, _, thar_dir = _master_and_stack(tmp_path)
-        wls.save_diagnostics()
+        wls.save_diagnostics(str(thar_dir))
         h5_path = thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5"
         with h5py.File(h5_path, "r") as h5:
             kept = h5["KP.20240101.00001.00"]["GREEN"]
@@ -936,46 +986,36 @@ class TestCombineCoeffs:
 
 
 class TestMinStackSizeGate:
-    """make_master_l2 gates the master on min_stack_size survivors per chip.
+    """make_master_l2 gates the master on min_stack_size frames extracted to L2.
 
-    Below the threshold it raises, but the per-frame diagnostics and L2s are
-    still written.
+    Below the threshold it raises before line fitting, but the per-frame L2s of
+    the frames that did load are still written.
     """
 
-    def _mock(self, monkeypatch, n_survivors, n_frames=8, masters_output=None):
-        # n_survivors is an int (same for every chip) or a {chip: count} dict, so
-        # a test can make GREEN and RED pass/fail the gate independently.
+    def _mock(self, monkeypatch, n_loaded, n_frames=8, masters_output=None):
+        # Frames past the first n_loaded fail to load (the first frame loads, so
+        # it still names the master).
         files = sorted(f"KP.20240101.{i:05d}.00.fits" for i in range(n_frames))
-        _stub_frame_pipeline(monkeypatch)
+        _stub_frame_pipeline(
+            monkeypatch,
+            l1=lambda self, fn, cache=False, **kw: (
+                None if files.index(fn) >= n_loaded else fn
+            ),
+        )
 
         def mock_fit(self, chip, fibers, **kwargs):
-            n = n_survivors[chip] if isinstance(n_survivors, dict) else n_survivors
-            frames = []
-            for j, l2 in enumerate(self._l2_obj_cache):
-                rejected = j >= n
-                coeffs = (
-                    None
-                    if rejected
-                    else np.zeros(
-                        (
-                            self.poly_degree_x + 1,
-                            self.poly_degree_m + 1,
-                            self.poly_degree_f + 1,
-                        )
-                    )
-                )
-                frames.append(
-                    {
-                        "obs_id": l2.obs_id,
-                        "lines": {
-                            "wav": np.array([5500.0]),
-                            "isgood": np.array([not rejected]),
-                        },
-                        "coeffs": coeffs,
-                        "rejected": rejected,
-                    }
-                )
-            return frames
+            coeffs = np.zeros(
+                (self.poly_degree_x + 1, self.poly_degree_m + 1, self.poly_degree_f + 1)
+            )
+            return [
+                {
+                    "obs_id": l2.obs_id,
+                    "lines": {"wav": np.array([5500.0]), "isgood": np.array([True])},
+                    "coeffs": coeffs,
+                    "rejected": False,
+                }
+                for l2 in self._l2_obj_cache
+            ]
 
         def mock_combine(self, frames, chip, nfibers, **kwargs):
             norder = NORDER_GREEN if chip == "GREEN" else NORDER_RED
@@ -989,38 +1029,26 @@ class TestMinStackSizeGate:
         config = {"KPF_MASTERS_OUTPUT": str(masters_output)} if masters_output else None
         return WLS(files, config=config)
 
-    def test_below_min_raises_but_diagnostics_written(self, monkeypatch, tmp_path):
-        wls = self._mock(monkeypatch, n_survivors=2, masters_output=tmp_path)
-        wls.min_stack_size = 5
+    def test_below_min_raises_but_l2s_written(self, monkeypatch, tmp_path):
+        # 7 of 8 load: within the failure limits, but below min_stack_size=8.
+        wls = self._mock(monkeypatch, n_loaded=7, masters_output=tmp_path)
+        wls.min_stack_size = 8
         night, master_path, thar_dir = _master_and_stack(tmp_path)
-        with pytest.raises(ValueError, match=r"passed line-fit QC"):
+        with pytest.raises(ValueError, match=r"only 7 of 8 frames processed"):
             wls.make_master_l2(output_dir=str(night))
 
-        # diagnostics + per-frame L2s persist despite the abort ...
-        assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
-        assert list(thar_dir.glob("*_thar_L2.fits"))
+        # the loaded frames' L2s persist despite the abort ...
+        assert len(list(thar_dir.glob("*_thar_L2.fits"))) == 7
         # ... but the master itself is withheld.
         assert not master_path.exists()
 
     def test_at_min_writes_master(self, monkeypatch, tmp_path):
-        wls = self._mock(monkeypatch, n_survivors=5, masters_output=tmp_path)
-        wls.min_stack_size = 5
+        wls = self._mock(monkeypatch, n_loaded=7, masters_output=tmp_path)
+        wls.min_stack_size = 7
         night, master_path, _ = _master_and_stack(tmp_path)
         ml2 = wls.make_master_l2(output_dir=str(night))
         assert isinstance(ml2, KPFMasterL2)
         assert master_path.exists()
-
-    def test_gate_is_per_chip(self, monkeypatch, tmp_path):
-        # GREEN clears the gate but RED does not: the master is withheld even
-        # though one chip passed. Diagnostics are saved before the gate, so they
-        # still persist.
-        wls = self._mock(monkeypatch, {"GREEN": 5, "RED": 2}, masters_output=tmp_path)
-        wls.min_stack_size = 5
-        night, master_path, thar_dir = _master_and_stack(tmp_path)
-        with pytest.raises(ValueError, match=r"RED: only 2 frame"):
-            wls.make_master_l2(output_dir=str(night))
-        assert not master_path.exists()
-        assert (thar_dir / "KP.20240101.00000.00_master_thar_diagnostics.h5").exists()
 
 
 class TestFitLinePositions:

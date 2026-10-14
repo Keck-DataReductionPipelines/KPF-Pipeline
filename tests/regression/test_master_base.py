@@ -63,6 +63,19 @@ class TestMasterBaseErrors:
         assert "Failed to load" in caplog.text
         assert l1_obj is None
 
+    def test_load_frame_standardize_error_warns_and_skips(self, caplog, monkeypatch):
+        # e.g. no instrument era covers the frame: drop it, log the traceback.
+        def from_fits(fn, standardize=False):
+            raise ValueError("no instrument era")
+
+        monkeypatch.setattr("kpfpipe.modules.masters.base.KPF0.from_fits", from_fits)
+        m = Dark(FILE_LIST)
+        with caplog.at_level(logging.WARNING):
+            l1_obj = m._load_frame(FILE_LIST[0], cache=False)
+        assert "Failed to load" in caplog.text
+        assert "Traceback" in caplog.text
+        assert l1_obj is None
+
     def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
         # NOTJUNK is the observer junk-list flag; failing a required QCL0 flag
         # drops the frame before assembly instead of raising.
@@ -155,6 +168,22 @@ class TestProcessFrame:
         )
 
         assert result is processed
+
+    def test_association_failure_warns_and_skips(self, caplog):
+        # No master within the search window: drop the frame, log the traceback.
+        dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation") as mock_ca,
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+            caplog.at_level(logging.WARNING),
+        ):
+            mock_ca.return_value.perform.side_effect = FileNotFoundError("no bias")
+            mock_ip.calibration_applied.return_value = False
+            result = dark._process_frame(MagicMock(obs_id="KP.20240101.00001.00"))
+
+        assert result is None
+        assert "Failed to process KP.20240101.00001.00" in caplog.text
+        assert "Traceback" in caplog.text
 
     def test_explicit_override_skips_association(self):
         # A bias given as a master object (not True) needs no association.
@@ -382,7 +411,7 @@ class TestRateEstimator:
     @staticmethod
     def _stacked_img(frames, *, nstream=6):
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
-        dark = Dark(file_list)
+        dark = Dark(file_list, config={"min_stack_size": 2})
         dark.chips = ["GREEN"]
         dark.stack_sigma = 1e6  # effectively no clipping
         # Keyed by filename because the streaming path re-reads its first frames
@@ -434,7 +463,7 @@ class TestRateEstimator:
         # master flat in test_master_flat.py.
         frames = [_stack_frame(10.0, 100.0, 10.0), _stack_frame(10.0, 100.0, 10.0)]
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
-        dark = Dark(file_list)
+        dark = Dark(file_list, config={"min_stack_size": 2})
         dark.chips = ["GREEN"]
         dark.stack_sigma = 1e6
         by_fn = dict(zip(file_list, frames, strict=True))
@@ -512,7 +541,9 @@ class TestPerPixelRejection:
             lambda arr, sigma, axis=0, **kwargs: np.zeros(arr.shape, dtype=bool),
         )
 
-        dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
+        dark = Dark(
+            sorted(f"f{i}.fits" for i in range(n)), config={"min_stack_size": 2}
+        )
         dark.chips = ["GREEN"]
         dark.stack_sigma = 5.0
         by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
@@ -611,12 +642,14 @@ class TestSurvivorGate:
         dark = Dark(sorted(f"f{i}.fits" for i in range(nrequested)))
         dark.chips = ["GREEN"]
         # The gate is what is under test, so the later cleaning pass -- which
-        # would interpolate the zeroed pixels back in -- is bypassed.
+        # would interpolate the zeroed pixels back in -- is bypassed, as is the
+        # stack-size check (no frames load when stats are stubbed).
         with (
             patch.multiple(dark, nrow=2, ncol=2),
             patch.object(
                 dark, "_compute_stats_from_datacube", return_value=(stats, False)
             ),
+            patch.object(dark, "_check_stack_size"),
             patch.object(dark, "_clean_l1_arrays", lambda arrays, *a, **k: arrays),
         ):
             return dark.stack_frames()
@@ -755,7 +788,9 @@ class TestStackingValidation:
 
     @staticmethod
     def _dark(n):
-        dark = Dark(sorted(f"f{i}.fits" for i in range(n)))
+        dark = Dark(
+            sorted(f"f{i}.fits" for i in range(n)), config={"min_stack_size": 2}
+        )
         dark.chips = ["GREEN"]
         return dark
 
@@ -784,14 +819,51 @@ class TestStackingValidation:
         with pytest.raises(ValueError, match="all zero or all non-zero"):
             self._stack_with_frames(frames)
 
-    def test_excessive_load_failures_raises(self):
-        dark = self._dark(5)
+    def _stack_with_failures(self, dark, n_fail, attempted):
+        """Stack ``dark``'s frames, the first ``n_fail`` of which fail to load,
+        recording each attempted filename in ``attempted``."""
+
+        def load(fn, **k):
+            attempted.append(fn)
+            if len(attempted) <= n_fail:
+                return None
+            return _stack_frame(10.0, 100.0, 10.0)
+
         with (
-            patch.object(dark, "_load_frame", lambda fn, **k: None),
+            patch.multiple(dark, nrow=2, ncol=2),
+            patch.object(dark, "_load_frame", load),
             patch.object(dark, "_process_frame", lambda l1: l1),
         ):
-            with pytest.raises(ValueError, match="too many frames failed to load"):
-                dark.stack_frames()
+            return dark.stack_frames()
+
+    def test_excessive_load_failures_raises_after_every_frame_attempted(self):
+        dark = self._dark(5)
+        attempted = []
+        with pytest.raises(ValueError, match="too many frames failed to load/process"):
+            self._stack_with_failures(dark, 3, attempted)
+        assert attempted == dark.l0_file_list
+
+    def test_process_failure_drops_frame_from_stack(self):
+        dark = self._dark(5)
+        frames = [_stack_frame(10.0, 100.0, 10.0) for _ in range(5)]
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.multiple(dark, nrow=2, ncol=2),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
+            patch.object(
+                dark, "_process_frame", lambda l1: None if l1 is frames[1] else l1
+            ),
+        ):
+            dark.stack_frames()
+        assert dark._stacked_files == [
+            fn for fn in dark.l0_file_list if fn != dark.l0_file_list[1]
+        ]
+
+    def test_below_min_stack_size_raises(self):
+        dark = self._dark(5)
+        dark.min_stack_size = 5
+        with pytest.raises(ValueError, match=r"only 4 of 5 frames processed"):
+            self._stack_with_failures(dark, 1, [])
 
     def test_ccd_var_frame_count_mismatch_raises(self):
         # CCD and VAR share a survivor mask, so a mismatch signals a bug and must
@@ -809,8 +881,11 @@ class TestStackingValidation:
                 "nframe": np.full((2, 2), 2, dtype=np.int32),
             },
         }
-        with patch.object(
-            dark, "_compute_stats_from_datacube", return_value=(stats, False)
+        with (
+            patch.object(
+                dark, "_compute_stats_from_datacube", return_value=(stats, False)
+            ),
+            patch.object(dark, "_check_stack_size"),
         ):
             with pytest.raises(ValueError, match="mismatched frame count"):
                 dark.stack_frames()
@@ -935,6 +1010,35 @@ class TestSaveMaster:
             bias.make_master_l1()  # populates ml1_obj
         with pytest.raises(FileExistsError, match="overwrite=True"):
             bias.save_master("L1", str(master_path))
+
+
+class TestWriteFrame:
+    """The per-frame write path shared by every master."""
+
+    @staticmethod
+    def _frame():
+        obj = MagicMock(obs_id="KP.20240101.00000.00", level=2)
+        obj.to_fits.side_effect = lambda path: open(path, "w").close()
+        return obj
+
+    def test_writes_cal_type_and_level_name(self, tmp_path):
+        Bias(FILE_LIST)._write_frame(self._frame(), "thar", output_dir=str(tmp_path))
+        assert (tmp_path / "KP.20240101.00000.00_thar_L2.fits").exists()
+
+    def test_refuses_overwrite_by_default(self, tmp_path):
+        (tmp_path / "KP.20240101.00000.00_thar_L2.fits").touch()
+        with pytest.raises(FileExistsError, match="overwrite=True"):
+            Bias(FILE_LIST)._write_frame(
+                self._frame(), "thar", output_dir=str(tmp_path)
+            )
+
+    def test_overwrite_true_replaces(self, tmp_path):
+        (tmp_path / "KP.20240101.00000.00_thar_L2.fits").touch()
+        frame = self._frame()
+        Bias(FILE_LIST)._write_frame(
+            frame, "thar", output_dir=str(tmp_path), overwrite=True
+        )
+        frame.to_fits.assert_called_once()
 
 
 class TestConfigSectionPlumbing:

@@ -73,12 +73,15 @@ def science_run_summary(l4, elapsed_s):
     return "\n\n" + "\n".join(lines) + "\n\n"
 
 
-def masters_run_summary(datecode, built, elapsed_s):
+def masters_run_summary(datecode, built, failed, elapsed_s):
     """Format the masters recipe's end-of-run verdict.
 
     ``built`` is the list of ``(cal_type, path, n_frames)`` stacked this run
     (empty if none) -- masters have no single product to read back, so the
-    recipe passes what it stacked. The surrounding blank lines make the block
+    recipe passes what it stacked. ``failed`` is the list of
+    ``(cal_type, source_path, error)`` for each master that failed to build; the
+    recipe tolerates these, so they are listed under a loud ``FAILED MASTERS``
+    sentinel to be found and fixed. The surrounding blank lines make the block
     stand out by eye in the log.
     """
     lines = [f"===== masters run summary: {datecode} ====="]
@@ -88,5 +91,12 @@ def masters_run_summary(datecode, built, elapsed_s):
             lines.append(f"  {cal_type:<6s} {name}  ({n_frames} frames)")
     else:
         lines.append("  (no masters built)")
+
+    if failed:
+        lines.append(f"  !!!!! {len(failed)} FAILED MASTERS !!!!!")
+        for cal_type, path, error in failed:
+            name = os.path.basename(path)
+            lines.append(f"  {cal_type:<6s} {name}  ({type(error).__name__}: {error})")
     lines.append(f"  elapsed:  {elapsed_s:.1f} s")
+
     return "\n\n" + "\n".join(lines) + "\n\n"

@@ -52,71 +52,128 @@ def main(config, args):
     )
 
     built = []  # (cal_type, path, n_frames) per master stacked, for the run summary
+    failed = []  # (cal_type, source_path, error) per master that failed
 
-    # Stack the bias frames into a master bias used to remove the detector
-    # offset from every science and calibration frame.
-    for files in file_handler.build_calibration_stacks(
-        "bias",
-        min_stack_size=config.get_params(["BIAS"])["min_stack_size"],
-        max_stack_size=config.get_params(["BIAS"])["max_stack_size"],
-        groupby="time_of_day",
-    ):
-        bias = Bias(files, config)
-        bias.make_master_l1(output_dir=masters_dir)
-        logger.info("stacked %d bias frames -> %s", len(files), bias.output_path)
-        built.append(("bias", bias.output_path, len(files)))
+    try:
+        # Stack the bias frames into a master bias used to remove the detector
+        # offset from every science and calibration frame.
+        for files in file_handler.build_calibration_stacks(
+            "bias",
+            min_stack_size=config.get_params(["BIAS"])["min_stack_size"],
+            max_stack_size=config.get_params(["BIAS"])["max_stack_size"],
+            groupby="time_of_day",
+        ):
+            try:
+                bias = Bias(files, config)
+                bias.make_master_l1(output_dir=masters_dir)
+            except (ValueError, OSError) as e:
+                logger.warning(
+                    "bias master from %s failed: %s", files[0], e, exc_info=True
+                )
+                failed.append(("bias", files[0], e))
+                continue
+            logger.info("stacked %d bias frames -> %s", len(files), bias.output_path)
+            built.append(("bias", bias.output_path, len(files)))
 
-    # Stack the dark frames into a master dark used to remove dark current.
-    # Runs after the master bias so CalibrationAssociation can subtract that
-    # bias from each dark frame (via _process_frame) before stacking.
-    for files in file_handler.build_calibration_stacks(
-        "dark",
-        min_stack_size=config.get_params(["DARK"])["min_stack_size"],
-        max_stack_size=config.get_params(["DARK"])["max_stack_size"],
-        groupby="obs_night",
-    ):
-        dark = Dark(files, config)
-        dark.make_master_l1(output_dir=masters_dir)
-        logger.info("stacked %d dark frames -> %s", len(files), dark.output_path)
-        built.append(("dark", dark.output_path, len(files)))
+        if not any(entry[0] == "bias" for entry in built):
+            raise RuntimeError("every bias master failed; see warnings above")
 
-    # Stack the flat frames into a master flat. Runs after the master bias and
-    # dark so CalibrationAssociation can subtract both from each flat frame (via
-    # _process_frame) before stacking.
-    for files in file_handler.build_calibration_stacks(
-        "flat",
-        min_stack_size=config.get_params(["FLAT"])["min_stack_size"],
-        max_stack_size=config.get_params(["FLAT"])["max_stack_size"],
-        groupby="time_of_day",
-    ):
-        flat = Flat(files, config)
-        flat.make_master_l1(output_dir=masters_dir)
-        logger.info("stacked %d flat frames -> %s", len(files), flat.output_path)
-        built.append(("flat", flat.output_path, len(files)))
+        # Stack the dark frames into a master dark used to remove dark current.
+        # Runs after the master bias so CalibrationAssociation can subtract that
+        # bias from each dark frame (via _process_frame) before stacking.
+        for files in file_handler.build_calibration_stacks(
+            "dark",
+            min_stack_size=config.get_params(["DARK"])["min_stack_size"],
+            max_stack_size=config.get_params(["DARK"])["max_stack_size"],
+            groupby="obs_night",
+        ):
+            try:
+                dark = Dark(files, config)
+                dark.make_master_l1(output_dir=masters_dir)
+            except (ValueError, OSError) as e:
+                logger.warning(
+                    "dark master from %s failed: %s", files[0], e, exc_info=True
+                )
+                failed.append(("dark", files[0], e))
+                continue
+            logger.info("stacked %d dark frames -> %s", len(files), dark.output_path)
+            built.append(("dark", dark.output_path, len(files)))
 
-    # Trace the orderlets on each master flat. Runs after the flats, whose
-    # geometry is the only input, and writes one CSV covering all CCDs beside
-    # the flat it was measured from.
-    for flat_path in [entry[1] for entry in built if entry[0] == "flat"]:
-        logger.info("building order trace from master flat %s", flat_path)
-        order_trace = OrderTrace(flat_path, config)
-        order_trace.make_master(output_dir=masters_dir)
-        built.append(("order_trace", order_trace.output_path, 1))
+        if not any(entry[0] == "dark" for entry in built):
+            raise RuntimeError("every dark master failed; see warnings above")
 
-    # Stack the ThAr exposures into a master wavelength solution, since the
-    # emission-line spectrum anchors the per-order wavelength calibration.
-    for files in file_handler.build_calibration_stacks(
-        "thar",
-        min_stack_size=config.get_params(["WLS"])["min_stack_size"],
-        max_stack_size=config.get_params(["WLS"])["max_stack_size"],
-        groupby="time_of_day",
-    ):
-        wls = WLS(files, config)
-        wls.make_master_l2(output_dir=masters_dir)
-        logger.info("built WLS from %d ThAr frames -> %s", len(files), wls.output_path)
-        built.append(("thar", wls.output_path, len(files)))
+        # Stack the flat frames into a master flat. Runs after the master bias and
+        # dark so CalibrationAssociation can subtract both from each flat frame (via
+        # _process_frame) before stacking.
+        for files in file_handler.build_calibration_stacks(
+            "flat",
+            min_stack_size=config.get_params(["FLAT"])["min_stack_size"],
+            max_stack_size=config.get_params(["FLAT"])["max_stack_size"],
+            groupby="time_of_day",
+        ):
+            try:
+                flat = Flat(files, config)
+                flat.make_master_l1(output_dir=masters_dir)
+            except (ValueError, OSError) as e:
+                logger.warning(
+                    "flat master from %s failed: %s", files[0], e, exc_info=True
+                )
+                failed.append(("flat", files[0], e))
+                continue
+            logger.info("stacked %d flat frames -> %s", len(files), flat.output_path)
+            built.append(("flat", flat.output_path, len(files)))
 
-    logger.info(masters_run_summary(datecode, built, time.monotonic() - t0))
+        if not any(entry[0] == "flat" for entry in built):
+            raise RuntimeError("every flat master failed; see warnings above")
+
+        # Trace the orderlets on each master flat. Runs after the flats, whose
+        # geometry is the only input, and writes one CSV covering all CCDs beside
+        # the flat it was measured from.
+        for flat_path in [entry[1] for entry in built if entry[0] == "flat"]:
+            logger.info("building order trace from master flat %s", flat_path)
+            try:
+                order_trace = OrderTrace(flat_path, config)
+                order_trace.make_master(output_dir=masters_dir)
+            except (ValueError, OSError) as e:
+                logger.warning(
+                    "order trace from %s failed: %s", flat_path, e, exc_info=True
+                )
+                failed.append(("order_trace", flat_path, e))
+                continue
+            built.append(("order_trace", order_trace.output_path, 1))
+
+        if not any(entry[0] == "order_trace" for entry in built):
+            raise RuntimeError("every order trace master failed; see warnings above")
+
+        # Stack the ThAr exposures into a master wavelength solution, since the
+        # emission-line spectrum anchors the per-order wavelength calibration.
+        for files in file_handler.build_calibration_stacks(
+            "thar",
+            min_stack_size=config.get_params(["WLS"])["min_stack_size"],
+            max_stack_size=config.get_params(["WLS"])["max_stack_size"],
+            groupby="time_of_day",
+        ):
+            try:
+                wls = WLS(files, config)
+                wls.make_master_l2(output_dir=masters_dir)
+            except (ValueError, OSError) as e:
+                logger.warning(
+                    "WLS master from %s failed: %s", files[0], e, exc_info=True
+                )
+                failed.append(("thar", files[0], e))
+                continue
+            logger.info(
+                "built WLS from %d ThAr frames -> %s", len(files), wls.output_path
+            )
+            built.append(("thar", wls.output_path, len(files)))
+
+        if not any(entry[0] == "thar" for entry in built):
+            raise RuntimeError("every WLS master failed; see warnings above")
+
+    finally:
+        # Logged even when a step aborts the run, so failures are never silent.
+        summary = masters_run_summary(datecode, built, failed, time.monotonic() - t0)
+        logger.log(logging.WARNING if failed else logging.INFO, summary)
     logger.info("exiting kpf_drp_masters pipeline")
 
 
