@@ -30,21 +30,21 @@ SNRCL747,95th-pctile SNR of CAL near 747nm,,float,139.8,DiagL2
 SNRSC852,95th-pctile SNR of summed SCI near 852nm,,float,171.5,DiagL2
 SNRSK852,95th-pctile SNR of SKY near 852nm,,float,2.3,DiagL2
 SNRCL852,95th-pctile SNR of CAL near 852nm,,float,118.4,DiagL2
-IFXSC452,1-99th-pctile integrated flux of summed SCI near 452nm,,float,4200000.0,DiagL2
-IFXSK452,1-99th-pctile integrated flux of SKY near 452nm,,float,3100.0,DiagL2
-IFXCL452,1-99th-pctile integrated flux of CAL near 452nm,,float,1800000.0,DiagL2
-IFXSC548,1-99th-pctile integrated flux of summed SCI near 548nm,,float,4200000.0,DiagL2
-IFXSK548,1-99th-pctile integrated flux of SKY near 548nm,,float,3100.0,DiagL2
-IFXCL548,1-99th-pctile integrated flux of CAL near 548nm,,float,1800000.0,DiagL2
-IFXSC652,1-99th-pctile integrated flux of summed SCI near 652nm,,float,4200000.0,DiagL2
-IFXSK652,1-99th-pctile integrated flux of SKY near 652nm,,float,3100.0,DiagL2
-IFXCL652,1-99th-pctile integrated flux of CAL near 652nm,,float,1800000.0,DiagL2
-IFXSC747,1-99th-pctile integrated flux of summed SCI near 747nm,,float,4200000.0,DiagL2
-IFXSK747,1-99th-pctile integrated flux of SKY near 747nm,,float,3100.0,DiagL2
-IFXCL747,1-99th-pctile integrated flux of CAL near 747nm,,float,1800000.0,DiagL2
-IFXSC852,1-99th-pctile integrated flux of summed SCI near 852nm,,float,4200000.0,DiagL2
-IFXSK852,1-99th-pctile integrated flux of SKY near 852nm,,float,3100.0,DiagL2
-IFXCL852,1-99th-pctile integrated flux of CAL near 852nm,,float,1800000.0,DiagL2
+IFXSC452,Integrated flux of summed SCI near 452nm (GREEN 1),,float,4200000.0,DiagL2
+IFXSK452,Integrated flux of SKY near 452nm (GREEN 1),,float,3100.0,DiagL2
+IFXCL452,Integrated flux of CAL near 452nm (GREEN 1),,float,1800000.0,DiagL2
+IFXSC548,Integrated flux of summed SCI near 548nm (GREEN 25),,float,4200000.0,DiagL2
+IFXSK548,Integrated flux of SKY near 548nm (GREEN 25),,float,3100.0,DiagL2
+IFXCL548,Integrated flux of CAL near 548nm (GREEN 25),,float,1800000.0,DiagL2
+IFXSC652,Integrated flux of summed SCI near 652nm (RED 8),,float,4200000.0,DiagL2
+IFXSK652,Integrated flux of SKY near 652nm (RED 8),,float,3100.0,DiagL2
+IFXCL652,Integrated flux of CAL near 652nm (RED 8),,float,1800000.0,DiagL2
+IFXSC747,Integrated flux of summed SCI near 747nm (RED 20),,float,4200000.0,DiagL2
+IFXSK747,Integrated flux of SKY near 747nm (RED 20),,float,3100.0,DiagL2
+IFXCL747,Integrated flux of CAL near 747nm (RED 20),,float,1800000.0,DiagL2
+IFXSC852,Integrated flux of summed SCI near 852nm (RED 30),,float,4200000.0,DiagL2
+IFXSK852,Integrated flux of SKY near 852nm (RED 30),,float,3100.0,DiagL2
+IFXCL852,Integrated flux of CAL near 852nm (RED 30),,float,1800000.0,DiagL2
 CFXSC452,Median continuum flux of summed SCI near 452nm,,float,12.5,DiagL2
 CFXSK452,Median continuum flux of SKY near 452nm,,float,1.2,DiagL2
 CFXCL452,Median continuum flux of CAL near 452nm,,float,4.1,DiagL2
