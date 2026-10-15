@@ -97,6 +97,16 @@ class Applicability:
         """
         return self.frame_type(kpf_obj) in ("LFC", "ThAr", "UNe", "Etalon")
 
+    def is_calibration(self, kpf_obj):
+        """Whether ``kpf_obj`` is a calibration frame (Bias/Dark/Flat or emission).
+
+        Calibration frames are not run through the science-only stages (e.g.
+        barycentric correction), so checks expecting their output branch on this.
+        """
+        return self.frame_type(kpf_obj) in ("Bias", "Dark", "Flat") or (
+            self.is_emission(kpf_obj)
+        )
+
     @property
     def classes(self):
         """The QC and diagnostics classes declaring an applicability table."""

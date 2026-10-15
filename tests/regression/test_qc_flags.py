@@ -1716,6 +1716,18 @@ class TestQCL2:
         kpf2.set_data("BARYCORR_Z", np.array([], dtype=np.float64))
         assert QCL2(kpf2).extraction_present() is False
 
+    def test_extraction_present_calibration_needs_no_barycentric(self):
+        # Calibration frames skip barycentric correction, so DATAPRL2 does not
+        # expect its ancillaries there.
+        kpf2 = stamp_frame_type(_make_kpf2_nan_headers(), "ThAr")
+        kpf2.set_data("BARYCORR_Z", np.array([], dtype=np.float64))
+        assert QCL2(kpf2).extraction_present() is True
+
+    def test_extraction_present_calibration_still_needs_wave(self):
+        kpf2 = stamp_frame_type(_make_kpf2_nan_headers(), "ThAr")
+        kpf2.set_data("SCI2_WAVE", np.array([], dtype=np.float64))
+        assert QCL2(kpf2).extraction_present() is False
+
     def test_extraction_present_fail_wrong_shape(self):
         kpf2 = _make_kpf2_nan_headers()
         kpf2.set_data(

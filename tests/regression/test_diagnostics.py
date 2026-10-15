@@ -1860,6 +1860,11 @@ class TestDiagnosticsApplicability:
         expected = frame in ("LFC", "ThAr", "UNe", "Etalon")
         assert applicability.is_emission(stamp_frame_type(KPF2(), frame)) is expected
 
+    @pytest.mark.parametrize("frame", _applicability.FRAME_TYPES)
+    def test_is_calibration(self, frame):
+        expected = frame not in ("Star", "Sun")
+        assert applicability.is_calibration(stamp_frame_type(KPF2(), frame)) is expected
+
     def test_calibration_frame_skips_guider_metrics(self, tmp_path, caplog):
         # The point of the layer: a Bias has no guider exposure, so the metrics
         # are not attempted and nothing is logged as an error.
