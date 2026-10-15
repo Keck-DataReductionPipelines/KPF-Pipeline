@@ -14,6 +14,8 @@ from numpy.polynomial import legendre
 from kpfpipe import FIBERS, REPO_ROOT, SCI_FIBERS
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
+from kpfpipe.quality_control.diagnostics import DiagL2
+from kpfpipe.quality_control.qc_flags import QCL2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory
 from kpfpipe.utils.kpf import get_obs_id
@@ -185,7 +187,8 @@ class WLS(BaseMasterModule):
         output_dir=None,
     ):
         """
-        Run each frame of ``l0_file_list`` through the L0->L2 pipeline, returning the
+        Run each frame of ``l0_file_list`` through the L0->L2 pipeline, with the
+        rough WLS as its WAVE and DiagL2/QCL2 run on it, returning the
         extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
         entry). With ``output_dir``, each frame's L2 is written there as
         ``{obs_id}_thar_L2.fits`` as soon as it is extracted. Every frame is
@@ -214,6 +217,13 @@ class WLS(BaseMasterModule):
 
             if l2_obj is None:
                 continue
+
+            # Extraction writes no WAVE; the rough WLS the line fits start from
+            # stands in so DiagL2 can locate its bands. Not yet a gate.
+            for ext, wave in self.rough_wls.items():
+                l2_obj.set_data(ext, wave)
+            DiagL2(l2_obj).run()
+            QCL2(l2_obj).run()
 
             if output_dir is not None:
                 self._write_frame(l2_obj, output_dir=output_dir, overwrite=True)

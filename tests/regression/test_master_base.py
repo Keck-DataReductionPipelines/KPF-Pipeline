@@ -149,6 +149,38 @@ class TestProcessFrame:
     """Dark subtracts the master bias by reusing the standard science modules
     through `_process_frame`, not by hand-rolling the math."""
 
+    @pytest.fixture(autouse=True)
+    def frame_qc(self, monkeypatch):
+        """Stub DiagL1/QCL1, which need a real frame; returns the stubs."""
+        stubs = {name: MagicMock() for name in ("DiagL1", "QCL1")}
+        for name, stub in stubs.items():
+            monkeypatch.setattr(masters_base, name, stub)
+        return stubs
+
+    def test_runs_l1_qc_on_the_processed_frame(self, frame_qc):
+        dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
+        processed = MagicMock(name="l1_processed")
+        with (
+            patch("kpfpipe.modules.masters.base.CalibrationAssociation"),
+            patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip,
+            patch.object(dark, "_load_calibration", return_value=False),
+        ):
+            mock_ip.return_value.perform.return_value = processed
+            mock_ip.calibration_applied.return_value = False
+            dark._process_frame(MagicMock(name="l1_in"))
+        for stub in frame_qc.values():
+            stub.assert_called_once_with(processed)
+
+    def test_runs_l1_qc_without_active_calibrations(self, frame_qc):
+        # A bias stack applies no calibrations, but its frames still get QC.
+        frame_in = MagicMock(name="l1_in")
+        with patch("kpfpipe.modules.masters.base.ImageProcessing") as mock_ip:
+            result = Bias(FILE_LIST)._process_frame(frame_in)
+        mock_ip.assert_not_called()
+        assert result is frame_in
+        for stub in frame_qc.values():
+            stub.assert_called_once_with(frame_in)
+
     def test_process_frame_runs_ca_then_ip(self):
         dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
         frame_in = MagicMock(name="l1_in")
@@ -261,7 +293,7 @@ class TestProcessFrame:
         )
         assert result is processed
 
-    def test_skips_frame_already_calibrated(self):
+    def test_skips_frame_already_calibrated(self, frame_qc):
         # The streaming pass revisits cached frames, so an already-calibrated frame
         # must pass through untouched rather than be subtracted twice.
         dark = Dark(FILE_LIST, config={"KPF_MASTERS_OUTPUT": "/masters"})
@@ -276,6 +308,8 @@ class TestProcessFrame:
 
         mock_ca.assert_not_called()
         mock_ip.assert_not_called()
+        # Its QC ran when it was first processed.
+        frame_qc["DiagL1"].assert_not_called()
         assert result is frame_in
 
     def test_forwards_configured_search_window(self):

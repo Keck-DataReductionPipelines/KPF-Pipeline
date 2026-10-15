@@ -14,8 +14,14 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.quality_control.checkpoints import CheckpointL0
-from kpfpipe.quality_control.qc_flags import QCL0
+from kpfpipe.quality_control.diagnostics import (
+    DiagL0,
+    DiagL1,
+    ExposureMeter,
+    Guider,
+    Telemetry,
+)
+from kpfpipe.quality_control.qc_flags import QCL0, QCL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
@@ -230,7 +236,7 @@ class BaseMasterModule:
                     f"OBSTYPE {obstype!r} is not a {self.master_type} frame"
                 )
 
-            for diagnostics in CheckpointL0.DIAGNOSTICS:
+            for diagnostics in (DiagL0, Guider, ExposureMeter, Telemetry):
                 diagnostics(l0_obj).run()
             qc = QCL0(l0_obj).run()
             failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
@@ -251,22 +257,23 @@ class BaseMasterModule:
 
     def _process_frame(self, l1_obj):
         """
-        Apply this module's active calibrations to an assembled frame (in place).
+        Apply this module's active calibrations to an assembled frame (in place),
+        then run DiagL1 and QCL1 on it.
 
         Subtracts active masters via ImageProcessing (reusing the science-path
         modules). ``True`` calibrations are associated first (nearest-in-time
         master written to PRIMARY); explicit filepath/KPFMasterL1 overrides pass
-        straight through. No active calibrations → frame returned unchanged.
+        straight through. No active calibrations → frame left uncalibrated.
         None on failure (a warning with traceback names the cause).
         """
         calibrations = self._active_calibrations
         active = [name for name, value in calibrations.items() if value]
-        if not active:
-            return l1_obj
 
         # Skip frames already calibrated (e.g. a cached frame revisited by the
         # streaming pass) so calibrations are never subtracted twice.
-        if all(ImageProcessing.calibration_applied(l1_obj, name) for name in active):
+        if active and all(
+            ImageProcessing.calibration_applied(l1_obj, name) for name in active
+        ):
             return l1_obj
 
         # Only header-driven (True) calibrations need association; explicit
@@ -284,15 +291,20 @@ class BaseMasterModule:
 
             # Load (and cache) each active master here, then hand the in-memory
             # masters to ImageProcessing so a shared master is read once per stack.
-            image_processing = ImageProcessing(l1_obj)
-            l1_obj = image_processing.perform(
-                bias=self._load_calibration(l1_obj, "bias"),
-                dark=self._load_calibration(l1_obj, "dark"),
-                flat=self._load_calibration(l1_obj, "flat"),
-            )
+            if active:
+                image_processing = ImageProcessing(l1_obj)
+                l1_obj = image_processing.perform(
+                    bias=self._load_calibration(l1_obj, "bias"),
+                    dark=self._load_calibration(l1_obj, "dark"),
+                    flat=self._load_calibration(l1_obj, "flat"),
+                )
         except (OSError, ValueError, KeyError, TypeError) as e:
             logger.warning("Failed to process %s: %s", l1_obj.obs_id, e, exc_info=True)
             return None
+
+        # Not yet a gate: the flags ride along on QUALITY_CONTROL.
+        DiagL1(l1_obj).run()
+        QCL1(l1_obj).run()
 
         return l1_obj
 

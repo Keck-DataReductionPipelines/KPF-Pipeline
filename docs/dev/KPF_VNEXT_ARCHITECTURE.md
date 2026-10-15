@@ -356,6 +356,10 @@ onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/
 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END
 timing-consistency flag, is an L0 check whose result rides forward this way).
 
+Checkpoints are a science-recipe stage. The masters modules process calibration frames differently
+and drop a bad frame rather than halt, so they run each level's Diagnostics and QC directly on every
+input frame and never call a Checkpoint.
+
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 
 ### Diagnostics

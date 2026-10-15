@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 import kpfpipe.modules.masters.base as base_module
+import kpfpipe.modules.masters.wls as wls_module
 from kpfpipe import DETECTOR, FIBERS
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
@@ -69,6 +70,22 @@ def _memoize_rough_wls(cached_rough_wls, monkeypatch):
     monkeypatch.setattr(WLS, "_load_rough_wls", _cached)
 
 
+@pytest.fixture(autouse=True)
+def frame_qc(monkeypatch):
+    """Stub the per-frame DiagL1/QCL1 and DiagL2/QCL2 runs, which need real
+    frames; returns the stubs so a test can check what they were run on."""
+    stubs = {}
+    for module, name in (
+        (base_module, "DiagL1"),
+        (base_module, "QCL1"),
+        (wls_module, "DiagL2"),
+        (wls_module, "QCL2"),
+    ):
+        stubs[name] = MagicMock()
+        monkeypatch.setattr(module, name, stubs[name])
+    return stubs
+
+
 class MockL1:
     obs_id = None
 
@@ -78,6 +95,10 @@ class MockL2:
 
     def __init__(self, obs_id=None):
         self.obs_id = obs_id
+        self.data = {}
+
+    def set_data(self, ext, value):
+        self.data[ext] = value
 
     def to_fits(self, path):
         # mirrors the real to_fits, which creates the parent directory
@@ -212,6 +233,21 @@ class TestProcessIndividualFrames:
         result = wls._process_stack_l0_to_l2(FILE_LIST)
         assert len(result) == len(FILE_LIST)
         assert all(r is mock_pipeline for r in result)
+
+    def test_runs_l2_qc_with_rough_wave(self, mock_pipeline, monkeypatch, frame_qc):
+        # Extraction writes no WAVE, so the rough WLS stands in before DiagL2
+        # and QCL2 run on the frame.
+        wls = WLS(FILE_LIST)
+        monkeypatch.setattr(
+            wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
+        )
+        wls._process_stack_l0_to_l2(FILE_LIST)
+        assert mock_pipeline.data.keys() == wls.rough_wls.keys()
+        for ext, wave in wls.rough_wls.items():
+            assert mock_pipeline.data[ext] is wave
+        for name in ("DiagL2", "QCL2"):
+            frame_qc[name].assert_called_with(mock_pipeline)
+            assert frame_qc[name].call_count == len(FILE_LIST)
 
     def test_file_list_override(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
