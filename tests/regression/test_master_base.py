@@ -76,19 +76,19 @@ class TestMasterBaseErrors:
         assert "Traceback" in caplog.text
         assert l1_obj is None
 
-    def test_load_frame_wrong_obstype_warns_and_skips(self, caplog, monkeypatch):
+    def test_load_frame_wrong_obsmode_warns_and_skips(self, caplog, monkeypatch):
         # A frame of another type (here a Bias in a dark stack) is rejected
         # before QC or assembly.
         m = Dark(FILE_LIST)
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",
             lambda fn, standardize=False: types.SimpleNamespace(
-                headers={"PRIMARY": {"OBSTYPE": "Bias"}}
+                headers={"PRIMARY": {"OBSTYPE": "Bias", "OBSMODE": "bias"}}
             ),
         )
         with caplog.at_level(logging.WARNING):
             l1_obj = m._load_frame(FILE_LIST[0], cache=False)
-        assert "OBSTYPE 'Bias' is not a dark frame" in caplog.text
+        assert "OBSMODE 'bias' is not a dark frame" in caplog.text
         assert l1_obj is None
 
     def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
@@ -100,7 +100,7 @@ class TestMasterBaseErrors:
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",
             lambda fn, standardize=False: types.SimpleNamespace(
-                headers={"PRIMARY": {"OBSTYPE": "Dark"}}
+                headers={"PRIMARY": {"OBSTYPE": "Dark", "OBSMODE": "dark"}}
             ),
         )
         monkeypatch.setattr(
@@ -118,8 +118,10 @@ class TestMasterBaseErrors:
         fn = FILE_LIST[0]
         qc_result = {kw: (True, "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         assembled = object()
-        # The diagnostics the gate folds in read OBSTYPE off the loaded L0.
-        raw_l0 = types.SimpleNamespace(headers={"PRIMARY": {"OBSTYPE": "Dark"}})
+        # The gate reads OBSMODE, and the diagnostics it folds in OBSTYPE, off the L0.
+        raw_l0 = types.SimpleNamespace(
+            headers={"PRIMARY": {"OBSTYPE": "Dark", "OBSMODE": "dark"}}
+        )
         seen = {}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",

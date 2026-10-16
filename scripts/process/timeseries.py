@@ -160,11 +160,11 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     Scans each night (datecode dir) under {data_input}/L0 via the shared
     ``scan_night_to_cache`` under the given `cache` mode (``"rw"`` by default: reuse
     the night's on-disk CSV when present, else write it), keeping frames whose
-    IMTYPE is 'Object' and OBJECT matches `target`. This discovery scan is the sole
-    mini-db writer in the timeseries flow -- the masters/science stages it launches
-    are told ``--cache r`` (see ``main``). Non-datecode entries are skipped with a
-    note; observer-flagged junk frames (the ISJUNK column) are dropped. Exits loudly
-    when the tree is missing or nothing matches.
+    DRP_OBSTYPE is 'Object' and DRP_OBJECT matches `target`. This discovery scan is
+    the sole mini-db writer in the timeseries flow -- the masters/science stages it
+    launches are told ``--cache r`` (see ``main``). Non-datecode entries are skipped
+    with a note; observer-flagged junk frames (the ISJUNK column) are dropped. Exits
+    loudly when the tree is missing or nothing matches.
     """
     nights = datecodes_in_range(data_input, start, end)
 
@@ -172,8 +172,8 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
         df = scan_night_to_cache(data_input, dc, cache=cache)
         if df is None:  # empty/absent night -- already warned, skip it
             return [], ""
-        is_object = df["IMTYPE"].astype(str).str.strip() == "Object"
-        is_target = df["OBJECT"].astype(str).str.strip() == str(target)
+        is_object = df["DRP_OBSTYPE"] == "Object"
+        is_target = df["DRP_OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
         good = matched.loc[~matched["ISJUNK"].astype(bool)]
         n_junk = len(matched) - len(good)

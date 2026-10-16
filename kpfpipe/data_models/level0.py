@@ -7,7 +7,6 @@ meter, guide camera, telemetry, and telescope metadata.
 
 import importlib.metadata
 import logging
-from datetime import datetime
 
 import astropy.units as u
 import numpy as np
@@ -16,9 +15,9 @@ from astropy.coordinates import Angle
 
 from kpfpipe import INSTRUMENT_ERAS, __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
-from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
+from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.kpf import get_obs_id
 
 logger = logging.getLogger(__name__)
@@ -29,22 +28,6 @@ logger = logging.getLogger(__name__)
 # metadata (PyPI-only), so map it from the exact pin here; bump both together.
 _RVDATA_VERSION = importlib.metadata.version("rv-data-standard")
 _RVDATA_RELEASE_MONTHS = {"0.4.0": "2026.06"}
-
-# Every KPF name that needs translating, lowercased -> its EPRV spelling. The
-# frame types feed OBSTYPE, the lamps feed both OBSTYPE and CLSRC#. A name absent
-# here is no KPF type or lamp: OBSTYPE rejects it, CLSRC# keeps it verbatim.
-_EPRV_SOURCES = {
-    "object": "Object",
-    "bias": "Bias",
-    "dark": "Dark",
-    "flatlamp": "Flat",
-    "th_gold": "ThAr",
-    "th_daily": "ThAr",
-    "u_gold": "UNe",
-    "u_daily": "UNe",
-    "lfcfiber": "LFC",
-    "etalonfiber": "Etalon",
-}
 
 
 class KPF0(KPFDataModel):
@@ -114,7 +97,8 @@ class KPF0(KPFDataModel):
 
         Snapshots that native header, replaces PRIMARY with the registry's typed
         EPRV skeleton, fills it from the header map, then stamps the values that
-        are computed rather than mapped (INSTERA, the site coordinates, and the
+        are computed rather than mapped (INSTERA, the ``HeaderParser`` frame
+        identity, illumination and readout, the site coordinates, and the
         WMKO/DRP/EPRV provenance cards). A second call is a no-op.
 
         Returns
@@ -135,8 +119,8 @@ class KPF0(KPFDataModel):
         self._fill_from_native()
         self._program_identification()
         self._instrument_era()
-        self._observing_mode()
-        self._readout()
+        self._observation_settings()
+        self._amplifiers()
         self._site_coordinates()
         self._tcs_pointing()
         self._drp_metadata()
@@ -177,8 +161,7 @@ class KPF0(KPFDataModel):
             default = None if pd.isna(row.DEFAULT) else row.DEFAULT
 
             if kpf_key and kpf_key in native:
-                # Verbatim: some cards legitimately read "None" (e.g. CAL-OBJ when
-                # the cal fiber is dark -> TRACE5/CLSRC5); real data, not a sentinel.
+                # Verbatim: a card reading "None" is real data, not a sentinel.
                 raw_value = native.get(kpf_key)
             elif default is not None and str(default).strip():
                 raw_value = default
@@ -263,70 +246,29 @@ class KPF0(KPFDataModel):
             )
         self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
 
-    def _observing_mode(self):
-        """Stamp OBSTYPE, ISSOLAR, OBSMODE and CLSRC#.
+    def _observation_settings(self):
+        """Stamp every value ``HeaderParser`` derives from the native header.
 
-        IMTYPE names the frame's type outright except on an Arclamp, which says
-        only that a lamp was used; OCTAGON says which, because CAL-OBJ carries an
-        octagon position index rather than a lamp name on a real arclamp frame.
-
-        OBSMODE is redundant for KPF, which has one optical configuration: the
-        EPRV standard defines it for instruments with several (hi-res/low-res),
-        so here it only restates OBSTYPE and ISSOLAR as sci/cal/solar.
-
-        CLSRC# names each trace's illumination source in the EPRV vocabulary,
-        normalized from the KPF fiber-source name TRACE# carries. A source the
-        standard does not name (a broadband flat, say) is stamped verbatim, and
-        the modules that dispatch on it reject it there.
+        Frame identity (OBSMODE, OBSTYPE, ISSOLAR, OBJECT, EXPTIME), each
+        trace's illumination (TRACE#, CLSRC#) and the readout (READMODE,
+        READTIMG, READTIMR) all come from the one parser the mini database
+        scan uses, so a frame is classified identically before and after
+        loading. A frame it cannot classify raises: nothing downstream can
+        reduce it.
         """
-        native = self.headers["INSTRUMENT_HEADER"]
-        prim = self.headers["PRIMARY"]
+        parsed = HeaderParser(self.headers["INSTRUMENT_HEADER"])
+        if parsed.DRP_KEYWORDS["OBSMODE"] == "unknown":
+            raise ValueError(f"{self.obs_id}: {parsed.warnings[0]}")
+        for key, value in parsed.DRP_KEYWORDS.items():
+            self.set_keyword(key, value)
 
-        imtype = str(native.get("IMTYPE", "")).strip()
-        card = "OCTAGON" if imtype == "Arclamp" else "IMTYPE"
-        name = str(native.get(card, "")).strip()
-        obstype = _EPRV_SOURCES.get(name.lower())
-        if obstype is None:
-            raise ValueError(
-                f"{self.obs_id} has {card} {name!r}, which names no KPF "
-                f"observation type ({', '.join(sorted(set(_EPRV_SOURCES.values())))})"
-            )
-
-        is_solar = any(
-            str(native.get(key, "")).strip().lower() in ("socal", "sun")
-            for key in ("OBJECT", "TARGNAME")
-        )
-        self.set_keyword("OBSTYPE", obstype)
-        self.set_keyword("ISSOLAR", is_solar)
-        self.set_keyword(
-            "OBSMODE",
-            ("solar" if is_solar else "sci") if obstype == "Object" else "cal",
-        )
-
-        for trace in range(1, len(TRACE_MAP) + 1):
-            source = prim.get(f"TRACE{trace}")
-            if not source:
-                continue
-            self.set_keyword(
-                f"CLSRC{trace}", _EPRV_SOURCES.get(str(source).strip().lower(), source)
-            )
-
-    def _readout(self):
-        """Stamp how each CCD was read out: NAMPGRN/NAMPRED, TRT#, READMODE.
+    def _amplifiers(self):
+        """Stamp how many amps each CCD was read out through: NAMPGRN/NAMPRED.
 
         Only the amps a readout used carry data, and KPF0 stores an absent one
-        as ``array(None, dtype=object)``. TRT{chip} is the shutter-close to
-        file-write duration. The ACF waveform filenames name the read mode
-        outright, and failing that that duration separates ~12 s fast readout
-        from ~48 s regular; a frame carrying neither leaves READMODE blank.
+        as ``array(None, dtype=object)``.
         """
-        native = self.headers["INSTRUMENT_HEADER"]
-        read_time = {}
-
-        for chip, namp_key, prefix in (
-            ("GREEN", "NAMPGRN", "GR"),
-            ("RED", "NAMPRED", "RD"),
-        ):
+        for chip, namp_key in (("GREEN", "NAMPGRN"), ("RED", "NAMPRED")):
             namp = 0
             for i in range(1, 5):
                 arr = self.data.get(f"{chip}_AMP{i}")
@@ -334,22 +276,6 @@ class KPF0(KPFDataModel):
                     continue
                 namp += 1
             self.set_keyword(namp_key, namp)
-
-            if native.get(f"{prefix}DATE") and native.get(f"{prefix}DATE-E"):
-                read_time[chip] = (
-                    datetime.fromisoformat(native[f"{prefix}DATE"])
-                    - datetime.fromisoformat(native[f"{prefix}DATE-E"])
-                ).total_seconds()
-                self.set_keyword(f"TRT{chip}", round(read_time[chip], 3))
-
-        acf = f"{native.get('GRACFFLN', '')} {native.get('RDACFFLN', '')}"
-        if "fast" in acf:
-            self.set_keyword("READMODE", "fast")
-        elif "regular" in acf:
-            self.set_keyword("READMODE", "regular")
-        elif read_time:
-            fast = min(read_time.values()) < 20
-            self.set_keyword("READMODE", "fast" if fast else "regular")
 
     def _site_coordinates(self):
         """Stamp the observatory location onto PRIMARY from ``KECK_LOCATION``.

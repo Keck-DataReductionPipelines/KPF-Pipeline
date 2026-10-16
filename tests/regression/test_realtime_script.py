@@ -1,6 +1,6 @@
 """Tests for scripts/process/realtime.py: the continuous-mode L0 watcher.
 
-Covers arg parsing, UT night selection, the settled-frame scan, IMTYPE
+Covers arg parsing, UT night selection, the settled-frame scan, OBSTYPE
 classification, the exactly-once ledger, and one-pass (``--once``) runs with the
 subprocess launcher stubbed: what gets dispatched, what gets skipped, what the
 heartbeat status file and the run.json say, and that a second pass over the same
@@ -112,7 +112,7 @@ class TestClassifyFrame:
     def test_bias_is_cal_with_reason(self, tmp_path):
         oid = write_l0_tree(tmp_path, _NIGHT, 100, imtype="Bias", obj="autocal-bias")
         kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
-        assert kind == "cal" and reason == "IMTYPE=Bias"
+        assert kind == "cal" and reason == "OBSMODE=bias"
 
     def test_unreadable_is_cal_with_reason(self, tmp_path):
         bad = tmp_path / "KP.20240405.00001.00.fits"

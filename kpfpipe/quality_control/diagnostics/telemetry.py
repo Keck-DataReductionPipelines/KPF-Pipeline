@@ -72,23 +72,23 @@ class Telemetry(Diagnostics):
         """THARTEMP/THARPWR/THARON: temperature [C], power draw [W] and time on [s]
         of the lit ThAr lamp.
 
-        The lamp is named as for OBSTYPE (OCTAGON on an Arclamp, else IMTYPE), and
-        must agree with the THARDAY/THARGD power status. Daily and Gold are
-        tracked separately natively but collapse onto one keyword pair here.
+        The lamp is named by the OBSMODE family (``thar`` daily, ``thar_gold``
+        gold), and must agree with the THARDAY/THARGD power status. Daily and
+        Gold are tracked separately natively but collapse onto one keyword pair
+        here.
         """
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
-        imtype = str(hdr.get("IMTYPE", "")).strip()
-        lamp = str(hdr.get("OCTAGON" if imtype == "Arclamp" else "IMTYPE", "")).strip()
+        lamp = str(self.kpf_obj.headers["PRIMARY"].get("OBSMODE", "")).split("-")[0]
         lamps = {
-            "th_daily": ("THARDAY", "kpfmet.TH_DAILY", "PTHDAY", "THDAYTON"),
-            "th_gold": ("THARGD", "kpfmet.TH_GOLD", "PTHAU", "THAUTON"),
+            "thar": ("THARDAY", "kpfmet.TH_DAILY", "PTHDAY", "THDAYTON"),
+            "thar_gold": ("THARGD", "kpfmet.TH_GOLD", "PTHAU", "THAUTON"),
         }
-        if lamp.lower() not in lamps:
+        if lamp not in lamps:
             raise ValueError(f"{lamp!r} names no ThAr lamp")
         lit = {
             card for card in ("THARDAY", "THARGD") if str(hdr.get(card)).strip() == "On"
         }
-        status, temp_key, power_key, on_key = lamps[lamp.lower()]
+        status, temp_key, power_key, on_key = lamps[lamp]
         if lit != {status}:
             raise ValueError(
                 f"lamp {lamp!r} disagrees with THARDAY={hdr.get('THARDAY')!r}, "

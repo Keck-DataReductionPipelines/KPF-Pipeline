@@ -216,6 +216,7 @@ def synthetic_l0_file(tmp_path_factory):
     primary.header["EXPTIME"] = 300.0
     primary.header["ELAPSED"] = 300.0
     primary.header["OBJECT"] = "10700"
+    primary.header["TARGNAME"] = "10700"
     primary.header["IMTYPE"] = "Object"
     primary.header["GROBSERV"] = "Smith"
     primary.header["PROGNAME"] = "K123"

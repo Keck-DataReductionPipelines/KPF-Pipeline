@@ -84,12 +84,13 @@ class BaseMasterModule:
     # bare KeyError rather than reject the frame.
     _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
 
-    # The standardized OBSTYPE a frame must carry to enter a stack, by master_type.
-    _OBSTYPE_BY_MASTER_TYPE = {
-        "bias": "Bias",
-        "dark": "Dark",
-        "flat": "Flat",
-        "thar": "ThAr",
+    # The standardized OBSMODE a frame must carry to enter a stack, by master_type:
+    # lamp masters take only all-fiber frames of the daily lamp.
+    _OBSMODE_BY_MASTER_TYPE = {
+        "bias": "bias",
+        "dark": "dark",
+        "flat": "flat-all",
+        "thar": "thar-all",
     }
 
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
@@ -213,7 +214,7 @@ class BaseMasterModule:
         Load an L0 file and assemble it to an L1 object; None on failure.
 
         Failure means the frame could not be read/standardized/assembled, its
-        OBSTYPE is not the one ``self.master_type`` expects, or it failed one of
+        OBSMODE is not the one ``self.master_type`` expects, or it failed one of
         ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause (with
         traceback for errors) and callers detect it via ``is None``.
         With ``cache=True`` the assembled L1 is retained for reuse (the streaming
@@ -225,15 +226,15 @@ class BaseMasterModule:
 
         # Outside the try: an unset or unknown master_type is a module bug, not a
         # bad frame, so it raises rather than rejecting every frame.
-        expected = self._OBSTYPE_BY_MASTER_TYPE[self.master_type]
+        expected = self._OBSMODE_BY_MASTER_TYPE[self.master_type]
 
         try:
             l0_obj = KPF0.from_fits(fn, standardize=True)
 
-            obstype = l0_obj.headers["PRIMARY"]["OBSTYPE"]
-            if obstype != expected:
+            obsmode = l0_obj.headers["PRIMARY"]["OBSMODE"]
+            if obsmode != expected:
                 raise ValueError(
-                    f"OBSTYPE {obstype!r} is not a {self.master_type} frame"
+                    f"OBSMODE {obsmode!r} is not a {self.master_type} frame"
                 )
 
             for diagnostics in (DiagL0, Guider, ExposureMeter, Telemetry):

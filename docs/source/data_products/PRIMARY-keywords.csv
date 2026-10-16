@@ -19,7 +19,7 @@ ALIASES,User-defined object names; ';' separated,,String,HD 219134; Gaia DR3 287
 DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,KPF0.standardize_headers
 JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,KPF0.standardize_headers
 OBSTYPE,Observation type,,String,Object,KPF0.standardize_headers
-OBSMODE,Observing mode,,String,sci,KPF0.standardize_headers
+OBSMODE,Sanitized frame label (e.g. thar-all or star),,String,thar-all,KPF0.standardize_headers
 ISSOLAR,True if the observation is of the Sun,,Boolean,F,KPF0.standardize_headers
 EXPTIME,Exposure time,s,Float,75.022,KPF0.standardize_headers
 BINNING,Binning mode,,String,1x1,KPF0.standardize_headers

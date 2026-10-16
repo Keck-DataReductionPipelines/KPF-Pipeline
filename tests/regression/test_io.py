@@ -21,6 +21,7 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.io import (
+    _MINI_DB_KEYS,
     FileHandler,
     check_filename_convention,
     datecode_dirs_in_range,
@@ -62,38 +63,34 @@ _SCI_A = [
 ]  # 50000-50100
 
 
-def _rows(files, obj, imtype, targname=None):
-    """Row dicts for a group of frames sharing OBJECT/IMTYPE/TARGNAME."""
-    return [
-        {"FILENAME": f, "IMTYPE": imtype, "OBJECT": obj, "TARGNAME": targname}
-        for f in files
-    ]
+def _rows(files, obj, obsmode):
+    """Row dicts for a group of frames sharing DRP_OBJECT/DRP_OBSMODE."""
+    return [{"FILENAME": f, "DRP_OBSMODE": obsmode, "DRP_OBJECT": obj} for f in files]
 
 
 def _mini_db(rows, *, exptime=60.0, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
-    Adds the derived columns build_calibration_stacks needs: EXPTIME/ELAPSED, the
-    UTC/HST timestamps (parsed from each FILENAME), and ISJUNK (FILENAMEs in
-    `junk` flagged True).
+    Adds the derived columns build_calibration_stacks needs: EXPTIME, the
+    UTC_TIME/HST_TIME timestamps (parsed from each FILENAME), and ISJUNK
+    (FILENAMEs in `junk` flagged True).
     """
     df = pd.DataFrame(rows)
     df["EXPTIME"] = exptime
-    df["ELAPSED"] = exptime
-    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
-    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
+    df["UTC_TIME"] = [get_timestamp(f) for f in df["FILENAME"]]
+    df["HST_TIME"] = [utc_to_hst(t) for t in df["UTC_TIME"]]
     df["ISJUNK"] = df["FILENAME"].isin(set(junk))
     return df
 
 
 def _make_mini_db():
     return _mini_db(
-        _rows(_BIAS_A, "autocal-bias", "Bias")
-        + _rows(_BIAS_B, "autocal-bias", "Bias")
-        + _rows(_DARK_A, "autocal-dark", "Dark")
-        + _rows(_THAR_MORN, "autocal-thar-all-morn", "Arclamp")
-        + _rows(_THAR_EVE, "autocal-thar-all-eve", "Arclamp")
-        + _rows(_SCI_A, "185144", "Object", "185144")
+        _rows(_BIAS_A, "autocal-bias", "bias")
+        + _rows(_BIAS_B, "autocal-bias", "bias")
+        + _rows(_DARK_A, "autocal-dark", "dark")
+        + _rows(_THAR_MORN, "autocal-thar-all-morn", "thar-all")
+        + _rows(_THAR_EVE, "autocal-thar-all-eve", "thar-all")
+        + _rows(_SCI_A, "185144", "star")
     )
 
 
@@ -104,7 +101,7 @@ _BIAS_SMALL = [
 
 def _mixed_bias_db():
     """Mini_db with one 5-file bias cluster (_BIAS_A) and a later 2-file one."""
-    return _mini_db(_rows(_BIAS_A + _BIAS_SMALL, "autocal-bias", "Bias")), _BIAS_SMALL
+    return _mini_db(_rows(_BIAS_A + _BIAS_SMALL, "autocal-bias", "bias")), _BIAS_SMALL
 
 
 def _midnight_bias_db(n_before=5, n_after=5):
@@ -121,7 +118,7 @@ def _midnight_bias_db(n_before=5, n_after=5):
         f"/data/L0/20240405/KP.20240405.{36100 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    df = _mini_db(_rows(before + after, "autocal-bias", "Bias"))
+    df = _mini_db(_rows(before + after, "autocal-bias", "bias"))
     return df, before, after
 
 
@@ -140,7 +137,7 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
         f"/data/L0/20240405/KP.20240405.{50000 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    df = _mini_db(_rows(before + after, "autocal-dark", "Dark"), exptime=1200.0)
+    df = _mini_db(_rows(before + after, "autocal-dark", "dark"), exptime=1200.0)
     return df, before, after
 
 
@@ -224,7 +221,7 @@ class TestBuildCalibrationStacks:
 
     def test_default_min_stack_size_is_noop(self):
         # The default min_stack_size=1 must not drop a lone 2-frame cluster.
-        db = _mini_db(_rows(_BIAS_SMALL, "autocal-bias", "Bias"))
+        db = _mini_db(_rows(_BIAS_SMALL, "autocal-bias", "bias"))
         lists = _cluster("bias", db)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_SMALL)
@@ -282,6 +279,28 @@ class TestBuildCalibrationStacks:
         assert len(lists) == 2
         assert lists[0] == sorted(_THAR_MORN)
         assert lists[1] == sorted(_THAR_EVE)
+
+    def test_selection_ignores_object(self):
+        # Issue #1559: a blank OBJECT must not drop a frame; DRP_OBSMODE selects it.
+        db = _mini_db(_rows(_BIAS_A, "", "bias"))
+        assert _cluster("bias", db) == [sorted(_BIAS_A)]
+
+    @pytest.mark.parametrize("other", ["thar_gold-all", "thar-sci"])
+    def test_thar_requires_daily_all_fiber(self, other):
+        # Gold-lamp and single-fiber frames never enter a ThAr master.
+        db = _mini_db(
+            _rows(_THAR_MORN, "autocal-thar-all-morn", "thar-all")
+            + _rows(_THAR_EVE, "autocal-thar-all-eve", other)
+        )
+        assert _cluster("thar", db) == [sorted(_THAR_MORN)]
+
+    def test_flat_requires_all_fiber(self):
+        # A wideflat is not a fiber flat.
+        db = _mini_db(
+            _rows(_BIAS_A, "autocal-flat-all", "flat-all")
+            + _rows(_BIAS_B, "autocal-wideflat", "wideflat")
+        )
+        assert _cluster("flat", db) == [sorted(_BIAS_A)]
 
 
 # build_calibration_stacks (real data)
@@ -753,9 +772,18 @@ class TestBuildMiniDatabase:
             "20240405"
         )
 
-    def test_has_required_columns(self, mini_db):
-        for col in ("FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"):
-            assert col in mini_db.columns
+    def test_columns(self, mini_db):
+        assert list(mini_db.columns) == [
+            "FILENAME",
+            "DRP_OBJECT",
+            "DRP_OBSTYPE",
+            "DRP_OBSMODE",
+            "UTC_TIME",
+            "HST_TIME",
+            "EXPTIME",
+            "ISJUNK",
+            "COMMENTS",
+        ]
 
     def test_no_cluster_columns(self, mini_db):
         # Cluster detection belongs to build_calibration_stacks, not the mini_db.
@@ -788,6 +816,30 @@ class TestBuildMiniDatabaseErrors:
             FileHandler({}).build_mini_database("20240405")
 
 
+def test_mini_db_comments_only_on_unknown_object(tmp_path):
+    # A bias frame whose TARGNAME names a target has no resolvable DRP_OBJECT.
+    for seconds, targname in ((1000, ""), (2000, "bias")):
+        write_l0_tree(
+            tmp_path,
+            "20240405",
+            seconds,
+            obj="autocal-bias",
+            imtype="Bias",
+            targname=targname,
+            exptime=0.0,
+            elapsed=0.0,
+        )
+    mini_db = FileHandler({"KPF_DATA_INPUT": str(tmp_path)}).build_mini_database(
+        "20240405"
+    )
+    assert list(mini_db["DRP_OBJECT"]) == ["Bias", "unknown"]
+    assert pd.isna(mini_db["COMMENTS"][0])
+    assert mini_db["COMMENTS"][1] == (
+        "Unparseable DRP_OBJECT identification: TARGNAME == bias, "
+        "IMTYPE == Bias, WMKO_OBJECT == autocal-bias"
+    )
+
+
 # build_mini_database on-disk cache (read/write + staleness guardrails):
 # synthetic L0 frames written to a temp tree
 
@@ -811,12 +863,12 @@ def _write_l0_frame(tmp_path, datecode, obs_id):
 
 def _seed_cache(tmp_path, datecode, filenames):
     """Seed the on-disk mini-db cache CSV (full schema, one row per filename) and
-    return its path. OBJECT is populated so the row survives the readable-frame
+    return its path. DRP_OBJECT is populated so the row survives the readable-frame
     clean; the rest is blank, which the assertions here do not read."""
     cache = tmp_path / "vNext" / "mini_db" / f"{datecode}_L0.csv"
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cols = "FILENAME,TARGNAME,IMTYPE,OBJECT,EXPTIME,ELAPSED,UTC,HST,ISJUNK"
-    rows = "".join(f"{fn},,,autocal-bias,,,,,\n" for fn in filenames)
+    cols = ",".join(_MINI_DB_KEYS)
+    rows = "".join(f"{fn},Bias,,,,,,,\n" for fn in filenames)
     cache.write_text(cols + "\n" + rows)
     return cache
 
@@ -931,6 +983,16 @@ class TestMiniDatabaseCache:
         assert len(db) == 2
         assert "/sentinel.fits" not in db["FILENAME"].tolist()
 
+    def test_cache_outdated_schema_rescans(self, tmp_path):
+        # A cache written before a column was added (here DRP_OBSMODE) is rejected.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        pd.read_csv(cache).drop(columns="DRP_OBSMODE").to_csv(cache, index=False)
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache="rw")
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+
     def test_cache_out_of_date_rescans(self, tmp_path):
         # Cache older than an L0 input -> freshness guardrail rejects it.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
@@ -985,18 +1047,18 @@ class TestJunkExclusion:
 
     def test_exclude_junk_default_drops_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
+        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "bias"), junk=[junk_fn])
         lists = _cluster("bias", db, min_stack_size=1)
         assert junk_fn not in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_false_keeps_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
+        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "bias"), junk=[junk_fn])
         lists = _cluster("bias", db, min_stack_size=1, exclude_junk=False)
         assert junk_fn in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
+        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "bias")).drop(columns="ISJUNK")
         with pytest.raises(KeyError, match="ISJUNK"):
             _cluster("bias", db, min_stack_size=1)

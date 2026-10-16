@@ -9,7 +9,7 @@ the raw headers -- but only to someone looking across nights.
 
 Over an inclusive datecode range this writes, under ``{analysis_dir}/thar/``:
 
-- ``thar_exposures_{START}_{END}.csv`` -- one row per ThAr frame;
+- ``thar_exposures_{START}_{END}.csv`` -- one row per daily-lamp ThAr frame;
 - ``thar_lamp_history_{START}_{END}.csv`` -- one row per consecutive stretch of a
   lamp serial in the daily all-fiber frames (a reinstalled lamp gets a new row;
   a blank ``HCLSN`` is reported as ``(none)``).
@@ -40,13 +40,15 @@ from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cach
 
 logger = logging.getLogger(__name__)
 
-# Mini-database columns (OBJECT's morn/eve suffix and the exposure times bear on how
-# bright a frame should be, notes/thar_lamp_health.md), then the PRIMARY cards read
-# per frame: the lamp's serial, which lamp position was selected, and how long each
-# had been powered -- a cold lamp is dim without being faulty.
+# The mini-database DRP_OBSMODE, then the native PRIMARY cards read per frame: OBJECT
+# (its morn/eve suffix bears on how bright a frame should be,
+# notes/thar_lamp_health.md), the exposure times, the lamp's serial, which lamp
+# position was selected, and how long each had been powered -- a cold lamp is dim
+# without being faulty.
 _EXPOSURE_CSV_COLUMNS = [
     "OBS_ID",
     "DATECODE",
+    "OBSMODE",
     "OBJECT",
     "EXPTIME",
     "ELAPSED",
@@ -58,10 +60,7 @@ _EXPOSURE_CSV_COLUMNS = [
     "THAUTON",
 ]
 
-# The lamp history follows the daily lamp through its all-fiber frames; OBJECT is a
-# prefix because later nights suffix it with -morn/-eve/-night.
-_OBJECT = "autocal-thar-all"
-_OCTAGON = "Th_daily"
+# The lamp history follows the daily lamp through its all-fiber frames.
 _LAMP_HISTORY_CSV_COLUMNS = ["HCLSN", "FIRST_DATECODE", "LAST_DATECODE", "N_OBS"]
 
 
@@ -101,11 +100,20 @@ def _frame_row(record):
     path = record["FILENAME"]
     header = fits.getheader(path, ext=0)
     row = {"OBS_ID": get_obs_id(path), "DATECODE": get_datecode(path)}
-    row.update({k: record[k] for k in ("OBJECT", "EXPTIME", "ELAPSED")})
+    row["OBSMODE"] = record["DRP_OBSMODE"]
+    row.update({k: header.get(k) for k in ("EXPTIME", "ELAPSED")})
     row.update(
         {
             k: str(header.get(k, "")).strip()
-            for k in ("OCTAGON", "HCLSN", "THDAYON", "THDAYTON", "THAUON", "THAUTON")
+            for k in (
+                "OBJECT",
+                "OCTAGON",
+                "HCLSN",
+                "THDAYON",
+                "THDAYTON",
+                "THAUON",
+                "THAUTON",
+            )
         }
     )
     return row
@@ -124,9 +132,9 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
         df = scan_night_to_cache(data_input, dc, cache=cache)
         if df is None:  # empty/absent night -- already warned, skip it
             return [], ""
-        # Every 'autocal-thar*' frame, not just the masters stack inputs: the
+        # Every daily-lamp ThAr frame, not just the masters stack inputs: the
         # fiber-specific cals light the same lamp, and early nights have only those.
-        is_thar = df["OBJECT"].astype(str).str.strip().str.startswith("autocal-thar")
+        is_thar = df["DRP_OBSMODE"].astype(str).str.startswith("thar-")
         frames = df.loc[is_thar & ~df["ISJUNK"].astype(bool)]
         if frames.empty:
             return [], ": no ThAr frames"
@@ -150,9 +158,7 @@ def lamp_history(rows):
     """
     history = []
     for r in rows:
-        if not (
-            str(r["OBJECT"]).strip().startswith(_OBJECT) and r["OCTAGON"] == _OCTAGON
-        ):
+        if r["OBSMODE"] != "thar-all":
             continue
         lamp = r["HCLSN"] or "(none)"
         if history and history[-1]["HCLSN"] == lamp:
@@ -203,11 +209,7 @@ def main(argv=None):
 
     history = lamp_history(rows)
     if not history:
-        logger.warning(
-            "no OBJECT=%s*, OCTAGON=%s frames: lamp history is empty",
-            _OBJECT,
-            _OCTAGON,
-        )
+        logger.warning("no OBSMODE=thar-all frames: lamp history is empty")
     path = os.path.join(out_dir, f"thar_lamp_history_{start}_{end}.csv")
     write_csv(path, history, _LAMP_HISTORY_CSV_COLUMNS)
     logger.info("done: %d lamp stretch(es) -> %s", len(history), path)

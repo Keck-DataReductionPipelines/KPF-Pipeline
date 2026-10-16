@@ -142,8 +142,8 @@ class TestImageAssemblyBias:
     def test_read_time_in_header(self, l1_bias):
         l1, _ = l1_bias
         # A regular readout takes ~48 s.
-        assert 40 < l1.headers["QUALITY_CONTROL"]["TRTGREEN"] < 60
-        assert 40 < l1.headers["QUALITY_CONTROL"]["TRTRED"] < 60
+        assert 40 < l1.headers["QUALITY_CONTROL"]["READTIMG"] < 60
+        assert 40 < l1.headers["QUALITY_CONTROL"]["READTIMR"] < 60
 
     def test_receipt_chain(self, l1_bias):
         l1, _ = l1_bias
@@ -584,7 +584,7 @@ class TestImageAssemblyRoundTrip:
 
 @pytest.mark.requires_testdata
 class TestNativeReadsUseTheInstrumentHeader:
-    """``_readout`` reads native cards, and every L0 module now runs after
+    """``HeaderParser`` reads native cards, and every L0 module now runs after
     standardization -- so PRIMARY no longer carries them.
 
     ``EXPTIMOK`` is the direct assertion the exit checklist asks for: it left

@@ -23,8 +23,8 @@ NFS mount:
   ``(path, mtime, size)``; restarts and rescans are harmless, and a re-delivered
   frame (new mtime) is treated as a new frame.
 
-Only science frames (PRIMARY ``IMTYPE == 'Object'``, the same test the timeseries
-wrapper uses) are reduced; calibration frames are recorded as ``skipped``. A
+Only science frames (``OBSTYPE == 'Object'``, the same test the timeseries wrapper
+uses) are reduced; calibration frames are recorded as ``skipped``. A
 heartbeat status file (``--status_file``, default ``{log_dir}/realtime_status.json``)
 is rewritten every pass so operations tooling can see the watcher is alive and what
 it has done.
@@ -40,10 +40,9 @@ import socket
 import sys
 import time
 
-from astropy.io import fits
-
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
@@ -206,7 +205,7 @@ def scan_settled_frames(l0_dirs, settle, now=None):
 
 
 def classify_frame(path):
-    """Return ``('science', None)`` for an ``IMTYPE == 'Object'`` frame, else
+    """Return ``('science', None)`` for an ``OBSTYPE == 'Object'`` frame, else
     ``('cal', reason)``.
 
     A header that cannot be read is classified ``cal`` with the error as the
@@ -214,12 +213,12 @@ def classify_frame(path):
     dispatched to fail loudly later -- the ledger keeps the reason.
     """
     try:
-        imtype = str(fits.getheader(path, 0).get("IMTYPE", "")).strip()
+        keywords = HeaderParser(path).DRP_KEYWORDS
     except Exception as exc:  # astropy raises a zoo of types for a bad file
         return "cal", f"unreadable header: {exc}"
-    if imtype == "Object":
+    if keywords["OBSTYPE"] == "Object":
         return "science", None
-    return "cal", f"IMTYPE={imtype or '<missing>'}"
+    return "cal", f"OBSMODE={keywords['OBSMODE']}"
 
 
 def _utc_now():

@@ -20,6 +20,7 @@ from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
+from kpfpipe.utils.header import HeaderParser
 
 from ._catalog import catalog_record_table
 from ._data_models import standardized_l0, write_amp_l0, write_minimal_l0
@@ -527,11 +528,22 @@ class TestStandardizedPrimary:
         return l0
 
 
-class TestObservingMode:
-    """OBSTYPE from IMTYPE/OCTAGON; OBSMODE and ISSOLAR from it; CLSRC# from TRACE#.
+# The midpoint shutters and cameras of an all-fiber lamp frame.
+_ALL_FIBERS = {
+    "SCISEL": "open",
+    "SKYSEL": "open",
+    "SIMCALSH": "open",
+    "GREEN": "YES",
+    "RED": "YES",
+    "CA_HK": "NO",
+}
 
-    KPF has one optical configuration, so OBSMODE restates OBSTYPE and ISSOLAR
-    as sci/cal/solar rather than naming a configuration of its own.
+
+class TestHeaderKeywords:
+    """Frame identity, illumination and readout are stamped from HeaderParser.
+
+    HeaderParser's rules are tested in test_header_parser.py; these tests pin
+    that standardization stamps its output and rejects what it cannot classify.
     """
 
     @staticmethod
@@ -541,110 +553,107 @@ class TestObservingMode:
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         for key, value in native.items():
             l0.headers["PRIMARY"][key] = value
-        return l0.standardize_headers().headers["PRIMARY"]
+        return l0.standardize_headers()
 
-    def test_object_frame_is_sci(self, synthetic_l0_file):
+    def test_object_frame_is_a_star(self, synthetic_l0_file):
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
         assert prim["OBSTYPE"] == "Object"
-        assert prim["OBSMODE"] == "sci"
+        assert prim["OBSMODE"] == "star"
         assert prim["ISSOLAR"] is False
 
-    @pytest.mark.parametrize(
-        "imtype, obstype",
-        [
-            ("Object", "Object"),
-            ("Bias", "Bias"),
-            ("Dark", "Dark"),
-            ("Flatlamp", "Flat"),
-        ],
-    )
-    def test_imtype_names_the_obstype(self, imtype, obstype):
-        assert self._standardize(imtype)["OBSTYPE"] == obstype
+    def test_every_header_parser_keyword_is_stamped(self):
+        l0 = self._standardize(
+            "Arclamp",
+            OCTAGON="Th_daily",
+            OBJECT=" autocal-thar-all ",
+            ELAPSED=5.0,
+            **_ALL_FIBERS,
+        )
+        parsed = HeaderParser(l0.headers["INSTRUMENT_HEADER"]).DRP_KEYWORDS
+        assert parsed  # the comparison below must not pass vacuously
+        for key, value in parsed.items():
+            assert l0.headers["PRIMARY"][key] == value, key
 
     @pytest.mark.parametrize(
-        "octagon, obstype",
+        "imtype, native, obsmode, obstype",
         [
-            ("Th_daily", "ThAr"),
-            ("Th_gold", "ThAr"),
-            ("U_daily", "UNe"),
-            ("U_gold", "UNe"),
-            ("LFCFiber", "LFC"),
-            ("EtalonFiber", "Etalon"),
+            ("Bias", {}, "bias", "Bias"),
+            ("Dark", {}, "dark", "Dark"),
+            ("Flatlamp", {"OCTAGON": "Home"}, "wideflat", "Flat"),
+            ("Flatlamp", {"OCTAGON": "BrdbandFiber"}, "flat-all", "Flat"),
+            ("Arclamp", {"OCTAGON": "Th_daily"}, "thar-all", "ThAr"),
+            ("Arclamp", {"OCTAGON": "Th_gold"}, "thar_gold-all", "ThAr"),
+            ("Arclamp", {"OCTAGON": "U_gold"}, "une_gold-all", "UNe"),
+            ("Arclamp", {"OCTAGON": "LFCFiber"}, "lfc-all", "LFC"),
+            ("Arclamp", {"OCTAGON": "EtalonFiber"}, "etalon-all", "Etalon"),
+            ("Object", {"OCTAGON": "EtalonFiber"}, "star", "Object"),
         ],
     )
-    def test_arclamp_splits_on_its_octagon(self, octagon, obstype):
-        # CAL-OBJ carries an octagon position index on a real arclamp frame, so
-        # OCTAGON is the only card that names the lamp.
-        assert self._standardize("Arclamp", OCTAGON=octagon)["OBSTYPE"] == obstype
-
-    def test_object_frame_outranks_its_octagon(self):
-        # A science frame parks the octagon on a lamp for simultaneous calibration.
-        assert self._standardize("Object", OCTAGON="EtalonFiber")["OBSTYPE"] == "Object"
-
-    def test_arclamp_with_an_unnamed_lamp_is_rejected(self):
-        with pytest.raises(ValueError, match="OCTAGON 'BrdbandFiber'"):
-            self._standardize("Arclamp", OCTAGON="BrdbandFiber")
+    def test_frame_identity(self, imtype, native, obsmode, obstype):
+        prim = self._standardize(imtype, **native, **_ALL_FIBERS).headers["PRIMARY"]
+        assert prim["OBSMODE"] == obsmode
+        assert prim["OBSTYPE"] == obstype
+        assert prim["ISSOLAR"] is False
 
     @pytest.mark.parametrize(
         "imtype, native",
         [
-            ("Bias", {}),
-            ("Dark", {}),
-            ("Flatlamp", {}),
-            ("Arclamp", {"OCTAGON": "Th_daily"}),
-            ("Arclamp", {"OCTAGON": "U_gold"}),
-            ("Arclamp", {"OCTAGON": "LFCFiber"}),
-            ("Arclamp", {"OCTAGON": "EtalonFiber"}),
+            ("Sky", {}),
+            ("Arclamp", {"OCTAGON": "BrdbandFiber", **_ALL_FIBERS}),
+            ("Arclamp", {"OCTAGON": "Th_daily"}),  # no shutter cards
         ],
     )
-    def test_calibration_frames_are_cal(self, imtype, native):
-        prim = self._standardize(imtype, **native)
-        assert prim["OBSMODE"] == "cal"
-        assert prim["ISSOLAR"] is False
+    def test_unclassifiable_frame_is_rejected(self, imtype, native):
+        with pytest.raises(ValueError, match="cannot classify frame"):
+            self._standardize(imtype, **native)
 
     @pytest.mark.parametrize("name", ("SoCal", "Sun"))
     @pytest.mark.parametrize("key", ("OBJECT", "TARGNAME"))
     def test_solar_frame_is_solar(self, key, name):
-        prim = self._standardize("Object", **{key: name})
-        assert prim["OBSMODE"] == "solar"
+        prim = self._standardize("Object", **{key: name}).headers["PRIMARY"]
+        assert prim["OBSMODE"] == "socal"
         assert prim["ISSOLAR"] is True
 
-    def test_socal_match_is_case_insensitive(self):
-        assert self._standardize("Object", OBJECT="socal")["ISSOLAR"] is True
-
-    def test_unrecognized_imtype_is_rejected(self):
-        with pytest.raises(ValueError, match="IMTYPE 'Sky'"):
-            self._standardize("Sky")
-
-    def test_clsrc_normalizes_each_trace(self):
+    def test_illumination_follows_the_shutters_not_the_obj_cards(self):
+        # CAL-OBJ names a lamp, but the closed cal shutter means none reached it.
         prim = self._standardize(
             "Object",
+            OCTAGON="Th_gold",
+            SIMCALSH="closed",
             **{"SKY-OBJ": "Sky", "SCI-OBJ": "Target", "CAL-OBJ": "Th_gold"},
-        )
+        ).headers["PRIMARY"]
         assert prim["CLSRC1"] == "Sky"
         assert [prim[f"CLSRC{trace}"] for trace in (2, 3, 4)] == ["Target"] * 3
-        assert prim["CLSRC5"] == "ThAr"
+        assert prim["TRACE5"] == prim["CLSRC5"] == "None"
 
     @pytest.mark.parametrize(
-        "cal_obj, source",
+        "octagon, source",
         [
             ("Th_gold", "ThAr"),
             ("Th_daily", "ThAr"),
             ("LFCFiber", "LFC"),
             ("EtalonFiber", "Etalon"),
-            ("BrdbandFiber", "BrdbandFiber"),
         ],
     )
-    def test_clsrc_vocabulary(self, cal_obj, source):
-        prim = self._standardize("Object", **{"CAL-OBJ": cal_obj})
-        assert prim["CLSRC5"] == source
+    def test_clsrc_vocabulary(self, octagon, source):
+        prim = self._standardize("Object", OCTAGON=octagon, SIMCALSH="open")
+        assert prim.headers["PRIMARY"]["TRACE5"] == octagon
+        assert prim.headers["PRIMARY"]["CLSRC5"] == source
 
-    def test_clsrc_is_blank_when_the_trace_names_no_source(self):
-        assert self._standardize("Bias")["CLSRC5"] is None
+    def test_flat_source_is_flat(self):
+        prim = self._standardize(
+            "Flatlamp", OCTAGON="BrdbandFiber", **_ALL_FIBERS
+        ).headers["PRIMARY"]
+        assert {prim[f"CLSRC{trace}"] for trace in range(1, 6)} == {"Flat"}
+
+    def test_unlit_traces_are_none(self):
+        prim = self._standardize("Bias").headers["PRIMARY"]
+        assert {prim[f"CLSRC{trace}"] for trace in range(1, 6)} == {"None"}
 
 
 class TestReadout:
-    """NAMPGRN/NAMPRED, TRT{chip} and READMODE, all stamped by ``_readout``.
+    """NAMPGRN/NAMPRED (``_amplifiers``), READTIMG/READTIMR and READMODE
+    (``HeaderParser``).
 
     READMODE is classified from the ACF filename first, the readout duration
     after.
@@ -710,8 +719,8 @@ class TestReadout:
             tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12), primary_cards=cards
         )
         qc = standardized_l0(path).headers["QUALITY_CONTROL"]
-        assert qc["TRTGREEN"] == 47.5
-        assert qc["TRTRED"] == 12.0
+        assert qc["READTIMG"] == 47.5
+        assert qc["READTIMR"] == 12.0
 
 
 class TestFiveTraceShape:
@@ -734,7 +743,10 @@ class TestFiveTraceShape:
     def _standardized(imtype):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = imtype
-        l0.headers["PRIMARY"]["OCTAGON"] = "Th_daily"  # read only for an Arclamp
+        l0.headers["PRIMARY"]["OCTAGON"] = (
+            "BrdbandFiber" if imtype == "Flatlamp" else "Th_daily"
+        )
+        l0.headers["PRIMARY"].update(_ALL_FIBERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         return l0.standardize_headers()
 

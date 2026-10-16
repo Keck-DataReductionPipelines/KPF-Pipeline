@@ -8,8 +8,8 @@ import tempfile
 from datetime import datetime
 
 import pandas as pd
-from astropy.io import fits
 
+from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.kpf import (
     OBS_ID_REGEX,
     get_datecode,
@@ -34,29 +34,31 @@ _J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0)
 _CACHE_FILE_MODE = 0o666
 _CACHE_DIR_MODE = 0o777
 
-_MINI_DB_KEYS = ["FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"]
-# Derived, not read from a header key: UTC/HST from the filename's KPF timestamp,
-# ISJUNK from the observer junk list (see load_junk_obs_ids).
-_MINI_DB_DERIVED_KEYS = ["UTC", "HST", "ISJUNK"]
+# The mini-database columns: DRP_* from HeaderParser, EXPTIME the native
+# EXPTIME, UTC/HST_TIME the filename's KPF timestamp, ISJUNK the observer junk
+# list (see load_junk_obs_ids), COMMENTS set only when DRP_OBJECT is unknown.
+_MINI_DB_KEYS = [
+    "FILENAME",
+    "DRP_OBJECT",
+    "DRP_OBSTYPE",
+    "DRP_OBSMODE",
+    "UTC_TIME",
+    "HST_TIME",
+    "EXPTIME",
+    "ISJUNK",
+    "COMMENTS",
+]
 
-_OBJECT_MAP = {
-    "bias": ["autocal-bias"],
-    "dark": ["autocal-dark"],
-    "flat": ["autocal-flat-all"],
-    "thar": [
-        "autocal-thar-all-morn",
-        "autocal-thar-all-midday",
-        "autocal-thar-all-eve",
-        "autocal-thar-all-night",
-        "autocal-thar-all-midnight",
-    ],
+# The calibration/master frame types, in canonical order, each mapped to the
+# OBSMODE a frame must carry to enter its stack (lamp masters take only all-fiber
+# frames of the daily lamp). The single source for both L0 frame selection
+# (build_calibration_stacks) and master-product filenames (kpf_filename).
+_CAL_TYPES = {
+    "bias": "bias",
+    "dark": "dark",
+    "flat": "flat-all",
+    "thar": "thar-all",
 }
-
-# The calibration/master frame types, in canonical order. Derived from
-# _OBJECT_MAP so it stays the single source: both L0 frame selection
-# (build_calibration_stacks) and master-product filenames (kpf_filename) validate
-# against the same set and cannot drift.
-_CAL_TYPES = tuple(_OBJECT_MAP)
 
 # How build_calibration_stacks groups a cal_type's frames into stacks:
 # 'time_of_day' (per observing session, gap-split), 'hst_day' (per HST calendar
@@ -177,6 +179,11 @@ class FileHandler:
             return None
 
         cached = pd.read_csv(cache_path)
+        if list(cached.columns) != _MINI_DB_KEYS:
+            logger.warning(
+                "mini database cache %s has an outdated schema; rescanning", cache_path
+            )
+            return None
         if len(cached) != len(file_list):
             logger.warning(
                 "mini database cache %s is stale (%d cached rows vs %d files on "
@@ -230,12 +237,10 @@ class FileHandler:
     @staticmethod
     def _clean_mini_db(full_scan_mini_db):
         """The readable-frame subset of a full scan: drop rows whose header could
-        not be read (every header column null) and re-index. Such frames stay in
-        the on-disk cache (which mirrors the L0 directory) but are useless for
+        not be read (null DRP_OBJECT) and re-index. Such frames stay in the
+        on-disk cache (which mirrors the L0 directory) but are useless for
         stacking/discovery, so the in-memory ``self._mini_db`` excludes them."""
-        return full_scan_mini_db.dropna(
-            subset=_MINI_DB_KEYS[1:], how="all"
-        ).reset_index(drop=True)
+        return full_scan_mini_db.dropna(subset=["DRP_OBJECT"]).reset_index(drop=True)
 
     def build_mini_database(self, datecode, cache=False):
         """Scan the PRIMARY header of every L0 FITS file for one observing night,
@@ -271,11 +276,14 @@ class FileHandler:
         Returns
         -------
         pandas.DataFrame
-            One row per readable frame. Columns: the header keys FILENAME
-            (absolute path), TARGNAME, IMTYPE, OBJECT, EXPTIME, ELAPSED; plus
-            derived UTC and HST (KPF-format timestamps from the filename, HST =
-            UTC-10) and ISJUNK (frame is on the observer junk list -- flagged,
-            not dropped). A missing header key gives None for that column. An
+            One row per readable frame. Columns: FILENAME (absolute path); the
+            ``HeaderParser`` keywords DRP_OBJECT, DRP_OBSTYPE, DRP_OBSMODE (the
+            values KPF0 will carry as OBJECT/OBSTYPE/OBSMODE); UTC_TIME and
+            HST_TIME (KPF-format timestamps from the filename, HST = UTC-10);
+            EXPTIME (the native, requested EXPTIME, not KPF0's EXPTIME = ELAPSED);
+            ISJUNK (frame is on the observer junk list -- flagged, not dropped);
+            and COMMENTS (the native TARGNAME/IMTYPE/OBJECT, only when DRP_OBJECT
+            is unknown). A missing header key gives None for that column. An
             unreadable frame is warned and omitted from this DataFrame (useless
             for stacking), but is still recorded -- with null header columns -- in
             the on-disk cache, so the cache mirrors the L0 directory exactly.
@@ -316,28 +324,37 @@ class FileHandler:
         junk = load_junk_obs_ids(self._data_input)
 
         logger.info("scanning %d FITS headers in %s", len(file_list), data_dir)
-        mini_db = {k: [] for k in _MINI_DB_KEYS + _MINI_DB_DERIVED_KEYS}
+        rows = []
 
         for fn in file_list:
             logger.debug("reading header of %s", fn)
-            try:
-                header = fits.getheader(fn, ext=0)
-            except Exception as e:
-                logger.warning("Could not read header from %s: %s", fn, e)
-                header = None
-
-            mini_db["FILENAME"].append(fn)
-
-            for k in _MINI_DB_KEYS[1:]:
-                mini_db[k].append(header.get(k, None) if header is not None else None)
-
             # UTC is the KPF timestamp; HST is that converted to Hawaii time.
             utc = get_timestamp(fn)
-            mini_db["UTC"].append(utc)
-            mini_db["HST"].append(utc_to_hst(utc))
-            mini_db["ISJUNK"].append(get_obs_id(fn) in junk)
+            row = {
+                "FILENAME": fn,
+                "UTC_TIME": utc,
+                "HST_TIME": utc_to_hst(utc),
+                "ISJUNK": get_obs_id(fn) in junk,
+            }
+            try:
+                parsed = HeaderParser(fn)
+            except Exception as e:
+                logger.warning("Could not read header from %s: %s", fn, e)
+            else:
+                native = parsed.WMKO_HEADER
+                for k in ("OBJECT", "OBSTYPE", "OBSMODE"):
+                    row[f"DRP_{k}"] = parsed.DRP_KEYWORDS[k]
+                row["EXPTIME"] = native.get("EXPTIME")
+                if row["DRP_OBJECT"] == "unknown":
+                    row["COMMENTS"] = (
+                        "Unparseable DRP_OBJECT identification: "
+                        f"TARGNAME == {native.get('TARGNAME')}, "
+                        f"IMTYPE == {native.get('IMTYPE')}, "
+                        f"WMKO_OBJECT == {native.get('OBJECT')}"
+                    )
+            rows.append(row)
 
-        self._full_scan_mini_db = pd.DataFrame(mini_db)
+        self._full_scan_mini_db = pd.DataFrame(rows, columns=_MINI_DB_KEYS)
         self._mini_db = self._clean_mini_db(self._full_scan_mini_db)
 
         if write_cache:
@@ -354,7 +371,7 @@ class FileHandler:
         return int((dt - _J2000_EPOCH).total_seconds())
 
     def _select_frames(self, cal_type, *, exclude_junk=True):
-        """The junk-excluded, OBJECT-filtered frames of ``cal_type`` from the
+        """The junk-excluded, DRP_OBSMODE-filtered frames of ``cal_type`` from the
         carried mini database -- the shared frame-selection entry point. Raises
         ``ValueError`` if no database is loaded or the type has no frames;
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
@@ -365,7 +382,7 @@ class FileHandler:
             )
         if exclude_junk:
             mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
-        cal_df = mini_db[mini_db["OBJECT"].isin(_OBJECT_MAP[cal_type])]
+        cal_df = mini_db[mini_db["DRP_OBSMODE"] == _CAL_TYPES[cal_type]]
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")
         return cal_df
@@ -406,7 +423,7 @@ class FileHandler:
         (``self._mini_db``, set by ``build_mini_database``).
 
         Drops observer-flagged junk frames (unless ``exclude_junk=False``), filters
-        by OBJECT, then groups the surviving frames into stacks according to
+        by OBSMODE, then groups the surviving frames into stacks according to
         ``groupby``:
 
         * ``'time_of_day'`` (default) -- one stack per observing session, split
@@ -461,9 +478,9 @@ class FileHandler:
             raise ValueError(
                 f"groupby must be one of {list(_GROUPBY_MODES)}; got '{groupby}'"
             )
-        if cal_type not in _OBJECT_MAP:
+        if cal_type not in _CAL_TYPES:
             raise ValueError(
-                f"cal_type must be one of {list(_OBJECT_MAP.keys())}; got '{cal_type}'"
+                f"cal_type must be one of {list(_CAL_TYPES)}; got '{cal_type}'"
             )
 
         if groupby == "time_of_day":
@@ -477,7 +494,7 @@ class FileHandler:
             if groupby == "hst_day":
                 # One stack per HST calendar day (the 'YYYYMMDD' HST-timestamp prefix).
                 by_day = {}
-                for fn, hst in zip(cal_df["FILENAME"], cal_df["HST"], strict=True):
+                for fn, hst in zip(cal_df["FILENAME"], cal_df["HST_TIME"], strict=True):
                     by_day.setdefault(str(hst).split(".")[0], []).append(fn)
                 clusters = [
                     sorted(v, key=self._seconds_since_j2000)

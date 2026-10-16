@@ -47,14 +47,16 @@ Expected layout for a first smoke run:
 
 Minimum L0 files for rebuilding masters locally:
 
-- At least 5 bias frames with `OBJECT=autocal-bias`
-- At least 5 dark frames with `OBJECT=autocal-dark`
-- At least 5 ThAr frames with `OBJECT=autocal-thar-all-*`
+- At least 5 bias frames (OBSMODE `bias`)
+- At least 5 dark frames (OBSMODE `dark`)
+- At least 5 all-fiber daily-lamp ThAr frames (OBSMODE `thar-all`)
 - One science exposure, initially `KP.20240405.40113.57.fits`
-- Flats with `OBJECT=autocal-flat-all`, if available, for future flat work
+- All-fiber flats (OBSMODE `flat-all`), if available, for future flat work
 
 The pipeline builds a mini CSV database from the primary headers in each
-`L0/<datecode>` directory. FITS data under `tests/testdata/` is intentionally
+`L0/<datecode>` directory. OBSMODE is the sanitized frame label that
+`kpfpipe/utils/header.py::HeaderParser` derives from the native IMTYPE,
+OCTAGON, shutter and camera cards. FITS data under `tests/testdata/` is intentionally
 gitignored and should not be committed.
 
 ## Smoke Commands
