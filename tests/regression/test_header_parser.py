@@ -182,9 +182,13 @@ def test_illumination(header, srcs):
     [
         (_hdr("Object", "EtalonFiber"), "On"),
         (
-            _hdr("Object", "LFCFiber", OBJECT="SoCal", TARGNAME="Sun", SOLSCISH="open"),
+            _hdr(
+                "Object", "EtalonFiber", OBJECT="SoCal", TARGNAME="Sun", SOLSCISH="open"
+            ),
             "On",
         ),
+        # Only the etalon is a simultaneous calibration source.
+        (_hdr("Object", "LFCFiber"), "Unknown"),
         (_hdr("Object", "EtalonFiber", shutters=("open", "open", "closed")), "Off"),
         (_hdr("Object", "EtalonFiber", SIMCALSH=None), "Unknown"),
         (_hdr("Object", "Home"), "Unknown"),

@@ -260,9 +260,10 @@ class HeaderParser:
         an Unknown frame.
 
         SIMULCAL is the convenience summary of CALSRC: ``On`` when a Target
-        frame's CAL fiber is lit, ``Off`` when it is dark, ``Unknown`` when
-        CALSRC is; ``N/A`` on a calibration frame and ``Unknown`` on an Unknown
-        one.
+        frame's CAL fiber sees the etalon (the only simultaneous calibration
+        source), ``Off`` when it is dark, ``Unknown`` when CALSRC is or names
+        another source (warned); ``N/A`` on a calibration frame and ``Unknown``
+        on an Unknown one.
         """
         native = self.WMKO_HEADER
         obj = self.DRP_KEYWORDS["OBJECT"]
@@ -324,8 +325,14 @@ class HeaderParser:
 
         mode = self.DRP_KEYWORDS["OBSMODE"]
         if mode == "Science":
-            self.DRP_KEYWORDS["SIMULCAL"] = {"None": "Off", "Unknown": "Unknown"}.get(
-                self.DRP_KEYWORDS["CALSRC"], "On"
+            calsrc = self.DRP_KEYWORDS["CALSRC"]
+            if calsrc not in ("Etalon", "None", "Unknown"):
+                self._warn(
+                    f"CALSRC={calsrc!r} is no simultaneous calibration source; "
+                    "SIMULCAL is Unknown"
+                )
+            self.DRP_KEYWORDS["SIMULCAL"] = {"Etalon": "On", "None": "Off"}.get(
+                calsrc, "Unknown"
             )
         else:
             self.DRP_KEYWORDS["SIMULCAL"] = "N/A" if mode == "Calibration" else mode
