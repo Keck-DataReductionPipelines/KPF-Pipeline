@@ -139,43 +139,48 @@ class TestDispatch:
     """Illumination-source resolution and per-source CCF configuration."""
 
     @pytest.mark.parametrize(
-        "clsrc, obj",
-        [("Target", "target"), ("Sky", "sky"), ("ThAr", "thar"), ("None", "none")],
+        "src, mask",
+        [
+            ("Target", "G2_espresso"),
+            ("SoCal", "G2_espresso"),
+            ("Sky", "G2_espresso"),
+            ("ThAr_daily", "thar"),
+            ("ThAr_gold", "thar"),
+            ("None", None),
+        ],
     )
-    def test_clsrc_dispatches_to_object(self, header_kpf2, clsrc, obj):
-        header_kpf2.headers["PRIMARY"]["CLSRC5"] = clsrc
-        assert (
-            CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "CAL")[
-                "object"
-            ]
-            == obj
+    def test_src_dispatches_to_mask(self, header_kpf2, src, mask):
+        header_kpf2.headers["PRIMARY"]["CALSRC"] = src
+        source = CrossCorrelation(header_kpf2)._resolve_illumination_source(
+            "GREEN", "CAL"
         )
+        assert (source["object"], source["mask_name"]) == (src, mask)
 
     def test_unrecognized_source_raises(self, header_kpf2):
-        header_kpf2.headers["PRIMARY"]["CLSRC5"] = "Frobnicator"
+        header_kpf2.headers["PRIMARY"]["CALSRC"] = "Frobnicator"
         with pytest.raises(ValueError, match="unrecognized illumination"):
             CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "CAL")
 
     def test_resolve_illumination_per_fiber(self, header_kpf2):
         cc = CrossCorrelation(header_kpf2)
-        assert cc._resolve_illumination_source("GREEN", "SCI2")["object"] == "target"
-        assert cc._resolve_illumination_source("RED", "SKY")["object"] == "sky"
-        assert cc._resolve_illumination_source("GREEN", "CAL")["object"] == "none"
+        assert cc._resolve_illumination_source("GREEN", "SCI2")["object"] == "Target"
+        assert cc._resolve_illumination_source("RED", "SKY")["object"] == "Sky"
+        assert cc._resolve_illumination_source("GREEN", "CAL")["object"] == "None"
 
     def test_resolve_unknown_fiber_raises(self, header_kpf2):
         with pytest.raises(ValueError, match="unknown fiber"):
             CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "BOGUS")
 
     def test_resolve_missing_keyword_raises(self, header_kpf2):
-        del header_kpf2.headers["PRIMARY"]["CLSRC5"]
-        with pytest.raises(ValueError, match="CLSRC5"):
+        del header_kpf2.headers["PRIMARY"]["CALSRC"]
+        with pytest.raises(ValueError, match="CALSRC"):
             CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "CAL")
 
     def test_settings_target(self, header_kpf2):
-        header_kpf2.headers["PRIMARY"]["CRV3"] = 11.1  # CLSRC3='Target'
+        header_kpf2.headers["PRIMARY"]["CRV3"] = 11.1  # SCISRC='Target'
         s = CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "SCI2")
         assert s == {
-            "object": "target",
+            "object": "Target",
             "mask_name": "G2_espresso",
             "apply_barycorr": True,
             "vel_grid_center": 11.1,
@@ -184,17 +189,29 @@ class TestDispatch:
     def test_settings_sky(self, header_kpf2):
         s = CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "SKY")
         assert s == {
-            "object": "sky",
+            "object": "Sky",
+            "mask_name": "G2_espresso",
+            "apply_barycorr": True,
+            "vel_grid_center": 0.0,
+        }
+
+    def test_settings_socal_needs_no_catalog(self, header_kpf2):
+        header_kpf2.headers["PRIMARY"]["SCISRC"] = "SoCal"
+        for card in ("CCLR3", "CCLRN3", "CRV3"):
+            del header_kpf2.headers["PRIMARY"][card]
+        s = CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "SCI2")
+        assert s == {
+            "object": "SoCal",
             "mask_name": "G2_espresso",
             "apply_barycorr": True,
             "vel_grid_center": 0.0,
         }
 
     def test_settings_thar(self, header_kpf2):
-        header_kpf2.headers["PRIMARY"]["CLSRC5"] = "ThAr"
+        header_kpf2.headers["PRIMARY"]["CALSRC"] = "ThAr_daily"
         s = CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "CAL")
         assert s == {
-            "object": "thar",
+            "object": "ThAr_daily",
             "mask_name": "thar",
             "apply_barycorr": False,
             "vel_grid_center": 0.0,
@@ -203,26 +220,24 @@ class TestDispatch:
     def test_settings_none(self, header_kpf2):
         s = CrossCorrelation(header_kpf2)._resolve_illumination_source(
             "GREEN", "CAL"
-        )  # CLSRC5='None'
+        )  # CALSRC='None'
         assert s == {
-            "object": "none",
+            "object": "None",
             "mask_name": None,
             "apply_barycorr": None,
             "vel_grid_center": None,
         }
 
-    @pytest.mark.parametrize("clsrc, obj", [("Etalon", "etalon"), ("LFC", "lfc")])
-    def test_unimplemented_source_warns_and_skips(
-        self, caplog, header_kpf2, clsrc, obj
-    ):
-        header_kpf2.headers["PRIMARY"]["CLSRC5"] = clsrc
+    @pytest.mark.parametrize("src", ["UNe_daily", "UNe_gold", "Etalon", "LFC"])
+    def test_unimplemented_source_warns_and_skips(self, caplog, header_kpf2, src):
+        header_kpf2.headers["PRIMARY"]["CALSRC"] = src
         with caplog.at_level(logging.WARNING):
             source = CrossCorrelation(header_kpf2)._resolve_illumination_source(
                 "GREEN", "CAL"
             )
-        assert re.search(rf"{obj}.*not implemented", caplog.text)
+        assert re.search(rf"{src}.*not implemented", caplog.text)
         assert source == {
-            "object": obj,
+            "object": src,
             "mask_name": None,
             "apply_barycorr": None,
             "vel_grid_center": None,
@@ -283,7 +298,7 @@ class TestBuildLineMask:
     def test_keys_and_shapes(self, header_kpf2):
         mask = CrossCorrelation(header_kpf2)._build_line_mask(
             "GREEN", "SCI2"
-        )  # CLSRC3='Target' -> G2
+        )  # SCISRC='Target' -> G2
         assert set(mask) == {"center", "weight", "start", "end"}
         n = mask["center"].size
         assert all(mask[k].shape == (n,) for k in mask)
@@ -300,7 +315,7 @@ class TestBuildLineMask:
         )
 
     def test_thar_mask_uniform_weights(self, header_kpf2):
-        header_kpf2.headers["PRIMARY"]["CLSRC5"] = "ThAr"  # -> thar mask
+        header_kpf2.headers["PRIMARY"]["CALSRC"] = "ThAr_daily"  # -> thar mask
         mask = CrossCorrelation(header_kpf2)._build_line_mask("GREEN", "CAL")
         assert np.all(mask["weight"] == 1.0)
         # ThAr centers are deduped and sorted (lines recur across overlapping orders).
@@ -525,7 +540,7 @@ class TestComputeCCFPublic:
 
 
 class TestPerform:
-    _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CLSRC5='None' -> skipped
+    _ILLUMINATED = ["SCI1", "SCI2", "SCI3", "SKY"]  # CALSRC='None' -> skipped
 
     def test_returns_kpf4_with_per_orderlet_extensions(self, performed):
         cc_module, l4 = performed
@@ -563,7 +578,7 @@ class TestPerform:
             assert np.all(np.isnan(np.asarray(table["RV_ERR"], dtype=float)))
 
     def test_unilluminated_fiber_skipped(self, performed):
-        # CLSRC5='None' -> no CCF cube, CCF variance, or RV table written.
+        # CALSRC='None' -> no CCF cube, CCF variance, or RV table written.
         cc_module, l4 = performed
         assert l4.data["CAL_CCF"].size == 0
         assert l4.data["CAL_CCF_VAR"].size == 0
@@ -675,16 +690,16 @@ class TestPerform:
         assert l4.headers["PRIMARY"].get("RVMETHOD") != "CCF"
 
     def test_thar_mask_recorded_for_cal(self, cc_module):
-        cc_module.l2_obj.headers["PRIMARY"]["CLSRC5"] = "ThAr"
+        cc_module.l2_obj.headers["PRIMARY"]["CALSRC"] = "ThAr_daily"
         l4 = cc_module.perform(fibers=["CAL"])
         assert l4.headers["CAL_CCF"]["CCFMASK"] == "thar"
 
     def test_unimplemented_fiber_skipped(self, caplog, cc_module):
         # An etalon/lfc fiber has no CCF path yet -> skipped, empty extensions.
-        cc_module.l2_obj.headers["PRIMARY"]["CLSRC5"] = "Etalon"
+        cc_module.l2_obj.headers["PRIMARY"]["CALSRC"] = "Etalon"
         with caplog.at_level(logging.WARNING):
             l4 = cc_module.perform(fibers=["CAL"])
-        assert re.search(r"etalon.*not implemented", caplog.text)
+        assert re.search(r"Etalon.*not implemented", caplog.text)
         assert l4.data["CAL_CCF"].size == 0
         assert len(l4.data["CAL_RV"]) == 0
 

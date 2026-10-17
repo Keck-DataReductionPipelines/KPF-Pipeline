@@ -42,7 +42,7 @@ def thar():
 
 
 # The (SCISEL, SKYSEL, SIMCALSH) shutters and (GREEN, RED, CA_HK) cameras that make
-# HeaderParser read each autocal-thar-{fibers} OBJECT as OBSMODE thar-{fibers}.
+# HeaderParser light each autocal-thar-{fibers} OBJECT's fibers and cameras.
 _FIBER_CARDS = {
     "all": ("open", "open", "open", "YES", "YES", "NO"),
     "sci": ("open", "closed", "closed", "YES", "YES", "NO"),
@@ -156,15 +156,16 @@ class TestFrameRow:
         path = Path(tmp_path) / "L0" / "20240101" / f"{obs_id}.fits"
         return {
             "FILENAME": str(path),
-            "DRP_OBSMODE": "thar-all",
-            "DRP_OBJECT": "ThAr",
+            "DRP_OBJECT": "ThAr_daily",
+            **dict.fromkeys(("SKYSRC", "SCISRC", "CALSRC"), "ThAr_daily"),
         }, obs_id
 
     def test_carries_mini_db_and_lamp_columns(self, thar, tmp_path):
         record, obs_id = self._record(tmp_path)
         row = thar._frame_row(record)
         assert row["OBS_ID"] == obs_id and row["DATECODE"] == "20240101"
-        assert row["OBSMODE"] == "thar-all" and row["OBJECT"] == "autocal-thar-all-eve"
+        assert row["SCISRC"] == "ThAr_daily"
+        assert row["OBJECT"] == "autocal-thar-all-eve"
         assert row["EXPTIME"] == 60.0 and row["ELAPSED"] == 60.0
         assert row["HCLSN"] == "L74828" and row["OCTAGON"] == "Th_daily"
         assert set(row) == set(thar._EXPOSURE_CSV_COLUMNS)
@@ -264,8 +265,12 @@ class TestScanLampSerialNumbers:
 # ---------------------------------------------------------------------------
 
 
-def _history_row(datecode, hclsn, obsmode="thar-all"):
-    return {"DATECODE": datecode, "OBSMODE": obsmode, "HCLSN": hclsn}
+def _history_row(datecode, hclsn, sources=("ThAr_daily",) * 3):
+    return {
+        "DATECODE": datecode,
+        **dict(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True)),
+        "HCLSN": hclsn,
+    }
 
 
 def _stretch(hclsn, first, last, n_obs):
@@ -295,11 +300,10 @@ class TestLampHistory:
         history = thar.lamp_history([_history_row("20240101", "")])
         assert history == [_stretch("(none)", "20240101", "20240101", 1)]
 
-    @pytest.mark.parametrize("obsmode", ["thar-sci", "thar_gold-all"])
-    def test_other_frames_neither_count_nor_split(self, thar, obsmode):
+    def test_other_frames_neither_count_nor_split(self, thar):
         rows = [
             _history_row("20240101", "L74828"),
-            _history_row("20240102", "L82884", obsmode),
+            _history_row("20240102", "L82884", sources=("None", "ThAr_daily", "None")),
             _history_row("20240103", "L74828"),
         ]
         assert thar.lamp_history(rows) == [

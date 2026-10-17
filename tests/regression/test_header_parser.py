@@ -39,6 +39,7 @@ def _hdr(imtype, octagon="Home", shutters=ALL, cameras=CCDS, **cards):
         "RDDATE-E": "2024-04-05T00:00:12",
         "GRACFFLN": "regular-read-green.acf",
         "RDACFFLN": "regular-read-red.acf",
+        "EXPMETER": "NO",
     }
     header.update(zip(("SCISEL", "SKYSEL", "SIMCALSH"), shutters, strict=True))
     header.update(zip(("GREEN", "RED", "CA_HK"), cameras, strict=True))
@@ -47,38 +48,42 @@ def _hdr(imtype, octagon="Home", shutters=ALL, cameras=CCDS, **cards):
 
 
 @pytest.mark.parametrize(
-    "header, obsmode, obstype",
+    "header, obstype, obsmode, obj",
     [
-        (_hdr("Bias", shutters=SHUT), "bias", "Bias"),
-        (_hdr("Dark", shutters=SHUT), "dark", "Dark"),
-        (_hdr("Object", "EtalonFiber", shutters=SKY), "star", "Object"),
-        (_hdr("Object", OBJECT="SoCal"), "socal", "Object"),
-        (_hdr("Object", OBJECT="x", TARGNAME=" SUN "), "socal", "Object"),
-        (_hdr("Flatlamp", shutters=SHUT), "wideflat", "Flat"),
-        (_hdr("Flatlamp", "BrdbandFiber"), "flat-all", "Flat"),
-        (_hdr("Arclamp", "Th_daily", shutters=SCI), "thar-sci", "ThAr"),
-        (_hdr("Arclamp", "Th_daily", shutters=SKY), "thar-sky", "ThAr"),
-        (_hdr("Arclamp", "Th_daily", shutters=CAL), "thar-cal", "ThAr"),
-        (_hdr("Arclamp", "Th_gold"), "thar_gold-all", "ThAr"),
-        (_hdr("Arclamp", "U_daily"), "une-all", "UNe"),
-        (_hdr("Arclamp", "U_gold", shutters=CAL), "une_gold-cal", "UNe"),
-        (_hdr("Arclamp", "EtalonFiber"), "etalon-all", "Etalon"),
-        (_hdr("Arclamp", "LFCFiber", cameras=("NO", "YES", "NO")), "lfc-all", "LFC"),
+        (_hdr("Bias", shutters=SHUT), "Bias", "Calibration", "Bias"),
+        (_hdr("Dark", shutters=SHUT), "Dark", "Calibration", "Dark"),
+        (_hdr("Object", "EtalonFiber", shutters=SKY), "Target", "Science", "target"),
+        (_hdr("Object", OBJECT="SoCal"), "Target", "Science", "SoCal"),
+        (_hdr("Object", OBJECT="x", TARGNAME=" SUN "), "Target", "Science", "SoCal"),
+        (_hdr("Flatlamp", shutters=SHUT), "Flat", "Calibration", "WideFlat"),
+        (_hdr("Flatlamp", "BrdbandFiber"), "Flat", "Calibration", "Flat"),
+        (
+            _hdr("Arclamp", "Th_daily", shutters=SCI),
+            "Arclamp",
+            "Calibration",
+            "ThAr_daily",
+        ),
+        (_hdr("Arclamp", "Th_gold"), "Arclamp", "Calibration", "ThAr_gold"),
+        (_hdr("Arclamp", "U_daily"), "Arclamp", "Calibration", "UNe_daily"),
+        (_hdr("Arclamp", "U_gold", shutters=CAL), "Arclamp", "Calibration", "UNe_gold"),
+        (_hdr("Arclamp", "EtalonFiber"), "Etalon", "Calibration", "Etalon"),
+        (_hdr("Arclamp", "LFCFiber", shutters=SHUT), "LFC", "Calibration", "LFC"),
         (
             _hdr("Arclamp", "Th_daily", shutters=HK, cameras=("NO", "NO", "YES")),
-            "thar-hk",
-            "ThAr",
+            "Arclamp",
+            "Calibration",
+            "ThAr_daily",
         ),
-        (_hdr("Arclamp", "LFCFiber", shutters=SHUT), "unknown", None),
-        (_hdr("Arclamp", "BrdbandFiber"), "unknown", None),
-        (_hdr("Sky"), "unknown", None),
+        (_hdr("Arclamp", "BrdbandFiber"), "Unknown", "Unknown", "Unknown"),
+        (_hdr("Sky"), "Unknown", "Unknown", "Unknown"),
     ],
 )
-def test_frame_identity(header, obsmode, obstype):
+def test_frame_identity(header, obstype, obsmode, obj):
     keywords = HeaderParser(header).DRP_KEYWORDS
-    assert keywords["OBSMODE"] == obsmode
     assert keywords["OBSTYPE"] == obstype
-    assert keywords["ISSOLAR"] is (obsmode == "socal")
+    assert keywords["OBSMODE"] == obsmode
+    assert keywords["OBJECT"] == obj
+    assert keywords["ISSOLAR"] is (obj == "SoCal")
 
 
 def test_exptime_is_elapsed():
@@ -89,23 +94,16 @@ def test_exptime_is_elapsed():
 @pytest.mark.parametrize(
     "header, obj",
     [
-        # Science: the target, when native OBJECT and TARGNAME agree.
+        # Target: the target, when native OBJECT and TARGNAME agree.
         (_hdr("Object", OBJECT=" 10700 ", TARGNAME="10700"), "10700"),
-        (_hdr("Object", OBJECT="10700", TARGNAME="HD 10700"), "unknown"),
-        (_hdr("Object", OBJECT="", TARGNAME=""), "unknown"),
-        # Calibration: the OBSTYPE, when OBJECT is an agreeing autocal label.
+        (_hdr("Object", OBJECT="10700", TARGNAME="HD 10700"), "Unknown"),
+        (_hdr("Object", OBJECT="", TARGNAME=""), "Unknown"),
+        # Calibration: IMTYPE/OCTAGON alone; the native OBJECT only warns.
         (_hdr("Bias", shutters=SHUT, OBJECT="autocal-bias", TARGNAME=""), "Bias"),
-        (_hdr("Arclamp", "Th_daily", OBJECT="autocal-thar-all-morn"), "ThAr"),
-        (_hdr("Arclamp", "Th_gold", OBJECT="autocal-thar-all-morn"), "unknown"),
-        (_hdr("Arclamp", "LFCFiber", OBJECT="LFCStability"), "unknown"),
-        (_hdr("Bias", shutters=SHUT, OBJECT=""), "unknown"),
-        (
-            _hdr(
-                "Arclamp", "LFCFiber", OBJECT="autocal-lfc-all", TARGNAME="AFP Failsafe"
-            ),
-            "unknown",
-        ),
-        (_hdr("Sky", OBJECT="autocal-bias"), "unknown"),
+        (_hdr("Arclamp", "Th_gold", OBJECT="autocal-thar-all-morn"), "ThAr_gold"),
+        (_hdr("Arclamp", "LFCFiber", OBJECT="LFCStability"), "LFC"),
+        (_hdr("Bias", shutters=SHUT, OBJECT=""), "Bias"),
+        (_hdr("Sky", OBJECT="autocal-bias"), "Unknown"),
     ],
 )
 def test_object(header, obj):
@@ -117,38 +115,48 @@ def _traces(keywords, prefix):
 
 
 @pytest.mark.parametrize(
-    "header, traces, clsrc",
+    "header, srcs",
     [
-        (
-            _hdr("Arclamp", "Th_daily", shutters=SCI),
-            ["None", "Th_daily", "Th_daily", "Th_daily", "None"],
-            ["None", "ThAr", "ThAr", "ThAr", "None"],
-        ),
-        (
-            _hdr("Flatlamp", "BrdbandFiber", shutters=CAL),
-            ["None", "None", "None", "None", "BrdbandFiber"],
-            ["None", "None", "None", "None", "Flat"],
-        ),
-        (
-            _hdr("Object", "EtalonFiber"),
-            ["Sky", "Target", "Target", "Target", "EtalonFiber"],
-            ["Sky", "Target", "Target", "Target", "Etalon"],
-        ),
+        (_hdr("Arclamp", "Th_daily", shutters=SCI), ["None", "ThAr_daily", "None"]),
+        (_hdr("Flatlamp", "BrdbandFiber", shutters=CAL), ["None", "None", "Flat"]),
+        (_hdr("Object", "EtalonFiber"), ["Sky", "Target", "Etalon"]),
+        (_hdr("Object", "EtalonFiber", OBJECT="SoCal"), ["Sky", "SoCal", "Etalon"]),
         (
             # The octagon parks on the etalon, but the SimulCal shutter is shut.
             _hdr("Object", "EtalonFiber", shutters=("open", "open", "closed")),
-            ["Sky", "Target", "Target", "Target", "None"],
-            ["Sky", "Target", "Target", "Target", "None"],
+            ["Sky", "Target", "None"],
         ),
-        (_hdr("Bias", shutters=SHUT), ["None"] * 5, ["None"] * 5),
-        (_hdr("Flatlamp", shutters=SHUT), ["None"] * 5, ["None"] * 5),
-        (_hdr("Arclamp", "LFCFiber", shutters=SHUT), [None] * 5, [None] * 5),
+        (_hdr("Bias", shutters=SHUT), ["None"] * 3),
+        (_hdr("Flatlamp", shutters=ALL), ["None"] * 3),
+        (_hdr("Arclamp", "LFCFiber", shutters=SHUT), ["None"] * 3),
+        (_hdr("Sky"), ["Unknown"] * 3),
     ],
 )
-def test_illumination(header, traces, clsrc):
+def test_illumination(header, srcs):
     keywords = HeaderParser(header).DRP_KEYWORDS
-    assert _traces(keywords, "TRACE") == traces
-    assert _traces(keywords, "CLSRC") == clsrc
+    assert [keywords[k] for k in ("SKYSRC", "SCISRC", "CALSRC")] == srcs
+    assert _traces(keywords, "TRACE") == ["SKY", "SCI", "SCI", "SCI", "CAL"]
+    # CLSRC# names a calibration lamp only, never Sky/Target/SoCal.
+    sky, sci, cal = ("None" if s in ("Sky", "Target", "SoCal") else s for s in srcs)
+    assert _traces(keywords, "CLSRC") == [sky, sci, sci, sci, cal]
+    # No catalog object until AstroQuery runs.
+    assert _traces(keywords, "CSRC") == _traces(keywords, "CID") == ["None"] * 5
+
+
+def test_cameras():
+    keywords = HeaderParser(_hdr("Bias", cameras=("YES", "no", " YES "))).DRP_KEYWORDS
+    assert [keywords[k] for k in ("GREEN", "RED", "CA_HK", "EXPMETER")] == [
+        True,
+        False,
+        True,
+        False,
+    ]
+
+
+def test_unrecognized_camera_card_warned_and_omitted():
+    parsed = HeaderParser(_hdr("Bias", cameras=("YES", "YES", "maybe")))
+    assert "CA_HK" not in parsed.DRP_KEYWORDS
+    assert any("CA_HK='maybe' is not YES/NO" in w for w in parsed.warnings)
 
 
 def test_readout_from_acf():
@@ -194,7 +202,7 @@ def test_consistent_frame_has_no_warnings():
 @pytest.mark.parametrize(
     "header, expected",
     [
-        (_hdr("Arclamp", "LFCFiber", shutters=SHUT), "cannot classify frame"),
+        (_hdr("Sky"), "cannot classify frame"),
         (_hdr("Bias", shutters=SHUT, OBJECT="  "), "OBJECT '' is no autocal label"),
         (
             _hdr("Arclamp", "LFCFiber", OBJECT="LFCStability"),
@@ -208,26 +216,26 @@ def test_consistent_frame_has_no_warnings():
             _hdr(
                 "Arclamp", "LFCFiber", OBJECT="autocal-lfc-all", TARGNAME="AFP Failsafe"
             ),
-            "TARGNAME 'AFP Failsafe' names a target on a lfc-all frame",
+            "TARGNAME 'AFP Failsafe' names a target on a LFC frame",
         ),
         (
             _hdr("Arclamp", "Th_daily", shutters=SCI, OBJECT="autocal-thar-all-eve"),
-            "disagrees with OBSMODE 'thar-sci'",
+            "disagrees with derived autocal-thar-sci",
         ),
         (
             # A daily-lamp OBJECT on a gold-lamp frame: the lamps must not conflate.
             _hdr("Arclamp", "Th_gold", OBJECT="autocal-thar-all-morn"),
-            "disagrees with OBSMODE 'thar_gold-all'",
+            "disagrees with derived autocal-thar_gold-all",
         ),
         (
             # The shutter-blind native pair: SKY-OBJ names the lamp on a shut fiber.
             _consistent("Arclamp", "Th_daily", SCI, "Th_daily", "Th_daily", "None"),
-            "SKY-OBJ='Th_daily' disagrees with derived TRACE1='None'",
+            "SKY-OBJ='Th_daily' disagrees with derived SKYSRC='None'",
         ),
         (
             # CAL-OBJ carrying an octagon position index (20240405).
             _consistent("Arclamp", "Th_daily", ALL, "Th_daily", "Th_daily", "10"),
-            "CAL-OBJ='10' disagrees with derived TRACE5='Th_daily'",
+            "CAL-OBJ='10' disagrees with derived CALSRC='ThAr_daily'",
         ),
         (_hdr("Bias", GRDATE=None), "GREEN=YES but GRDATE/GRDATE-E absent"),
         (_hdr("Bias", ELAPSED=None), "ELAPSED absent"),
@@ -241,22 +249,23 @@ def test_warnings(header, expected, caplog):
 
 
 @pytest.mark.parametrize(
-    "obj, octagon, shutters",
+    "header, obj",
     [
-        ("autocal-thar-all", "Th_daily", ALL),  # 2023's bare ThAr name
-        ("autocal-wideflat-f5", "Home", SHUT),
-        ("autocal-bias", "Home", SHUT),
+        (_hdr("Arclamp", "Th_daily", OBJECT="autocal-thar-all"), "ThAr_daily"),
+        (_hdr("Flatlamp", shutters=SHUT, OBJECT="autocal-wideflat-f5"), "WideFlat"),
+        (_hdr("Bias", shutters=SHUT, OBJECT="autocal-bias"), "Bias"),
+        (
+            _hdr(
+                "Arclamp", "Th_daily", HK, ("NO", "NO", "YES"), OBJECT="autocal-thar-hk"
+            ),
+            "ThAr_daily",
+        ),
     ],
 )
-def test_object_labels_that_agree_do_not_warn(obj, octagon, shutters):
-    imtype = {"Th_daily": "Arclamp"}.get(octagon, "Flatlamp")
-    if obj == "autocal-bias":
-        imtype = "Bias"
-    parser = HeaderParser(
-        _hdr(imtype, octagon, shutters, OBJECT=obj, TARGNAME="unknown")
-    )
+def test_object_labels_that_agree_do_not_warn(header, obj):
+    parser = HeaderParser(header)
     assert not any("OBJECT" in w or "TARGNAME" in w for w in parser.warnings)
-    assert parser.DRP_KEYWORDS["OBJECT"] == parser.DRP_KEYWORDS["OBSTYPE"]
+    assert parser.DRP_KEYWORDS["OBJECT"] == obj
 
 
 def test_hk_frame_does_not_warn_missing_ccd_timing():
@@ -322,7 +331,7 @@ def test_header_is_not_modified():
 def test_kpf0_stamps_every_keyword(path):
     l0 = KPF0.from_fits(str(path), standardize=True)
     keywords = HeaderParser(l0.headers["INSTRUMENT_HEADER"]).DRP_KEYWORDS
-    assert keywords["OBSMODE"] != "unknown"
+    assert keywords["OBSMODE"] != "Unknown"
     for key, value in keywords.items():
         ext = "QUALITY_CONTROL" if key.startswith("READTIM") else "PRIMARY"
         assert l0.headers[ext].get(key) == value, key

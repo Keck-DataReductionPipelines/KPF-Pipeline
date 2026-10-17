@@ -180,11 +180,12 @@ def _catalog_record_hdu():
     from kpfpipe.modules.astro_query import AstroQuery
 
     l0 = KPF0()
-    l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+    l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
     AstroQuery(l0)._write_catalog_record(
         "kpf-drp",
         {
             "object": "Gaia DR3 12345",
+            "catalog": "Gaia DR3",
             "radec_src": "gaia",
             "plx_src": "gaia",
             "rv_src": "gaia",

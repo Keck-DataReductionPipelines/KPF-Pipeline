@@ -149,7 +149,7 @@ class TestToKPF2:
         kpf2 = converted_l1.to_kpf2()
         prim = kpf2.headers["PRIMARY"]
         assert prim.get("EXPTIME") == 300.0  # from ELAPSED
-        assert prim.get("OBSTYPE") == "Object"  # from IMTYPE
+        assert prim.get("OBSTYPE") == "Target"  # from IMTYPE
         # Raw natives never reach the EPRV PRIMARY.
         assert "ELAPSED" not in prim
         assert "IMTYPE" not in prim

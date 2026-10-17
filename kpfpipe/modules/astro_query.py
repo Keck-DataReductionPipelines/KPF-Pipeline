@@ -46,13 +46,14 @@ class AstroQuery:
     the native ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry, and writes all
     three rows to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV ``C*#``
     catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science
-    frames are supported: the constructor raises on a non-``Object`` OBSTYPE. Fail-soft
+    frames are supported: the constructor raises on a non-``Target`` OBSTYPE or a
+    SoCal (ISSOLAR) frame. Fail-soft
     otherwise -- a missing GAIAID/OBJECT or a failed lookup yields a ``None`` record.
 
     Parameters
     ----------
     l0_obj : KPF0
-        Standardized L0 science frame (OBSTYPE ``Object``). Its PRIMARY header
+        Standardized L0 science frame (OBSTYPE ``Target``). Its PRIMARY header
         (OBSTYPE, GAIAID, OBJECT, TARG*) is read but never modified.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: do_gaia_query, do_simbad_query,
@@ -63,10 +64,15 @@ class AstroQuery:
         self.l0_obj = l0_obj
 
         obstype = l0_obj.headers["PRIMARY"].get("OBSTYPE")
-        if obstype != "Object":
+        if obstype != "Target":
             raise ValueError(
-                f"AstroQuery runs only on science frames (OBSTYPE 'Object'); got "
+                f"AstroQuery runs only on science frames (OBSTYPE 'Target'); got "
                 f"OBSTYPE={obstype!r}. It must not be called on a calibration frame."
+            )
+        if l0_obj.headers["PRIMARY"].get("ISSOLAR"):
+            raise ValueError(
+                "AstroQuery does not run on SoCal frames (ISSOLAR): the Sun has no "
+                "catalog entry"
             )
 
         if config is None:
@@ -316,7 +322,9 @@ class AstroQuery:
     # CATALOG_RECORD write schema (AstroQuery is the sole populator): one row per
     # resolved source (wmko/gaia/simbad) plus the merged 'kpf-drp' row, in column
     # order. A None unit marks a string column -- RA/Dec are sexagesimal strings, so
-    # not subject to astropy unit conversion. radec_src/plx_src/rv_src name the
+    # not subject to astropy unit conversion. catalog labels the catalog behind the
+    # position (CSRC#; e.g. "Gaia DR3", "WMKO TCS/DCS"). radec_src/plx_src/rv_src
+    # name the
     # source each value block came from -- its own for a source row, the winner (or
     # "" if none) for the merged row. Values are in the EPRV C*# PRIMARY format:
     # RA/Dec sexagesimal strings (ICRS), PM [arcsec/yr] (RA incl. cos Dec), parallax
@@ -327,6 +335,7 @@ class AstroQuery:
     _CATALOG_SCHEMA = {
         "source": None,
         "object": None,
+        "catalog": None,
         "radec_src": None,
         "plx_src": None,
         "rv_src": None,
@@ -479,6 +488,7 @@ class AstroQuery:
         )
         record = {
             "object": f"Gaia {release} {gaia_id}",
+            "catalog": f"Gaia {release}",
             "ra": ra_str,
             "dec": dec_str,
             "pmra": None if pmra is None else pmra / 1e3,
@@ -511,7 +521,45 @@ class AstroQuery:
         "V": None,
         "main_id": None,
         "ids": None,
+        "coo_bibcode": None,
     }
+
+    # SIMBAD coordinate reference (coo_bibcode) -> (catalog label for CSRC#, the
+    # prefix of that catalog's designation among the ids, for CID#). EDR3 and DR3
+    # share source_ids, and SIMBAD lists only the DR3 designation.
+    _SIMBAD_CATALOGS = {
+        "2020yCat.1350....0G": ("Gaia EDR3", "Gaia DR3 "),
+        "2020A&A...649A...1G": ("Gaia EDR3", "Gaia DR3 "),
+        "2022yCat.1355....0G": ("Gaia DR3", "Gaia DR3 "),
+        "2023A&A...674A...1G": ("Gaia DR3", "Gaia DR3 "),
+        "2018yCat.1345....0G": ("Gaia DR2", "Gaia DR2 "),
+        "2018A&A...616A...1G": ("Gaia DR2", "Gaia DR2 "),
+        "2007A&A...474..653V": ("Hipparcos (2007)", "HIP "),
+        "1997A&A...323L..49P": ("Hipparcos (1997)", "HIP "),
+        "1997HIP...C......0E": ("Hipparcos (1997)", "HIP "),
+        "2000A&A...355L..27H": ("Tycho-2", "TYC "),
+        "2003yCat.2246....0C": ("2MASS", "2MASS J"),
+        "2006AJ....131.1163S": ("2MASS", "2MASS J"),
+    }
+
+    def _simbad_catalog(self, row, name):
+        """``(catalog, designation)`` of a SIMBAD row's coordinates: the catalog its
+        coo_bibcode cites and the star's id in it (``name`` when SIMBAD lists none).
+        An unrecognized bibcode is warned and labelled 'Simbad Query (catalog
+        unknown)'.
+        """
+        bibcode = str(row["coo_bibcode"]).strip()
+        if bibcode not in self._SIMBAD_CATALOGS:
+            logger.warning(
+                "SIMBAD coordinates for %r cite an unrecognized catalog (coo_bibcode "
+                "%r)",
+                name,
+                bibcode,
+            )
+            return "Simbad Query (catalog unknown)", name
+        catalog, prefix = self._SIMBAD_CATALOGS[bibcode]
+        ids = (i.strip() for i in str(row["ids"]).split("|"))
+        return catalog, next((i for i in ids if i.startswith(prefix)), name)
 
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
@@ -563,8 +611,10 @@ class AstroQuery:
         color, color_name = self._color(
             self._scalar(row["B"]), self._scalar(row["V"]), "B-V"
         )
+        catalog, designation = self._simbad_catalog(row, name)
         record = {
-            "object": name,
+            "object": designation,
+            "catalog": catalog,
             "ra": ra_str,
             "dec": dec_str,
             "pmra": None if pmra is None else pmra / 1e3,
@@ -637,6 +687,7 @@ class AstroQuery:
             )
             record = {
                 "object": primary.get("OBJECT"),
+                "catalog": "WMKO TCS/DCS",
                 "ra": ra_str,
                 "dec": dec_str,
                 "pmra": icrs.pm_ra_cosdec.to_value(u.arcsec / u.yr) if has_pm else None,
@@ -756,6 +807,7 @@ class AstroQuery:
 
         record = {
             "object": base_record["object"],
+            "catalog": base_record["catalog"],
             "radec_src": base_source,
             "plx_src": base_source,
             "rv_src": rv_source,
@@ -779,7 +831,7 @@ class AstroQuery:
     # EPRV C*# format already, so the overlay is a direct copy (no conversion).
     _CATALOG_CARD_BASES = {
         "object": "CID",
-        "radec_src": "CSRC",
+        "catalog": "CSRC",
         "ra": "CRA",
         "dec": "CDEC",
         "pmra": "CPMR",
@@ -832,8 +884,8 @@ class AstroQuery:
                     continue
                 value = float(value)
             # SCI traces only. SKY and CAL have no object on the fiber, so their
-            # catalog cards stay blank by design -- not a gap. (Most C*# types
-            # admit no "N/A", so a blank is the only way to say "not applicable".)
+            # catalog cards keep HeaderParser's CSRC/CID "None" and stay blank
+            # otherwise -- not a gap. (Most C*# types admit no "N/A".)
             for fiber in SCI_FIBERS:
                 cards[f"{base}{self.fiber_positions[fiber] + 1}"] = value
         return cards

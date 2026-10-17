@@ -547,7 +547,7 @@ class TestPerform:
 
     def test_cal_only_run_skips_combine(self, monkeypatch, caplog):
         # A calibration-only run must not raise: PRIMARY RV is left UNDEFINED.
-        l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="ThAr")
+        l4 = _make_l4(monkeypatch, sci_obj="None", sky_obj="None", cal_obj="ThAr_daily")
         with caplog.at_level(logging.INFO, logger="kpfpipe"):
             prim = (
                 RadialVelocity(l4, config={"rv_window": RANGE_KMS})

@@ -112,7 +112,7 @@ class TestClassifyFrame:
     def test_bias_is_cal_with_reason(self, tmp_path):
         oid = write_l0_tree(tmp_path, _NIGHT, 100, imtype="Bias", obj="autocal-bias")
         kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
-        assert kind == "cal" and reason == "OBSMODE=bias"
+        assert kind == "cal" and reason == "OBJECT=Bias"
 
     def test_unreadable_is_cal_with_reason(self, tmp_path):
         bad = tmp_path / "KP.20240405.00001.00.fits"

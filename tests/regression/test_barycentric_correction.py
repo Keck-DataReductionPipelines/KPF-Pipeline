@@ -10,9 +10,10 @@ import logging
 import astropy.units as u
 import numpy as np
 import pytest
-from astropy.coordinates import Distance, SkyCoord
+from astropy.coordinates import Distance, SkyCoord, get_body_barycentric
 from astropy.table import Table
 from astropy.time import Time
+from barycorrpy import utc_tdb
 
 from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level2 import KPF2
@@ -308,6 +309,34 @@ class TestComputeBarycorrReference:
         # rewiring, loose enough to clear ephemeris/IERS noise at the pinned version.
         assert bc_vel[0] == pytest.approx(24627.84694194215, abs=1e-2)
         assert bjd_tdb[0] == pytest.approx(2460476.873644211, abs=1e-6)
+
+    def test_solar_mode(self):
+        # SoCal: barycorrpy's solar BC, and a true BJD_TDB -- not barycorrpy's solar
+        # HJD_TDB -- cross-checked against astropy's independent light-travel time
+        # along the observer->Sun direction.
+        t = Time("2024-06-15T21:00:00.000", scale="utc")
+        bc_vel, bjd_tdb = BarycentricCorrection._compute_barycorr(
+            {"SolSystemTarget": "Sun", "predictive": False}, t, KECK_LOCATION
+        )
+        # Earth rotation and orbit eccentricity: |BC| for the Sun is << 1 km/s.
+        assert np.isfinite(bc_vel[0]) and abs(bc_vel[0]) < 1.0e3
+        times = Time([t.utc.jd], format="jd", scale="utc")
+        observer = (
+            get_body_barycentric("earth", times)
+            + KECK_LOCATION.get_gcrs_posvel(times)[0]
+        )
+        sun = SkyCoord(get_body_barycentric("sun", times) - observer, frame="icrs")
+        expected = times.tdb + times.light_travel_time(
+            sun, "barycentric", location=KECK_LOCATION
+        )
+        assert bjd_tdb[0] == pytest.approx(expected.jd[0], abs=1e-3 / 86400)
+        hjd_tdb = utc_tdb.JDUTC_to_HJDTDB(
+            JDUTC=times.jd,
+            lat=KECK_LOCATION.lat.deg,
+            longi=KECK_LOCATION.lon.deg,
+            alt=KECK_LOCATION.height.value,
+        )[0]
+        assert abs(bjd_tdb[0] - hjd_tdb[0]) * 86400 > 0.5  # a BJD, not an HJD
 
 
 # ---------------------------------------------------------------------------
@@ -701,10 +730,20 @@ class TestGetAstrometry:
         assert astrometry["epoch"] == pytest.approx(Time(2016.0, format="jyear").jd)
 
     def test_records_provenance_from_csrc(self, synthetic_kpf2):
-        synthetic_kpf2.headers["PRIMARY"]["CSRC3"] = "simbad"
+        synthetic_kpf2.headers["PRIMARY"]["CSRC3"] = "Gaia EDR3"
         bc = BarycentricCorrection(synthetic_kpf2)
         bc._get_astrometry()
-        assert bc._astrometry_source == "simbad"
+        assert bc._astrometry_source == "Gaia EDR3"
+
+    def test_socal_uses_the_solar_ephemeris(self, synthetic_kpf2):
+        # SoCal has no catalog cards; barycorrpy's solar mode needs none.
+        primary = synthetic_kpf2.headers["PRIMARY"]
+        primary["ISSOLAR"] = True
+        for card in ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3"):
+            del primary[card]
+        bc = BarycentricCorrection(synthetic_kpf2)
+        assert bc._get_astrometry() == {"SolSystemTarget": "Sun", "predictive": False}
+        assert bc._astrometry_source == "solar ephemeris"
 
     def test_result_is_cached(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)

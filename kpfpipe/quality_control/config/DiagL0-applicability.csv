@@ -1,4 +1,4 @@
-Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+Method,Keywords,Description,RequiredData,Target,SoCal,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 DiagL0.gaia_ra_dec_offset,GAIAOFF,Pointing offset from the Gaia catalog position,CATALOG_RECORD,1,0,0,0,0,0,0,0,0
 DiagL0.target_ra_dec_offset,TCSOFF,Pointing offset from the TCS/DCS target position,CATALOG_RECORD|INSTRUMENT_HEADER,1,0,0,0,0,0,0,0,0
 DiagL0.object_ra_dec_offset,OBJOFF,Pointing offset from the SIMBAD position,CATALOG_RECORD,1,0,0,0,0,0,0,0,0

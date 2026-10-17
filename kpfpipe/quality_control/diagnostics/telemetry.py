@@ -72,16 +72,16 @@ class Telemetry(Diagnostics):
         """THARTEMP/THARPWR/THARON: temperature [C], power draw [W] and time on [s]
         of the lit ThAr lamp.
 
-        The lamp is named by the OBSMODE family (``thar`` daily, ``thar_gold``
-        gold), and must agree with the THARDAY/THARGD power status. Daily and
+        The lamp is named by OBJECT (``ThAr_daily`` or ``ThAr_gold``), and must
+        agree with the THARDAY/THARGD power status. Daily and
         Gold are tracked separately natively but collapse onto one keyword pair
         here.
         """
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
-        lamp = str(self.kpf_obj.headers["PRIMARY"].get("OBSMODE", "")).split("-")[0]
+        lamp = str(self.kpf_obj.headers["PRIMARY"].get("OBJECT", ""))
         lamps = {
-            "thar": ("THARDAY", "kpfmet.TH_DAILY", "PTHDAY", "THDAYTON"),
-            "thar_gold": ("THARGD", "kpfmet.TH_GOLD", "PTHAU", "THAUTON"),
+            "ThAr_daily": ("THARDAY", "kpfmet.TH_DAILY", "PTHDAY", "THDAYTON"),
+            "ThAr_gold": ("THARGD", "kpfmet.TH_GOLD", "PTHAU", "THAUTON"),
         }
         if lamp not in lamps:
             raise ValueError(f"{lamp!r} names no ThAr lamp")

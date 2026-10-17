@@ -34,31 +34,40 @@ _J2000_EPOCH = datetime(2000, 1, 1, 12, 0, 0)
 _CACHE_FILE_MODE = 0o666
 _CACHE_DIR_MODE = 0o777
 
-# The mini-database columns: DRP_* from HeaderParser, EXPTIME the native
-# EXPTIME, UTC/HST_TIME the filename's KPF timestamp, ISJUNK the observer junk
-# list (see load_junk_obs_ids), COMMENTS set only when DRP_OBJECT is unknown.
+# The mini-database columns: DRP_* and the fiber sources from HeaderParser, the
+# camera readout flags from the native camera cards, EXPTIME the native EXPTIME,
+# UTC/HST_TIME the filename's KPF timestamp, ISJUNK the observer junk list (see
+# load_junk_obs_ids), COMMENTS set only when DRP_OBJECT is Unknown.
 _MINI_DB_KEYS = [
     "FILENAME",
     "DRP_OBJECT",
     "DRP_OBSTYPE",
     "DRP_OBSMODE",
+    "SKYSRC",
+    "SCISRC",
+    "CALSRC",
+    "GREEN",
+    "RED",
+    "CA_HK",
+    "EXPMETER",
+    "EXPTIME",
     "UTC_TIME",
     "HST_TIME",
-    "EXPTIME",
     "ISJUNK",
     "COMMENTS",
 ]
 
 # The calibration/master frame types, in canonical order, each mapped to the
-# OBSMODE a frame must carry to enter its stack (lamp masters take only all-fiber
-# frames of the daily lamp). The single source for both L0 frame selection
-# (build_calibration_stacks) and master-product filenames (kpf_filename).
+# OBJECT a frame must carry to enter its stack. The single
+# source for L0 frame selection (build_calibration_stacks), master admission
+# (MasterBase), and master-product filenames (kpf_filename).
 _CAL_TYPES = {
-    "bias": "bias",
-    "dark": "dark",
-    "flat": "flat-all",
-    "thar": "thar-all",
+    "bias": "Bias",
+    "dark": "Dark",
+    "flat": "Flat",
+    "thar": "ThAr_daily",
 }
+
 
 # How build_calibration_stacks groups a cal_type's frames into stacks:
 # 'time_of_day' (per observing session, gap-split), 'hst_day' (per HST calendar
@@ -278,12 +287,14 @@ class FileHandler:
         pandas.DataFrame
             One row per readable frame. Columns: FILENAME (absolute path); the
             ``HeaderParser`` keywords DRP_OBJECT, DRP_OBSTYPE, DRP_OBSMODE (the
-            values KPF0 will carry as OBJECT/OBSTYPE/OBSMODE); UTC_TIME and
+            values KPF0 will carry as OBJECT/OBSTYPE/OBSMODE) and SKYSRC, SCISRC,
+            CALSRC (the source lighting each fiber); GREEN, RED, CA_HK, EXPMETER
+            (whether that camera read out); UTC_TIME and
             HST_TIME (KPF-format timestamps from the filename, HST = UTC-10);
             EXPTIME (the native, requested EXPTIME, not KPF0's EXPTIME = ELAPSED);
             ISJUNK (frame is on the observer junk list -- flagged, not dropped);
             and COMMENTS (the native TARGNAME/IMTYPE/OBJECT, only when DRP_OBJECT
-            is unknown). A missing header key gives None for that column. An
+            is Unknown). A missing header key gives None for that column. An
             unreadable frame is warned and omitted from this DataFrame (useless
             for stacking), but is still recorded -- with null header columns -- in
             the on-disk cache, so the cache mirrors the L0 directory exactly.
@@ -343,9 +354,19 @@ class FileHandler:
             else:
                 native = parsed.WMKO_HEADER
                 for k in ("OBJECT", "OBSTYPE", "OBSMODE"):
-                    row[f"DRP_{k}"] = parsed.DRP_KEYWORDS[k]
+                    row[f"DRP_{k}"] = parsed.DRP_KEYWORDS.get(k)
+                for k in (
+                    "SKYSRC",
+                    "SCISRC",
+                    "CALSRC",
+                    "GREEN",
+                    "RED",
+                    "CA_HK",
+                    "EXPMETER",
+                ):
+                    row[k] = parsed.DRP_KEYWORDS.get(k)
                 row["EXPTIME"] = native.get("EXPTIME")
-                if row["DRP_OBJECT"] == "unknown":
+                if row["DRP_OBJECT"] == "Unknown":
                     row["COMMENTS"] = (
                         "Unparseable DRP_OBJECT identification: "
                         f"TARGNAME == {native.get('TARGNAME')}, "
@@ -371,8 +392,10 @@ class FileHandler:
         return int((dt - _J2000_EPOCH).total_seconds())
 
     def _select_frames(self, cal_type, *, exclude_junk=True):
-        """The junk-excluded, DRP_OBSMODE-filtered frames of ``cal_type`` from the
-        carried mini database -- the shared frame-selection entry point. Raises
+        """The junk-excluded ``cal_type`` frames from the carried mini database --
+        the shared frame-selection entry point. A frame qualifies when its OBJECT is
+        the type's and (lamp masters) every fiber saw the lamp, so sci/sky/cal-only
+        lamp frames are left out. Raises
         ``ValueError`` if no database is loaded or the type has no frames;
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
         mini_db = self._mini_db
@@ -382,7 +405,11 @@ class FileHandler:
             )
         if exclude_junk:
             mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
-        cal_df = mini_db[mini_db["DRP_OBSMODE"] == _CAL_TYPES[cal_type]]
+        obj = _CAL_TYPES[cal_type]
+        keep = mini_db["DRP_OBJECT"] == obj
+        if cal_type in ("flat", "thar"):
+            keep &= (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == obj).all(axis=1)
+        cal_df = mini_db[keep]
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")
         return cal_df
@@ -422,9 +449,9 @@ class FileHandler:
         type, grouped from the mini database carried on the instance
         (``self._mini_db``, set by ``build_mini_database``).
 
-        Drops observer-flagged junk frames (unless ``exclude_junk=False``), filters
-        by OBSMODE, then groups the surviving frames into stacks according to
-        ``groupby``:
+        Drops observer-flagged junk frames (unless ``exclude_junk=False``), keeps
+        the type's frames (``_select_frames``), then groups the surviving frames
+        into stacks according to ``groupby``:
 
         * ``'time_of_day'`` (default) -- one stack per observing session, split
           wherever consecutive frames are more than ``cluster_gap_seconds`` apart

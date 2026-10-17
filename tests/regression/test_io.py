@@ -63,9 +63,20 @@ _SCI_A = [
 ]  # 50000-50100
 
 
-def _rows(files, obj, obsmode):
-    """Row dicts for a group of frames sharing DRP_OBJECT/DRP_OBSMODE."""
-    return [{"FILENAME": f, "DRP_OBSMODE": obsmode, "DRP_OBJECT": obj} for f in files]
+def _rows(files, obj, sources=None):
+    """Row dicts for a group of frames sharing DRP_OBJECT and fiber sources (SKYSRC,
+    SCISRC, CALSRC; default: every fiber sees a lamp OBJECT, else none)."""
+    if sources is None:
+        lamp = obj == "Flat" or obj.startswith(("ThAr", "UNe"))
+        sources = (obj if lamp else "None",) * 3
+    return [
+        {
+            "FILENAME": f,
+            "DRP_OBJECT": obj,
+            **dict(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True)),
+        }
+        for f in files
+    ]
 
 
 def _mini_db(rows, *, exptime=60.0, junk=()):
@@ -85,12 +96,12 @@ def _mini_db(rows, *, exptime=60.0, junk=()):
 
 def _make_mini_db():
     return _mini_db(
-        _rows(_BIAS_A, "autocal-bias", "bias")
-        + _rows(_BIAS_B, "autocal-bias", "bias")
-        + _rows(_DARK_A, "autocal-dark", "dark")
-        + _rows(_THAR_MORN, "autocal-thar-all-morn", "thar-all")
-        + _rows(_THAR_EVE, "autocal-thar-all-eve", "thar-all")
-        + _rows(_SCI_A, "185144", "star")
+        _rows(_BIAS_A, "Bias")
+        + _rows(_BIAS_B, "Bias")
+        + _rows(_DARK_A, "Dark")
+        + _rows(_THAR_MORN, "ThAr_daily")
+        + _rows(_THAR_EVE, "ThAr_daily")
+        + _rows(_SCI_A, "185144")
     )
 
 
@@ -101,7 +112,7 @@ _BIAS_SMALL = [
 
 def _mixed_bias_db():
     """Mini_db with one 5-file bias cluster (_BIAS_A) and a later 2-file one."""
-    return _mini_db(_rows(_BIAS_A + _BIAS_SMALL, "autocal-bias", "bias")), _BIAS_SMALL
+    return _mini_db(_rows(_BIAS_A + _BIAS_SMALL, "Bias")), _BIAS_SMALL
 
 
 def _midnight_bias_db(n_before=5, n_after=5):
@@ -118,7 +129,7 @@ def _midnight_bias_db(n_before=5, n_after=5):
         f"/data/L0/20240405/KP.20240405.{36100 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    df = _mini_db(_rows(before + after, "autocal-bias", "bias"))
+    df = _mini_db(_rows(before + after, "Bias"))
     return df, before, after
 
 
@@ -137,7 +148,7 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
         f"/data/L0/20240405/KP.20240405.{50000 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    df = _mini_db(_rows(before + after, "autocal-dark", "dark"), exptime=1200.0)
+    df = _mini_db(_rows(before + after, "Dark"), exptime=1200.0)
     return df, before, after
 
 
@@ -221,7 +232,7 @@ class TestBuildCalibrationStacks:
 
     def test_default_min_stack_size_is_noop(self):
         # The default min_stack_size=1 must not drop a lone 2-frame cluster.
-        db = _mini_db(_rows(_BIAS_SMALL, "autocal-bias", "bias"))
+        db = _mini_db(_rows(_BIAS_SMALL, "Bias"))
         lists = _cluster("bias", db)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_SMALL)
@@ -280,26 +291,21 @@ class TestBuildCalibrationStacks:
         assert lists[0] == sorted(_THAR_MORN)
         assert lists[1] == sorted(_THAR_EVE)
 
-    def test_selection_ignores_object(self):
-        # Issue #1559: a blank OBJECT must not drop a frame; DRP_OBSMODE selects it.
-        db = _mini_db(_rows(_BIAS_A, "", "bias"))
-        assert _cluster("bias", db) == [sorted(_BIAS_A)]
-
-    @pytest.mark.parametrize("other", ["thar_gold-all", "thar-sci"])
-    def test_thar_requires_daily_all_fiber(self, other):
+    @pytest.mark.parametrize(
+        "obj, sources",
+        [
+            ("ThAr_gold", None),
+            ("ThAr_daily", ("None", "ThAr_daily", "None")),
+        ],
+    )
+    def test_thar_requires_daily_all_fiber(self, obj, sources):
         # Gold-lamp and single-fiber frames never enter a ThAr master.
-        db = _mini_db(
-            _rows(_THAR_MORN, "autocal-thar-all-morn", "thar-all")
-            + _rows(_THAR_EVE, "autocal-thar-all-eve", other)
-        )
+        db = _mini_db(_rows(_THAR_MORN, "ThAr_daily") + _rows(_THAR_EVE, obj, sources))
         assert _cluster("thar", db) == [sorted(_THAR_MORN)]
 
     def test_flat_requires_all_fiber(self):
-        # A wideflat is not a fiber flat.
-        db = _mini_db(
-            _rows(_BIAS_A, "autocal-flat-all", "flat-all")
-            + _rows(_BIAS_B, "autocal-wideflat", "wideflat")
-        )
+        # A wide flat is not a fiber flat.
+        db = _mini_db(_rows(_BIAS_A, "Flat") + _rows(_BIAS_B, "WideFlat"))
         assert _cluster("flat", db) == [sorted(_BIAS_A)]
 
 
@@ -778,9 +784,16 @@ class TestBuildMiniDatabase:
             "DRP_OBJECT",
             "DRP_OBSTYPE",
             "DRP_OBSMODE",
+            "SKYSRC",
+            "SCISRC",
+            "CALSRC",
+            "GREEN",
+            "RED",
+            "CA_HK",
+            "EXPMETER",
+            "EXPTIME",
             "UTC_TIME",
             "HST_TIME",
-            "EXPTIME",
             "ISJUNK",
             "COMMENTS",
         ]
@@ -817,26 +830,17 @@ class TestBuildMiniDatabaseErrors:
 
 
 def test_mini_db_comments_only_on_unknown_object(tmp_path):
-    # A bias frame whose TARGNAME names a target has no resolvable DRP_OBJECT.
-    for seconds, targname in ((1000, ""), (2000, "bias")):
-        write_l0_tree(
-            tmp_path,
-            "20240405",
-            seconds,
-            obj="autocal-bias",
-            imtype="Bias",
-            targname=targname,
-            exptime=0.0,
-            elapsed=0.0,
-        )
+    # A Target frame whose OBJECT and TARGNAME disagree has no resolvable OBJECT.
+    for seconds, targname in ((1000, "10700"), (2000, "HD 10700")):
+        write_l0_tree(tmp_path, "20240405", seconds, obj="10700", targname=targname)
     mini_db = FileHandler({"KPF_DATA_INPUT": str(tmp_path)}).build_mini_database(
         "20240405"
     )
-    assert list(mini_db["DRP_OBJECT"]) == ["Bias", "unknown"]
+    assert list(mini_db["DRP_OBJECT"]) == ["10700", "Unknown"]
     assert pd.isna(mini_db["COMMENTS"][0])
     assert mini_db["COMMENTS"][1] == (
-        "Unparseable DRP_OBJECT identification: TARGNAME == bias, "
-        "IMTYPE == Bias, WMKO_OBJECT == autocal-bias"
+        "Unparseable DRP_OBJECT identification: TARGNAME == HD 10700, "
+        "IMTYPE == Object, WMKO_OBJECT == 10700"
     )
 
 
@@ -1047,18 +1051,18 @@ class TestJunkExclusion:
 
     def test_exclude_junk_default_drops_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "bias"), junk=[junk_fn])
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"), junk=[junk_fn])
         lists = _cluster("bias", db, min_stack_size=1)
         assert junk_fn not in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_false_keeps_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "bias"), junk=[junk_fn])
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"), junk=[junk_fn])
         lists = _cluster("bias", db, min_stack_size=1, exclude_junk=False)
         assert junk_fn in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "bias")).drop(columns="ISJUNK")
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias")).drop(columns="ISJUNK")
         with pytest.raises(KeyError, match="ISJUNK"):
             _cluster("bias", db, min_stack_size=1)

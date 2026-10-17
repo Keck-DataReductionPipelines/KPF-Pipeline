@@ -40,7 +40,8 @@ from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cach
 
 logger = logging.getLogger(__name__)
 
-# The mini-database DRP_OBSMODE, then the native PRIMARY cards read per frame: OBJECT
+# The mini-database fiber sources, then the native PRIMARY
+# cards read per frame: OBJECT
 # (its morn/eve suffix bears on how bright a frame should be,
 # notes/thar_lamp_health.md), the exposure times, the lamp's serial, which lamp
 # position was selected, and how long each had been powered -- a cold lamp is dim
@@ -48,7 +49,9 @@ logger = logging.getLogger(__name__)
 _EXPOSURE_CSV_COLUMNS = [
     "OBS_ID",
     "DATECODE",
-    "OBSMODE",
+    "SKYSRC",
+    "SCISRC",
+    "CALSRC",
     "OBJECT",
     "EXPTIME",
     "ELAPSED",
@@ -100,7 +103,7 @@ def _frame_row(record):
     path = record["FILENAME"]
     header = fits.getheader(path, ext=0)
     row = {"OBS_ID": get_obs_id(path), "DATECODE": get_datecode(path)}
-    row["OBSMODE"] = record["DRP_OBSMODE"]
+    row.update({k: record[k] for k in ("SKYSRC", "SCISRC", "CALSRC")})
     row.update({k: header.get(k) for k in ("EXPTIME", "ELAPSED")})
     row.update(
         {
@@ -134,7 +137,7 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
             return [], ""
         # Every daily-lamp ThAr frame, not just the masters stack inputs: the
         # fiber-specific cals light the same lamp, and early nights have only those.
-        is_thar = df["DRP_OBSMODE"].astype(str).str.startswith("thar-")
+        is_thar = df["DRP_OBJECT"] == "ThAr_daily"
         frames = df.loc[is_thar & ~df["ISJUNK"].astype(bool)]
         if frames.empty:
             return [], ": no ThAr frames"
@@ -158,7 +161,7 @@ def lamp_history(rows):
     """
     history = []
     for r in rows:
-        if r["OBSMODE"] != "thar-all":
+        if {r["SKYSRC"], r["SCISRC"], r["CALSRC"]} != {"ThAr_daily"}:
             continue
         lamp = r["HCLSN"] or "(none)"
         if history and history[-1]["HCLSN"] == lamp:
@@ -209,7 +212,7 @@ def main(argv=None):
 
     history = lamp_history(rows)
     if not history:
-        logger.warning("no OBSMODE=thar-all frames: lamp history is empty")
+        logger.warning("no all-fiber daily ThAr frames: lamp history is empty")
     path = os.path.join(out_dir, f"thar_lamp_history_{start}_{end}.csv")
     write_csv(path, history, _LAMP_HISTORY_CSV_COLUMNS)
     logger.info("done: %d lamp stretch(es) -> %s", len(history), path)

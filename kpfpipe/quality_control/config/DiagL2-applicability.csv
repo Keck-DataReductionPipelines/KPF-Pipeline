@@ -1,4 +1,4 @@
-Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+Method,Keywords,Description,RequiredData,Target,SoCal,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 DiagL2.nan_counts,NANSKY|NANSCI{1/2/3}|NANCAL,NaN pixel count in each extracted orderlet,TRACE#_FLUX,1,1,0,0,1,1,1,1,1
 DiagL2.zero_counts,ZEROSKY|ZEROSCI{1/2/3}|ZEROCAL,Non-positive pixel count in each extracted orderlet,TRACE#_FLUX,1,1,0,0,1,1,1,1,1
 DiagL2.band_snr,SNR{SC/SK/CL}{452/548/652/747/852}|EXSNR#|EXSNRW#,"Per-band SNR of each orderlet, with the summed-SCI values mirrored to PRIMARY",TRACE#_FLUX|TRACE#_VAR|TRACE#_WAVE,1,1,0,0,1,1,1,1,1

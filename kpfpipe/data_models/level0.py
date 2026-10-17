@@ -249,16 +249,18 @@ class KPF0(KPFDataModel):
     def _observation_settings(self):
         """Stamp every value ``HeaderParser`` derives from the native header.
 
-        Frame identity (OBSMODE, OBSTYPE, ISSOLAR, OBJECT, EXPTIME), each
-        trace's illumination (TRACE#, CLSRC#) and the readout (READMODE,
-        READTIMG, READTIMR) all come from the one parser the mini database
-        scan uses, so a frame is classified identically before and after
-        loading. A frame it cannot classify raises: nothing downstream can
-        reduce it.
+        Frame identity (OBSTYPE, OBSMODE, OBJECT, ISSOLAR, EXPTIME), fiber
+        illumination (SKYSRC, SCISRC, CALSRC, which downstream code consumes),
+        the EPRV trace cards (TRACE#, CLSRC#, and CSRC#/CID# as ``None`` until
+        AstroQuery), the cameras read out (GREEN, RED, CA_HK, EXPMETER) and the
+        readout (READMODE, READTIMG, READTIMR) all come from the one parser the
+        mini database scan uses, so a frame is classified identically before and
+        after loading. A frame it cannot classify raises, citing every parser
+        warning: nothing downstream can reduce it.
         """
         parsed = HeaderParser(self.headers["INSTRUMENT_HEADER"])
-        if parsed.DRP_KEYWORDS["OBSMODE"] == "unknown":
-            raise ValueError(f"{self.obs_id}: {parsed.warnings[0]}")
+        if parsed.DRP_KEYWORDS["OBSMODE"] == "Unknown":
+            raise ValueError(f"{self.obs_id}: {'; '.join(parsed.warnings)}")
         for key, value in parsed.DRP_KEYWORDS.items():
             self.set_keyword(key, value)
 

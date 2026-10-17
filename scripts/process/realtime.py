@@ -23,7 +23,7 @@ NFS mount:
   ``(path, mtime, size)``; restarts and rescans are harmless, and a re-delivered
   frame (new mtime) is treated as a new frame.
 
-Only science frames (``OBSTYPE == 'Object'``, the same test the timeseries wrapper
+Only science frames (``OBSTYPE == 'Target'``, the same test the timeseries wrapper
 uses) are reduced; calibration frames are recorded as ``skipped``. A
 heartbeat status file (``--status_file``, default ``{log_dir}/realtime_status.json``)
 is rewritten every pass so operations tooling can see the watcher is alive and what
@@ -205,7 +205,7 @@ def scan_settled_frames(l0_dirs, settle, now=None):
 
 
 def classify_frame(path):
-    """Return ``('science', None)`` for an ``OBSTYPE == 'Object'`` frame, else
+    """Return ``('science', None)`` for an ``OBSTYPE == 'Target'`` frame, else
     ``('cal', reason)``.
 
     A header that cannot be read is classified ``cal`` with the error as the
@@ -216,9 +216,9 @@ def classify_frame(path):
         keywords = HeaderParser(path).DRP_KEYWORDS
     except Exception as exc:  # astropy raises a zoo of types for a bad file
         return "cal", f"unreadable header: {exc}"
-    if keywords["OBSTYPE"] == "Object":
+    if keywords["OBSTYPE"] == "Target":
         return "science", None
-    return "cal", f"OBSMODE={keywords['OBSMODE']}"
+    return "cal", f"OBJECT={keywords['OBJECT']}"
 
 
 def _utc_now():

@@ -62,7 +62,7 @@ def _make_kpf0(
     ``dates`` seeds raw DATE-BEG/MID/END/ELAPSED cards on PRIMARY. ``expmeter``
     maps an EXPMETER_SCI/SKY extension name to its table; without it the frame has
     no EM data at all, like a calibration. ``imtype`` sets PRIMARY IMTYPE
-    ('Object' is a science frame, anything else a calibration).
+    ('Target' is a science frame, anything else a calibration).
     """
     fn = write_amp_l0(
         tmp_path / f"{obs_id}.fits",
@@ -203,7 +203,7 @@ def ungated(monkeypatch):
     covered by ``TestQCApplicability``.
     """
     monkeypatch.setattr(applicability, "applies", lambda *_: True)
-    monkeypatch.setattr(applicability, "frame_type", lambda _: "Star")
+    monkeypatch.setattr(applicability, "frame_type", lambda _: "Target")
 
 
 @pytest.mark.usefixtures("ungated")

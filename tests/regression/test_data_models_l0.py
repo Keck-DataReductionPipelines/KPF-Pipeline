@@ -422,7 +422,7 @@ class TestStandardizedPrimary:
 
     def test_natives_are_converted_to_eprv_names(self, synthetic_l0_file):
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
-        assert prim["OBSTYPE"] == "Object"  # IMTYPE -> OBSTYPE
+        assert prim["OBSTYPE"] == "Target"  # IMTYPE -> OBSTYPE
         assert prim["EXPTIME"] == 300.0  # ELAPSED -> EXPTIME
         assert prim["INSTRUME"] == "KPF"
         assert prim["OBJECT"] == "10700"
@@ -555,10 +555,11 @@ class TestHeaderKeywords:
             l0.headers["PRIMARY"][key] = value
         return l0.standardize_headers()
 
-    def test_object_frame_is_a_star(self, synthetic_l0_file):
+    def test_object_frame_is_a_target(self, synthetic_l0_file):
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
-        assert prim["OBSTYPE"] == "Object"
-        assert prim["OBSMODE"] == "star"
+        assert prim["OBSTYPE"] == "Target"
+        assert prim["OBSMODE"] == "Science"
+        assert prim["OBJECT"] == "10700"
         assert prim["ISSOLAR"] is False
 
     def test_every_header_parser_keyword_is_stamped(self):
@@ -575,24 +576,24 @@ class TestHeaderKeywords:
             assert l0.headers["PRIMARY"][key] == value, key
 
     @pytest.mark.parametrize(
-        "imtype, native, obsmode, obstype",
+        "imtype, native, obj, obstype",
         [
-            ("Bias", {}, "bias", "Bias"),
-            ("Dark", {}, "dark", "Dark"),
-            ("Flatlamp", {"OCTAGON": "Home"}, "wideflat", "Flat"),
-            ("Flatlamp", {"OCTAGON": "BrdbandFiber"}, "flat-all", "Flat"),
-            ("Arclamp", {"OCTAGON": "Th_daily"}, "thar-all", "ThAr"),
-            ("Arclamp", {"OCTAGON": "Th_gold"}, "thar_gold-all", "ThAr"),
-            ("Arclamp", {"OCTAGON": "U_gold"}, "une_gold-all", "UNe"),
-            ("Arclamp", {"OCTAGON": "LFCFiber"}, "lfc-all", "LFC"),
-            ("Arclamp", {"OCTAGON": "EtalonFiber"}, "etalon-all", "Etalon"),
-            ("Object", {"OCTAGON": "EtalonFiber"}, "star", "Object"),
+            ("Bias", {}, "Bias", "Bias"),
+            ("Dark", {}, "Dark", "Dark"),
+            ("Flatlamp", {"OCTAGON": "Home"}, "WideFlat", "Flat"),
+            ("Flatlamp", {"OCTAGON": "BrdbandFiber"}, "Flat", "Flat"),
+            ("Arclamp", {"OCTAGON": "Th_daily"}, "ThAr_daily", "Arclamp"),
+            ("Arclamp", {"OCTAGON": "Th_gold"}, "ThAr_gold", "Arclamp"),
+            ("Arclamp", {"OCTAGON": "U_gold"}, "UNe_gold", "Arclamp"),
+            ("Arclamp", {"OCTAGON": "LFCFiber"}, "LFC", "LFC"),
+            ("Arclamp", {"OCTAGON": "EtalonFiber"}, "Etalon", "Etalon"),
         ],
     )
-    def test_frame_identity(self, imtype, native, obsmode, obstype):
+    def test_frame_identity(self, imtype, native, obj, obstype):
         prim = self._standardize(imtype, **native, **_ALL_FIBERS).headers["PRIMARY"]
-        assert prim["OBSMODE"] == obsmode
+        assert prim["OBSMODE"] == "Calibration"
         assert prim["OBSTYPE"] == obstype
+        assert prim["OBJECT"] == obj
         assert prim["ISSOLAR"] is False
 
     @pytest.mark.parametrize(
@@ -600,7 +601,6 @@ class TestHeaderKeywords:
         [
             ("Sky", {}),
             ("Arclamp", {"OCTAGON": "BrdbandFiber", **_ALL_FIBERS}),
-            ("Arclamp", {"OCTAGON": "Th_daily"}),  # no shutter cards
         ],
     )
     def test_unclassifiable_frame_is_rejected(self, imtype, native):
@@ -611,7 +611,8 @@ class TestHeaderKeywords:
     @pytest.mark.parametrize("key", ("OBJECT", "TARGNAME"))
     def test_solar_frame_is_solar(self, key, name):
         prim = self._standardize("Object", **{key: name}).headers["PRIMARY"]
-        assert prim["OBSMODE"] == "socal"
+        assert prim["OBSMODE"] == "Science"
+        assert prim["OBJECT"] == "SoCal"
         assert prim["ISSOLAR"] is True
 
     def test_illumination_follows_the_shutters_not_the_obj_cards(self):
@@ -622,22 +623,23 @@ class TestHeaderKeywords:
             SIMCALSH="closed",
             **{"SKY-OBJ": "Sky", "SCI-OBJ": "Target", "CAL-OBJ": "Th_gold"},
         ).headers["PRIMARY"]
-        assert prim["CLSRC1"] == "Sky"
-        assert [prim[f"CLSRC{trace}"] for trace in (2, 3, 4)] == ["Target"] * 3
-        assert prim["TRACE5"] == prim["CLSRC5"] == "None"
+        assert (prim["SKYSRC"], prim["SCISRC"]) == ("Sky", "Target")
+        assert {prim[f"CLSRC{trace}"] for trace in range(1, 5)} == {"None"}
+        assert prim["TRACE5"] == "CAL"
+        assert prim["CLSRC5"] == prim["CALSRC"] == "None"
 
     @pytest.mark.parametrize(
         "octagon, source",
         [
-            ("Th_gold", "ThAr"),
-            ("Th_daily", "ThAr"),
+            ("Th_gold", "ThAr_gold"),
+            ("Th_daily", "ThAr_daily"),
             ("LFCFiber", "LFC"),
             ("EtalonFiber", "Etalon"),
         ],
     )
     def test_clsrc_vocabulary(self, octagon, source):
         prim = self._standardize("Object", OCTAGON=octagon, SIMCALSH="open")
-        assert prim.headers["PRIMARY"]["TRACE5"] == octagon
+        assert prim.headers["PRIMARY"]["TRACE5"] == "CAL"
         assert prim.headers["PRIMARY"]["CLSRC5"] == source
 
     def test_flat_source_is_flat(self):

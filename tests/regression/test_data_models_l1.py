@@ -189,6 +189,7 @@ class TestToKpf1:
     # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.
     _KPF_DRP = {
         "object": "Gaia DR3 12345",
+        "catalog": "Gaia DR3",
         "radec_src": "gaia",
         "plx_src": "gaia",
         "rv_src": "gaia",
@@ -226,12 +227,12 @@ class TestToKpf1:
 
     def test_catalog_overlay_populates_sci_cards(self):
         # Direct copy of the canonical row onto every SCI fiber (2,3,4), no conversion.
-        # Traces 1 (SKY) and 5 (CAL) are deliberately left blank: no object on those
-        # fibers, and most C*# types admit no "N/A".
+        # Traces 1 (SKY) and 5 (CAL) hold no object: CSRC/CID "None", the rest blank
+        # (most C*# types admit no "N/A").
         p = self._l0_with_catalog(dict(self._KPF_DRP)).to_kpf1().headers["PRIMARY"]
         for i in (2, 3, 4):
             assert p[f"CID{i}"] == "Gaia DR3 12345"
-            assert p[f"CSRC{i}"] == "gaia"
+            assert p[f"CSRC{i}"] == "Gaia DR3"
             assert p[f"CRA{i}"] == "12:00:00.0000"
             assert p[f"CDEC{i}"] == "+40:00:00.000"
             assert p[f"CPMR{i}"] == 0.5
@@ -264,15 +265,17 @@ class TestToKpf1:
 
     def test_frame_without_catalog_leaves_sci_cards_present_and_blank(self):
         # No AstroQuery overlay at all: the seed has still stamped every member of
-        # every C*# family, so the cards are present and empty rather than absent.
+        # every C*# family, so the cards are present rather than absent -- empty,
+        # except CSRC/CID, which HeaderParser sets to "None" (no catalog object).
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.standardize_headers()
         p = l0.to_kpf1().headers["PRIMARY"]
-        for kw in ("CRA2", "CID2", "CSRC2", "CPMR2"):
+        for kw in ("CRA2", "CPMR2"):
             assert kw in p
             assert not p.get(kw)
+        assert p["CID2"] == p["CSRC2"] == "None"
 
     def test_catalog_overlay_warns_on_mixed_sources(self, caplog):
         # rv from a different catalog than the position -> WARNING at PRIMARY commit.

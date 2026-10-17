@@ -78,12 +78,11 @@ CATALOG_RECORD = {
 # The PRIMARY cards applicability.frame_type reads, per frame type. In-memory
 # products skip KPF0.standardize_headers, so their builders stamp these directly.
 FRAME_TYPE_CARDS = {
-    "Star": {"OBSTYPE": "Object", "ISSOLAR": False},
-    "Sun": {"OBSTYPE": "Object", "ISSOLAR": True},
-} | {
-    frame: {"OBSTYPE": frame}
-    for frame in ("Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
-}
+    "Target": {"OBSTYPE": "Target", "ISSOLAR": False},
+    "SoCal": {"OBSTYPE": "Target", "ISSOLAR": True},
+    "ThAr": {"OBSTYPE": "Arclamp", "OBJECT": "ThAr_daily"},
+    "UNe": {"OBSTYPE": "Arclamp", "OBJECT": "UNe_daily"},
+} | {frame: {"OBSTYPE": frame} for frame in ("Bias", "Dark", "Flat", "LFC", "Etalon")}
 
 _DEFAULT_PRIMARY = {
     "INSTRUME": "KPF",
@@ -243,7 +242,7 @@ def standardized_l0(path):
     return KPF0.from_fits(str(path), standardize=True)
 
 
-def stamp_frame_type(kpf_obj, frame_type="Star"):
+def stamp_frame_type(kpf_obj, frame_type="Target"):
     """Stamp PRIMARY so the applicability gate resolves ``frame_type``.
 
     Every Diagnostics/QC ``run()`` reads it, and an in-memory L1/L2/L4 has only

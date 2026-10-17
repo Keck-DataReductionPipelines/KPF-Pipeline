@@ -23,6 +23,7 @@ from kpfpipe.quality_control.diagnostics import (
 )
 from kpfpipe.quality_control.qc_flags import QCL0, QCL1
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.io import _CAL_TYPES
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
 logger = logging.getLogger(__name__)
@@ -83,15 +84,6 @@ class BaseMasterModule:
     # frames a stack is built from, and the `qc[kw][0]` read below would raise a
     # bare KeyError rather than reject the frame.
     _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
-
-    # The standardized OBSMODE a frame must carry to enter a stack, by master_type:
-    # lamp masters take only all-fiber frames of the daily lamp.
-    _OBSMODE_BY_MASTER_TYPE = {
-        "bias": "bias",
-        "dark": "dark",
-        "flat": "flat-all",
-        "thar": "thar-all",
-    }
 
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
     # the stats methods: a frame whose exposure is <= this counts as zero
@@ -213,8 +205,8 @@ class BaseMasterModule:
         """
         Load an L0 file and assemble it to an L1 object; None on failure.
 
-        Failure means the frame could not be read/standardized/assembled, its
-        OBSMODE is not the one ``self.master_type`` expects, or it failed one of
+        Failure means the frame could not be read/standardized/assembled, it is
+        not a ``self.master_type`` input, or it failed one of
         ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause (with
         traceback for errors) and callers detect it via ``is None``.
         With ``cache=True`` the assembled L1 is retained for reuse (the streaming
@@ -226,15 +218,21 @@ class BaseMasterModule:
 
         # Outside the try: an unset or unknown master_type is a module bug, not a
         # bad frame, so it raises rather than rejecting every frame.
-        expected = self._OBSMODE_BY_MASTER_TYPE[self.master_type]
+        if self.master_type not in _CAL_TYPES:
+            raise ValueError(f"unknown master_type {self.master_type!r}")
 
         try:
             l0_obj = KPF0.from_fits(fn, standardize=True)
 
-            obsmode = l0_obj.headers["PRIMARY"]["OBSMODE"]
-            if obsmode != expected:
+            prim = l0_obj.headers["PRIMARY"]
+            sources = tuple(prim[k] for k in ("SKYSRC", "SCISRC", "CALSRC"))
+            obj = _CAL_TYPES[self.master_type]
+            lamp = self.master_type in ("flat", "thar")
+            # Lamp masters take all-fiber frames only: every fiber saw the lamp.
+            if prim["OBJECT"] != obj or (lamp and set(sources) != {obj}):
                 raise ValueError(
-                    f"OBSMODE {obsmode!r} is not a {self.master_type} frame"
+                    f"OBJECT {prim['OBJECT']!r}, sources {sources}: "
+                    f"not a {self.master_type} frame"
                 )
 
             for diagnostics in (DiagL0, Guider, ExposureMeter, Telemetry):

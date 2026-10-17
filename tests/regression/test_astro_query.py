@@ -44,6 +44,7 @@ def _record(obj, ra=180.0, **overrides):
     Override a field with None to mark it missing."""
     rec = {
         "object": obj,
+        "catalog": "Gaia DR3",
         "ra": _ra_str(ra),
         "dec": _dec_str(40.0),
         "pmra": 1.0,
@@ -67,7 +68,7 @@ def _merge(records, targradv=None, priority=("gaia", "simbad", "wmko")):
     default ``priority`` admits all three sources so these exercise the merge
     itself; the shipped policy is pinned in TestAstrometryPriority."""
     l0 = KPF0()
-    l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+    l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
     if targradv is not None:
         l0.headers["INSTRUMENT_HEADER"]["TARGRADV"] = targradv
     aq = AstroQuery(l0, {"astrometry_priority": priority})
@@ -272,7 +273,7 @@ class TestSingleSourceProvenance:
     def test_source_row_provenance_defaults_to_source(self):
         # A source row holds only its own values, so all three labels are its own.
         l0 = KPF0()
-        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G"))
         aq._write_catalog_record("wmko", _record("W"))
@@ -296,7 +297,7 @@ class TestRedshift:
 
     def test_written_row_carries_redshift(self):
         l0 = KPF0()
-        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G", rv=11.0))
         row = l0.data["CATALOG_RECORD"][0]
@@ -305,7 +306,7 @@ class TestRedshift:
     def test_missing_rv_leaves_redshift_nan(self):
         # rv absent -> z is NaN (blank CZ# downstream), not an error.
         l0 = KPF0()
-        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
         aq = AstroQuery(l0)
         aq._write_catalog_record("gaia", _record("G", rv=None))
         row = l0.data["CATALOG_RECORD"][0]
@@ -342,7 +343,7 @@ class TestReadWmkoHeader:
     @staticmethod
     def _l0_targ(**targ):
         l0 = KPF0()
-        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
         p = l0.headers["INSTRUMENT_HEADER"]
         p["OBJECT"] = "testtarget"
         for key, value in targ.items():
@@ -474,6 +475,7 @@ _SIMBAD_VALUES = {
     "V": 8.5,
     "main_id": "* tau Cet",
     "ids": "HD  10700|* tau Cet|Gaia DR3 2452378776434477184",
+    "coo_bibcode": "2020yCat.1350....0G",  # Gaia EDR3
 }
 
 
@@ -520,7 +522,7 @@ def _simbad_instance(table):
 def _l0_for_query(**primary):
     """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID)."""
     l0 = KPF0()
-    l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+    l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
     for key, value in primary.items():
         l0.headers["INSTRUMENT_HEADER"][key] = value
     return l0
@@ -673,7 +675,7 @@ class TestExternalQueries:
         record.pop("color")
         record.pop("color_name")
         l0 = KPF0()
-        l0.headers["PRIMARY"]["OBSTYPE"] = "Object"
+        l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
         aq = AstroQuery(l0)
         aq._write_catalog_record("kpf-drp", record)
         row = l0.data["CATALOG_RECORD"][0]
@@ -726,12 +728,31 @@ class TestExternalQueries:
         assert rec["pmdec"] == pytest.approx(-0.25)
         assert rec["parallax"] == pytest.approx(100.0)
         assert rec["rv"] == pytest.approx(12.3)
-        assert rec["object"] == "HD 10700"  # bare-numeric OBJECT -> HD prefix
+        # The coordinates cite Gaia EDR3, so CID/CSRC take its designation and label.
+        assert rec["object"] == "Gaia DR3 2452378776434477184"
+        assert rec["catalog"] == "Gaia EDR3"
         assert rec["frame"] == "icrs"
         assert rec["epoch"] == pytest.approx(2000.0)
         assert rec["color"] == pytest.approx(1.0)  # Johnson B - V
         assert rec["color_name"] == "B-V"
         assert "simbad" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
+
+    def test_query_simbad_uncited_designation_keeps_name(self):
+        # Hipparcos coordinates, but SIMBAD lists no HIP id: CID falls back to the name.
+        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        table = _simbad_table({"coo_bibcode": "2007A&A...474..653V"})
+        with _patch_simbad(_simbad_instance(table)):
+            rec = aq.query_simbad()
+        assert (rec["catalog"], rec["object"]) == ("Hipparcos (2007)", "HD 10700")
+
+    def test_query_simbad_unknown_catalog_warns(self, caplog):
+        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        table = _simbad_table({"coo_bibcode": "1999XYZ.....1....Q"})
+        with _patch_simbad(_simbad_instance(table)), caplog.at_level(logging.WARNING):
+            rec = aq.query_simbad()
+        assert rec["catalog"] == "Simbad Query (catalog unknown)"
+        assert rec["object"] == "HD 10700"
+        assert "unrecognized catalog" in caplog.text
 
     def test_query_simbad_missing_photometry_leaves_color_none(self):
         # A color needs both magnitudes; one unmeasured -> no color.
@@ -843,6 +864,7 @@ class TestRequestMatchesParse:
             "B",
             "V",
             "ids",
+            "coo_bibcode",
         }
 
 
@@ -950,7 +972,8 @@ class TestPerform:
     def test_each_query_lands_on_its_own_attribute(self):
         aq, _ = _perform()
         assert aq._gaia["object"] == "Gaia DR3 12345"  # from GAIAID, via query_gaia
-        assert aq._simbad["object"] == "tau Cet"  # from OBJECT, via query_simbad
+        # Cited catalog's designation, via query_simbad
+        assert aq._simbad["object"] == "Gaia DR3 2452378776434477184"
         assert aq._gaia["ra"] == _ra_str(10.0)
         assert aq._simbad["ra"] == _ra_str(20.0)
 
@@ -987,12 +1010,12 @@ class TestPerform:
         row = _kpf_drp_row(record)
         assert row["ra"] == _ra_str(20.0)
         assert row["radec_src"] == "simbad"
-        assert row["object"] == "tau Cet"
+        assert row["object"] == "Gaia DR3 2452378776434477184"
 
 
 class TestConstructor:
     """The constructor's three guards. Every other AstroQuery(...) in the suite
-    passes OBSTYPE='Object' and either None or a plain dict, so none of these is
+    passes OBSTYPE='Target' and either None or a plain dict, so none of these is
     otherwise exercised."""
 
     @staticmethod
@@ -1010,9 +1033,15 @@ class TestConstructor:
         with pytest.raises(ValueError, match="science frames"):
             AstroQuery(self._l0(obstype))
 
+    def test_rejects_socal_frames(self):
+        l0 = self._l0("Target")
+        l0.headers["PRIMARY"]["ISSOLAR"] = True
+        with pytest.raises(ValueError, match="SoCal"):
+            AstroQuery(l0)
+
     def test_rejects_unsupported_config_type(self):
         with pytest.raises(TypeError, match="must be None, dict, or ConfigHandler"):
-            AstroQuery(self._l0("Object"), config=["gaia"])
+            AstroQuery(self._l0("Target"), config=["gaia"])
 
     def test_config_handler_branch_is_read(self, tmp_path):
         # How the recipes construct it. A section-name typo here would be
@@ -1022,5 +1051,5 @@ class TestConstructor:
         cfg.write_text(
             "[DATA_DIRS]\n[TRACES]\n[MODULE_ASTRO_QUERY]\ndo_gaia_query = false\n"
         )
-        aq = AstroQuery(self._l0("Object"), config=ConfigHandler(str(cfg)))
+        aq = AstroQuery(self._l0("Target"), config=ConfigHandler(str(cfg)))
         assert aq.do_gaia_query is False

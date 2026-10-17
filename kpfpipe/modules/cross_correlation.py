@@ -8,23 +8,25 @@ CCFs, their per-bin photon variances, and the per-order metadata table the
 radial-velocity step later fills with fitted RVs.
 
 Each fiber's mask, barycentric handling, and CCF grid center are dispatched from
-its illumination source (the PRIMARY CLSRC# card for its trace):
+its illumination source (the PRIMARY SKYSRC/SCISRC/CALSRC card for the fiber):
 
-  +--------+-------------------------------------+----------+---------------------+
-  | source | mask                                | barycorr | grid center         |
-  +========+=====================================+==========+=====================+
-  | target | CCLR3 colour-lookup                 | yes      | CRV3 (systemic)     |
-  +--------+-------------------------------------+----------+---------------------+
-  | sky    | G2_espresso (solar)                 | yes      | 0                   |
-  +--------+-------------------------------------+----------+---------------------+
-  | thar   | ThAr list (unit wt)                 | no       | 0                   |
-  +--------+-------------------------------------+----------+---------------------+
-  | etalon | [NOT IMPLEMENTED]                   |          |                     |
-  +--------+-------------------------------------+----------+---------------------+
-  | lfc    | [NOT IMPLEMENTED]                   |          |                     |
-  +--------+-------------------------------------+----------+---------------------+
-  | none   | not illuminated -> skipped (no CCF) |          |                     |
-  +--------+-------------------------------------+----------+---------------------+
+  +-----------------+-------------------------------------+----------+-----------------+
+  | source          | mask                                | barycorr | grid center     |
+  +=================+=====================================+==========+=================+
+  | Target          | CCLR3 colour-lookup                 | yes      | CRV3 (systemic) |
+  +-----------------+-------------------------------------+----------+-----------------+
+  | SoCal           | G2_espresso                         | yes      | 0               |
+  +-----------------+-------------------------------------+----------+-----------------+
+  | Sky             | G2_espresso (solar)                 | yes      | 0               |
+  +-----------------+-------------------------------------+----------+-----------------+
+  | ThAr_daily/gold | ThAr list (unit wt)                 | no       | 0               |
+  +-----------------+-------------------------------------+----------+-----------------+
+  | UNe_daily/gold  | [NOT IMPLEMENTED]                   |          |                 |
+  +-----------------+-------------------------------------+----------+-----------------+
+  | LFC, Etalon     | [NOT IMPLEMENTED]                   |          |                 |
+  +-----------------+-------------------------------------+----------+-----------------+
+  | None            | not illuminated -> skipped (no CCF) |          |                 |
+  +-----------------+-------------------------------------+----------+-----------------+
 
 All reference wavelengths (stellar line masks, ThAr line list) are in vacuum;
 no air/vacuum conversion is performed.
@@ -108,82 +110,50 @@ class CrossCorrelation:
         """
         Resolve (and cache) the orderlet's illumination source and CCF settings
         (dict: 'object', 'mask_name', 'apply_barycorr', 'vel_grid_center') from
-        the PRIMARY CLSRC# card ``KPF0.standardize_headers`` stamped for the
-        fiber's trace. 'none' and the not-yet-built sources (etalon, lfc) get
-        None mask/barycorr/center.
+        the PRIMARY SKYSRC/SCISRC/CALSRC card ``KPF0.standardize_headers``
+        stamped for the fiber; 'object' is that source. 'None' and the
+        not-yet-built sources (UNe, LFC, Etalon) get None mask/barycorr/center.
         """
         key = f"{chip.upper()}_{fiber.upper()}"
         if key in self._illumination_source:
             return self._illumination_source[key]
-        positions = self.fiber_positions
-        try:
-            keyword = f"CLSRC{positions[fiber.upper()] + 1}"
-        except KeyError:
+        if fiber.upper() not in self.fiber_positions:
             raise ValueError(
-                f"unknown fiber {fiber!r}; expected one of {sorted(positions)}"
-            ) from None
-        clsrc = self.l2_obj.headers["PRIMARY"].get(keyword)
-        if not clsrc:
+                f"unknown fiber {fiber!r}; expected one of "
+                f"{sorted(self.fiber_positions)}"
+            )
+        keyword = f"{fiber.upper()[:3]}SRC"  # SCI1-3 share SCISRC
+        src = self.l2_obj.headers["PRIMARY"].get(keyword)
+        if not src:
             raise ValueError(
                 f"{keyword} is not set on PRIMARY; "
                 f"cannot dispatch a mask for fiber {fiber}"
             )
 
         # Dispatch the source to CCF settings (mask, barycorr flag, grid center:
-        # systemic RV for a star, 0 for sky/cal).
-        if clsrc == "Target":
-            source = {
-                "object": "target",
-                "mask_name": self._resolve_stellar_mask(),
-                "apply_barycorr": True,
-                "vel_grid_center": self._get_systemic_rv(),
-            }
-        elif clsrc == "Sky":
-            source = {
-                "object": "sky",
-                "mask_name": "G2_espresso",
-                "apply_barycorr": True,
-                "vel_grid_center": 0.0,
-            }
-        elif clsrc == "ThAr":
-            source = {
-                "object": "thar",
-                "mask_name": "thar",
-                "apply_barycorr": False,
-                "vel_grid_center": 0.0,
-            }
-        elif clsrc == "None":
-            source = {
-                "object": "none",
-                "mask_name": None,
-                "apply_barycorr": None,
-                "vel_grid_center": None,
-            }
-        elif clsrc == "LFC":
-            source = {
-                "object": "lfc",
-                "mask_name": None,
-                "apply_barycorr": None,
-                "vel_grid_center": None,
-            }
+        # systemic RV for a star, 0 for sky/cal). No mask -> no CCF for the fiber.
+        source = {"object": src, "mask_name": None}
+        source["apply_barycorr"] = source["vel_grid_center"] = None
+        if src == "Target":
+            source["mask_name"] = self._resolve_stellar_mask()
+            source["apply_barycorr"] = True
+            source["vel_grid_center"] = self._get_systemic_rv()
+        elif src in ("SoCal", "Sky"):
+            source["mask_name"] = "G2_espresso"
+            source["apply_barycorr"] = True
+            source["vel_grid_center"] = 0.0
+        elif src in ("ThAr_daily", "ThAr_gold"):
+            source["mask_name"] = "thar"
+            source["apply_barycorr"] = False
+            source["vel_grid_center"] = 0.0
+        elif src in ("UNe_daily", "UNe_gold", "LFC", "Etalon"):
             logger.warning(
-                "%s is lfc-illuminated; CCF is not implemented. Skipping this fiber.",
+                "%s is %s-illuminated; CCF is not implemented. Skipping this fiber.",
                 fiber.upper(),
+                src,
             )
-        elif clsrc == "Etalon":
-            source = {
-                "object": "etalon",
-                "mask_name": None,
-                "apply_barycorr": None,
-                "vel_grid_center": None,
-            }
-            logger.warning(
-                "%s is etalon-illuminated; CCF is not implemented. "
-                "Skipping this fiber.",
-                fiber.upper(),
-            )
-        else:
-            raise ValueError(f"unrecognized illumination source {clsrc!r}")
+        elif src != "None":
+            raise ValueError(f"unrecognized illumination source {src!r}")
 
         self._illumination_source[key] = source
         return source
@@ -223,7 +193,7 @@ class CrossCorrelation:
         star can fall outside a zero-centered window.
         """
         # The C*# cards are written identically to all science fibers (traces 2-4),
-        # and to those only: SKY (1) and CAL (5) hold no object, so they stay blank.
+        # and to those only: SKY (1) and CAL (5) hold no object, so they stay None.
         primary = self.l2_obj.headers.get("PRIMARY", {})
         try:
             star_rv = float(primary.get("CRV3"))
@@ -476,7 +446,7 @@ class CrossCorrelation:
             window = self.ccf_window
 
         source = self._resolve_illumination_source(chip, fiber)
-        if source["object"] == "none":
+        if source["object"] == "None":
             return None  # fiber not illuminated; caller skips
         apply_barycorr = source["apply_barycorr"]
 
@@ -506,7 +476,7 @@ class CrossCorrelation:
 
         norder = flux.shape[0]
 
-        # Per-order barycentric redshift -- only for astronomical sources (target,
+        # Per-order barycentric redshift -- only for astronomical sources (star,
         # sky). Calibration sources (thar) stay in the instrument frame (z = 0).
         if apply_barycorr:
             if np.size(self.l2_obj.data.get("BARYCORR_Z", np.array([]))) == 0:

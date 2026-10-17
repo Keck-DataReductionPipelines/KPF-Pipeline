@@ -17,7 +17,7 @@ import logging
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import Angle
+from astropy.coordinates import Angle, SkyCoord, get_body_barycentric
 from astropy.stats import mad_std
 from astropy.time import Time
 from barycorrpy import get_BC_vel, utc_tdb
@@ -38,7 +38,7 @@ _DEFAULT_CFG = {**DEFAULT_CFG}
 # AstroQuery never ran. The trailing 3 (also CPLX3/CSRC3/CRV3) selects the SCI2
 # trace: the C*# cards are identical across science fibers (SCI1-3 = traces 2-4)
 # and written for those only -- SKY (1) and CAL (5) have no object, so their
-# catalog cards are blank by design.
+# catalog cards are blank by design. A SoCal frame (ISSOLAR) needs none of them.
 _REQUIRED_CARDS = ("CRA3", "CDEC3", "CPMR3", "CPMD3", "CEPCH3")
 
 
@@ -58,8 +58,10 @@ class BarycentricCorrection:
         Extracted L2 frame. Must have EXPMETER_SCI populated and SCI2_WAVE
         populated by WavelengthCalibration. PRIMARY must carry the SCI2 catalog
         cards (CRA3/CDEC3/CPMR3/CPMD3/CEPCH3) unless perform() is given a
-        ``skycoord`` override. INSTRUMENT_HEADER (the preserved L1 PRIMARY) must
-        contain DATE-BEG/DATE-END when extrapolating.
+        ``skycoord`` override or the frame is SoCal (ISSOLAR), which uses
+        barycorrpy's solar mode (BJD_TDB is still a true BJD).
+        INSTRUMENT_HEADER (the preserved L1 PRIMARY) must contain
+        DATE-BEG/DATE-END when extrapolating.
     config : None | dict | ConfigHandler
         Module configuration. Recognizes no module-specific keys.
     """
@@ -93,7 +95,7 @@ class BarycentricCorrection:
         self._ccd_z = None
         self._exposure_meter = None  # (toggle_key, w_em, t_em)
         self._astrometry = None  # cached barycorrpy kwargs, set by _get_astrometry
-        self._astrometry_source = None  # CSRC3 ('gaia'|'simbad'|'wmko'), same setter
+        self._astrometry_source = None  # CSRC3 (e.g. 'Gaia DR3'), same setter
 
     # ------------------------------------------------------------------
     # Private helpers -- exposure-meter handling
@@ -354,6 +356,10 @@ class BarycentricCorrection:
             If any of ``_REQUIRED_CARDS`` is absent or blank -- without a position
             there is nothing to correct.
         """
+        if self._astrometry is None and self.l2_obj.headers["PRIMARY"].get("ISSOLAR"):
+            # SoCal: barycorrpy's own solar ephemeris replaces catalog astrometry.
+            self._astrometry = {"SolSystemTarget": "Sun", "predictive": False}
+            self._astrometry_source = "solar ephemeris"
         if self._astrometry is None:
             primary = self.l2_obj.headers["PRIMARY"]
             cards = {name: primary.get(name) for name in _REQUIRED_CARDS}
@@ -408,6 +414,37 @@ class BarycentricCorrection:
         alt = location.height.to(u.m).value
 
         JDUTC = np.atleast_1d(obs_times.utc.jd)
+
+        if astrometry.get("SolSystemTarget") == "Sun":
+            # barycorrpy's solar BC (Wright & Kanodia 2020); BJD_TDB stays a true
+            # BJD, as on every frame: barycorrpy's converter along the observer->Sun
+            # direction at each time (astropy ephemeris), as for a star.
+            bc_vel, *_ = get_BC_vel(
+                JDUTC=JDUTC, lat=lat, longi=lon, alt=alt, rv=rv_mps, **astrometry
+            )
+            times = Time(JDUTC, format="jd", scale="utc")
+            observer = (
+                get_body_barycentric("earth", times)
+                + location.get_gcrs_posvel(times)[0]
+            )
+            sun = SkyCoord(get_body_barycentric("sun", times) - observer, frame="icrs")
+            bjd_tdb = [
+                utc_tdb.JDUTC_to_BJDTDB(
+                    JDUTC=jd,
+                    ra=ra,
+                    dec=dec,
+                    epoch=jd,
+                    pmra=0.0,
+                    pmdec=0.0,
+                    px=0.0,
+                    rv=0.0,
+                    lat=lat,
+                    longi=lon,
+                    alt=alt,
+                )[0][0]
+                for jd, ra, dec in zip(JDUTC, sun.ra.deg, sun.dec.deg, strict=True)
+            ]
+            return np.asarray(bc_vel), np.asarray(bjd_tdb)
 
         bc_vel, *_ = get_BC_vel(
             JDUTC=JDUTC,
@@ -621,7 +658,9 @@ class BarycentricCorrection:
             rv_kms = float(systemic_rv)
         except (TypeError, ValueError):
             rv_kms = np.nan
-        if not np.isfinite(rv_kms):
+        if "SolSystemTarget" in astrometry:
+            rv_kms = 0.0  # the Sun has no catalog systemic RV
+        elif not np.isfinite(rv_kms):
             logger.warning(
                 "CRV3=%s is missing or unusable; using rv=0 (no systemic RV)",
                 systemic_rv,
