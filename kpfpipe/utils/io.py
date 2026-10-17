@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from kpfpipe.utils.header import HeaderParser
+from kpfpipe.utils.header import HeaderError, HeaderParser
 from kpfpipe.utils.kpf import (
     OBS_ID_REGEX,
     get_datecode,
@@ -245,8 +245,8 @@ class FileHandler:
 
     @staticmethod
     def _clean_mini_db(full_scan_mini_db):
-        """The readable-frame subset of a full scan: drop rows whose header could
-        not be read (null DRP_OBJECT) and re-index. Such frames stay in the
+        """The usable-frame subset of a full scan: drop rejected rows (unreadable
+        or invalid header, null DRP_OBJECT) and re-index. Such frames stay in the
         on-disk cache (which mirrors the L0 directory) but are useless for
         stacking/discovery, so the in-memory ``self._mini_db`` excludes them."""
         return full_scan_mini_db.dropna(subset=["DRP_OBJECT"]).reset_index(drop=True)
@@ -293,10 +293,12 @@ class FileHandler:
             HST_TIME (KPF-format timestamps from the filename, HST = UTC-10);
             EXPTIME (the native, requested EXPTIME, not KPF0's EXPTIME = ELAPSED);
             ISJUNK (frame is on the observer junk list -- flagged, not dropped);
-            and COMMENTS (the native TARGNAME/IMTYPE/OBJECT, only when DRP_OBJECT
-            is Unknown). A missing header key gives None for that column. An
-            unreadable frame is warned and omitted from this DataFrame (useless
-            for stacking), but is still recorded -- with null header columns -- in
+            and COMMENTS (the native TARGNAME/IMTYPE/OBJECT when DRP_OBJECT is
+            Unknown, or why a frame was rejected). A missing header key gives None
+            for that column. A rejected frame -- an unreadable file, or a header
+            ``HeaderParser`` finds nonsensical (``HeaderError``, DRP_OBSMODE
+            Unknown) -- is logged at ERROR and omitted from this DataFrame (useless
+            for stacking), but is still recorded, with its reason in COMMENTS, in
             the on-disk cache, so the cache mirrors the L0 directory exactly.
 
         Raises
@@ -336,6 +338,7 @@ class FileHandler:
 
         logger.info("scanning %d FITS headers in %s", len(file_list), data_dir)
         rows = []
+        rejected = []
 
         for fn in file_list:
             logger.debug("reading header of %s", fn)
@@ -349,8 +352,15 @@ class FileHandler:
             }
             try:
                 parsed = HeaderParser(fn)
-            except Exception as e:
-                logger.warning("Could not read header from %s: %s", fn, e)
+            except OSError as e:
+                logger.error("Could not read L0 file %s: %s", fn, e)
+                row["COMMENTS"] = f"Unreadable L0: {e}"
+                rejected.append(fn)
+            except HeaderError as e:
+                logger.error("Invalid header in %s: %s", fn, e)
+                row["DRP_OBSMODE"] = "Unknown"
+                row["COMMENTS"] = f"Invalid header: {e}"
+                rejected.append(fn)
             else:
                 native = parsed.WMKO_HEADER
                 for k in ("OBJECT", "OBSTYPE", "OBSMODE"):
@@ -375,6 +385,15 @@ class FileHandler:
                     )
             rows.append(row)
 
+        if rejected:
+            logger.error(
+                "%d of %d frames in %s rejected (see mini database COMMENTS): %s",
+                len(rejected),
+                len(file_list),
+                data_dir,
+                ", ".join(os.path.basename(fn) for fn in rejected),
+            )
+
         self._full_scan_mini_db = pd.DataFrame(rows, columns=_MINI_DB_KEYS)
         self._mini_db = self._clean_mini_db(self._full_scan_mini_db)
 
@@ -394,8 +413,9 @@ class FileHandler:
     def _select_frames(self, cal_type, *, exclude_junk=True):
         """The junk-excluded ``cal_type`` frames from the carried mini database --
         the shared frame-selection entry point. A frame qualifies when its OBJECT is
-        the type's and (lamp masters) every fiber saw the lamp, so sci/sky/cal-only
-        lamp frames are left out. Raises
+        the type's and every fiber saw the lamp (lamp masters, so sci/sky/cal-only
+        lamp frames are left out) or nothing (bias/dark), so a frame with any
+        ``Unknown`` source never qualifies. Raises
         ``ValueError`` if no database is loaded or the type has no frames;
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
         mini_db = self._mini_db
@@ -406,9 +426,9 @@ class FileHandler:
         if exclude_junk:
             mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
         obj = _CAL_TYPES[cal_type]
+        lit = obj if cal_type in ("flat", "thar") else "None"
         keep = mini_db["DRP_OBJECT"] == obj
-        if cal_type in ("flat", "thar"):
-            keep &= (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == obj).all(axis=1)
+        keep &= (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
         cal_df = mini_db[keep]
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")

@@ -39,6 +39,10 @@ _TRACES = {
 }
 
 
+class HeaderError(ValueError):
+    """A native header that was read but carries a nonsensical value."""
+
+
 def _norm(value):
     """A header value as a stripped, lowercased string (None -> '')."""
     return "" if value is None else str(value).strip().lower()
@@ -73,6 +77,14 @@ class HeaderParser:
         is omitted.
     warnings : list of str
         Every unreliable-metadata warning raised while parsing, also logged.
+
+    Raises
+    ------
+    OSError
+        If ``source`` is a file that cannot be read.
+    HeaderError
+        If the header was read but a value is nonsensical (a corrupt card, an
+        unparseable ELAPSED or readout timestamp, or a negative read time).
     """
 
     def __init__(self, source):
@@ -85,10 +97,14 @@ class HeaderParser:
         self.DRP_KEYWORDS = {}
         self.warnings = []
 
-        self._cameras()
-        self._frame_identity()
-        self._illumination()
-        self._readout()
+        # astropy reads a card's value lazily, so a corrupt one raises on lookup.
+        try:
+            self._cameras()
+            self._frame_identity()
+            self._illumination()
+            self._readout()
+        except fits.verify.VerifyError as e:
+            raise HeaderError(f"{self._label}: {e}") from None
 
     def _warn(self, message):
         """Record and log one unreliable-metadata warning."""
@@ -157,7 +173,12 @@ class HeaderParser:
         if elapsed in (None, ""):
             self._warn("ELAPSED absent; EXPTIME not set")
         else:
-            self.DRP_KEYWORDS["EXPTIME"] = float(elapsed)
+            try:
+                self.DRP_KEYWORDS["EXPTIME"] = float(elapsed)
+            except ValueError:
+                raise HeaderError(
+                    f"{self._label}: ELAPSED={elapsed!r} is not a number"
+                ) from None
 
     def _object(self, cal_object):
         """The sanitized OBJECT: the target on a Target frame, else `cal_object`.
@@ -231,11 +252,14 @@ class HeaderParser:
         On a lamp frame an open fiber sees the OCTAGON source; on a Target
         frame SCI sees the Target (``SoCal`` on a solar frame), SKY the Sky and
         an open CAL the OCTAGON source; bias, dark and wide flat light no trace
-        (``None``). Every source of an Unknown frame is ``Unknown``.
+        (``None``). A shutter it needs that is absent or neither open nor
+        closed makes that source ``Unknown`` (warned), as is every source of
+        an Unknown frame.
 
         SIMULCAL is the convenience summary of CALSRC: ``On`` when a Target
-        frame's CAL fiber is lit, else ``Off``; ``N/A`` on a calibration frame
-        and ``Unknown`` on an Unknown one.
+        frame's CAL fiber is lit, ``Off`` when it is dark, ``Unknown`` when
+        CALSRC is; ``N/A`` on a calibration frame and ``Unknown`` on an Unknown
+        one.
         """
         native = self.WMKO_HEADER
         obj = self.DRP_KEYWORDS["OBJECT"]
@@ -245,17 +269,17 @@ class HeaderParser:
         for trace, (fiber, shutter, obj_card, src_card) in _TRACES.items():
             self.DRP_KEYWORDS[f"TRACE{trace}"] = fiber
             # The source in native SCI-OBJ/SKY-OBJ/CAL-OBJ terms, for the cross-check.
-            is_open = _norm(native.get(shutter)) == "open"
+            lit = {"open": octagon, "closed": "None"}.get(
+                _norm(native.get(shutter)), "Unknown"
+            )
             if obstype == "Unknown":
                 source = "Unknown"
             elif obj in ("Bias", "Dark", "WideFlat"):
                 source = "None"
             elif obstype == "Target":
-                source = {"SCI": "Target", "SKY": "Sky"}.get(
-                    fiber, octagon if is_open else "None"
-                )
+                source = {"SCI": "Target", "SKY": "Sky"}.get(fiber, lit)
             else:
-                source = octagon if is_open else "None"
+                source = lit
 
             src = _SOURCES.get(source.lower(), source)
             if source == "Target" and obj == "SoCal":
@@ -268,7 +292,12 @@ class HeaderParser:
             self.DRP_KEYWORDS[f"CSRC{trace}"] = "None"
             self.DRP_KEYWORDS[f"CID{trace}"] = "None"
 
-            # Trace 2 stands for 3-4, which share SCI-OBJ: warn once per card.
+            # Trace 2 stands for 3-4, which share SCI-OBJ/SCISEL: warn once per card.
+            if src_card and source == "Unknown" and obstype != "Unknown":
+                self._warn(
+                    f"{shutter}={native.get(shutter)!r} is not open/closed; "
+                    f"{src_card} is Unknown"
+                )
             if (
                 src_card
                 and source != "Unknown"
@@ -281,8 +310,8 @@ class HeaderParser:
 
         mode = self.DRP_KEYWORDS["OBSMODE"]
         if mode == "Science":
-            self.DRP_KEYWORDS["SIMULCAL"] = (
-                "Off" if self.DRP_KEYWORDS["CALSRC"] == "None" else "On"
+            self.DRP_KEYWORDS["SIMULCAL"] = {"None": "Off", "Unknown": "Unknown"}.get(
+                self.DRP_KEYWORDS["CALSRC"], "On"
             )
         else:
             self.DRP_KEYWORDS["SIMULCAL"] = "N/A" if mode == "Calibration" else mode
@@ -294,7 +323,8 @@ class HeaderParser:
         waveform filenames name the read mode outright; failing that, the read
         time separates ~12 s fast readout from ~48 s regular (logged at debug,
         since most frames need it). A camera that read out but lacks its timing
-        cards is warned.
+        cards is warned; a negative read time (file written before the shutter
+        closed) or an unparseable timestamp raises HeaderError.
         """
         native = self.WMKO_HEADER
         read_time = {}
@@ -304,9 +334,20 @@ class HeaderParser:
         ):
             start, end = native.get(f"{prefix}DATE"), native.get(f"{prefix}DATE-E")
             if start and end:
-                read_time[chip] = (
-                    datetime.fromisoformat(start) - datetime.fromisoformat(end)
-                ).total_seconds()
+                try:
+                    read_time[chip] = (
+                        datetime.fromisoformat(start) - datetime.fromisoformat(end)
+                    ).total_seconds()
+                except (TypeError, ValueError):
+                    raise HeaderError(
+                        f"{self._label}: {prefix}DATE={start!r} or "
+                        f"{prefix}DATE-E={end!r} is not an ISO timestamp"
+                    ) from None
+                if read_time[chip] < 0:
+                    raise HeaderError(
+                        f"{self._label}: {prefix}DATE={start!r} precedes "
+                        f"{prefix}DATE-E={end!r}; negative {chip} read time"
+                    )
                 self.DRP_KEYWORDS[key] = round(read_time[chip], 3)
             elif self.DRP_KEYWORDS.get(chip):
                 self._warn(f"{chip}=YES but {prefix}DATE/{prefix}DATE-E absent")

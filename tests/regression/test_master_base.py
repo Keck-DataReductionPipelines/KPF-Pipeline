@@ -43,10 +43,11 @@ MASTERS_CONFIG_PATH = (
 )
 
 
-def _l0(obj):
-    """A stand-in standardized L0 of OBJECT `obj` with unlit fibers."""
+def _l0(obj, sources=("None",) * 3):
+    """A stand-in standardized L0 of OBJECT `obj`, its fibers lit by `sources`
+    (SKYSRC, SCISRC, CALSRC; default unlit)."""
     prim = {"OBSTYPE": obj, "OBJECT": obj}
-    prim.update(dict.fromkeys(("SKYSRC", "SCISRC", "CALSRC"), "None"))
+    prim.update(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True))
     return types.SimpleNamespace(headers={"PRIMARY": prim})
 
 
@@ -94,6 +95,18 @@ class TestMasterBaseErrors:
         with caplog.at_level(logging.WARNING):
             l1_obj = m._load_frame(FILE_LIST[0], cache=False)
         assert "OBJECT 'Bias'" in caplog.text
+        assert "not a dark frame" in caplog.text
+        assert l1_obj is None
+
+    def test_load_frame_unknown_source_warns_and_skips(self, caplog, monkeypatch):
+        # An undeterminable fiber source (e.g. a missing shutter card) is rejected.
+        m = Dark(FILE_LIST)
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: _l0("Dark", ("None", "Unknown", "None")),
+        )
+        with caplog.at_level(logging.WARNING):
+            l1_obj = m._load_frame(FILE_LIST[0], cache=False)
         assert "not a dark frame" in caplog.text
         assert l1_obj is None
 

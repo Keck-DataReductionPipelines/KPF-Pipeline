@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from astropy.io import fits
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
@@ -302,6 +303,21 @@ class TestBuildCalibrationStacks:
         # Gold-lamp and single-fiber frames never enter a ThAr master.
         db = _mini_db(_rows(_THAR_MORN, "ThAr_daily") + _rows(_THAR_EVE, obj, sources))
         assert _cluster("thar", db) == [sorted(_THAR_MORN)]
+
+    @pytest.mark.parametrize(
+        "cal_type, obj, sources",
+        [
+            ("thar", "ThAr_daily", ("Unknown", "ThAr_daily", "ThAr_daily")),
+            ("bias", "Bias", ("None", "None", "Unknown")),
+        ],
+    )
+    def test_unknown_source_excluded(self, cal_type, obj, sources):
+        # A frame whose illumination HeaderParser could not determine (e.g. a
+        # missing shutter card) never enters a master.
+        good = _THAR_MORN if cal_type == "thar" else _BIAS_A
+        bad = _THAR_EVE if cal_type == "thar" else _BIAS_B
+        db = _mini_db(_rows(good, obj) + _rows(bad, obj, sources))
+        assert _cluster(cal_type, db) == [sorted(good)]
 
     def test_flat_requires_all_fiber(self):
         # A wide flat is not a fiber flat.
@@ -918,19 +934,66 @@ class TestMiniDatabaseCache:
         corrupt = tmp_path / "L0" / "20240405" / "KP.20240405.03000.00.fits"
         corrupt.write_bytes(b"not a valid FITS file")
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.ERROR):
             db = fh.build_mini_database("20240405", cache="rw")
-        assert "Could not read header" in caplog.text
+        assert "Could not read L0 file" in caplog.text
+        assert "1 of 3 frames" in caplog.text
 
         assert len(db) == 2  # in-memory: only the two readable frames
         cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
-        assert len(pd.read_csv(cache)) == 3  # on-disk: one row per file present
+        cached = pd.read_csv(cache)
+        assert len(cached) == 3  # on-disk: one row per file present
+        assert cached["COMMENTS"].iloc[2].startswith("Unreadable L0: ")
 
         # 3 == 3, so the cache reads back as current.
         cached = fh._read_mini_db_cache("20240405")
         assert cached is not None and len(cached) == 3
         # A cache hit still cleans down to the readable set.
         assert len(fh.build_mini_database("20240405", cache="r")) == 2
+
+    def test_invalid_header_recorded_with_reason(self, caplog, tmp_path):
+        # A readable header with a nonsensical value is rejected like an unreadable
+        # file, but recorded as invalid so it can be repaired at KOA or junked.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        _write_l0_frame(tmp_path, "20240405", "KP.20240405.02000.00")
+        bad = tmp_path / "L0" / "20240405" / "KP.20240405.02000.00.fits"
+        fits.setval(bad, "ELAPSED", value="N/A")
+
+        with caplog.at_level(logging.ERROR):
+            db = fh.build_mini_database("20240405", cache="w")
+        assert "Invalid header" in caplog.text
+
+        assert len(db) == 1
+        row = fh._full_scan_mini_db.iloc[1]
+        assert row["DRP_OBSMODE"] == "Unknown"
+        assert row["COMMENTS"] == (
+            "Invalid header: KP.20240405.02000.00.fits: ELAPSED='N/A' is not a number"
+        )
+
+    def test_corrupt_card_recorded_as_invalid_header(self, tmp_path):
+        # astropy reads the file but raises VerifyError on the corrupt card.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        bad = tmp_path / "L0" / "20240405" / "KP.20240405.01000.00.fits"
+        raw = bad.read_bytes()
+        i = raw.index(b"ELAPSED =")
+        bad.write_bytes(raw[:i] + b"ELAPSED = 1.2.3".ljust(80) + raw[i + 80 :])
+
+        fh.build_mini_database("20240405")
+        row = fh._full_scan_mini_db.iloc[0]
+        assert row["DRP_OBSMODE"] == "Unknown"
+        assert row["COMMENTS"].startswith("Invalid header: ")
+        assert "Unparsable card (ELAPSED)" in row["COMMENTS"]
+
+    def test_unexpected_parser_error_propagates(self, monkeypatch, tmp_path):
+        # Anything but an unreadable file or HeaderError is a pipeline bug.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+
+        def boom(self, source):
+            raise KeyError("bug")
+
+        monkeypatch.setattr("kpfpipe.utils.io.HeaderParser.__init__", boom)
+        with pytest.raises(KeyError, match="bug"):
+            fh.build_mini_database("20240405")
 
     def test_cache_write_failure_leaves_no_partial_or_temp(self, tmp_path, monkeypatch):
         # The atomic write (temp file + os.replace) must clean up on failure.

@@ -9,6 +9,7 @@ orchestrator argv it builds, and the main() dispatch order.
 Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 """
 
+import logging
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -242,6 +243,18 @@ class TestDiscoverScienceObsIds:
             str(tmp_path), "10700", "20240101", "20240131", jobs=2
         )
         assert got == [good] and junk not in got
+
+    def test_unknown_object_targets_counted_with_warning(self, ts, tmp_path, caplog):
+        # OBJECT != TARGNAME: HeaderParser can't trust the name, so the frame
+        # can't be matched, but discovery must say so rather than drop it quietly.
+        good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        write_l0_tree(str(tmp_path), "20240101", 3700, obj="10700", targname="HD 10700")
+        with caplog.at_level(logging.WARNING):
+            got = ts.discover_science_obs_ids(
+                str(tmp_path), "10700", "20240101", "20240131", jobs=1
+            )
+        assert got == [good]
+        assert "1 Target frame(s) with Unknown OBJECT" in caplog.text
 
     def test_excludes_non_object_imtype(self, ts, tmp_path):
         obj = _write_l0(str(tmp_path), "20240101", 3600, "10700")

@@ -9,7 +9,7 @@ from astropy.io import fits
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.utils import header as header_module
-from kpfpipe.utils.header import HeaderParser
+from kpfpipe.utils.header import HeaderError, HeaderParser
 
 TESTDATA_L0 = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 
@@ -130,6 +130,14 @@ def _traces(keywords, prefix):
         (_hdr("Flatlamp", shutters=ALL), ["None"] * 3),
         (_hdr("Arclamp", "LFCFiber", shutters=SHUT), ["None"] * 3),
         (_hdr("Sky"), ["Unknown"] * 3),
+        # A shutter the source depends on that is absent or garbled.
+        (_hdr("Arclamp", "Th_daily", SKYSEL=None), ["Unknown"] + ["ThAr_daily"] * 2),
+        (
+            _hdr("Object", "EtalonFiber", SIMCALSH="moving"),
+            ["Sky", "Target", "Unknown"],
+        ),
+        # Bias/dark/wide flat light nothing whatever the shutters say.
+        (_hdr("Bias", SCISEL=None, SKYSEL=None, SIMCALSH=None), ["None"] * 3),
     ],
 )
 def test_illumination(header, srcs):
@@ -149,6 +157,7 @@ def test_illumination(header, srcs):
         (_hdr("Object", "EtalonFiber"), "On"),
         (_hdr("Object", "LFCFiber", OBJECT="SoCal"), "On"),
         (_hdr("Object", "EtalonFiber", shutters=("open", "open", "closed")), "Off"),
+        (_hdr("Object", "EtalonFiber", SIMCALSH=None), "Unknown"),
         (_hdr("Arclamp", "EtalonFiber"), "N/A"),
         (_hdr("Bias", shutters=SHUT), "N/A"),
         (_hdr("Sky"), "Unknown"),
@@ -186,6 +195,21 @@ def test_readmode_fallback_logs_debug_not_warning(caplog):
     assert parser.DRP_KEYWORDS["READMODE"] == "regular"
     assert not any("READMODE" in w for w in parser.warnings)
     assert "READMODE inferred from read time" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "cards, match",
+    [
+        # GRDATE-E (shutter close) after GRDATE (file write) is impossible.
+        ({"GRDATE_E": "2024-04-05T00:02:00"}, "negative GREEN read time"),
+        ({"RDDATE": "garbled"}, "RDDATE='garbled' or RDDATE-E=.* is not an ISO"),
+        ({"GRDATE": 5.0}, "is not an ISO timestamp"),
+        ({"ELAPSED": "N/A"}, "ELAPSED='N/A' is not a number"),
+    ],
+)
+def test_nonsensical_value_raises_header_error(cards, match):
+    with pytest.raises(HeaderError, match=match):
+        HeaderParser(_hdr("Bias", **cards))
 
 
 # Warnings: each unreliable-metadata case is recorded and logged.
@@ -251,6 +275,10 @@ def test_consistent_frame_has_no_warnings():
             # CAL-OBJ carrying an octagon position index (20240405).
             _consistent("Arclamp", "Th_daily", ALL, "Th_daily", "Th_daily", "10"),
             "CAL-OBJ='10' disagrees with derived CALSRC='ThAr_daily'",
+        ),
+        (
+            _hdr("Arclamp", "Th_daily", SIMCALSH="moving"),
+            "SIMCALSH='moving' is not open/closed; CALSRC is Unknown",
         ),
         (_hdr("Bias", GRDATE=None), "GREEN=YES but GRDATE/GRDATE-E absent"),
         (_hdr("Bias", ELAPSED=None), "ELAPSED absent"),

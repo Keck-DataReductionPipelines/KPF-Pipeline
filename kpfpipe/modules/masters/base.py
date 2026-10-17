@@ -227,9 +227,10 @@ class BaseMasterModule:
             prim = l0_obj.headers["PRIMARY"]
             sources = tuple(prim[k] for k in ("SKYSRC", "SCISRC", "CALSRC"))
             obj = _CAL_TYPES[self.master_type]
-            lamp = self.master_type in ("flat", "thar")
-            # Lamp masters take all-fiber frames only: every fiber saw the lamp.
-            if prim["OBJECT"] != obj or (lamp and set(sources) != {obj}):
+            # Every fiber saw the lamp (lamp masters take all-fiber frames only)
+            # or nothing (bias/dark); an Unknown source never qualifies.
+            lit = obj if self.master_type in ("flat", "thar") else "None"
+            if prim["OBJECT"] != obj or set(sources) != {lit}:
                 raise ValueError(
                     f"OBJECT {prim['OBJECT']!r}, sources {sources}: "
                     f"not a {self.master_type} frame"

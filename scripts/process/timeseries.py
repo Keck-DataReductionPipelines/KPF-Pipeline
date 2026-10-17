@@ -163,8 +163,9 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     DRP_OBSTYPE is 'Target' and DRP_OBJECT matches `target`. This discovery scan is
     the sole mini-db writer in the timeseries flow -- the masters/science stages it
     launches are told ``--cache r`` (see ``main``). Non-datecode entries are skipped
-    with a note; observer-flagged junk frames (the ISJUNK column) are dropped. Exits
-    loudly when the tree is missing or nothing matches.
+    with a note; observer-flagged junk frames (the ISJUNK column) are dropped. Target
+    frames with an Unknown OBJECT cannot be matched and are counted with a warning.
+    Exits loudly when the tree is missing or nothing matches.
     """
     nights = datecodes_in_range(data_input, start, end)
 
@@ -178,8 +179,17 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
         good = matched.loc[~matched["ISJUNK"].astype(bool)]
         n_junk = len(matched) - len(good)
         hits = [get_obs_id(fn) for fn in good["FILENAME"]]
-        junk_note = f", {n_junk} junk skipped" if n_junk else ""
-        return hits, f": {len(hits)} matching frame(s){junk_note}"
+        note = f", {n_junk} junk skipped" if n_junk else ""
+        # A Target whose OBJECT HeaderParser could not trust may be this target.
+        n_unknown = int((is_object & (df["DRP_OBJECT"] == "Unknown")).sum())
+        if n_unknown:
+            logger.warning(
+                "%s: %d Target frame(s) with Unknown OBJECT (see mini_db COMMENTS)",
+                dc,
+                n_unknown,
+            )
+            note += f", {n_unknown} Target frame(s) with Unknown OBJECT"
+        return hits, f": {len(hits)} matching frame(s){note}"
 
     results = scan_datecodes(
         nights, jobs, _scan_night, label=f"scanning for target {target},"

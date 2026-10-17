@@ -114,11 +114,32 @@ class TestClassifyFrame:
         kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
         assert kind == "cal" and reason == "OBJECT=Bias"
 
-    def test_unreadable_is_cal_with_reason(self, tmp_path):
+    def test_unreadable_is_rejected_with_reason(self, tmp_path):
         bad = tmp_path / "KP.20240405.00001.00.fits"
         bad.write_bytes(b"not a fits file")
         kind, reason = rt.classify_frame(str(bad))
-        assert kind == "cal" and reason.startswith("unreadable header")
+        assert kind == "rejected" and reason.startswith("unreadable L0: ")
+
+    def test_invalid_header_is_rejected_with_reason(self, tmp_path):
+        oid = write_l0_tree(tmp_path, _NIGHT, 100, elapsed="N/A")
+        kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
+        assert kind == "rejected"
+        assert reason.startswith("invalid header: ") and "ELAPSED='N/A'" in reason
+
+    def test_unclassifiable_is_rejected_with_parser_warnings(self, tmp_path):
+        oid = write_l0_tree(tmp_path, _NIGHT, 100, imtype="Sky")
+        kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
+        assert kind == "rejected" and "cannot classify frame (IMTYPE='Sky'" in reason
+
+    def test_unexpected_error_propagates(self, monkeypatch, tmp_path):
+        oid = write_l0_tree(tmp_path, _NIGHT, 100)
+
+        def boom(self, source):
+            raise KeyError("bug")
+
+        monkeypatch.setattr(rt.HeaderParser, "__init__", boom)
+        with pytest.raises(KeyError, match="bug"):
+            rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
 
 
 # ---------------------------------------------------------------------------
@@ -133,12 +154,14 @@ class TestLedger:
         k2 = rt.Ledger.key("/b", 2.5, 10)
         led.mark(k1, state="running")
         led.mark(k2, state="skipped")
+        led.mark(rt.Ledger.key("/c", 3.5, 10), state="rejected")
         led.mark(k1, state="succeeded", exit_status=0)
         again = rt.Ledger(str(tmp_path / "ledger.json")).load()
         assert again.seen(k1) and again.seen(k2)
         assert again.entries[k1]["exit_status"] == 0
         assert again.counts() == {
             "skipped": 1,
+            "rejected": 1,
             "running": 0,
             "succeeded": 1,
             "failed": 0,
@@ -244,6 +267,7 @@ class TestOnce:
         assert status["files_seen"] == 3
         assert status["dispatched"] == 2
         assert status["skipped"] == 1
+        assert status["rejected"] == 0
         assert status["succeeded"] == 2
         assert status["failed"] == 0
         assert status["running"] == 0 and status["queued"] == 0
