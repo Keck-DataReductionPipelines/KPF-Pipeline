@@ -143,6 +143,21 @@ def test_illumination(header, srcs):
     assert _traces(keywords, "CSRC") == _traces(keywords, "CID") == ["None"] * 5
 
 
+@pytest.mark.parametrize(
+    "header, simulcal",
+    [
+        (_hdr("Object", "EtalonFiber"), "On"),
+        (_hdr("Object", "LFCFiber", OBJECT="SoCal"), "On"),
+        (_hdr("Object", "EtalonFiber", shutters=("open", "open", "closed")), "Off"),
+        (_hdr("Arclamp", "EtalonFiber"), "N/A"),
+        (_hdr("Bias", shutters=SHUT), "N/A"),
+        (_hdr("Sky"), "Unknown"),
+    ],
+)
+def test_simulcal(header, simulcal):
+    assert HeaderParser(header).DRP_KEYWORDS["SIMULCAL"] == simulcal
+
+
 def test_cameras():
     keywords = HeaderParser(_hdr("Bias", cameras=("YES", "no", " YES "))).DRP_KEYWORDS
     assert [keywords[k] for k in ("GREEN", "RED", "CA_HK", "EXPMETER")] == [

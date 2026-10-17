@@ -1282,10 +1282,23 @@ class TestQCL0Telemetry:
         native["EL"] = 29.9
         assert QCL0(l0).elevation_ok() is False
 
-    def _make_kpf0_with_etalon(self, tmp_path, offset):
+    def _make_kpf0_with_etalon(self, tmp_path, offset, simulcal="On"):
         l0 = _make_kpf0(tmp_path)
+        l0.headers["PRIMARY"]["SIMULCAL"] = simulcal
         l0.headers["QUALITY_CONTROL"]["ETATOFF"] = offset
         return l0
+
+    def test_etalon_without_simulcal_writes_no_flag(self, tmp_path):
+        # A science frame without simultaneous calibration has no drift reference.
+        l0 = self._make_kpf0_with_etalon(tmp_path, 0.6, simulcal="Off")
+        assert QCL0(l0).etalon_at_temp() is None
+        qc = QCL0(l0)
+        qc.run()
+        assert "ETATMPOK" not in qc.results
+
+    def test_etalon_frame_always_checked(self, tmp_path):
+        l0 = self._make_kpf0_with_etalon(tmp_path, 0.6, simulcal="N/A")
+        assert QCL0(l0).etalon_at_temp() is False
 
     def test_etalon_at_temp_pass(self, tmp_path):
         # 0.5 mK is the limit itself; an offset must exceed it to fail.
@@ -1304,8 +1317,10 @@ class TestQCL0Telemetry:
         )
 
     def test_etalon_missing_offset_raises(self, tmp_path):
+        l0 = _make_kpf0(tmp_path)
+        l0.headers["PRIMARY"]["SIMULCAL"] = "On"
         with pytest.raises(KeyError, match="ETATOFF"):
-            QCL0(_make_kpf0(tmp_path)).etalon_at_temp()
+            QCL0(l0).etalon_at_temp()
 
     def _make_kpf0_with_agitator(self, tmp_path, *, status="Running", speed=2000.0):
         fn = write_amp_l0(

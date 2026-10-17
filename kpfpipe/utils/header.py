@@ -68,7 +68,7 @@ class HeaderParser:
     DRP_KEYWORDS : dict
         Sanitized and derived values under their EPRV PRIMARY names: OBSTYPE,
         OBSMODE, OBJECT, ISSOLAR, EXPTIME, GREEN, RED, CA_HK, EXPMETER, TRACE1-5,
-        CLSRC1-5, CSRC1-5, CID1-5, SKYSRC, SCISRC, CALSRC, READMODE, READTIMG,
+        CLSRC1-5, CSRC1-5, CID1-5, SKYSRC, SCISRC, CALSRC, SIMULCAL, READMODE, READTIMG,
         READTIMR. A value that cannot be determined
         is omitted.
     warnings : list of str
@@ -232,6 +232,10 @@ class HeaderParser:
         frame SCI sees the Target (``SoCal`` on a solar frame), SKY the Sky and
         an open CAL the OCTAGON source; bias, dark and wide flat light no trace
         (``None``). Every source of an Unknown frame is ``Unknown``.
+
+        SIMULCAL is the convenience summary of CALSRC: ``On`` when a Target
+        frame's CAL fiber is lit, else ``Off``; ``N/A`` on a calibration frame
+        and ``Unknown`` on an Unknown one.
         """
         native = self.WMKO_HEADER
         obj = self.DRP_KEYWORDS["OBJECT"]
@@ -274,6 +278,14 @@ class HeaderParser:
                     f"{obj_card}={native.get(obj_card)!r} disagrees with derived "
                     f"{src_card}={src!r} ({shutter}={native.get(shutter)!r})"
                 )
+
+        mode = self.DRP_KEYWORDS["OBSMODE"]
+        if mode == "Science":
+            self.DRP_KEYWORDS["SIMULCAL"] = (
+                "Off" if self.DRP_KEYWORDS["CALSRC"] == "None" else "On"
+            )
+        else:
+            self.DRP_KEYWORDS["SIMULCAL"] = "N/A" if mode == "Calibration" else mode
 
     def _readout(self):
         """Stamp READTIMG/READTIMR and READMODE.

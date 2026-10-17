@@ -1,6 +1,6 @@
 Method,Keywords,Description,RequiredData,Target,SoCal,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 Telemetry.ccd_temperature_offsets,GTEMPOFF|RTEMPOFF,CCD temperature offsets from their setpoints,TELEMETRY,1,1,1,1,1,1,1,1,1
-Telemetry.etalon_temperature_offset,ETATOFF,Etalon chamber temperature offset from its setpoint,TELEMETRY|INSTRUMENT_HEADER,0,0,0,0,0,0,0,0,1
+Telemetry.etalon_temperature_offset,ETATOFF,Etalon chamber temperature offset from its setpoint,TELEMETRY|INSTRUMENT_HEADER,1,1,0,0,0,0,0,0,1
 Telemetry.thar_lamp,THARTEMP|THARPWR|THARON,"Temperature, power draw and time on of the lit ThAr lamp (Daily or Gold)",TELEMETRY|INSTRUMENT_HEADER,0,0,0,0,0,0,1,0,0
 Telemetry.site_conditions,INHUM|OUTPRES|OUTTMP|OUTHUM|ENVWINDS|ENVWINDD,"In-dome humidity and pressure, and outside weather from the CFHT tower",INSTRUMENT_HEADER,1,1,0,0,0,0,0,0,0
 Telemetry.mirror_temperatures,M1TMP|M2TMP,Primary and secondary mirror temperatures,INSTRUMENT_HEADER,1,1,1,1,1,1,1,1,1

@@ -33,6 +33,7 @@ NAMPRED,Number of RED amplifiers,,Int,2,KPF0.standardize_headers
 SKYSRC,Source illuminating the SKY fiber,,String,Sky,KPF0.standardize_headers
 SCISRC,Source illuminating the SCI fiber,,String,Target,KPF0.standardize_headers
 CALSRC,Source illuminating the CAL fiber,,String,Etalon,KPF0.standardize_headers
+SIMULCAL,Simultaneous etalon calibration On/Off,,String,On,KPF0.standardize_headers
 NUMORDER,Number of orders,,Uint,67,KPF0.standardize_headers
 NUMTRACE,Number of object-indexed keyword families,,UInt,5,KPF0.standardize_headers
 TRACE#,Type of object in trace #,,String,SCI,KPF0.standardize_headers

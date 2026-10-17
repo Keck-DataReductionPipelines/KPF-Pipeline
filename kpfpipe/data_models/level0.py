@@ -250,7 +250,8 @@ class KPF0(KPFDataModel):
         """Stamp every value ``HeaderParser`` derives from the native header.
 
         Frame identity (OBSTYPE, OBSMODE, OBJECT, ISSOLAR, EXPTIME), fiber
-        illumination (SKYSRC, SCISRC, CALSRC, which downstream code consumes),
+        illumination (SKYSRC, SCISRC, CALSRC, which downstream code consumes,
+        and the SIMULCAL summary),
         the EPRV trace cards (TRACE#, CLSRC#, and CSRC#/CID# as ``None`` until
         AstroQuery), the cameras read out (GREEN, RED, CA_HK, EXPMETER) and the
         readout (READMODE, READTIMG, READTIMR) all come from the one parser the
