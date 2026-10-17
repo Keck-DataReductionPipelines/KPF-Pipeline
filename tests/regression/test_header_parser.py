@@ -53,8 +53,7 @@ def _hdr(imtype, octagon="Home", shutters=ALL, cameras=CCDS, **cards):
         (_hdr("Bias", shutters=SHUT), "Bias", "Calibration", "Bias"),
         (_hdr("Dark", shutters=SHUT), "Dark", "Calibration", "Dark"),
         (_hdr("Object", "EtalonFiber", shutters=SKY), "Target", "Science", "target"),
-        (_hdr("Object", OBJECT="SoCal"), "Target", "Science", "SoCal"),
-        (_hdr("Object", OBJECT="x", TARGNAME=" SUN "), "Target", "Science", "SoCal"),
+        (_hdr("Object", OBJECT="SoCal", TARGNAME="Sun"), "Target", "Science", "SoCal"),
         (_hdr("Flatlamp", shutters=SHUT), "Flat", "Calibration", "WideFlat"),
         (_hdr("Flatlamp", "BrdbandFiber"), "Flat", "Calibration", "Flat"),
         (
@@ -98,6 +97,10 @@ def test_exptime_is_elapsed():
         (_hdr("Object", OBJECT=" 10700 ", TARGNAME="10700"), "10700"),
         (_hdr("Object", OBJECT="10700", TARGNAME="HD 10700"), "Unknown"),
         (_hdr("Object", OBJECT="", TARGNAME=""), "Unknown"),
+        # Solar: exactly OBJECT SoCal with TARGNAME Sun; one alone is Unknown.
+        (_hdr("Object", OBJECT="SoCal", TARGNAME="target"), "Unknown"),
+        (_hdr("Object", OBJECT="x", TARGNAME="Sun"), "Unknown"),
+        (_hdr("Object", OBJECT="Sun", TARGNAME="Sun"), "Unknown"),
         # Calibration: IMTYPE/OCTAGON alone; the native OBJECT only warns.
         (_hdr("Bias", shutters=SHUT, OBJECT="autocal-bias", TARGNAME=""), "Bias"),
         (_hdr("Arclamp", "Th_gold", OBJECT="autocal-thar-all-morn"), "ThAr_gold"),
@@ -120,7 +123,27 @@ def _traces(keywords, prefix):
         (_hdr("Arclamp", "Th_daily", shutters=SCI), ["None", "ThAr_daily", "None"]),
         (_hdr("Flatlamp", "BrdbandFiber", shutters=CAL), ["None", "None", "Flat"]),
         (_hdr("Object", "EtalonFiber"), ["Sky", "Target", "Etalon"]),
-        (_hdr("Object", "EtalonFiber", OBJECT="SoCal"), ["Sky", "SoCal", "Etalon"]),
+        (
+            _hdr(
+                "Object", "EtalonFiber", OBJECT="SoCal", TARGNAME="Sun", SOLSCISH="open"
+            ),
+            ["Sky", "SoCal", "Etalon"],
+        ),
+        # SoCal reaches SCI through its own shutter, SOLSCISH.
+        (
+            _hdr(
+                "Object",
+                "EtalonFiber",
+                OBJECT="SoCal",
+                TARGNAME="Sun",
+                SOLSCISH="closed",
+            ),
+            ["Sky", "None", "Etalon"],
+        ),
+        (
+            _hdr("Object", "EtalonFiber", OBJECT="SoCal", TARGNAME="Sun"),
+            ["Sky", "Unknown", "Etalon"],
+        ),
         (
             # The octagon parks on the etalon, but the SimulCal shutter is shut.
             _hdr("Object", "EtalonFiber", shutters=("open", "open", "closed")),
@@ -155,7 +178,10 @@ def test_illumination(header, srcs):
     "header, simulcal",
     [
         (_hdr("Object", "EtalonFiber"), "On"),
-        (_hdr("Object", "LFCFiber", OBJECT="SoCal"), "On"),
+        (
+            _hdr("Object", "LFCFiber", OBJECT="SoCal", TARGNAME="Sun", SOLSCISH="open"),
+            "On",
+        ),
         (_hdr("Object", "EtalonFiber", shutters=("open", "open", "closed")), "Off"),
         (_hdr("Object", "EtalonFiber", SIMCALSH=None), "Unknown"),
         (_hdr("Arclamp", "EtalonFiber"), "N/A"),

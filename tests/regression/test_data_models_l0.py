@@ -607,13 +607,14 @@ class TestHeaderKeywords:
         with pytest.raises(ValueError, match="cannot classify frame"):
             self._standardize(imtype, **native)
 
-    @pytest.mark.parametrize("name", ("SoCal", "Sun"))
-    @pytest.mark.parametrize("key", ("OBJECT", "TARGNAME"))
-    def test_solar_frame_is_solar(self, key, name):
-        prim = self._standardize("Object", **{key: name}).headers["PRIMARY"]
+    def test_solar_frame_is_solar(self):
+        prim = self._standardize(
+            "Object", OBJECT="SoCal", TARGNAME="Sun", SOLSCISH="open"
+        ).headers["PRIMARY"]
         assert prim["OBSMODE"] == "Science"
         assert prim["OBJECT"] == "SoCal"
         assert prim["ISSOLAR"] is True
+        assert prim["SCISRC"] == "SoCal"
 
     def test_illumination_follows_the_shutters_not_the_obj_cards(self):
         # CAL-OBJ names a lamp, but the closed cal shutter means none reached it.

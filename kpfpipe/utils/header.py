@@ -183,10 +183,11 @@ class HeaderParser:
         """The sanitized OBJECT: the target on a Target frame, else `cal_object`.
 
         WMKO uses OBJECT as free-form metadata; the DRP uses it to name what
-        was observed. A solar Target frame (native OBJECT or TARGNAME ``SoCal``
-        or ``Sun``) is ``SoCal``; any other Target frame's OBJECT is its target
+        was observed. A solar Target frame (native OBJECT ``SoCal`` and TARGNAME
+        ``Sun``) is ``SoCal``; any other Target frame's OBJECT is its target
         identifier (e.g. ``10700``), trusted only when the native OBJECT and
-        TARGNAME agree, else ``Unknown``. A calibration frame's OBJECT is
+        TARGNAME agree. A Target frame failing its check (including only one
+        of the two cards naming the Sun) is ``Unknown``. A calibration frame's OBJECT is
         `cal_object`, derived from IMTYPE/OCTAGON alone (e.g. ``ThAr_daily``,
         ``WideFlat``); a native OBJECT that is no ``autocal-*`` label agreeing
         with it and the lit fibers, or a TARGNAME naming a target, is only
@@ -200,9 +201,10 @@ class HeaderParser:
             return "Unknown"
 
         if obstype == "Target":
-            if {obj.lower(), targname.lower()} & {"socal", "sun"}:
+            if (obj, targname) == ("SoCal", "Sun"):
                 return "SoCal"
-            if obj and obj == targname:
+            solar = {obj.lower(), targname.lower()} & {"socal", "sun"}
+            if obj and obj == targname and not solar:
                 return obj
             self._warn(
                 f"OBJECT {obj!r} disagrees with TARGNAME {targname!r}; "
@@ -249,8 +251,9 @@ class HeaderParser:
         shutter, not from the native SCI-OBJ/SKY-OBJ/CAL-OBJ, which can ignore
         the shutters or carry placeholders; those only cross-check the result.
         On a lamp frame an open fiber sees the OCTAGON source; on a Target
-        frame SCI sees the Target (``SoCal`` on a solar frame), SKY the Sky and
-        an open CAL the OCTAGON source; bias, dark and wide flat light no trace
+        frame SCI sees the Target, SKY the Sky and an open CAL the OCTAGON
+        source. On a solar frame SCI sees ``SoCal`` only when the SoCal feed's
+        own shutter (SOLSCISH) is open; bias, dark and wide flat light no trace
         (``None``). A shutter it needs that is absent or neither open nor
         closed makes that source ``Unknown`` (warned), as is every source of
         an Unknown frame.
@@ -267,15 +270,18 @@ class HeaderParser:
         octagon = str(native.get("OCTAGON") or "").strip()
         for trace, (fiber, shutter, obj_card, src_card) in _TRACES.items():
             self.DRP_KEYWORDS[f"TRACE{trace}"] = fiber
+            solar_sci = fiber == "SCI" and obj == "SoCal"
+            if solar_sci:
+                shutter = "SOLSCISH"
             # The source in native SCI-OBJ/SKY-OBJ/CAL-OBJ terms, for the cross-check.
-            lit = {"open": octagon, "closed": "None"}.get(
+            lit = {"open": "Target" if solar_sci else octagon, "closed": "None"}.get(
                 _norm(native.get(shutter)), "Unknown"
             )
             if obstype == "Unknown":
                 source = "Unknown"
             elif obj in ("Bias", "Dark", "WideFlat"):
                 source = "None"
-            elif obstype == "Target":
+            elif obstype == "Target" and not solar_sci:
                 source = {"SCI": "Target", "SKY": "Sky"}.get(fiber, lit)
             else:
                 source = lit
