@@ -37,7 +37,8 @@ _CACHE_DIR_MODE = 0o777
 # The mini-database columns: DRP_* and the fiber sources from HeaderParser, the
 # camera readout flags from the native camera cards, EXPTIME the native EXPTIME,
 # UTC/HST_TIME the filename's KPF timestamp, ISJUNK the observer junk list (see
-# load_junk_obs_ids), COMMENTS set only when DRP_OBJECT is Unknown.
+# load_junk_obs_ids), COMMENTS the fatal/non-fatal warning counts (details in
+# the log).
 _MINI_DB_KEYS = [
     "FILENAME",
     "DRP_OBJECT",
@@ -293,13 +294,16 @@ class FileHandler:
             HST_TIME (KPF-format timestamps from the filename, HST = UTC-10);
             EXPTIME (the native, requested EXPTIME, not KPF0's EXPTIME = ELAPSED);
             ISJUNK (frame is on the observer junk list -- flagged, not dropped);
-            and COMMENTS (the native TARGNAME/IMTYPE/OBJECT when DRP_OBJECT is
-            Unknown, or why a frame was rejected). A missing header key gives None
-            for that column. A rejected frame -- an unreadable file, or a header
-            ``HeaderParser`` finds nonsensical (``HeaderError``, DRP_OBSMODE
-            Unknown) -- is logged at ERROR and omitted from this DataFrame (useless
-            for stacking), but is still recorded, with its reason in COMMENTS, in
-            the on-disk cache, so the cache mirrors the L0 directory exactly.
+            and COMMENTS (``WARNINGS: <n> fatal, <m> non-fatal``, the frame's
+            warnings by kind, each logged with its filename; fatal means the
+            frame is unusable: rejected, or OBSMODE Unknown; empty for a clean
+            frame). A missing header key
+            gives None for that column. A rejected frame -- an unreadable file, or
+            a header ``HeaderParser`` finds nonsensical (``HeaderError``,
+            DRP_OBSMODE Unknown) -- is logged at ERROR and omitted from this
+            DataFrame (useless for stacking), but is still recorded, with a fatal
+            warning in COMMENTS, in the on-disk cache, so the cache mirrors the L0
+            directory exactly.
 
         Raises
         ------
@@ -354,12 +358,12 @@ class FileHandler:
                 parsed = HeaderParser(fn)
             except OSError as e:
                 logger.error("Could not read L0 file %s: %s", fn, e)
-                row["COMMENTS"] = f"Unreadable L0: {e}"
+                row["COMMENTS"] = "WARNINGS: 1 fatal, 0 non-fatal"
                 rejected.append(fn)
             except HeaderError as e:
                 logger.error("Invalid header in %s: %s", fn, e)
                 row["DRP_OBSMODE"] = "Unknown"
-                row["COMMENTS"] = f"Invalid header: {e}"
+                row["COMMENTS"] = "WARNINGS: 1 fatal, 0 non-fatal"
                 rejected.append(fn)
             else:
                 native = parsed.WMKO_HEADER
@@ -376,18 +380,19 @@ class FileHandler:
                 ):
                     row[k] = parsed.DRP_KEYWORDS.get(k)
                 row["EXPTIME"] = native.get("EXPTIME")
-                if row["DRP_OBJECT"] == "Unknown":
+                # An unclassifiable frame's one "cannot classify" warning is
+                # fatal (KPF0 rejects it); the rest leave the frame usable.
+                fatal = int(row["DRP_OBSMODE"] == "Unknown")
+                if parsed.warnings:
                     row["COMMENTS"] = (
-                        "Unparseable DRP_OBJECT identification: "
-                        f"TARGNAME == {native.get('TARGNAME')}, "
-                        f"IMTYPE == {native.get('IMTYPE')}, "
-                        f"WMKO_OBJECT == {native.get('OBJECT')}"
+                        f"WARNINGS: {fatal} fatal, "
+                        f"{len(parsed.warnings) - fatal} non-fatal"
                     )
             rows.append(row)
 
         if rejected:
             logger.error(
-                "%d of %d frames in %s rejected (see mini database COMMENTS): %s",
+                "%d of %d frames in %s rejected (reasons logged above): %s",
                 len(rejected),
                 len(file_list),
                 data_dir,

@@ -845,19 +845,43 @@ class TestBuildMiniDatabaseErrors:
             FileHandler({}).build_mini_database("20240405")
 
 
-def test_mini_db_comments_only_on_unknown_object(tmp_path):
-    # A Target frame whose OBJECT and TARGNAME disagree has no resolvable OBJECT.
+def test_mini_db_comments_count_parser_warnings(tmp_path, caplog):
+    # COMMENTS counts each frame's HeaderParser warnings (details in the log), so
+    # a mislabeled frame is flagged even when it is still usable.
+    clean = {
+        **dict.fromkeys(("GREEN", "RED", "CA_HK", "EXPMETER"), "NO"),
+        **dict(SCISEL="open", SKYSEL="open", SIMCALSH="closed"),
+        **{"SCI-OBJ": "Target", "SKY-OBJ": "Sky", "CAL-OBJ": "None"},
+    }
     for seconds, targname in ((1000, "10700"), (2000, "HD 10700")):
-        write_l0_tree(tmp_path, "20240405", seconds, obj="10700", targname=targname)
-    mini_db = FileHandler({"KPF_DATA_INPUT": str(tmp_path)}).build_mini_database(
-        "20240405"
+        write_l0_tree(
+            tmp_path,
+            "20240405",
+            seconds,
+            obj="10700",
+            targname=targname,
+            extra_cards=clean,
+        )
+    # A calibration frame classified from IMTYPE + OCTAGON names both cards.
+    # It is fatal: KPF0 rejects an unclassifiable frame.
+    write_l0_tree(
+        tmp_path,
+        "20240405",
+        3000,
+        imtype="Arclamp",
+        extra_cards={**clean, "OCTAGON": "Home"},
     )
-    assert list(mini_db["DRP_OBJECT"]) == ["10700", "Unknown"]
+    with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.header"):
+        mini_db = FileHandler({"KPF_DATA_INPUT": str(tmp_path)}).build_mini_database(
+            "20240405"
+        )
+    assert list(mini_db["DRP_OBJECT"]) == ["10700", "Unknown", "Unknown"]
     assert pd.isna(mini_db["COMMENTS"][0])
-    assert mini_db["COMMENTS"][1] == (
-        "Unparseable DRP_OBJECT identification: TARGNAME == HD 10700, "
-        "IMTYPE == Object, WMKO_OBJECT == 10700"
-    )
+    assert mini_db["COMMENTS"][1] == "WARNINGS: 0 fatal, 1 non-fatal"
+    assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
+    # The details are in the log, keyed by filename.
+    assert "OBJECT '10700' disagrees with TARGNAME 'HD 10700'" in caplog.text
+    assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home')" in caplog.text
 
 
 # build_mini_database on-disk cache (read/write + staleness guardrails):
@@ -943,7 +967,7 @@ class TestMiniDatabaseCache:
         cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
         cached = pd.read_csv(cache)
         assert len(cached) == 3  # on-disk: one row per file present
-        assert cached["COMMENTS"].iloc[2].startswith("Unreadable L0: ")
+        assert cached["COMMENTS"].iloc[2] == "WARNINGS: 1 fatal, 0 non-fatal"
 
         # 3 == 3, so the cache reads back as current.
         cached = fh._read_mini_db_cache("20240405")
@@ -966,11 +990,10 @@ class TestMiniDatabaseCache:
         assert len(db) == 1
         row = fh._full_scan_mini_db.iloc[1]
         assert row["DRP_OBSMODE"] == "Unknown"
-        assert row["COMMENTS"] == (
-            "Invalid header: KP.20240405.02000.00.fits: ELAPSED='N/A' is not a number"
-        )
+        assert row["COMMENTS"] == "WARNINGS: 1 fatal, 0 non-fatal"
+        assert "ELAPSED='N/A' is not a number" in caplog.text
 
-    def test_corrupt_card_recorded_as_invalid_header(self, tmp_path):
+    def test_corrupt_card_recorded_as_invalid_header(self, caplog, tmp_path):
         # astropy reads the file but raises VerifyError on the corrupt card.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
         bad = tmp_path / "L0" / "20240405" / "KP.20240405.01000.00.fits"
@@ -978,11 +1001,12 @@ class TestMiniDatabaseCache:
         i = raw.index(b"ELAPSED =")
         bad.write_bytes(raw[:i] + b"ELAPSED = 1.2.3".ljust(80) + raw[i + 80 :])
 
-        fh.build_mini_database("20240405")
+        with caplog.at_level(logging.ERROR):
+            fh.build_mini_database("20240405")
         row = fh._full_scan_mini_db.iloc[0]
         assert row["DRP_OBSMODE"] == "Unknown"
-        assert row["COMMENTS"].startswith("Invalid header: ")
-        assert "Unparsable card (ELAPSED)" in row["COMMENTS"]
+        assert row["COMMENTS"] == "WARNINGS: 1 fatal, 0 non-fatal"
+        assert "Unparsable card (ELAPSED)" in caplog.text
 
     def test_unexpected_parser_error_propagates(self, monkeypatch, tmp_path):
         # Anything but an unreadable file or HeaderError is a pipeline bug.

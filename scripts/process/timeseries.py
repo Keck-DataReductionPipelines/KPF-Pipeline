@@ -184,7 +184,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
         n_unknown = int((is_object & (df["DRP_OBJECT"] == "Unknown")).sum())
         if n_unknown:
             logger.warning(
-                "%s: %d Target frame(s) with Unknown OBJECT (see mini_db COMMENTS)",
+                "%s: %d Target frame(s) with Unknown OBJECT (see the scan log)",
                 dc,
                 n_unknown,
             )

@@ -107,10 +107,9 @@ class HeaderParser:
             raise HeaderError(f"{self._label}: {e}") from None
 
     def _warn(self, message):
-        """Record and log one unreliable-metadata warning."""
-        message = f"{self._label}: {message}"
+        """Record one unreliable-metadata warning and log it with the file label."""
         self.warnings.append(message)
-        logger.warning(message)
+        logger.warning("%s: %s", self._label, message)
 
     def _cameras(self):
         """Stamp GREEN, RED, CA_HK, EXPMETER: whether each camera read out, from
