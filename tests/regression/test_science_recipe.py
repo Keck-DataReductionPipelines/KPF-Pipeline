@@ -66,6 +66,7 @@ def _load_recipe():
 _CATALOG_CAPTURE = {
     "wmko": {
         "object": "95128",
+        "catalog": "WMKO TCS/DCS",
         "radec_src": "wmko",
         "plx_src": "wmko",
         "rv_src": "wmko",
@@ -83,6 +84,7 @@ _CATALOG_CAPTURE = {
     },
     "gaia": {
         "object": "Gaia DR3 777254360337133312",
+        "catalog": "Gaia DR3",
         "radec_src": "gaia",
         "plx_src": "gaia",
         "rv_src": "gaia",
@@ -99,7 +101,8 @@ _CATALOG_CAPTURE = {
         "color_name": "Gaia BP-RP",
     },
     "simbad": {
-        "object": "HD 95128",
+        "object": "Gaia DR3 777254360337133312",
+        "catalog": "Gaia EDR3",
         "radec_src": "simbad",
         "plx_src": "simbad",
         "rv_src": "simbad",
@@ -117,6 +120,7 @@ _CATALOG_CAPTURE = {
     },
     "kpf-drp": {
         "object": "Gaia DR3 777254360337133312",
+        "catalog": "Gaia DR3",
         "radec_src": "gaia",
         "plx_src": "gaia",
         "rv_src": "gaia",
@@ -300,10 +304,10 @@ class TestScienceRecipe:
         prim = l2.headers["PRIMARY"]
         expected = _CATALOG_CAPTURE["kpf-drp"]
         # SCI1-3 are traces 2-4 and carry identical astrometry. Traces 1 (SKY) and
-        # 5 (CAL) are blank by design -- no object on the fiber, no "N/A" to write.
+        # 5 (CAL) hold no object on the fiber: CSRC/CID "None", the rest blank.
         for column, base in (
             ("object", "CID"),
-            ("radec_src", "CSRC"),
+            ("catalog", "CSRC"),
             ("ra", "CRA"),
             ("dec", "CDEC"),
             ("pmra", "CPMR"),
@@ -413,7 +417,7 @@ class TestScienceRecipe:
 # ---------------------------------------------------------------------------
 
 
-def _wire_science_recipe(tmp_path, monkeypatch):
+def _wire_science_recipe(tmp_path, monkeypatch, solar=False):
     """Load the real recipe with every collaborator replaced by a recorder.
 
     Returns ``(recipe, config, args, record)``. ``record["calls"]`` holds one
@@ -425,11 +429,12 @@ def _wire_science_recipe(tmp_path, monkeypatch):
     input identifies which stage produced it.
     """
     recipe = _load_recipe()
-    record = {"calls": [], "written": [], "summary": None}
+    record = {"calls": [], "written": [], "summary": None, "solar": solar}
 
     class Product:
         def __init__(self, tag):
             self.tag = tag
+            self.headers = {"PRIMARY": {"ISSOLAR": record["solar"]}}
 
         def to_fits(self, path):
             record["written"].append((self.tag, path))
@@ -520,6 +525,16 @@ class TestScienceRecipeWiring:
         recipe.main(config, args)
         record["tmp_path"] = tmp_path
         return record
+
+    def test_socal_skips_astro_query(self, tmp_path, monkeypatch):
+        # The Sun has no catalog entry; barycorr and CCF use solar defaults instead.
+        recipe, config, args, record = _wire_science_recipe(
+            tmp_path, monkeypatch, solar=True
+        )
+        recipe.main(config, args)
+        stages = [call[0] for call in record["calls"]]
+        assert "AstroQuery" not in stages
+        assert "BarycentricCorrection" in stages and "CrossCorrelation" in stages
 
     def test_stages_run_in_order(self, run):
         # The load standardizes (next test), so every stage reads one PRIMARY,

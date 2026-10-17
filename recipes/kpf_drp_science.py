@@ -56,10 +56,14 @@ def main(config, args):
     l0 = KPF0.from_fits(fn, standardize=True)
 
     # Resolves into l0's CATALOG_RECORD, consumed by L0 diagnostics and
-    # barycentric correction.
-    logger.info("resolving catalog astrometry for %s", obs_id)
-    astro_query = AstroQuery(l0, config)
-    l0 = astro_query.perform()
+    # barycentric correction. SoCal has no catalog object; barycorr uses the
+    # solar ephemeris instead.
+    if l0.headers["PRIMARY"].get("ISSOLAR"):
+        logger.info("SoCal frame %s: no catalog astrometry to resolve", obs_id)
+    else:
+        logger.info("resolving catalog astrometry for %s", obs_id)
+        astro_query = AstroQuery(l0, config)
+        l0 = astro_query.perform()
 
     logger.info("generating L0 quicklook plots for %s", obs_id)
     l0_qlp_dir = kpf_directory(

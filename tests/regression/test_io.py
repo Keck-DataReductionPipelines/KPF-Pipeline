@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from astropy.io import fits
 
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
@@ -21,6 +22,7 @@ from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters import KPFMasterL1
 from kpfpipe.utils.io import (
+    _MINI_DB_KEYS,
     FileHandler,
     check_filename_convention,
     datecode_dirs_in_range,
@@ -62,10 +64,18 @@ _SCI_A = [
 ]  # 50000-50100
 
 
-def _rows(files, obj, imtype, targname=None):
-    """Row dicts for a group of frames sharing OBJECT/IMTYPE/TARGNAME."""
+def _rows(files, obj, sources=None):
+    """Row dicts for a group of frames sharing DRP_OBJECT and fiber sources (SKYSRC,
+    SCISRC, CALSRC; default: every fiber sees a lamp OBJECT, else none)."""
+    if sources is None:
+        lamp = obj == "Flat" or obj.startswith(("ThAr", "UNe"))
+        sources = (obj if lamp else "None",) * 3
     return [
-        {"FILENAME": f, "IMTYPE": imtype, "OBJECT": obj, "TARGNAME": targname}
+        {
+            "FILENAME": f,
+            "DRP_OBJECT": obj,
+            **dict(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True)),
+        }
         for f in files
     ]
 
@@ -73,27 +83,26 @@ def _rows(files, obj, imtype, targname=None):
 def _mini_db(rows, *, exptime=60.0, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
-    Adds the derived columns build_calibration_stacks needs: EXPTIME/ELAPSED, the
-    UTC/HST timestamps (parsed from each FILENAME), and ISJUNK (FILENAMEs in
-    `junk` flagged True).
+    Adds the derived columns build_calibration_stacks needs: EXPTIME, the
+    UTC_TIME/HST_TIME timestamps (parsed from each FILENAME), and ISJUNK
+    (FILENAMEs in `junk` flagged True).
     """
     df = pd.DataFrame(rows)
     df["EXPTIME"] = exptime
-    df["ELAPSED"] = exptime
-    df["UTC"] = [get_timestamp(f) for f in df["FILENAME"]]
-    df["HST"] = [utc_to_hst(t) for t in df["UTC"]]
+    df["UTC_TIME"] = [get_timestamp(f) for f in df["FILENAME"]]
+    df["HST_TIME"] = [utc_to_hst(t) for t in df["UTC_TIME"]]
     df["ISJUNK"] = df["FILENAME"].isin(set(junk))
     return df
 
 
 def _make_mini_db():
     return _mini_db(
-        _rows(_BIAS_A, "autocal-bias", "Bias")
-        + _rows(_BIAS_B, "autocal-bias", "Bias")
-        + _rows(_DARK_A, "autocal-dark", "Dark")
-        + _rows(_THAR_MORN, "autocal-thar-all-morn", "Arclamp")
-        + _rows(_THAR_EVE, "autocal-thar-all-eve", "Arclamp")
-        + _rows(_SCI_A, "185144", "Object", "185144")
+        _rows(_BIAS_A, "Bias")
+        + _rows(_BIAS_B, "Bias")
+        + _rows(_DARK_A, "Dark")
+        + _rows(_THAR_MORN, "ThAr_daily")
+        + _rows(_THAR_EVE, "ThAr_daily")
+        + _rows(_SCI_A, "185144")
     )
 
 
@@ -104,7 +113,7 @@ _BIAS_SMALL = [
 
 def _mixed_bias_db():
     """Mini_db with one 5-file bias cluster (_BIAS_A) and a later 2-file one."""
-    return _mini_db(_rows(_BIAS_A + _BIAS_SMALL, "autocal-bias", "Bias")), _BIAS_SMALL
+    return _mini_db(_rows(_BIAS_A + _BIAS_SMALL, "Bias")), _BIAS_SMALL
 
 
 def _midnight_bias_db(n_before=5, n_after=5):
@@ -121,7 +130,7 @@ def _midnight_bias_db(n_before=5, n_after=5):
         f"/data/L0/20240405/KP.20240405.{36100 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    df = _mini_db(_rows(before + after, "autocal-bias", "Bias"))
+    df = _mini_db(_rows(before + after, "Bias"))
     return df, before, after
 
 
@@ -140,7 +149,7 @@ def _cross_midnight_gap_db(n_before=2, n_after=2):
         f"/data/L0/20240405/KP.20240405.{50000 + i * 100:05d}.00.fits"  # HST 20240405
         for i in range(n_after)
     ]
-    df = _mini_db(_rows(before + after, "autocal-dark", "Dark"), exptime=1200.0)
+    df = _mini_db(_rows(before + after, "Dark"), exptime=1200.0)
     return df, before, after
 
 
@@ -224,7 +233,7 @@ class TestBuildCalibrationStacks:
 
     def test_default_min_stack_size_is_noop(self):
         # The default min_stack_size=1 must not drop a lone 2-frame cluster.
-        db = _mini_db(_rows(_BIAS_SMALL, "autocal-bias", "Bias"))
+        db = _mini_db(_rows(_BIAS_SMALL, "Bias"))
         lists = _cluster("bias", db)
         assert len(lists) == 1
         assert lists[0] == sorted(_BIAS_SMALL)
@@ -282,6 +291,38 @@ class TestBuildCalibrationStacks:
         assert len(lists) == 2
         assert lists[0] == sorted(_THAR_MORN)
         assert lists[1] == sorted(_THAR_EVE)
+
+    @pytest.mark.parametrize(
+        "obj, sources",
+        [
+            ("ThAr_gold", None),
+            ("ThAr_daily", ("None", "ThAr_daily", "None")),
+        ],
+    )
+    def test_thar_requires_daily_all_fiber(self, obj, sources):
+        # Gold-lamp and single-fiber frames never enter a ThAr master.
+        db = _mini_db(_rows(_THAR_MORN, "ThAr_daily") + _rows(_THAR_EVE, obj, sources))
+        assert _cluster("thar", db) == [sorted(_THAR_MORN)]
+
+    @pytest.mark.parametrize(
+        "cal_type, obj, sources",
+        [
+            ("thar", "ThAr_daily", ("Unknown", "ThAr_daily", "ThAr_daily")),
+            ("bias", "Bias", ("None", "None", "Unknown")),
+        ],
+    )
+    def test_unknown_source_excluded(self, cal_type, obj, sources):
+        # A frame whose illumination HeaderParser could not determine (e.g. a
+        # missing shutter card) never enters a master.
+        good = _THAR_MORN if cal_type == "thar" else _BIAS_A
+        bad = _THAR_EVE if cal_type == "thar" else _BIAS_B
+        db = _mini_db(_rows(good, obj) + _rows(bad, obj, sources))
+        assert _cluster(cal_type, db) == [sorted(good)]
+
+    def test_flat_requires_all_fiber(self):
+        # A wide flat is not a fiber flat.
+        db = _mini_db(_rows(_BIAS_A, "Flat") + _rows(_BIAS_B, "WideFlat"))
+        assert _cluster("flat", db) == [sorted(_BIAS_A)]
 
 
 # build_calibration_stacks (real data)
@@ -753,9 +794,25 @@ class TestBuildMiniDatabase:
             "20240405"
         )
 
-    def test_has_required_columns(self, mini_db):
-        for col in ("FILENAME", "TARGNAME", "IMTYPE", "OBJECT", "EXPTIME", "ELAPSED"):
-            assert col in mini_db.columns
+    def test_columns(self, mini_db):
+        assert list(mini_db.columns) == [
+            "FILENAME",
+            "DRP_OBJECT",
+            "DRP_OBSTYPE",
+            "DRP_OBSMODE",
+            "SKYSRC",
+            "SCISRC",
+            "CALSRC",
+            "GREEN",
+            "RED",
+            "CA_HK",
+            "EXPMETER",
+            "EXPTIME",
+            "UTC_TIME",
+            "HST_TIME",
+            "ISJUNK",
+            "COMMENTS",
+        ]
 
     def test_no_cluster_columns(self, mini_db):
         # Cluster detection belongs to build_calibration_stacks, not the mini_db.
@@ -788,6 +845,45 @@ class TestBuildMiniDatabaseErrors:
             FileHandler({}).build_mini_database("20240405")
 
 
+def test_mini_db_comments_count_parser_warnings(tmp_path, caplog):
+    # COMMENTS counts each frame's HeaderParser warnings (details in the log), so
+    # a mislabeled frame is flagged even when it is still usable.
+    clean = {
+        **dict.fromkeys(("GREEN", "RED", "CA_HK", "EXPMETER"), "NO"),
+        **dict(SCISEL="open", SKYSEL="open", SIMCALSH="closed"),
+        **{"SCI-OBJ": "Target", "SKY-OBJ": "Sky", "CAL-OBJ": "None"},
+    }
+    for seconds, targname in ((1000, "10700"), (2000, "HD 10700")):
+        write_l0_tree(
+            tmp_path,
+            "20240405",
+            seconds,
+            obj="10700",
+            targname=targname,
+            extra_cards=clean,
+        )
+    # A calibration frame classified from IMTYPE + OCTAGON names both cards.
+    # It is fatal: KPF0 rejects an unclassifiable frame.
+    write_l0_tree(
+        tmp_path,
+        "20240405",
+        3000,
+        imtype="Arclamp",
+        extra_cards={**clean, "OCTAGON": "Home"},
+    )
+    with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.header"):
+        mini_db = FileHandler({"KPF_DATA_INPUT": str(tmp_path)}).build_mini_database(
+            "20240405"
+        )
+    assert list(mini_db["DRP_OBJECT"]) == ["10700", "Unknown", "Unknown"]
+    assert pd.isna(mini_db["COMMENTS"][0])
+    assert mini_db["COMMENTS"][1] == "WARNINGS: 0 fatal, 1 non-fatal"
+    assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
+    # The details are in the log, keyed by filename.
+    assert "OBJECT '10700' disagrees with TARGNAME 'HD 10700'" in caplog.text
+    assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home')" in caplog.text
+
+
 # build_mini_database on-disk cache (read/write + staleness guardrails):
 # synthetic L0 frames written to a temp tree
 
@@ -811,12 +907,12 @@ def _write_l0_frame(tmp_path, datecode, obs_id):
 
 def _seed_cache(tmp_path, datecode, filenames):
     """Seed the on-disk mini-db cache CSV (full schema, one row per filename) and
-    return its path. OBJECT is populated so the row survives the readable-frame
+    return its path. DRP_OBJECT is populated so the row survives the readable-frame
     clean; the rest is blank, which the assertions here do not read."""
     cache = tmp_path / "vNext" / "mini_db" / f"{datecode}_L0.csv"
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cols = "FILENAME,TARGNAME,IMTYPE,OBJECT,EXPTIME,ELAPSED,UTC,HST,ISJUNK"
-    rows = "".join(f"{fn},,,autocal-bias,,,,,\n" for fn in filenames)
+    cols = ",".join(_MINI_DB_KEYS)
+    rows = "".join(f"{fn},Bias,,,,,,,\n" for fn in filenames)
     cache.write_text(cols + "\n" + rows)
     return cache
 
@@ -853,6 +949,18 @@ class TestMiniDatabaseCache:
         assert stat.S_IMODE(cache.stat().st_mode) == 0o666
         assert stat.S_IMODE(cache.parent.stat().st_mode) == 0o777
 
+    def test_cached_mini_db_keeps_none_sources(self, tmp_path):
+        # "None" (an unlit fiber) must not read back as NaN, or bias selection,
+        # which requires every *SRC == "None", finds nothing from the cache.
+        for obs in ("01000.00", "01100.00", "01200.00"):
+            fh = _write_l0_frame(tmp_path, "20240405", f"KP.20240405.{obs}")
+        fh.build_mini_database("20240405", cache="w")
+
+        fh = FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
+        fh.build_mini_database("20240405", cache="r")
+        assert (fh._mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == "None").all().all()
+        assert len(fh.build_calibration_stacks("bias", min_stack_size=3)[0]) == 3
+
     def test_unreadable_frame_recorded_in_cache_not_in_memory(self, caplog, tmp_path):
         # An unreadable frame is useless for stacking, so it is dropped in memory,
         # but the cache still records it: the row-count guardrail compares against
@@ -862,19 +970,67 @@ class TestMiniDatabaseCache:
         corrupt = tmp_path / "L0" / "20240405" / "KP.20240405.03000.00.fits"
         corrupt.write_bytes(b"not a valid FITS file")
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.ERROR):
             db = fh.build_mini_database("20240405", cache="rw")
-        assert "Could not read header" in caplog.text
+        assert "Could not read L0 file" in caplog.text
+        assert "1 of 3 frames" in caplog.text
 
         assert len(db) == 2  # in-memory: only the two readable frames
         cache = tmp_path / "vNext" / "mini_db" / "20240405_L0.csv"
-        assert len(pd.read_csv(cache)) == 3  # on-disk: one row per file present
+        cached = pd.read_csv(cache)
+        assert len(cached) == 3  # on-disk: one row per file present
+        assert cached["COMMENTS"].iloc[2] == "WARNINGS: 1 fatal, 0 non-fatal"
+        assert cached["DRP_OBSMODE"].iloc[2] == "Unknown"
 
         # 3 == 3, so the cache reads back as current.
         cached = fh._read_mini_db_cache("20240405")
         assert cached is not None and len(cached) == 3
         # A cache hit still cleans down to the readable set.
         assert len(fh.build_mini_database("20240405", cache="r")) == 2
+
+    def test_invalid_header_recorded_with_reason(self, caplog, tmp_path):
+        # A readable header with a nonsensical value is rejected like an unreadable
+        # file, but recorded as invalid so it can be repaired at KOA or junked.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        _write_l0_frame(tmp_path, "20240405", "KP.20240405.02000.00")
+        bad = tmp_path / "L0" / "20240405" / "KP.20240405.02000.00.fits"
+        fits.setval(bad, "ELAPSED", value="N/A")
+
+        with caplog.at_level(logging.ERROR):
+            db = fh.build_mini_database("20240405", cache="w")
+        assert "Invalid header" in caplog.text
+
+        assert len(db) == 1
+        row = fh._full_scan_mini_db.iloc[1]
+        assert row["DRP_OBSMODE"] == "Unknown"
+        assert row["COMMENTS"] == "WARNINGS: 1 fatal, 0 non-fatal"
+        assert "ELAPSED='N/A' is not a number" in caplog.text
+
+    def test_corrupt_card_recorded_as_invalid_header(self, caplog, tmp_path):
+        # astropy reads the file but raises VerifyError on the corrupt card.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        bad = tmp_path / "L0" / "20240405" / "KP.20240405.01000.00.fits"
+        raw = bad.read_bytes()
+        i = raw.index(b"ELAPSED =")
+        bad.write_bytes(raw[:i] + b"ELAPSED = 1.2.3".ljust(80) + raw[i + 80 :])
+
+        with caplog.at_level(logging.ERROR):
+            fh.build_mini_database("20240405")
+        row = fh._full_scan_mini_db.iloc[0]
+        assert row["DRP_OBSMODE"] == "Unknown"
+        assert row["COMMENTS"] == "WARNINGS: 1 fatal, 0 non-fatal"
+        assert "Unparsable card (ELAPSED)" in caplog.text
+
+    def test_unexpected_parser_error_propagates(self, monkeypatch, tmp_path):
+        # Anything but an unreadable file or HeaderError is a pipeline bug.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+
+        def boom(self, source):
+            raise KeyError("bug")
+
+        monkeypatch.setattr("kpfpipe.utils.io.HeaderParser.__init__", boom)
+        with pytest.raises(KeyError, match="bug"):
+            fh.build_mini_database("20240405")
 
     def test_cache_write_failure_leaves_no_partial_or_temp(self, tmp_path, monkeypatch):
         # The atomic write (temp file + os.replace) must clean up on failure.
@@ -931,6 +1087,16 @@ class TestMiniDatabaseCache:
         assert len(db) == 2
         assert "/sentinel.fits" not in db["FILENAME"].tolist()
 
+    def test_cache_outdated_schema_rescans(self, tmp_path):
+        # A cache written before a column was added (here DRP_OBSMODE) is rejected.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        pd.read_csv(cache).drop(columns="DRP_OBSMODE").to_csv(cache, index=False)
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache="rw")
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+
     def test_cache_out_of_date_rescans(self, tmp_path):
         # Cache older than an L0 input -> freshness guardrail rejects it.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
@@ -985,18 +1151,18 @@ class TestJunkExclusion:
 
     def test_exclude_junk_default_drops_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"), junk=[junk_fn])
         lists = _cluster("bias", db, min_stack_size=1)
         assert junk_fn not in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_false_keeps_flagged_frame(self):
         junk_fn = _JUNK_BIAS[1]
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias"), junk=[junk_fn])
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"), junk=[junk_fn])
         lists = _cluster("bias", db, min_stack_size=1, exclude_junk=False)
         assert junk_fn in [fn for cluster in lists for fn in cluster]
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
-        db = _mini_db(_rows(_JUNK_BIAS, "autocal-bias", "Bias")).drop(columns="ISJUNK")
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias")).drop(columns="ISJUNK")
         with pytest.raises(KeyError, match="ISJUNK"):
             _cluster("bias", db, min_stack_size=1)

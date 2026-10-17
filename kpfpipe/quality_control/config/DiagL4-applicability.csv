@@ -1,3 +1,3 @@
-Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+Method,Keywords,Description,RequiredData,Target,SoCal,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 DiagL4.bjd_dispersion,BJD{MEAN/STD/RNG},Dispersion of the per-order BJD_TDB,RV#,1,1,0,0,0,0,0,0,0
 DiagL4.berv_dispersion,BERV{MEAN/STD/RNG},Dispersion of the per-order barycentric RV,RV#,1,1,0,0,0,0,0,0,0

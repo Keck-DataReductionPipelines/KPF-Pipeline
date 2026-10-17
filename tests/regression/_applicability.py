@@ -21,7 +21,17 @@ from kpfpipe.quality_control.config import PATH as _QC_CFG_PATH
 
 # The boolean columns, spelled out rather than imported so a silent edit to
 # ``applicability.FRAME_TYPES`` cannot pass unnoticed.
-FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
+FRAME_TYPES = (
+    "Target",
+    "SoCal",
+    "Bias",
+    "Dark",
+    "Flat",
+    "LFC",
+    "ThAr",
+    "UNe",
+    "Etalon",
+)
 
 QC_COLUMNS = ["Method", "Description", "RequiredData", *FRAME_TYPES]
 DIAG_COLUMNS = ["Method", "Keywords", "Description", "RequiredData", *FRAME_TYPES]

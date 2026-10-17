@@ -1,4 +1,4 @@
-Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+Method,Keywords,Description,RequiredData,Target,SoCal,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 Guider.guider_errors,GDR{X/Y/R}RMS|GDR{X/Y}BIAS,"Guiding error RMS and bias in x, y and r",GUIDER_CUBE_ORIGINS,1,0,0,0,0,0,0,0,0
 Guider.guider_image_stats,GDRFW{MD/STD}|GDRFX{MD/STD}|GDRPK{MD/STD},"Median and spread of the guider images' FWHM, flux and peak flux",GUIDER_CUBE_ORIGINS,1,0,0,0,0,0,0,0,0
 Guider.guider_seeing,GDRSEE{JZ/V}|SEEING,"Seeing from the guider Moffat fit, in J+Z and scaled to V band",GUIDER_AVG|INSTRUMENT_HEADER,1,0,0,0,0,0,0,0,0
