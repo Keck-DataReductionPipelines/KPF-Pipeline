@@ -949,6 +949,18 @@ class TestMiniDatabaseCache:
         assert stat.S_IMODE(cache.stat().st_mode) == 0o666
         assert stat.S_IMODE(cache.parent.stat().st_mode) == 0o777
 
+    def test_cached_mini_db_keeps_none_sources(self, tmp_path):
+        # "None" (an unlit fiber) must not read back as NaN, or bias selection,
+        # which requires every *SRC == "None", finds nothing from the cache.
+        for obs in ("01000.00", "01100.00", "01200.00"):
+            fh = _write_l0_frame(tmp_path, "20240405", f"KP.20240405.{obs}")
+        fh.build_mini_database("20240405", cache="w")
+
+        fh = FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
+        fh.build_mini_database("20240405", cache="r")
+        assert (fh._mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == "None").all().all()
+        assert len(fh.build_calibration_stacks("bias", min_stack_size=3)[0]) == 3
+
     def test_unreadable_frame_recorded_in_cache_not_in_memory(self, caplog, tmp_path):
         # An unreadable frame is useless for stacking, so it is dropped in memory,
         # but the cache still records it: the row-count guardrail compares against
@@ -968,6 +980,7 @@ class TestMiniDatabaseCache:
         cached = pd.read_csv(cache)
         assert len(cached) == 3  # on-disk: one row per file present
         assert cached["COMMENTS"].iloc[2] == "WARNINGS: 1 fatal, 0 non-fatal"
+        assert cached["DRP_OBSMODE"].iloc[2] == "Unknown"
 
         # 3 == 3, so the cache reads back as current.
         cached = fh._read_mini_db_cache("20240405")

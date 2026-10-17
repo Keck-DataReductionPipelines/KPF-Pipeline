@@ -252,8 +252,9 @@ class HeaderParser:
         the shutters or carry placeholders; those only cross-check the result.
         On a lamp frame an open fiber sees the OCTAGON source; on a Target
         frame SCI sees the Target, SKY the Sky and an open CAL the OCTAGON
-        source. On a solar frame SCI sees ``SoCal`` only when the SoCal feed's
-        own shutter (SOLSCISH) is open; bias, dark and wide flat light no trace
+        source (``Unknown``, warned, if OCTAGON names no lamp). On a solar
+        frame SCI sees ``SoCal`` only when the SoCal feed's own shutter
+        (SOLSCISH) is open; bias, dark and wide flat light no trace
         (``None``). A shutter it needs that is absent or neither open nor
         closed makes that source ``Unknown`` (warned), as is every source of
         an Unknown frame.
@@ -273,9 +274,10 @@ class HeaderParser:
             solar_sci = fiber == "SCI" and obj == "SoCal"
             if solar_sci:
                 shutter = "SOLSCISH"
+            state = _norm(native.get(shutter))
             # The source in native SCI-OBJ/SKY-OBJ/CAL-OBJ terms, for the cross-check.
             lit = {"open": "Target" if solar_sci else octagon, "closed": "None"}.get(
-                _norm(native.get(shutter)), "Unknown"
+                state, "Unknown"
             )
             if obstype == "Unknown":
                 source = "Unknown"
@@ -289,6 +291,13 @@ class HeaderParser:
             src = _SOURCES.get(source.lower(), source)
             if source == "Target" and obj == "SoCal":
                 src = "SoCal"
+            # An open CAL fiber on a Target frame sees an OCTAGON naming no lamp.
+            if state == "open" and source == octagon and _norm(octagon) not in _SOURCES:
+                self._warn(
+                    f"OCTAGON={native.get('OCTAGON')!r} names no calibration "
+                    f"source; {src_card} is Unknown"
+                )
+                src = "Unknown"
             if src_card:
                 self.DRP_KEYWORDS[src_card] = src
             # CLSRC# names a calibration lamp only; CSRC#/CID# await AstroQuery.

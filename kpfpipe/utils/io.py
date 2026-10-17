@@ -188,7 +188,8 @@ class FileHandler:
             )
             return None
 
-        cached = pd.read_csv(cache_path)
+        # "None" (an unlit fiber) and "N/A" are vocabulary, not missing values.
+        cached = pd.read_csv(cache_path, keep_default_na=False, na_values=[""])
         if list(cached.columns) != _MINI_DB_KEYS:
             logger.warning(
                 "mini database cache %s has an outdated schema; rescanning", cache_path
@@ -299,8 +300,8 @@ class FileHandler:
             frame is unusable: rejected, or OBSMODE Unknown; empty for a clean
             frame). A missing header key
             gives None for that column. A rejected frame -- an unreadable file, or
-            a header ``HeaderParser`` finds nonsensical (``HeaderError``,
-            DRP_OBSMODE Unknown) -- is logged at ERROR and omitted from this
+            a header ``HeaderParser`` finds nonsensical (``HeaderError``) --
+            has DRP_OBSMODE Unknown, is logged at ERROR and omitted from this
             DataFrame (useless for stacking), but is still recorded, with a fatal
             warning in COMMENTS, in the on-disk cache, so the cache mirrors the L0
             directory exactly.
@@ -358,6 +359,7 @@ class FileHandler:
                 parsed = HeaderParser(fn)
             except OSError as e:
                 logger.error("Could not read L0 file %s: %s", fn, e)
+                row["DRP_OBSMODE"] = "Unknown"
                 row["COMMENTS"] = "WARNINGS: 1 fatal, 0 non-fatal"
                 rejected.append(fn)
             except HeaderError as e:

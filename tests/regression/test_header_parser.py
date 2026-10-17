@@ -159,6 +159,9 @@ def _traces(keywords, prefix):
             _hdr("Object", "EtalonFiber", SIMCALSH="moving"),
             ["Sky", "Target", "Unknown"],
         ),
+        # An open CAL fiber on a Target frame whose OCTAGON names no lamp.
+        (_hdr("Object", "Home"), ["Sky", "Target", "Unknown"]),
+        (_hdr("Object", OCTAGON=None), ["Sky", "Target", "Unknown"]),
         # Bias/dark/wide flat light nothing whatever the shutters say.
         (_hdr("Bias", SCISEL=None, SKYSEL=None, SIMCALSH=None), ["None"] * 3),
     ],
@@ -184,6 +187,7 @@ def test_illumination(header, srcs):
         ),
         (_hdr("Object", "EtalonFiber", shutters=("open", "open", "closed")), "Off"),
         (_hdr("Object", "EtalonFiber", SIMCALSH=None), "Unknown"),
+        (_hdr("Object", "Home"), "Unknown"),
         (_hdr("Arclamp", "EtalonFiber"), "N/A"),
         (_hdr("Bias", shutters=SHUT), "N/A"),
         (_hdr("Sky"), "Unknown"),
