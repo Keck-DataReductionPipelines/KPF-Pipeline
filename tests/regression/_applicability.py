@@ -10,6 +10,7 @@ normalization (the class-prefix split, the boolean coercion, the BOM handling).
 NaN, so the comparison turns on the text the file holds.
 """
 
+import itertools
 import re
 
 import pandas as pd
@@ -49,26 +50,34 @@ def tagged_methods(cls, tag):
 
 
 def matches(entry, names):
-    """The ``names`` an entry covers: itself when literal, else its ``#`` family.
+    """Every name an entry declares: itself when literal, else its expansion.
 
-    ``#`` stands for one varying field -- one or more characters -- so it covers
-    both an index (``TRACE#_FLUX``, ``EXSNR#``) and a named field (``P#AMP#``,
-    ``GDR#RMS``). A name spelled with ``#`` in the source table is that literal
-    name, never a pattern, which is what keeps ``EXSNR#`` off ``EXSNRW#``.
+    ``#`` is a trace index, 1 to 5, as everywhere else in the pipeline;
+    ``{a/b/c}`` is one of the listed alternatives (``NANSCI{1/2/3}``,
+    ``P{16/50/84}{G/R}AMP{1/2/3/4}``). A name spelled with ``#`` in ``names``
+    (``EXSNR#``) is that literal name, never expanded. The caller checks the
+    result against ``names``, so an entry declaring an unknown name fails.
     """
     if entry in names:
         return {entry}
-    pattern = ".+".join(map(re.escape, entry.split("#")))
-    return {name for name in names if re.fullmatch(pattern, name)}
+    fields = [
+        "12345"
+        if token == "#"
+        else token[1:-1].split("/")
+        if token.startswith("{")
+        else [token]
+        for token in re.split(r"(#|\{[^{}]*\})", entry)
+    ]
+    return {"".join(parts) for parts in itertools.product(*fields)}
 
 
 def unknown_extensions(required_data, data_model):
-    """The ``|``-separated RequiredData entries no ``data_model`` extension covers."""
+    """The ``|``-separated RequiredData entries naming no ``data_model`` extension."""
     names = extension_manifest.names(data_model)
     return [
         entry
         for entry in filter(None, required_data.split("|"))
-        if not matches(entry, names)
+        if not matches(entry, names) <= set(names)
     ]
 
 

@@ -1070,6 +1070,68 @@ class TestTelemetryEtalonTemperature:
         assert name == "etalon_temperature_offset"
 
 
+class TestTelemetryTharLamp:
+    """Lit ThAr lamp's temperature and power, collapsed across Daily and Gold."""
+
+    def _make_l0(self, octagon="Th_daily", day="On", gold="Off", **cards):
+        l0 = KPF0()
+        l0.headers["INSTRUMENT_HEADER"].update(
+            {
+                "IMTYPE": "Arclamp",
+                "OCTAGON": octagon,
+                "THARDAY": day,
+                "THARGD": gold,
+                "PTHDAY": 1.6e-05,
+                "PTHAU": 2.0e-06,
+                "THDAYTON": 3474.5,
+                "THAUTON": 1465.7,
+                **cards,
+            }
+        )
+        l0.set_data(
+            "TELEMETRY",
+            Table(
+                {
+                    "keyword": ["kpfmet.TH_DAILY", "kpfmet.TH_GOLD"],
+                    "average": ["21.5", "18.8"],  # native TELEMETRY stores strings
+                }
+            ),
+        )
+        return l0
+
+    def test_daily_lamp(self):
+        results = Telemetry(self._make_l0()).thar_lamp()
+        assert results == {"THARTEMP": 21.5, "THARPWR": 1.6e-05, "THARON": 3474.5}
+
+    def test_gold_lamp(self):
+        l0 = self._make_l0(octagon="Th_gold", day="Off", gold="On")
+        assert Telemetry(l0).thar_lamp() == {
+            "THARTEMP": 18.8,
+            "THARPWR": 2.0e-06,
+            "THARON": 1465.7,
+        }
+
+    def test_imtype_names_lamp_off_arclamp(self):
+        l0 = self._make_l0(octagon="", IMTYPE="Th_daily")
+        assert Telemetry(l0).thar_lamp()["THARTEMP"] == 21.5
+
+    @pytest.mark.parametrize("day, gold", [("Off", "On"), ("On", "On"), ("Off", "Off")])
+    def test_power_status_mismatch_raises(self, day, gold):
+        with pytest.raises(ValueError, match="disagrees"):
+            Telemetry(self._make_l0(day=day, gold=gold)).thar_lamp()
+
+    def test_non_thar_lamp_raises(self):
+        with pytest.raises(ValueError, match="names no ThAr lamp"):
+            Telemetry(self._make_l0(octagon="U_daily")).thar_lamp()
+
+    def test_written_to_quality_control(self):
+        # ThAr frame: the only type thar_lamp is declared applicable to.
+        l0 = stamp_frame_type(self._make_l0(), "ThAr")
+        results = Telemetry(l0).run()
+        for key in ("THARTEMP", "THARPWR", "THARON"):
+            assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
+
+
 class TestTelemetryMoonRadialVelocity:
     """RV of sunlight reflected off the Moon."""
 
@@ -1430,7 +1492,7 @@ class TestDiagL2ZeroCounts:
 # ---------------------------------------------------------------------------
 
 
-class TestDiagL2Snr:
+class TestDiagL2BandSnr:
     def test_keys_written_when_flux_and_var_present(self):
         kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones, all VAR 0.25
         DiagL2(kpf2).run()
@@ -1474,7 +1536,82 @@ class TestDiagL2Snr:
     def test_raises_without_var(self):
         kpf2 = _make_kpf2_nan_pixels(var=None)
         with pytest.raises(IndexError):
-            DiagL2(kpf2).snr()
+            DiagL2(kpf2).band_snr()
+
+
+class TestDiagL2BandThroughput:
+    def _sky_with_first_column(self, value):
+        # GREEN SKY (carrying 452/548) gets ``value`` in column 0 of every order.
+        kpf2 = _make_kpf2_nan_pixels()
+        flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+        flux[:, 0] = value
+        kpf2.set_data("GREEN_SKY_FLUX", flux)
+        return kpf2
+
+    def test_keys_written(self):
+        kpf2 = _make_kpf2_nan_pixels()  # all FLUX ones
+        DiagL2(kpf2).run()
+        # Constant flux sits inside its own percentile range: ncol per fiber.
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        for wavelength in (452, 548, 652, 747, 852):
+            for code, expected in (("SC", 3 * _NCOL_TEST), ("SK", _NCOL_TEST)):
+                key = f"IFX{code}{wavelength}"
+                assert qc.get(key) == pytest.approx(expected), key
+            assert qc.get(f"IFXCL{wavelength}") == pytest.approx(_NCOL_TEST)
+
+    def test_outlier_above_99th_percentile_clipped(self):
+        out = DiagL2(self._sky_with_first_column(1000.0)).band_throughput()
+        assert out["IFXSK452"] == pytest.approx(_NCOL_TEST - 1)
+        assert out["IFXSK652"] == pytest.approx(_NCOL_TEST)  # RED untouched
+
+    def test_nan_treated_as_zero(self):
+        out = DiagL2(self._sky_with_first_column(np.nan)).band_throughput()
+        assert np.isfinite(out["IFXSK452"])
+        assert out["IFXSK452"] == pytest.approx(_NCOL_TEST - 1)
+
+    def test_summed_sci_nan_in_one_orderlet_keeps_the_others(self):
+        kpf2 = _make_kpf2_nan_pixels()
+        flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+        flux[:, 0] = np.nan
+        kpf2.set_data("GREEN_SCI1_FLUX", flux)
+        # Column 0 sums to 2 (SCI1 zeroed), others to 3; 2 falls below P1.
+        out = DiagL2(kpf2).band_throughput()
+        assert out["IFXSC452"] == pytest.approx(3 * (_NCOL_TEST - 1))
+
+
+class TestDiagL2BandContinuum:
+    def _green_sky(self, columns, value):
+        # GREEN SKY (carrying 452/548) gets ``value`` in ``columns`` of every order.
+        kpf2 = _make_kpf2_nan_pixels()
+        flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+        flux[:, columns] = value
+        kpf2.set_data("GREEN_SKY_FLUX", flux)
+        return kpf2
+
+    def test_keys_written_on_emission_frames(self):
+        kpf2 = stamp_frame_type(_make_kpf2_nan_pixels(), "ThAr")  # all FLUX ones
+        DiagL2(kpf2).run()
+        qc = kpf2.headers["QUALITY_CONTROL"]
+        for wavelength in (452, 548, 652, 747, 852):
+            for code, expected in (("SC", 3.0), ("SK", 1.0), ("CL", 1.0)):
+                assert qc.get(f"CFX{code}{wavelength}") == pytest.approx(expected)
+
+    def test_skipped_on_star_frames(self):
+        kpf2 = _make_kpf2_nan_pixels()  # stamped Star
+        DiagL2(kpf2).run()
+        assert "CFXSC452" not in kpf2.headers["QUALITY_CONTROL"]
+
+    def test_emission_line_does_not_move_continuum(self):
+        out = DiagL2(self._green_sky(slice(0, 1), 1000.0)).band_continuum()
+        assert out["CFXSK452"] == pytest.approx(1.0)
+
+    def test_nan_treated_as_zero(self):
+        # Half the pixels NaN -> zeros; median of four 0s and four 1s is 0.5.
+        out = DiagL2(
+            self._green_sky(slice(0, _NCOL_TEST // 2), np.nan)
+        ).band_continuum()
+        assert out["CFXSK452"] == pytest.approx(0.5)
+        assert out["CFXSK652"] == pytest.approx(1.0)  # RED untouched
 
 
 # ---------------------------------------------------------------------------
@@ -1513,8 +1650,22 @@ class TestDiagL2OrderFluxRatios:
         with pytest.raises(LookupError, match="452 nm"):
             DiagL2(kpf2).order_flux_ratios()
 
+    def test_emission_uses_integrated_flux(self):
+        # GREEN SCI2: one bright column (100) over a floor of 1. The continuum
+        # path takes the 95th percentile (65.35); the emission path sums the
+        # 1st-99th percentile pixels, clipping the 100 (7 against RED's 8).
+        def run(frame):
+            kpf2 = stamp_frame_type(_make_kpf2_nan_pixels(), frame)
+            flux = np.ones((NORDER_GREEN, _NCOL_TEST), dtype=np.float32)
+            flux[:, 0] = 100.0
+            kpf2.set_data("GREEN_SCI2_FLUX", flux)
+            return DiagL2(kpf2).order_flux_ratios()["FR452652"]
 
-class TestDiagL2OrderletFluxRatios:
+        assert run("Star") == pytest.approx(65.35)
+        assert run("ThAr") == pytest.approx(7 / 8)
+
+
+class TestDiagL2FiberFluxRatios:
     def test_keys_written_and_unity_when_uniform(self):
         # All fibers flux=1 (default) -> every median ratio == 1.0 with no scatter.
         kpf2 = _make_kpf2_nan_pixels()
@@ -1546,6 +1697,17 @@ class TestDiagL2OrderletFluxRatios:
             kpf2.set_data(f"{chip}_SCI1_FLUX", flux[:, ::-1].copy())
         DiagL2(kpf2).run()
         assert kpf2.headers["QUALITY_CONTROL"].get("FR12M652") == pytest.approx(1.0)
+
+    def test_emission_integrated_ratio_and_propagated_uncertainty(self):
+        # SCI1 flux=2 over SCI2's 1, VAR 0.25 everywhere, 8 pixels per order:
+        # F=16, S=8, sum var 2 each. U = R * sqrt(2/F^2 + 2/S^2).
+        kpf2 = stamp_frame_type(_make_kpf2_nan_pixels(), "ThAr")
+        set_fiber_arrays(kpf2, "FLUX", 2.0, fibers=("SCI1",), ncol=_NCOL_TEST)
+        out = DiagL2(kpf2).fiber_flux_ratios()
+        assert out["FR12M652"] == pytest.approx(2.0)
+        assert out["FR12U652"] == pytest.approx(2 * np.sqrt(2 / 16**2 + 2 / 8**2))
+        assert out["FR32M652"] == pytest.approx(1.0)
+        assert out["FR32U652"] == pytest.approx(0.25)
 
 
 # ---------------------------------------------------------------------------
@@ -1668,9 +1830,9 @@ class TestDiagnosticsApplicability:
         for row in _applicability.table(diag_cls.__name__).itertuples(index=False):
             for entry in row.Keywords.split("|"):
                 covered = _applicability.matches(entry, registered)
-                assert covered, (
-                    f"{row.Method} declares {entry!r}, which covers no keyword "
-                    f"the registry lists as populated by {diag_cls.__name__}"
+                assert covered <= registered, (
+                    f"{row.Method} declares {sorted(covered - registered)}, which "
+                    f"the registry does not list as populated by {diag_cls.__name__}"
                 )
                 for keyword in covered:
                     assert keyword not in owner, (
@@ -1692,6 +1854,16 @@ class TestDiagnosticsApplicability:
             assert not unknown, (
                 f"{row.Method} requires {unknown}, no {diag_cls.LEVEL} extension"
             )
+
+    @pytest.mark.parametrize("frame", _applicability.FRAME_TYPES)
+    def test_is_emission(self, frame):
+        expected = frame in ("LFC", "ThAr", "UNe", "Etalon")
+        assert applicability.is_emission(stamp_frame_type(KPF2(), frame)) is expected
+
+    @pytest.mark.parametrize("frame", _applicability.FRAME_TYPES)
+    def test_is_calibration(self, frame):
+        expected = frame not in ("Star", "Sun")
+        assert applicability.is_calibration(stamp_frame_type(KPF2(), frame)) is expected
 
     def test_calibration_frame_skips_guider_metrics(self, tmp_path, caplog):
         # The point of the layer: a Bias has no guider exposure, so the metrics

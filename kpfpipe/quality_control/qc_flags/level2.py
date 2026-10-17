@@ -3,6 +3,7 @@
 import numpy as np
 
 from kpfpipe import CHIPS, DETECTOR, FIBERS
+from kpfpipe.quality_control.applicability import applicability
 from kpfpipe.quality_control.qc_flags.base import QC
 
 
@@ -22,6 +23,9 @@ class QCL2(QC):
         least one finite value: an orderlet that never reached the detector is
         NaN-filled by extraction, which is present but not populated.
 
+        Calibration frames skip barycentric correction, so the ancillaries are
+        required of science frames only.
+
         BLAZE and ORDER_TABLE are EPRV-required but have no producer in the
         science chain, so they are out of scope until one exists.
         """
@@ -35,6 +39,8 @@ class QCL2(QC):
                         return False
                     if not np.any(np.isfinite(arr)):
                         return False
+        if applicability.is_calibration(self.kpf_obj):
+            return True
         per_order = (DETECTOR["numorder"],)
         for ext in ("BJD_TDB", "BARYCORR_KMS", "BARYCORR_Z"):
             arr = self.kpf_obj.data.get(ext)
@@ -98,7 +104,7 @@ class QCL2(QC):
     def science_snr(self):
         """Summed-SCI SNR is finite and greater than 1 at all five wavelengths.
 
-        Reads the SNRSC* metrics written by ``DiagL2.snr`` (run DiagL2 before
+        Reads the SNRSC* metrics written by ``DiagL2.band_snr`` (run DiagL2 before
         QCL2, the same Diagnostics -> QC ordering every metric-backed check
         relies on). Guards against a silently failed extraction. The SKY and CAL
         metrics are excluded: neither carries starlight, so neither has a floor.

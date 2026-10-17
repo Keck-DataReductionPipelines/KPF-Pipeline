@@ -14,8 +14,14 @@ from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.image_processing import ImageProcessing
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
-from kpfpipe.quality_control.checkpoints import CheckpointL0
-from kpfpipe.quality_control.qc_flags import QCL0
+from kpfpipe.quality_control.diagnostics import (
+    DiagL0,
+    DiagL1,
+    ExposureMeter,
+    Guider,
+    Telemetry,
+)
+from kpfpipe.quality_control.qc_flags import QCL0, QCL1
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers, interpolate_bad_pixels
 
@@ -66,7 +72,7 @@ class BaseMasterModule:
     # extensions in ``_build_ml1_obj``. A bias master is a stacked count image
     # (electrons); a dark is normalized to a rate (electrons/sec); a flat is the
     # total electrons summed over the stack (electrons). Unknown types get no BUNIT.
-    _BUNIT_BY_TYPE = {
+    _BUNIT_BY_MASTER_TYPE = {
         "bias": "electrons",
         "dark": "electrons/sec",
         "flat": "electrons",
@@ -78,6 +84,14 @@ class BaseMasterModule:
     # bare KeyError rather than reject the frame.
     _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
 
+    # The standardized OBSTYPE a frame must carry to enter a stack, by master_type.
+    _OBSTYPE_BY_MASTER_TYPE = {
+        "bias": "Bias",
+        "dark": "Dark",
+        "flat": "Flat",
+        "thar": "ThAr",
+    }
+
     # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
     # the stats methods: a frame whose exposure is <= this counts as zero
     # (a bias, stacked with T=1), else as a real exposure (T=exptime).
@@ -87,6 +101,10 @@ class BaseMasterModule:
         if l0_file_list != sorted(l0_file_list):
             raise ValueError("l0_file_list must be sorted in ascending order")
         self.l0_file_list = l0_file_list
+
+        # The master type being built (the MASTYPE token: bias/dark/flat/thar);
+        # set by each subclass's __init__, and checked by ``_load_frame``.
+        self.master_type = None
 
         if config is None:
             params = {}
@@ -194,8 +212,9 @@ class BaseMasterModule:
         """
         Load an L0 file and assemble it to an L1 object; None on failure.
 
-        Failure means the frame could not be read/standardized/assembled or failed
-        one of ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause (with
+        Failure means the frame could not be read/standardized/assembled, its
+        OBSTYPE is not the one ``self.master_type`` expects, or it failed one of
+        ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause (with
         traceback for errors) and callers detect it via ``is None``.
         With ``cache=True`` the assembled L1 is retained for reuse (the streaming
         stats path caches its approximation-pass frames so the exact pass reuses
@@ -204,10 +223,20 @@ class BaseMasterModule:
         if fn in self._l1_obj_cache:
             return self._l1_obj_cache[fn]
 
+        # Outside the try: an unset or unknown master_type is a module bug, not a
+        # bad frame, so it raises rather than rejecting every frame.
+        expected = self._OBSTYPE_BY_MASTER_TYPE[self.master_type]
+
         try:
             l0_obj = KPF0.from_fits(fn, standardize=True)
 
-            for diagnostics in CheckpointL0.DIAGNOSTICS:
+            obstype = l0_obj.headers["PRIMARY"]["OBSTYPE"]
+            if obstype != expected:
+                raise ValueError(
+                    f"OBSTYPE {obstype!r} is not a {self.master_type} frame"
+                )
+
+            for diagnostics in (DiagL0, Guider, ExposureMeter, Telemetry):
                 diagnostics(l0_obj).run()
             qc = QCL0(l0_obj).run()
             failed = [kw for kw in self._REQUIRED_L0_QC_FLAGS if not qc[kw][0]]
@@ -228,22 +257,23 @@ class BaseMasterModule:
 
     def _process_frame(self, l1_obj):
         """
-        Apply this module's active calibrations to an assembled frame (in place).
+        Apply this module's active calibrations to an assembled frame (in place),
+        then run DiagL1 and QCL1 on it.
 
         Subtracts active masters via ImageProcessing (reusing the science-path
         modules). ``True`` calibrations are associated first (nearest-in-time
         master written to PRIMARY); explicit filepath/KPFMasterL1 overrides pass
-        straight through. No active calibrations → frame returned unchanged.
+        straight through. No active calibrations → frame left uncalibrated.
         None on failure (a warning with traceback names the cause).
         """
         calibrations = self._active_calibrations
         active = [name for name, value in calibrations.items() if value]
-        if not active:
-            return l1_obj
 
         # Skip frames already calibrated (e.g. a cached frame revisited by the
         # streaming pass) so calibrations are never subtracted twice.
-        if all(ImageProcessing.calibration_applied(l1_obj, name) for name in active):
+        if active and all(
+            ImageProcessing.calibration_applied(l1_obj, name) for name in active
+        ):
             return l1_obj
 
         # Only header-driven (True) calibrations need association; explicit
@@ -261,15 +291,20 @@ class BaseMasterModule:
 
             # Load (and cache) each active master here, then hand the in-memory
             # masters to ImageProcessing so a shared master is read once per stack.
-            image_processing = ImageProcessing(l1_obj)
-            l1_obj = image_processing.perform(
-                bias=self._load_calibration(l1_obj, "bias"),
-                dark=self._load_calibration(l1_obj, "dark"),
-                flat=self._load_calibration(l1_obj, "flat"),
-            )
+            if active:
+                image_processing = ImageProcessing(l1_obj)
+                l1_obj = image_processing.perform(
+                    bias=self._load_calibration(l1_obj, "bias"),
+                    dark=self._load_calibration(l1_obj, "dark"),
+                    flat=self._load_calibration(l1_obj, "flat"),
+                )
         except (OSError, ValueError, KeyError, TypeError) as e:
             logger.warning("Failed to process %s: %s", l1_obj.obs_id, e, exc_info=True)
             return None
+
+        # Not yet a gate: the flags ride along on QUALITY_CONTROL.
+        DiagL1(l1_obj).run()
+        QCL1(l1_obj).run()
 
         return l1_obj
 
@@ -288,15 +323,17 @@ class BaseMasterModule:
             logger.warning("Failed to extract %s: %s", l1_obj.obs_id, e, exc_info=True)
             return None
 
-    def _write_frame(self, obj, cal_type, *, output_dir, overwrite=False):
+    def _write_frame(self, obj, *, output_dir, overwrite=False):
         """
         Write one processed stack frame to ``output_dir`` as
-        ``{obs_id}_{cal_type}_L{level}.fits`` (e.g. ``..._thar_L2.fits``).
+        ``{obs_id}_{master_type}_L{level}.fits`` (e.g. ``..._thar_L2.fits``).
 
         Callers own the directory (typically the ``cal_stack`` tree). Refuses to
         clobber an existing file unless ``overwrite`` is True.
         """
-        path = os.path.join(output_dir, f"{obj.obs_id}_{cal_type}_L{obj.level}.fits")
+        path = os.path.join(
+            output_dir, f"{obj.obs_id}_{self.master_type}_L{obj.level}.fits"
+        )
         if not overwrite and os.path.exists(path):
             raise FileExistsError(
                 f"{path} already exists; pass overwrite=True to replace it"
@@ -306,7 +343,7 @@ class BaseMasterModule:
         # convention warning. to_fits creates the parent directory as needed.
         obj.check_filename_convention = lambda _: True
         obj.to_fits(path)
-        logger.info("wrote %s frame to %s", cal_type, path)
+        logger.info("wrote %s frame to %s", self.master_type, path)
 
     # ------------------------------------------------------------------
     # Private helpers for frame stacking.
@@ -590,18 +627,18 @@ class BaseMasterModule:
 
         return exact_stats, zero_exptime
 
-    def _clean_l1_arrays(self, l1_arrays, sigma, cal_type=None):
+    def _clean_l1_arrays(self, l1_arrays, sigma):
         """
         Interpolate bad pixels and recompute the per-chip bad-pixel mask
         (True = good) on the stacked '{chip}_IMG/_SNR/_MASK' arrays.
 
-        ``cal_type`` selects the final outlier-flagging mode, since the detector is
-        illuminated only for flats (in the assembled image dispersion runs along
-        axis=1, cross-dispersion along axis=0):
+        ``self.master_type`` selects the final outlier-flagging mode, since the
+        detector is illuminated only for flats (in the assembled image dispersion
+        runs along axis=1, cross-dispersion along axis=0):
 
         - 'bias' : per-column median (axis=0) -- judges each pixel against its own
           cross-dispersion column, removing column-wise bias structure.
-        - 'dark'/None : global median (no illumination/column structure to preserve).
+        - 'dark' : global median (no illumination/column structure to preserve).
         - 'flat' : residual deviation from the smooth illumination trend along
           dispersion (axis=1), tolerating the blaze while catching departures.
         """
@@ -612,17 +649,18 @@ class BaseMasterModule:
 
             img_fixed = interpolate_bad_pixels(img, mask)
 
-            if cal_type == "bias":
+            if self.master_type == "bias":
                 out = flag_outliers(img_fixed, sigma, axis=0, method="median")
-            elif cal_type == "flat":
+            elif self.master_type == "flat":
                 out = flag_outliers(
                     img_fixed, sigma, axis=1, kernel_size=32, method="trend"
                 )
-            elif cal_type in ("dark", None):
+            elif self.master_type == "dark":
                 out = flag_outliers(img_fixed, sigma, method="median")
             else:
                 raise ValueError(
-                    f"unknown cal_type {cal_type!r}; expected 'bias', 'dark', or 'flat'"
+                    f"unknown master_type {self.master_type!r}; "
+                    "expected 'bias', 'dark', or 'flat'"
                 )
 
             bad = (img == 0) | (snr <= 0)
@@ -638,15 +676,15 @@ class BaseMasterModule:
     # Private helpers for building outputs and tracking results.
     # ------------------------------------------------------------------
 
-    def _build_ml1_obj(self, l1_arrays, *, master_type):
+    def _build_ml1_obj(self, l1_arrays):
         """
         Assemble a KPFMasterL1 from finalized per-chip '{chip}_IMG/_SNR/_MASK'
-        arrays. ``master_type`` ('bias'/'dark'/'flat') drives the WMKO filename
+        arrays. ``self.master_type`` ('bias'/'dark'/'flat') drives the WMKO filename
         token, the receipt key (``master_{master_type}``), and the BUNIT units
-        (``_BUNIT_BY_TYPE``). INPUT_FILES records ``self._stacked_files``.
+        (``_BUNIT_BY_MASTER_TYPE``). INPUT_FILES records ``self._stacked_files``.
         """
-        receipt_key = f"master_{master_type}"
-        bunit = self._BUNIT_BY_TYPE.get(master_type)
+        receipt_key = f"master_{self.master_type}"
+        bunit = self._BUNIT_BY_MASTER_TYPE.get(self.master_type)
 
         ml1_obj = KPFMasterL1()
 
@@ -658,7 +696,7 @@ class BaseMasterModule:
             if bunit is not None:
                 ml1_obj.headers[f"{chip}_IMG"]["BUNIT"] = bunit
 
-        ml1_obj.set_input_files(self._stacked_files, master_type)
+        ml1_obj.set_input_files(self._stacked_files, self.master_type)
         ml1_obj.receipt_add_entry(receipt_key, "", "PASS")
 
         return ml1_obj
@@ -687,7 +725,6 @@ class BaseMasterModule:
         l0_file_list=None,
         nstream=6,
         sigma=None,
-        cal_type=None,
         max_fail_fraction=0.2,
         max_fail_number=2,
     ):
@@ -704,9 +741,6 @@ class BaseMasterModule:
             Defaults to 6.
         sigma : float, optional
             Sigma threshold for frame-to-frame outlier rejection.
-        cal_type : {'bias', 'dark', 'flat', None}, optional
-            Forwarded to ``_clean_l1_arrays`` to select the outlier-flagging
-            mode. Defaults to the conservative global-median mode.
         max_fail_fraction : float, optional
             Maximum fraction of frames allowed to fail loading. Defaults to 0.2.
         max_fail_number : int, optional
@@ -774,7 +808,7 @@ class BaseMasterModule:
             good &= exptime_sum > 0
 
             img = np.zeros_like(counts)
-            if cal_type == "flat":
+            if self.master_type == "flat":
                 # Master flat: total electrons summed over the stack.
                 img[good] = counts[good]
             else:
@@ -793,7 +827,7 @@ class BaseMasterModule:
             l1_arrays[f"{chip}_SNR"] = snr.astype(np.float32)
             l1_arrays[f"{chip}_MASK"] = good
 
-        return self._clean_l1_arrays(l1_arrays, sigma, cal_type=cal_type)
+        return self._clean_l1_arrays(l1_arrays, sigma)
 
     def save_master(self, level, path, *, overwrite=False):
         """

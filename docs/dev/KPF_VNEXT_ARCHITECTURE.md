@@ -356,11 +356,15 @@ onto L0's QUALITY_CONTROL, which `to_kpf1` then propagates downstream so the L1/
 products carry the full append-only QC history (e.g. `DATTIMOK`, the raw DATE-BEG/MID/END
 timing-consistency flag, is an L0 check whose result rides forward this way).
 
+Checkpoints are a science-recipe stage. The masters modules process calibration frames differently
+and drop a bad frame rather than halt, so they run each level's Diagnostics and QC directly on every
+input frame and never call a Checkpoint.
+
 This is unlike v2.12, which had one big `DiagnosticsFramework` primitive with a conditional dispatch tree over many functions and shared backend state with `AnalyzeL0/2D/L1/L2` classes. v3 uses per-level classes with method-attribute registration (`_diag_name` / `_qc_key` / `_checkpoint_name`) and no shared state.
 
 ### Diagnostics
 
-`kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword`, which routes each to its registry home — most land on QUALITY_CONTROL, but a metric registered as an EPRV PRIMARY keyword goes to PRIMARY (`DiagL2.snr` writes `SNRSC*` to QUALITY_CONTROL and mirrors the summed-SCI values to `EXSNR1-5`/`EXSNRW1-5` on PRIMARY). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
+`kpfpipe/quality_control/diagnostics/` — computes scalar/array metrics from finished data products and writes them via `set_keyword`, which routes each to its registry home — most land on QUALITY_CONTROL, but a metric registered as an EPRV PRIMARY keyword goes to PRIMARY (`DiagL2.band_snr` writes `SNRSC*` to QUALITY_CONTROL and mirrors the summed-SCI values to `EXSNR1-5`/`EXSNRW1-5` on PRIMARY). Per-level classes (`DiagL0`/`DiagL1`/`DiagL2`/`DiagL4`) mirror the QC structure. Examples: per-fiber NaN counts in extracted spectra, zero-flux fraction.
 
 A level whose metrics span several unrelated extensions splits them into per-extension classes beside its `DiagL{n}`, each a `Diagnostics` subclass carrying that level's `LEVEL`. L0 has three: `Guider` (`GUIDER_AVG`, `GUIDER_CUBE_ORIGINS`, plus the `SEEING` and `AIRMASS` cards the guiding is judged against), `ExposureMeter` (`EXPMETER_SCI`, `EXPMETER_SKY`) and `Telemetry` (the `TELEMETRY` table, the environment cards on `INSTRUMENT_HEADER`, and the solar/lunar geometry), leaving `DiagL0` the raw amplifier images and `CATALOG_RECORD`. The recipe still drives them all through `CheckpointL0(l0).run()`.
 
