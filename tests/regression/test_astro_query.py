@@ -344,8 +344,8 @@ class TestReadWmkoHeader:
     def _l0_targ(**targ):
         l0 = KPF0()
         l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
+        l0.headers["PRIMARY"]["OBJECT"] = "testtarget"
         p = l0.headers["INSTRUMENT_HEADER"]
-        p["OBJECT"] = "testtarget"
         for key, value in targ.items():
             p[key] = value
         return l0
@@ -524,7 +524,8 @@ def _l0_for_query(**primary):
     l0 = KPF0()
     l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
     for key, value in primary.items():
-        l0.headers["INSTRUMENT_HEADER"][key] = value
+        header = "PRIMARY" if key == "OBJECT" else "INSTRUMENT_HEADER"
+        l0.headers[header][key] = value
     return l0
 
 
@@ -597,6 +598,11 @@ class TestExternalQueries:
         )
         assert AstroQuery(_l0_for_query())._simbad_resolvable_name() is None
         assert AstroQuery(_l0_for_query(OBJECT=""))._simbad_resolvable_name() is None
+        # HeaderParser marks an untrusted native OBJECT Unknown; SIMBAD must not
+        # be queried with it, nor with the native card behind it.
+        l0 = _l0_for_query(OBJECT="Unknown")
+        l0.headers["INSTRUMENT_HEADER"]["OBJECT"] = "10700"
+        assert AstroQuery(l0)._simbad_resolvable_name() is None
 
     @pytest.mark.parametrize(
         ("main_id", "ids", "expected"),
@@ -766,7 +772,7 @@ class TestExternalQueries:
         aq = AstroQuery(_l0_for_query())
         with caplog.at_level(logging.WARNING):
             assert aq.query_simbad() is None
-        assert "no OBJECT name" in caplog.text
+        assert "no usable OBJECT name" in caplog.text
 
     def test_query_simbad_lookup_failure_returns_none(self, caplog):
         # Retried like the Gaia failure above; sleep is patched for the same reason.

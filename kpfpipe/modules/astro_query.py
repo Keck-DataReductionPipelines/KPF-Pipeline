@@ -213,16 +213,14 @@ class AstroQuery:
         )
 
     def _simbad_resolvable_name(self):
-        """SIMBAD-resolvable name from L0 PRIMARY OBJECT, or None if absent.
+        """SIMBAD-resolvable name from the sanitized L0 PRIMARY OBJECT, or None if
+        absent or ``Unknown`` (HeaderParser could not trust the native OBJECT).
 
         KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
         SIMBAD resolves only with an 'HD ' prefix; named targets pass through.
         """
-        obj = self.l0_obj.headers["INSTRUMENT_HEADER"].get("OBJECT")
-        if obj is None:
-            return None
-        obj = str(obj).strip()
-        if not obj:
+        obj = str(self.l0_obj.headers["PRIMARY"].get("OBJECT") or "").strip()
+        if obj in ("", "Unknown"):
             return None
         return f"HD {obj}" if obj.isdigit() else obj
 
@@ -564,7 +562,7 @@ class AstroQuery:
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
-        Returns None (warned, not raised) when L0 has no OBJECT name, or when the
+        Returns None (warned, not raised) when L0 has no usable OBJECT name, or when the
         lookup fails after the ``retry_request`` retries or resolves nothing. Raises
         ValueError if the result's column units differ from the assumed schema: the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value mas,
@@ -574,7 +572,9 @@ class AstroQuery:
         name = self._simbad_resolvable_name()
         if name is None:
             logger.warning(
-                "no OBJECT name on L0 PRIMARY; SIMBAD astrometry unavailable"
+                "no usable OBJECT name on L0 PRIMARY (%r); SIMBAD astrometry "
+                "unavailable",
+                self.l0_obj.headers["PRIMARY"].get("OBJECT"),
             )
             return None
         logger.info("querying SIMBAD for %r", name)
@@ -686,7 +686,7 @@ class AstroQuery:
                 "G-J",
             )
             record = {
-                "object": primary.get("OBJECT"),
+                "object": self.l0_obj.headers["PRIMARY"].get("OBJECT"),
                 "catalog": "WMKO TCS/DCS",
                 "ra": ra_str,
                 "dec": dec_str,
