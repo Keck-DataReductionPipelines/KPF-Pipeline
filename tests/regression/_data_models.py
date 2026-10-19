@@ -13,13 +13,16 @@ a stated reason (CCF clip margins, PNG size checks, overscan geometry), so width
 is always an explicit argument.
 """
 
+import contextlib
 import os
 
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
+from astropy.time import Time
 
 from kpfpipe import CHIPS, DETECTOR, FIBERS, SCI_FIBERS
+from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
 
 # --- detector-derived constants --------------------------------------------
 
@@ -108,10 +111,15 @@ def _primary_hdu(path, primary_cards):
     """PRIMARY with the cards every L0 needs; ``primary_cards`` overrides.
 
     OFNAME defaults to the file's own basename, which is what keeps the write
-    from tripping ``check_filename_convention``. A card set to None is dropped,
-    so a caller can build a frame that is deliberately missing one.
+    from tripping ``check_filename_convention``. MJD-OBS defaults to the
+    filename time, which ``KPF0._timestamp`` checks it against. A card set to
+    None is dropped, so a caller can build a frame that is deliberately missing
+    one.
     """
     cards = dict(_DEFAULT_PRIMARY, OFNAME=os.path.basename(str(path)))
+    with contextlib.suppress(ValueError):
+        start = kpf_timestamp_to_datetime(get_timestamp(str(path)))
+        cards["MJD-OBS"] = Time(start).mjd
     cards.update(primary_cards or {})
     primary = fits.PrimaryHDU()
     for key, value in cards.items():
