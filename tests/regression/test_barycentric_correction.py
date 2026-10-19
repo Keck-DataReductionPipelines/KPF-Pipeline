@@ -37,7 +37,11 @@ NCOL = 50  # reduced column count for speed
 # exactly brackets the readings unless a test says otherwise.
 _T0 = "2024-01-01T"
 _WAVE_COLS = ["5000", "5100", "5200", "5300"]  # 100 Angstrom spacing = dispersion
-_FLUX_VALUE = 100.0  # uniform ADU per reading
+_FLUX_VALUE = 100.0  # mean ADU per reading
+# Reading-to-reading jitter so the module's noise estimate is nonzero. On three
+# equally spaced readings, [+1, -2, +1] leaves each channel's total and
+# flux-weighted midpoint unchanged.
+_FLUX_JITTER = np.array([1.0, -2.0, 1.0])
 
 # SCI2 catalog cards as KPF0.to_kpf1 writes them: ICRS, RA/Dec sexagesimal (hourangle
 # / deg), PM arcsec/yr, parallax mas, epoch Julian years. RA 180 deg, Dec 0, 100 pc.
@@ -72,7 +76,7 @@ def _make_expmeter_table():
         "Date-End": [f"{_T0}00:01:00.000", f"{_T0}00:03:00.000", f"{_T0}00:05:00.000"],
     }
     for wc in _WAVE_COLS:
-        data[wc] = np.full(3, _FLUX_VALUE)
+        data[wc] = _FLUX_VALUE + _FLUX_JITTER
     return _expmeter_table(data)
 
 
@@ -267,7 +271,8 @@ class TestGetNormalizedFlux:
     def test_gain_and_dispersion_applied(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
         _, f = bc._get_normalized_flux()
-        np.testing.assert_allclose(f, _FLUX_VALUE * 1.48424 / 100.0, rtol=1e-5)
+        expected = (_FLUX_VALUE + _FLUX_JITTER)[:, None] * 1.48424 / 100.0
+        np.testing.assert_allclose(f, np.broadcast_to(expected, f.shape), rtol=1e-5)
 
 
 # ---------------------------------------------------------------------------
@@ -370,11 +375,11 @@ class TestFluxWeightedMidpointExpmeter:
     def test_small_negative_flux_preserved(self, synthetic_kpf2, monkeypatch):
         # Small negatives are background-subtraction noise near zero flux;
         # flooring them to zero would bias the flux-weighted midpoint. Only a
-        # nonpositive channel *total* raises.
+        # nonpositive or low-SNR channel *total* flags the channel.
         def mock_flux(self):
             w = np.array([float(c) for c in _WAVE_COLS])
-            f = np.full((3, len(_WAVE_COLS)), 100.0)
-            f[0, 0] = -20.0  # channel total stays positive (+180)
+            f = np.tile(100.0 + 5.0 * _FLUX_JITTER[:, None], (1, len(_WAVE_COLS)))
+            f[:, 0] = [-20.0, 100.0, 100.0]  # channel total stays positive (+180)
             return w, f
 
         monkeypatch.setattr(BarycentricCorrection, "_get_normalized_flux", mock_flux)
@@ -408,8 +413,8 @@ class TestFluxWeightedMidpointExpmeter:
         # separates the actual result from the floored one unambiguously.
         assert abs(actual_s - floored_s) > 1.0
 
-    def test_zero_flux_channel_raises(self, synthetic_kpf2):
-        # Zero flux across all readings makes the midpoint 0/0; fail loudly.
+    def test_too_many_bad_channels_raises(self, synthetic_kpf2):
+        # One zero-flux channel of two leaves 50% good, below the 90% floor.
         data = {
             "Date-Beg": [
                 "2024-01-01T00:00:00.000",
@@ -421,18 +426,48 @@ class TestFluxWeightedMidpointExpmeter:
                 "2024-01-01T00:03:00.000",
                 "2024-01-01T00:05:00.000",
             ],
-            "5000": [100.0, 100.0, 100.0],
+            "5000": _FLUX_VALUE + _FLUX_JITTER,
             "5100": [0.0, 0.0, 0.0],
         }
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         bc = BarycentricCorrection(synthetic_kpf2)
-        with pytest.raises(ValueError, match="total flux"):
+        with pytest.raises(ValueError, match="1 of 2 exposure meter channels"):
             bc.compute_flux_weighted_midpoint_times(
                 output="expmeter",
                 interpolate=False,
                 extrapolate=False,
                 fix_outliers=False,
             )
+
+    def test_bad_channel_interpolated_from_neighbors(self, synthetic_kpf2):
+        # One zero-flux channel of ten (90% good) is filled from its wavelength
+        # neighbors instead of raising. Neighbors bracket it with distinct times.
+        data = {
+            "Date-Beg": [
+                "2024-01-01T00:00:00.000",
+                "2024-01-01T00:02:00.000",
+                "2024-01-01T00:04:00.000",
+            ],
+            "Date-End": [
+                "2024-01-01T00:01:00.000",
+                "2024-01-01T00:03:00.000",
+                "2024-01-01T00:05:00.000",
+            ],
+        }
+        for i in range(10):
+            data[str(5000 + 100 * i)] = [1000.0 - 50.0 * i, 500.0, 500.0 + 50.0 * i]
+        data["5500"] = [0.0, 0.0, 0.0]
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
+        bc = BarycentricCorrection(synthetic_kpf2)
+        w, t = bc.compute_flux_weighted_midpoint_times(
+            output="expmeter",
+            interpolate=False,
+            extrapolate=False,
+            fix_outliers=False,
+        )
+        i = int(np.flatnonzero(w == 5500.0)[0])
+        neighbors = t.jd[(w == 5400.0) | (w == 5600.0)]
+        np.testing.assert_allclose(t.jd[i], neighbors.mean(), rtol=0, atol=1e-9)
 
     def test_interpolate_shifts_midpoint_with_front_weighted_flux(self, synthetic_kpf2):
         # Front-weighted flux makes interpolation add a bright sample at the
@@ -448,8 +483,8 @@ class TestFluxWeightedMidpointExpmeter:
                 "2024-01-01T00:03:00.000",
                 "2024-01-01T00:05:00.000",
             ],
-            "5000": [1000.0, 1.0, 1.0],
-            "5100": [1000.0, 1.0, 1.0],
+            "5000": [1000.0, 500.0, 500.0],
+            "5100": [1000.0, 500.0, 500.0],
         }
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         bc = BarycentricCorrection(synthetic_kpf2)
@@ -487,8 +522,8 @@ class TestFluxWeightedMidpointExpmeter:
                 "2024-01-01T00:02:50.000",
                 "2024-01-01T00:03:20.000",
             ],
-            "5000": [1000.0, 1.0, 1.0],
-            "5100": [1000.0, 1.0, 1.0],
+            "5000": [1000.0, 500.0, 500.0],
+            "5100": [1000.0, 500.0, 500.0],
         }
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         # Shutter open 00:00:00 to 00:05:00; readings only 00:02:00 to 00:03:20.
@@ -551,8 +586,8 @@ class TestFluxWeightedMidpointOrders:
                 "2024-01-01T00:03:00.000",
                 "2024-01-01T00:05:00.000",
             ],
-            "5000": [1000.0, 1.0, 1.0],
-            "5100": [1.0, 1.0, 1000.0],
+            "5000": [1000.0, 500.0, 500.0],
+            "5100": [500.0, 500.0, 1000.0],
         }
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
 
@@ -611,8 +646,8 @@ class TestFluxWeightedMidpointCcds:
                 "2024-01-01T00:03:00.000",
                 "2024-01-01T00:05:00.000",
             ],
-            "5000": [1000.0, 1.0, 1.0],
-            "5300": [1.0, 1.0, 1000.0],
+            "5000": [1000.0, 500.0, 500.0],
+            "5300": [500.0, 500.0, 1000.0],
         }
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
 
@@ -674,8 +709,8 @@ class TestFluxWeightedMidpointCcds:
                 "2024-01-01T00:03:00.000",
                 "2024-01-01T00:05:00.000",
             ],
-            "5000": [1000.0, 1.0, 1.0],
-            "5100": [1.0, 1.0, 1000.0],
+            "5000": [1000.0, 500.0, 500.0],
+            "5100": [500.0, 500.0, 1000.0],
         }
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
 

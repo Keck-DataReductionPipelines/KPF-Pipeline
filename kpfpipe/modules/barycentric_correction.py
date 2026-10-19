@@ -272,6 +272,11 @@ class BarycentricCorrection:
         if fix_outliers:
             f = self._fix_expmeter_outliers(f)
 
+        # Per-channel SNR from the measured readings only (gap rows are model
+        # estimates); per-pixel noise from successive-reading differences.
+        f_noise = mad_std(np.diff(f, axis=0)) / np.sqrt(2)
+        channel_snr = np.sum(f, axis=0) / (f_noise * np.sqrt(len(f)))
+
         # Cache boundary readings; f[0] and f[-1] get clobbered by later vstacks.
         f_first_reading = f[0].copy()
         f_last_reading = f[-1].copy()
@@ -302,14 +307,35 @@ class BarycentricCorrection:
                 t = Time(np.concatenate([t.jd, [t_ext.jd]]), format="jd", scale="utc")
                 f = np.vstack([f, f_ext])
 
-        flux_sum = np.sum(f, axis=0)
-        if np.any(flux_sum <= 0):
-            raise ValueError(
-                "exposure meter channel with non-positive total flux; "
-                "cannot compute flux-weighted midpoint"
+        channel_tot = np.sum(f, axis=0)
+        low_snr_channels = channel_snr < 2
+        negative_channels = channel_tot <= 0
+
+        if np.any(low_snr_channels):
+            logger.info(
+                "%d exposure meter channels with SNR < 2 identified, "
+                "interpolating over adjacent channels",
+                np.sum(low_snr_channels),
             )
+
+        if np.any(negative_channels):
+            logger.info(
+                "%d exposure meter channels with negative flux counts identified, "
+                "interpolating over adjacent channels",
+                np.sum(negative_channels),
+            )
+
+        good = ~(low_snr_channels | negative_channels)
+        if np.sum(good) / len(good) < 0.9:
+            raise ValueError(
+                f"{np.sum(~good)} of {len(good)} exposure meter channels flagged "
+                "as bad; cannot reliably compute flux-weighted midpoint"
+            )
+
+        jd_good = np.sum(t.jd[:, None] * f[:, good], axis=0) / channel_tot[good]
+        order = np.argsort(w_em[good])
         t_em = Time(
-            np.sum(t.jd[:, None] * f, axis=0) / flux_sum,
+            np.interp(w_em, w_em[good][order], jd_good[order]),
             format="jd",
             scale="utc",
         )
