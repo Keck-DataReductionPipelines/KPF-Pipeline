@@ -28,8 +28,8 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import read_token_file
-from kpfpipe.utils.kpf import get_datecode, is_obs_id
+from kpfpipe.utils.io import FileHandler, read_token_file
+from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
     cache_parser,
@@ -186,6 +186,30 @@ def main(argv=None):
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
+    # Gate junk and single-CCD frames out of the science recipe.
+    status = {}
+    for dc in datecodes:
+        mini_db = FileHandler({"KPF_DATA_INPUT": data_input}).build_mini_database(
+            dc, cache="r"
+        )
+        both_ccds = mini_db[["GREEN", "RED"]].eq(True).all(axis=1)
+        for fn, junk, both in zip(
+            mini_db["FILENAME"], mini_db["ISJUNK"].astype(bool), both_ccds, strict=True
+        ):
+            status[get_obs_id(fn)] = (junk, both)
+    kept = []
+    for o in obs_ids:
+        junk, both = status.get(o, (False, True))
+        if junk:
+            logger.info("skipping %s: junk frame", o)
+        elif not both:
+            logger.warning(
+                "skipping %s: DRP does not yet support single-CCD exposures", o
+            )
+        else:
+            kept.append(o)
+    obs_ids = kept
+
     tasks = [
         _cli_task(o, forward, config=args.config, recipe=args.recipe) for o in obs_ids
     ]
@@ -200,7 +224,12 @@ def main(argv=None):
     )
 
     reduced = len(obs_ids) - len(failed)
-    logger.info("done: reduced %d/%d frame(s)", reduced, len(obs_ids))
+    logger.info(
+        "done: reduced %d/%d frame(s), %d skipped",
+        reduced,
+        len(obs_ids),
+        len(args.obs_ids) - len(obs_ids),
+    )
     if failed:
         sys.exit(1)
 

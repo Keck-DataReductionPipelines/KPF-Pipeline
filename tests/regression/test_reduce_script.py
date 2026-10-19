@@ -13,10 +13,30 @@ import tempfile
 
 import pytest
 
+from kpfpipe.utils.header import HeaderParser
+from kpfpipe.utils.io import load_junk_obs_ids
 from scripts.process import reduce as red
+
+from ._scripts import add_junk_obs_id, write_l0_tree
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
+
+# A well-formed obs_id with no L0 on disk (see _pass_frame_gate).
+_OID = "KP.20240405.40113.57"
+
+
+class _BothCcdsHeader:
+    def __init__(self, path):
+        self.DRP_KEYWORDS = {"GREEN": True, "RED": True}
+
+
+@pytest.fixture(autouse=True)
+def _pass_frame_gate(monkeypatch):
+    # These tests use placeholder obs_ids with no L0 on disk; pass them through
+    # the junk/single-CCD gate (TestFrameGate restores the real readers).
+    monkeypatch.setattr(red, "HeaderParser", _BothCcdsHeader)
+    monkeypatch.setattr(red, "load_junk_obs_ids", lambda data_input: set())
 
 
 def _stub_recipe(tmp_path, sentinel):
@@ -90,7 +110,7 @@ class TestDirShortcuts:
                 "-c",
                 str(cfg),
                 "-o",
-                "KP.x",
+                _OID,
                 "--input_dir",
                 "/aliased/in",
             ],  # fmt: skip
@@ -111,7 +131,7 @@ class TestDirShortcuts:
                 "-c",
                 str(cfg),
                 "-o",
-                "KP.x",
+                _OID,
                 "--output_dir",
                 "/out",
             ],  # fmt: skip
@@ -142,7 +162,7 @@ class TestRunLogDir:
                 "-c",
                 str(_base_cfg(tmp_path)),
                 "-o",
-                "KP.x",
+                _OID,
                 *extra,
             ]  # fmt: skip
         )
@@ -185,7 +205,7 @@ class TestShortcutOverride:
         recipe = _stub_recipe(tmp_path, sentinel)
         _run(
             monkeypatch,
-            ["--science", "-r", str(recipe), "-c", str(cfg), "-o", "KP.x"],
+            ["--science", "-r", str(recipe), "-c", str(cfg), "-o", _OID],
         )
         assert sentinel.read_text() == "/custom/in"
 
@@ -198,7 +218,7 @@ class TestGuards:
 
     def test_masters_rejects_obs_id(self, capsys):
         with pytest.raises(SystemExit) as exc:
-            red.main(["--masters", "-o", "KP.x"])
+            red.main(["--masters", "-o", _OID])
         assert exc.value.code == 2
         assert "masters recipe takes -d/--datecode" in capsys.readouterr().err
 
@@ -211,7 +231,7 @@ class TestGuards:
     def test_missing_recipe_and_config_errors(self, capsys):
         # No --masters/--science and no explicit -r/-c pair.
         with pytest.raises(SystemExit) as exc:
-            red.main(["-o", "KP.x"])
+            red.main(["-o", _OID])
         assert exc.value.code == 2
         assert "must specify --masters, --science" in capsys.readouterr().err
 
@@ -224,7 +244,7 @@ class TestGuards:
     def test_datecode_and_obs_id_are_mutually_exclusive(self, capsys):
         # The guard against running a masters recipe on a science target.
         with pytest.raises(SystemExit) as exc:
-            red.main(["--science", "-d", "20240405", "-o", "KP.x"])
+            red.main(["--science", "-d", "20240405", "-o", _OID])
         assert exc.value.code == 2
         assert "not allowed with argument" in capsys.readouterr().err
 
@@ -237,7 +257,7 @@ class TestRecipeLoading:
         cfg = _base_cfg(tmp_path)
         _stub_logging(monkeypatch)
         with pytest.raises(SystemExit, match="Recipe file not found"):
-            red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", "KP.x"])
+            red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", _OID])
 
     def test_recipe_without_main_exits(self, monkeypatch, tmp_path):
         cfg = _base_cfg(tmp_path)
@@ -245,7 +265,7 @@ class TestRecipeLoading:
         recipe.write_text("VALUE = 1\n")
         _stub_logging(monkeypatch)
         with pytest.raises(SystemExit, match="has no main"):
-            red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
+            red.main(["-r", str(recipe), "-c", str(cfg), "-o", _OID])
 
     def test_recipe_exception_is_logged_before_reraise(
         self, monkeypatch, tmp_path, caplog
@@ -260,7 +280,7 @@ class TestRecipeLoading:
         caplog.set_level(logging.CRITICAL)
 
         with pytest.raises(RuntimeError, match="boom"):
-            red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
+            red.main(["-r", str(recipe), "-c", str(cfg), "-o", _OID])
 
         assert "uncaught exception; pipeline aborted" in caplog.text
 
@@ -301,7 +321,7 @@ class TestRecipeLoading:
         )
         recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
         with pytest.raises(SystemExit) as exc:
-            red.main(["-r", str(recipe), "-c", str(cfg), "-o", "KP.x"])
+            red.main(["-r", str(recipe), "-c", str(cfg), "-o", _OID])
         assert exc.value.code == 2
 
 
@@ -421,3 +441,34 @@ def _record_cfg(tmp_path):
         "console = false\n"
     )
     return cfg
+
+
+class TestFrameGate:
+    """Junk and single-CCD frames return before the recipe runs."""
+
+    def _main(self, monkeypatch, tmp_path, obs_id):
+        monkeypatch.setattr(red, "HeaderParser", HeaderParser)
+        monkeypatch.setattr(red, "load_junk_obs_ids", load_junk_obs_ids)
+        sentinel = tmp_path / "ran.txt"
+        recipe = _stub_recipe(tmp_path, sentinel)
+        cfg = _base_cfg(tmp_path)
+        argv = ["-r", str(recipe), "-c", str(cfg), "-o", obs_id]
+        _run(monkeypatch, [*argv, "--kpf_data_input", str(tmp_path)])
+        return sentinel.exists()
+
+    def test_junk_frame_is_skipped(self, monkeypatch, tmp_path, caplog):
+        obs_id = write_l0_tree(tmp_path, "20240405", 100)
+        add_junk_obs_id(tmp_path, obs_id)
+        with caplog.at_level(logging.INFO, logger=red.logger.name):
+            assert not self._main(monkeypatch, tmp_path, obs_id)
+        assert f"skipping {obs_id}: junk frame" in caplog.text
+
+    def test_single_ccd_frame_is_skipped(self, monkeypatch, tmp_path, caplog):
+        obs_id = write_l0_tree(tmp_path, "20240405", 100, extra_cards={"RED": "NO"})
+        with caplog.at_level(logging.WARNING, logger=red.logger.name):
+            assert not self._main(monkeypatch, tmp_path, obs_id)
+        assert "DRP does not yet support single-CCD exposures" in caplog.text
+
+    def test_both_ccds_frame_runs(self, monkeypatch, tmp_path):
+        obs_id = write_l0_tree(tmp_path, "20240405", 100)
+        assert self._main(monkeypatch, tmp_path, obs_id)

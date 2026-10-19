@@ -111,6 +111,8 @@ def write_l0_tree(
             "TARGNAME": obj if targname is None else targname,
             "EXPTIME": exptime,
             "ELAPSED": elapsed,
+            "GREEN": "YES",
+            "RED": "YES",
             **(extra_cards or {}),
         }
     )

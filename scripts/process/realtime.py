@@ -24,8 +24,9 @@ NFS mount:
   frame (new mtime) is treated as a new frame.
 
 Only science frames (``OBSTYPE == 'Target'``, the same test the timeseries wrapper
-uses) are reduced; calibration frames are recorded as ``skipped``, and a bad
-file (unreadable, invalid or unclassifiable header) as ``rejected``. A
+uses) are reduced. Other frames are recorded as ``calibration``, ``junk``
+(observer junk list), or ``rejected`` (unreadable, invalid or unclassifiable
+header, or a single-CCD exposure the DRP does not yet support). A
 heartbeat status file (``--status_file``, default ``{log_dir}/realtime_status.json``)
 is rewritten every pass so operations tooling can see the watcher is alive and what
 it has done.
@@ -44,6 +45,7 @@ import time
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.header import HeaderError, HeaderParser
+from kpfpipe.utils.io import load_junk_obs_ids
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
@@ -205,28 +207,43 @@ def scan_settled_frames(l0_dirs, settle, now=None):
     return found
 
 
-def classify_frame(path):
-    """Return ``('science', None)`` for an ``OBSTYPE == 'Target'`` frame,
-    ``('rejected', reason)`` for a bad file, else ``('cal', reason)``.
+def classify_frame(path, junk=frozenset()):
+    """Return ``(state, reason)``: ``('science', None)`` for a frame to reduce
+    (``OBSTYPE == 'Target'``), ``('calibration', reason)`` for a good calibration
+    frame, ``('junk', reason)`` for an obs_id in `junk`, or ``('rejected', reason)``.
 
-    A bad file is one that cannot be read (``OSError``; frames are settled, so
-    not a partial write), whose header ``HeaderParser`` finds nonsensical
-    (``HeaderError``), or that it cannot classify (OBSMODE ``Unknown``; the
-    reason is its warnings). The ledger keeps the reason so the frame can be
-    repaired at KOA or junked. Any other exception is a pipeline bug and raises.
+    A rejected frame cannot be read (``OSError``; frames are settled, so not a
+    partial write), has a header ``HeaderParser`` finds nonsensical
+    (``HeaderError``) or cannot classify (OBSMODE ``Unknown``; the reason is its
+    warnings), or did not read out both GREEN and RED (unsupported for now). The
+    ledger keeps the reason so the frame can be repaired at KOA or junked. Each
+    junk/rejected verdict is logged here, at INFO/ERROR (single-CCD at WARNING).
+    Any other exception is a pipeline bug and raises.
     """
+    obs_id = get_obs_id(path)
+    if obs_id in junk:
+        logger.info("junk %s (junk frame)", obs_id)
+        return "junk", "junk frame"
     try:
         parser = HeaderParser(path)
     except OSError as e:
-        return "rejected", f"unreadable L0: {e}"
+        reason = f"unreadable L0: {e}"
     except HeaderError as e:
-        return "rejected", f"invalid header: {e}"
-    keywords = parser.DRP_KEYWORDS
-    if keywords["OBSMODE"] == "Unknown":
-        return "rejected", "; ".join(parser.warnings)
-    if keywords["OBSTYPE"] == "Target":
-        return "science", None
-    return "cal", f"OBJECT={keywords['OBJECT']}"
+        reason = f"invalid header: {e}"
+    else:
+        keywords = parser.DRP_KEYWORDS
+        if keywords["OBSMODE"] == "Unknown":
+            reason = "; ".join(parser.warnings)
+        elif not (keywords.get("GREEN") and keywords.get("RED")):
+            reason = "DRP does not yet support single-CCD exposures"
+            logger.warning("reject %s (%s)", obs_id, reason)
+            return "rejected", reason
+        elif keywords["OBSTYPE"] == "Target":
+            return "science", None
+        else:
+            return "calibration", f"OBJECT={keywords['OBJECT']}"
+    logger.error("reject %s (%s)", obs_id, reason)
+    return "rejected", reason
 
 
 def _utc_now():
@@ -236,9 +253,9 @@ def _utc_now():
 class Ledger:
     """The exactly-once ledger: one entry per ``(path, mtime, size)`` ever seen.
 
-    States: ``skipped`` (calibration frame), ``rejected`` (bad file), ``running``
-    (dispatched, not yet reaped), ``succeeded``, ``failed``. Persisted atomically
-    after every change so a restart resumes where it left off.
+    States: ``calibration``, ``junk``, ``rejected`` (see ``classify_frame``),
+    ``running`` (dispatched, not yet reaped), ``succeeded``, ``failed``. Persisted
+    atomically after every change so a restart resumes where it left off.
     """
 
     def __init__(self, path):
@@ -278,7 +295,8 @@ class Ledger:
 
     def counts(self):
         out = {
-            "skipped": 0,
+            "calibration": 0,
+            "junk": 0,
             "rejected": 0,
             "running": 0,
             "succeeded": 0,
@@ -368,19 +386,17 @@ class Realtime:
                 reason=str(exc),
             )
             return
-        kind, reason = classify_frame(path)
-        if kind != "science":
-            if kind == "rejected":
-                logger.error("reject %s (%s)", obs_id, reason)
-            else:
-                logger.info("skip %s (%s)", obs_id, reason)
+        state, reason = classify_frame(path, load_junk_obs_ids(self.data_input))
+        if state != "science":
+            if state == "calibration":
+                logger.info("calibration %s (%s)", obs_id, reason)
             self.ledger.mark(
                 key,
                 path=path,
                 obs_id=obs_id,
                 mtime=mtime,
                 size=size,
-                state="skipped" if kind == "cal" else "rejected",
+                state=state,
                 reason=reason,
             )
             return
@@ -432,7 +448,8 @@ class Realtime:
                 "jobs": self.args.jobs,
                 "files_seen": self.files_seen,
                 "dispatched": c["dispatched"],
-                "skipped": c["skipped"],
+                # Schema 1 (KPF-Ops): skipped = deliberately not reduced.
+                "skipped": c["calibration"] + c["junk"],
                 "rejected": c["rejected"],
                 "running": sum(1 for f in self.futures if f.running()),
                 "queued": sum(1 for f in self.futures if not f.running()),
@@ -470,10 +487,11 @@ class Realtime:
         self.write_status(self.watched_dirs())
         exit_status = 0 if c["failed"] == 0 else 1
         logger.info(
-            "done: %d succeeded, %d failed, %d skipped, %d rejected",
+            "done: %d succeeded, %d failed, %d calibration, %d junk, %d rejected",
             c["succeeded"],
             c["failed"],
-            c["skipped"],
+            c["calibration"],
+            c["junk"],
             c["rejected"],
         )
         return exit_status

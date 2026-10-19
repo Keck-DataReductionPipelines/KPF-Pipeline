@@ -66,7 +66,8 @@ _SCI_A = [
 
 def _rows(files, obj, sources=None):
     """Row dicts for a group of frames sharing DRP_OBJECT and fiber sources (SKYSRC,
-    SCISRC, CALSRC; default: every fiber sees a lamp OBJECT, else none)."""
+    SCISRC, CALSRC; default: every fiber sees a lamp OBJECT, else none), with both
+    GREEN and RED read out."""
     if sources is None:
         lamp = obj == "Flat" or obj.startswith(("ThAr", "UNe"))
         sources = (obj if lamp else "None",) * 3
@@ -75,6 +76,8 @@ def _rows(files, obj, sources=None):
             "FILENAME": f,
             "DRP_OBJECT": obj,
             **dict(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True)),
+            "GREEN": True,
+            "RED": True,
         }
         for f in files
     ]
@@ -1160,6 +1163,17 @@ class TestJunkExclusion:
         db = _mini_db(_rows(_JUNK_BIAS, "Bias"), junk=[junk_fn])
         lists = _cluster("bias", db, min_stack_size=1, exclude_junk=False)
         assert junk_fn in [fn for cluster in lists for fn in cluster]
+
+    @pytest.mark.parametrize("green, red", [(True, False), (False, True), (None, True)])
+    def test_single_ccd_frame_excluded_with_warning(self, green, red, caplog):
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"))
+        single_fn = _JUNK_BIAS[1]
+        db = db.astype({"GREEN": object, "RED": object})
+        db.loc[db["FILENAME"] == single_fn, ["GREEN", "RED"]] = [green, red]
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.io"):
+            lists = _cluster("bias", db, min_stack_size=1)
+        assert single_fn not in [fn for cluster in lists for fn in cluster]
+        assert f"excluding {single_fn}: DRP does not yet support" in caplog.text
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
