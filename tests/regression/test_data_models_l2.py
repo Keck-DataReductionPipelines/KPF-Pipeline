@@ -157,7 +157,7 @@ class TestToKPF2:
     def test_to_kpf2_copies_same_name_keywords(self, converted_l1):
         kpf2 = converted_l1.to_kpf2()
         assert kpf2.headers["PRIMARY"].get("INSTRUME") == "KPF"
-        assert kpf2.headers["PRIMARY"].get("DATE-OBS") == "2024-01-13T10:26:56"
+        assert kpf2.headers["PRIMARY"].get("DATE-OBS") == "2024-01-13T10:26:55.968"
 
     def test_to_kpf2_sets_defaults(self, converted_l1):
         kpf2 = converted_l1.to_kpf2()

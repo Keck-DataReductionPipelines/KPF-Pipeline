@@ -182,7 +182,7 @@ class TestToKpf1:
     def test_to_kpf1_forwards_the_eprv_primary(self, synthetic_l0_file):
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
-        assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:56"
+        assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:55.968"
         assert l1.headers["PRIMARY"]["OBJECT"] == "10700"
         assert l1.headers["PRIMARY"]["DATALVL"] == "L1"
 

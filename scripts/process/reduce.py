@@ -35,7 +35,8 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import kpf_directory, kpf_filepath
+from kpfpipe.utils.header import HeaderParser
+from kpfpipe.utils.io import kpf_directory, kpf_filepath, load_junk_obs_ids
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
 from scripts._argparse import (
@@ -159,6 +160,20 @@ def main(argv=None):
     spec.loader.exec_module(recipe)
     if not hasattr(recipe, "main"):
         raise SystemExit(f"Recipe {args.recipe!r} has no main() function")
+
+    # Junk and single-CCD frames never enter the science recipe.
+    if args.obs_id:
+        data_input = config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
+        if args.obs_id in load_junk_obs_ids(data_input):
+            logger.info("skipping %s: junk frame", args.obs_id)
+            return
+        drp = HeaderParser(kpf_filepath(args.obs_id, "L0", data_root=data_input))
+        if not (drp.DRP_KEYWORDS.get("GREEN") and drp.DRP_KEYWORDS.get("RED")):
+            logger.warning(
+                "skipping %s: DRP does not yet support single-CCD exposures",
+                args.obs_id,
+            )
+            return
 
     # Clear prior L1/L2/L4 products so this run's outputs stand alone. After the load,
     # never before: a mistyped -r must not destroy a night's products on its way out.

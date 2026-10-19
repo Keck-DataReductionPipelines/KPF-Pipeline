@@ -18,7 +18,7 @@ from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.header import HeaderParser
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.kpf import get_datecode, get_obs_id
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,7 @@ class KPF0(KPFDataModel):
         self._seed_primary()
         self._fill_from_native()
         self._program_identification()
+        self._timestamp()
         self._instrument_era()
         self._observation_settings()
         self._amplifiers()
@@ -143,8 +144,8 @@ class KPF0(KPFDataModel):
         A pure tabular pass over the PRIMARY-targeted map rows: take the
         instrument value if the native header carries it, else the row default,
         and type it to the registry DataType. A row with neither is skipped, so
-        the seeded blank card stands. ``JD_UTC`` is the one non-tabular value --
-        a per-frame transform of the native ``MJD-OBS`` -- and is applied last.
+        the seeded blank card stands. DATE-OBS and JD_UTC are stamped by
+        ``_timestamp``.
 
         The ``KPF_EXT=QUALITY_CONTROL`` rows are not filled here: their source
         extension is still empty at this point in the pipeline, so ``Guider``
@@ -174,12 +175,6 @@ class KPF0(KPFDataModel):
                     eprv_key, registry.datatype_for(eprv_key, "PRIMARY"), raw_value
                 ),
             )
-
-        # JD_UTC: convert the native MJD-OBS to a full Julian date. The one value
-        # transform the header map can't express, so it lives here, not as a default.
-        mjd = native.get("MJD-OBS")
-        if mjd not in (None, "", "UNKNOWN"):
-            self.set_keyword("JD_UTC", float(mjd) + 2400000.5)
 
     def _program_identification(self):
         """Stamp the observing program's identity onto PRIMARY.
@@ -224,13 +219,36 @@ class KPF0(KPFDataModel):
             logger.warning("%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key)
         return "UNKNOWN"
 
+    def _timestamp(self):
+        """Stamp DATE-OBS and JD_UTC, the exposure start, from the native MJD-OBS.
+
+        The native DATE-OBS is a date only, so both come from MJD-OBS. A missing,
+        non-numeric or non-positive MJD-OBS raises, as does one whose UT date is
+        not the obs_id's datecode.
+        """
+        mjd = self.headers["INSTRUMENT_HEADER"].get("MJD-OBS")
+        try:
+            jd = float(mjd) + 2400000.5
+        except (TypeError, ValueError):
+            jd = None
+        if jd is None or jd <= 2400000.5:
+            raise ValueError(f"{self.obs_id}: MJD-OBS={mjd!r} is not a valid MJD")
+        obs_time = pd.to_datetime(jd, unit="D", origin="julian")
+        obs_date = obs_time.strftime("%Y%m%d")
+        if self.obs_id and obs_date != get_datecode(self.obs_id):
+            raise ValueError(
+                f"{self.obs_id}: MJD-OBS={mjd!r} falls on {obs_date}, not the "
+                "obs_id's datecode"
+            )
+        self.set_keyword("DATE-OBS", obs_time.isoformat(timespec="milliseconds"))
+        self.set_keyword("JD_UTC", jd)
+
     def _instrument_era(self):
         """Stamp INSTERA from JD_UTC against ``INSTRUMENT_ERAS``.
 
-        Runs after the tabular fill, which is what supplies JD_UTC. A frame no
-        era covers -- an undated one included, since its JD_UTC parses to NaT,
-        which no interval contains -- has no reference calibrations, so this
-        raises rather than shipping an unattributable product.
+        Runs after ``_timestamp``, which is what supplies JD_UTC. A frame no era
+        covers has no reference calibrations, so this raises rather than
+        shipping an unattributable product.
         """
         obs_time = pd.to_datetime(
             self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"

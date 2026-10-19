@@ -422,7 +422,8 @@ class FileHandler:
         the shared frame-selection entry point. A frame qualifies when its OBJECT is
         the type's and every fiber saw the lamp (lamp masters, so sci/sky/cal-only
         lamp frames are left out) or nothing (bias/dark), so a frame with any
-        ``Unknown`` source never qualifies. Raises
+        ``Unknown`` source never qualifies. A frame without both GREEN and RED
+        read out is excluded with a warning (single-CCD is unsupported). Raises
         ``ValueError`` if no database is loaded or the type has no frames;
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
         mini_db = self._mini_db
@@ -436,6 +437,12 @@ class FileHandler:
         lit = obj if cal_type in ("flat", "thar") else "None"
         keep = mini_db["DRP_OBJECT"] == obj
         keep &= (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
+        both_ccds = mini_db[["GREEN", "RED"]].eq(True).all(axis=1)
+        for fn in mini_db.loc[keep & ~both_ccds, "FILENAME"]:
+            logger.warning(
+                "excluding %s: DRP does not yet support single-CCD exposures", fn
+            )
+        keep &= both_ccds
         cal_df = mini_db[keep]
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")

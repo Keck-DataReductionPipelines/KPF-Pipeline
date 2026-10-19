@@ -6,10 +6,12 @@ at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
 is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
+import logging
 import os
 import sys
 import tempfile
 
+import pandas as pd
 import pytest
 
 from scripts.process import science as _science
@@ -182,6 +184,24 @@ class TestCliTask:
 # ---------------------------------------------------------------------------
 
 
+def _fake_file_handler(rows=()):
+    """A FileHandler stand-in whose mini database holds `rows`, each an
+    ``(obs_id, isjunk, green, red)`` tuple."""
+    mini_db = pd.DataFrame(
+        [(f"/in/L0/20240405/{o}.fits", j, g, r) for o, j, g, r in rows],
+        columns=["FILENAME", "ISJUNK", "GREEN", "RED"],
+    )
+
+    class _FakeFileHandler:
+        def __init__(self, data_dirs):
+            pass
+
+        def build_mini_database(self, datecode, cache=False):
+            return mini_db
+
+    return _FakeFileHandler
+
+
 class TestMainExitCode:
     def _patch(self, s, monkeypatch, failed, calls=None):
         # Skip the runtime setup, config resolution and subprocess fan-out (and
@@ -192,6 +212,7 @@ class TestMainExitCode:
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
         _stub_batch_log(monkeypatch, s)
         monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
+        monkeypatch.setattr(s, "FileHandler", _fake_file_handler())
 
         def fake_run_stage(*args, **kwargs):
             if calls is not None:
@@ -216,6 +237,35 @@ class TestMainExitCode:
         assert warm_args["data_input"] == "/in"  # resolved from config DATA_DIRS
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["cache"] == "rw"
+
+    def test_junk_and_single_ccd_frames_are_skipped(self, s, monkeypatch, caplog):
+        # Junk (INFO) and single-CCD (WARNING) frames never reach the fan-out; a
+        # GREEN or RED of None counts as not read out.
+        calls = []
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        oid3, oid4 = "KP.20240405.40300.00", "KP.20240405.40400.00"
+        monkeypatch.setattr(
+            s,
+            "FileHandler",
+            _fake_file_handler(
+                [
+                    (_OID1, True, True, True),
+                    (_OID2, False, True, False),
+                    (oid3, False, None, True),
+                    (oid4, False, True, True),
+                ]
+            ),
+        )
+        with caplog.at_level(logging.INFO, logger=s.logger.name):
+            s.main(["--obs_ids", _OID1, _OID2, oid3, oid4])
+        tasks = calls[0][0][1]
+        assert [tag for tag, _ in tasks] == [oid4]
+        levels = {r.getMessage(): r.levelno for r in caplog.records}
+        assert levels[f"skipping {_OID1}: junk frame"] == logging.INFO
+        single = "DRP does not yet support single-CCD exposures"
+        assert levels[f"skipping {_OID2}: {single}"] == logging.WARNING
+        assert levels[f"skipping {oid3}: {single}"] == logging.WARNING
+        assert "done: reduced 1/1 frame(s), 3 skipped" in levels
 
     def test_exits_zero_when_all_reduced(self, s, monkeypatch):
         self._patch(s, monkeypatch, failed=[])

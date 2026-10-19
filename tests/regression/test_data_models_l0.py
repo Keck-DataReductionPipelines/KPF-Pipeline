@@ -454,6 +454,8 @@ class TestStandardizedPrimary:
         assert prim["NUMORDER"] == 67  # 35 green + 32 red, not 65
         # JD_UTC is the full Julian Date of DATE-OBS (not a raw MJD).
         assert prim["JD_UTC"] == pytest.approx(2460322.93537, abs=1e-3)
+        # DATE-OBS is the full exposure start from MJD-OBS, not the native date.
+        assert prim["DATE-OBS"] == "2024-01-13T10:26:55.968"
         version = importlib.metadata.version("kpfpipe")
         assert prim["DRPTAG"] == version  # EPRV version keyword stays on PRIMARY
         # DRPVERNO is the WMKO counterpart of DRPTAG; both sit on PRIMARY.
@@ -485,7 +487,7 @@ class TestStandardizedPrimary:
         primary.header["IMTYPE"] = "Object"
         primary.header["OFNAME"] = "KP.20240113.00009.00.fits"
         primary.header["PROGNAME"] = "K123"
-        primary.header["MJD-OBS"] = 60310.0
+        primary.header["MJD-OBS"] = 60322.0
         primary.header["PARANTEL"] = 108.03
         fits.HDUList([primary]).writeto(fn)
 
@@ -512,7 +514,18 @@ class TestStandardizedPrimary:
     def test_undated_frame_is_rejected(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
-        with pytest.raises(ValueError, match="No KPF instrument era covers NaT"):
+        with pytest.raises(ValueError, match="MJD-OBS=None is not a valid MJD"):
+            l0.standardize_headers()
+
+    @pytest.mark.parametrize("mjd", [0.0, -1.0, "UNKNOWN", ""])
+    def test_invalid_mjd_obs_is_rejected(self, mjd):
+        with pytest.raises(ValueError, match="is not a valid MJD"):
+            self._dated_l0(mjd).standardize_headers()
+
+    def test_mjd_obs_off_the_datecode_is_rejected(self):
+        l0 = self._dated_l0(60507.0)  # 2024-07-16
+        l0.obs_id = "KP.20240717.00561.67"
+        with pytest.raises(ValueError, match="falls on 20240716, not the obs_id's"):
             l0.standardize_headers()
 
     def test_frame_between_eras_is_rejected(self):

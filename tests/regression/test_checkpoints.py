@@ -273,7 +273,7 @@ class TestCheckpointL0:
         # A science frame carrying everything QCL0 requires: pointing, timing,
         # exposure-meter tables and resolved astrometry. This is the only
         # in-process exercise of QCL0.run().
-        fn = str(tmp_path / "KP.20240405.00001.00.fits")
+        fn = str(tmp_path / "KP.20240923.32832.00.fits")  # SCIENCE_POINTING night
         write_science_l0(fn, namps=4, shape=(10, 10), primary_cards={"PROGNAME": None})
         l0 = fill_primary(seed_catalog_record(standardized_l0(fn)), "L0")
         with caplog.at_level(logging.WARNING):
@@ -284,6 +284,14 @@ class TestCheckpointL0:
         assert qc["DEADPXOK"] == 1
         assert qc["SATPXOK"] == 1
         assert qc["TCSOFF"] < 1.0
+
+    def test_run_raises_when_times_inconsistent(self, tmp_path, stub_cfht_weather):
+        # DATTIMOK is fatal: a mistimed science frame corrupts barycentric correction.
+        fn = str(tmp_path / "KP.20240923.32832.00.fits")
+        write_science_l0(fn, namps=4, shape=(10, 10), primary_cards={"ELAPSED": 99.0})
+        l0 = fill_primary(seed_catalog_record(standardized_l0(fn)), "L0")
+        with pytest.raises(ValueError, match="DATTIMOK = 0"):
+            CheckpointL0(l0).run()
 
 
 # ---------------------------------------------------------------------------

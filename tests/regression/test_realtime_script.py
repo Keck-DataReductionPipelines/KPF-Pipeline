@@ -8,6 +8,7 @@ tree dispatches nothing. Synthetic L0 trees only -- no real reduction runs.
 """
 
 import json
+import logging
 import os
 
 import pytest
@@ -109,10 +110,30 @@ class TestClassifyFrame:
             None,
         )
 
-    def test_bias_is_cal_with_reason(self, tmp_path):
+    @pytest.mark.parametrize("imtype", ["Object", "Bias"])
+    def test_junk_frame_is_junk(self, imtype, tmp_path):
+        oid = write_l0_tree(tmp_path, _NIGHT, 100, imtype=imtype)
+        path = str(tmp_path / "L0" / _NIGHT / f"{oid}.fits")
+        assert rt.classify_frame(path, {oid}) == ("junk", "junk frame")
+
+    @pytest.mark.parametrize("imtype", ["Object", "Bias"])
+    def test_single_ccd_frame_is_rejected(self, imtype, tmp_path, caplog):
+        oid = write_l0_tree(
+            tmp_path, _NIGHT, 100, imtype=imtype, extra_cards={"GREEN": "NO"}
+        )
+        with caplog.at_level(logging.WARNING, logger=rt.logger.name):
+            kind, reason = rt.classify_frame(
+                str(tmp_path / "L0" / _NIGHT / f"{oid}.fits")
+            )
+        assert kind == "rejected" and "single-CCD" in reason
+        assert [r.levelno for r in caplog.records if r.name == rt.logger.name] == [
+            logging.WARNING
+        ]
+
+    def test_bias_is_calibration_with_reason(self, tmp_path):
         oid = write_l0_tree(tmp_path, _NIGHT, 100, imtype="Bias", obj="autocal-bias")
         kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
-        assert kind == "cal" and reason == "OBJECT=Bias"
+        assert kind == "calibration" and reason == "OBJECT=Bias"
 
     def test_unreadable_is_rejected_with_reason(self, tmp_path):
         bad = tmp_path / "KP.20240405.00001.00.fits"
@@ -153,14 +174,15 @@ class TestLedger:
         k1 = rt.Ledger.key("/a", 1.5, 10)
         k2 = rt.Ledger.key("/b", 2.5, 10)
         led.mark(k1, state="running")
-        led.mark(k2, state="skipped")
+        led.mark(k2, state="calibration")
         led.mark(rt.Ledger.key("/c", 3.5, 10), state="rejected")
         led.mark(k1, state="succeeded", exit_status=0)
         again = rt.Ledger(str(tmp_path / "ledger.json")).load()
         assert again.seen(k1) and again.seen(k2)
         assert again.entries[k1]["exit_status"] == 0
         assert again.counts() == {
-            "skipped": 1,
+            "calibration": 1,
+            "junk": 0,
             "rejected": 1,
             "running": 0,
             "succeeded": 1,
@@ -259,7 +281,7 @@ class TestOnce:
 
         ledger = rt.Ledger(str(log_dir / "realtime_ledger.json")).load()
         states = {e["obs_id"]: e["state"] for e in ledger.entries.values()}
-        assert states == {o1: "succeeded", o2: "succeeded", b1: "skipped"}
+        assert states == {o1: "succeeded", o2: "succeeded", b1: "calibration"}
 
         with open(log_dir / "realtime_status.json") as fh:
             status = json.load(fh)
