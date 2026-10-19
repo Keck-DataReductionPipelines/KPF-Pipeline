@@ -43,6 +43,14 @@ MASTERS_CONFIG_PATH = (
 )
 
 
+def _l0(obj, sources=("None",) * 3):
+    """A stand-in standardized L0 of OBJECT `obj`, its fibers lit by `sources`
+    (SKYSRC, SCISRC, CALSRC; default unlit)."""
+    prim = {"OBSTYPE": obj, "OBJECT": obj}
+    prim.update(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True))
+    return types.SimpleNamespace(headers={"PRIMARY": prim})
+
+
 class TestMasterBaseErrors:
     def test_unsorted_l0_list_raises(self):
         # The L0 list must be sorted so stacking order is deterministic.
@@ -76,19 +84,30 @@ class TestMasterBaseErrors:
         assert "Traceback" in caplog.text
         assert l1_obj is None
 
-    def test_load_frame_wrong_obstype_warns_and_skips(self, caplog, monkeypatch):
+    def test_load_frame_wrong_object_warns_and_skips(self, caplog, monkeypatch):
         # A frame of another type (here a Bias in a dark stack) is rejected
         # before QC or assembly.
         m = Dark(FILE_LIST)
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",
-            lambda fn, standardize=False: types.SimpleNamespace(
-                headers={"PRIMARY": {"OBSTYPE": "Bias"}}
-            ),
+            lambda fn, standardize=False: _l0("Bias"),
         )
         with caplog.at_level(logging.WARNING):
             l1_obj = m._load_frame(FILE_LIST[0], cache=False)
-        assert "OBSTYPE 'Bias' is not a dark frame" in caplog.text
+        assert "OBJECT 'Bias'" in caplog.text
+        assert "not a dark frame" in caplog.text
+        assert l1_obj is None
+
+    def test_load_frame_unknown_source_warns_and_skips(self, caplog, monkeypatch):
+        # An undeterminable fiber source (e.g. a missing shutter card) is rejected.
+        m = Dark(FILE_LIST)
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: _l0("Dark", ("None", "Unknown", "None")),
+        )
+        with caplog.at_level(logging.WARNING):
+            l1_obj = m._load_frame(FILE_LIST[0], cache=False)
+        assert "not a dark frame" in caplog.text
         assert l1_obj is None
 
     def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
@@ -99,9 +118,7 @@ class TestMasterBaseErrors:
         qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",
-            lambda fn, standardize=False: types.SimpleNamespace(
-                headers={"PRIMARY": {"OBSTYPE": "Dark"}}
-            ),
+            lambda fn, standardize=False: _l0("Dark"),
         )
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.QCL0",
@@ -118,8 +135,9 @@ class TestMasterBaseErrors:
         fn = FILE_LIST[0]
         qc_result = {kw: (True, "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         assembled = object()
-        # The diagnostics the gate folds in read OBSTYPE off the loaded L0.
-        raw_l0 = types.SimpleNamespace(headers={"PRIMARY": {"OBSTYPE": "Dark"}})
+        # The gate reads OBJECT/sources/cameras, and the diagnostics it folds in
+        # OBSTYPE, off the L0.
+        raw_l0 = _l0("Dark")
         seen = {}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",

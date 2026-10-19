@@ -270,8 +270,11 @@ class QCL0(QC):
         DiagL0 measures the signed offset of the chamber furthest from its
         setpoint; this applies the limit to its magnitude. The etalon line
         positions shift with temperature, so an off-setpoint chamber corrupts the
-        drift reference.
+        drift reference. A science frame without simultaneous calibration
+        (SIMULCAL ``Off``) gets no flag; ``On`` and ``Unknown`` are checked.
         """
+        if self.kpf_obj.headers["PRIMARY"]["SIMULCAL"] == "Off":
+            return None
         return abs(float(self.kpf_obj.headers["QUALITY_CONTROL"]["ETATOFF"])) <= 0.5
 
     etalon_at_temp._qc_key = "ETATMPOK"

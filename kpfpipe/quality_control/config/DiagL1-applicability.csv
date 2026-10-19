@@ -1,2 +1,2 @@
-Method,Keywords,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+Method,Keywords,Description,RequiredData,Target,SoCal,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 DiagL1.flux_percentiles,FFI{G/R}{10/50/90/99}P,Flux percentiles of each assembled FFI,GREEN_CCD|RED_CCD,1,1,1,1,1,1,1,1,1

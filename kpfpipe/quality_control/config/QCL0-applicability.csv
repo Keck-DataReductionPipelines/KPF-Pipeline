@@ -1,4 +1,4 @@
-Method,Description,RequiredData,Star,Sun,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
+Method,Description,RequiredData,Target,SoCal,Bias,Dark,Flat,LFC,ThAr,UNe,Etalon
 QCL0.data_l0_red_green,DATAPRL0: GREEN/RED amps present and populated,GREEN_AMP{1/2/3/4}|RED_AMP{1/2/3/4},1,1,1,1,1,1,1,1,1
 QCL0.header_keywords_present,KWRDPRL0: required L0 PRIMARY keywords present,PRIMARY,1,1,0,0,0,0,0,0,0
 QCL0.telemetry_present,TELEPR: TELEMETRY extension present and populated,TELEMETRY,1,1,1,1,1,1,1,1,1
@@ -16,7 +16,7 @@ QCL0.guiding_ok,GUIDEROK: guiding error RMS/bias within 50 mas,QUALITY_CONTROL,1
 QCL0.guide_camera_ok,GDRCAMOK: guide camera not saturated,QUALITY_CONTROL,1,0,0,0,0,0,0,0,0
 QCL0.seeing_ok,SEEINGOK: V-band seeing < 1.5 arcsec,QUALITY_CONTROL,1,0,0,0,0,0,0,0,0
 QCL0.elevation_ok,ELEVOK: telescope elevation above 30 deg (ADC working range),INSTRUMENT_HEADER,1,0,0,0,0,0,0,0,0
-QCL0.etalon_at_temp,ETATMPOK: etalon chamber temperatures at their setpoints,QUALITY_CONTROL,0,0,0,0,0,0,0,0,1
+QCL0.etalon_at_temp,ETATMPOK: etalon chamber temperatures at their setpoints,QUALITY_CONTROL,1,1,0,0,0,0,0,0,1
 QCL0.agitator_operating,AGITOK: agitator running above minimum speed,INSTRUMENT_HEADER|TELEMETRY,1,1,0,0,1,1,1,1,1
 QCL0.not_junk,NOTJUNK: obs_id not in junk list,,1,1,1,1,1,1,1,1,1
 QCL0.radec_consistent,TARGETOK: pointing consistent with target/catalog RA/DEC,QUALITY_CONTROL,1,0,0,0,0,0,0,0,0

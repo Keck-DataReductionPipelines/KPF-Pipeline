@@ -41,15 +41,29 @@ def thar():
     return _thar
 
 
+# The (SCISEL, SKYSEL, SIMCALSH) shutters and (GREEN, RED, CA_HK) cameras that make
+# HeaderParser light each autocal-thar-{fibers} OBJECT's fibers and cameras.
+_FIBER_CARDS = {
+    "all": ("open", "open", "open", "YES", "YES", "NO"),
+    "sci": ("open", "closed", "closed", "YES", "YES", "NO"),
+    "sky": ("closed", "open", "closed", "YES", "YES", "NO"),
+    "cal": ("closed", "closed", "open", "YES", "YES", "NO"),
+    "hk": ("open", "closed", "open", "NO", "NO", "YES"),
+}
+
+
 def _write_thar(data_input, datecode, seconds, *, obj="autocal-thar-all-eve", **cards):
-    """Write one ThAr L0 frame; `cards` override the default lamp cards."""
+    """Write one ThAr L0 frame lit as its OBJECT says; `cards` override the
+    default lamp cards."""
+    keys = ("SCISEL", "SKYSEL", "SIMCALSH", "GREEN", "RED", "CA_HK")
+    fibers = dict(zip(keys, _FIBER_CARDS[obj.split("-")[2]], strict=True))
     return write_l0_tree(
         data_input,
         datecode,
         seconds,
         obj=obj,
         imtype="Arclamp",
-        extra_cards={**_LAMP_CARDS, **cards},
+        extra_cards={**fibers, **_LAMP_CARDS, **cards},
     )
 
 
@@ -142,16 +156,17 @@ class TestFrameRow:
         path = Path(tmp_path) / "L0" / "20240101" / f"{obs_id}.fits"
         return {
             "FILENAME": str(path),
-            "OBJECT": "autocal-thar-all-eve",
-            "EXPTIME": 20.0,
-            "ELAPSED": 20.0,
+            "DRP_OBJECT": "ThAr_daily",
+            **dict.fromkeys(("SKYSRC", "SCISRC", "CALSRC"), "ThAr_daily"),
         }, obs_id
 
     def test_carries_mini_db_and_lamp_columns(self, thar, tmp_path):
         record, obs_id = self._record(tmp_path)
         row = thar._frame_row(record)
         assert row["OBS_ID"] == obs_id and row["DATECODE"] == "20240101"
-        assert row["OBJECT"] == "autocal-thar-all-eve" and row["EXPTIME"] == 20.0
+        assert row["SCISRC"] == "ThAr_daily"
+        assert row["OBJECT"] == "autocal-thar-all-eve"
+        assert row["EXPTIME"] == 60.0 and row["ELAPSED"] == 60.0
         assert row["HCLSN"] == "L74828" and row["OCTAGON"] == "Th_daily"
         assert set(row) == set(thar._EXPOSURE_CSV_COLUMNS)
 
@@ -171,7 +186,7 @@ class TestScanLampSerialNumbers:
     def _scan(self, thar, tmp_path, start="20240101", end="20240131", jobs=4):
         return thar.scan_lamp_serial_numbers(str(tmp_path), start, end, jobs)
 
-    def test_selects_every_thar_object_variant(self, thar, tmp_path):
+    def test_selects_every_daily_thar_variant(self, thar, tmp_path):
         # Wider than the masters cal_type map on purpose: the fiber-specific cals
         # light the same lamp, and early nights carry only those.
         expected = {
@@ -195,6 +210,7 @@ class TestScanLampSerialNumbers:
         thar_id = _write_thar(str(tmp_path), "20240101", 3600)
         write_l0_tree(str(tmp_path), "20240101", 3700, obj="autocal-bias")
         write_l0_tree(str(tmp_path), "20240101", 3800, obj="10700")
+        _write_thar(str(tmp_path), "20240101", 3900, OCTAGON="Th_gold")
         assert [r["OBS_ID"] for r in self._scan(thar, tmp_path)] == [thar_id]
 
     def test_excludes_junk(self, thar, tmp_path):
@@ -249,8 +265,12 @@ class TestScanLampSerialNumbers:
 # ---------------------------------------------------------------------------
 
 
-def _history_row(datecode, hclsn, obj="autocal-thar-all-eve", octagon="Th_daily"):
-    return {"DATECODE": datecode, "OBJECT": obj, "OCTAGON": octagon, "HCLSN": hclsn}
+def _history_row(datecode, hclsn, sources=("ThAr_daily",) * 3):
+    return {
+        "DATECODE": datecode,
+        **dict(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True)),
+        "HCLSN": hclsn,
+    }
 
 
 def _stretch(hclsn, first, last, n_obs):
@@ -280,20 +300,10 @@ class TestLampHistory:
         history = thar.lamp_history([_history_row("20240101", "")])
         assert history == [_stretch("(none)", "20240101", "20240101", 1)]
 
-    @pytest.mark.parametrize(
-        "obj", ["autocal-thar-all", "autocal-thar-all-morn", "autocal-thar-all-night"]
-    )
-    def test_every_all_fiber_variant_counts(self, thar, obj):
-        assert len(thar.lamp_history([_history_row("20240101", "L74828", obj)])) == 1
-
-    @pytest.mark.parametrize(
-        "obj, octagon",
-        [("autocal-thar-sci", "Th_daily"), ("autocal-thar-all", "Th_gold")],
-    )
-    def test_other_frames_neither_count_nor_split(self, thar, obj, octagon):
+    def test_other_frames_neither_count_nor_split(self, thar):
         rows = [
             _history_row("20240101", "L74828"),
-            _history_row("20240102", "L82884", obj, octagon),
+            _history_row("20240102", "L82884", sources=("None", "ThAr_daily", "None")),
             _history_row("20240103", "L74828"),
         ]
         assert thar.lamp_history(rows) == [

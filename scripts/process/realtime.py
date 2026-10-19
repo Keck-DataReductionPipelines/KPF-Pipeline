@@ -23,8 +23,9 @@ NFS mount:
   ``(path, mtime, size)``; restarts and rescans are harmless, and a re-delivered
   frame (new mtime) is treated as a new frame.
 
-Only science frames (PRIMARY ``IMTYPE == 'Object'``, the same test the timeseries
-wrapper uses) are reduced; calibration frames are recorded as ``skipped``. A
+Only science frames (``OBSTYPE == 'Target'``, the same test the timeseries wrapper
+uses) are reduced; calibration frames are recorded as ``skipped``, and a bad
+file (unreadable, invalid or unclassifiable header) as ``rejected``. A
 heartbeat status file (``--status_file``, default ``{log_dir}/realtime_status.json``)
 is rewritten every pass so operations tooling can see the watcher is alive and what
 it has done.
@@ -40,10 +41,9 @@ import socket
 import sys
 import time
 
-from astropy.io import fits
-
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.header import HeaderError, HeaderParser
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
@@ -206,20 +206,27 @@ def scan_settled_frames(l0_dirs, settle, now=None):
 
 
 def classify_frame(path):
-    """Return ``('science', None)`` for an ``IMTYPE == 'Object'`` frame, else
-    ``('cal', reason)``.
+    """Return ``('science', None)`` for an ``OBSTYPE == 'Target'`` frame,
+    ``('rejected', reason)`` for a bad file, else ``('cal', reason)``.
 
-    A header that cannot be read is classified ``cal`` with the error as the
-    reason, so a corrupt or partial file is recorded and skipped rather than
-    dispatched to fail loudly later -- the ledger keeps the reason.
+    A bad file is one that cannot be read (``OSError``; frames are settled, so
+    not a partial write), whose header ``HeaderParser`` finds nonsensical
+    (``HeaderError``), or that it cannot classify (OBSMODE ``Unknown``; the
+    reason is its warnings). The ledger keeps the reason so the frame can be
+    repaired at KOA or junked. Any other exception is a pipeline bug and raises.
     """
     try:
-        imtype = str(fits.getheader(path, 0).get("IMTYPE", "")).strip()
-    except Exception as exc:  # astropy raises a zoo of types for a bad file
-        return "cal", f"unreadable header: {exc}"
-    if imtype == "Object":
+        parser = HeaderParser(path)
+    except OSError as e:
+        return "rejected", f"unreadable L0: {e}"
+    except HeaderError as e:
+        return "rejected", f"invalid header: {e}"
+    keywords = parser.DRP_KEYWORDS
+    if keywords["OBSMODE"] == "Unknown":
+        return "rejected", "; ".join(parser.warnings)
+    if keywords["OBSTYPE"] == "Target":
         return "science", None
-    return "cal", f"IMTYPE={imtype or '<missing>'}"
+    return "cal", f"OBJECT={keywords['OBJECT']}"
 
 
 def _utc_now():
@@ -229,7 +236,7 @@ def _utc_now():
 class Ledger:
     """The exactly-once ledger: one entry per ``(path, mtime, size)`` ever seen.
 
-    States: ``skipped`` (calibration frame or unreadable), ``running``
+    States: ``skipped`` (calibration frame), ``rejected`` (bad file), ``running``
     (dispatched, not yet reaped), ``succeeded``, ``failed``. Persisted atomically
     after every change so a restart resumes where it left off.
     """
@@ -270,7 +277,13 @@ class Ledger:
         return entry
 
     def counts(self):
-        out = {"skipped": 0, "running": 0, "succeeded": 0, "failed": 0}
+        out = {
+            "skipped": 0,
+            "rejected": 0,
+            "running": 0,
+            "succeeded": 0,
+            "failed": 0,
+        }
         for e in self.entries.values():
             state = e.get("state")
             if state in out:
@@ -345,21 +358,29 @@ class Realtime:
         try:
             obs_id = get_obs_id(path)
         except ValueError as exc:
-            logger.warning("skipping %s: %s", path, exc)
+            logger.error("rejecting %s: %s", path, exc)
             self.ledger.mark(
-                key, path=path, mtime=mtime, size=size, state="skipped", reason=str(exc)
+                key,
+                path=path,
+                mtime=mtime,
+                size=size,
+                state="rejected",
+                reason=str(exc),
             )
             return
         kind, reason = classify_frame(path)
         if kind != "science":
-            logger.info("skip %s (%s)", obs_id, reason)
+            if kind == "rejected":
+                logger.error("reject %s (%s)", obs_id, reason)
+            else:
+                logger.info("skip %s (%s)", obs_id, reason)
             self.ledger.mark(
                 key,
                 path=path,
                 obs_id=obs_id,
                 mtime=mtime,
                 size=size,
-                state="skipped",
+                state="skipped" if kind == "cal" else "rejected",
                 reason=reason,
             )
             return
@@ -412,6 +433,7 @@ class Realtime:
                 "files_seen": self.files_seen,
                 "dispatched": c["dispatched"],
                 "skipped": c["skipped"],
+                "rejected": c["rejected"],
                 "running": sum(1 for f in self.futures if f.running()),
                 "queued": sum(1 for f in self.futures if not f.running()),
                 "succeeded": c["succeeded"],
@@ -448,10 +470,11 @@ class Realtime:
         self.write_status(self.watched_dirs())
         exit_status = 0 if c["failed"] == 0 else 1
         logger.info(
-            "done: %d succeeded, %d failed, %d skipped",
+            "done: %d succeeded, %d failed, %d skipped, %d rejected",
             c["succeeded"],
             c["failed"],
             c["skipped"],
+            c["rejected"],
         )
         return exit_status
 

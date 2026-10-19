@@ -415,7 +415,7 @@ class KeywordRegistry:
         None; a blank ``DataType`` passes the value through unchanged.
         Deliberately **no** ``"UNKNOWN"``/``"UNDEFINED"`` sentinel rule:
         ``SCI-OBJ``/``SKY-OBJ`` carry the literal value ``Unknown`` on real
-        frames, and blanking those would silently empty ``TRACE1..TRACE4``.
+        frames, and blanking those would silently drop that native value.
 
         An unknown ``DataType`` raises (config error, not frame data). A value
         that won't convert warns and yields None, so one malformed native

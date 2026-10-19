@@ -18,14 +18,22 @@ OBJECT,Primary object name,,String,219134,KPF0.standardize_headers
 ALIASES,User-defined object names; ';' separated,,String,HD 219134; Gaia DR3 2870618101503062016,AstroQuery
 DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,KPF0.standardize_headers
 JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,KPF0.standardize_headers
-OBSTYPE,Observation type,,String,Object,KPF0.standardize_headers
-OBSMODE,Observing mode,,String,sci,KPF0.standardize_headers
+OBSTYPE,Observation type (e.g. Arclamp or Target),,String,Arclamp,KPF0.standardize_headers
+OBSMODE,Observing mode (Science/Calibration/Engineering/Unknown),,String,Calibration,KPF0.standardize_headers
 ISSOLAR,True if the observation is of the Sun,,Boolean,F,KPF0.standardize_headers
+GREEN,True if the GREEN camera was read out,,Boolean,T,KPF0.standardize_headers
+RED,True if the RED camera was read out,,Boolean,T,KPF0.standardize_headers
+CA_HK,True if the Ca H&K camera was read out,,Boolean,T,KPF0.standardize_headers
+EXPMETER,True if the exposure meter was read out,,Boolean,T,KPF0.standardize_headers
 EXPTIME,Exposure time,s,Float,75.022,KPF0.standardize_headers
 BINNING,Binning mode,,String,1x1,KPF0.standardize_headers
-READMODE,Readout mode,,String,normal,KPF0.standardize_headers
+READMODE,Readout mode (regular/fast),,String,regular,KPF0.standardize_headers
 NAMPGRN,Number of GREEN amplifiers,,Int,2,KPF0.standardize_headers
 NAMPRED,Number of RED amplifiers,,Int,2,KPF0.standardize_headers
+SKYSRC,Source illuminating the SKY fiber,,String,Sky,KPF0.standardize_headers
+SCISRC,Source illuminating the SCI fiber,,String,Target,KPF0.standardize_headers
+CALSRC,Source illuminating the CAL fiber,,String,Etalon,KPF0.standardize_headers
+SIMULCAL,Simultaneous etalon calibration (On/Off/Unknown; N/A on calibration frames),,String,On,KPF0.standardize_headers
 NUMORDER,Number of orders,,Uint,67,KPF0.standardize_headers
 NUMTRACE,Number of object-indexed keyword families,,UInt,5,KPF0.standardize_headers
 TRACE#,Type of object in trace #,,String,SCI,KPF0.standardize_headers
@@ -49,7 +57,7 @@ BERV,Barycentric RV,km/s,float,12.4431,RadialVelocity
 SYSVEL,Systemic velocity subtracted from RVs,km/s,float,0.0,RadialVelocity
 SYSACC,Acceleration of the systemic velocity,km/s^2,float,0.0,RadialVelocity
 CSRC#,Catalog source for object in trace #,,String,Gaia DR3,AstroQuery
-CID#,Catalog designation for object in trace #,,String,DR3 2870618101503062016,AstroQuery
+CID#,Catalog designation for object in trace #,,String,Gaia DR3 2870618101503062016,AstroQuery
 CRA#,Catalog RA for object in trace #,sexagesimal,String,23:13:16.98,AstroQuery
 CDEC#,Catalog Dec for object in trace #,sexagesimal,String,+57:10:06.1,AstroQuery
 CEQNX#,Catalog equinox for object in trace #,yr,Float,2000.0,AstroQuery

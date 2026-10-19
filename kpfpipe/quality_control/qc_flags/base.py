@@ -33,8 +33,9 @@ class QC:
 
         Resets ``self.results`` at the start so repeated calls are deterministic.
         A check the applicability table does not declare for this frame type is
-        skipped before it runs, as is one raising ``NotImplementedError``; neither
-        writes a flag. Any other exception counts as a fail -- this layer never
+        skipped before it runs, as is one raising ``NotImplementedError``, and one
+        returning None does not apply to this frame's contents; none writes a
+        flag. Any other exception counts as a fail -- this layer never
         aborts; halting is the checkpoint layer's role.
 
         Returns
@@ -67,6 +68,13 @@ class QC:
             except Exception as e:
                 logger.error("%s QC check %r raised: %s", self.LEVEL, name, e)
                 passed = False
+            if passed is None:
+                logger.debug(
+                    "%s QC check %r does not apply to this frame; skipped",
+                    self.LEVEL,
+                    name,
+                )
+                continue
             self.results[kw] = (passed, comment)
             self.kpf_obj.set_keyword(kw, 1 if passed else 0)
             logger.log(

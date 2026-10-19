@@ -32,6 +32,8 @@ def synthetic_4amp_l0(tmp_path):
         seed=42,
         primary_cards={
             "OBJECT": "synthetic-4amp",
+            "TARGNAME": "synthetic-4amp",
+            "IMTYPE": "Object",
             "DATE-OBS": "2024-04-05T01:00:37",
         },
     )
@@ -50,6 +52,8 @@ def synthetic_2amp_l0(tmp_path):
         seed=99,
         primary_cards={
             "OBJECT": "synthetic-2amp",
+            "TARGNAME": "synthetic-2amp",
+            "IMTYPE": "Object",
             "DATE-OBS": "2024-04-05T01:00:38",
         },
     )

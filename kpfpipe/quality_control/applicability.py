@@ -19,7 +19,17 @@ import pandas as pd
 from kpfpipe.quality_control.config import PATH as _config_path
 
 # The 0/1 columns every applicability table must carry.
-FRAME_TYPES = ("Star", "Sun", "Bias", "Dark", "Flat", "LFC", "ThAr", "UNe", "Etalon")
+FRAME_TYPES = (
+    "Target",
+    "SoCal",
+    "Bias",
+    "Dark",
+    "Flat",
+    "LFC",
+    "ThAr",
+    "UNe",
+    "Etalon",
+)
 
 _SUFFIX = "-applicability.csv"
 
@@ -71,16 +81,19 @@ class Applicability:
 
     @staticmethod
     def frame_type(kpf_obj):
-        """``kpf_obj``'s column: its OBSTYPE, with Object split on ISSOLAR.
+        """``kpf_obj``'s column: its OBSTYPE, with Target split on ISSOLAR and
+        Arclamp on the OBJECT lamp.
 
-        Star and Sun share an OBSTYPE but not a check list -- nothing points or
-        guides at the Sun -- so the gate resolves them here rather than in the
-        dozen methods that differ.
+        Target and SoCal share an OBSTYPE but not a check list -- nothing points
+        or guides at the Sun -- so the gate resolves them here rather than in the
+        dozen methods that differ; likewise ThAr and UNe arclamps.
         """
         prim = kpf_obj.headers["PRIMARY"]
         obstype = str(prim.get("OBSTYPE", "")).strip()
-        if obstype == "Object":
-            return "Sun" if prim.get("ISSOLAR") else "Star"
+        if obstype == "Target":
+            return "SoCal" if prim.get("ISSOLAR") else "Target"
+        if obstype == "Arclamp":
+            obstype = str(prim.get("OBJECT", "")).split("_")[0]
         if obstype not in FRAME_TYPES:
             raise ValueError(
                 f"OBSTYPE {obstype!r} names no frame type; run "

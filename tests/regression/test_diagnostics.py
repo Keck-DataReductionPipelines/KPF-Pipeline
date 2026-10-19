@@ -64,7 +64,7 @@ def ungated(monkeypatch):
     covered by ``TestDiagnosticsApplicability``.
     """
     monkeypatch.setattr(applicability, "applies", lambda *_: True)
-    monkeypatch.setattr(applicability, "frame_type", lambda _: "Star")
+    monkeypatch.setattr(applicability, "frame_type", lambda _: "Target")
 
 
 @pytest.mark.usefixtures("ungated")
@@ -1073,12 +1073,11 @@ class TestTelemetryEtalonTemperature:
 class TestTelemetryTharLamp:
     """Lit ThAr lamp's temperature and power, collapsed across Daily and Gold."""
 
-    def _make_l0(self, octagon="Th_daily", day="On", gold="Off", **cards):
+    def _make_l0(self, obj="ThAr_daily", day="On", gold="Off", **cards):
         l0 = KPF0()
+        l0.headers["PRIMARY"]["OBJECT"] = obj
         l0.headers["INSTRUMENT_HEADER"].update(
             {
-                "IMTYPE": "Arclamp",
-                "OCTAGON": octagon,
                 "THARDAY": day,
                 "THARGD": gold,
                 "PTHDAY": 1.6e-05,
@@ -1104,16 +1103,12 @@ class TestTelemetryTharLamp:
         assert results == {"THARTEMP": 21.5, "THARPWR": 1.6e-05, "THARON": 3474.5}
 
     def test_gold_lamp(self):
-        l0 = self._make_l0(octagon="Th_gold", day="Off", gold="On")
+        l0 = self._make_l0(obj="ThAr_gold", day="Off", gold="On")
         assert Telemetry(l0).thar_lamp() == {
             "THARTEMP": 18.8,
             "THARPWR": 2.0e-06,
             "THARON": 1465.7,
         }
-
-    def test_imtype_names_lamp_off_arclamp(self):
-        l0 = self._make_l0(octagon="", IMTYPE="Th_daily")
-        assert Telemetry(l0).thar_lamp()["THARTEMP"] == 21.5
 
     @pytest.mark.parametrize("day, gold", [("Off", "On"), ("On", "On"), ("Off", "Off")])
     def test_power_status_mismatch_raises(self, day, gold):
@@ -1122,7 +1117,7 @@ class TestTelemetryTharLamp:
 
     def test_non_thar_lamp_raises(self):
         with pytest.raises(ValueError, match="names no ThAr lamp"):
-            Telemetry(self._make_l0(octagon="U_daily")).thar_lamp()
+            Telemetry(self._make_l0(obj="UNe_daily")).thar_lamp()
 
     def test_written_to_quality_control(self):
         # ThAr frame: the only type thar_lamp is declared applicable to.
@@ -1597,7 +1592,7 @@ class TestDiagL2BandContinuum:
                 assert qc.get(f"CFX{code}{wavelength}") == pytest.approx(expected)
 
     def test_skipped_on_star_frames(self):
-        kpf2 = _make_kpf2_nan_pixels()  # stamped Star
+        kpf2 = _make_kpf2_nan_pixels()  # stamped Target
         DiagL2(kpf2).run()
         assert "CFXSC452" not in kpf2.headers["QUALITY_CONTROL"]
 
@@ -1661,7 +1656,7 @@ class TestDiagL2OrderFluxRatios:
             kpf2.set_data("GREEN_SCI2_FLUX", flux)
             return DiagL2(kpf2).order_flux_ratios()["FR452652"]
 
-        assert run("Star") == pytest.approx(65.35)
+        assert run("Target") == pytest.approx(65.35)
         assert run("ThAr") == pytest.approx(7 / 8)
 
 
@@ -1862,7 +1857,7 @@ class TestDiagnosticsApplicability:
 
     @pytest.mark.parametrize("frame", _applicability.FRAME_TYPES)
     def test_is_calibration(self, frame):
-        expected = frame not in ("Star", "Sun")
+        expected = frame not in ("Target", "SoCal")
         assert applicability.is_calibration(stamp_frame_type(KPF2(), frame)) is expected
 
     def test_calibration_frame_skips_guider_metrics(self, tmp_path, caplog):
