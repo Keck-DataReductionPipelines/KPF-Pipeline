@@ -138,6 +138,27 @@ class TestComputeRV:
                 vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
             )
 
+    def test_negative_pixels_with_positive_sum_allowed(self):
+        # Low-illumination (e.g. SKY) CCFs dip below zero; only a negative window
+        # sum is non-physical.
+        vel, ccf, _, vps = self._ccf(baseline=20.0)
+        assert np.any(ccf < 0)
+        ccf_var = np.full_like(ccf, 100.0)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
+        )
+        assert rv == pytest.approx(0.0, abs=0.05)
+        assert np.isfinite(rv_err) and rv_err > 0
+
+    def test_negative_sum_raises(self):
+        # fit_nsigma=3 keeps the window on the dip, so the window sum is < 0.
+        vel, ccf, _, vps = self._ccf(baseline=5.0)
+        ccf_var = np.full_like(ccf, 100.0)
+        with pytest.raises(ValueError, match="non-physical"):
+            RadialVelocity._compute_rv_1d(
+                vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 3.0
+            )
+
     def test_flat_ccf_returns_nan(self):
         vel = np.arange(-402, 403) * 0.25
         ccf = np.full_like(vel, 100.0)
@@ -381,6 +402,33 @@ class TestComputeRVPublic:
         others = np.delete(np.arange(NORDER_GREEN), bad)
         assert np.all(np.isfinite(res["rv"][others]))
         assert np.all(np.isfinite(res["rv_err"][others]))
+
+    def _raise_nonphysical(self, *args, **kwargs):
+        raise ValueError("non-physical CCF or CCF variance in the RV fit window")
+
+    def test_weighted_sky_nonphysical_warns_and_degrades_to_nan(
+        self, rv_loaded, monkeypatch, caplog
+    ):
+        monkeypatch.setattr(rv_loaded, "_compute_rv_1d", self._raise_nonphysical)
+        with caplog.at_level(logging.WARNING, logger="kpfpipe"):
+            out = rv_loaded.compute_weighted_rvs(
+                ["GREEN"], "SKY", combine_fibers=False, combine_ccds=False
+            )
+        assert np.isnan(out["GREEN"][0]) and np.isnan(out["GREEN"][1])
+        assert "GREEN_SKY: non-physical CCF window" in caplog.text
+
+    @pytest.mark.parametrize(
+        "fibers, combine_fibers",
+        [("SCI2", False), (["SCI1", "SCI2", "SCI3"], True)],
+    )
+    def test_weighted_science_nonphysical_raises(
+        self, rv_loaded, monkeypatch, fibers, combine_fibers
+    ):
+        monkeypatch.setattr(rv_loaded, "_compute_rv_1d", self._raise_nonphysical)
+        with pytest.raises(ValueError, match="non-physical"):
+            rv_loaded.compute_weighted_rvs(
+                ["GREEN"], fibers, combine_fibers=combine_fibers, combine_ccds=False
+            )
 
     def test_order_weights_read_from_rvn(self, rv_loaded):
         # _get_order_weights slices the WEIGHT column of the L4 RVn table.

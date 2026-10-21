@@ -213,11 +213,8 @@ class RadialVelocity:
         # Photon-limited RV uncertainty from the weighted CCF slope over the
         # second-pass window (Bouchy 2001).
         ccf_var_fit = ccf_var[idx_lo:idx_hi]
-        if not np.any(ccf_fit) or np.any(ccf_fit < 0) or np.any(ccf_var_fit <= 0):
-            raise ValueError(
-                "non-physical CCF or CCF variance in the RV fit window "
-                "(zero/negative flux counts); cannot compute a photon-limited error"
-            )
+        if not np.any(ccf_fit) or np.sum(ccf_fit) < 0 or np.any(ccf_var_fit <= 0):
+            raise ValueError("non-physical CCF or CCF variance in the RV fit window")
 
         # Boisse (2010) N_scale = CCF step / CCF-noise correlation length,
         # decorrelating the oversampled CCF.
@@ -456,26 +453,38 @@ class RadialVelocity:
             if not np.any(ccf_w):
                 per_chip[chip] = (np.nan, np.nan)
                 continue
-            rv = self._compute_rv_1d(
-                grid,
-                ccf_w,
-                ccf_s_var,
-                scale,
-                mask_width,
-                window,
-                fit_nsigma,
-                min_npts,
-            )[0]
-            rv_err = self._compute_rv_1d(
-                grid,
-                ccf_s,
-                ccf_s_var,
-                scale,
-                mask_width,
-                window,
-                fit_nsigma,
-                min_npts,
-            )[1]
+            # A non-physical SKY CCF (low illumination) degrades to NaN; SCI/CAL
+            # failures stay fatal.
+            try:
+                rv = self._compute_rv_1d(
+                    grid,
+                    ccf_w,
+                    ccf_s_var,
+                    scale,
+                    mask_width,
+                    window,
+                    fit_nsigma,
+                    min_npts,
+                )[0]
+                rv_err = self._compute_rv_1d(
+                    grid,
+                    ccf_s,
+                    ccf_s_var,
+                    scale,
+                    mask_width,
+                    window,
+                    fit_nsigma,
+                    min_npts,
+                )[1]
+            except ValueError as e:
+                if fibers != ["SKY"]:
+                    raise
+                logger.warning(
+                    "%s_SKY: non-physical CCF window (%s); weighted RV/RV_ERR set NaN",
+                    chip,
+                    e,
+                )
+                rv, rv_err = np.nan, np.nan
             per_chip[chip] = (rv, rv_err)
 
         if not combine_ccds:
