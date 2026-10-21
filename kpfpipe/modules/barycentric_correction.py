@@ -103,10 +103,13 @@ class BarycentricCorrection:
 
     def _get_timestamps(self):
         """
-        Read EXPMETER_SCI start/mid/end timestamps (t_beg, t_mid, t_end).
+        Read EXPMETER_SCI timestamps -> (t_beg, t_mid, t_end, keep).
 
         Prefers the corrected columns (Date-Beg-Corr / Date-End-Corr), falling
-        back to uncorrected; t_mid is the unweighted (t_beg + t_end) / 2.
+        back to uncorrected; t_mid is the unweighted (t_beg + t_end) / 2. A
+        faulty first or last reading (non-finite or non-positive duration) is
+        dropped with a warning; any other faulty reading raises. ``keep`` is the
+        boolean row mask; the caller applies it to these arrays and the flux.
         """
         expmeter = self.l2_obj.data["EXPMETER_SCI"]
 
@@ -134,17 +137,33 @@ class BarycentricCorrection:
                 "falling back to uncorrected dates"
             )
 
-        if not strictly_increasing(t_beg.jd):
+        # A faulty first or last reading occurs in normal operations and is
+        # dropped; any other is fatal.
+        dt = (t_end - t_beg).sec
+        keep = np.isfinite(dt) & (dt > 0)
+        if not np.all(keep):
+            idx = np.flatnonzero(~keep)
+            if len(idx) > 1 or idx[0] not in (0, len(dt) - 1):
+                raise ValueError(
+                    f"EXPMETER_SCI readings {idx.tolist()} have non-finite or "
+                    "non-positive duration"
+                )
+            logger.warning(
+                "Dropping %s EXPMETER_SCI reading: non-finite or non-positive duration",
+                "first" if idx[0] == 0 else "last",
+            )
+
+        if not strictly_increasing(t_beg.jd[keep]):
             raise ValueError(
                 "EXPMETER_SCI Date-Beg timestamps are not strictly increasing"
             )
-        if not strictly_increasing(t_end.jd):
+        if not strictly_increasing(t_end.jd[keep]):
             raise ValueError(
                 "EXPMETER_SCI Date-End timestamps are not strictly increasing"
             )
 
         t_mid = Time((t_beg.jd + t_end.jd) / 2, format="jd", scale="utc")
-        return t_beg, t_mid, t_end
+        return t_beg, t_mid, t_end, keep
 
     def _get_normalized_flux(self):
         """
@@ -181,6 +200,9 @@ class BarycentricCorrection:
         by ``k`` (larger rejects fewer). Replacement is griddata linear, falling
         back to nearest for residual NaNs.
         """
+        if np.any(np.array(f.shape) < kernel_size):
+            return f.copy()
+
         f_smooth = gaussian_filter(
             median_filter(f, size=kernel_size), sigma=kernel_size
         )
@@ -266,8 +288,19 @@ class BarycentricCorrection:
         outlier readings (``fix_outliers``) before collapsing the time axis to a
         flux-weighted mean per channel.
         """
-        t_beg, t_mid, t_end = self._get_timestamps()
+        t_beg, t_mid, t_end, keep = self._get_timestamps()
         w_em, f = self._get_normalized_flux()
+        t_beg, t_mid, t_end, f = t_beg[keep], t_mid[keep], t_end[keep], f[keep]
+
+        if len(f) == 1:
+            logger.warning(
+                "Single EXPMETER_SCI reading; using geometric exposure midpoint"
+            )
+            hdr = self.l2_obj.headers["INSTRUMENT_HEADER"]
+            obs_beg = Time(hdr["DATE-BEG"], format="isot", scale="utc")
+            obs_end = Time(hdr["DATE-END"], format="isot", scale="utc")
+            jd_mid = (obs_beg.jd + obs_end.jd) / 2
+            return w_em, Time(np.full(len(w_em), jd_mid), format="jd", scale="utc")
 
         if fix_outliers:
             f = self._fix_expmeter_outliers(f)

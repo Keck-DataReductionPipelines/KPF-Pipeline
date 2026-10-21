@@ -223,14 +223,15 @@ class TestFixExpmeterOutliers:
 
 
 class TestGetTimestamps:
-    def test_returns_three_time_arrays(self, synthetic_kpf2):
+    def test_returns_row_aligned_arrays(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
-        t_beg, t_mid, t_end = bc._get_timestamps()
-        assert len(t_beg) == 3 and len(t_mid) == 3 and len(t_end) == 3
+        t_beg, t_mid, t_end, keep = bc._get_timestamps()
+        assert len(t_beg) == len(t_mid) == len(t_end) == len(keep) == 3
+        assert np.all(keep)
 
     def test_mid_is_between_beg_and_end(self, synthetic_kpf2):
         bc = BarycentricCorrection(synthetic_kpf2)
-        t_beg, t_mid, t_end = bc._get_timestamps()
+        t_beg, t_mid, t_end, _ = bc._get_timestamps()
         assert np.all(t_mid.jd > t_beg.jd)
         assert np.all(t_mid.jd < t_end.jd)
 
@@ -358,7 +359,7 @@ class TestFluxWeightedMidpointExpmeter:
             extrapolate=False,
             fix_outliers=False,
         )
-        _, t_mid, _ = bc._get_timestamps()
+        _, t_mid, _, _ = bc._get_timestamps()
         np.testing.assert_allclose(np.mean(t_fwm.jd), np.mean(t_mid.jd), atol=1e-6)
 
     def test_output_shapes(self, synthetic_kpf2):
@@ -385,7 +386,7 @@ class TestFluxWeightedMidpointExpmeter:
         monkeypatch.setattr(BarycentricCorrection, "_get_normalized_flux", mock_flux)
 
         bc = BarycentricCorrection(synthetic_kpf2)
-        _, t_mid, _ = bc._get_timestamps()
+        _, t_mid, _, _ = bc._get_timestamps()
         _, t_fwm = bc.compute_flux_weighted_midpoint_times(
             output="expmeter",
             interpolate=False,
@@ -548,6 +549,50 @@ class TestFluxWeightedMidpointExpmeter:
             fix_outliers=False,
         )
         assert np.mean(t_yes.jd) < np.mean(t_no.jd) - 1e-7
+
+
+class TestFaultyReadingDuration:
+    # Four 30 s readings starting each minute; ``bad`` rows get zero duration.
+    _KWARGS = dict(interpolate=True, extrapolate=True, fix_outliers=False)
+    _FLUX = [100.0, 103.0, 98.0, 101.0]
+
+    def _table(self, rows, bad=()):
+        beg = [f"{_T0}00:0{i}:00.000" for i in rows]
+        end = [
+            f"{_T0}00:0{i}:00.000" if i in bad else f"{_T0}00:0{i}:30.000" for i in rows
+        ]
+        data = {"Date-Beg": beg, "Date-End": end}
+        for wc in _WAVE_COLS:
+            data[wc] = [self._FLUX[i] for i in rows]
+        return _expmeter_table(data)
+
+    def _midpoints(self, kpf2, table):
+        kpf2.set_data("EXPMETER_SCI", table)
+        return BarycentricCorrection(kpf2).compute_flux_weighted_midpoint_times(
+            output="expmeter", **self._KWARGS
+        )[1]
+
+    @pytest.mark.parametrize("edge", [0, 3])
+    def test_faulty_edge_reading_dropped(self, caplog, synthetic_kpf2, edge):
+        kept = [i for i in range(4) if i != edge]
+        expected = self._midpoints(synthetic_kpf2, self._table(kept))
+        with caplog.at_level(logging.WARNING):
+            actual = self._midpoints(synthetic_kpf2, self._table(range(4), bad=(edge,)))
+        np.testing.assert_array_equal(actual.jd, expected.jd)
+        assert ("first" if edge == 0 else "last") in caplog.text
+
+    def test_single_reading_uses_geometric_midpoint(self, caplog, synthetic_kpf2):
+        # Shutter open 00:00:00 to 00:05:00 (fixture), so the midpoint is 00:02:30.
+        with caplog.at_level(logging.WARNING):
+            t = self._midpoints(synthetic_kpf2, self._table([1]))
+        expected = Time(f"{_T0}00:02:30.000", format="isot", scale="utc").jd
+        np.testing.assert_allclose(t.jd, expected, rtol=0, atol=1e-9)
+        assert "geometric" in caplog.text
+
+    @pytest.mark.parametrize("bad", [(1,), (0, 3)], ids=["middle", "both-edges"])
+    def test_faulty_reading_raises(self, synthetic_kpf2, bad):
+        with pytest.raises(ValueError, match="non-positive duration"):
+            self._midpoints(synthetic_kpf2, self._table(range(4), bad=bad))
 
 
 class TestFluxWeightedMidpointOrders:
