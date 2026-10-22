@@ -27,14 +27,19 @@ import csv
 import logging
 import os
 import sys
-import time
 
 from astropy.io import fits
 
 import kpfpipe
 from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
-from scripts._argparse import analysis_parser, resolve_dates, resolve_dir_shortcuts
+from scripts._argparse import (
+    analysis_parser,
+    cache_parser,
+    pool_parser,
+    resolve_dates,
+    resolve_dir_shortcuts,
+)
 from scripts._dispatch import _default_science_jobs
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 
@@ -67,21 +72,23 @@ _EXPOSURE_CSV_COLUMNS = [
 _LAMP_HISTORY_CSV_COLUMNS = ["HCLSN", "FIRST_DATECODE", "LAST_DATECODE", "N_OBS"]
 
 
-def default_date_range():
-    """First light through tomorrow -- the whole archive.
-
-    The end is UTC-dated a day ahead so it never falls behind the newest HST night
-    on disk; a datecode dir that does not exist yet simply contributes nothing.
-    """
-    return "20221109", time.strftime("%Y%m%d", time.gmtime(time.time() + 86400))
-
-
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         prog="kpfpipe analyze thar",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        parents=[analysis_parser(default_date_range=default_date_range())],
+        parents=[
+            analysis_parser("analyzes every L0 night in it"),
+            pool_parser(jobs_help="max concurrent per-night header scans"),
+            cache_parser(default="rw"),
+        ],
+    )
+    ap.add_argument(
+        "--kpf_data_input",
+        "--input_dir",
+        dest="kpf_data_input",
+        required=True,
+        help="root of the raw L0 input tree to read (--input_dir is an alias)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
 

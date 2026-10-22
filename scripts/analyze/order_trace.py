@@ -32,7 +32,6 @@ import logging
 import os
 import re
 import sys
-import time
 import warnings
 from collections import defaultdict
 
@@ -43,12 +42,7 @@ import kpfpipe
 from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.logger import setup_batch_logging
-from scripts._argparse import (
-    dates_parser,
-    logging_parser,
-    resolve_dates,
-    resolve_dir_shortcuts,
-)
+from scripts._argparse import analysis_parser, resolve_dates, resolve_dir_shortcuts
 
 logger = logging.getLogger(__name__)
 
@@ -72,45 +66,17 @@ _COEFF_COLUMNS = ["Era", "Chip", "Fiber", "Order", "Coeff", "Typical", "Max"]
 _JUMP_COLUMNS = ["Era", "Chip", "Date", "Epoch", "Step", "Significance"]
 
 
-def default_date_range():
-    """First light through tomorrow -- the whole archive.
-
-    The end is UTC-dated a day ahead so it never falls behind the newest HST night
-    on disk; a datecode dir that does not exist yet simply contributes nothing.
-    """
-    return "20221109", time.strftime("%Y%m%d", time.gmtime(time.time() + 86400))
-
-
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         prog="kpfpipe analyze order_trace",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        parents=[
-            logging_parser(),
-            dates_parser(
-                "analyzes every masters night in it",
-                dates=False,
-                default_date_range=default_date_range(),
-            ),
-        ],
+        parents=[analysis_parser("analyzes every masters night in it")],
     )
     ap.add_argument(
         "--input_dir",
         required=True,
         help="root of the masters tree to read: {input_dir}/masters/{datecode}/",
-    )
-    ap.add_argument(
-        "--analysis_dir",
-        default=None,
-        help="directory for the analysis reports (default: {output_dir}/analysis)",
-    )
-    ap.add_argument(
-        "--output_dir",
-        default=None,
-        help="shortcut: root for every output directory not given its own explicit "
-        "flag -- the analysis dir ({output_dir}/analysis) and the log dir "
-        "({output_dir}/logs)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
     args = resolve_dir_shortcuts(args)
