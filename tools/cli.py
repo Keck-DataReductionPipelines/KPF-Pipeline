@@ -27,6 +27,7 @@ Examples:
     kpfpipe science --obs_ids KP.20240405.40113.57
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
     kpfpipe analyze thar --date_range 20240727 20241022
+    kpfpipe analyze order_trace --date_range 20221109 20250829
     kpfpipe fetch masters -u <user> --dates 20240405 --local_dir ~/data
 
 Run ``kpfpipe <command> -h`` for a command's own options.
@@ -37,7 +38,7 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 
 import sys
 
-from scripts.analyze import thar
+from scripts.analyze import order_trace, thar
 from scripts.fetch import L0 as fetch_l0
 from scripts.fetch import L2 as fetch_l2
 from scripts.fetch import L4 as fetch_l4
@@ -49,6 +50,7 @@ from scripts.process import masters, realtime, reduce, science, timeseries
 # the processing drivers are.
 _ANALYSES = {
     "thar": thar.main,
+    "order_trace": order_trace.main,
 }
 
 # The `fetch` subcommands, keyed by the data they pull. Same arrangement, and same
@@ -133,7 +135,8 @@ def _analyze_usage():
     return (
         "usage: kpfpipe analyze <subject> [options]\n\n"
         "subjects:\n"
-        "  thar        which ThAr lamp (HCLSN) was in use, night by night\n\n"
+        "  thar         which ThAr lamp (HCLSN) was in use, night by night\n"
+        "  order_trace  order-trace stability within each instrument era\n\n"
         "Run `kpfpipe analyze <subject> -h` for a subject's own options."
     )
 
