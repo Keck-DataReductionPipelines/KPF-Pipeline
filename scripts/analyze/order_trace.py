@@ -40,7 +40,7 @@ import numpy as np
 import pandas as pd
 
 import kpfpipe
-from kpfpipe import CHIPS, FIBERS
+from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.utils.io import datecode_dirs_in_range
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
@@ -53,7 +53,6 @@ from scripts._argparse import (
 logger = logging.getLogger(__name__)
 
 OBS_ID_RE = re.compile(r"^KP\.(\d{8})\.")
-NCOL = 4080  # detector columns; the fits are defined over 0..NCOL-1
 NSAMPLE = 81  # columns sampled when comparing centerlines
 MIN_EPOCHS = 3  # an era needs this many trace files to have a scatter
 
@@ -155,8 +154,14 @@ def load_traces(input_dir, start, end, eras):
 
     One CSV is one epoch, named for the master flat it was traced from, so the
     datecode comes from the filename and a night with several flats
-    contributes several epochs. Exits loudly when the tree is missing or holds no
-    science-era traces in range -- an empty report would read as "stable".
+    contributes several epochs. Exits loudly when the tree is missing, a CSV is
+    empty, or no science-era traces are in range -- an empty report would read
+    as "stable".
+
+    Files traced at different polynomial degrees concatenate with the higher
+    ``CoeffN`` absent (NaN) from the lower-degree ones; an absent coefficient is
+    zero, as in the zero-padded partial refits, so it is filled as such rather
+    than left to blank those epochs' centerlines.
     """
     root = os.path.join(input_dir, "masters")
     if not os.path.isdir(root):
@@ -174,7 +179,12 @@ def load_traces(input_dir, start, end, eras):
             era = era_of(night, eras)
             if era is None:  # engineering / service-mission night
                 continue
-            table = pd.read_csv(path)
+            try:
+                table = pd.read_csv(path)
+            except pd.errors.EmptyDataError:
+                table = pd.DataFrame()
+            if table.empty:
+                sys.exit(f"error: empty order-trace CSV: {path}")
             table["Era"] = era
             table["Night"] = night
             table["Epoch"] = epoch
@@ -183,7 +193,11 @@ def load_traces(input_dir, start, end, eras):
         sys.exit(
             f"error: no science-era order-trace CSVs under {root} in {start}..{end}"
         )
-    return pd.concat(tables, ignore_index=True)
+    traces = pd.concat(tables, ignore_index=True)
+    coeffs = traces.filter(regex=r"^Coeff\d+$").columns
+    measured = traces["Status"] != "missing"
+    traces.loc[measured, coeffs] = traces.loc[measured, coeffs].fillna(0.0)
+    return traces
 
 
 def pixel_deviations(traces, coeff_cols):
@@ -196,7 +210,8 @@ def pixel_deviations(traces, coeff_cols):
     excursion; the per-epoch table carries the same two, plus `P95`, over that
     one epoch's traces.
     """
-    columns = np.linspace(0.0, NCOL - 1.0, NSAMPLE)
+    # The fits are defined over detector columns 0..ncol-1.
+    columns = np.linspace(0.0, DETECTOR["ccd"]["ncol"] - 1.0, NSAMPLE)
     powers = np.vstack([columns**k for k in range(len(coeff_cols))])
 
     records = []
@@ -288,12 +303,22 @@ def find_jumps(epochs):
     (`RMS`) and the signed shift (`Shift`) separates them most sharply. A jump
     has to clear both an absolute size and the local scatter -- the second test
     is what tells a step apart from a noisy stretch or a single bad flat, which
-    moves the traces for one epoch and then moves them back.
+    moves the traces for one epoch and then moves them back. A chip with fewer
+    than ``2 * JUMP_WINDOW`` epochs in an era has no boundary to score; that is
+    warned, not reported as stable.
     """
     jumps = []
     for (era, chip), group in epochs.groupby(["Era", "Chip"]):
         if chip == "BOTH":
             continue
+        if len(group) < 2 * JUMP_WINDOW:
+            logger.warning(
+                "era %s %s: %d epochs, too few to detect jumps (need %d)",
+                era,
+                chip,
+                len(group),
+                2 * JUMP_WINDOW,
+            )
         group = group.sort_values("Epoch").reset_index(drop=True)
         series = [group["RMS"].to_numpy(float), group["Shift"].to_numpy(float)]
         scored = []
@@ -537,9 +562,12 @@ def plot_stability_over_time(epochs, jumps, eras, out_dir):
         mark_jumps(axis, dates)
         axis.set_yscale("log")
         axis.set_ylabel("deviation [pixels]")
-        axis.set_title(
-            f"era {era}: {len(subset)} epochs, {len(dates)} jumps", fontsize=10
+        found = (
+            f"{len(dates)} jumps"
+            if len(subset) >= 2 * JUMP_WINDOW
+            else "too few to detect jumps"
         )
+        axis.set_title(f"era {era}: {len(subset)} epochs, {found}", fontsize=10)
         axis.grid(alpha=0.3)
     np.atleast_1d(axes)[0].legend(fontsize=8, ncol=3, loc="lower left")
     fig.suptitle("Per-epoch offset from the era median centerline, over time")
@@ -628,10 +656,19 @@ def summarize(traces, pixel, eras):
         )
 
 
-def report_jumps(jumps, eras):
+def report_jumps(jumps, epochs, eras):
     """The detected jumps, per era, with the chip that stepped."""
     logger.info("jumps (step = level change in pixels; sig = step / local scatter):")
     for era in eras:
+        count = int(((epochs["Era"] == era) & (epochs["Chip"] == "BOTH")).sum())
+        if count < 2 * JUMP_WINDOW:
+            logger.info(
+                "  era %s: jump detection skipped (%d epochs < %d)",
+                era,
+                count,
+                2 * JUMP_WINDOW,
+            )
+            continue
         dates = jump_dates(jumps, era)
         logger.info("  era %s: %d jumps", era, len(dates))
         for row in jumps[jumps["Era"] == era].itertuples():
@@ -672,6 +709,13 @@ def main(argv=None):
 
     eras = sorted(traces["Era"].unique(), key=float)
     colors = era_colors(eras)
+    for era in sorted(set(eras) - set(pixel["Era"]), key=float):
+        logger.warning(
+            "era %s: no trace has %d+ epochs (%d in range); not analyzed",
+            era,
+            MIN_EPOCHS,
+            traces.loc[traces["Era"] == era, "Epoch"].nunique(),
+        )
     eras = [era for era in eras if era in set(pixel["Era"])]
 
     out_dir = os.path.join(args.analysis_dir, "order_trace")
@@ -689,7 +733,7 @@ def main(argv=None):
     plot_stability_over_time(epochs, jumps, eras, out_dir)
     plot_stability_over_time_by_chip(epochs, jumps, eras, out_dir)
     summarize(traces, pixel, eras)
-    report_jumps(jumps, eras)
+    report_jumps(jumps, epochs, eras)
 
 
 if __name__ == "__main__":
