@@ -5,8 +5,8 @@ overrides, the fan-out pool controls, and the mini-db ``--cache`` mode -- factor
 out so the subcommand parsers (``reduce``/``masters``/``science``) compose them via
 ``parents=[...]`` instead of each re-declaring the same flags. Every factory
 returns a fresh ``add_help=False`` parser to slot in as a parent. The
-``kpfpipe analyze`` scripts compose one parent, `analysis_parser`, which is itself
-built from these same groups.
+``kpfpipe analyze`` scripts compose `analysis_parser`, itself built from these same
+groups, adding the input and pool/cache flags each one needs.
 
 This layer parses arguments and hands the values on; it never asks the filesystem
 what data exists. Resolving a datecode range against the data tree is ``_scan.py``'s
@@ -17,6 +17,7 @@ job. Depends only on stdlib + ``kpfpipe`` -- never on ``tools`` -- so, like
 import argparse
 import os
 import sys
+import time
 
 from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf import is_datecode
@@ -269,38 +270,35 @@ def pool_parser(jobs_help):
     return p
 
 
-def analysis_parser(default_date_range=None):
-    """The single parent parser the ``kpfpipe analyze`` scripts compose: their own
-    date range and directories, over the logging/pool/cache groups above.
+def default_date_range():
+    """First light through tomorrow -- the whole archive.
 
-    A script whose natural scope is the whole archive passes `default_date_range`
-    as a ``(START, END)`` pair, which makes ``--date_range`` optional.
+    The end is UTC-dated a day ahead so it never falls behind the newest HST night
+    on disk; a datecode dir that does not exist yet simply contributes nothing.
+    """
+    return "20221109", time.strftime("%Y%m%d", time.gmtime(time.time() + 86400))
+
+
+def analysis_parser(range_action):
+    """The parent parser every ``kpfpipe analyze`` script composes: a date range
+    defaulting to the whole archive, the logging group above, and where the reports
+    land. `range_action` words the ``--date_range`` help, as in `dates_parser`.
 
     The analysis scripts read no recipe TOML (those configs belong to the recipes),
-    so their directories come from the CLI alone: ``--input_dir`` is required, and
-    ``--analysis_dir``/``--log_dir`` -- or the ``--output_dir`` they fall back to --
-    say where the reports and logs land. Validated post-parse by each script's
-    ``parse_args``, as with the processing commands.
+    so their directories come from the CLI alone: ``--analysis_dir``/``--log_dir``
+    -- or the ``--output_dir`` they fall back to -- say where the reports and logs
+    land. Each script declares its own required input flag (they read different
+    trees) and any pool/cache groups it needs. Validated post-parse by each
+    script's ``parse_args``, as with the processing commands.
     """
     p = argparse.ArgumentParser(
         add_help=False,
         parents=[
             logging_parser(),
-            pool_parser(jobs_help="max concurrent per-night header scans"),
-            cache_parser(default="rw"),
             dates_parser(
-                "analyzes every L0 night in it",
-                dates=False,
-                default_date_range=default_date_range,
+                range_action, dates=False, default_date_range=default_date_range()
             ),
         ],
-    )
-    p.add_argument(
-        "--kpf_data_input",
-        "--input_dir",
-        dest="kpf_data_input",
-        required=True,
-        help="root of the raw L0 input tree to read (--input_dir is an alias)",
     )
     p.add_argument(
         "--analysis_dir",

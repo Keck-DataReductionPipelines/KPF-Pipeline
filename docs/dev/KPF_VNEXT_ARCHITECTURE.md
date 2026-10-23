@@ -62,7 +62,7 @@ kpfpipe/            scientist-facing building blocks (importable, no orchestrati
   utils/            shared helpers (io, logger, config, stats, astro, kpf)
 recipes/            compose modules into an end-to-end reduction (kpf_drp_{science,masters}.py)
 configs/            default recipe parameters (kpf_drp_{science,masters}.toml)
-scripts/            run recipes many times (processing/, plotting/)
+scripts/            run recipes many times (processing/, plotting/, analyze/)
 tools/              the `kpfpipe` CLI dispatcher (cli.py) and operator tools
 reference/          static reference data (detector.toml, line lists, order traces, etc.)
 tests/              regression/ (test suite) + profiling/ (performance harnesses)
@@ -285,6 +285,9 @@ interface*) and `plot/` the post-reduction plotter (`timeseries.py`). Every *pro
 is runnable on its own (`python -m scripts.process.<name>`), with no knowledge of the dispatcher
 above it; its flags are documented by `kpfpipe <command> --help`. The plotter is not a driver: it
 has no CLI and is imported by the `timeseries` wrapper as a library.
+`analyze/` holds read-only analyses of existing products (`thar.py`, `order_trace.py`), each
+reporting how one subject changes across nights; they reduce nothing and write only reports under
+`{output_dir}/analysis/<subject>/`.
 
 The drivers share a set of **`tools`-free** orchestration helpers, which sit at the
 `scripts/` root rather than inside `process/` because more than one sub-package composes them:
@@ -331,6 +334,8 @@ the remaining argv verbatim (each subcommand owns its own argparse). Full flag u
   library, not an orchestrator, so it needs no fan-out; the wrapper catches its failures to keep the
   stage fail-soft). Each stage is independently skippable and fail-soft — a frame is handed to science
   regardless of its masters result.
+- **`kpfpipe analyze <subject>`** (→ `scripts/analyze/<subject>.py`) — **read-only analyses**,
+  registered by subject in `_ANALYSES`; each runs in-process and writes reports, never data products.
 
 ## Quality control
 
