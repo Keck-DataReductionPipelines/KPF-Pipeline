@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 from datetime import datetime
 
 import pandas as pd
@@ -172,8 +173,9 @@ class FileHandler:
     def _read_mini_db_cache(self, datecode):
         """The cached mini database for ``datecode`` if trustworthy, else None
         (caller rescans). Rejects a stale cache when the row count differs from the
-        FITS files on disk, or the cache is older than any input or the directory
-        (by ``st_mtime``/``st_ctime``, so a same-count swap is still caught)."""
+        FITS files on disk, the cache is older than any input or the directory
+        (by ``st_mtime``/``st_ctime``, so a same-count swap is still caught), or the
+        cache is more than 7 days old, whatever the inputs."""
         cache_path = self._mini_db_cache_path(datecode)
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
@@ -206,6 +208,15 @@ class FileHandler:
             return None
 
         cache_mtime = os.stat(cache_path).st_mtime
+        # Conservative backstop: a week-old cache is rescanned even when it looks
+        # current, so a change the checks above miss cannot persist indefinitely.
+        if time.time() - cache_mtime > 7 * 86400:
+            logger.warning(
+                "mini database cache %s is more than 7 days old; rescanning",
+                cache_path,
+            )
+            return None
+
         newest_input = os.stat(data_dir).st_mtime
         for fn in file_list:
             st = os.stat(fn)
@@ -268,7 +279,8 @@ class FileHandler:
         * read (``"r"``) -- load a *current* cache instead of re-scanning the L0
           directory. A cache is current only when it passes the count and
           freshness guardrails in ``_read_mini_db_cache``; a frame added, removed,
-          replaced, or rewritten since the cache was built forces a rescan.
+          replaced, or rewritten since the cache was built, or a cache more than 7
+          days old, forces a rescan.
         * write (``"w"``) -- after scanning, (re)write the cache (directory created
           as needed) for next time. A cache hit on read short-circuits the scan, so
           nothing is rewritten.

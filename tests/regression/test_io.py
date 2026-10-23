@@ -1113,6 +1113,20 @@ class TestMiniDatabaseCache:
         )
         assert db["FILENAME"].tolist() == [expected]
 
+    def test_cache_older_than_a_week_rescans(self, tmp_path, monkeypatch, caplog):
+        # A cache passing every other guardrail is still rescanned once it is more
+        # than 7 days old. File ctimes cannot be backdated, so advance the clock.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+        now = os.stat(cache).st_mtime
+        monkeypatch.setattr("kpfpipe.utils.io.time.time", lambda: now + 7 * 86400 + 1)
+
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.io"):
+            db = fh.build_mini_database("20240405", cache="rw")
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert "more than 7 days old" in caplog.text
+
     def test_cache_false_leaves_no_cache(self, tmp_path):
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
         fh.build_mini_database("20240405")  # cache defaults to False
