@@ -48,6 +48,9 @@ _TRACE_FAMILIES = (
     "CCLRN",
 )
 
+# Native cards that make write_minimal_l0's frame a science (Target) frame.
+_SCIENCE_CARDS = {"IMTYPE": "Object", "OBJECT": "10700", "TARGNAME": "10700"}
+
 
 class TestKPF0:
     def test_from_fits(self, synthetic_l0_file):
@@ -230,13 +233,27 @@ class TestKPF0Provenance:
             synthetic_l0_file
         )
 
-    def test_progid_defaults_to_unknown_and_warns(self, caplog, synthetic_l0_minimal):
+    def test_progid_defaults_to_unknown_and_warns(self, caplog, tmp_path):
+        fn = write_minimal_l0(
+            tmp_path / "KP.20240113.00001.00.fits",
+            primary_cards={**_SCIENCE_CARDS, "PROGNAME": None},
+        )
         with caplog.at_level(logging.WARNING):
-            l0 = standardized_l0(synthetic_l0_minimal)
+            l0 = standardized_l0(fn)
         assert "PROGNAME absent" in caplog.text
         prim = l0.headers["PRIMARY"]
         assert prim.get("PROGID") == "UNKNOWN"
         assert prim.get("KOAID") == "KP.20240113.00001.00.fits"
+
+    def test_absent_program_ids_log_debug_on_calibration(
+        self, caplog, synthetic_l0_minimal
+    ):
+        # A calibration frame names no program as a rule: DEBUG, not WARNING.
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.data_models.level0"):
+            l0 = standardized_l0(synthetic_l0_minimal)
+        absent = [r for r in caplog.records if "absent from L0 PRIMARY" in r.message]
+        assert absent and all(r.levelno == logging.DEBUG for r in absent)
+        assert l0.headers["PRIMARY"].get("PROGID") == "UNKNOWN"
 
     def test_program_and_observer_fall_back_to_their_copies(self, tmp_path):
         fn = write_minimal_l0(
@@ -256,7 +273,12 @@ class TestKPF0Provenance:
     def test_disagreeing_copies_default_to_unknown_and_warn(self, caplog, tmp_path):
         fn = write_minimal_l0(
             tmp_path / "KP.20240113.00005.00.fits",
-            primary_cards={"PROGNAME": None, "GRPROGNA": "K123", "RDPROGNA": "K456"},
+            primary_cards={
+                **_SCIENCE_CARDS,
+                "PROGNAME": None,
+                "GRPROGNA": "K123",
+                "RDPROGNA": "K456",
+            },
         )
         with caplog.at_level(logging.WARNING):
             prim = standardized_l0(fn).headers["PRIMARY"]
