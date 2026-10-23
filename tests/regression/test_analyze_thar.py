@@ -157,17 +157,27 @@ class TestFrameRow:
         return {
             "FILENAME": str(path),
             "DRP_OBJECT": "ThAr_daily",
+            "DRP_OBSTYPE": "Arclamp",
+            "DRP_OBSMODE": "Calibration",
             **dict.fromkeys(("SKYSRC", "SCISRC", "CALSRC"), "ThAr_daily"),
+            "GREEN": True,
+            "RED": True,
+            "CA_HK": False,
+            "EXPTIME": 60.0,
+            "ISJUNK": False,
+            "COMMENTS": "WARNINGS: 0 fatal, 1 non-fatal",
         }, obs_id
 
     def test_carries_mini_db_and_lamp_columns(self, thar, tmp_path):
         record, obs_id = self._record(tmp_path)
         row = thar._frame_row(record)
+        assert row["FILENAME"] == record["FILENAME"]
         assert row["OBS_ID"] == obs_id and row["DATECODE"] == "20240101"
-        assert row["SCISRC"] == "ThAr_daily"
-        assert row["OBJECT"] == "autocal-thar-all-eve"
-        assert row["EXPTIME"] == 60.0 and row["ELAPSED"] == 60.0
-        assert row["HCLSN"] == "L74828" and row["OCTAGON"] == "Th_daily"
+        assert row["DRP_OBJECT"] == "ThAr_daily" and row["SCISRC"] == "ThAr_daily"
+        assert (row["GREEN"], row["RED"], row["CA_HK"]) == (True, True, False)
+        assert row["EXPTIME"] == 60.0 and row["ISJUNK"] is False
+        assert row["COMMENTS"] == "WARNINGS: 0 fatal, 1 non-fatal"
+        assert row["HCLSN"] == "L74828"
         assert set(row) == set(thar._EXPOSURE_CSV_COLUMNS)
 
     def test_absent_card_becomes_empty_field(self, thar, tmp_path):
@@ -175,6 +185,12 @@ class TestFrameRow:
         # written, with the gap visible rather than the frame dropped.
         record, _ = self._record(tmp_path, HCLSN="")
         assert thar._frame_row(record)["HCLSN"] == ""
+
+    def test_no_warnings_becomes_empty_comments(self, thar, tmp_path):
+        # mini_db leaves COMMENTS NaN on a clean frame; the CSV must not read "nan".
+        record, _ = self._record(tmp_path)
+        record["COMMENTS"] = float("nan")
+        assert thar._frame_row(record)["COMMENTS"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -206,18 +222,25 @@ class TestScanLampSerialNumbers:
         rows = self._scan(thar, tmp_path)
         assert {r["OBS_ID"] for r in rows} == expected
 
-    def test_excludes_non_thar_frames(self, thar, tmp_path):
-        thar_id = _write_thar(str(tmp_path), "20240101", 3600)
+    def test_selects_daily_and_gold_excludes_non_thar(self, thar, tmp_path):
+        daily = _write_thar(str(tmp_path), "20240101", 3600)
         write_l0_tree(str(tmp_path), "20240101", 3700, obj="autocal-bias")
         write_l0_tree(str(tmp_path), "20240101", 3800, obj="10700")
-        _write_thar(str(tmp_path), "20240101", 3900, OCTAGON="Th_gold")
-        assert [r["OBS_ID"] for r in self._scan(thar, tmp_path)] == [thar_id]
+        gold = _write_thar(str(tmp_path), "20240101", 3900, OCTAGON="Th_gold")
+        rows = self._scan(thar, tmp_path)
+        assert [r["OBS_ID"] for r in rows] == [daily, gold]
+        assert rows[1]["SCISRC"] == "ThAr_gold"
 
-    def test_excludes_junk(self, thar, tmp_path):
+    def test_keeps_junk_flagged(self, thar, tmp_path):
+        # A full accounting: junk frames stay in the list, flagged by ISJUNK.
         good = _write_thar(str(tmp_path), "20240101", 3600)
         junk = _write_thar(str(tmp_path), "20240101", 3700)
         add_junk_obs_id(str(tmp_path), junk)
-        assert [r["OBS_ID"] for r in self._scan(thar, tmp_path)] == [good]
+        rows = self._scan(thar, tmp_path)
+        assert [(r["OBS_ID"], r["ISJUNK"]) for r in rows] == [
+            (good, False),
+            (junk, True),
+        ]
 
     def test_rows_are_chronological_across_nights(self, thar, tmp_path):
         # Nights complete out of pool order; the report must still read forward.
@@ -265,12 +288,8 @@ class TestScanLampSerialNumbers:
 # ---------------------------------------------------------------------------
 
 
-def _history_row(datecode, hclsn, sources=("ThAr_daily",) * 3):
-    return {
-        "DATECODE": datecode,
-        **dict(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True)),
-        "HCLSN": hclsn,
-    }
+def _history_row(datecode, hclsn, obj="ThAr_daily"):
+    return {"DATECODE": datecode, "DRP_OBJECT": obj, "HCLSN": hclsn}
 
 
 def _stretch(hclsn, first, last, n_obs):
@@ -300,14 +319,24 @@ class TestLampHistory:
         history = thar.lamp_history([_history_row("20240101", "")])
         assert history == [_stretch("(none)", "20240101", "20240101", 1)]
 
-    def test_other_frames_neither_count_nor_split(self, thar):
+    def test_gold_frames_neither_count_nor_split(self, thar):
         rows = [
             _history_row("20240101", "L74828"),
-            _history_row("20240102", "L82884", sources=("None", "ThAr_daily", "None")),
+            _history_row("20240102", "L90001", obj="ThAr_gold"),
             _history_row("20240103", "L74828"),
         ]
         assert thar.lamp_history(rows) == [
             _stretch("L74828", "20240101", "20240103", 2)
+        ]
+
+    def test_every_daily_frame_counts_whatever_its_fibers(self, thar, tmp_path):
+        # The serial names the lamp; which fibers a frame lit is irrelevant.
+        for i, obj in enumerate(["autocal-thar-all-eve", "autocal-thar-sci"]):
+            _write_thar(str(tmp_path), "20240101", 3600 + i * 100, obj=obj)
+        _write_thar(str(tmp_path), "20240101", 3800, obj="autocal-thar-hk")
+        rows = thar.scan_lamp_serial_numbers(str(tmp_path), "20240101", "20240131", 1)
+        assert thar.lamp_history(rows) == [
+            _stretch("L74828", "20240101", "20240101", 3)
         ]
 
 
