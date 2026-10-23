@@ -17,7 +17,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULT_CFG, DETECTOR
+from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
@@ -82,6 +82,19 @@ class ImageAssembly:
         for k, v in DETECTOR.items():
             setattr(self, k, v)
         self.nrow, self.ncol = self.ccd["nrow"], self.ccd["ncol"]
+        obs_time = pd.to_datetime(
+            l0_obj.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
+        )
+        readout = pd.read_csv(
+            f"{REPO_ROOT}/reference/readout.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        readout = readout[
+            (readout["UT_start_date"] <= obs_time)
+            & (obs_time <= readout["UT_end_date"])
+        ].iloc[0]
+        # Rebind, not mutate: self.ccd is DETECTOR's own dict.
+        self.ccd = {**self.ccd, "prescan": int(readout["Prescan"])}
 
         self._info = None
         self.namp = {}  # number of amplifiers; set by _infer_amplifier_settings()

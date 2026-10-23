@@ -12,6 +12,7 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
+import kpfpipe
 from kpfpipe import CHIPS, FIBERS, SCI_FIBERS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
@@ -408,6 +409,25 @@ class TestQCL0:
             tmp_path / "KP.20240405.00004.00.fits", namps=3, shape=(10, 10)
         )
         assert QCL0(standardized_l0(fn)).data_l0_red_green() is False
+
+    @pytest.mark.parametrize(
+        ("datecode", "shape", "passed"),
+        [
+            ("20230309", (110, 114), True),  # early-2023 mode: 4 / 100 / 100
+            ("20240405", (40, 64), True),  # current mode: 4 / 50 / 30
+            ("20230309", (40, 64), False),
+            ("20240405", (110, 114), False),
+        ],
+    )
+    def test_data_l0_red_green_amp_shape_follows_readout_mode(
+        self, tmp_path, monkeypatch, datecode, shape, passed
+    ):
+        # The real readout modes over the 20x20 mini detector (10x10 4-amp tiles).
+        monkeypatch.setattr(
+            "kpfpipe.quality_control.qc_flags.level0.REPO_ROOT", kpfpipe.REPO_ROOT
+        )
+        fn = write_amp_l0(tmp_path / f"KP.{datecode}.00005.00.fits", shape=shape)
+        assert QCL0(standardized_l0(fn)).data_l0_red_green() is passed
 
     def test_header_keywords_present(self, tmp_path):
         l0 = _make_kpf0(tmp_path)

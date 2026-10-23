@@ -5,8 +5,9 @@ import re
 from datetime import datetime
 
 import numpy as np
+import pandas as pd
 
-from kpfpipe import DETECTOR
+from kpfpipe import DETECTOR, REPO_ROOT
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
@@ -27,12 +28,21 @@ class QCL0(QC):
         """
         ccd = DETECTOR["ccd"]
         primary = self.kpf_obj.headers["PRIMARY"]
+        obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
+        readout = pd.read_csv(
+            f"{REPO_ROOT}/reference/readout.csv",
+            parse_dates=["UT_start_date", "UT_end_date"],
+        )
+        readout = readout[
+            (readout["UT_start_date"] <= obs_time)
+            & (obs_time <= readout["UT_end_date"])
+        ].iloc[0]
         for chip, keyword in (("GREEN", "NAMPGRN"), ("RED", "NAMPRED")):
             namp = primary[keyword]
             if namp not in (2, 4):
                 return False
-            nrow = ccd["nrow"] // (2 if namp == 4 else 1) + ccd["oscan_prl"]
-            ncol = ccd["ncol"] // 2 + ccd["prescan"] + ccd["oscan_srl"]
+            nrow = ccd["nrow"] // (2 if namp == 4 else 1) + readout["ParallelOverscan"]
+            ncol = ccd["ncol"] // 2 + readout["Prescan"] + readout["SerialOverscan"]
             for i in range(1, namp + 1):
                 arr = self.kpf_obj.data[f"{chip}_AMP{i}"]
                 if arr.shape != (nrow, ncol) or not np.any(np.isfinite(arr)):

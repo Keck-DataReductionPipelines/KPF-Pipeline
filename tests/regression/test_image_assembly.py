@@ -13,7 +13,7 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import CHIPS
+from kpfpipe import CHIPS, DETECTOR
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
@@ -546,6 +546,23 @@ class TestAmplifierGuards:
         module.orientation["GREEN_AMP1"] = "sideways"
         with pytest.raises(ValueError, match="unexpected 'flip' entry"):
             module.orient_channels("GREEN")
+
+
+@pytest.mark.parametrize(("datecode", "prescan"), [("20230309", 3), ("20240405", 5)])
+def test_prescan_follows_the_frame_readout_mode(
+    tmp_path, monkeypatch, datecode, prescan
+):
+    (tmp_path / "reference").mkdir()
+    (tmp_path / "reference/readout.csv").write_text(
+        "UT_start_date,UT_end_date,Prescan,SerialOverscan,ParallelOverscan\n"
+        "2000-01-01 00:00:00,2023-06-26 00:00:00,3,100,100\n"
+        "2023-06-26 00:00:01,2040-01-01 00:00:00,5,50,30\n"
+    )
+    monkeypatch.setattr("kpfpipe.modules.image_assembly.REPO_ROOT", tmp_path)
+    path = write_amp_l0(tmp_path / f"KP.{datecode}.00001.00.fits", shape=(10, 10))
+    module = ImageAssembly(standardized_l0(path))
+    assert module.ccd["prescan"] == prescan
+    assert "prescan" not in DETECTOR["ccd"]
 
 
 # ---------------------------------------------------------------------------
