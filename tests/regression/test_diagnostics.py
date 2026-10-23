@@ -141,7 +141,7 @@ class TestDiagnosticsBase:
             results = MyDiag(obj).run()
         assert results == {}
         assert obj.headers["PRIMARY"] == {}
-        assert "diagnostic 'nothing' raised" in caplog.text
+        assert "diagnostic 'nothing' could not be computed" in caplog.text
 
     def test_raising_method_logs_and_continues(self, caplog):
         obj = self._make_obj()
@@ -163,8 +163,10 @@ class TestDiagnosticsBase:
         # a later metric is still computed. Halting is the checkpoint layer's job.
         with caplog.at_level(logging.ERROR):
             results = MyDiag(obj).run()
-        assert "diagnostic 'boom' raised" in caplog.text
-        assert "boom!" in caplog.text
+        assert "diagnostic 'boom' could not be computed (ValueError: boom!)" in (
+            caplog.text
+        )
+        assert "exception caught, its keywords left blank" in caplog.text
         assert results == {"KEYA": (3.14, "KEYA description")}
         assert obj.headers["PRIMARY"]["KEYA"] == 3.14
 

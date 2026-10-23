@@ -287,8 +287,10 @@ class TestQCBase:
         # WARNING an ordinary fail gets), counted as a fail, and the run continues.
         with caplog.at_level(logging.ERROR):
             results = MyQC(obj).run()
-        assert "QC check 'check_boom' raised" in caplog.text
-        assert "boom!" in caplog.text
+        assert "QC check 'check_boom' could not be computed (ValueError: boom!)" in (
+            caplog.text
+        )
+        assert "exception caught, BOOM set to 0, QC continues" in caplog.text
         assert obj.headers["QUALITY_CONTROL"]["BOOM"] == 0
         assert results["BOOM"][0] is False
         assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
