@@ -8,6 +8,7 @@ import logging
 import types
 
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 from astropy.table import Table
@@ -361,6 +362,22 @@ class TestQCBase:
 # ---------------------------------------------------------------------------
 
 
+def test_readout_reference_shapes_match_detector_geometry():
+    # Each known setting's NAXIS1/NAXIS2 is the imaging area per amp plus its
+    # prescan and overscan.
+    ccd = kpfpipe.DETECTOR["ccd"]
+    readout = pd.read_csv(f"{kpfpipe.REPO_ROOT}/reference/readout.csv")
+    assert len(readout) == 8
+    for _, row in readout.iterrows():
+        nrow = ccd["nrow"] // (2 if row["Amplifiers"] == 4 else 1)
+        ncol = ccd["ncol"] // 2
+        assert row["NAXIS2"] == nrow + row["ParallelOverscan"]
+        assert row["NAXIS1"] == ncol + row["Prescan"] + row["SerialOverscan"]
+        assert row["ReadoutSetting"] == (
+            f"{row['Chip'].lower()}-{row['Amplifiers']}amp-oscan{row['SerialOverscan']}"
+        )
+
+
 @pytest.mark.usefixtures("mini_detector")
 class TestQCL0:
     def test_data_l0_red_green_pass(self, tmp_path):
@@ -410,24 +427,31 @@ class TestQCL0:
         )
         assert QCL0(standardized_l0(fn)).data_l0_red_green() is False
 
-    @pytest.mark.parametrize(
-        ("datecode", "shape", "passed"),
-        [
-            ("20230309", (110, 114), True),  # early-2023 mode: 4 / 100 / 100
-            ("20240405", (40, 64), True),  # current mode: 4 / 50 / 30
-            ("20230309", (40, 64), False),
-            ("20240405", (110, 114), False),
-        ],
-    )
-    def test_data_l0_red_green_amp_shape_follows_readout_mode(
-        self, tmp_path, monkeypatch, datecode, shape, passed
+    def test_data_l0_red_green_fail_unknown_readout_setting(
+        self, tmp_path, readout_shapes
     ):
-        # The real readout modes over the 20x20 mini detector (10x10 4-amp tiles).
-        monkeypatch.setattr(
-            "kpfpipe.quality_control.qc_flags.level0.REPO_ROOT", kpfpipe.REPO_ROOT
-        )
-        fn = write_amp_l0(tmp_path / f"KP.{datecode}.00005.00.fits", shape=shape)
-        assert QCL0(standardized_l0(fn)).data_l0_red_green() is passed
+        readout_shapes((4, 12, 10), (2, 10, 20))
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_header_disagrees_with_data(
+        self, tmp_path, readout_shapes
+    ):
+        # (10, 12) is a known setting, but the header still reports (10, 10).
+        readout_shapes((4, 10, 10), (4, 12, 10))
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        for i in range(1, 5):
+            l0.data[f"GREEN_AMP{i}"] = np.ones((10, 12), dtype=np.float32)
+        assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_mixed_settings_on_a_chip(
+        self, tmp_path, readout_shapes
+    ):
+        readout_shapes((4, 10, 10), (4, 12, 10))
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        l0.data["GREEN_AMP2"] = np.ones((10, 12), dtype=np.float32)
+        l0.headers["GREEN_AMP2"]["NAXIS1"] = 12
+        assert QCL0(l0).data_l0_red_green() is False
 
     def test_header_keywords_present(self, tmp_path):
         l0 = _make_kpf0(tmp_path)

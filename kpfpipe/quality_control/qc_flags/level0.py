@@ -7,7 +7,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DETECTOR, REPO_ROOT
+from kpfpipe import REPO_ROOT
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
@@ -22,29 +22,34 @@ class QCL0(QC):
 
         KPF reads out 2 or 4 amplifiers per chip, the count
         ``KPF0.standardize_headers`` stamped as NAMPGRN/NAMPRED. Each amp must
-        match the shape ``ImageAssembly.dims`` implies for that readout mode
-        (prescan/overscan included) and hold at least one finite value, so a
+        match its header (NAXIS2, NAXIS1) and the shape of one known readout
+        setting in ``reference/readout.csv`` (the same one for every amp on the
+        chip), and hold at least one finite value, so a
         truncated readout or an all-NaN placeholder is not mistaken for good data.
         """
-        ccd = DETECTOR["ccd"]
         primary = self.kpf_obj.headers["PRIMARY"]
-        obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
-        readout = pd.read_csv(
-            f"{REPO_ROOT}/reference/readout.csv",
-            parse_dates=["UT_start_date", "UT_end_date"],
-        )
-        readout = readout[
-            (readout["UT_start_date"] <= obs_time)
-            & (obs_time <= readout["UT_end_date"])
-        ].iloc[0]
+        readout = pd.read_csv(f"{REPO_ROOT}/reference/readout.csv")
         for chip, keyword in (("GREEN", "NAMPGRN"), ("RED", "NAMPRED")):
             namp = primary[keyword]
             if namp not in (2, 4):
                 return False
-            nrow = ccd["nrow"] // (2 if namp == 4 else 1) + readout["ParallelOverscan"]
-            ncol = ccd["ncol"] // 2 + readout["Prescan"] + readout["SerialOverscan"]
+            setting = readout[
+                (readout["Chip"] == chip) & (readout["Amplifiers"] == namp)
+            ]
+            nrow, ncol = None, None
             for i in range(1, namp + 1):
                 arr = self.kpf_obj.data[f"{chip}_AMP{i}"]
+                header = self.kpf_obj.headers[f"{chip}_AMP{i}"]
+                if arr.shape != (header.get("NAXIS2"), header.get("NAXIS1")):
+                    return False
+                if nrow is None:
+                    match = setting[
+                        (setting["NAXIS2"] == arr.shape[0])
+                        & (setting["NAXIS1"] == arr.shape[1])
+                    ]
+                    if match.empty:
+                        return False
+                    nrow, ncol = arr.shape
                 if arr.shape != (nrow, ncol) or not np.any(np.isfinite(arr)):
                     return False
         return True

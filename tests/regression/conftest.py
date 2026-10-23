@@ -47,7 +47,34 @@ def stub_cfht_weather(monkeypatch):
 
 
 @pytest.fixture
-def mini_detector(monkeypatch, tmp_path):
+def readout_shapes(monkeypatch, tmp_path):
+    """Point the readout-setting lookups at a test ``reference/readout.csv``.
+
+    Returns ``use(*shapes, prescan=0)``: each ``(namp, naxis1, naxis2)`` becomes
+    a known setting on both chips, replacing any set by an earlier call.
+    """
+
+    def use(*shapes, prescan=0):
+        (tmp_path / "reference").mkdir(exist_ok=True)
+        lines = [
+            "ReadoutSetting,Chip,Amplifiers,Prescan,SerialOverscan,"
+            "ParallelOverscan,NAXIS1,NAXIS2,COMMENTS"
+        ]
+        for chip in ("GREEN", "RED"):
+            for namp, naxis1, naxis2 in shapes:
+                lines.append(f"test,{chip},{namp},{prescan},0,0,{naxis1},{naxis2},")
+        (tmp_path / "reference/readout.csv").write_text("\n".join(lines) + "\n")
+        for module in (
+            "kpfpipe.modules.image_assembly",
+            "kpfpipe.quality_control.qc_flags.level0",
+        ):
+            monkeypatch.setattr(f"{module}.REPO_ROOT", tmp_path)
+
+    return use
+
+
+@pytest.fixture
+def mini_detector(monkeypatch, readout_shapes):
     """Shrink ``DETECTOR['ccd']`` to a 20x20, overscan-free detector.
 
     The DATAPR* checks pin exact shapes read from ``DETECTOR`` at call time, so a
@@ -64,14 +91,5 @@ def mini_detector(monkeypatch, tmp_path):
 
     for key, value in (("nrow", 20), ("ncol", 20)):
         monkeypatch.setitem(DETECTOR["ccd"], key, value)
-    # A prescan- and overscan-free readout.csv, read in place of the reference.
-    (tmp_path / "reference").mkdir()
-    (tmp_path / "reference/readout.csv").write_text(
-        "UT_start_date,UT_end_date,Prescan,SerialOverscan,ParallelOverscan\n"
-        "2000-01-01 00:00:00,2040-01-01 00:00:00,0,0,0\n"
-    )
-    for module in (
-        "kpfpipe.modules.image_assembly",
-        "kpfpipe.quality_control.qc_flags.level0",
-    ):
-        monkeypatch.setattr(f"{module}.REPO_ROOT", tmp_path)
+    # Prescan- and overscan-free readout settings: 4 x (10, 10) or 2 x (20, 10).
+    readout_shapes((4, 10, 10), (2, 10, 20))

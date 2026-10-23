@@ -13,7 +13,7 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import CHIPS, DETECTOR
+from kpfpipe import CHIPS
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.modules.image_assembly import ImageAssembly
 
@@ -480,18 +480,19 @@ class TestOverscanMethods:
     """
 
     @pytest.fixture
-    def ia(self, tmp_path):
+    def ia(self, tmp_path, readout_shapes):
         """ImageAssembly on a tiny 4-amp frame, with the geometry set by hand.
 
-        ``dims``/``prescan`` normally come from the detector reference; setting
-        them directly keeps the overscan slicing arithmetic in view.
+        ``dims``/``prescan`` normally come from the detector and readout
+        references; setting them directly keeps the overscan slicing arithmetic
+        in view.
         """
+        readout_shapes((4, 12, 12))
         path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(12, 12))
         module = ImageAssembly(standardized_l0(path))
         module.namp["GREEN"] = 4
         module.dims["GREEN"] = (8, 8)
-        # Rebind, not mutate: self.ccd is DETECTOR's own dict.
-        module.ccd = {**module.ccd, "prescan": 2}
+        module.prescan["GREEN"] = 2
         return module
 
     def _set_serial_overscan(self, ia, values):
@@ -540,29 +541,26 @@ class TestAmplifierGuards:
         with pytest.raises(ValueError, match="Only 2-amp and 4-amp"):
             ImageAssembly(l0)
 
-    def test_unexpected_flip_entry_raises(self, tmp_path):
+    def test_unexpected_flip_entry_raises(self, tmp_path, readout_shapes):
+        readout_shapes((4, 10, 10))
         path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
         module = ImageAssembly(standardized_l0(path))
         module.orientation["GREEN_AMP1"] = "sideways"
         with pytest.raises(ValueError, match="unexpected 'flip' entry"):
             module.orient_channels("GREEN")
 
+    def test_unknown_readout_setting_raises(self, tmp_path, readout_shapes):
+        readout_shapes((4, 12, 12))
+        path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
+        with pytest.raises(ValueError, match="matches no readout setting"):
+            ImageAssembly(standardized_l0(path))
 
-@pytest.mark.parametrize(("datecode", "prescan"), [("20230309", 3), ("20240405", 5)])
-def test_prescan_follows_the_frame_readout_mode(
-    tmp_path, monkeypatch, datecode, prescan
-):
-    (tmp_path / "reference").mkdir()
-    (tmp_path / "reference/readout.csv").write_text(
-        "UT_start_date,UT_end_date,Prescan,SerialOverscan,ParallelOverscan\n"
-        "2000-01-01 00:00:00,2023-06-26 00:00:00,3,100,100\n"
-        "2023-06-26 00:00:01,2040-01-01 00:00:00,5,50,30\n"
-    )
-    monkeypatch.setattr("kpfpipe.modules.image_assembly.REPO_ROOT", tmp_path)
-    path = write_amp_l0(tmp_path / f"KP.{datecode}.00001.00.fits", shape=(10, 10))
+
+def test_prescan_comes_from_the_matched_readout_setting(tmp_path, readout_shapes):
+    readout_shapes((4, 10, 10), prescan=3)
+    path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
     module = ImageAssembly(standardized_l0(path))
-    assert module.ccd["prescan"] == prescan
-    assert "prescan" not in DETECTOR["ccd"]
+    assert module.prescan == {"GREEN": 3, "RED": 3}
 
 
 # ---------------------------------------------------------------------------
