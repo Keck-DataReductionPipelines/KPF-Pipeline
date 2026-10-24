@@ -54,13 +54,15 @@ def readout_shapes(monkeypatch, tmp_path):
     a known setting on both chips, replacing any set by an earlier call.
     """
 
+    from kpfpipe import CHIPS
+
     def use(*shapes, prescan=0):
         (tmp_path / "reference").mkdir(exist_ok=True)
         lines = [
             "ReadoutSetting,Chip,Amplifiers,Prescan,SerialOverscan,"
             "ParallelOverscan,NAXIS1,NAXIS2,COMMENTS"
         ]
-        for chip in ("GREEN", "RED"):
+        for chip in CHIPS:
             for namp, naxis1, naxis2 in shapes:
                 lines.append(f"test,{chip},{namp},{prescan},0,0,{naxis1},{naxis2},")
         (tmp_path / "reference/readout.csv").write_text("\n".join(lines) + "\n")

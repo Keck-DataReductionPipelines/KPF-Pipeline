@@ -36,9 +36,9 @@ _CACHE_FILE_MODE = 0o666
 _CACHE_DIR_MODE = 0o777
 
 # The mini-database columns: DRP_* and the fiber sources from HeaderParser, the
-# camera readout flags from the native camera cards, NATIVE_OBJECT and EXPTIME
-# the native OBJECT and EXPTIME,
-# UTC/HST_TIME the filename's KPF timestamp, ISJUNK the observer junk list (see
+# camera readout flags from the native camera cards, NATIVE_OBJECT/EXPTIME the
+# native OBJECT/EXPTIME, UTC/HST_TIME the filename's KPF timestamp, ISJUNK the
+# observer junk list (see
 # load_junk_obs_ids), COMMENTS the fatal/non-fatal warning counts (details in
 # the log).
 _MINI_DB_KEYS = [
@@ -463,10 +463,16 @@ class FileHandler:
         engineering = mini_db["NATIVE_OBJECT"].str.contains(
             "flush-persistence|test", case=False, na=False
         )
-        for fn, native_obj in mini_db.loc[
-            keep & engineering, ["FILENAME", "NATIVE_OBJECT"]
-        ].values:
-            logger.info("excluding %s: native OBJECT %r", fn, native_obj)
+        excluded = mini_db.loc[keep & engineering, ["FILENAME", "NATIVE_OBJECT"]]
+        if not excluded.empty:
+            logger.info(
+                "excluding %d %s frame(s) by native OBJECT: %s",
+                len(excluded),
+                cal_type,
+                ", ".join(
+                    f"{os.path.basename(fn)} ({obj!r})" for fn, obj in excluded.values
+                ),
+            )
         keep &= ~engineering
         cal_df = mini_db[keep]
         if cal_df.empty:

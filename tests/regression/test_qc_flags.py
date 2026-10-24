@@ -362,20 +362,21 @@ class TestQCBase:
 # ---------------------------------------------------------------------------
 
 
-def test_readout_reference_shapes_match_detector_geometry():
-    # Each known setting's NAXIS1/NAXIS2 is the imaging area per amp plus its
-    # prescan and overscan.
-    ccd = kpfpipe.DETECTOR["ccd"]
-    readout = pd.read_csv(f"{kpfpipe.REPO_ROOT}/reference/readout.csv")
-    assert len(readout) == 8
-    for _, row in readout.iterrows():
-        nrow = ccd["nrow"] // (2 if row["Amplifiers"] == 4 else 1)
-        ncol = ccd["ncol"] // 2
-        assert row["NAXIS2"] == nrow + row["ParallelOverscan"]
-        assert row["NAXIS1"] == ncol + row["Prescan"] + row["SerialOverscan"]
-        assert row["ReadoutSetting"] == (
-            f"{row['Chip'].lower()}-{row['Amplifiers']}amp-oscan{row['SerialOverscan']}"
-        )
+class TestReadoutReference:
+    def test_readout_reference_shapes_match_detector_geometry(self):
+        # Each known setting's NAXIS1/NAXIS2 is the imaging area per amp plus its
+        # prescan and overscan.
+        ccd = kpfpipe.DETECTOR["ccd"]
+        readout = pd.read_csv(f"{kpfpipe.REPO_ROOT}/reference/readout.csv")
+        assert len(readout) == 8  # oracle: the known readout settings
+        for _, row in readout.iterrows():
+            nrow = ccd["nrow"] // (2 if row["Amplifiers"] == 4 else 1)
+            ncol = ccd["ncol"] // 2
+            assert row["NAXIS2"] == nrow + row["ParallelOverscan"]
+            assert row["NAXIS1"] == ncol + row["Prescan"] + row["SerialOverscan"]
+            assert row["ReadoutSetting"] == (
+                f"{row['Chip'].lower()}-{row['Amplifiers']}amp-oscan{row['SerialOverscan']}"
+            )
 
 
 @pytest.mark.usefixtures("mini_detector")

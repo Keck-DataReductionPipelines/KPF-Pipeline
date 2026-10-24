@@ -1203,7 +1203,8 @@ class TestJunkExclusion:
         kept = [fn for cluster in lists for fn in cluster]
         assert eng_fn not in kept
         assert set(kept) == set(_JUNK_BIAS) - {eng_fn}
-        assert f"excluding {eng_fn}: native OBJECT {native_obj!r}" in caplog.text
+        assert "excluding 1 bias frame(s) by native OBJECT" in caplog.text
+        assert f"{os.path.basename(eng_fn)} ({native_obj!r})" in caplog.text
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.

@@ -397,12 +397,12 @@ class SpectralExtraction:
                 f"Failed to extract {len(failed)} orderlets from the {chip} CCD "
                 f"({', '.join(failed)}); not marked 'missing' in {trace_file}"
             )
-        for name in expected:
+        if expected:
             logger.warning(
                 "%s %s not extracted (NaN): expected, marked 'missing' in %s "
                 "(off-detector in this era; see reference/order_traces/README.md)",
                 chip,
-                name,
+                ", ".join(expected),
                 trace_file,
             )
 

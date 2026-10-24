@@ -556,11 +556,14 @@ class TestAmplifierGuards:
             ImageAssembly(standardized_l0(path))
 
 
-def test_prescan_comes_from_the_matched_readout_setting(tmp_path, readout_shapes):
-    readout_shapes((4, 10, 10), prescan=3)
-    path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
-    module = ImageAssembly(standardized_l0(path))
-    assert module.prescan == {"GREEN": 3, "RED": 3}
+class TestReadoutSetting:
+    def test_prescan_comes_from_the_matched_readout_setting(
+        self, tmp_path, readout_shapes
+    ):
+        readout_shapes((4, 10, 10), prescan=3)
+        path = write_amp_l0(tmp_path / "KP.20240101.00001.00.fits", shape=(10, 10))
+        module = ImageAssembly(standardized_l0(path))
+        assert module.prescan == {"GREEN": 3, "RED": 3}
 
 
 # ---------------------------------------------------------------------------

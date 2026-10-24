@@ -22,10 +22,10 @@ class QCL0(QC):
 
         KPF reads out 2 or 4 amplifiers per chip, the count
         ``KPF0.standardize_headers`` stamped as NAMPGRN/NAMPRED. Each amp must
-        match its header (NAXIS2, NAXIS1) and the shape of one known readout
-        setting in ``reference/readout.csv`` (the same one for every amp on the
-        chip), and hold at least one finite value, so a
-        truncated readout or an all-NaN placeholder is not mistaken for good data.
+        match its header (NAXIS2, NAXIS1) and one readout setting in
+        ``reference/readout.csv`` (the same for every amp on the chip), and hold
+        at least one finite value, so a truncated readout or an all-NaN
+        placeholder is not mistaken for good data.
         """
         primary = self.kpf_obj.headers["PRIMARY"]
         readout = pd.read_csv(f"{REPO_ROOT}/reference/readout.csv")

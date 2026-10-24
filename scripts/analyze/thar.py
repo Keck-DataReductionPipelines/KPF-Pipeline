@@ -102,12 +102,11 @@ def parse_args(argv=None):
 
 
 def _frame_row(record):
-    """One CSV row for the frame in mini-database `record`, reopening its header
-    for ``HCLSN``.
+    """One CSV row for mini-database `record`, plus ``HCLSN`` from its header.
 
-    An absent ``HCLSN`` becomes an empty field: it is genuinely blank on some early
-    nights, which is itself worth reporting. A mini-database gap (NaN, e.g.
-    COMMENTS on a frame without warnings) becomes an empty field too.
+    An absent ``HCLSN`` (genuinely blank on some early nights, itself worth
+    reporting) or a mini-database NaN (e.g. ``COMMENTS`` on a warning-free frame)
+    becomes an empty field.
     """
     path = record["FILENAME"]
     row = {
