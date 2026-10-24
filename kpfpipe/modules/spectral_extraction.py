@@ -95,7 +95,8 @@ class SpectralExtraction:
         in_era = {}
         for path in glob.glob(f"{REPO_ROOT}/reference/order_traces/order_trace_*.csv"):
             datecode = os.path.basename(path)[len("order_trace_") : -len(".csv")]
-            measured = pd.Timestamp(datecode)
+            # +2 s places a trace dated on an era's start day inside that era
+            measured = pd.Timestamp(datecode) + pd.Timedelta(seconds=2)
             if era["UT_start_date"] <= measured <= latest:
                 in_era[measured] = path
         if not in_era:
