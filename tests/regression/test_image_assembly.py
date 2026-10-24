@@ -602,9 +602,9 @@ class TestNativeReadsUseTheInstrumentHeader:
     """``HeaderParser`` reads native cards, and every L0 module now runs after
     standardization -- so PRIMARY no longer carries them.
 
-    ``EXPTIMOK`` is the direct assertion the exit checklist asks for: it left
-    ``_REQUIRED_L0_QC_FLAGS``, so a missed repoint no longer fails closed through
-    the masters loader, and this is what catches it instead.
+    ``EXPTIMOK`` is the direct assertion the exit checklist asks for: it is in
+    ``_REQUIRED_L0_QC_FLAGS``, so a missed repoint would drop every masters
+    frame; this catches it before a masters run does.
     """
 
     def test_read_mode_is_inferred_from_the_native_header(self):

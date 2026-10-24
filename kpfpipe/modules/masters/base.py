@@ -83,11 +83,11 @@ class BaseMasterModule:
     # it is not declared for calibration frames, so it writes no card on the
     # frames a stack is built from, and the `qc[kw][0]` read below would raise a
     # bare KeyError rather than reject the frame.
-    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "NOTJUNK")
+    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "EXPTIMOK", "NOTJUNK")
 
-    # Exposure-time threshold (seconds) for the bias/zero-exposure decision in
-    # the stats methods: a frame whose exposure is <= this counts as zero
-    # (a bias, stacked with T=1), else as a real exposure (T=exptime).
+    # Exposure-time threshold (seconds) for frame admission in ``_load_frame``:
+    # a bias must be <= this (stacked with T=1), every other master type above
+    # it (T=exptime).
     _ZERO_EXPTIME_TOL_SECONDS = 0.1
 
     def __init__(self, l0_file_list, config=None):
@@ -206,7 +206,8 @@ class BaseMasterModule:
         Load an L0 file and assemble it to an L1 object; None on failure.
 
         Failure means the frame could not be read/standardized/assembled, it is
-        not a ``self.master_type`` input, or it failed one of
+        not a ``self.master_type`` input (by OBJECT, sources, or a zero/non-zero
+        exposure that does not match the type), or it failed one of
         ``_REQUIRED_L0_QC_FLAGS``; a warning names the cause (with
         traceback for errors) and callers detect it via ``is None``.
         With ``cache=True`` the assembled L1 is retained for reuse (the streaming
@@ -234,6 +235,12 @@ class BaseMasterModule:
                 raise ValueError(
                     f"OBJECT {prim['OBJECT']!r}, sources {sources}: "
                     f"not a {self.master_type} frame"
+                )
+            # Only a bias is a zero exposure. Checked per frame.
+            is_zero = prim["EXPTIME"] <= self._ZERO_EXPTIME_TOL_SECONDS
+            if is_zero != (self.master_type == "bias"):
+                raise ValueError(
+                    f"EXPTIME {prim['EXPTIME']} s: not a {self.master_type} exposure"
                 )
 
             for diagnostics in (DiagL0, Guider, ExposureMeter, Telemetry):
@@ -392,16 +399,15 @@ class BaseMasterModule:
         center, not the master IMG), 'rate_rms' (frame-to-frame sample RMS), and on
         '{chip}_CCD' only 'exptime_sum' (per-pixel total exposure over valid frames;
         the exposure-weighted-rate denominator in stack_frames, = valid-frame count
-        for a bias stack where T=1). ``zero_exptime`` is True for a bias stack (all
-        exposures ≤ ``_ZERO_EXPTIME_TOL_SECONDS``).
+        for a bias stack where T=1). ``zero_exptime`` is True for a bias stack.
 
         Notes
         -----
         Exposure time is the EPRV PRIMARY EXPTIME (elapsed, mapped from native
         ELAPSED), not the nominal requested EXPTIME. Rejection is on the CCD rate
         (VAR = |CCD| + RN adds no independent info); rates make differing-exposure
-        frames comparable, and VAR is still summed for the SNR. Exposures must be
-        all zero (≤ ``_ZERO_EXPTIME_TOL_SECONDS``) or all above it.
+        frames comparable, and VAR is still summed for the SNR. Zero vs non-zero
+        exposure is fixed by the master type; ``_load_frame`` drops mismatches.
         """
         if sigma is None:
             sigma = self.stack_sigma
@@ -458,16 +464,8 @@ class BaseMasterModule:
         if np.any(exptime < 0):
             raise ValueError(f"Exposure times cannot be negative; exptime = {exptime}")
 
-        if np.all(exptime > self._ZERO_EXPTIME_TOL_SECONDS):
-            zero_exptime = False
-            T = exptime[:, None, None]
-        elif np.all(exptime <= self._ZERO_EXPTIME_TOL_SECONDS):
-            zero_exptime = True
-            T = np.ones_like(exptime)[:, None, None]
-        else:
-            raise ValueError(
-                f"Exposure times must be all zero or all non-zero; exptime = {exptime}"
-            )
+        zero_exptime = self.master_type == "bias"
+        T = (np.ones_like(exptime) if zero_exptime else exptime)[:, None, None]
 
         stats = {}
 
@@ -527,8 +525,7 @@ class BaseMasterModule:
 
         The first ``nstream - 1`` frames are stacked via the datacube method to
         estimate per-pixel rate mean/RMS, which set the clipping bounds for the
-        streaming pass. Raises if fewer than two of those frames load or
-        exposures are inconsistent.
+        streaming pass. Raises if fewer than two of those frames load.
 
         Returns ``(exact_stats, zero_exptime)``. ``exact_stats`` carries only
         'nframe', 'counts_sum', and (on '{chip}_CCD') 'exptime_sum' -- no
@@ -603,11 +600,7 @@ class BaseMasterModule:
             if exptime < 0:
                 raise ValueError("Exposure times cannot be negative")
 
-            is_zero = exptime <= self._ZERO_EXPTIME_TOL_SECONDS
-            if zero_exptime != is_zero:
-                raise ValueError("Exposure times must be all zero or all non-zero")
-
-            T = 1.0 if is_zero else exptime
+            T = 1.0 if zero_exptime else exptime
 
             for chip in self.chips:
                 # Clip each pixel against the CCD rate bounds (VAR = |CCD| + RN
