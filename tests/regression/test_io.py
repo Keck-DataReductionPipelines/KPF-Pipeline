@@ -991,6 +991,56 @@ class TestMiniDatabaseCache:
         # A cache hit still cleans down to the readable set.
         assert len(fh.build_mini_database("20240405", cache="r")) == 2
 
+    def test_misfiled_frame_recorded_in_cache_not_in_memory(self, caplog, tmp_path):
+        # A frame of another night filed in this night's directory (#1555: 287
+        # frames of 20231124 in L0/20231114) must not join this night's stacks.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        _write_l0_frame(tmp_path, "20240405", "KP.20240405.02000.00")
+        _write_l0_frame(tmp_path, "20240415", "KP.20240415.01500.00")
+        os.rename(
+            tmp_path / "L0" / "20240415" / "KP.20240415.01500.00.fits",
+            tmp_path / "L0" / "20240405" / "KP.20240415.01500.00.fits",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            db = fh.build_mini_database("20240405", cache="rw")
+        assert "1 of 3 L0 files in L0/20240405 belong to another night" in caplog.text
+        assert "KP.20240415.01500.00.fits" in caplog.text
+        assert [os.path.basename(f) for f in db["FILENAME"]] == [
+            "KP.20240405.01000.00.fits",
+            "KP.20240405.02000.00.fits",
+        ]
+
+        # The cache still mirrors the directory, with the misfiled frame fatal.
+        cached = pd.read_csv(tmp_path / "vNext" / "mini_db" / "20240405_L0.csv")
+        assert len(cached) == 3
+        row = cached[cached["FILENAME"].str.endswith("KP.20240415.01500.00.fits")]
+        assert row["DRP_OBSMODE"].item() == "Unknown"
+        assert row["COMMENTS"].item() == "WARNINGS: 1 fatal, 0 non-fatal"
+        assert len(fh.build_mini_database("20240405", cache="r")) == 2
+
+    def test_misfiled_frame_dropped_from_older_cache(self, caplog, tmp_path):
+        # A cache written before misfiled frames were recognized lists them as
+        # ordinary frames; a cache hit still drops them.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        _write_l0_frame(tmp_path, "20240415", "KP.20240415.01500.00")
+        l0_dir = tmp_path / "L0" / "20240405"
+        misfiled = l0_dir / "KP.20240415.01500.00.fits"
+        os.rename(tmp_path / "L0" / "20240415" / misfiled.name, misfiled)
+        cache = _seed_cache(
+            tmp_path,
+            "20240405",
+            [str(l0_dir / "KP.20240405.01000.00.fits"), str(misfiled)],
+        )
+        _touch_newer(cache, l0_dir)
+
+        with caplog.at_level(logging.WARNING):
+            db = fh.build_mini_database("20240405", cache="r")
+        assert "1 of 2 L0 files in L0/20240405 belong to another night" in caplog.text
+        assert [os.path.basename(f) for f in db["FILENAME"]] == [
+            "KP.20240405.01000.00.fits"
+        ]
+
     def test_invalid_header_recorded_with_reason(self, caplog, tmp_path):
         # A readable header with a nonsensical value is rejected like an unreadable
         # file, but recorded as invalid so it can be repaired at KOA or junked.

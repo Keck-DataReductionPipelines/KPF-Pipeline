@@ -90,6 +90,15 @@ def load_junk_obs_ids(data_input):
     return set(df.iloc[:, 0].astype(str).str.strip())
 
 
+def _filed_under_other_night(filename, datecode):
+    """True if ``filename``'s obs_id names a night other than ``datecode``; a
+    name without an obs_id is not judged (False)."""
+    try:
+        return get_datecode(filename) != datecode
+    except ValueError:
+        return False
+
+
 def datecode_dirs_in_range(root, start, end):
     """Sorted datecode subdirs of ``root`` within the inclusive [start, end] range.
 
@@ -246,12 +255,30 @@ class FileHandler:
         logger.info("wrote mini database cache to %s", cache_path)
 
     @staticmethod
-    def _clean_mini_db(full_scan_mini_db):
+    def _clean_mini_db(full_scan_mini_db, datecode):
         """The usable-frame subset of a full scan: drop rejected rows (unreadable
-        or invalid header, null DRP_OBJECT) and re-index. Such frames stay in the
+        or invalid header, null DRP_OBJECT) and frames filed under the wrong night
+        (obs_id datecode != ``datecode``), and re-index. Such frames stay in the
         on-disk cache (which mirrors the L0 directory) but are useless for
-        stacking/discovery, so the in-memory ``self._mini_db`` excludes them."""
-        return full_scan_mini_db.dropna(subset=["DRP_OBJECT"]).reset_index(drop=True)
+        stacking/discovery, so the in-memory ``self._mini_db`` excludes them.
+        Misfiled frames are dropped here, not only at scan time, so a cache
+        written before they were recognized is cleaned too."""
+        names = full_scan_mini_db["FILENAME"].map(os.path.basename)
+        misfiled = names.map(lambda fn: _filed_under_other_night(fn, datecode))
+        if misfiled.any():
+            shown = list(names[misfiled])
+            logger.warning(
+                "%d of %d L0 files in L0/%s belong to another night (obs_id "
+                "datecode != %s); skipping them: %s%s",
+                len(shown),
+                len(names),
+                datecode,
+                datecode,
+                ", ".join(shown[:10]),
+                f", ... ({len(shown) - 10} more)" if len(shown) > 10 else "",
+            )
+        kept = full_scan_mini_db[~misfiled]
+        return kept.dropna(subset=["DRP_OBJECT"]).reset_index(drop=True)
 
     def build_mini_database(self, datecode, cache=False):
         """Scan the PRIMARY header of every L0 FITS file for one observing night,
@@ -304,7 +331,9 @@ class FileHandler:
             has DRP_OBSMODE Unknown, is logged at ERROR and omitted from this
             DataFrame (useless for stacking), but is still recorded, with a fatal
             warning in COMMENTS, in the on-disk cache, so the cache mirrors the L0
-            directory exactly.
+            directory exactly. A frame whose obs_id names another night (filed
+            in the wrong directory) is handled the same way, without reading its
+            header, and logged once per night at WARNING.
 
         Raises
         ------
@@ -331,7 +360,7 @@ class FileHandler:
                     self._mini_db_cache_path(datecode),
                 )
                 self._full_scan_mini_db = cached
-                self._mini_db = self._clean_mini_db(cached)
+                self._mini_db = self._clean_mini_db(cached, datecode)
                 return self._mini_db
 
         data_dir = os.path.join(self._data_input, "L0", datecode)
@@ -355,6 +384,13 @@ class FileHandler:
                 "HST_TIME": utc_to_hst(utc),
                 "ISJUNK": get_obs_id(fn) in junk,
             }
+            # A frame of another night (an archive filing error) is fatal
+            # without reading it; _clean_mini_db reports and drops it.
+            if _filed_under_other_night(os.path.basename(fn), datecode):
+                row["DRP_OBSMODE"] = "Unknown"
+                row["COMMENTS"] = "WARNINGS: 1 fatal, 0 non-fatal"
+                rows.append(row)
+                continue
             try:
                 parsed = HeaderParser(fn)
             except OSError as e:
@@ -402,7 +438,7 @@ class FileHandler:
             )
 
         self._full_scan_mini_db = pd.DataFrame(rows, columns=_MINI_DB_KEYS)
-        self._mini_db = self._clean_mini_db(self._full_scan_mini_db)
+        self._mini_db = self._clean_mini_db(self._full_scan_mini_db, datecode)
 
         if write_cache:
             self._write_mini_db_cache(datecode)
