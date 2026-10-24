@@ -590,14 +590,20 @@ class TestExtractFfiFailureTolerance:
         monkeypatch.setitem(DETECTOR["norder"], "GREEN", 2)
         return se
 
-    def test_one_missing_trace_leaves_a_nan_row(self, caplog, monkeypatch):
+    def test_trace_marked_missing_leaves_a_nan_row(self, caplog, monkeypatch):
         se = self._make_se(n_traced=1, monkeypatch=monkeypatch)
+        se._missing_traces = {("GREEN", "SCI1", 1)}
         with caplog.at_level(logging.WARNING):
             arrays = se.extract_ffi("GREEN", ["SCI1"])
         flux = arrays["GREEN_SCI1_FLUX"]
         assert np.all(np.isfinite(flux[0]))
         assert np.all(np.isnan(flux[1]))
-        assert "1 orderlet failed" in caplog.text
+        assert "GREEN SCI1 order 1 not extracted (NaN): expected" in caplog.text
+
+    def test_unmarked_missing_trace_raises(self, monkeypatch):
+        se = self._make_se(n_traced=1, monkeypatch=monkeypatch)
+        with pytest.raises(LookupError, match=r"Failed to extract 1 .*SCI1 order 1"):
+            se.extract_ffi("GREEN", ["SCI1"])
 
     def test_two_missing_traces_raise(self, monkeypatch):
         se = self._make_se(n_traced=0, monkeypatch=monkeypatch)
@@ -726,6 +732,7 @@ class TestOrderTraceSelection:
 
         assert set(se._order_trace) == {"GREEN", "RED"}
         assert se._order_trace["GREEN"].index.tolist() == [("SCI1", 0)]
+        assert se._missing_traces == {("GREEN", "SCI1", 1)}
 
     def test_writes_the_trace_path_to_the_l2_receipt(
         self, minimal_l1, tmp_path, monkeypatch
