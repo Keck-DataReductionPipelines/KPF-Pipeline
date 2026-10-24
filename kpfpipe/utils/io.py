@@ -36,7 +36,8 @@ _CACHE_FILE_MODE = 0o666
 _CACHE_DIR_MODE = 0o777
 
 # The mini-database columns: DRP_* and the fiber sources from HeaderParser, the
-# camera readout flags from the native camera cards, EXPTIME the native EXPTIME,
+# camera readout flags from the native camera cards, NATIVE_OBJECT and EXPTIME
+# the native OBJECT and EXPTIME,
 # UTC/HST_TIME the filename's KPF timestamp, ISJUNK the observer junk list (see
 # load_junk_obs_ids), COMMENTS the fatal/non-fatal warning counts (details in
 # the log).
@@ -52,6 +53,7 @@ _MINI_DB_KEYS = [
     "RED",
     "CA_HK",
     "EXPMETER",
+    "NATIVE_OBJECT",
     "EXPTIME",
     "UTC_TIME",
     "HST_TIME",
@@ -305,6 +307,7 @@ class FileHandler:
             CALSRC (the source lighting each fiber); GREEN, RED, CA_HK, EXPMETER
             (whether that camera read out); UTC_TIME and
             HST_TIME (KPF-format timestamps from the filename, HST = UTC-10);
+            NATIVE_OBJECT (the native OBJECT, not KPF0's derived OBJECT = DRP_OBJECT);
             EXPTIME (the native, requested EXPTIME, not KPF0's EXPTIME = ELAPSED);
             ISJUNK (frame is on the observer junk list -- flagged, not dropped);
             and COMMENTS (``WARNINGS: <n> fatal, <m> non-fatal``, the frame's
@@ -393,6 +396,7 @@ class FileHandler:
                     "EXPMETER",
                 ):
                     row[k] = parsed.DRP_KEYWORDS.get(k)
+                row["NATIVE_OBJECT"] = native.get("OBJECT")
                 row["EXPTIME"] = native.get("EXPTIME")
                 # An unclassifiable frame's one "cannot classify" warning is
                 # fatal (KPF0 rejects it); the rest leave the frame usable.
@@ -435,7 +439,8 @@ class FileHandler:
         the type's and every fiber saw the lamp (lamp masters, so sci/sky/cal-only
         lamp frames are left out) or nothing (bias/dark), so a frame with any
         ``Unknown`` source never qualifies. A frame without both GREEN and RED
-        read out is excluded with a warning (single-CCD is unsupported). Raises
+        read out is excluded with a warning (single-CCD is unsupported); one whose
+        native OBJECT names a flush-persistence or test frame is excluded. Raises
         ``ValueError`` if no database is loaded or the type has no frames;
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
         mini_db = self._mini_db
@@ -455,6 +460,14 @@ class FileHandler:
                 "excluding %s: DRP does not yet support single-CCD exposures", fn
             )
         keep &= both_ccds
+        engineering = mini_db["NATIVE_OBJECT"].str.contains(
+            "flush-persistence|test", case=False, na=False
+        )
+        for fn, native_obj in mini_db.loc[
+            keep & engineering, ["FILENAME", "NATIVE_OBJECT"]
+        ].values:
+            logger.info("excluding %s: native OBJECT %r", fn, native_obj)
+        keep &= ~engineering
         cal_df = mini_db[keep]
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")
