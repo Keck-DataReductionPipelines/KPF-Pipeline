@@ -267,7 +267,7 @@ resolves which master calibrations a frame uses. The `masters/` submodule
 (`bias`/`dark`/`flat`/`wls` over a shared `base.py` stacking engine) builds the calibration
 products (see *Masters Pipeline*).
 
-**Detector geometry.** Helpers like `orient_channels` and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic. The readout itself — amplifier count (`NAMPGRN`/`NAMPRED`), read time and `READMODE` — is stamped once by `KPF0.standardize_headers` and read from the header thereafter.
+**Detector geometry.** Helpers like `orient_channels` and `RN_KEYS` are owned by `ImageAssembly`. Other consumers (Quicklook, future Diagnostics) import them rather than duplicating the logic. The readout itself — amplifier count (`NAMPGRN`/`NAMPRED`), read time and `READMODE` — is stamped once by `KPF0.standardize_headers` and read from the header thereafter. Prescan and overscan come from the `reference/readout.csv` setting matching each chip's amplifier shape.
 
 ### Recipes & configs
 
@@ -455,9 +455,10 @@ hand. It is constructed from the already-extracted `[DATA_DIRS]` mapping (it doe
 
 - `build_mini_database(datecode)` — scans a night into a per-frame table, tagging each frame
   with the derived **`ISJUNK`** column (from `junk_obs.csv`; used by masters stacking to exclude
-  junk) and caching the result to disk.
+  junk) and the native **`NATIVE_OBJECT`**, and caching the result to disk.
 - `build_calibration_stacks(...)` — groups frames into per-`cal_type` stacks for master
-  building; `exclude_junk=True` filters junk out first.
+  building; `exclude_junk=True` filters junk out first, and frames whose `NATIVE_OBJECT`
+  contains `flush-persistence` or `test` are always excluded.
 - `find_masters(cal_type, level, datecode)` — locates already-built master calibrations.
 
 It is **not thread-safe** (`build_mini_database` stores the scanned night on the instance), so
