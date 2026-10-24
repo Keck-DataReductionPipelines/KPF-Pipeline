@@ -452,29 +452,34 @@ class FileHandler:
             mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
         obj = _CAL_TYPES[cal_type]
         lit = obj if cal_type in ("flat", "thar") else "None"
-        keep = mini_db["DRP_OBJECT"] == obj
-        keep &= (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
-        both_ccds = mini_db[["GREEN", "RED"]].eq(True).all(axis=1)
-        for fn in mini_db.loc[keep & ~both_ccds, "FILENAME"]:
+        cal_df = mini_db[
+            (mini_db["DRP_OBJECT"] == obj)
+            & (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
+        ]
+        single_ccd = ~cal_df[["GREEN", "RED"]].eq(True).all(axis=1)
+        for fn in cal_df.loc[single_ccd, "FILENAME"]:
             logger.warning(
                 "excluding %s: DRP does not yet support single-CCD exposures", fn
             )
-        keep &= both_ccds
-        engineering = mini_db["NATIVE_OBJECT"].str.contains(
-            "flush-persistence|test", case=False, na=False
+        cal_df = cal_df[~single_ccd]
+        exclude = (
+            cal_df["NATIVE_OBJECT"]
+            .astype("string")
+            .str.contains("flush-persistence|test", case=False, na=False)
         )
-        excluded = mini_db.loc[keep & engineering, ["FILENAME", "NATIVE_OBJECT"]]
-        if not excluded.empty:
+        if exclude.any():
             logger.info(
                 "excluding %d %s frame(s) by native OBJECT: %s",
-                len(excluded),
+                exclude.sum(),
                 cal_type,
                 ", ".join(
-                    f"{os.path.basename(fn)} ({obj!r})" for fn, obj in excluded.values
+                    f"{os.path.basename(fn)} ({native!r})"
+                    for fn, native in cal_df.loc[
+                        exclude, ["FILENAME", "NATIVE_OBJECT"]
+                    ].values
                 ),
             )
-        keep &= ~engineering
-        cal_df = mini_db[keep]
+        cal_df = cal_df[~exclude]
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")
         return cal_df

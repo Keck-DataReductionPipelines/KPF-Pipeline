@@ -1206,6 +1206,13 @@ class TestJunkExclusion:
         assert "excluding 1 bias frame(s) by native OBJECT" in caplog.text
         assert f"{os.path.basename(eng_fn)} ({native_obj!r})" in caplog.text
 
+    def test_all_nan_native_object_keeps_frames(self):
+        # An all-NaN NATIVE_OBJECT column (seen on Nov 2022 nights) is float dtype.
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"))
+        db["NATIVE_OBJECT"] = float("nan")
+        lists = _cluster("bias", db, min_stack_size=1)
+        assert set(fn for cluster in lists for fn in cluster) == set(_JUNK_BIAS)
+
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.
         db = _mini_db(_rows(_JUNK_BIAS, "Bias")).drop(columns="ISJUNK")
