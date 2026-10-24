@@ -611,6 +611,22 @@ class TestQCL0:
         bad = dict(GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
 
+    def test_times_era1_bias_late_mid_passes(self, tmp_path):
+        # KP.20230309.02724.10: DATE-MID written 0.100 s late lands 71 ms past
+        # DATE-END on a zero-length exposure, inside the 0.1 s slack.
+        beg, end = "2023-03-09T00:45:24.098825", "2023-03-09T00:45:24.156702"
+        bias = {
+            "DATE-BEG": beg,
+            "DATE-MID": "2023-03-09T00:45:24.228",
+            "DATE-END": end,
+            "ELAPSED": 0.0,
+            "GRDATE-B": beg,
+            "GRDATE-E": end,
+            "RDDATE-B": beg,
+            "RDDATE-E": end,
+        }
+        assert QCL0(_make_kpf0(tmp_path, dates=bias)).times_consistent() is True
+
     def test_times_elapsed_mismatch_fails(self, tmp_path):
         bad = dict(GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False

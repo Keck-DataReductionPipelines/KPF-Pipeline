@@ -2,7 +2,7 @@
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -125,6 +125,10 @@ class QCL0(QC):
     def times_consistent(self):
         """DATE-BEG <= DATE-MID <= DATE-END, matching ELAPSED and the shutters.
 
+        DATE-MID may fall up to 0.1 s outside the window: until mid-2023 it was
+        written 0.100 s late, which on a bias (a ~0.05 s window) lands it after
+        DATE-END.
+
         The exposure-meter half of this check is EMTIMEOK. The shutter window
         must agree with ELAPSED to 0.1 s, and each per-chip shutter time must
         fall within 0.1 s of the window edge it bounds; mismatched chips have
@@ -140,7 +144,8 @@ class QCL0(QC):
             datetime.fromisoformat(str(hdr[k]))
             for k in ("DATE-BEG", "DATE-MID", "DATE-END")
         )
-        if not beg <= mid <= end:
+        slack = timedelta(seconds=0.1)
+        if not beg - slack <= mid <= end + slack:
             return False
         if abs((end - beg).total_seconds() - float(hdr["ELAPSED"])) > 0.1:
             return False
