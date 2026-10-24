@@ -622,7 +622,7 @@ class TestExtractionMethodGuard:
 _STUB_ERAS = """INSTERA,UT_start_date,UT_end_date,Comments
 1.0,2022-11-09 00:00:01,2024-02-03 00:00:00,First science era
 2.0,2024-02-23 12:00:01,2024-11-01 00:00:00,Second science era
-2.5,2024-11-01 12:00:01,2025-01-01 00:00:00,Service Mission #2 (engineering)
+2.5,2024-11-01 00:00:01,2025-01-01 00:00:00,Service Mission #2 (engineering)
 """
 
 _STUB_TRACE = (
