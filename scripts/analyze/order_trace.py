@@ -46,7 +46,7 @@ from scripts._argparse import analysis_parser, resolve_dates, resolve_dir_shortc
 
 logger = logging.getLogger(__name__)
 
-OBS_ID_RE = re.compile(r"^KP\.(\d{8})\.")
+OBS_ID_RE = re.compile(r"^KP\.(\d{8})\.(\d{5}\.\d+)")
 NSAMPLE = 81  # columns sampled when comparing centerlines
 MIN_EPOCHS = 3  # an era needs this many trace files to have a scatter
 
@@ -105,11 +105,14 @@ def load_science_eras():
     ]
 
 
-def era_of(datecode, eras):
-    """Eras are resolved at 12:00 UT, which falls inside the Keck night."""
-    t = pd.Timestamp(datecode) + pd.Timedelta(hours=12)
+def era_of(obs_time, eras):
+    """The era covering ``obs_time``; ``None`` outside the science eras.
+
+    Resolved at the flat's own UT time, not its datecode: a boundary can split
+    a UT day (2024-02-23 is era 1.5 until 12:00 and era 2.0 after).
+    """
     for era, start, end in eras:
-        if start <= t <= end:
+        if start <= obs_time <= end:
             return era
     return None
 
@@ -141,8 +144,9 @@ def load_traces(input_dir, start, end, eras):
             if not match:
                 logger.warning("skipping unrecognised filename %s", path)
                 continue
-            night = match.group(1)
-            era = era_of(night, eras)
+            night, seconds = match.groups()
+            obs_time = pd.Timestamp(night) + pd.Timedelta(seconds=float(seconds))
+            era = era_of(obs_time, eras)
             if era is None:  # engineering / service-mission night
                 continue
             try:

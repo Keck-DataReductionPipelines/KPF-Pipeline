@@ -65,7 +65,7 @@ class PlotL0(Plot):
             ia = ImageAssembly(l0_copy)
             ia.orient_channels(chip)
 
-            prescan = ia.ccd["prescan"]
+            prescan = ia.prescan[chip]
             nrow_img = ia.nrow // 2
             ncol_img = ia.ncol // 2
 

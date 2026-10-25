@@ -3,9 +3,6 @@
 [ccd]
 nrow = 4080       # Detector rows (pixels)
 ncol = 4080       # Detector columns (pixels)
-prescan = 4       # Prescan columns (pixels)
-oscan_srl = 50    # Serial overscan columns (pixels)
-oscan_prl = 30    # Parallel overscan columns (pixels)
 
 [amplifiers]
 green = [

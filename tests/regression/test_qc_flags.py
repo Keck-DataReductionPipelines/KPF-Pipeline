@@ -8,10 +8,12 @@ import logging
 import types
 
 import numpy as np
+import pandas as pd
 import pytest
 from astropy.io import fits
 from astropy.table import Table
 
+import kpfpipe
 from kpfpipe import CHIPS, FIBERS, SCI_FIBERS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
@@ -287,8 +289,10 @@ class TestQCBase:
         # WARNING an ordinary fail gets), counted as a fail, and the run continues.
         with caplog.at_level(logging.ERROR):
             results = MyQC(obj).run()
-        assert "QC check 'check_boom' raised" in caplog.text
-        assert "boom!" in caplog.text
+        assert "QC check 'check_boom' could not be computed (ValueError: boom!)" in (
+            caplog.text
+        )
+        assert "exception caught, BOOM set to 0, QC continues" in caplog.text
         assert obj.headers["QUALITY_CONTROL"]["BOOM"] == 0
         assert results["BOOM"][0] is False
         assert obj.headers["QUALITY_CONTROL"]["CHKOK"] == 1
@@ -358,6 +362,23 @@ class TestQCBase:
 # ---------------------------------------------------------------------------
 
 
+class TestReadoutReference:
+    def test_readout_reference_shapes_match_detector_geometry(self):
+        # Each known setting's NAXIS1/NAXIS2 is the imaging area per amp plus its
+        # prescan and overscan.
+        ccd = kpfpipe.DETECTOR["ccd"]
+        readout = pd.read_csv(f"{kpfpipe.REPO_ROOT}/reference/readout.csv")
+        assert len(readout) == 8  # oracle: the known readout settings
+        for _, row in readout.iterrows():
+            nrow = ccd["nrow"] // (2 if row["Amplifiers"] == 4 else 1)
+            ncol = ccd["ncol"] // 2
+            assert row["NAXIS2"] == nrow + row["ParallelOverscan"]
+            assert row["NAXIS1"] == ncol + row["Prescan"] + row["SerialOverscan"]
+            assert row["ReadoutSetting"] == (
+                f"{row['Chip'].lower()}-{row['Amplifiers']}amp-oscan{row['SerialOverscan']}"
+            )
+
+
 @pytest.mark.usefixtures("mini_detector")
 class TestQCL0:
     def test_data_l0_red_green_pass(self, tmp_path):
@@ -406,6 +427,32 @@ class TestQCL0:
             tmp_path / "KP.20240405.00004.00.fits", namps=3, shape=(10, 10)
         )
         assert QCL0(standardized_l0(fn)).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_unknown_readout_setting(
+        self, tmp_path, readout_shapes
+    ):
+        readout_shapes((4, 12, 10), (2, 10, 20))
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_header_disagrees_with_data(
+        self, tmp_path, readout_shapes
+    ):
+        # (10, 12) is a known setting, but the header still reports (10, 10).
+        readout_shapes((4, 10, 10), (4, 12, 10))
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        for i in range(1, 5):
+            l0.data[f"GREEN_AMP{i}"] = np.ones((10, 12), dtype=np.float32)
+        assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_mixed_settings_on_a_chip(
+        self, tmp_path, readout_shapes
+    ):
+        readout_shapes((4, 10, 10), (4, 12, 10))
+        l0 = _make_kpf0(tmp_path, with_amps=True)
+        l0.data["GREEN_AMP2"] = np.ones((10, 12), dtype=np.float32)
+        l0.headers["GREEN_AMP2"]["NAXIS1"] = 12
+        assert QCL0(l0).data_l0_red_green() is False
 
     def test_header_keywords_present(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
@@ -564,6 +611,22 @@ class TestQCL0:
     def test_times_out_of_order_fails(self, tmp_path):
         bad = dict(GOOD_DATES, **{"DATE-MID": "2024-09-23T09:12:25.000"})  # mid > end
         assert QCL0(_make_kpf0(tmp_path, dates=bad)).times_consistent() is False
+
+    def test_times_era1_bias_late_mid_passes(self, tmp_path):
+        # KP.20230309.02724.10: DATE-MID written 0.100 s late lands 71 ms past
+        # DATE-END on a zero-length exposure, inside the 0.1 s slack.
+        beg, end = "2023-03-09T00:45:24.098825", "2023-03-09T00:45:24.156702"
+        bias = {
+            "DATE-BEG": beg,
+            "DATE-MID": "2023-03-09T00:45:24.228",
+            "DATE-END": end,
+            "ELAPSED": 0.0,
+            "GRDATE-B": beg,
+            "GRDATE-E": end,
+            "RDDATE-B": beg,
+            "RDDATE-E": end,
+        }
+        assert QCL0(_make_kpf0(tmp_path, dates=bias)).times_consistent() is True
 
     def test_times_elapsed_mismatch_fails(self, tmp_path):
         bad = dict(GOOD_DATES, ELAPSED=99.0)  # END-BEG != ELAPSED

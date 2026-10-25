@@ -19,11 +19,12 @@ pytestmark = pytest.mark.quicklook
 
 
 @pytest.fixture
-def synthetic_4amp_l0(tmp_path):
+def synthetic_4amp_l0(tmp_path, readout_shapes):
     # 4-amp readout geometry. Deliberately tiny: every consumer asserts titles,
     # axis counts, run() keys or PNG names, none of which depend on detector
     # size. Only test_image_shape_4amp needs real geometry -- it takes
     # fullres_4amp_l0 instead.
+    readout_shapes((4, 24, 32), prescan=4)
     fn = write_amp_l0(
         tmp_path / "KP.20240405.00001.00.fits",
         namps=4,
@@ -211,8 +212,9 @@ class TestStitchedImage2Amp:
 
 
 class TestStitchedImage2To16:
-    def test_scales_high_values(self, tmp_path):
+    def test_scales_high_values(self, tmp_path, readout_shapes):
         # A median above the 200 * 2^16 threshold triggers the 2^16 rescale.
+        readout_shapes((4, 100, 100), prescan=4)
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00003.00.fits",
             namps=4,
@@ -323,8 +325,9 @@ class TestPlotL0Run:
         with pytest.raises(TypeError):
             qlp.run()
 
-    def test_run_skips_missing_chip(self, tmp_path):
+    def test_run_skips_missing_chip(self, tmp_path, readout_shapes):
         # GREEN only: no RED_AMP* HDU at all, so run() must skip the red chip.
+        readout_shapes((4, 100, 100), prescan=4)
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00004.00.fits",
             namps=4,

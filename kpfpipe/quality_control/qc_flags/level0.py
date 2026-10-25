@@ -2,11 +2,12 @@
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
+import pandas as pd
 
-from kpfpipe import DETECTOR
+from kpfpipe import REPO_ROOT
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
@@ -21,20 +22,34 @@ class QCL0(QC):
 
         KPF reads out 2 or 4 amplifiers per chip, the count
         ``KPF0.standardize_headers`` stamped as NAMPGRN/NAMPRED. Each amp must
-        match the shape ``ImageAssembly.dims`` implies for that readout mode
-        (prescan/overscan included) and hold at least one finite value, so a
-        truncated readout or an all-NaN placeholder is not mistaken for good data.
+        match its header (NAXIS2, NAXIS1) and one readout setting in
+        ``reference/readout.csv`` (the same for every amp on the chip), and hold
+        at least one finite value, so a truncated readout or an all-NaN
+        placeholder is not mistaken for good data.
         """
-        ccd = DETECTOR["ccd"]
         primary = self.kpf_obj.headers["PRIMARY"]
+        readout = pd.read_csv(f"{REPO_ROOT}/reference/readout.csv")
         for chip, keyword in (("GREEN", "NAMPGRN"), ("RED", "NAMPRED")):
             namp = primary[keyword]
             if namp not in (2, 4):
                 return False
-            nrow = ccd["nrow"] // (2 if namp == 4 else 1) + ccd["oscan_prl"]
-            ncol = ccd["ncol"] // 2 + ccd["prescan"] + ccd["oscan_srl"]
+            setting = readout[
+                (readout["Chip"] == chip) & (readout["Amplifiers"] == namp)
+            ]
+            nrow, ncol = None, None
             for i in range(1, namp + 1):
                 arr = self.kpf_obj.data[f"{chip}_AMP{i}"]
+                header = self.kpf_obj.headers[f"{chip}_AMP{i}"]
+                if arr.shape != (header.get("NAXIS2"), header.get("NAXIS1")):
+                    return False
+                if nrow is None:
+                    match = setting[
+                        (setting["NAXIS2"] == arr.shape[0])
+                        & (setting["NAXIS1"] == arr.shape[1])
+                    ]
+                    if match.empty:
+                        return False
+                    nrow, ncol = arr.shape
                 if arr.shape != (nrow, ncol) or not np.any(np.isfinite(arr)):
                     return False
         return True
@@ -110,6 +125,10 @@ class QCL0(QC):
     def times_consistent(self):
         """DATE-BEG <= DATE-MID <= DATE-END, matching ELAPSED and the shutters.
 
+        DATE-MID may fall up to 0.1 s outside the window: until mid-2023 it was
+        written 0.100 s late, which on a bias (a ~0.05 s window) lands it after
+        DATE-END.
+
         The exposure-meter half of this check is EMTIMEOK. The shutter window
         must agree with ELAPSED to 0.1 s, and each per-chip shutter time must
         fall within 0.1 s of the window edge it bounds; mismatched chips have
@@ -125,7 +144,8 @@ class QCL0(QC):
             datetime.fromisoformat(str(hdr[k]))
             for k in ("DATE-BEG", "DATE-MID", "DATE-END")
         )
-        if not beg <= mid <= end:
+        slack = timedelta(seconds=0.1)
+        if not beg - slack <= mid <= end + slack:
             return False
         if abs((end - beg).total_seconds() - float(hdr["ELAPSED"])) > 0.1:
             return False

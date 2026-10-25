@@ -61,18 +61,28 @@ class Diagnostics:
             try:
                 output = list(fn().items())
             except Exception as e:
-                logger.error("%s diagnostic %r raised: %s", self.LEVEL, name, e)
+                logger.error(
+                    "%s diagnostic %r could not be computed (%s: %s); "
+                    "exception caught, its keywords left blank, diagnostics continue",
+                    self.LEVEL,
+                    name,
+                    type(e).__name__,
+                    e,
+                )
                 continue
             for kw, value in output:
                 try:
                     self.kpf_obj.set_keyword(kw, value)
                 except Exception as e:
                     logger.error(
-                        "%s diagnostic %r keyword %r rejected: %s",
+                        "%s diagnostic %r value for %r rejected (%s: %s); "
+                        "exception caught, %r left blank, diagnostics continue",
                         self.LEVEL,
                         name,
                         kw,
+                        type(e).__name__,
                         e,
+                        kw,
                     )
                     continue
                 self.results[kw] = (

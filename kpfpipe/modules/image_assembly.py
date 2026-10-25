@@ -17,7 +17,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from kpfpipe import DEFAULT_CFG, DETECTOR
+from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import flag_outliers
 
@@ -86,6 +86,7 @@ class ImageAssembly:
         self._info = None
         self.namp = {}  # number of amplifiers; set by _infer_amplifier_settings()
         self.dims = {}  # amplifier dimensions; set by _infer_amplifier_settings()
+        self.prescan = {}  # prescan columns; set by _infer_amplifier_settings()
         self.gain = {}  # per-amp gain; set by _infer_amplifier_settings()
         self.orientation = {}  # amp ext -> flip; set by _infer_amplifier_settings()
         self.readnoise = {}  # set by measure_read_noise()
@@ -99,12 +100,15 @@ class ImageAssembly:
 
     def _infer_amplifier_settings(self):
         """
-        Cache amplifier count (namp) and per-channel dimensions, orientation,
-        and gain. Orientation maps each channel to standard orientation
-        (serial overscan right, parallel overscan bottom).
+        Cache amplifier count (namp) and per-channel dimensions, prescan,
+        orientation, and gain. Orientation maps each channel to standard
+        orientation (serial overscan right, parallel overscan bottom). The
+        prescan comes from the ``reference/readout.csv`` setting whose shape
+        matches the chip's AMP1 header (NAXIS1, NAXIS2).
         """
         primary = self.l0_obj.headers["PRIMARY"]
         self.namp = {"GREEN": primary["NAMPGRN"], "RED": primary["NAMPRED"]}
+        readout = pd.read_csv(f"{REPO_ROOT}/reference/readout.csv")
 
         for chip, namp in self.namp.items():
             if namp == 0:  # chip not read out; nothing to assemble
@@ -118,6 +122,20 @@ class ImageAssembly:
                     f"Only 2-amp and 4-amp mode supported, "
                     f"detected {namp} on {chip} CCD"
                 )
+            header = self.l0_obj.headers[f"{chip}_AMP1"]
+            naxis1, naxis2 = header.get("NAXIS1"), header.get("NAXIS2")
+            match = readout[
+                (readout["Chip"] == chip)
+                & (readout["Amplifiers"] == namp)
+                & (readout["NAXIS1"] == naxis1)
+                & (readout["NAXIS2"] == naxis2)
+            ]
+            if match.empty:
+                raise ValueError(
+                    f"{chip} {namp}-amp shape (NAXIS1={naxis1}, NAXIS2={naxis2}) "
+                    f"matches no readout setting in reference/readout.csv"
+                )
+            self.prescan[chip] = int(match.iloc[0]["Prescan"])
 
         for chip in self.chips:
             chip = chip.upper()
@@ -133,7 +151,7 @@ class ImageAssembly:
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
-        ncol_prescan = self.ccd["prescan"]
+        ncol_prescan = self.prescan[chip]
         nrow_imaging, ncol_imaging = self.dims[chip]
 
         oscan_pix_srl = full_amplifier[:nrow_imaging, ncol_prescan + ncol_imaging :]
@@ -155,7 +173,7 @@ class ImageAssembly:
         chip = chip.upper()
         full_amplifier = self.l0_obj.data[f"{chip}_AMP{amp_no}"]
 
-        ncol_prescan = self.ccd["prescan"]
+        ncol_prescan = self.prescan[chip]
         nrow_imaging, ncol_imaging = self.dims[chip]
 
         image_pix = full_amplifier[

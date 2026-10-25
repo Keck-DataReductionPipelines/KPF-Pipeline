@@ -132,11 +132,19 @@ class TestEras:
         assert not {"0.5", "1.5", "2.5", "2.7", "3.5"} & set(eras)
 
     @pytest.mark.parametrize(
-        ("datecode", "era"),
-        [("20230101", "1.0"), ("20240301", "2.0"), ("20240205", None)],
+        ("obs_time", "era"),
+        [
+            ("2023-01-01 12:00", "1.0"),
+            ("2024-03-01 12:00", "2.0"),
+            ("2024-02-05 12:00", None),
+            # 2024-02-23 is split: era 1.5 until 12:00 UT, era 2.0 after
+            ("2024-02-23 11:30", None),
+            ("2024-02-23 15:30", "2.0"),
+        ],
     )
-    def test_era_of(self, order_trace, datecode, era):
-        assert order_trace.era_of(datecode, order_trace.load_science_eras()) == era
+    def test_era_of(self, order_trace, obs_time, era):
+        eras = order_trace.load_science_eras()
+        assert order_trace.era_of(pd.Timestamp(obs_time), eras) == era
 
 
 # ---------------------------------------------------------------------------

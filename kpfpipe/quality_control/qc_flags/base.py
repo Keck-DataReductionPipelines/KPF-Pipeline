@@ -66,7 +66,15 @@ class QC:
                 )
                 continue
             except Exception as e:
-                logger.error("%s QC check %r raised: %s", self.LEVEL, name, e)
+                logger.error(
+                    "%s QC check %r could not be computed (%s: %s); "
+                    "exception caught, %s set to 0, QC continues",
+                    self.LEVEL,
+                    name,
+                    type(e).__name__,
+                    e,
+                    kw,
+                )
                 passed = False
             if passed is None:
                 logger.debug(

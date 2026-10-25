@@ -117,10 +117,10 @@ class KPF0(KPFDataModel):
         self.headers["PRIMARY"].clear()
         self._seed_primary()
         self._fill_from_native()
-        self._program_identification()
         self._timestamp()
         self._instrument_era()
         self._observation_settings()
+        self._program_identification()  # after OBSMODE, which sets its log level
         self._amplifiers()
         self._site_coordinates()
         self._tcs_pointing()
@@ -181,9 +181,10 @@ class KPF0(KPFDataModel):
 
         These map from native cards, so they are read off INSTRUMENT_HEADER
         rather than the EPRV skeleton this is filling. A card the frame does not
-        carry defaults to UNKNOWN with a warning. ORGANIZA is the data owner, one
-        organization for every KPF frame. PROGID and PROGRAM are the WMKO and
-        EPRV spellings of one value.
+        carry defaults to UNKNOWN, warned on a science frame and logged at DEBUG
+        on a calibration frame, which names no program as a rule. ORGANIZA is
+        the data owner, one organization for every KPF frame. PROGID and PROGRAM
+        are the WMKO and EPRV spellings of one value.
         """
         self.set_keyword("ORGANIZA", "WMKO")
 
@@ -209,14 +210,17 @@ class KPF0(KPFDataModel):
         copies = {native.get(k) for k in fallbacks} - {None, ""}
         if len(copies) == 1:
             return copies.pop()
+        science = self.headers["PRIMARY"]["OBSMODE"] == "Science"
+        level = logging.WARNING if science else logging.DEBUG
         if copies:
-            logger.warning(
+            logger.log(
+                level,
                 "%s absent from L0 PRIMARY and %s disagree; defaulting to 'UNKNOWN'",
                 key,
                 "/".join(fallbacks),
             )
         else:
-            logger.warning("%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key)
+            logger.log(level, "%s absent from L0 PRIMARY; defaulting to 'UNKNOWN'", key)
         return "UNKNOWN"
 
     def _timestamp(self):

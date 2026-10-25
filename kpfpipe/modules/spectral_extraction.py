@@ -59,6 +59,7 @@ class SpectralExtraction:
 
         self._order_trace = None
         self._order_trace_path = None
+        self._missing_traces = set()
         self._info = None
 
     # ------------------------------------------------------------------
@@ -95,7 +96,8 @@ class SpectralExtraction:
         in_era = {}
         for path in glob.glob(f"{REPO_ROOT}/reference/order_traces/order_trace_*.csv"):
             datecode = os.path.basename(path)[len("order_trace_") : -len(".csv")]
-            measured = pd.Timestamp(datecode)
+            # +2 s places a trace dated on an era's start day inside that era
+            measured = pd.Timestamp(datecode) + pd.Timedelta(seconds=2)
             if era["UT_start_date"] <= measured <= latest:
                 in_era[measured] = path
         if not in_era:
@@ -108,7 +110,13 @@ class SpectralExtraction:
         logger.info("reading order trace from %s", filepath)
 
         table = pd.read_csv(filepath)
-        table = table[table["Status"] != "missing"]
+        missing = table["Status"] == "missing"
+        self._missing_traces = set(
+            table.loc[missing, ["Chip", "Fiber", "Order"]].itertuples(
+                index=False, name=None
+            )
+        )
+        table = table[~missing]
         self._order_trace = {
             chip: rows.set_index(["Fiber", "Order"]).sort_index()
             for chip, rows in table.groupby("Chip")
@@ -365,7 +373,7 @@ class SpectralExtraction:
                 (norder, ncol), dtype=np.float32
             )
 
-        failure = 0
+        expected, failed = [], []
         for order in range(norder):
             for fiber in fibers:
                 try:
@@ -373,23 +381,29 @@ class SpectralExtraction:
                         chip, fiber, order, extraction_method
                     )
                 except LookupError:
-                    failure += 1
+                    known = (chip, fiber, order) in self._missing_traces
+                    (expected if known else failed).append(f"{fiber} order {order}")
                     flux_1d = np.full(ncol, np.nan, dtype=np.float32)
                     var_1d = np.full(ncol, np.nan, dtype=np.float32)
 
                 l2_arrays[f"{chip}_{fiber}_FLUX"][order] = flux_1d
                 l2_arrays[f"{chip}_{fiber}_VAR"][order] = var_1d
 
-        # Some KPF eras have one trace off-detector, so a single failure is
-        # expected; continuing the loop surfaces diagnostics if the algorithm
-        # truly fails.
-        if failure == 1:
-            logger.warning(
-                "1 orderlet failed to extract from the %s CCD; filled with NaN.", chip
-            )
-        elif failure > 1:
+        # Only an orderlet the trace file marks 'missing' (off-detector in that
+        # era) is expected to fail; any other failure is real.
+        trace_file = os.path.basename(str(self._order_trace_path))
+        if failed:
             raise LookupError(
-                f"Failed to extract {failure} orderlets from the {chip} CCD"
+                f"Failed to extract {len(failed)} orderlets from the {chip} CCD "
+                f"({', '.join(failed)}); not marked 'missing' in {trace_file}"
+            )
+        if expected:
+            logger.warning(
+                "%s %s not extracted (NaN): expected, marked 'missing' in %s "
+                "(off-detector in this era; see reference/order_traces/README.md)",
+                chip,
+                ", ".join(expected),
+                trace_file,
             )
 
         return l2_arrays

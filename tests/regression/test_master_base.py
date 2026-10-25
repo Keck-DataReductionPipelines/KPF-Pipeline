@@ -43,10 +43,10 @@ MASTERS_CONFIG_PATH = (
 )
 
 
-def _l0(obj, sources=("None",) * 3):
+def _l0(obj, sources=("None",) * 3, exptime=10.0):
     """A stand-in standardized L0 of OBJECT `obj`, its fibers lit by `sources`
-    (SKYSRC, SCISRC, CALSRC; default unlit)."""
-    prim = {"OBSTYPE": obj, "OBJECT": obj}
+    (SKYSRC, SCISRC, CALSRC; default unlit), exposed for `exptime` seconds."""
+    prim = {"OBSTYPE": obj, "OBJECT": obj, "EXPTIME": exptime}
     prim.update(zip(("SKYSRC", "SCISRC", "CALSRC"), sources, strict=True))
     return types.SimpleNamespace(headers={"PRIMARY": prim})
 
@@ -98,6 +98,24 @@ class TestMasterBaseErrors:
         assert "not a dark frame" in caplog.text
         assert l1_obj is None
 
+    @pytest.mark.parametrize(
+        ("master", "obj", "exptime"), [(Dark, "Dark", 0.0), (Bias, "Bias", 0.5)]
+    )
+    def test_load_frame_wrong_exposure_warns_and_skips(
+        self, master, obj, exptime, caplog, monkeypatch
+    ):
+        # Only a bias is a zero exposure; a mismatched frame (e.g. a 0 s
+        # engineering Dark) is dropped rather than failing the whole stack.
+        m = master(FILE_LIST)
+        monkeypatch.setattr(
+            "kpfpipe.modules.masters.base.KPF0.from_fits",
+            lambda fn, standardize=False: _l0(obj, exptime=exptime),
+        )
+        with caplog.at_level(logging.WARNING):
+            l1_obj = m._load_frame(FILE_LIST[0], cache=False)
+        assert f"not a {m.master_type} exposure" in caplog.text
+        assert l1_obj is None
+
     def test_load_frame_unknown_source_warns_and_skips(self, caplog, monkeypatch):
         # An undeterminable fiber source (e.g. a missing shutter card) is rejected.
         m = Dark(FILE_LIST)
@@ -110,12 +128,15 @@ class TestMasterBaseErrors:
         assert "not a dark frame" in caplog.text
         assert l1_obj is None
 
-    def test_load_frame_qc_failure_warns_and_skips(self, caplog, monkeypatch):
-        # NOTJUNK is the observer junk-list flag; failing a required QCL0 flag
-        # drops the frame before assembly instead of raising.
+    @pytest.mark.parametrize("flag", ["NOTJUNK", "EXPTIMOK"])
+    def test_load_frame_qc_failure_warns_and_skips(self, flag, caplog, monkeypatch):
+        # NOTJUNK is the observer junk-list flag; EXPTIMOK catches ELAPSED out of
+        # step with EXPTIME (a bias read out late would otherwise stack as a
+        # non-zero exposure). Failing a required QCL0 flag drops the frame
+        # before assembly instead of raising.
         m = Dark(FILE_LIST)
         fn = FILE_LIST[0]
-        qc_result = {kw: (kw != "NOTJUNK", "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
+        qc_result = {kw: (kw != flag, "") for kw in Dark._REQUIRED_L0_QC_FLAGS}
         monkeypatch.setattr(
             "kpfpipe.modules.masters.base.KPF0.from_fits",
             lambda fn, standardize=False: _l0("Dark"),
@@ -126,7 +147,7 @@ class TestMasterBaseErrors:
         )
         with caplog.at_level(logging.WARNING):
             l1_obj = m._load_frame(fn, cache=False)
-        assert re.search(r"QC failed.*NOTJUNK", caplog.text)
+        assert re.search(rf"QC failed.*{flag}", caplog.text)
         assert l1_obj is None
 
     def test_load_frame_qc_pass_returns_assembled(self, monkeypatch):
@@ -476,9 +497,9 @@ class TestRateEstimator:
     disabled here (large sigma) so the arithmetic is exact."""
 
     @staticmethod
-    def _stacked_img(frames, *, nstream=6):
+    def _stacked_img(frames, *, nstream=6, master=Dark):
         file_list = sorted(f"f{i}.fits" for i in range(len(frames)))
-        dark = Dark(file_list, config={"min_stack_size": 2})
+        dark = master(file_list, config={"min_stack_size": 2})
         dark.chips = ["GREEN"]
         dark.stack_sigma = 1e6  # effectively no clipping
         # Keyed by filename because the streaming path re-reads its first frames
@@ -503,10 +524,11 @@ class TestRateEstimator:
         np.testing.assert_allclose(self._stacked_img(frames), 6.0, rtol=1e-5)
 
     def test_zero_exptime_is_mean_counts(self):
-        # Zero-exptime (bias-like) branch: T = 1, so the estimate is the mean in
-        # electrons, (100 + 140) / 2.
+        # Bias stack: T = 1, so the estimate is the mean in electrons,
+        # (100 + 140) / 2.
         frames = [_stack_frame(0.0, 100.0, 10.0), _stack_frame(0.0, 140.0, 10.0)]
-        np.testing.assert_allclose(self._stacked_img(frames), 120.0, rtol=1e-5)
+        img = self._stacked_img(frames, master=Bias)
+        np.testing.assert_allclose(img, 120.0, rtol=1e-5)
 
     def test_streaming_path_matches(self):
         # Streaming path (nframe >= nstream), mixed exposures:
@@ -881,11 +903,6 @@ class TestStackingValidation:
     def test_negative_exptime_raises(self):
         frames = [_stack_frame(-5.0, 100.0, 10.0), _stack_frame(-5.0, 100.0, 10.0)]
         with pytest.raises(ValueError, match="cannot be negative"):
-            self._stack_with_frames(frames)
-
-    def test_mixed_zero_and_nonzero_exptime_raises(self):
-        frames = [_stack_frame(0.0, 100.0, 10.0), _stack_frame(10.0, 100.0, 10.0)]
-        with pytest.raises(ValueError, match="all zero or all non-zero"):
             self._stack_with_frames(frames)
 
     def _stack_with_failures(self, dark, n_fail, attempted):

@@ -1,0 +1,9 @@
+ReadoutSetting,Chip,Amplifiers,Prescan,SerialOverscan,ParallelOverscan,NAXIS1,NAXIS2,COMMENTS
+green-2amp-oscan50,GREEN,2,4,50,30,2094,4110,Standard from 20230703; first seen 20230616
+green-4amp-oscan50,GREEN,4,4,50,30,2094,2070,Occasional (engineering/fast read) from 20230612
+green-2amp-oscan100,GREEN,2,4,100,100,2144,4180,Not seen in 2023 bias scan
+green-4amp-oscan100,GREEN,4,4,100,100,2144,2140,Standard through 20230611; mixed with oscan50 20230612-20230702
+red-2amp-oscan50,RED,2,4,50,30,2094,4110,Standard from 20230321
+red-4amp-oscan50,RED,4,4,50,30,2094,2070,Occasional (engineering/fast read) from 20230612
+red-2amp-oscan100,RED,2,4,100,100,2144,4180,Standard through 20230320; also 20230612
+red-4amp-oscan100,RED,4,4,100,100,2144,2140,Not seen in 2023 bias scan

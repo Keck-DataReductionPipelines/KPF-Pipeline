@@ -9,13 +9,14 @@ the raw headers -- but only to someone looking across nights.
 
 Over an inclusive datecode range this writes, under ``{analysis_dir}/thar/``:
 
-- ``thar_exposures_{START}_{END}.csv`` -- one row per daily-lamp ThAr frame;
+- ``thar_exposures_{START}_{END}.csv`` -- one row per ThAr frame, daily and gold,
+  junk included: the mini-database's ThAr rows plus each frame's ``HCLSN``;
 - ``thar_lamp_history_{START}_{END}.csv`` -- one row per consecutive stretch of a
-  lamp serial in the daily all-fiber frames (a reinstalled lamp gets a new row;
-  a blank ``HCLSN`` is reported as ``(none)``).
+  lamp serial over every daily frame, whatever its fibers (a reinstalled lamp gets
+  a new row; a blank ``HCLSN`` is reported as ``(none)``).
 
 Frames come from the L0 mini-database (``--cache``), so only the ThAr ones are
-reopened for their lamp cards; nothing is reduced and no data product written.
+reopened for their lamp serial; nothing is reduced and no data product written.
 ``--date_range`` defaults to the whole archive: first light through tomorrow.
 
     kpfpipe analyze thar --date_range 20240727 20241022 \
@@ -28,6 +29,7 @@ import logging
 import os
 import sys
 
+import pandas as pd
 from astropy.io import fits
 
 import kpfpipe
@@ -45,30 +47,28 @@ from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cach
 
 logger = logging.getLogger(__name__)
 
-# The mini-database fiber sources, then the native PRIMARY
-# cards read per frame: OBJECT
-# (its morn/eve suffix bears on how bright a frame should be,
-# notes/thar_lamp_health.md), the exposure times, the lamp's serial, which lamp
-# position was selected, and how long each had been powered -- a cold lamp is dim
-# without being faulty.
+# The frame's identity, its mini-database columns (UTC/HST_TIME aside), then the
+# native PRIMARY HCLSN, the serial of the lamp in use.
 _EXPOSURE_CSV_COLUMNS = [
+    "FILENAME",
     "OBS_ID",
     "DATECODE",
+    "DRP_OBJECT",
+    "DRP_OBSTYPE",
+    "DRP_OBSMODE",
     "SKYSRC",
     "SCISRC",
     "CALSRC",
-    "OBJECT",
+    "GREEN",
+    "RED",
+    "CA_HK",
     "EXPTIME",
-    "ELAPSED",
-    "OCTAGON",
+    "ISJUNK",
+    "COMMENTS",
     "HCLSN",
-    "THDAYON",
-    "THDAYTON",
-    "THAUON",
-    "THAUTON",
 ]
 
-# The lamp history follows the daily lamp through its all-fiber frames.
+# The lamp history follows the daily lamp through all its frames.
 _LAMP_HISTORY_CSV_COLUMNS = ["HCLSN", "FIRST_DATECODE", "LAST_DATECODE", "N_OBS"]
 
 
@@ -102,30 +102,22 @@ def parse_args(argv=None):
 
 
 def _frame_row(record):
-    """One CSV row for the frame in mini-database `record`, reopening its header.
+    """One CSV row for mini-database `record`, plus ``HCLSN`` from its header.
 
-    A card the header lacks becomes an empty field: ``HCLSN`` is genuinely blank on
-    some early nights, which is itself worth reporting.
+    An absent ``HCLSN`` (genuinely blank on some early nights, itself worth
+    reporting) or a mini-database NaN (e.g. ``COMMENTS`` on a warning-free frame)
+    becomes an empty field.
     """
     path = record["FILENAME"]
-    header = fits.getheader(path, ext=0)
-    row = {"OBS_ID": get_obs_id(path), "DATECODE": get_datecode(path)}
-    row.update({k: record[k] for k in ("SKYSRC", "SCISRC", "CALSRC")})
-    row.update({k: header.get(k) for k in ("EXPTIME", "ELAPSED")})
-    row.update(
-        {
-            k: str(header.get(k, "")).strip()
-            for k in (
-                "OBJECT",
-                "OCTAGON",
-                "HCLSN",
-                "THDAYON",
-                "THDAYTON",
-                "THAUON",
-                "THAUTON",
-            )
-        }
-    )
+    row = {
+        "OBS_ID": get_obs_id(path),
+        "DATECODE": get_datecode(path),
+        "HCLSN": str(fits.getheader(path, ext=0).get("HCLSN", "")).strip(),
+    }
+    for k in _EXPOSURE_CSV_COLUMNS:
+        if k not in row:
+            value = record.get(k)
+            row[k] = value if pd.notna(value) else ""
     return row
 
 
@@ -142,10 +134,9 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
         df = scan_night_to_cache(data_input, dc, cache=cache)
         if df is None:  # empty/absent night -- already warned, skip it
             return [], ""
-        # Every daily-lamp ThAr frame, not just the masters stack inputs: the
-        # fiber-specific cals light the same lamp, and early nights have only those.
-        is_thar = df["DRP_OBJECT"] == "ThAr_daily"
-        frames = df.loc[is_thar & ~df["ISJUNK"].astype(bool)]
+        # Every ThAr frame from either lamp, junk included -- a full accounting of
+        # the ThAr frames on disk, not just the masters stack inputs.
+        frames = df.loc[df["DRP_OBJECT"].isin(["ThAr_daily", "ThAr_gold"])]
         if frames.empty:
             return [], ": no ThAr frames"
         rows = [_frame_row(f) for _, f in frames.iterrows()]
@@ -161,14 +152,16 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
 
 
 def lamp_history(rows):
-    """Consecutive-HCLSN stretches over the daily all-fiber frames in `rows`.
+    """Consecutive-HCLSN stretches over every daily ThAr frame in `rows`.
 
-    `rows` must be chronological, as ``scan_lamp_serial_numbers`` returns them; a
-    new stretch starts wherever the serial changes from one frame to the next.
+    The serial names the installed lamp whichever fibers a frame lit, so every
+    ``ThAr_daily`` frame counts. `rows` must be chronological, as
+    ``scan_lamp_serial_numbers`` returns them; a new stretch starts wherever the
+    serial changes from one frame to the next.
     """
     history = []
     for r in rows:
-        if {r["SKYSRC"], r["SCISRC"], r["CALSRC"]} != {"ThAr_daily"}:
+        if r["DRP_OBJECT"] != "ThAr_daily":
             continue
         lamp = r["HCLSN"] or "(none)"
         if history and history[-1]["HCLSN"] == lamp:
@@ -219,7 +212,7 @@ def main(argv=None):
 
     history = lamp_history(rows)
     if not history:
-        logger.warning("no all-fiber daily ThAr frames: lamp history is empty")
+        logger.warning("no daily ThAr frames: lamp history is empty")
     path = os.path.join(out_dir, f"thar_lamp_history_{start}_{end}.csv")
     write_csv(path, history, _LAMP_HISTORY_CSV_COLUMNS)
     logger.info("done: %d lamp stretch(es) -> %s", len(history), path)

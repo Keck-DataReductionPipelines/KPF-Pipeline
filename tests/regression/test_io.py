@@ -86,11 +86,12 @@ def _rows(files, obj, sources=None):
 def _mini_db(rows, *, exptime=60.0, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
-    Adds the derived columns build_calibration_stacks needs: EXPTIME, the
+    Adds the derived columns build_calibration_stacks needs: NATIVE_OBJECT, EXPTIME, the
     UTC_TIME/HST_TIME timestamps (parsed from each FILENAME), and ISJUNK
     (FILENAMEs in `junk` flagged True).
     """
     df = pd.DataFrame(rows)
+    df["NATIVE_OBJECT"] = "autocal"
     df["EXPTIME"] = exptime
     df["UTC_TIME"] = [get_timestamp(f) for f in df["FILENAME"]]
     df["HST_TIME"] = [utc_to_hst(t) for t in df["UTC_TIME"]]
@@ -810,6 +811,7 @@ class TestBuildMiniDatabase:
             "RED",
             "CA_HK",
             "EXPMETER",
+            "NATIVE_OBJECT",
             "EXPTIME",
             "UTC_TIME",
             "HST_TIME",
@@ -1113,6 +1115,20 @@ class TestMiniDatabaseCache:
         )
         assert db["FILENAME"].tolist() == [expected]
 
+    def test_cache_older_than_a_week_rescans(self, tmp_path, monkeypatch, caplog):
+        # A cache passing every other guardrail is still rescanned once it is more
+        # than 7 days old. File ctimes cannot be backdated, so advance the clock.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+        now = os.stat(cache).st_mtime
+        monkeypatch.setattr("kpfpipe.utils.io.time.time", lambda: now + 7 * 86400 + 1)
+
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.io"):
+            db = fh.build_mini_database("20240405", cache="rw")
+        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert "more than 7 days old" in caplog.text
+
     def test_cache_false_leaves_no_cache(self, tmp_path):
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
         fh.build_mini_database("20240405")  # cache defaults to False
@@ -1174,6 +1190,28 @@ class TestJunkExclusion:
             lists = _cluster("bias", db, min_stack_size=1)
         assert single_fn not in [fn for cluster in lists for fn in cluster]
         assert f"excluding {single_fn}: DRP does not yet support" in caplog.text
+
+    @pytest.mark.parametrize(
+        "native_obj", ["flush-persistence", "bias-noise-test-1", "FLAT-test"]
+    )
+    def test_engineering_object_excluded(self, native_obj, caplog):
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"))
+        eng_fn = _JUNK_BIAS[1]
+        db.loc[db["FILENAME"] == eng_fn, "NATIVE_OBJECT"] = native_obj
+        with caplog.at_level(logging.INFO, logger="kpfpipe.utils.io"):
+            lists = _cluster("bias", db, min_stack_size=1)
+        kept = [fn for cluster in lists for fn in cluster]
+        assert eng_fn not in kept
+        assert set(kept) == set(_JUNK_BIAS) - {eng_fn}
+        assert "excluding 1 bias frame(s) by native OBJECT" in caplog.text
+        assert f"{os.path.basename(eng_fn)} ({native_obj!r})" in caplog.text
+
+    def test_all_nan_native_object_keeps_frames(self):
+        # An all-NaN NATIVE_OBJECT column (seen on Nov 2022 nights) is float dtype.
+        db = _mini_db(_rows(_JUNK_BIAS, "Bias"))
+        db["NATIVE_OBJECT"] = float("nan")
+        lists = _cluster("bias", db, min_stack_size=1)
+        assert set(fn for cluster in lists for fn in cluster) == set(_JUNK_BIAS)
 
     def test_exclude_junk_without_column_raises(self):
         # A mini database built before ISJUNK existed must fail loudly.

@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import tempfile
+import time
 from datetime import datetime
 
 import pandas as pd
@@ -35,8 +36,9 @@ _CACHE_FILE_MODE = 0o666
 _CACHE_DIR_MODE = 0o777
 
 # The mini-database columns: DRP_* and the fiber sources from HeaderParser, the
-# camera readout flags from the native camera cards, EXPTIME the native EXPTIME,
-# UTC/HST_TIME the filename's KPF timestamp, ISJUNK the observer junk list (see
+# camera readout flags from the native camera cards, NATIVE_OBJECT/EXPTIME the
+# native OBJECT/EXPTIME, UTC/HST_TIME the filename's KPF timestamp, ISJUNK the
+# observer junk list (see
 # load_junk_obs_ids), COMMENTS the fatal/non-fatal warning counts (details in
 # the log).
 _MINI_DB_KEYS = [
@@ -51,6 +53,7 @@ _MINI_DB_KEYS = [
     "RED",
     "CA_HK",
     "EXPMETER",
+    "NATIVE_OBJECT",
     "EXPTIME",
     "UTC_TIME",
     "HST_TIME",
@@ -172,8 +175,9 @@ class FileHandler:
     def _read_mini_db_cache(self, datecode):
         """The cached mini database for ``datecode`` if trustworthy, else None
         (caller rescans). Rejects a stale cache when the row count differs from the
-        FITS files on disk, or the cache is older than any input or the directory
-        (by ``st_mtime``/``st_ctime``, so a same-count swap is still caught)."""
+        FITS files on disk, the cache is older than any input or the directory
+        (by ``st_mtime``/``st_ctime``, so a same-count swap is still caught), or the
+        cache is more than 7 days old, whatever the inputs."""
         cache_path = self._mini_db_cache_path(datecode)
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
@@ -206,6 +210,15 @@ class FileHandler:
             return None
 
         cache_mtime = os.stat(cache_path).st_mtime
+        # Conservative backstop: a week-old cache is rescanned even when it looks
+        # current, so a change the checks above miss cannot persist indefinitely.
+        if time.time() - cache_mtime > 7 * 86400:
+            logger.warning(
+                "mini database cache %s is more than 7 days old; rescanning",
+                cache_path,
+            )
+            return None
+
         newest_input = os.stat(data_dir).st_mtime
         for fn in file_list:
             st = os.stat(fn)
@@ -268,7 +281,8 @@ class FileHandler:
         * read (``"r"``) -- load a *current* cache instead of re-scanning the L0
           directory. A cache is current only when it passes the count and
           freshness guardrails in ``_read_mini_db_cache``; a frame added, removed,
-          replaced, or rewritten since the cache was built forces a rescan.
+          replaced, or rewritten since the cache was built, or a cache more than 7
+          days old, forces a rescan.
         * write (``"w"``) -- after scanning, (re)write the cache (directory created
           as needed) for next time. A cache hit on read short-circuits the scan, so
           nothing is rewritten.
@@ -293,6 +307,7 @@ class FileHandler:
             CALSRC (the source lighting each fiber); GREEN, RED, CA_HK, EXPMETER
             (whether that camera read out); UTC_TIME and
             HST_TIME (KPF-format timestamps from the filename, HST = UTC-10);
+            NATIVE_OBJECT (the native OBJECT, not KPF0's derived OBJECT = DRP_OBJECT);
             EXPTIME (the native, requested EXPTIME, not KPF0's EXPTIME = ELAPSED);
             ISJUNK (frame is on the observer junk list -- flagged, not dropped);
             and COMMENTS (``WARNINGS: <n> fatal, <m> non-fatal``, the frame's
@@ -381,6 +396,7 @@ class FileHandler:
                     "EXPMETER",
                 ):
                     row[k] = parsed.DRP_KEYWORDS.get(k)
+                row["NATIVE_OBJECT"] = native.get("OBJECT")
                 row["EXPTIME"] = native.get("EXPTIME")
                 # An unclassifiable frame's one "cannot classify" warning is
                 # fatal (KPF0 rejects it); the rest leave the frame usable.
@@ -423,7 +439,8 @@ class FileHandler:
         the type's and every fiber saw the lamp (lamp masters, so sci/sky/cal-only
         lamp frames are left out) or nothing (bias/dark), so a frame with any
         ``Unknown`` source never qualifies. A frame without both GREEN and RED
-        read out is excluded with a warning (single-CCD is unsupported). Raises
+        read out is excluded with a warning (single-CCD is unsupported); one whose
+        native OBJECT names a flush-persistence or test frame is excluded. Raises
         ``ValueError`` if no database is loaded or the type has no frames;
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
         mini_db = self._mini_db
@@ -435,15 +452,34 @@ class FileHandler:
             mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
         obj = _CAL_TYPES[cal_type]
         lit = obj if cal_type in ("flat", "thar") else "None"
-        keep = mini_db["DRP_OBJECT"] == obj
-        keep &= (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
-        both_ccds = mini_db[["GREEN", "RED"]].eq(True).all(axis=1)
-        for fn in mini_db.loc[keep & ~both_ccds, "FILENAME"]:
+        cal_df = mini_db[
+            (mini_db["DRP_OBJECT"] == obj)
+            & (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
+        ]
+        single_ccd = ~cal_df[["GREEN", "RED"]].eq(True).all(axis=1)
+        for fn in cal_df.loc[single_ccd, "FILENAME"]:
             logger.warning(
                 "excluding %s: DRP does not yet support single-CCD exposures", fn
             )
-        keep &= both_ccds
-        cal_df = mini_db[keep]
+        cal_df = cal_df[~single_ccd]
+        exclude = (
+            cal_df["NATIVE_OBJECT"]
+            .astype("string")
+            .str.contains("flush-persistence|test", case=False, na=False)
+        )
+        if exclude.any():
+            logger.info(
+                "excluding %d %s frame(s) by native OBJECT: %s",
+                exclude.sum(),
+                cal_type,
+                ", ".join(
+                    f"{os.path.basename(fn)} ({native!r})"
+                    for fn, native in cal_df.loc[
+                        exclude, ["FILENAME", "NATIVE_OBJECT"]
+                    ].values
+                ),
+            )
+        cal_df = cal_df[~exclude]
         if cal_df.empty:
             raise ValueError(f"No '{cal_type}' calibration frames found")
         return cal_df
