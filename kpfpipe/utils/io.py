@@ -441,21 +441,51 @@ class FileHandler:
         ``Unknown`` source never qualifies. A frame without both GREEN and RED
         read out is excluded with a warning (single-CCD is unsupported); one whose
         native OBJECT names a flush-persistence or test frame is excluded. Raises
-        ``ValueError`` if no database is loaded or the type has no frames;
+        ``ValueError`` if no database is loaded or no frame survives selection
+        (the message gives per-filter counts);
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
         mini_db = self._mini_db
         if mini_db is None:
             raise ValueError(
                 "no mini database available; call build_mini_database(datecode) first"
             )
-        if exclude_junk:
-            mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
         obj = _CAL_TYPES[cal_type]
         lit = obj if cal_type in ("flat", "thar") else "None"
-        cal_df = mini_db[
-            (mini_db["DRP_OBJECT"] == obj)
-            & (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
-        ]
+        cal_df = mini_db[mini_db["DRP_OBJECT"] == obj]
+        n_object = len(cal_df)
+        n_junk = 0
+        if exclude_junk:
+            junk = cal_df["ISJUNK"].astype(bool)
+            n_junk = int(junk.sum())
+            if n_junk:
+                logger.debug(
+                    "excluding %d %s frame(s) as junk: %s",
+                    n_junk,
+                    cal_type,
+                    ", ".join(
+                        os.path.basename(fn) for fn in cal_df.loc[junk, "FILENAME"]
+                    ),
+                )
+            cal_df = cal_df[~junk]
+        sources = cal_df[["SKYSRC", "SCISRC", "CALSRC"]]
+        lamp = (sources == lit).all(axis=1)
+        n_source = int((~lamp).sum())
+        if n_source:
+            logger.debug(
+                "excluding %d %s frame(s) with SKYSRC/SCISRC/CALSRC != %r: %s",
+                n_source,
+                cal_type,
+                lit,
+                ", ".join(
+                    f"{os.path.basename(fn)} {tuple(src)}"
+                    for fn, src in zip(
+                        cal_df.loc[~lamp, "FILENAME"],
+                        sources[~lamp].values.tolist(),
+                        strict=True,
+                    )
+                ),
+            )
+        cal_df = cal_df[lamp]
         single_ccd = ~cal_df[["GREEN", "RED"]].eq(True).all(axis=1)
         for fn in cal_df.loc[single_ccd, "FILENAME"]:
             logger.warning(
@@ -481,7 +511,15 @@ class FileHandler:
             )
         cal_df = cal_df[~exclude]
         if cal_df.empty:
-            raise ValueError(f"No '{cal_type}' calibration frames found")
+            # Per-filter counts separate a night with no such frames from one
+            # whose frames were all excluded.
+            raise ValueError(
+                f"No usable '{cal_type}' calibration frames: {n_object} with "
+                f"OBJECT={obj!r}; excluded {n_junk} junk, {n_source} source "
+                f"mismatch (SKYSRC/SCISRC/CALSRC != {lit!r}), "
+                f"{int(single_ccd.sum())} single-CCD, {int(exclude.sum())} "
+                "native OBJECT flush-persistence/test"
+            )
         return cal_df
 
     def _identify_clusters(self, cal_type, *, cluster_gap_seconds, exclude_junk=True):
@@ -534,7 +572,8 @@ class FileHandler:
           routinely straddle HST midnight and belong in a single nightly stack.
 
         Every returned stack has at least ``min_stack_size`` files; undersized
-        stacks are dropped, and it raises when none meets the threshold. A stack
+        stacks are dropped with a warning, and it raises when none meets the
+        threshold. A stack
         with more than ``max_stack_size`` files is truncated to its first
         ``max_stack_size`` (earliest by time), with a warning.
 
@@ -568,8 +607,8 @@ class FileHandler:
         ------
         ValueError
             If ``groupby`` or ``cal_type`` is not recognized, if no mini database is
-            loaded on the instance, if no calibration frames of the requested type
-            are found, or if no stack meets ``min_stack_size``.
+            loaded on the instance, if no calibration frame of the requested type
+            survives selection, or if no stack meets ``min_stack_size``.
         """
         if groupby not in _GROUPBY_MODES:
             raise ValueError(
@@ -600,12 +639,23 @@ class FileHandler:
             else:  # obs_night -- the whole loaded night, one stack spanning midnight
                 clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
 
+        sizes = [len(c) for c in clusters]
+        for c in clusters:
+            if len(c) < min_stack_size:
+                logger.warning(
+                    "dropping %d-frame %s cluster (< min_stack_size=%d): %s .. %s",
+                    len(c),
+                    cal_type,
+                    min_stack_size,
+                    os.path.basename(c[0]),
+                    os.path.basename(c[-1]),
+                )
         clusters = [c for c in clusters if len(c) >= min_stack_size]
 
         if not clusters:
             raise ValueError(
                 f"'{cal_type}' groupby={groupby} produced no cluster with at least "
-                f"min_stack_size={min_stack_size} files"
+                f"min_stack_size={min_stack_size} files (cluster sizes: {sizes})"
             )
 
         if max_stack_size is not None:

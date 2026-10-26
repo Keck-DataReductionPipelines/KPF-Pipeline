@@ -221,7 +221,7 @@ class TestBuildCalibrationStacks:
             FileHandler({}).build_calibration_stacks("bias")
 
     def test_raises_when_no_frames_found(self):
-        with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
+        with pytest.raises(ValueError, match="No usable 'flat' calibration frames"):
             _cluster("flat", _make_mini_db())
 
     def test_raises_when_only_cluster_below_min(self):
