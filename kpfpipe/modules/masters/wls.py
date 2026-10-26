@@ -10,19 +10,17 @@ import numpy as np
 import pandas as pd
 from numpy.polynomial import legendre
 
-from kpfpipe import FIBERS, REPO_ROOT, SCI_FIBERS
+from kpfpipe import FIBERS, INSTRUMENT_ERAS, REPO_ROOT, SCI_FIBERS
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.base import BaseMasterModule
 from kpfpipe.quality_control.diagnostics import DiagL2
 from kpfpipe.quality_control.qc_flags import QCL2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.kpf import get_obs_id, select_era_reference
 from kpfpipe.utils.stats import optimize_lsq
 
 logger = logging.getLogger(__name__)
-
-_ROUGH_WLS_FILE = f"{REPO_ROOT}/reference/rough_wls_fallback.csv"
 
 # Per-line fit diagnostics, column -> (units, description). The line fitters
 # return these keys; save_diagnostics writes each to the <CHIP>_LINES group.
@@ -101,7 +99,8 @@ class WLS(BaseMasterModule):
             raise TypeError("config must be None, dict, or ConfigHandler")
         super().__init__(l0_file_list, params)
         self.master_type = "thar"
-        self.rough_wls_file = _ROUGH_WLS_FILE
+        # chosen per frame by _process_stack_l0_to_l2 from the frame's era
+        self.rough_wls_file = None
 
         # physical echelle order per row (bluest first), cached per chip;
         # e.g. GREEN 137..103. "order" means this echelle order throughout.
@@ -112,7 +111,6 @@ class WLS(BaseMasterModule):
             for chip in self.echelle_orders
         }
 
-        self._load_rough_wls()
         self._load_linelist()
 
         self._l2_obj_cache = []  # populated by _process_stack_l0_to_l2()
@@ -157,7 +155,7 @@ class WLS(BaseMasterModule):
 
             ncol = self.ncol
             # Per-order Legendre coefficients (C0..Cn) evaluated on the
-            # normalized pixel grid; see scripts/build_rough_wls_from_legacy_wls.py.
+            # normalized pixel grid.
             coeff_cols = sorted(
                 (c for c in df.columns if c.startswith("C") and c[1:].isdigit()),
                 key=lambda c: int(c[1:]),
@@ -191,7 +189,8 @@ class WLS(BaseMasterModule):
     ):
         """
         Run each frame of ``l0_file_list`` through the L0->L2 pipeline, with the
-        rough WLS as its WAVE and DiagL2/QCL2 run on it, returning the
+        rough WLS of its era (``reference/rough_wls``, chosen like the order
+        trace) as its WAVE and DiagL2/QCL2 run on it, returning the
         extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
         entry). With ``output_dir``, each frame's L2 is written there as
         ``{obs_id}_thar_L2.fits`` as soon as it is extracted. Every frame is
@@ -223,6 +222,15 @@ class WLS(BaseMasterModule):
 
             # Extraction writes no WAVE; the rough WLS the line fits start from
             # stands in so DiagL2 can locate its bands. Not yet a gate.
+            self._load_rough_wls(
+                select_era_reference(
+                    f"{REPO_ROOT}/reference/rough_wls/rough_wls_*.csv",
+                    "rough WLS",
+                    l1_obj.headers["PRIMARY"],
+                    l1_obj.obs_id,
+                    INSTRUMENT_ERAS,
+                )
+            )
             for ext, wave in self.rough_wls.items():
                 l2_obj.set_data(ext, wave)
             DiagL2(l2_obj).run()

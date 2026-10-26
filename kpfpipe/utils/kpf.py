@@ -1,8 +1,12 @@
-"""obs_id, datecode, and timestamp parsing, plus UTC/HST and KPF/EPRV conversions."""
+"""obs_id, datecode, and timestamp parsing, UTC/HST and KPF/EPRV conversions,
+and per-era reference selection."""
 
+import glob
 import os
 import re
 from datetime import datetime, timedelta
+
+import pandas as pd
 
 # The obs_id/KOAID shape, as a string so utils/io.py can embed it in the larger
 # filename patterns it builds, and compiled here for matching.
@@ -153,3 +157,43 @@ def kpf_timestamp_to_eprv_timestamp(timestamp):
     mm = (total_seconds % 3600) // 60
     ss = total_seconds % 60
     return f"{date_str}T{hh:02d}{mm:02d}{ss:02d}"
+
+
+def select_era_reference(pattern, kind, primary, obs_id, eras):
+    """Path of the most recent ``kind`` reference measured before a frame within
+    the frame's instrument era (``INSTERA``, stamped at ``KPF0.to_kpf1``).
+
+    ``pattern`` globs the references, its one ``*`` standing for the datecode
+    each was measured on (e.g. ``.../order_traces/order_trace_*.csv``);
+    ``primary`` is the frame's PRIMARY header and ``eras`` the instrument-era
+    table.
+
+    Raises ``ValueError`` when no era carries the frame's ``INSTERA`` and
+    ``FileNotFoundError`` when the era has no reference measured before it."""
+    instera = str(primary["INSTERA"])
+    obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
+
+    match = eras[eras["INSTERA"].astype(str) == instera]
+    if match.empty:
+        raise ValueError(
+            f"reference/instrument_eras.csv carries no instrument era "
+            f"{instera!r}, the INSTERA of {obs_id}"
+        )
+    era = match.iloc[0]
+
+    # The instrument changes whenever it is opened, so only a reference
+    # measured earlier in this era describes this frame.
+    latest = min(era["UT_end_date"], obs_time)
+    prefix, suffix = os.path.basename(pattern).split("*")
+    in_era = {}
+    for path in glob.glob(pattern):
+        datecode = os.path.basename(path)[len(prefix) : -len(suffix)]
+        # +2 s places a reference dated on an era's start day inside that era
+        measured = pd.Timestamp(datecode) + pd.Timedelta(seconds=2)
+        if era["UT_start_date"] <= measured <= latest:
+            in_era[measured] = path
+    if not in_era:
+        raise FileNotFoundError(
+            f"No {kind} measured before {obs_time} within KPF instrument era {instera}"
+        )
+    return in_era[max(in_era)]

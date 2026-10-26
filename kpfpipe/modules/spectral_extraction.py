@@ -5,7 +5,6 @@ Extracts per-order 1D spectra from an assembled L1 frame into a KPF2 (L2),
 populating the per-fiber FLUX and VAR arrays.
 """
 
-import glob
 import logging
 import os
 
@@ -14,6 +13,7 @@ import pandas as pd
 
 from kpfpipe import DEFAULT_CFG, DETECTOR, INSTRUMENT_ERAS, REPO_ROOT
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.kpf import select_era_reference
 from kpfpipe.utils.stats import bounded_polyval
 
 logger = logging.getLogger(__name__)
@@ -77,36 +77,13 @@ class SpectralExtraction:
         Raises ``ValueError`` when no era carries the frame's ``INSTERA``.
         Deliberately not a ``LookupError``: ``extract_ffi`` catches that to fill
         an absent orderlet with NaN, and would bury this."""
-        primary = self.l1_obj.headers["PRIMARY"]
-        instera = str(primary["INSTERA"])
-        obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
-
-        eras = INSTRUMENT_ERAS
-        match = eras[eras["INSTERA"].astype(str) == instera]
-        if match.empty:
-            raise ValueError(
-                f"reference/instrument_eras.csv carries no instrument era "
-                f"{instera!r}, the INSTERA of {self.l1_obj.obs_id}"
-            )
-        era = match.iloc[0]
-
-        # Trace geometry moves whenever the instrument is opened, so only a
-        # reference measured earlier in this era describes this frame.
-        latest = min(era["UT_end_date"], obs_time)
-        in_era = {}
-        for path in glob.glob(f"{REPO_ROOT}/reference/order_traces/order_trace_*.csv"):
-            datecode = os.path.basename(path)[len("order_trace_") : -len(".csv")]
-            # +2 s places a trace dated on an era's start day inside that era
-            measured = pd.Timestamp(datecode) + pd.Timedelta(seconds=2)
-            if era["UT_start_date"] <= measured <= latest:
-                in_era[measured] = path
-        if not in_era:
-            raise FileNotFoundError(
-                f"No order trace measured before {obs_time} within KPF instrument "
-                f"era {instera}"
-            )
-
-        filepath = in_era[max(in_era)]
+        filepath = select_era_reference(
+            f"{REPO_ROOT}/reference/order_traces/order_trace_*.csv",
+            "order trace",
+            self.l1_obj.headers["PRIMARY"],
+            self.l1_obj.obs_id,
+            INSTRUMENT_ERAS,
+        )
         logger.info("reading order trace from %s", filepath)
 
         table = pd.read_csv(filepath)

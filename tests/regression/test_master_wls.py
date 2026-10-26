@@ -14,10 +14,10 @@ import pytest
 
 import kpfpipe.modules.masters.base as base_module
 import kpfpipe.modules.masters.wls as wls_module
-from kpfpipe import DETECTOR, FIBERS
+from kpfpipe import DETECTOR, FIBERS, REPO_ROOT
 from kpfpipe.data_models.masters import KPFMasterL2
 from kpfpipe.modules.masters.wls import WLS
-from kpfpipe.utils.kpf import get_obs_id
+from kpfpipe.utils.kpf import get_obs_id, select_era_reference
 
 from ._dtype_policy import (
     MASK_MEM,
@@ -36,6 +36,9 @@ NORDER_RED = DETECTOR["norder"]["RED"]
 NCOL_TEST = 16
 
 DATECODE = "20240101"  # shared by FILE_LIST and the master obs_ids below
+# The rough WLS of DATECODE's era (1.0), served to every frame unless a test
+# drives the real per-frame selection.
+ROUGH_WLS_FILE = f"{REPO_ROOT}/reference/rough_wls/rough_wls_20221207.csv"
 
 
 def _fake_lines(chip, fiber, echelle):
@@ -60,34 +63,39 @@ def _fake_lines(chip, fiber, echelle):
 
 @pytest.fixture(scope="module")
 def cached_rough_wls():
-    """The rough-WLS grid, built once for the whole module."""
-    return WLS(FILE_LIST).rough_wls
+    """The rough-WLS grid of ROUGH_WLS_FILE, built once for the whole module."""
+    wls = WLS(FILE_LIST)
+    _REAL_LOAD_ROUGH_WLS(wls, ROUGH_WLS_FILE)
+    return wls.rough_wls
 
 
 @pytest.fixture(autouse=True)
 def _memoize_rough_wls(cached_rough_wls, monkeypatch):
-    """Serve every ``WLS(...)`` in this file the grid built once above.
+    """Serve every frame in this file ROUGH_WLS_FILE's grid, built once above.
 
-    ``WLS.__init__`` rebuilds the rough-WLS grid unconditionally -- measured at
-    0.15 s a call, and this file constructs roughly sixty. The grid depends only
-    on class defaults (the CSV, ncol, chips, fibers, echelle orders), so each
-    instance gets a fresh dict wrapping the shared arrays; the three tests that
-    override a channel rebind the key rather than writing through it.
+    The test frames carry no headers, so the per-frame era selection returns
+    ROUGH_WLS_FILE, and loading it -- measured at 0.15 s a call, in a file that
+    processes roughly sixty stacks -- hands each instance a fresh dict wrapping
+    the shared arrays; the tests that override a channel rebind the key rather
+    than writing through it.
 
-    A caller passing an explicit ``rough_wls_file`` still reaches the real
-    loader, so the missing-file path is unaffected, and
-    ``test_cached_grid_matches_the_real_loader`` drives the real loader once per
-    run to keep this cache honest.
+    Any other path still reaches the real loader, so the missing-file path is
+    unaffected, and ``test_cached_grid_matches_the_real_loader`` drives the real
+    loader once per run to keep this cache honest.
     """
 
     def _cached(self, rough_wls_file=None):
-        if rough_wls_file is not None and rough_wls_file != self.rough_wls_file:
+        if rough_wls_file not in (None, ROUGH_WLS_FILE):
             return _REAL_LOAD_ROUGH_WLS(self, rough_wls_file)
-        if not hasattr(self, "rough_wls"):
+        if self.rough_wls_file != ROUGH_WLS_FILE:
+            self.rough_wls_file = ROUGH_WLS_FILE
             self.rough_wls = dict(cached_rough_wls)
         return self.rough_wls
 
     monkeypatch.setattr(WLS, "_load_rough_wls", _cached)
+    monkeypatch.setattr(
+        wls_module, "select_era_reference", lambda *args, **kwargs: ROUGH_WLS_FILE
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -107,7 +115,10 @@ def frame_qc(monkeypatch):
 
 
 class MockL1:
-    obs_id = None
+    headers = {"PRIMARY": {}}  # rough-WLS selection is stubbed (_memoize_rough_wls)
+
+    def __init__(self, obs_id=None):
+        self.obs_id = obs_id
 
 
 class MockL2:
@@ -177,13 +188,17 @@ def mock_pipeline(monkeypatch):
 def _stub_frame_pipeline(monkeypatch, l1=None, extract=None):
     """Short-circuit load -> process -> extract so a test drives only the fit.
 
-    ``_load_frame`` threads each source filename through as the opaque L1 token
-    unless ``l1`` overrides it, so the extracted L2 stub carries that frame's
+    ``_load_frame`` returns a MockL1 carrying each source file's obs_id unless
+    ``l1`` overrides it, so the extracted L2 stub carries that frame's
     obs_id (which drives per-frame naming). The fit/combine stubs stay per-test:
     their survivor and rejection structure IS what each test asserts.
     """
-    load = (lambda self, fn, cache=False, **kw: fn) if l1 is None else l1
-    extract = extract or (lambda self, l1_obj, **kw: MockL2(get_obs_id(l1_obj)))
+    load = (
+        (lambda self, fn, cache=False, **kw: MockL1(get_obs_id(fn)))
+        if l1 is None
+        else l1
+    )
+    extract = extract or (lambda self, l1_obj, **kw: MockL2(l1_obj.obs_id))
     monkeypatch.setattr(WLS, "_load_frame", load)
     monkeypatch.setattr(WLS, "_process_frame", lambda self, l1_obj, **kw: l1_obj)
     monkeypatch.setattr(WLS, "_extract_frame", extract)
@@ -268,6 +283,36 @@ class TestProcessIndividualFrames:
         for name in ("DiagL2", "QCL2"):
             frame_qc[name].assert_called_with(mock_pipeline)
             assert frame_qc[name].call_count == len(FILE_LIST)
+
+    @pytest.mark.parametrize(
+        "date_obs, instera, datecode",
+        [
+            ("2023-06-01T05:00:00", "1.0", "20221207"),
+            ("2024-06-01T05:00:00", "2.0", "20240224"),
+        ],
+    )
+    def test_selects_the_rough_wls_of_the_frames_era(
+        self, monkeypatch, date_obs, instera, datecode
+    ):
+        # Chosen like the order trace: the latest reference within the frame's era.
+        monkeypatch.setattr(wls_module, "select_era_reference", select_era_reference)
+        l1 = MockL1()
+        l1.headers = {
+            "PRIMARY": {
+                "JD_UTC": pd.Timestamp(date_obs).to_julian_date(),
+                "INSTERA": instera,
+            }
+        }
+        _stub_frame_pipeline(
+            monkeypatch,
+            l1=lambda self, fn, **kw: l1,
+            extract=lambda self, l1_obj, **kw: MockL2(),
+        )
+        wls = WLS(FILE_LIST)
+        wls._process_stack_l0_to_l2(FILE_LIST)
+        assert wls.rough_wls_file == (
+            f"{REPO_ROOT}/reference/rough_wls/rough_wls_{datecode}.csv"
+        )
 
     def test_file_list_override(self, mock_pipeline, monkeypatch):
         wls = WLS(FILE_LIST)
@@ -968,7 +1013,7 @@ class TestMinStackSizeGate:
         _stub_frame_pipeline(
             monkeypatch,
             l1=lambda self, fn, cache=False, **kw: (
-                None if files.index(fn) >= n_loaded else fn
+                None if files.index(fn) >= n_loaded else MockL1(get_obs_id(fn))
             ),
         )
 
@@ -1031,9 +1076,9 @@ class TestFitLinePositions:
         class StubL2:
             data = {"RED_SCI1_FLUX": flux, "RED_SCI1_VAR": np.ones_like(flux)}
 
-        wls.rough_wls["RED_SCI1_WAVE"] = np.tile(
-            np.linspace(6500.0, 6510.0, ncol), (norder, 1)
-        )
+        wls.rough_wls = {
+            "RED_SCI1_WAVE": np.tile(np.linspace(6500.0, 6510.0, ncol), (norder, 1))
+        }
         wls._linelist_df = _linelist_df("RED", norder, waves)
         return StubL2()
 
@@ -1134,8 +1179,7 @@ class TestRoughWlsLoading:
         # The one test that runs the real Legendre evaluation, so the module's
         # memoized grid cannot drift from what production would have built.
         wls = WLS(FILE_LIST)
-        del wls.rough_wls
-        _REAL_LOAD_ROUGH_WLS(wls)
+        _REAL_LOAD_ROUGH_WLS(wls, ROUGH_WLS_FILE)
         assert set(wls.rough_wls) == set(cached_rough_wls)
         for channel_ext, grid in wls.rough_wls.items():
             np.testing.assert_array_equal(grid, cached_rough_wls[channel_ext])
