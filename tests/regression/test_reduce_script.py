@@ -400,7 +400,7 @@ class TestClearStaleOutputs:
         stack_subdir = os.path.join(night, "thar_L2")
         os.makedirs(stack_subdir)
         stack_files = [
-            f"{koaid}_master_thar_diagnostics.h5",
+            f"{koaid}_thar_l2_diagnostics.h5",
             "KP.20240405.40113.57_thar_L2.fits",
             "KP.20240405.40200.00_thar_L2.fits",
         ]
