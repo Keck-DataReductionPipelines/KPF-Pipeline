@@ -28,6 +28,7 @@ Examples:
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
     kpfpipe analyze thar --date_range 20240727 20241022
     kpfpipe analyze order_trace --date_range 20221109 20250829
+    kpfpipe analyze rough_wls --date_range 20221109 20251231
     kpfpipe fetch masters -u <user> --dates 20240405 --local_dir ~/data
 
 Run ``kpfpipe <command> -h`` for a command's own options.
@@ -38,7 +39,7 @@ layer; the scripts never import ``tools`` (see CLAUDE.md, "CLI architecture").
 
 import sys
 
-from scripts.analyze import order_trace, thar
+from scripts.analyze import order_trace, rough_wls, thar
 from scripts.fetch import L0 as fetch_l0
 from scripts.fetch import L2 as fetch_l2
 from scripts.fetch import L4 as fetch_l4
@@ -51,6 +52,7 @@ from scripts.process import masters, realtime, reduce, science, timeseries
 _ANALYSES = {
     "thar": thar.main,
     "order_trace": order_trace.main,
+    "rough_wls": rough_wls.main,
 }
 
 # The `fetch` subcommands, keyed by the data they pull. Same arrangement, and same
