@@ -126,6 +126,6 @@ def add_junk_obs_id(data_input, obs_id):
     ref.mkdir(parents=True, exist_ok=True)
     junk_csv = ref / "junk_obs.csv"
     if not junk_csv.exists():
-        junk_csv.write_text("Junk Observations for KPF\nobservation_id\n")
+        junk_csv.write_text("observation_id\n")
     with junk_csv.open("a") as fh:
         fh.write(f"{obs_id}\n")

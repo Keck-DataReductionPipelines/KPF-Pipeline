@@ -1156,12 +1156,11 @@ class TestJunkExclusion:
         assert "junk exclusion is a no-op" in caplog.text
 
     def test_load_junk_parses_wmko_format(self, tmp_path):
-        # WMKO layout: a title line, an 'observation_id' header, one obs_id per row.
+        # WMKO layout: an 'observation_id' header, one obs_id per row.
         ref = tmp_path / "vNext" / "reference"
         ref.mkdir(parents=True)
         (ref / "junk_obs.csv").write_text(
-            "Junk Observations for KPF\nobservation_id\n"
-            "KP.20240405.00001.00\nKP.20240405.00002.00\n"
+            "observation_id\nKP.20240405.00001.00\nKP.20240405.00002.00\n"
         )
         assert load_junk_obs_ids(str(tmp_path)) == {
             "KP.20240405.00001.00",

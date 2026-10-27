@@ -81,15 +81,14 @@ _GROUPBY_MODES = ("time_of_day", "hst_day", "obs_night")
 
 def load_junk_obs_ids(data_input):
     """Set of observer-flagged junk obs_ids, to be stored with L0 data at
-    ``{data_input}/vNext/reference/junk_obs.csv`` (a title line, an
-    ``observation_id`` header, then one obs_id per row). An absent file yields
+    ``{data_input}/vNext/reference/junk_obs.csv``. An absent file yields
     the empty set, so exclusion becomes a no-op.
     """
     junk_csv = os.path.join(data_input, "vNext", "reference", "junk_obs.csv")
     if not os.path.isfile(junk_csv):
         logger.debug("No junk_obs.csv at %s; junk exclusion is a no-op", junk_csv)
         return set()
-    df = pd.read_csv(junk_csv, header=1)
+    df = pd.read_csv(junk_csv)
     return set(df.iloc[:, 0].astype(str).str.strip())
 
 
