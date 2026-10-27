@@ -437,7 +437,8 @@ class FileHandler:
         the shared frame-selection entry point. A frame qualifies when its OBJECT is
         the type's and every fiber saw the lamp (lamp masters, so sci/sky/cal-only
         lamp frames are left out) or nothing (bias/dark), so a frame with any
-        ``Unknown`` source never qualifies. A frame without both GREEN and RED
+        ``Unknown`` source never qualifies; such frames are logged with their
+        SKYSRC/SCISRC/CALSRC. A frame without both GREEN and RED
         read out is excluded with a warning (single-CCD is unsupported); one whose
         native OBJECT names a flush-persistence or test frame is excluded. Raises
         ``ValueError`` if no database is loaded or no frame survives selection
@@ -469,20 +470,31 @@ class FileHandler:
         sources = cal_df[["SKYSRC", "SCISRC", "CALSRC"]]
         lamp = (sources == lit).all(axis=1)
         n_source = int((~lamp).sum())
-        if n_source:
+        excluded = cal_df.loc[~lamp]
+        for fn, native, sky, sci, cal in excluded[
+            ["FILENAME", "NATIVE_OBJECT", "SKYSRC", "SCISRC", "CALSRC"]
+        ].values:
             logger.debug(
-                "excluding %d %s frame(s) with SKYSRC/SCISRC/CALSRC != %r: %s",
-                n_source,
+                "excluding %s (native OBJECT %r): SKYSRC=%s SCISRC=%s CALSRC=%s",
+                os.path.basename(fn),
+                native,
+                sky,
+                sci,
+                cal,
+            )
+        # One entry per distinct (SKYSRC, SCISRC, CALSRC) among the excluded.
+        by_source = [
+            f"SKYSRC={sky} SCISRC={sci} CALSRC={cal}: {n}"
+            for (sky, sci, cal), n in excluded.groupby(["SKYSRC", "SCISRC", "CALSRC"])
+            .size()
+            .items()
+        ]
+        for entry in by_source:
+            logger.info(
+                "%s: excluding frames without SKYSRC=SCISRC=CALSRC=%s: %s",
                 cal_type,
                 lit,
-                ", ".join(
-                    f"{os.path.basename(fn)} {tuple(src)}"
-                    for fn, src in zip(
-                        cal_df.loc[~lamp, "FILENAME"],
-                        sources[~lamp].values.tolist(),
-                        strict=True,
-                    )
-                ),
+                entry,
             )
         cal_df = cal_df[lamp]
         single_ccd = ~cal_df[["GREEN", "RED"]].eq(True).all(axis=1)
@@ -514,8 +526,8 @@ class FileHandler:
             # whose frames were all excluded.
             raise ValueError(
                 f"No usable '{cal_type}' calibration frames: {n_object} with "
-                f"OBJECT={obj!r}; excluded {n_junk} junk, {n_source} source "
-                f"mismatch (SKYSRC/SCISRC/CALSRC != {lit!r}), "
+                f"OBJECT={obj!r}; excluded {n_junk} on junk list, {n_source} "
+                f"without SKYSRC=SCISRC=CALSRC={lit} [{'; '.join(by_source)}], "
                 f"{int(single_ccd.sum())} single-CCD, {int(exclude.sum())} "
                 "native OBJECT flush-persistence/test"
             )
