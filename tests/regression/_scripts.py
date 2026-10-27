@@ -113,6 +113,12 @@ def write_l0_tree(
             "ELAPSED": elapsed,
             "GREEN": "YES",
             "RED": "YES",
+            # A bias/dark must record every shutter closed.
+            **(
+                {k: "closed" for k in ("SCISEL", "SKYSEL", "SIMCALSH")}
+                if imtype in ("Bias", "Dark")
+                else {}
+            ),
             **(extra_cards or {}),
         }
     )

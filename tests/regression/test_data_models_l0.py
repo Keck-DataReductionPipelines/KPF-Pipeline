@@ -25,7 +25,12 @@ from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.header import HeaderParser
 
 from ._catalog import catalog_record_table
-from ._data_models import standardized_l0, write_amp_l0, write_minimal_l0
+from ._data_models import (
+    CLOSED_SHUTTERS,
+    standardized_l0,
+    write_amp_l0,
+    write_minimal_l0,
+)
 from ._dtype_policy import assert_not_float64
 from ._eprv import kpf_table
 
@@ -538,6 +543,7 @@ class TestStandardizedPrimary:
     def test_undated_frame_is_rejected(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         with pytest.raises(ValueError, match="MJD-OBS=None is not a valid MJD"):
             l0.standardize_headers()
 
@@ -564,6 +570,7 @@ class TestStandardizedPrimary:
     def _dated_l0(mjd):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = mjd
         return l0
 
@@ -618,8 +625,8 @@ class TestHeaderKeywords:
     @pytest.mark.parametrize(
         "imtype, native, obj, obstype",
         [
-            ("Bias", {}, "Bias", "Bias"),
-            ("Dark", {}, "Dark", "Dark"),
+            ("Bias", CLOSED_SHUTTERS, "Bias", "Bias"),
+            ("Dark", CLOSED_SHUTTERS, "Dark", "Dark"),
             ("Flatlamp", {"OCTAGON": "Home"}, "WideFlat", "Flat"),
             ("Flatlamp", {"OCTAGON": "BrdbandFiber"}, "Flat", "Flat"),
             ("Arclamp", {"OCTAGON": "Th_daily"}, "ThAr_daily", "Arclamp"),
@@ -630,7 +637,7 @@ class TestHeaderKeywords:
         ],
     )
     def test_frame_identity(self, imtype, native, obj, obstype):
-        prim = self._standardize(imtype, **native, **_ALL_FIBERS).headers["PRIMARY"]
+        prim = self._standardize(imtype, **{**_ALL_FIBERS, **native}).headers["PRIMARY"]
         assert prim["OBSMODE"] == "Calibration"
         assert prim["OBSTYPE"] == obstype
         assert prim["OBJECT"] == obj
@@ -690,7 +697,7 @@ class TestHeaderKeywords:
         assert {prim[f"CLSRC{trace}"] for trace in range(1, 6)} == {"Flat"}
 
     def test_unlit_traces_are_none(self):
-        prim = self._standardize("Bias").headers["PRIMARY"]
+        prim = self._standardize("Bias", **CLOSED_SHUTTERS).headers["PRIMARY"]
         assert {prim[f"CLSRC{trace}"] for trace in range(1, 6)} == {"None"}
 
 
@@ -748,6 +755,7 @@ class TestReadout:
     def test_read_mode_is_blank_without_acf_or_dates(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         assert l0.standardize_headers().headers["PRIMARY"]["READMODE"] is None
 
@@ -790,6 +798,8 @@ class TestFiveTraceShape:
             "BrdbandFiber" if imtype == "Flatlamp" else "Th_daily"
         )
         l0.headers["PRIMARY"].update(_ALL_FIBERS)
+        if imtype in ("Bias", "Dark"):
+            l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         return l0.standardize_headers()
 

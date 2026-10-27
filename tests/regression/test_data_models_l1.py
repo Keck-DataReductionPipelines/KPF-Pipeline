@@ -18,6 +18,7 @@ from kpfpipe.data_models.masters.base import KPFMasterModel
 from kpfpipe.utils.astro import compute_redshift
 
 from ._catalog import SOURCES, catalog_record_table
+from ._data_models import CLOSED_SHUTTERS
 from ._eprv import kpf_table
 
 # synthetic_l0_file, synthetic_l0_minimal, synthetic_l1_file fixtures live in
@@ -269,6 +270,7 @@ class TestToKpf1:
         # except CSRC/CID, which HeaderParser sets to "None" (no catalog object).
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.standardize_headers()
         p = l0.to_kpf1().headers["PRIMARY"]

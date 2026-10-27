@@ -886,7 +886,7 @@ def test_mini_db_comments_count_parser_warnings(tmp_path, caplog):
     assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
     # The details are in the log, keyed by filename.
     assert "OBJECT '10700' disagrees with TARGNAME 'HD 10700'" in caplog.text
-    assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home')" in caplog.text
+    assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home'" in caplog.text
 
 
 # build_mini_database on-disk cache (read/write + staleness guardrails):

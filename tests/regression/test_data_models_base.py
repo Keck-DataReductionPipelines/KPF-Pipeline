@@ -25,6 +25,7 @@ from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.data_models.masters.level1 import KPFMasterL1
 from kpfpipe.data_models.masters.level2 import KPFMasterL2
 
+from ._data_models import CLOSED_SHUTTERS
 from ._eprv import expand, kpf_table
 from ._registry import expected_comment, expected_routing
 
@@ -407,6 +408,7 @@ class TestQualityControlPropagation:
     def test_propagation_l0_to_l1_to_l2(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
+        l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.standardize_headers()
         # QCL0 routes L0 QC flags to QUALITY_CONTROL.
