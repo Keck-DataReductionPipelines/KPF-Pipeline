@@ -23,7 +23,7 @@ trace with `Chip`, `Fiber`, `Order`, `Coeff0..3`, `BottomEdge`, `TopEdge`,
 | 1.0 | `order_trace_20230731.csv` | KP.20230731.81094.75 | after jump 4 |
 | 2.0 | `order_trace_20240224.csv` | KP.20240224.00049.95 | era start |
 | 2.0 | `order_trace_20240528.csv` | KP.20240528.81096.73 | after jump |
-| 2.6 | `order_trace_20250102.csv` | KP.20250102.00031.42 | era start |
+| 2.6 | `order_trace_20250101.csv` | KP.20250101.81101.69 | era start |
 | 2.6 | `order_trace_20250117.csv` | KP.20250117.81096.88 | after settling |
 | 2.6 | `order_trace_20250225.csv` | KP.20250225.81096.24 | after jump |
 | 3.0 | `order_trace_20250424.csv` | KP.20250424.81096.58 | era start |
