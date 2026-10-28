@@ -11,6 +11,7 @@ import h5py
 import numpy as np
 import pandas as pd
 import pytest
+from astropy.io import fits
 
 import kpfpipe.modules.masters.base as base_module
 import kpfpipe.modules.masters.wls as wls_module
@@ -355,14 +356,16 @@ class TestProcessIndividualFrames:
             MockL2(get_obs_id(fn)) for fn in FILE_LIST[1:]
         ]
         monkeypatch.setattr(base_module, "SpectralExtraction", mock_se)
-        wls = WLS(FILE_LIST)
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         monkeypatch.setattr(
             wls, "_load_frame", lambda fn, cache=False, **kwargs: MockL1()
         )
-        result = wls._process_stack_l0_to_l2(FILE_LIST, output_dir=tmp_path)
+        result = wls._process_stack_l0_to_l2(FILE_LIST, write_stack=True)
         assert len(result) == 7
         assert wls._stacked_files == FILE_LIST[1:]
-        assert sorted(p.name for p in tmp_path.iterdir()) == sorted(
+        stack_dir = _master_and_stack(tmp_path)[2]
+        assert str(wls._stack_dir) == str(stack_dir)
+        assert sorted(p.name for p in stack_dir.iterdir()) == sorted(
             f"{get_obs_id(fn)}_thar_L2.fits" for fn in FILE_LIST[1:]
         )
 
@@ -374,7 +377,57 @@ class TestProcessIndividualFrames:
 
         monkeypatch.setattr(WLS, "_write_frame", write)
         with pytest.raises(OSError, match="disk full"):
-            WLS(FILE_LIST)._process_stack_l0_to_l2(FILE_LIST, output_dir=tmp_path)
+            WLS(
+                FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)}
+            )._process_stack_l0_to_l2(FILE_LIST, write_stack=True)
+
+
+def _thar_frame(tmp_path, datecode, serial, seconds=1000):
+    """A header-only L0 file dated `datecode` whose PRIMARY HCLSN is `serial`."""
+    path = tmp_path / f"KP.{datecode}.{seconds:05d}.00.fits"
+    hdr = fits.Header()
+    hdr["HCLSN"] = serial
+    fits.PrimaryHDU(header=hdr).writeto(path)
+    return str(path)
+
+
+class TestValidateLampSerialNumbers:
+    @pytest.mark.parametrize(
+        "datecode, serial, kept",
+        [
+            ("20221213", "L82979", True),
+            ("20221213", "G858A", False),  # swap night; history lists L82979
+            ("20230225", "L82890", True),  # overlapping rows admit either lamp
+            ("20230225", "L82884", True),
+            ("20240401", "", True),  # (none) matches a blank serial
+            ("20230105", "", False),
+            ("20241101", "L00000", True),  # (unknown) admits any
+            ("20221001", "HJE0762", False),  # before the history starts
+        ],
+    )
+    def test_lamp_serial_against_history(self, tmp_path, datecode, serial, kept):
+        fn = _thar_frame(tmp_path, datecode, serial)
+        # An admitted companion keeps the stack non-empty.
+        good = _thar_frame(tmp_path, "20240101", "L82932")
+        assert (fn in WLS._validate_lamp_serial_numbers([fn, good])) is kept
+
+    def test_drop_warns(self, tmp_path, caplog):
+        fn = _thar_frame(tmp_path, "20221213", "G858A")
+        good = _thar_frame(tmp_path, "20221213", "L82979", seconds=2000)
+        with caplog.at_level(logging.WARNING):
+            assert WLS._validate_lamp_serial_numbers([fn, good]) == [good]
+        assert "dropping KP.20221213.01000.00.fits: HCLSN='G858A'" in caplog.text
+
+    def test_date_after_history_skips_check(self, tmp_path, caplog):
+        fn = _thar_frame(tmp_path, "29991231", "X")
+        with caplog.at_level(logging.WARNING):
+            assert WLS._validate_lamp_serial_numbers([fn]) == [fn]
+        assert "skipping HCLSN check for 1 frame(s)" in caplog.text
+
+    def test_all_dropped_raises(self, tmp_path):
+        fn = _thar_frame(tmp_path, "20221213", "G858A")
+        with pytest.raises(ValueError, match="passed the HCLSN check"):
+            WLS._validate_lamp_serial_numbers([fn])
 
 
 @pytest.fixture

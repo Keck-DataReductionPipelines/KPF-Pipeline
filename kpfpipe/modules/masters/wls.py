@@ -8,6 +8,7 @@ import os
 import h5py
 import numpy as np
 import pandas as pd
+from astropy.io import fits
 from numpy.polynomial import legendre
 
 from kpfpipe import FIBERS, INSTRUMENT_ERAS, REPO_ROOT, SCI_FIBERS
@@ -17,7 +18,7 @@ from kpfpipe.quality_control.diagnostics import DiagL2
 from kpfpipe.quality_control.qc_flags import QCL2
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_directory
-from kpfpipe.utils.kpf import get_obs_id, select_era_reference
+from kpfpipe.utils.kpf import get_datecode, get_obs_id, select_era_reference
 from kpfpipe.utils.stats import optimize_lsq
 
 logger = logging.getLogger(__name__)
@@ -180,20 +181,73 @@ class WLS(BaseMasterModule):
     # Algorithm steps
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _validate_lamp_serial_numbers(l0_file_list):
+        """``l0_file_list`` less, with a warning each, the frames whose PRIMARY
+        ``HCLSN`` no ``reference/thar_lamp_history.csv`` row covering their
+        datecode lists (``(none)`` is a blank serial, ``(unknown)`` admits any).
+        Dates after the history ends are not checked; a frame whose header
+        cannot be read is kept for ``_load_frame`` to reject."""
+        history = pd.read_csv(
+            f"{REPO_ROOT}/reference/thar_lamp_history.csv",
+            dtype=str,
+            keep_default_na=False,
+        )
+        last = history["LAST_DATECODE"].max()
+        kept, unchecked = [], 0
+        for fn in l0_file_list:
+            datecode = get_datecode(fn)
+            if datecode > last:
+                unchecked += 1
+                kept.append(fn)
+                continue
+            try:
+                serial = str(fits.getheader(fn, ext=0).get("HCLSN", "")).strip()
+            except OSError:
+                kept.append(fn)
+                continue
+            rows = history[
+                (history["FIRST_DATECODE"] <= datecode)
+                & (history["LAST_DATECODE"] >= datecode)
+            ]
+            expected = set(rows["HCLSN"].replace("(none)", ""))
+            if serial in expected or "(unknown)" in expected:
+                kept.append(fn)
+            else:
+                logger.warning(
+                    "dropping %s: HCLSN=%r, expected %s on %s",
+                    os.path.basename(fn),
+                    serial,
+                    sorted(expected),
+                    datecode,
+                )
+        if unchecked:
+            logger.warning(
+                "skipping HCLSN check for %d frame(s) dated after %s, "
+                "the end of reference/thar_lamp_history.csv",
+                unchecked,
+                last,
+            )
+        if l0_file_list and not kept:
+            raise ValueError("no frame of l0_file_list passed the HCLSN check")
+        return kept
+
     def _process_stack_l0_to_l2(
         self,
         l0_file_list,
         max_fail_fraction=0.2,
         max_fail_number=2,
-        output_dir=None,
+        write_stack=False,
     ):
         """
         Run each frame of ``l0_file_list`` through the L0->L2 pipeline, with the
         rough WLS of its era (``reference/rough_wls``, chosen like the order
         trace) as its WAVE and DiagL2/QCL2 run on it, returning the
         extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
-        entry). With ``output_dir``, each frame's L2 is written there as
-        ``{obs_id}_thar_L2.fits`` as soon as it is extracted. Every frame is
+        entry). With ``write_stack``, each frame's L2 is written as
+        ``{obs_id}_thar_L2.fits`` as soon as it is extracted, to the ThAr
+        ``cal_stack`` directory named by the first frame to reach L2
+        (``self._stack_dir``, else None). Every frame is
         attempted; afterwards, raises if frame failures exceed
         ``max_fail_fraction`` or ``max_fail_number``, or fewer than
         ``min_stack_size`` frames reached L2.
@@ -203,6 +257,7 @@ class WLS(BaseMasterModule):
 
         self._l2_obj_cache = []
         self._stacked_files = []
+        self._stack_dir = None
 
         for fn in l0_file_list:
             l1_obj = self._load_frame(fn, cache=False)
@@ -236,8 +291,16 @@ class WLS(BaseMasterModule):
             DiagL2(l2_obj).run()
             QCL2(l2_obj).run()
 
-            if output_dir is not None:
-                self._write_frame(l2_obj, output_dir=output_dir, overwrite=True)
+            if write_stack:
+                if self._stack_dir is None:
+                    self._stack_dir = kpf_directory(
+                        kind="cal_stack",
+                        data_root=self._masters_output,
+                        level="L2",
+                        obs_id=get_obs_id(fn),
+                        cal_type=self.master_type,
+                    )
+                self._write_frame(l2_obj, output_dir=self._stack_dir, overwrite=True)
             self._stacked_files.append(fn)
             self._l2_obj_cache.append(l2_obj)
 
@@ -719,6 +782,7 @@ class WLS(BaseMasterModule):
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list
+        l0_file_list = self._validate_lamp_serial_numbers(l0_file_list)
         self.l0_file_list = l0_file_list
         if lineprofile is None:
             lineprofile = self.lineprofile
@@ -735,18 +799,8 @@ class WLS(BaseMasterModule):
 
         self._load_linelist(linelist)
 
-        stack_dir = None
-        if output_dir is not None:
-            stack_dir = kpf_directory(
-                kind="cal_stack",
-                data_root=self._masters_output,
-                level="L2",
-                obs_id=get_obs_id(l0_file_list[0]),
-                cal_type=self.master_type,
-            )
-
         # _process_stack_l0_to_l2 resets self._l2_obj_cache at entry.
-        self._process_stack_l0_to_l2(l0_file_list, output_dir=stack_dir)
+        self._process_stack_l0_to_l2(l0_file_list, write_stack=output_dir is not None)
 
         # Persist diagnostics even when a per-frame WLS fit raises, so a failed
         # stack still leaves every line fit on disk (only the master is withheld).
@@ -762,8 +816,8 @@ class WLS(BaseMasterModule):
                     poly_degree_f=poly_degree_f,
                 )
         finally:
-            if stack_dir is not None and self._frame_diagnostics:
-                self.save_diagnostics(stack_dir, overwrite=True)
+            if self._stack_dir is not None and self._frame_diagnostics:
+                self.save_diagnostics(self._stack_dir, overwrite=True)
 
         self._track_info()
         logger.info("%s", self._info)
