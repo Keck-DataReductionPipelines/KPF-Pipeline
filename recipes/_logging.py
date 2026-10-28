@@ -73,18 +73,20 @@ def science_run_summary(l4, elapsed_s):
     return "\n\n" + "\n".join(lines) + "\n\n"
 
 
-def masters_run_summary(datecode, built, failed, elapsed_s):
+def masters_run_summary(datecode, stages, built, failed, elapsed_s):
     """Format the masters recipe's end-of-run verdict.
 
-    ``built`` is the list of ``(cal_type, path, n_frames)`` stacked this run
-    (empty if none) -- masters have no single product to read back, so the
+    ``stages`` are the recipe stages this run covered, named in the header so each
+    of a staged batch night's summaries says which stage it reports. ``built`` is
+    the list of ``(cal_type, path, n_frames)`` stacked this run (empty if none) --
+    masters have no single product to read back, so the
     recipe passes what it stacked. ``failed`` is the list of
     ``(cal_type, source_path, error)`` for each master that failed to build; the
     recipe tolerates these, so they are listed under a loud ``FAILED MASTERS``
     sentinel to be found and fixed. The surrounding blank lines make the block
     stand out by eye in the log.
     """
-    lines = [f"===== masters run summary: {datecode} ====="]
+    lines = [f"===== masters run summary: {datecode} ({', '.join(stages)}) ====="]
     if built:
         for cal_type, path, n_frames in built:
             name = os.path.basename(path) if path else "n/a"

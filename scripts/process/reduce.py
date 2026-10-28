@@ -39,6 +39,7 @@ from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.io import kpf_directory, kpf_filepath, load_junk_obs_ids
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
+from recipes.kpf_drp_masters import STAGES
 from scripts._argparse import (
     data_dirs_parser,
     logging_parser,
@@ -98,6 +99,13 @@ def main(argv=None):
         default=None,
         help="obs_id, e.g. KP.20240405.40113.57 (science only; exclusive with -d)",
     )
+    parser.add_argument(
+        "--stages",
+        nargs="+",
+        choices=STAGES,
+        default=None,
+        help="masters stages to run (default: all); the batch runs one at a time",
+    )
     args = resolve_dir_shortcuts(parser.parse_args(argv))
 
     if args.shortcut:
@@ -117,6 +125,8 @@ def main(argv=None):
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
     if args.recipe == DEFAULT_SCIENCE_RECIPE and args.datecode:
         parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
+    if args.recipe == DEFAULT_SCIENCE_RECIPE and args.stages:
+        parser.error("--stages applies to the masters recipe only")
 
     overrides = {}
     if args.kpf_data_input or args.kpf_masters_output or args.kpf_science_output:
@@ -230,15 +240,11 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
     }
 
 
-# Glob patterns for a masters night's products: every L1/L2/L4 master in the
-# night's directory (KOAID prefix wildcarded). The WLS L2 master's per-frame
-# ThAr L2s and diagnostics HDF5 live in a thar_L2/ subdirectory that
-# clear_stale_outputs removes wholesale.
-_MASTER_OUTPUT_GLOBS = (
-    "*_master_*_L1.fits",
-    "*_master_*_L2.fits",
-    "*_master_*_L4.fits",
-)
+# Glob patterns for one masters stage's products in the night's directory (KOAID
+# prefix wildcarded): the FITS masters, and the order trace's CSV. The WLS L2
+# master's per-frame ThAr L2s and diagnostics HDF5 live in a thar_L2/ subdirectory
+# that clear_stale_outputs removes wholesale.
+_MASTER_OUTPUT_GLOBS = ("*_master_{stage}_L*.fits", "*_master_{stage}.csv")
 
 
 def clear_stale_outputs(config, args):
@@ -251,11 +257,14 @@ def clear_stale_outputs(config, args):
     reuses -- clearing up front guarantees the run's results stand alone.
 
     Science (``-o obs_id``): the three per-obs_id paths under
-    ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): every master product in the
-    night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded), plus
-    the whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the
-    diagnostics HDF5), so a rebuilt thar master can never co-exist with a prior
-    run's frame L2s or diagnostics. A no-op when nothing matches; raises KeyError
+    ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): the master products in the
+    night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded) of
+    the earliest stage being run (``--stages``, default all) and every stage after
+    it, since each is built from the ones before; plus, with the thar stage, the
+    whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the diagnostics
+    HDF5), so a rebuilt thar master can never co-exist with a prior run's frame
+    L2s or diagnostics. Earlier stages' masters, which a staged batch run builds
+    on, are kept. A no-op when nothing matches; raises KeyError
     if the relevant output root is absent from [DATA_DIRS] (the recipe requires
     the same key, so failing here surfaces a broken config one step earlier).
     """
@@ -272,8 +281,13 @@ def clear_stale_outputs(config, args):
         masters_dir = kpf_directory(
             kind="masters", data_root=data_root, datecode=args.datecode
         )
-        for pattern in _MASTER_OUTPUT_GLOBS:
-            paths += glob.glob(os.path.join(masters_dir, pattern))
+        first = min(STAGES.index(stage) for stage in args.stages or STAGES)
+        stages = STAGES[first:]
+        for stage in stages:
+            for pattern in _MASTER_OUTPUT_GLOBS:
+                paths += glob.glob(
+                    os.path.join(masters_dir, pattern.format(stage=stage))
+                )
         stack_subdir = kpf_directory(
             kind="cal_stack",
             data_root=data_root,
@@ -281,7 +295,7 @@ def clear_stale_outputs(config, args):
             datecode=args.datecode,
             cal_type="thar",
         )
-        if os.path.isdir(stack_subdir):
+        if "thar" in stages and os.path.isdir(stack_subdir):
             shutil.rmtree(stack_subdir)
             logger.info("removed stale output dir: %s", stack_subdir)
 

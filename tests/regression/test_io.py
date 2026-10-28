@@ -215,10 +215,10 @@ class TestBuildCalibrationStacks:
         for lst in _cluster("bias", _make_mini_db()):
             assert lst == sorted(lst)
 
-    def test_raises_when_no_cluster_meets_min(self):
+    def test_warns_and_returns_empty_when_no_cluster_meets_min(self, caplog):
         # Both bias clusters hold 5 files, so min_stack_size=6 drops everything.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("bias", _make_mini_db(), min_stack_size=6)
+        assert _cluster("bias", _make_mini_db(), min_stack_size=6) == []
+        assert "no cluster with at least" in caplog.text
 
     def test_stacks_require_a_mini_database(self):
         # Forgetting build_mini_database(datecode) must give a readable error,
@@ -227,14 +227,15 @@ class TestBuildCalibrationStacks:
         with pytest.raises(ValueError, match="no mini database"):
             FileHandler({}).build_calibration_stacks("bias")
 
-    def test_raises_when_no_frames_found(self):
-        with pytest.raises(ValueError, match="No usable 'flat' calibration frames"):
-            _cluster("flat", _make_mini_db())
+    @pytest.mark.parametrize("groupby", ["time_of_day", "obs_night"])
+    def test_warns_and_returns_empty_when_no_frames_found(self, caplog, groupby):
+        assert _cluster("flat", _make_mini_db(), groupby=groupby) == []
+        assert "No usable 'flat' calibration frames" in caplog.text
 
-    def test_raises_when_only_cluster_below_min(self):
+    def test_warns_and_returns_empty_when_only_cluster_below_min(self, caplog):
         # The only dark cluster holds 3 files, below min_stack_size=5.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("dark", _make_mini_db(), min_stack_size=5)
+        assert _cluster("dark", _make_mini_db(), min_stack_size=5) == []
+        assert "no cluster with at least" in caplog.text
 
     def test_drops_small_cluster_keeps_large(self):
         db, _ = _mixed_bias_db()
@@ -436,10 +437,10 @@ class TestBuildCalibrationStacksRealData:
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_dark_raises_on_undersized_clusters(self, fh):
+    def test_dark_undersized_clusters_give_no_stacks(self, fh, caplog):
         # The testdata's dark clusters hold 2 and 3 frames, below min_stack_size=5.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_calibration_stacks("dark", min_stack_size=5)
+        assert fh.build_calibration_stacks("dark", min_stack_size=5) == []
+        assert "no cluster with at least" in caplog.text
 
     def test_dark_obs_night_single_stack(self, fh):
         # The night's 5 dark frames span two HST days (2 + 3); obs_night merges them.
@@ -1327,14 +1328,14 @@ class TestJunkExclusion:
         ],
     )
     def test_date_without_nominal_exptime_excluded(
-        self, cal_type, obj, datecode, exptime
+        self, cal_type, obj, datecode, exptime, caplog
     ):
         files = [
             f"/data/L0/{datecode}/KP.{datecode}.{s:05d}.00.fits" for s in (1000, 1100)
         ]
         db = _mini_db(_rows(files, obj), exptime=exptime)
-        with pytest.raises(ValueError, match="2 out-of-range EXPTIME"):
-            _cluster(cal_type, db, min_stack_size=1)
+        assert _cluster(cal_type, db, min_stack_size=1) == []
+        assert "2 out-of-range EXPTIME" in caplog.text
 
     @pytest.mark.parametrize(
         "cal_type, obj", [("flat", "Flat"), ("thar", "ThAr_daily")]

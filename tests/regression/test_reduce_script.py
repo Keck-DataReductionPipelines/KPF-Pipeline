@@ -228,6 +228,18 @@ class TestGuards:
         assert exc.value.code == 2
         assert "science recipe takes -o/--obs_id" in capsys.readouterr().err
 
+    def test_science_rejects_stages(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(["--science", "-o", _OID, "--stages", "bias"])
+        assert exc.value.code == 2
+        assert "--stages applies to the masters recipe only" in capsys.readouterr().err
+
+    def test_unknown_stage_is_rejected(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(["--masters", "-d", "20240405", "--stages", "biass"])
+        assert exc.value.code == 2
+        assert "invalid choice: 'biass'" in capsys.readouterr().err
+
     def test_missing_recipe_and_config_errors(self, capsys):
         # No --masters/--science and no explicit -r/-c pair.
         with pytest.raises(SystemExit) as exc:
@@ -336,8 +348,8 @@ class _Config:
         return self._data_dirs
 
 
-def _args(obs_id=None, datecode=None):
-    return argparse.Namespace(obs_id=obs_id, datecode=datecode)
+def _args(obs_id=None, datecode=None, stages=None):
+    return argparse.Namespace(obs_id=obs_id, datecode=datecode, stages=stages)
 
 
 class TestClearStaleOutputs:
@@ -416,6 +428,41 @@ class TestClearStaleOutputs:
         assert not os.path.exists(stack_subdir)
         for name in kept:
             assert os.path.exists(os.path.join(night, name)), name
+
+    @pytest.mark.parametrize(
+        "stages, kept",
+        [
+            (["dark"], ["bias"]),
+            (["order_trace"], ["bias", "dark", "flat"]),
+            (["dark", "thar"], ["bias"]),  # from the earliest selected stage on
+            (None, []),
+        ],
+    )
+    def test_masters_stage_run_clears_its_stage_and_downstream(
+        self, tmp_path, stages, kept
+    ):
+        # A staged batch run keeps the earlier stages' masters it builds on, but
+        # never leaves a later stage's master built from a replaced one.
+        masters_root = str(tmp_path / "m")
+        night = os.path.join(masters_root, "masters", "20240405")
+        os.makedirs(os.path.join(night, "thar_L2"))
+        koaid = "KP.20240405.40113.57"
+        products = {
+            "bias": f"{koaid}_master_bias_L1.fits",
+            "dark": f"{koaid}_master_dark_L1.fits",
+            "flat": f"{koaid}_master_flat_L1.fits",
+            "order_trace": f"{koaid}_master_order_trace.csv",
+            "thar": f"{koaid}_master_thar_L2.fits",
+        }
+        for name in products.values():
+            open(os.path.join(night, name), "w").close()
+
+        red.clear_stale_outputs(
+            _Config({"KPF_MASTERS_OUTPUT": masters_root}),
+            _args(datecode="20240405", stages=stages),
+        )
+
+        assert sorted(os.listdir(night)) == sorted(products[st] for st in kept)
 
     def test_masters_noop_when_dir_absent(self, tmp_path):
         # A never-built night has no masters dir; glob matches nothing, no error.

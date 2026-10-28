@@ -445,9 +445,10 @@ class FileHandler:
         must have every fiber lit by the type's lamp (unlit for bias/dark), must be
         read out on both GREEN and RED (single-CCD is unsupported), and must pass
         ``_validate_native_object`` and ``_validate_exposure_time``; exclusions are
-        logged. Raises ``ValueError`` if no database is loaded or no frame
-        survives (with per-filter counts); ``exclude_junk`` on a pre-junk-tracking
-        database raises ``KeyError``."""
+        logged, and when no frame survives a warning gives the per-filter counts
+        and the empty frame is returned. Raises ``ValueError`` if no database is
+        loaded; ``exclude_junk`` on a pre-junk-tracking database raises
+        ``KeyError``."""
         if mini_db is None:
             mini_db = self._mini_db
         if mini_db is None:
@@ -515,13 +516,22 @@ class FileHandler:
         if cal_df.empty:
             # Per-filter counts separate a night with no such frames from one
             # whose frames were all excluded.
-            raise ValueError(
-                f"No usable '{cal_type}' calibration frames: {n_object} with "
-                f"OBJECT={obj!r}; excluded {n_junk} on junk list, {n_source} "
-                f"without SKYSRC=SCISRC=CALSRC={lit} [{'; '.join(by_source)}], "
-                f"{int(single_ccd.sum())} single-CCD, {int(exclude.sum())} "
-                "native OBJECT flush-persistence/test/noise/superflat/check, "
-                f"{int(bad_exptime.sum())} out-of-range EXPTIME"
+            logger.warning(
+                "No usable '%s' calibration frames: %d with OBJECT=%r; excluded %d "
+                "on junk list, %d without SKYSRC=SCISRC=CALSRC=%s [%s], %d "
+                "single-CCD, %d native OBJECT "
+                "flush-persistence/test/noise/superflat/check, %d out-of-range "
+                "EXPTIME",
+                cal_type,
+                n_object,
+                obj,
+                n_junk,
+                n_source,
+                lit,
+                "; ".join(by_source),
+                int(single_ccd.sum()),
+                int(exclude.sum()),
+                int(bad_exptime.sum()),
             )
         return cal_df
 
@@ -603,6 +613,8 @@ class FileHandler:
         not partition, so a mislabeled frame clusters with its true session."""
         cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
         timed = sorted((self._seconds_since_j2000(fn), fn) for fn in cal_df["FILENAME"])
+        if not timed:
+            return []
         clusters = []
         cluster = [timed[0][1]]
         prev_t = timed[0][0]
@@ -649,8 +661,8 @@ class FileHandler:
           routinely straddle HST midnight and belong in a single nightly stack.
 
         Every returned stack has at least ``min_stack_size`` files; undersized
-        stacks are dropped with a warning, and it raises when none meets the
-        threshold. A stack
+        stacks are dropped with a warning, and when none meets the threshold (or
+        no frame survives selection) it warns and returns an empty list. A stack
         with more than ``max_stack_size`` files is truncated to its first
         ``max_stack_size`` (earliest by time), with a warning.
 
@@ -678,14 +690,13 @@ class FileHandler:
         Returns
         -------
         list of list of str
-            Sorted file lists, one per stack.
+            Sorted file lists, one per stack; empty when the night has none.
 
         Raises
         ------
         ValueError
-            If ``groupby`` or ``cal_type`` is not recognized, if no mini database is
-            loaded on the instance, if no calibration frame of the requested type
-            survives selection, or if no stack meets ``min_stack_size``.
+            If ``groupby`` or ``cal_type`` is not recognized, or if no mini
+            database is loaded on the instance.
         """
         if groupby not in _GROUPBY_MODES:
             raise ValueError(
@@ -723,10 +734,12 @@ class FileHandler:
             cal_df = self._select_frames(
                 cal_type, exclude_junk=exclude_junk, mini_db=day_db
             )
-            clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
+            files = sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)
+            clusters = [files] if files else []
         else:  # obs_night -- the whole loaded night, one stack spanning midnight
             cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
-            clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
+            files = sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)
+            clusters = [files] if files else []
 
         sizes = [len(c) for c in clusters]
         for c in clusters:
@@ -742,10 +755,15 @@ class FileHandler:
         clusters = [c for c in clusters if len(c) >= min_stack_size]
 
         if not clusters:
-            raise ValueError(
-                f"'{cal_type}' groupby={groupby} produced no cluster with at least "
-                f"min_stack_size={min_stack_size} files (cluster sizes: {sizes})"
+            logger.warning(
+                "'%s' groupby=%s produced no cluster with at least "
+                "min_stack_size=%d files (cluster sizes: %s)",
+                cal_type,
+                groupby,
+                min_stack_size,
+                sizes,
             )
+            return []
 
         if max_stack_size is not None:
             capped = []

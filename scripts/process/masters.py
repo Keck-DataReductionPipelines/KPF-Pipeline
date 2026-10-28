@@ -14,14 +14,20 @@ which nights to build, via two mutually exclusive input forms:
 The range form enumerates the datecode dirs present under ``{KPF_DATA_INPUT}/L0``
 within [START, END].
 
-Builds run in a bounded process pool. The L0 mini-database caches are warmed up
-front by a parallel per-datecode pre-scan (``--cache``, ``rw`` by default; ``r``
-skips the pre-scan and leaves each reduce to read-only); the first night then runs
-alone as a canary before the rest fan out. The masters recipe imports neither
+Builds run stage by stage: every night's bias, then every night's dark, and so on
+through the recipe's ``STAGES`` (``--stages``), each stage a bounded process pool.
+A night's masters are associated from nearby nights' (``masters_search_window_days``),
+so each stage starts only after every night has finished the previous one -- the
+masters chosen are then those a chronological one-night-at-a-time run would choose,
+however wide the window. All of a night's stages append to its one log in the run
+directory. The L0 mini-database caches are warmed up front by a parallel
+per-datecode pre-scan (``--cache``, ``rw`` by default; ``r`` skips the pre-scan
+and leaves each reduce to read-only); within each stage the first night runs alone
+as a canary before the rest fan out. The masters recipe imports neither
 barycorrpy, astropy IERS nor matplotlib, so that canary warms only bytecode; the
 reference-data caches it warms for the science stage have no counterpart here. The
-run is fail-soft (a night that fails to build is reported and the others continue)
-but exits nonzero if any night failed.
+run is fail-soft (a night that fails a stage is reported, and it and the others
+continue to the next stage) but exits nonzero if any night failed any stage.
 """
 
 import argparse
@@ -32,6 +38,7 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.logger import setup_batch_logging
+from recipes.kpf_drp_masters import STAGES
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
@@ -102,14 +109,14 @@ def parse_args(argv=None):
     return resolve_dir_shortcuts(args)
 
 
-def _cli_task(datecode, forward, config=None, recipe=None):
+def _cli_task(datecode, forward, config=None, recipe=None, stage=None):
     """Build a (tag, argv) task building one night via the ``kpfpipe run`` leaf.
 
     Passes recipe/config to the leaf explicitly (the masters defaults unless
     `recipe`/`config` override) rather than leaning on its ``--masters`` shortcut,
     so the orchestrator is the single owner of what it runs. `forward` is the
     resolved dir/log overrides appended to every invocation; the tag (datecode)
-    keys the sentinel/log paths.
+    keys the sentinel/log paths. `stage`, when given, becomes ``--stages``.
     """
     argv = [
         sys.executable,
@@ -123,6 +130,8 @@ def _cli_task(datecode, forward, config=None, recipe=None):
         datecode,
         *forward,
     ]
+    if stage:
+        argv += ["--stages", stage]
     return datecode, argv
 
 
@@ -172,19 +181,28 @@ def main(argv=None):
     # default; --cache r skips the pre-scan and leaves reduces to read-only).
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
-    tasks = [
-        _cli_task(dc, forward, config=args.config, recipe=args.recipe)
-        for dc in datecodes
-    ]
-    failed = run_stage(
-        "masters",
-        tasks,
-        args.jobs,
-        run_dir,
-        job_timeout=args.job_timeout,
-        abort_on_failure=False,
-        launch_interval=_LAUNCH_INTERVAL,
-    )
+    failed = set()
+    for stage in STAGES:
+        logger.info("stage %s: all %d night(s)", stage, len(datecodes))
+        tasks = [
+            _cli_task(
+                dc,
+                forward,
+                config=args.config,
+                recipe=args.recipe,
+                stage=stage,
+            )
+            for dc in datecodes
+        ]
+        failed |= run_stage(
+            "masters",
+            tasks,
+            args.jobs,
+            run_dir,
+            job_timeout=args.job_timeout,
+            abort_on_failure=False,
+            launch_interval=_LAUNCH_INTERVAL,
+        )
 
     built = len(datecodes) - len(failed)
     logger.info("done: built masters for %d/%d night(s)", built, len(datecodes))
