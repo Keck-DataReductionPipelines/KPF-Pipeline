@@ -1250,7 +1250,7 @@ class TestJunkExclusion:
             # No row of its lamp history covers the date, so no exposure is
             # nominal.
             ("flat", "Flat", "20260501", 50.0),
-            ("thar", "ThAr_daily", "20241101", 20.0),
+            ("thar", "ThAr_daily", "20260501", 20.0),
         ],
     )
     def test_date_without_nominal_exptime_excluded(
