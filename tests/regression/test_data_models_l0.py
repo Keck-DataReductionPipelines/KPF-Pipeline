@@ -150,6 +150,12 @@ class TestKPF0ErrorPaths:
         with pytest.raises(ValueError, match="Non-standard extension 'MYSTERY'"):
             KPF0.from_fits(fn)
 
+    def test_raises_on_unnamed_extension(self, tmp_path):
+        unnamed = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32))
+        fn = self._minimal_l0(tmp_path, extra_hdus=[unnamed])
+        with pytest.raises(ValueError, match=r"\(HDU \d+ has no EXTNAME\)"):
+            KPF0.from_fits(fn)
+
     def test_parses_receipt_with_entries(self, tmp_path):
         receipt = Table({"FUNCTION": ["init"], "STATUS": ["PASS"]})
         rec_hdu = fits.BinTableHDU(data=receipt, name="RECEIPT")

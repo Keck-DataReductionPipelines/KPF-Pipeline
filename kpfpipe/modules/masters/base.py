@@ -453,7 +453,8 @@ class BaseMasterModule:
 
         if i < 2:
             raise ValueError(
-                f"Stacking requires at least two frames; only {i} of {nframe} loaded"
+                f"Stacking requires at least two frames; only {i} of {nframe} "
+                "loaded and processed"
             )
 
         if i < nframe:

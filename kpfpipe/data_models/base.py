@@ -227,7 +227,7 @@ class KPFDataModel(RVDataModel):
         the known-extension gate; an unknown extension raises.
         """
         known = set(self.extension_manifest.names(self._data_model))
-        for hdu in hdul:
+        for i, hdu in enumerate(hdul):
             ext_name = hdu.name
 
             if isinstance(hdu, fits.PrimaryHDU):
@@ -242,7 +242,8 @@ class KPFDataModel(RVDataModel):
             if ext_name != "PRIMARY" and ext_name not in self.extensions:
                 if ext_name not in known:
                     raise ValueError(
-                        f"Non-standard extension {ext_name!r} in L{self.level} file"
+                        f"Non-standard extension {ext_name!r} in L{self.level} file "
+                        f"(HDU {i}{' has no EXTNAME' if not ext_name else ''})"
                     )
                 self.create_extension(ext_name, fits_type)
 
