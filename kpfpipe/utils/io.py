@@ -10,6 +10,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from kpfpipe import REPO_ROOT
 from kpfpipe.utils.header import HeaderError, HeaderParser
 from kpfpipe.utils.kpf import (
     OBS_ID_REGEX,
@@ -81,15 +82,14 @@ _GROUPBY_MODES = ("time_of_day", "hst_day", "obs_night")
 
 def load_junk_obs_ids(data_input):
     """Set of observer-flagged junk obs_ids, to be stored with L0 data at
-    ``{data_input}/vNext/reference/junk_obs.csv`` (a title line, an
-    ``observation_id`` header, then one obs_id per row). An absent file yields
+    ``{data_input}/vNext/reference/junk_obs.csv``. An absent file yields
     the empty set, so exclusion becomes a no-op.
     """
     junk_csv = os.path.join(data_input, "vNext", "reference", "junk_obs.csv")
     if not os.path.isfile(junk_csv):
         logger.debug("No junk_obs.csv at %s; junk exclusion is a no-op", junk_csv)
         return set()
-    df = pd.read_csv(junk_csv, header=1)
+    df = pd.read_csv(junk_csv)
     return set(df.iloc[:, 0].astype(str).str.strip())
 
 
@@ -434,55 +434,160 @@ class FileHandler:
         return int((dt - _J2000_EPOCH).total_seconds())
 
     def _select_frames(self, cal_type, *, exclude_junk=True):
-        """The junk-excluded ``cal_type`` frames from the carried mini database --
-        the shared frame-selection entry point. A frame qualifies when its OBJECT is
-        the type's and every fiber saw the lamp (lamp masters, so sci/sky/cal-only
-        lamp frames are left out) or nothing (bias/dark), so a frame with any
-        ``Unknown`` source never qualifies. A frame without both GREEN and RED
-        read out is excluded with a warning (single-CCD is unsupported); one whose
-        native OBJECT names a flush-persistence or test frame is excluded. Raises
-        ``ValueError`` if no database is loaded or the type has no frames;
-        ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
+        """The ``cal_type`` frames from the carried mini database that may enter a
+        stack -- the shared frame-selection entry point. A frame must not be junk,
+        must have every fiber lit by the type's lamp (unlit for bias/dark), must be
+        read out on both GREEN and RED (single-CCD is unsupported), and must pass
+        ``_validate_native_object`` and ``_validate_exposure_time``; exclusions are
+        logged. Raises ``ValueError`` if no database is loaded or no frame
+        survives (with per-filter counts); ``exclude_junk`` on a pre-junk-tracking
+        database raises ``KeyError``."""
         mini_db = self._mini_db
         if mini_db is None:
             raise ValueError(
                 "no mini database available; call build_mini_database(datecode) first"
             )
-        if exclude_junk:
-            mini_db = mini_db[~mini_db["ISJUNK"].astype(bool)]
         obj = _CAL_TYPES[cal_type]
         lit = obj if cal_type in ("flat", "thar") else "None"
-        cal_df = mini_db[
-            (mini_db["DRP_OBJECT"] == obj)
-            & (mini_db[["SKYSRC", "SCISRC", "CALSRC"]] == lit).all(axis=1)
+        cal_df = mini_db[mini_db["DRP_OBJECT"] == obj]
+        n_object = len(cal_df)
+        n_junk = 0
+        if exclude_junk:
+            junk = cal_df["ISJUNK"].astype(bool)
+            n_junk = int(junk.sum())
+            if n_junk:
+                logger.debug(
+                    "excluding %d %s frame(s) as junk: %s",
+                    n_junk,
+                    cal_type,
+                    ", ".join(
+                        os.path.basename(fn) for fn in cal_df.loc[junk, "FILENAME"]
+                    ),
+                )
+            cal_df = cal_df[~junk]
+        sources = cal_df[["SKYSRC", "SCISRC", "CALSRC"]]
+        lamp = (sources == lit).all(axis=1)
+        n_source = int((~lamp).sum())
+        excluded = cal_df.loc[~lamp]
+        for fn, native, sky, sci, cal in excluded[
+            ["FILENAME", "NATIVE_OBJECT", "SKYSRC", "SCISRC", "CALSRC"]
+        ].values:
+            logger.debug(
+                "excluding %s (native OBJECT %r): SKYSRC=%s SCISRC=%s CALSRC=%s",
+                os.path.basename(fn),
+                native,
+                sky,
+                sci,
+                cal,
+            )
+        # One entry per distinct (SKYSRC, SCISRC, CALSRC) among the excluded.
+        by_source = [
+            f"SKYSRC={sky} SCISRC={sci} CALSRC={cal}: {n}"
+            for (sky, sci, cal), n in excluded.groupby(["SKYSRC", "SCISRC", "CALSRC"])
+            .size()
+            .items()
         ]
+        for entry in by_source:
+            logger.info(
+                "%s: excluding frames without SKYSRC=SCISRC=CALSRC=%s: %s",
+                cal_type,
+                lit,
+                entry,
+            )
+        cal_df = cal_df[lamp]
         single_ccd = ~cal_df[["GREEN", "RED"]].eq(True).all(axis=1)
         for fn in cal_df.loc[single_ccd, "FILENAME"]:
             logger.warning(
                 "excluding %s: DRP does not yet support single-CCD exposures", fn
             )
         cal_df = cal_df[~single_ccd]
-        exclude = (
+        exclude = ~self._validate_native_object(cal_type, cal_df)
+        cal_df = cal_df[~exclude]
+        bad_exptime = ~self._validate_exposure_time(cal_type, cal_df)
+        cal_df = cal_df[~bad_exptime]
+        if cal_df.empty:
+            # Per-filter counts separate a night with no such frames from one
+            # whose frames were all excluded.
+            raise ValueError(
+                f"No usable '{cal_type}' calibration frames: {n_object} with "
+                f"OBJECT={obj!r}; excluded {n_junk} on junk list, {n_source} "
+                f"without SKYSRC=SCISRC=CALSRC={lit} [{'; '.join(by_source)}], "
+                f"{int(single_ccd.sum())} single-CCD, {int(exclude.sum())} "
+                "native OBJECT flush-persistence/test/noise/superflat/check, "
+                f"{int(bad_exptime.sum())} out-of-range EXPTIME"
+            )
+        return cal_df
+
+    @staticmethod
+    def _validate_native_object(cal_type, cal_df):
+        """Mask of the ``cal_df`` frames whose native OBJECT does not mark an
+        engineering or test frame; the rest are logged."""
+        valid = ~(
             cal_df["NATIVE_OBJECT"]
             .astype("string")
-            .str.contains("flush-persistence|test", case=False, na=False)
+            .str.contains(
+                "flush-persistence|test|noise|superflat|check", case=False, na=False
+            )
         )
-        if exclude.any():
+        if not valid.all():
             logger.info(
                 "excluding %d %s frame(s) by native OBJECT: %s",
-                exclude.sum(),
+                (~valid).sum(),
                 cal_type,
                 ", ".join(
                     f"{os.path.basename(fn)} ({native!r})"
                     for fn, native in cal_df.loc[
-                        exclude, ["FILENAME", "NATIVE_OBJECT"]
+                        ~valid, ["FILENAME", "NATIVE_OBJECT"]
                     ].values
                 ),
             )
-        cal_df = cal_df[~exclude]
-        if cal_df.empty:
-            raise ValueError(f"No '{cal_type}' calibration frames found")
-        return cal_df
+        return valid
+
+    @staticmethod
+    def _validate_exposure_time(cal_type, cal_df):
+        """Mask of the ``cal_df`` frames whose requested EXPTIME suits
+        ``cal_type``; a flat or ThAr frame needs the nominal value for its
+        datecode, so a date no history row covers admits none, except that a
+        date after the history ends skips the check with a warning. The rest
+        are logged."""
+        exptime = pd.to_numeric(cal_df["EXPTIME"], errors="coerce")
+        if cal_type == "bias":
+            valid = exptime <= 0.1  # [s]
+        elif cal_type == "dark":
+            valid = exptime >= 300  # [s]
+        else:
+            history = pd.read_csv(
+                f"{REPO_ROOT}/reference/{cal_type}_lamp_history.csv",
+                dtype={"FIRST_DATECODE": str, "LAST_DATECODE": str},
+            )
+            datecode = cal_df["FILENAME"].map(get_datecode)
+            nominal = pd.Series(float("nan"), index=cal_df.index)
+            for first, last, t in history[
+                ["FIRST_DATECODE", "LAST_DATECODE", "EXPTIME"]
+            ].values:
+                nominal[(datecode >= first) & (datecode <= last)] = t
+            unchecked = datecode > history["LAST_DATECODE"].max()
+            if unchecked.any():
+                logger.warning(
+                    "skipping EXPTIME check for %d %s frame(s) dated after %s, "
+                    "the end of reference/%s_lamp_history.csv",
+                    unchecked.sum(),
+                    cal_type,
+                    history["LAST_DATECODE"].max(),
+                    cal_type,
+                )
+            valid = (exptime == nominal) | unchecked
+        if not valid.all():
+            logger.info(
+                "excluding %d %s frame(s) by EXPTIME: %s",
+                (~valid).sum(),
+                cal_type,
+                ", ".join(
+                    f"{os.path.basename(fn)} ({t})"
+                    for fn, t in cal_df.loc[~valid, ["FILENAME", "EXPTIME"]].values
+                ),
+            )
+        return valid
 
     def _identify_clusters(self, cal_type, *, cluster_gap_seconds, exclude_junk=True):
         """Group ``cal_type`` frames into observing-session clusters by time gaps:
@@ -534,7 +639,8 @@ class FileHandler:
           routinely straddle HST midnight and belong in a single nightly stack.
 
         Every returned stack has at least ``min_stack_size`` files; undersized
-        stacks are dropped, and it raises when none meets the threshold. A stack
+        stacks are dropped with a warning, and it raises when none meets the
+        threshold. A stack
         with more than ``max_stack_size`` files is truncated to its first
         ``max_stack_size`` (earliest by time), with a warning.
 
@@ -568,8 +674,8 @@ class FileHandler:
         ------
         ValueError
             If ``groupby`` or ``cal_type`` is not recognized, if no mini database is
-            loaded on the instance, if no calibration frames of the requested type
-            are found, or if no stack meets ``min_stack_size``.
+            loaded on the instance, if no calibration frame of the requested type
+            survives selection, or if no stack meets ``min_stack_size``.
         """
         if groupby not in _GROUPBY_MODES:
             raise ValueError(
@@ -600,12 +706,23 @@ class FileHandler:
             else:  # obs_night -- the whole loaded night, one stack spanning midnight
                 clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
 
+        sizes = [len(c) for c in clusters]
+        for c in clusters:
+            if len(c) < min_stack_size:
+                logger.warning(
+                    "dropping %d-frame %s cluster (< min_stack_size=%d): %s .. %s",
+                    len(c),
+                    cal_type,
+                    min_stack_size,
+                    os.path.basename(c[0]),
+                    os.path.basename(c[-1]),
+                )
         clusters = [c for c in clusters if len(c) >= min_stack_size]
 
         if not clusters:
             raise ValueError(
                 f"'{cal_type}' groupby={groupby} produced no cluster with at least "
-                f"min_stack_size={min_stack_size} files"
+                f"min_stack_size={min_stack_size} files (cluster sizes: {sizes})"
             )
 
         if max_stack_size is not None:

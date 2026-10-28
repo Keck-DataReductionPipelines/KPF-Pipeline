@@ -83,16 +83,23 @@ def _rows(files, obj, sources=None):
     ]
 
 
-def _mini_db(rows, *, exptime=60.0, junk=()):
+def _mini_db(rows, *, exptime=None, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
-    Adds the derived columns build_calibration_stacks needs: NATIVE_OBJECT, EXPTIME, the
+    Adds the derived columns build_calibration_stacks needs: NATIVE_OBJECT, EXPTIME
+    (defaults nominal per object; Flat/ThAr as of 20240405), the
     UTC_TIME/HST_TIME timestamps (parsed from each FILENAME), and ISJUNK
     (FILENAMEs in `junk` flagged True).
     """
     df = pd.DataFrame(rows)
     df["NATIVE_OBJECT"] = "autocal"
-    df["EXPTIME"] = exptime
+    df["EXPTIME"] = (
+        df["DRP_OBJECT"]
+        .map({"Bias": 0.0, "Dark": 1200.0, "Flat": 30.0, "ThAr_daily": 10.0})
+        .fillna(60.0)
+        if exptime is None
+        else exptime
+    )
     df["UTC_TIME"] = [get_timestamp(f) for f in df["FILENAME"]]
     df["HST_TIME"] = [utc_to_hst(t) for t in df["UTC_TIME"]]
     df["ISJUNK"] = df["FILENAME"].isin(set(junk))
@@ -221,7 +228,7 @@ class TestBuildCalibrationStacks:
             FileHandler({}).build_calibration_stacks("bias")
 
     def test_raises_when_no_frames_found(self):
-        with pytest.raises(ValueError, match="No 'flat' calibration frames found"):
+        with pytest.raises(ValueError, match="No usable 'flat' calibration frames"):
             _cluster("flat", _make_mini_db())
 
     def test_raises_when_only_cluster_below_min(self):
@@ -886,7 +893,7 @@ def test_mini_db_comments_count_parser_warnings(tmp_path, caplog):
     assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
     # The details are in the log, keyed by filename.
     assert "OBJECT '10700' disagrees with TARGNAME 'HD 10700'" in caplog.text
-    assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home')" in caplog.text
+    assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home'" in caplog.text
 
 
 # build_mini_database on-disk cache (read/write + staleness guardrails):
@@ -1156,12 +1163,11 @@ class TestJunkExclusion:
         assert "junk exclusion is a no-op" in caplog.text
 
     def test_load_junk_parses_wmko_format(self, tmp_path):
-        # WMKO layout: a title line, an 'observation_id' header, one obs_id per row.
+        # WMKO layout: an 'observation_id' header, one obs_id per row.
         ref = tmp_path / "vNext" / "reference"
         ref.mkdir(parents=True)
         (ref / "junk_obs.csv").write_text(
-            "Junk Observations for KPF\nobservation_id\n"
-            "KP.20240405.00001.00\nKP.20240405.00002.00\n"
+            "observation_id\nKP.20240405.00001.00\nKP.20240405.00002.00\n"
         )
         assert load_junk_obs_ids(str(tmp_path)) == {
             "KP.20240405.00001.00",
@@ -1192,7 +1198,15 @@ class TestJunkExclusion:
         assert f"excluding {single_fn}: DRP does not yet support" in caplog.text
 
     @pytest.mark.parametrize(
-        "native_obj", ["flush-persistence", "bias-noise-test-1", "FLAT-test"]
+        "native_obj",
+        [
+            "flush-persistence",
+            "bias-noise-test-1",
+            "FLAT-test",
+            "bias-noise-newbaseline",
+            "superflat",
+            "ThAr_daily_check_GS",
+        ],
     )
     def test_engineering_object_excluded(self, native_obj, caplog):
         db = _mini_db(_rows(_JUNK_BIAS, "Bias"))
@@ -1205,6 +1219,57 @@ class TestJunkExclusion:
         assert set(kept) == set(_JUNK_BIAS) - {eng_fn}
         assert "excluding 1 bias frame(s) by native OBJECT" in caplog.text
         assert f"{os.path.basename(eng_fn)} ({native_obj!r})" in caplog.text
+
+    @pytest.mark.parametrize(
+        "cal_type, obj, bad, good",
+        [
+            ("bias", "Bias", 1.0, 0.1),
+            ("dark", "Dark", 60.0, 300.0),
+            # On 20240405 the nominal flat is 30 s and the nominal ThAr 10 s.
+            ("flat", "Flat", 10.0, 30.0),
+            ("thar", "ThAr_daily", 120.0, 10.0),
+        ],
+    )
+    def test_out_of_range_exptime_excluded(self, cal_type, obj, bad, good, caplog):
+        db = _mini_db(_rows(_JUNK_BIAS, obj), exptime=good)
+        bad_fn = _JUNK_BIAS[1]
+        db.loc[db["FILENAME"] == bad_fn, "EXPTIME"] = bad
+        with caplog.at_level(logging.INFO, logger="kpfpipe.utils.io"):
+            lists = _cluster(cal_type, db, min_stack_size=1, groupby="obs_night")
+        assert set(fn for cluster in lists for fn in cluster) == set(_JUNK_BIAS) - {
+            bad_fn
+        }
+        assert f"excluding 1 {cal_type} frame(s) by EXPTIME" in caplog.text
+        assert f"{os.path.basename(bad_fn)} ({bad})" in caplog.text
+
+    @pytest.mark.parametrize(
+        "cal_type, obj, datecode, exptime",
+        [
+            # The date precedes its lamp history, so no exposure is nominal.
+            ("flat", "Flat", "20221001", 0.2),
+            ("thar", "ThAr_daily", "20221001", 5.0),
+        ],
+    )
+    def test_date_without_nominal_exptime_excluded(
+        self, cal_type, obj, datecode, exptime
+    ):
+        files = [
+            f"/data/L0/{datecode}/KP.{datecode}.{s:05d}.00.fits" for s in (1000, 1100)
+        ]
+        db = _mini_db(_rows(files, obj), exptime=exptime)
+        with pytest.raises(ValueError, match="2 out-of-range EXPTIME"):
+            _cluster(cal_type, db, min_stack_size=1)
+
+    @pytest.mark.parametrize(
+        "cal_type, obj", [("flat", "Flat"), ("thar", "ThAr_daily")]
+    )
+    def test_date_after_history_skips_exptime_check(self, caplog, cal_type, obj):
+        files = [f"/data/L0/29991231/KP.29991231.{s:05d}.00.fits" for s in (1000, 1100)]
+        db = _mini_db(_rows(files, obj), exptime=999.0)
+        with caplog.at_level(logging.WARNING):
+            lists = _cluster(cal_type, db, min_stack_size=1)
+        assert set(fn for cluster in lists for fn in cluster) == set(files)
+        assert f"skipping EXPTIME check for 2 {cal_type} frame(s)" in caplog.text
 
     def test_all_nan_native_object_keeps_frames(self):
         # An all-NaN NATIVE_OBJECT column (seen on Nov 2022 nights) is float dtype.

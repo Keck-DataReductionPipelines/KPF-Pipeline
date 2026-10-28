@@ -123,13 +123,20 @@ class HeaderParser:
                 self._warn(f"{card}={self.WMKO_HEADER.get(card)!r} is not YES/NO")
 
     def _classify(self):
-        """(OBSTYPE, calibration OBJECT) from IMTYPE and OCTAGON; see
-        ``_frame_identity``. The OBJECT is None on a Target or Unknown frame."""
+        """(OBSTYPE, calibration OBJECT) from IMTYPE and OCTAGON, and on a bias
+        or dark the shutters; see ``_frame_identity``. The OBJECT is None on a
+        Target or Unknown frame."""
         native = self.WMKO_HEADER
         imtype = _norm(native.get("IMTYPE"))
         source = _SOURCES.get(_norm(native.get("OCTAGON")))
 
         if imtype in ("bias", "dark"):
+            # No fiber may be lit on a bias or dark: every shutter must record closed.
+            if any(
+                _norm(native.get(k)) != "closed"
+                for k in ("SCISEL", "SKYSEL", "SIMCALSH")
+            ):
+                return "Unknown", None
             return imtype.capitalize(), imtype.capitalize()
         if imtype == "object":
             return "Target", None
@@ -147,7 +154,8 @@ class HeaderParser:
         """Stamp OBSTYPE, OBSMODE, OBJECT, ISSOLAR and EXPTIME.
 
         IMTYPE gives OBSTYPE (Bias, Dark, Flat, Arclamp, LFC, Etalon, Target)
-        and, on a lamp frame, OCTAGON the lamp; anything else is ``Unknown``.
+        and, on a lamp frame, OCTAGON the lamp; anything else, including a
+        bias or dark with any shutter not recorded closed, is ``Unknown``.
         OBSMODE is ``Science`` for a Target, ``Calibration`` for any other
         known OBSTYPE, else ``Unknown``. OBJECT, set once OBSTYPE is known, is
         sanitized by ``_object``. EXPTIME is the EPRV exposure time: the native
@@ -157,7 +165,10 @@ class HeaderParser:
         obstype, cal_object = self._classify()
         self.DRP_KEYWORDS["OBSTYPE"] = obstype
         if obstype == "Unknown":
-            cards = ", ".join(f"{k}={native.get(k)!r}" for k in ("IMTYPE", "OCTAGON"))
+            cards = ", ".join(
+                f"{k}={native.get(k)!r}"
+                for k in ("IMTYPE", "OCTAGON", "SCISEL", "SKYSEL", "SIMCALSH")
+            )
             self._warn(f"cannot classify frame ({cards})")
             self.DRP_KEYWORDS["OBSMODE"] = "Unknown"
         else:

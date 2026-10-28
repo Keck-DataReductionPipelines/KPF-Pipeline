@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 import tools.cli as cli
+from scripts.analyze import _eras
 from scripts.analyze import order_trace as _order_trace
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
@@ -77,7 +78,7 @@ def _write_stepped_era(input_dir, before=10, after=20, step=0.05):
 
 def _load(order_trace, input_dir, start="20221109", end="20261231"):
     return order_trace.load_traces(
-        str(input_dir), start, end, order_trace.load_science_eras()
+        str(input_dir), start, end, _eras.load_science_eras()
     )
 
 
@@ -126,8 +127,8 @@ class TestParseArgs:
 
 
 class TestEras:
-    def test_engineering_eras_are_excluded(self, order_trace):
-        eras = [era for era, _, _ in order_trace.load_science_eras()]
+    def test_engineering_eras_are_excluded(self):
+        eras = [era for era, _, _ in _eras.load_science_eras()]
         assert "1.0" in eras and "2.0" in eras
         assert not {"0.5", "1.5", "2.5", "2.7", "3.5"} & set(eras)
 
@@ -142,9 +143,9 @@ class TestEras:
             ("2024-02-23 15:30", "2.0"),
         ],
     )
-    def test_era_of(self, order_trace, obs_time, era):
-        eras = order_trace.load_science_eras()
-        assert order_trace.era_of(pd.Timestamp(obs_time), eras) == era
+    def test_era_of(self, obs_time, era):
+        eras = _eras.load_science_eras()
+        assert _eras.era_of(pd.Timestamp(obs_time), eras) == era
 
 
 # ---------------------------------------------------------------------------

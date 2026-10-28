@@ -25,16 +25,29 @@ class TestGaussianFit:
         for sigma in (2.7, 1.1):
             theta_true = [2.0, 50.0, 1.3, sigma]
             y = _gaussian_dist(theta_true, x)
-            theta, _ = optimize_lsq(x, y, "gaussian")
+            theta, _, _, converged = optimize_lsq(x, y, "gaussian")
             np.testing.assert_allclose(theta, theta_true, rtol=1e-5, atol=1e-5)
             assert theta[3] > 0
+            assert converged
 
     def test_sigma_is_positive(self):
         # Sigma enters only as sigma**2, so the fit must never return a negative width.
         x = np.arange(-8, 9, dtype=float)
         y = _gaussian_dist([1.0, 25.0, -0.6, 2.0], x)
-        theta, _ = optimize_lsq(x, y, "gaussian")
+        theta, *_ = optimize_lsq(x, y, "gaussian")
         assert theta[3] > 0
+
+    def test_errors_and_residuals_on_noisy_line(self):
+        # theta_err scales with the residual scatter; the true center lies
+        # within a few sigma of the fit.
+        rng = np.random.default_rng(0)
+        x = np.arange(-10, 11, dtype=float)
+        y = _gaussian_dist([2.0, 50.0, 1.3, 2.0], x) + rng.normal(0, 0.5, x.size)
+        theta, resid, theta_err, converged = optimize_lsq(x, y, "gaussian")
+        assert converged
+        assert resid.shape == x.shape
+        assert np.all(np.isfinite(theta_err)) and np.all(theta_err > 0)
+        assert abs(theta[2] - 1.3) < 5 * theta_err[2]
 
     def test_jacobian_matches_finite_difference(self):
         # Guards the d/d(sigma) term (a*E*dx**2/sigma**3) in _gaussian_jac.

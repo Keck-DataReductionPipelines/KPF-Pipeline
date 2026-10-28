@@ -457,8 +457,8 @@ hand. It is constructed from the already-extracted `[DATA_DIRS]` mapping (it doe
   with the derived **`ISJUNK`** column (from `junk_obs.csv`; used by masters stacking to exclude
   junk) and the native **`NATIVE_OBJECT`**, and caching the result to disk.
 - `build_calibration_stacks(...)` — groups frames into per-`cal_type` stacks for master
-  building; `exclude_junk=True` filters junk out first, and frames whose `NATIVE_OBJECT`
-  contains `flush-persistence` or `test` are always excluded.
+  building; `exclude_junk=True` filters junk out first, and `_select_frames` applies the
+  remaining admission filters (lamp/fiber state, native OBJECT, EXPTIME).
 - `find_masters(cal_type, level, datecode)` — locates already-built master calibrations.
 
 It is **not thread-safe** (`build_mini_database` stores the scanned night on the instance), so

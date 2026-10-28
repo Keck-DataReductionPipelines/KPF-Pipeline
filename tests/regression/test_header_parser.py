@@ -22,9 +22,12 @@ SHUT = ("closed", "closed", "closed")
 CCDS = ("YES", "YES", "YES")
 
 
-def _hdr(imtype, octagon="Home", shutters=ALL, cameras=CCDS, **cards):
+def _hdr(imtype, octagon="Home", shutters=None, cameras=CCDS, **cards):
     """A native PRIMARY as a dict: the identity cards plus regular-readout timing
-    for both CCDs. ``cards`` adds or overrides any card (dashes as underscores)."""
+    for both CCDs. ``shutters`` defaults to all shut on a bias/dark, else all
+    open. ``cards`` adds or overrides any card (dashes as underscores)."""
+    if shutters is None:
+        shutters = SHUT if imtype in ("Bias", "Dark") else ALL
     header = {
         "OFNAME": "KP.20240405.00000.00.fits",
         "IMTYPE": imtype,
@@ -75,6 +78,12 @@ def _hdr(imtype, octagon="Home", shutters=ALL, cameras=CCDS, **cards):
         ),
         (_hdr("Arclamp", "BrdbandFiber"), "Unknown", "Unknown", "Unknown"),
         (_hdr("Sky"), "Unknown", "Unknown", "Unknown"),
+        # A bias/dark must record every shutter closed: open, absent or garbled
+        # is unclassifiable.
+        (_hdr("Bias", shutters=CAL), "Unknown", "Unknown", "Unknown"),
+        (_hdr("Dark", shutters=SCI), "Unknown", "Unknown", "Unknown"),
+        (_hdr("Bias", SKYSEL=None), "Unknown", "Unknown", "Unknown"),
+        (_hdr("Dark", SIMCALSH="moving"), "Unknown", "Unknown", "Unknown"),
     ],
 )
 def test_frame_identity(header, obstype, obsmode, obj):
@@ -162,8 +171,6 @@ def _traces(keywords, prefix):
         # An open CAL fiber on a Target frame whose OCTAGON names no lamp.
         (_hdr("Object", "Home"), ["Sky", "Target", "Unknown"]),
         (_hdr("Object", OCTAGON=None), ["Sky", "Target", "Unknown"]),
-        # Bias/dark/wide flat light nothing whatever the shutters say.
-        (_hdr("Bias", SCISEL=None, SKYSEL=None, SIMCALSH=None), ["None"] * 3),
     ],
 )
 def test_illumination(header, srcs):
@@ -276,6 +283,11 @@ def test_consistent_frame_has_no_warnings():
     "header, expected",
     [
         (_hdr("Sky"), "cannot classify frame"),
+        (
+            _hdr("Dark", shutters=CAL),
+            "cannot classify frame (IMTYPE='Dark', OCTAGON='Home', "
+            "SCISEL='closed', SKYSEL='closed', SIMCALSH='open')",
+        ),
         (_hdr("Bias", shutters=SHUT, OBJECT="  "), "OBJECT '' is no autocal label"),
         (
             _hdr("Arclamp", "LFCFiber", OBJECT="LFCStability"),

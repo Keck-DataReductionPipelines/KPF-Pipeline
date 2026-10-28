@@ -87,10 +87,14 @@ FRAME_TYPE_CARDS = {
     "UNe": {"OBSTYPE": "Arclamp", "OBJECT": "UNe_daily"},
 } | {frame: {"OBSTYPE": frame} for frame in ("Bias", "Dark", "Flat", "LFC", "Etalon")}
 
+# The midpoint shutters a bias or dark must record: every fiber shut.
+CLOSED_SHUTTERS = {"SCISEL": "closed", "SKYSEL": "closed", "SIMCALSH": "closed"}
+
 _DEFAULT_PRIMARY = {
     "INSTRUME": "KPF",
     "OBJECT": "synthetic",
     "IMTYPE": "Bias",
+    **CLOSED_SHUTTERS,
     "DATE-OBS": "2024-01-01T00:00:01",
     "MJD-OBS": 60310.0,
     "PROGNAME": "K123",

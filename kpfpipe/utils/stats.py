@@ -101,8 +101,12 @@ def optimize_lsq(x, y, linemodel):
     theta : ndarray
         Fitted parameters in the model's reported convention. For 'gaussian':
         ``[b, a, mu, sigma]`` (baseline, amplitude, center, positive width).
-    rms : float
-        RMS of the fit residuals (``std`` of ``model - y`` at the solution).
+    resid : ndarray
+        Fit residuals ``model - y`` at the solution, same shape as ``y``.
+    theta_err : ndarray
+        1-sigma errors on ``theta``; NaN if the covariance is singular.
+    converged : bool
+        True if MINPACK reports convergence (``ier`` in 1-4).
 
     Raises
     ------
@@ -128,7 +132,7 @@ def optimize_lsq(x, y, linemodel):
     # extra residual evaluation, building OptimizeResult) that dominates for the
     # many tiny line fits here. The tolerances and ``maxfev`` below are exactly what
     # ``least_squares`` forwards to lmder, so the fit is bit-for-bit identical.
-    sol, _cov, info, _msg, _ier = leastsq(
+    sol, cov, info, _msg, ier = leastsq(
         residual,
         theta0,
         Dfun=jacobian,
@@ -139,9 +143,13 @@ def optimize_lsq(x, y, linemodel):
         full_output=True,
     )
 
-    theta, rms = untransform(sol), np.std(info["fvec"])
+    resid = info["fvec"]
 
-    return theta, rms
+    if cov is None:  # singular Jacobian, e.g. a fit window with no line
+        cov = np.full((len(sol), len(sol)), np.nan)
+    theta_err = np.sqrt(np.diag(cov) * np.sum(resid**2) / (len(y) - len(sol)))
+
+    return untransform(sol), resid, theta_err, ier in (1, 2, 3, 4)
 
 
 def robust_polyfit(x, y, deg, sigma=4.0, maxiter=8, min_valid_fraction=0.5, full=False):

@@ -12,8 +12,9 @@ Over an inclusive datecode range this writes, under ``{analysis_dir}/thar/``:
 - ``thar_exposures_{START}_{END}.csv`` -- one row per ThAr frame, daily and gold,
   junk included: the mini-database's ThAr rows plus each frame's ``HCLSN``;
 - ``thar_lamp_history_{START}_{END}.csv`` -- one row per consecutive stretch of a
-  lamp serial over every daily frame, whatever its fibers (a reinstalled lamp gets
-  a new row; a blank ``HCLSN`` is reported as ``(none)``).
+  lamp serial over every daily frame, whatever its fibers, and per EXPTIME within
+  it (a reinstalled lamp gets new rows; a blank ``HCLSN`` is reported as
+  ``(none)``).
 
 Frames come from the L0 mini-database (``--cache``), so only the ThAr ones are
 reopened for their lamp serial; nothing is reduced and no data product written.
@@ -68,8 +69,14 @@ _EXPOSURE_CSV_COLUMNS = [
     "HCLSN",
 ]
 
-# The lamp history follows the daily lamp through all its frames.
-_LAMP_HISTORY_CSV_COLUMNS = ["HCLSN", "FIRST_DATECODE", "LAST_DATECODE", "N_OBS"]
+# The lamp history follows the daily lamp through all its frames, by exposure time.
+_LAMP_HISTORY_CSV_COLUMNS = [
+    "HCLSN",
+    "FIRST_DATECODE",
+    "LAST_DATECODE",
+    "EXPTIME",
+    "N_OBS",
+]
 
 
 def parse_args(argv=None):
@@ -152,31 +159,41 @@ def scan_lamp_serial_numbers(data_input, start, end, jobs, cache="rw"):
 
 
 def lamp_history(rows):
-    """Consecutive-HCLSN stretches over every daily ThAr frame in `rows`.
+    """Consecutive-HCLSN stretches over every daily ThAr frame in `rows`, one row
+    per exposure time found in each stretch.
 
     The serial names the installed lamp whichever fibers a frame lit, so every
     ``ThAr_daily`` frame counts. `rows` must be chronological, as
-    ``scan_lamp_serial_numbers`` returns them; a new stretch starts wherever the
-    serial changes from one frame to the next.
+    ``scan_lamp_serial_numbers`` returns them.
     """
-    history = []
+    stretches = []
     for r in rows:
         if r["DRP_OBJECT"] != "ThAr_daily":
             continue
         lamp = r["HCLSN"] or "(none)"
-        if history and history[-1]["HCLSN"] == lamp:
-            history[-1]["LAST_DATECODE"] = r["DATECODE"]
-            history[-1]["N_OBS"] += 1
+        if not stretches or stretches[-1][0] != lamp:
+            stretches.append((lamp, {}))
+        by_exptime = stretches[-1][1]
+        entry = by_exptime.get(r["EXPTIME"])
+        if entry is None:
+            by_exptime[r["EXPTIME"]] = {
+                "HCLSN": lamp,
+                "FIRST_DATECODE": r["DATECODE"],
+                "LAST_DATECODE": r["DATECODE"],
+                "EXPTIME": r["EXPTIME"],
+                "N_OBS": 1,
+            }
         else:
-            history.append(
-                {
-                    "HCLSN": lamp,
-                    "FIRST_DATECODE": r["DATECODE"],
-                    "LAST_DATECODE": r["DATECODE"],
-                    "N_OBS": 1,
-                }
-            )
-    return history
+            entry["LAST_DATECODE"] = r["DATECODE"]
+            entry["N_OBS"] += 1
+    # A blank EXPTIME sorts after every numeric one.
+    return [
+        entry
+        for _, by_exptime in stretches
+        for _, entry in sorted(
+            by_exptime.items(), key=lambda kv: (kv[0] == "", float(kv[0] or 0))
+        )
+    ]
 
 
 def write_csv(path, rows, columns):
@@ -215,7 +232,7 @@ def main(argv=None):
         logger.warning("no daily ThAr frames: lamp history is empty")
     path = os.path.join(out_dir, f"thar_lamp_history_{start}_{end}.csv")
     write_csv(path, history, _LAMP_HISTORY_CSV_COLUMNS)
-    logger.info("done: %d lamp stretch(es) -> %s", len(history), path)
+    logger.info("done: %d lamp/EXPTIME row(s) -> %s", len(history), path)
 
 
 if __name__ == "__main__":
