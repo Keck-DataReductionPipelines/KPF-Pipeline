@@ -2,8 +2,8 @@
 
 Unit tests mock stack_frames; the regression class builds a real master dark from
 the five bundled L0 darks, which span two default-gap clusters and HST midnight and
-so are grouped with groupby='obs_night' (the whole night in one stack), as the
-masters recipe does for darks. The shared stacking engine (`BaseMasterModule`) is
+so are grouped with groupby='obs_night' (the whole night in one stack). The shared
+stacking engine (`BaseMasterModule`) is
 unit-tested in test_master_base.py.
 """
 

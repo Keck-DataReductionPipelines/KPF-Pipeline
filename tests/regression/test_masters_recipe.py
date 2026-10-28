@@ -80,7 +80,7 @@ STACK_FILES = {
 # asserted, not the numbers alone.
 STACK_LIMITS = {
     "bias": ("time_of_day", 5, 20),
-    "dark": ("obs_night", 3, 20),
+    "dark": ("hst_day", 3, 20),
     "flat": ("time_of_day", 5, 20),
     "thar": ("time_of_day", 5, 20),
 }

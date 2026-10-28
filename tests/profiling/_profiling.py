@@ -244,7 +244,7 @@ def ccf_l4(config):
 
 # Widen the time_of_day gap so bias/thar's frames form a single representative
 # stack rather than splitting morn/eve. Darks instead use groupby='obs_night'
-# (the whole night in one stack), matching recipes/kpf_drp_masters.py.
+# (the whole night in one stack), so all of the bundled night's darks stack.
 MASTERS_CLUSTER_GAP_SECONDS = 24 * 3600
 
 # Reading masters (bias/dark/flat/thar) for the dark and WLS harnesses, which

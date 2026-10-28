@@ -6,7 +6,7 @@ import os
 import re
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -75,8 +75,9 @@ _CAL_TYPES = {
 
 
 # How build_calibration_stacks groups a cal_type's frames into stacks:
-# 'time_of_day' (per observing session, gap-split), 'hst_day' (per HST calendar
-# day), or 'obs_night' (the whole loaded night, one stack spanning HST midnight).
+# 'time_of_day' (per observing session, gap-split), 'hst_day' (the HST calendar
+# day before the loaded datecode, read from it and the previous UT directory), or
+# 'obs_night' (the whole loaded night, one stack spanning HST midnight).
 _GROUPBY_MODES = ("time_of_day", "hst_day", "obs_night")
 
 
@@ -166,6 +167,8 @@ class FileHandler:
         )
         self._mini_db = None  # loaded night's readable frames (build_mini_database)
         self._full_scan_mini_db = None  # full scan of every file, written to the cache
+        self._datecode = None  # loaded night (build_mini_database)
+        self._cache = False  # its cache mode, reused to load a neighboring night
 
     def _mini_db_cache_path(self, datecode):
         """On-disk mini-database cache path for one night:
@@ -332,6 +335,8 @@ class FileHandler:
                 f"cache must be False or one of 'r'/'w'/'rw'/'wr', got {cache!r}"
             )
         datecode = str(datecode)
+        self._datecode = datecode
+        self._cache = cache
         read_cache = cache and "r" in cache
         write_cache = cache and "w" in cache
 
@@ -433,16 +438,18 @@ class FileHandler:
         dt = kpf_timestamp_to_datetime(get_timestamp(s))
         return int((dt - _J2000_EPOCH).total_seconds())
 
-    def _select_frames(self, cal_type, *, exclude_junk=True):
-        """The ``cal_type`` frames from the carried mini database that may enter a
-        stack -- the shared frame-selection entry point. A frame must not be junk,
+    def _select_frames(self, cal_type, *, exclude_junk=True, mini_db=None):
+        """The ``cal_type`` frames from the carried mini database (or ``mini_db``,
+        if given) that may enter a stack -- the shared frame-selection entry
+        point. A frame must not be junk,
         must have every fiber lit by the type's lamp (unlit for bias/dark), must be
         read out on both GREEN and RED (single-CCD is unsupported), and must pass
         ``_validate_native_object`` and ``_validate_exposure_time``; exclusions are
         logged. Raises ``ValueError`` if no database is loaded or no frame
         survives (with per-filter counts); ``exclude_junk`` on a pre-junk-tracking
         database raises ``KeyError``."""
-        mini_db = self._mini_db
+        if mini_db is None:
+            mini_db = self._mini_db
         if mini_db is None:
             raise ValueError(
                 "no mini database available; call build_mini_database(datecode) first"
@@ -633,7 +640,10 @@ class FileHandler:
           (the morn/eve/night sessions). The split is purely temporal, so the
           morn/eve/night OBJECT suffix does not partition it and a mislabeled
           frame stacks with its true session. Used for bias and thar.
-        * ``'hst_day'`` -- one stack per HST (Hawaii) calendar day.
+        * ``'hst_day'`` -- one stack for HST (Hawaii) calendar day D-1, where D
+          is the loaded datecode: 00:00-23:59 HST, i.e. UT D-1 10:00 to UT D
+          10:00, so its frames come from the D-1 and D directories. A missing
+          D-1 directory leaves only D's part of the day.
         * ``'obs_night'`` -- one stack for the whole loaded night (the UTC-keyed
           datecode), spanning HST midnight. Used for darks, whose sparse sequences
           routinely straddle HST midnight and belong in a single nightly stack.
@@ -692,19 +702,31 @@ class FileHandler:
                 cluster_gap_seconds=cluster_gap_seconds,
                 exclude_junk=exclude_junk,
             )
-        else:
+        elif groupby == "hst_day":
+            # HST day D-1 runs from UT D-1 10:00 to UT D 10:00, so it spans the
+            # previous UT directory and this one.
+            hst_date = (
+                datetime.strptime(self._datecode, "%Y%m%d") - timedelta(days=1)
+            ).strftime("%Y%m%d")
+            mini_dbs = [self._mini_db]
+            if glob.glob(os.path.join(self._data_input, "L0", hst_date, "*.fits")):
+                previous = FileHandler({"KPF_DATA_INPUT": self._data_input})
+                mini_dbs.insert(0, previous.build_mini_database(hst_date, self._cache))
+            else:
+                logger.debug(
+                    "no L0 frames for %s; HST day from %s only",
+                    hst_date,
+                    self._datecode,
+                )
+            day_db = pd.concat(mini_dbs, ignore_index=True)
+            day_db = day_db[day_db["HST_TIME"].astype(str).str[:8] == hst_date]
+            cal_df = self._select_frames(
+                cal_type, exclude_junk=exclude_junk, mini_db=day_db
+            )
+            clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
+        else:  # obs_night -- the whole loaded night, one stack spanning midnight
             cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
-            if groupby == "hst_day":
-                # One stack per HST calendar day (the 'YYYYMMDD' HST-timestamp prefix).
-                by_day = {}
-                for fn, hst in zip(cal_df["FILENAME"], cal_df["HST_TIME"], strict=True):
-                    by_day.setdefault(str(hst).split(".")[0], []).append(fn)
-                clusters = [
-                    sorted(v, key=self._seconds_since_j2000)
-                    for _, v in sorted(by_day.items())
-                ]
-            else:  # obs_night -- the whole loaded night, one stack spanning midnight
-                clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
+            clusters = [sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)]
 
         sizes = [len(c) for c in clusters]
         for c in clusters:

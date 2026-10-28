@@ -260,14 +260,6 @@ class TestBuildCalibrationStacks:
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
 
-    def test_hst_day_splits_at_midnight(self):
-        # hst_day splits at midnight even when the frames are less than a gap apart.
-        db, before, after = _midnight_bias_db()
-        lists = _cluster("bias", db, min_stack_size=5, groupby="hst_day")
-        assert len(lists) == 2
-        assert lists[0] == sorted(before)
-        assert lists[1] == sorted(after)
-
     def test_obs_night_single_stack_spans_midnight(self):
         # obs_night spans both a >2 hr gap and HST midnight (the sparse-dark case).
         db, before, after = _cross_midnight_gap_db()
@@ -334,6 +326,90 @@ class TestBuildCalibrationStacks:
         # A wide flat is not a fiber flat.
         db = _mini_db(_rows(_BIAS_A, "Flat") + _rows(_BIAS_B, "WideFlat"))
         assert _cluster("flat", db) == [sorted(_BIAS_A)]
+
+
+def _darks(datecode, seconds):
+    """Dark frames in UT directory ``datecode`` at the given seconds of day."""
+    files = [f"/data/L0/{datecode}/KP.{datecode}.{s:05d}.00.fits" for s in seconds]
+    return _mini_db(_rows(files, "Dark")), files
+
+
+class TestHstDay:
+    """hst_day stacks HST day D-1 from the D-1 and D UT directories.
+
+    HST day D-1 is UT D-1 10:00 (36000 s) to UT D 10:00. The previous night's
+    mini_db is stubbed; ``previous`` maps each datecode with an L0 directory on
+    disk to the mini_db its load returns.
+    """
+
+    @pytest.fixture
+    def run(self, tmp_path, monkeypatch):
+        def _run(datecode, today, previous=(), groupby="hst_day", **kwargs):
+            previous = dict(previous)
+            for d in previous:
+                (tmp_path / "L0" / d).mkdir(parents=True)
+                (tmp_path / "L0" / d / f"KP.{d}.00000.00.fits").touch()
+            loaded = []
+
+            def fake_build(self, d, cache=False):
+                loaded.append(d)
+                return previous[d]
+
+            monkeypatch.setattr(FileHandler, "build_mini_database", fake_build)
+            fh = FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
+            fh._datecode = datecode
+            fh._mini_db = today
+            stacks = fh.build_calibration_stacks("dark", groupby=groupby, **kwargs)
+            return stacks, loaded
+
+        return _run
+
+    def test_boundary_seconds(self, run):
+        # UT 09:59:59 is HST 23:59:59 of the day before; UT 10:00:00 is HST 00:00.
+        prev_db, prev = _darks("20240404", [35999, 36000, 60000])
+        today_db, today = _darks("20240405", [35999, 36000])
+        stacks, loaded = run("20240405", today_db, {"20240404": prev_db})
+        assert loaded == ["20240404"]
+        assert stacks == [[prev[1], prev[2], today[0]]]
+
+    def test_combines_directories_to_reach_min_stack_size(self, run):
+        # Two morning darks (UT dir D-1) and two evening darks (UT dir D): neither
+        # directory alone reaches min_stack_size=3.
+        prev_db, prev = _darks("20240404", [61200, 61500])
+        today_db, today = _darks("20240405", [3600, 3900])
+        stacks, _ = run("20240405", today_db, {"20240404": prev_db}, min_stack_size=3)
+        assert stacks == [prev + today]
+
+    @pytest.mark.parametrize(
+        "datecode, previous_datecode",
+        [("20240301", "20240229"), ("20240101", "20231231"), ("20230301", "20230228")],
+    )
+    def test_previous_datecode_crosses_calendar_boundaries(
+        self, run, datecode, previous_datecode
+    ):
+        prev_db, prev = _darks(previous_datecode, [50000])
+        today_db, today = _darks(datecode, [3600])
+        stacks, loaded = run(datecode, today_db, {previous_datecode: prev_db})
+        assert loaded == [previous_datecode]
+        assert stacks == [prev + today]
+
+    def test_missing_previous_directory_uses_today_only(self, run, caplog):
+        today_db, today = _darks("20240405", [3600, 3900, 36000])
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.utils.io"):
+            stacks, loaded = run("20240405", today_db)
+        assert loaded == []
+        assert stacks == [today[:2]]
+        assert "no L0 frames for 20240404" in caplog.text
+
+    @pytest.mark.parametrize("groupby", ["time_of_day", "obs_night"])
+    def test_other_modes_read_only_the_loaded_directory(self, run, groupby):
+        prev_db, _ = _darks("20240404", [61200])
+        today_db, today = _darks("20240405", [3600, 36000])
+        stacks, loaded = run(
+            "20240405", today_db, {"20240404": prev_db}, groupby=groupby
+        )
+        assert loaded == []
+        assert sorted(f for s in stacks for f in s) == today
 
 
 # build_calibration_stacks (real data)

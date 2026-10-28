@@ -85,7 +85,7 @@ def main(config, args):
             "dark",
             min_stack_size=config.get_params(["DARK"])["min_stack_size"],
             max_stack_size=config.get_params(["DARK"])["max_stack_size"],
-            groupby="obs_night",
+            groupby="hst_day",
         ):
             try:
                 dark = Dark(files, config)
