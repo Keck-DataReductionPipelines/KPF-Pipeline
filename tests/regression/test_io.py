@@ -83,16 +83,21 @@ def _rows(files, obj, sources=None):
     ]
 
 
-def _mini_db(rows, *, exptime=60.0, junk=()):
+def _mini_db(rows, *, exptime=None, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
-    Adds the derived columns build_calibration_stacks needs: NATIVE_OBJECT, EXPTIME, the
+    Adds the derived columns build_calibration_stacks needs: NATIVE_OBJECT, EXPTIME
+    (default 0 s for Bias, 1200 s for Dark, else 60 s), the
     UTC_TIME/HST_TIME timestamps (parsed from each FILENAME), and ISJUNK
     (FILENAMEs in `junk` flagged True).
     """
     df = pd.DataFrame(rows)
     df["NATIVE_OBJECT"] = "autocal"
-    df["EXPTIME"] = exptime
+    df["EXPTIME"] = (
+        df["DRP_OBJECT"].map({"Bias": 0.0, "Dark": 1200.0}).fillna(60.0)
+        if exptime is None
+        else exptime
+    )
     df["UTC_TIME"] = [get_timestamp(f) for f in df["FILENAME"]]
     df["HST_TIME"] = [utc_to_hst(t) for t in df["UTC_TIME"]]
     df["ISJUNK"] = df["FILENAME"].isin(set(junk))
@@ -1204,6 +1209,23 @@ class TestJunkExclusion:
         assert set(kept) == set(_JUNK_BIAS) - {eng_fn}
         assert "excluding 1 bias frame(s) by native OBJECT" in caplog.text
         assert f"{os.path.basename(eng_fn)} ({native_obj!r})" in caplog.text
+
+    @pytest.mark.parametrize(
+        "cal_type, obj, bad, good",
+        [("bias", "Bias", 1.0, 0.1), ("dark", "Dark", 60.0, 300.0)],
+    )
+    def test_out_of_range_exptime_excluded(self, cal_type, obj, bad, good, caplog):
+        db = _mini_db(_rows(_JUNK_BIAS, obj), exptime=good)
+        bad_fn = _JUNK_BIAS[1]
+        db.loc[db["FILENAME"] == bad_fn, "EXPTIME"] = bad
+        with caplog.at_level(logging.INFO, logger="kpfpipe.utils.io"):
+            lists = _cluster(cal_type, db, min_stack_size=1, groupby="obs_night")
+        assert set(fn for cluster in lists for fn in cluster) == set(_JUNK_BIAS) - {
+            bad_fn
+        }
+        assert (
+            f"excluding {cal_type} {os.path.basename(bad_fn)}: EXPTIME" in caplog.text
+        )
 
     def test_all_nan_native_object_keeps_frames(self):
         # An all-NaN NATIVE_OBJECT column (seen on Nov 2022 nights) is float dtype.

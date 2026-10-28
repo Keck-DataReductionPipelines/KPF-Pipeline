@@ -440,7 +440,8 @@ class FileHandler:
         ``Unknown`` source never qualifies; such frames are logged with their
         SKYSRC/SCISRC/CALSRC. A frame without both GREEN and RED
         read out is excluded with a warning (single-CCD is unsupported); one whose
-        native OBJECT names a flush-persistence or test frame is excluded. Raises
+        native OBJECT names a flush-persistence or test frame is excluded, as is a
+        bias with requested EXPTIME above 0.1 s or a dark below 300 s. Raises
         ``ValueError`` if no database is loaded or no frame survives selection
         (the message gives per-filter counts);
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
@@ -521,6 +522,18 @@ class FileHandler:
                 ),
             )
         cal_df = cal_df[~exclude]
+        # Requested exposure: bias at most 0.1 s, dark at least 300 s.
+        exptime = pd.to_numeric(cal_df["EXPTIME"], errors="coerce")
+        bad_exptime = pd.Series(False, index=cal_df.index)
+        if cal_type == "bias":
+            bad_exptime = ~(exptime <= 0.1)
+        elif cal_type == "dark":
+            bad_exptime = ~(exptime >= 300)
+        for fn, t in cal_df.loc[bad_exptime, ["FILENAME", "EXPTIME"]].values:
+            logger.info(
+                "excluding %s %s: EXPTIME=%s", cal_type, os.path.basename(fn), t
+            )
+        cal_df = cal_df[~bad_exptime]
         if cal_df.empty:
             # Per-filter counts separate a night with no such frames from one
             # whose frames were all excluded.
@@ -529,7 +542,8 @@ class FileHandler:
                 f"OBJECT={obj!r}; excluded {n_junk} on junk list, {n_source} "
                 f"without SKYSRC=SCISRC=CALSRC={lit} [{'; '.join(by_source)}], "
                 f"{int(single_ccd.sum())} single-CCD, {int(exclude.sum())} "
-                "native OBJECT flush-persistence/test"
+                "native OBJECT flush-persistence/test, "
+                f"{int(bad_exptime.sum())} out-of-range EXPTIME"
             )
         return cal_df
 
