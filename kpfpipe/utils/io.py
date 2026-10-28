@@ -441,7 +441,8 @@ class FileHandler:
         ``Unknown`` source never qualifies; such frames are logged with their
         SKYSRC/SCISRC/CALSRC. A frame without both GREEN and RED
         read out is excluded with a warning (single-CCD is unsupported); one whose
-        native OBJECT names a flush-persistence or test frame is excluded, as is a
+        native OBJECT names a flush-persistence, test, noise, superflat or check
+        frame is excluded, as is a
         bias with requested EXPTIME above 0.1 s, a dark below 300 s, or a ThAr
         frame off the nominal EXPTIME for its datecode in
         ``reference/thar_lamp_history.csv``. Raises
@@ -507,23 +508,7 @@ class FileHandler:
                 "excluding %s: DRP does not yet support single-CCD exposures", fn
             )
         cal_df = cal_df[~single_ccd]
-        exclude = (
-            cal_df["NATIVE_OBJECT"]
-            .astype("string")
-            .str.contains("flush-persistence|test", case=False, na=False)
-        )
-        if exclude.any():
-            logger.info(
-                "excluding %d %s frame(s) by native OBJECT: %s",
-                exclude.sum(),
-                cal_type,
-                ", ".join(
-                    f"{os.path.basename(fn)} ({native!r})"
-                    for fn, native in cal_df.loc[
-                        exclude, ["FILENAME", "NATIVE_OBJECT"]
-                    ].values
-                ),
-            )
+        exclude = ~self._validate_native_object(cal_type, cal_df)
         cal_df = cal_df[~exclude]
         bad_exptime = ~self._validate_exposure_time(cal_type, cal_df)
         cal_df = cal_df[~bad_exptime]
@@ -535,10 +520,36 @@ class FileHandler:
                 f"OBJECT={obj!r}; excluded {n_junk} on junk list, {n_source} "
                 f"without SKYSRC=SCISRC=CALSRC={lit} [{'; '.join(by_source)}], "
                 f"{int(single_ccd.sum())} single-CCD, {int(exclude.sum())} "
-                "native OBJECT flush-persistence/test, "
+                "native OBJECT flush-persistence/test/noise/superflat/check, "
                 f"{int(bad_exptime.sum())} out-of-range EXPTIME"
             )
         return cal_df
+
+    @staticmethod
+    def _validate_native_object(cal_type, cal_df):
+        """Mask of the ``cal_df`` frames whose native OBJECT names no
+        flush-persistence, test, noise, superflat or check frame (case-insensitive; a
+        blank OBJECT passes). The failing frames are logged."""
+        valid = ~(
+            cal_df["NATIVE_OBJECT"]
+            .astype("string")
+            .str.contains(
+                "flush-persistence|test|noise|superflat|check", case=False, na=False
+            )
+        )
+        if not valid.all():
+            logger.info(
+                "excluding %d %s frame(s) by native OBJECT: %s",
+                (~valid).sum(),
+                cal_type,
+                ", ".join(
+                    f"{os.path.basename(fn)} ({native!r})"
+                    for fn, native in cal_df.loc[
+                        ~valid, ["FILENAME", "NATIVE_OBJECT"]
+                    ].values
+                ),
+            )
+        return valid
 
     @staticmethod
     def _validate_exposure_time(cal_type, cal_df):

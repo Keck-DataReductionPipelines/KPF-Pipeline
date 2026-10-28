@@ -1199,7 +1199,15 @@ class TestJunkExclusion:
         assert f"excluding {single_fn}: DRP does not yet support" in caplog.text
 
     @pytest.mark.parametrize(
-        "native_obj", ["flush-persistence", "bias-noise-test-1", "FLAT-test"]
+        "native_obj",
+        [
+            "flush-persistence",
+            "bias-noise-test-1",
+            "FLAT-test",
+            "bias-noise-newbaseline",
+            "superflat",
+            "ThAr_daily_check_GS",
+        ],
     )
     def test_engineering_object_excluded(self, native_obj, caplog):
         db = _mini_db(_rows(_JUNK_BIAS, "Bias"))
