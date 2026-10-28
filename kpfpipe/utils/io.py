@@ -10,6 +10,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from kpfpipe import REPO_ROOT
 from kpfpipe.utils.header import HeaderError, HeaderParser
 from kpfpipe.utils.kpf import (
     OBS_ID_REGEX,
@@ -441,7 +442,9 @@ class FileHandler:
         SKYSRC/SCISRC/CALSRC. A frame without both GREEN and RED
         read out is excluded with a warning (single-CCD is unsupported); one whose
         native OBJECT names a flush-persistence or test frame is excluded, as is a
-        bias with requested EXPTIME above 0.1 s or a dark below 300 s. Raises
+        bias with requested EXPTIME above 0.1 s, a dark below 300 s, or a ThAr
+        frame off the nominal EXPTIME for its datecode in
+        ``reference/thar_lamp_history.csv``. Raises
         ``ValueError`` if no database is loaded or no frame survives selection
         (the message gives per-filter counts);
         ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
@@ -522,17 +525,7 @@ class FileHandler:
                 ),
             )
         cal_df = cal_df[~exclude]
-        # Requested exposure: bias at most 0.1 s, dark at least 300 s.
-        exptime = pd.to_numeric(cal_df["EXPTIME"], errors="coerce")
-        bad_exptime = pd.Series(False, index=cal_df.index)
-        if cal_type == "bias":
-            bad_exptime = ~(exptime <= 0.1)
-        elif cal_type == "dark":
-            bad_exptime = ~(exptime >= 300)
-        for fn, t in cal_df.loc[bad_exptime, ["FILENAME", "EXPTIME"]].values:
-            logger.info(
-                "excluding %s %s: EXPTIME=%s", cal_type, os.path.basename(fn), t
-            )
+        bad_exptime = ~self._validate_exposure_time(cal_type, cal_df)
         cal_df = cal_df[~bad_exptime]
         if cal_df.empty:
             # Per-filter counts separate a night with no such frames from one
@@ -546,6 +539,38 @@ class FileHandler:
                 f"{int(bad_exptime.sum())} out-of-range EXPTIME"
             )
         return cal_df
+
+    @staticmethod
+    def _validate_exposure_time(cal_type, cal_df):
+        """Mask of the ``cal_df`` frames whose requested EXPTIME suits
+        ``cal_type``: a bias at most 0.1 s, a dark at least 300 s, a ThAr frame
+        the nominal exposure for its datecode in
+        ``reference/thar_lamp_history.csv`` (none on a date no row covers). A
+        flat passes whatever its exposure; a blank EXPTIME fails. Each failing
+        frame is logged."""
+        exptime = pd.to_numeric(cal_df["EXPTIME"], errors="coerce")
+        valid = pd.Series(True, index=cal_df.index)
+        if cal_type == "bias":
+            valid = exptime <= 0.1
+        elif cal_type == "dark":
+            valid = exptime >= 300
+        elif cal_type == "thar":
+            history = pd.read_csv(
+                f"{REPO_ROOT}/reference/thar_lamp_history.csv",
+                dtype={"FIRST_DATECODE": str, "LAST_DATECODE": str},
+            )
+            datecode = cal_df["FILENAME"].map(get_datecode)
+            nominal = pd.Series(float("nan"), index=cal_df.index)
+            for first, last, t in history[
+                ["FIRST_DATECODE", "LAST_DATECODE", "EXPTIME"]
+            ].values:
+                nominal[(datecode >= first) & (datecode <= last)] = t
+            valid = exptime == nominal
+        for fn, t in cal_df.loc[~valid, ["FILENAME", "EXPTIME"]].values:
+            logger.info(
+                "excluding %s %s: EXPTIME=%s", cal_type, os.path.basename(fn), t
+            )
+        return valid
 
     def _identify_clusters(self, cal_type, *, cluster_gap_seconds, exclude_junk=True):
         """Group ``cal_type`` frames into observing-session clusters by time gaps:
