@@ -434,21 +434,14 @@ class FileHandler:
         return int((dt - _J2000_EPOCH).total_seconds())
 
     def _select_frames(self, cal_type, *, exclude_junk=True):
-        """The junk-excluded ``cal_type`` frames from the carried mini database --
-        the shared frame-selection entry point. A frame qualifies when its OBJECT is
-        the type's and every fiber saw the lamp (lamp masters, so sci/sky/cal-only
-        lamp frames are left out) or nothing (bias/dark), so a frame with any
-        ``Unknown`` source never qualifies; such frames are logged with their
-        SKYSRC/SCISRC/CALSRC. A frame without both GREEN and RED
-        read out is excluded with a warning (single-CCD is unsupported); one whose
-        native OBJECT names a flush-persistence, test, noise, superflat or check
-        frame is excluded, as is a
-        bias with requested EXPTIME above 0.1 s, a dark below 300 s, or a ThAr
-        frame off the nominal EXPTIME for its datecode in
-        ``reference/thar_lamp_history.csv``. Raises
-        ``ValueError`` if no database is loaded or no frame survives selection
-        (the message gives per-filter counts);
-        ``exclude_junk`` on a pre-junk-tracking database raises ``KeyError``."""
+        """The ``cal_type`` frames from the carried mini database that may enter a
+        stack -- the shared frame-selection entry point. A frame must not be junk,
+        must have every fiber lit by the type's lamp (unlit for bias/dark), must be
+        read out on both GREEN and RED (single-CCD is unsupported), and must pass
+        ``_validate_native_object`` and ``_validate_exposure_time``; exclusions are
+        logged. Raises ``ValueError`` if no database is loaded or no frame
+        survives (with per-filter counts); ``exclude_junk`` on a pre-junk-tracking
+        database raises ``KeyError``."""
         mini_db = self._mini_db
         if mini_db is None:
             raise ValueError(
@@ -527,9 +520,8 @@ class FileHandler:
 
     @staticmethod
     def _validate_native_object(cal_type, cal_df):
-        """Mask of the ``cal_df`` frames whose native OBJECT names no
-        flush-persistence, test, noise, superflat or check frame (case-insensitive; a
-        blank OBJECT passes). The failing frames are logged."""
+        """Mask of the ``cal_df`` frames whose native OBJECT does not mark an
+        engineering or test frame; the rest are logged."""
         valid = ~(
             cal_df["NATIVE_OBJECT"]
             .astype("string")
@@ -554,20 +546,17 @@ class FileHandler:
     @staticmethod
     def _validate_exposure_time(cal_type, cal_df):
         """Mask of the ``cal_df`` frames whose requested EXPTIME suits
-        ``cal_type``: a bias at most 0.1 s, a dark at least 300 s, a ThAr frame
-        the nominal exposure for its datecode in
-        ``reference/thar_lamp_history.csv`` (none on a date no row covers). A
-        flat passes whatever its exposure; a blank EXPTIME fails. Each failing
-        frame is logged."""
+        ``cal_type``; a flat or ThAr frame needs the nominal value for its
+        datecode, so a date no history row covers admits none. The rest are
+        logged."""
         exptime = pd.to_numeric(cal_df["EXPTIME"], errors="coerce")
-        valid = pd.Series(True, index=cal_df.index)
         if cal_type == "bias":
             valid = exptime <= 0.1
         elif cal_type == "dark":
             valid = exptime >= 300
-        elif cal_type == "thar":
+        else:
             history = pd.read_csv(
-                f"{REPO_ROOT}/reference/thar_lamp_history.csv",
+                f"{REPO_ROOT}/reference/{cal_type}_lamp_history.csv",
                 dtype={"FIRST_DATECODE": str, "LAST_DATECODE": str},
             )
             datecode = cal_df["FILENAME"].map(get_datecode)

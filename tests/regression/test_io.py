@@ -87,8 +87,8 @@ def _mini_db(rows, *, exptime=None, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
     Adds the derived columns build_calibration_stacks needs: NATIVE_OBJECT, EXPTIME
-    (default 0 s for Bias, 1200 s for Dark, 10 s -- nominal on 20240405 -- for
-    ThAr_daily, else 60 s), the
+    (default 0 s for Bias, 1200 s for Dark, and the 20240405 nominal 30 s for
+    Flat and 10 s for ThAr_daily, else 60 s), the
     UTC_TIME/HST_TIME timestamps (parsed from each FILENAME), and ISJUNK
     (FILENAMEs in `junk` flagged True).
     """
@@ -96,7 +96,7 @@ def _mini_db(rows, *, exptime=None, junk=()):
     df["NATIVE_OBJECT"] = "autocal"
     df["EXPTIME"] = (
         df["DRP_OBJECT"]
-        .map({"Bias": 0.0, "Dark": 1200.0, "ThAr_daily": 10.0})
+        .map({"Bias": 0.0, "Dark": 1200.0, "Flat": 30.0, "ThAr_daily": 10.0})
         .fillna(60.0)
         if exptime is None
         else exptime
@@ -1226,7 +1226,8 @@ class TestJunkExclusion:
         [
             ("bias", "Bias", 1.0, 0.1),
             ("dark", "Dark", 60.0, 300.0),
-            # 20240405 is a 10 s night in reference/thar_lamp_history.csv.
+            # On 20240405 the nominal flat is 30 s and the nominal ThAr 10 s.
+            ("flat", "Flat", 10.0, 30.0),
             ("thar", "ThAr_daily", 120.0, 10.0),
         ],
     )
@@ -1243,12 +1244,24 @@ class TestJunkExclusion:
             f"excluding {cal_type} {os.path.basename(bad_fn)}: EXPTIME" in caplog.text
         )
 
-    def test_thar_on_date_without_nominal_exptime_excluded(self):
-        # 20241101 falls between lamp-history rows, so no exposure is nominal.
-        files = [f"/data/L0/20241101/KP.20241101.{s:05d}.00.fits" for s in (1000, 1100)]
-        db = _mini_db(_rows(files, "ThAr_daily"), exptime=20.0)
+    @pytest.mark.parametrize(
+        "cal_type, obj, datecode, exptime",
+        [
+            # No row of its lamp history covers the date, so no exposure is
+            # nominal.
+            ("flat", "Flat", "20260501", 50.0),
+            ("thar", "ThAr_daily", "20241101", 20.0),
+        ],
+    )
+    def test_date_without_nominal_exptime_excluded(
+        self, cal_type, obj, datecode, exptime
+    ):
+        files = [
+            f"/data/L0/{datecode}/KP.{datecode}.{s:05d}.00.fits" for s in (1000, 1100)
+        ]
+        db = _mini_db(_rows(files, obj), exptime=exptime)
         with pytest.raises(ValueError, match="2 out-of-range EXPTIME"):
-            _cluster("thar", db, min_stack_size=1)
+            _cluster(cal_type, db, min_stack_size=1)
 
     def test_all_nan_native_object_keeps_frames(self):
         # An all-NaN NATIVE_OBJECT column (seen on Nov 2022 nights) is float dtype.

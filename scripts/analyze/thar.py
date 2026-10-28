@@ -164,9 +164,7 @@ def lamp_history(rows):
 
     The serial names the installed lamp whichever fibers a frame lit, so every
     ``ThAr_daily`` frame counts. `rows` must be chronological, as
-    ``scan_lamp_serial_numbers`` returns them; a new stretch starts wherever the
-    serial changes from one frame to the next. Within a stretch, rows run in order
-    of EXPTIME, each spanning the first to last datecode at that exposure time.
+    ``scan_lamp_serial_numbers`` returns them.
     """
     stretches = []
     for r in rows:
