@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_CFG = {
     **DEFAULT_CFG,
-    "masters_search_window_days": [-1, 0],
+    "masters_search_window_days": [-5, 0],
 }
 
 # Level suffix of the master FITS file for each supported calibration type,
@@ -57,7 +57,7 @@ class CalibrationAssociation:
         Module configuration. Recognized keys: KPF_MASTERS_OUTPUT (root
         directory holding the master calibration files) and
         masters_search_window_days ([days_before, days_after] search window
-        relative to the frame's observation date; default [-1, 0]).
+        relative to the frame's observation date; default [-5, 0]).
     """
 
     def __init__(self, l1_obj, config=None):
