@@ -288,15 +288,16 @@ class TestScanLampSerialNumbers:
 # ---------------------------------------------------------------------------
 
 
-def _history_row(datecode, hclsn, obj="ThAr_daily"):
-    return {"DATECODE": datecode, "DRP_OBJECT": obj, "HCLSN": hclsn}
+def _history_row(datecode, hclsn, obj="ThAr_daily", exptime=20.0):
+    return {"DATECODE": datecode, "DRP_OBJECT": obj, "HCLSN": hclsn, "EXPTIME": exptime}
 
 
-def _stretch(hclsn, first, last, n_obs):
+def _stretch(hclsn, first, last, n_obs, exptime=20.0):
     return {
         "HCLSN": hclsn,
         "FIRST_DATECODE": first,
         "LAST_DATECODE": last,
+        "EXPTIME": exptime,
         "N_OBS": n_obs,
     }
 
@@ -329,6 +330,21 @@ class TestLampHistory:
             _stretch("L74828", "20240101", "20240103", 2)
         ]
 
+    def test_one_row_per_exptime_within_stretch(self, thar):
+        rows = [
+            _history_row("20240101", "L82884", exptime=10.0),
+            _history_row("20240102", "L82884", exptime=120.0),
+            _history_row("20240103", "L82884", exptime=20.0),
+            _history_row("20240104", "L82884", exptime=10.0),
+            _history_row("20240105", "L82884", exptime=""),
+        ]
+        assert thar.lamp_history(rows) == [
+            _stretch("L82884", "20240101", "20240104", 2, exptime=10.0),
+            _stretch("L82884", "20240103", "20240103", 1, exptime=20.0),
+            _stretch("L82884", "20240102", "20240102", 1, exptime=120.0),
+            _stretch("L82884", "20240105", "20240105", 1, exptime=""),
+        ]
+
     def test_every_daily_frame_counts_whatever_its_fibers(self, thar, tmp_path):
         # The serial names the lamp; which fibers a frame lit is irrelevant.
         for i, obj in enumerate(["autocal-thar-all-eve", "autocal-thar-sci"]):
@@ -336,7 +352,7 @@ class TestLampHistory:
         _write_thar(str(tmp_path), "20240101", 3800, obj="autocal-thar-hk")
         rows = thar.scan_lamp_serial_numbers(str(tmp_path), "20240101", "20240131", 1)
         assert thar.lamp_history(rows) == [
-            _stretch("L74828", "20240101", "20240101", 3)
+            _stretch("L74828", "20240101", "20240101", 3, exptime=60.0)
         ]
 
 
