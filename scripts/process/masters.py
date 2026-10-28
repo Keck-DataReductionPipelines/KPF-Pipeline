@@ -31,6 +31,7 @@ continue to the next stage) but exits nonzero if any night failed any stage.
 """
 
 import argparse
+import glob
 import logging
 import os
 import sys
@@ -176,6 +177,17 @@ def main(argv=None):
     logger.info(
         "building masters for %d night(s): %s", len(datecodes), ", ".join(datecodes)
     )
+    # A night with no L0 FITS has nothing to build; skip it rather than fail it.
+    empty = [
+        dc
+        for dc in datecodes
+        if not glob.glob(os.path.join(data_input, "L0", dc, "*.fits"))
+    ]
+    if empty:
+        logger.warning(
+            "skipping %d empty night(s) (no L0 FITS): %s", len(empty), ", ".join(empty)
+        )
+        datecodes = [dc for dc in datecodes if dc not in empty]
 
     # Warm the L0 mini-db caches up front, one thread per night (--cache, rw
     # default; --cache r skips the pre-scan and leaves reduces to read-only).

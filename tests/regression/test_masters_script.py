@@ -216,6 +216,8 @@ class TestMainExitCode:
         _stub_batch_log(monkeypatch, m)
         monkeypatch.setattr(m, "datecodes_in_range", lambda di, s, e: ["20240405"])
         monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
+        # Every night holds L0 FITS unless a test says otherwise.
+        monkeypatch.setattr(m.glob, "glob", lambda pattern: [pattern])
 
         def _fake_run_stage(*a, **k):
             if calls is not None:
@@ -233,6 +235,15 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             m.main(["--dates", "20240405"])
         assert exc.value.code == 1
+
+    def test_empty_night_is_skipped_not_failed(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        monkeypatch.setattr(
+            m.glob, "glob", lambda pattern: [] if "20240406" in pattern else [pattern]
+        )
+        m.main(["--dates", "20240405", "20240406"])  # no SystemExit
+        assert all([t[0] for t in c["args"][1]] == ["20240405"] for c in calls)
 
     def test_fan_out_is_staggered(self, m, monkeypatch):
         # Masters passes its stagger interval to run_stage so the lockstep
