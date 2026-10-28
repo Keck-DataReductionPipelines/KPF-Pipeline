@@ -160,16 +160,35 @@ def kpf_timestamp_to_eprv_timestamp(timestamp):
 
 
 def select_era_reference(pattern, kind, primary, obs_id, eras):
-    """Path of the most recent ``kind`` reference measured before a frame within
-    the frame's instrument era (``INSTERA``, stamped at ``KPF0.to_kpf1``).
+    """The most recent ``kind`` reference measured before a frame within the
+    frame's instrument era (``INSTERA``, stamped at ``KPF0.to_kpf1``).
 
-    ``pattern`` globs the references, its one ``*`` standing for the datecode
-    each was measured on (e.g. ``.../order_traces/order_trace_*.csv``);
-    ``primary`` is the frame's PRIMARY header and ``eras`` the instrument-era
-    table.
+    Parameters
+    ----------
+    pattern : str
+        Glob of the references, its one ``*`` standing for the datecode each
+        was measured on (e.g. ``.../order_traces/order_trace_*.csv``).
+    kind : str
+        Reference name for error messages.
+    primary : astropy.io.fits.Header
+        The frame's PRIMARY header.
+    obs_id : str
+        The frame's obs_id, for error messages.
+    eras : pandas.DataFrame
+        The instrument-era table.
 
-    Raises ``ValueError`` when no era carries the frame's ``INSTERA`` and
-    ``FileNotFoundError`` when the era has no reference measured before it."""
+    Returns
+    -------
+    str
+        Path of the selected reference.
+
+    Raises
+    ------
+    ValueError
+        If no era carries the frame's ``INSTERA``.
+    FileNotFoundError
+        If the era has no reference measured before the frame.
+    """
     instera = str(primary["INSTERA"])
     obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
 

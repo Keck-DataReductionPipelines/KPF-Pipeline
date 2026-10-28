@@ -552,9 +552,9 @@ class FileHandler:
         are logged."""
         exptime = pd.to_numeric(cal_df["EXPTIME"], errors="coerce")
         if cal_type == "bias":
-            valid = exptime <= 0.1
+            valid = exptime <= 0.1  # [s]
         elif cal_type == "dark":
-            valid = exptime >= 300
+            valid = exptime >= 300  # [s]
         else:
             history = pd.read_csv(
                 f"{REPO_ROOT}/reference/{cal_type}_lamp_history.csv",
@@ -577,9 +577,15 @@ class FileHandler:
                     cal_type,
                 )
             valid = (exptime == nominal) | unchecked
-        for fn, t in cal_df.loc[~valid, ["FILENAME", "EXPTIME"]].values:
+        if not valid.all():
             logger.info(
-                "excluding %s %s: EXPTIME=%s", cal_type, os.path.basename(fn), t
+                "excluding %d %s frame(s) by EXPTIME: %s",
+                (~valid).sum(),
+                cal_type,
+                ", ".join(
+                    f"{os.path.basename(fn)} ({t})"
+                    for fn, t in cal_df.loc[~valid, ["FILENAME", "EXPTIME"]].values
+                ),
             )
         return valid
 

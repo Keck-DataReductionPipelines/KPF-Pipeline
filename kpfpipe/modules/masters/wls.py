@@ -183,18 +183,24 @@ class WLS(BaseMasterModule):
 
     @staticmethod
     def _validate_lamp_serial_numbers(l0_file_list):
-        """``l0_file_list`` less, with a warning each, the frames whose PRIMARY
+        """``l0_file_list`` less, with one warning, the frames whose PRIMARY
         ``HCLSN`` no ``reference/thar_lamp_history.csv`` row covering their
         datecode lists (``(none)`` is a blank serial, ``(unknown)`` admits any).
         Dates after the history ends are not checked; a frame whose header
-        cannot be read is kept for ``_load_frame`` to reject."""
+        cannot be read is kept for ``_load_frame`` to reject.
+
+        Raises
+        ------
+        ValueError
+            If a non-empty ``l0_file_list`` loses every frame.
+        """
         history = pd.read_csv(
             f"{REPO_ROOT}/reference/thar_lamp_history.csv",
             dtype=str,
             keep_default_na=False,
         )
         last = history["LAST_DATECODE"].max()
-        kept, unchecked = [], 0
+        kept, dropped, unchecked = [], [], 0
         for fn in l0_file_list:
             datecode = get_datecode(fn)
             if datecode > last:
@@ -214,13 +220,14 @@ class WLS(BaseMasterModule):
             if serial in expected or "(unknown)" in expected:
                 kept.append(fn)
             else:
-                logger.warning(
-                    "dropping %s: HCLSN=%r, expected %s on %s",
-                    os.path.basename(fn),
-                    serial,
-                    sorted(expected),
-                    datecode,
-                )
+                dropped.append(f"{os.path.basename(fn)} ({serial!r})")
+        if dropped:
+            logger.warning(
+                "dropping %d ThAr frame(s) whose HCLSN the lamp history does not "
+                "list: %s",
+                len(dropped),
+                ", ".join(dropped),
+            )
         if unchecked:
             logger.warning(
                 "skipping HCLSN check for %d frame(s) dated after %s, "
@@ -241,13 +248,12 @@ class WLS(BaseMasterModule):
     ):
         """
         Run each frame of ``l0_file_list`` through the L0->L2 pipeline, with the
-        rough WLS of its era (``reference/rough_wls``, chosen like the order
-        trace) as its WAVE and DiagL2/QCL2 run on it, returning the
-        extracted KPF2 objects (also cached on ``self._l2_obj_cache``, reset at
-        entry). With ``write_stack``, each frame's L2 is written as
-        ``{obs_id}_thar_L2.fits`` as soon as it is extracted, to the ThAr
-        ``cal_stack`` directory named by the first frame to reach L2
-        (``self._stack_dir``, else None). Every frame is
+        rough WLS of its era (``reference/rough_wls``) as its WAVE and
+        DiagL2/QCL2 run on it, returning the extracted KPF2 objects (also
+        cached on ``self._l2_obj_cache``, reset at entry). With
+        ``write_stack``, each frame's L2 is written as ``{obs_id}_thar_L2.fits``
+        as soon as it is extracted, to the ThAr ``cal_stack`` directory of the
+        first frame to reach L2 (``self._stack_dir``). Every frame is
         attempted; afterwards, raises if frame failures exceed
         ``max_fail_fraction`` or ``max_fail_number``, or fewer than
         ``min_stack_size`` frames reached L2.
@@ -468,7 +474,7 @@ class WLS(BaseMasterModule):
 
             n_total = sum(len(d["WAVE"]) for d in fiber_lines)
             n_fit = sum(int(np.sum(d["FINITE"])) for d in fiber_lines)
-            logger.info("%s %s: %d/%d lines fit", chip, fiber, n_fit, n_total)
+            logger.debug("%s %s: %d/%d lines fit", chip, fiber, n_fit, n_total)
             if n_fit == 0:
                 logger.warning(
                     "%s %s: no lines fit (all windows non-finite)", chip, fiber
@@ -506,7 +512,9 @@ class WLS(BaseMasterModule):
         if poly_degree_f is None:
             poly_degree_f = self.poly_degree_f
 
-        good = np.abs(lines["FIT_MEAN"] - lines["PIX_GUESS"]) <= window
+        good = lines["CONVERGED"] & (
+            np.abs(lines["FIT_MEAN"] - lines["PIX_GUESS"]) <= window
+        )
         wav = lines["WAVE"][good]
         pix = lines["FIT_MEAN"][good]
         order = lines["ECHELLE_ORDER"][good]
@@ -768,6 +776,13 @@ class WLS(BaseMasterModule):
             every chip in self.chips, INPUT_FILES recording the stacked
             L0 files, and a 'master_wls' receipt entry.
 
+        Raises
+        ------
+        ValueError
+            If no frame has a lamp serial the history lists, load failures
+            exceed the limits, fewer than ``self.min_stack_size`` frames reach
+            L2, or a per-frame WLS fit fails.
+
         Notes
         -----
         Resets self._l2_obj_cache before processing so repeat calls do not
@@ -776,9 +791,7 @@ class WLS(BaseMasterModule):
         Every frame that reaches L2 is line-fit and contributes to the master;
         none is rejected. Each per-frame L2 is written right after extraction,
         and the diagnostics HDF5 after line fitting even if a per-frame WLS fit
-        raises, so both persist if the master is not built. Raises ValueError if
-        load failures exceed the limits, fewer than ``self.min_stack_size``
-        frames reach L2, or a per-frame WLS fit fails.
+        raises, so both persist if the master is not built.
         """
         if l0_file_list is None:
             l0_file_list = self.l0_file_list

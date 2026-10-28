@@ -87,8 +87,7 @@ def _mini_db(rows, *, exptime=None, junk=()):
     """Assemble a synthetic mini database from row dicts.
 
     Adds the derived columns build_calibration_stacks needs: NATIVE_OBJECT, EXPTIME
-    (default 0 s for Bias, 1200 s for Dark, and the 20240405 nominal 30 s for
-    Flat and 10 s for ThAr_daily, else 60 s), the
+    (defaults nominal per object; Flat/ThAr as of 20240405), the
     UTC_TIME/HST_TIME timestamps (parsed from each FILENAME), and ISJUNK
     (FILENAMEs in `junk` flagged True).
     """
@@ -1240,9 +1239,8 @@ class TestJunkExclusion:
         assert set(fn for cluster in lists for fn in cluster) == set(_JUNK_BIAS) - {
             bad_fn
         }
-        assert (
-            f"excluding {cal_type} {os.path.basename(bad_fn)}: EXPTIME" in caplog.text
-        )
+        assert f"excluding 1 {cal_type} frame(s) by EXPTIME" in caplog.text
+        assert f"{os.path.basename(bad_fn)} ({bad})" in caplog.text
 
     @pytest.mark.parametrize(
         "cal_type, obj, datecode, exptime",

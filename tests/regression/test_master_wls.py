@@ -74,15 +74,10 @@ def cached_rough_wls():
 def _memoize_rough_wls(cached_rough_wls, monkeypatch):
     """Serve every frame in this file ROUGH_WLS_FILE's grid, built once above.
 
-    The test frames carry no headers, so the per-frame era selection returns
-    ROUGH_WLS_FILE, and loading it -- measured at 0.15 s a call, in a file that
-    processes roughly sixty stacks -- hands each instance a fresh dict wrapping
-    the shared arrays; the tests that override a channel rebind the key rather
-    than writing through it.
-
-    Any other path still reaches the real loader, so the missing-file path is
-    unaffected, and ``test_cached_grid_matches_the_real_loader`` drives the real
-    loader once per run to keep this cache honest.
+    A real load costs 0.15 s and this file processes ~60 stacks. Each instance
+    gets a fresh dict over the shared arrays; tests overriding a channel rebind
+    the key rather than writing through it. Other paths reach the real loader;
+    ``test_cached_grid_matches_the_real_loader`` keeps this cache honest.
     """
 
     def _cached(self, rough_wls_file=None):
@@ -416,7 +411,7 @@ class TestValidateLampSerialNumbers:
         good = _thar_frame(tmp_path, "20221213", "L82979", seconds=2000)
         with caplog.at_level(logging.WARNING):
             assert WLS._validate_lamp_serial_numbers([fn, good]) == [good]
-        assert "dropping KP.20221213.01000.00.fits: HCLSN='G858A'" in caplog.text
+        assert "KP.20221213.01000.00.fits ('G858A')" in caplog.text
 
     def test_date_after_history_skips_check(self, tmp_path, caplog):
         fn = _thar_frame(tmp_path, "29991231", "X")
@@ -928,6 +923,7 @@ class TestCalculateWlsCoeffs:
             "WAVE": np.asarray(wav, dtype=float),
             "FIT_MEAN": np.asarray(pix, dtype=float),
             "PIX_GUESS": np.round(pix).astype(int),
+            "CONVERGED": np.ones(len(pix), dtype=bool),
             "ECHELLE_ORDER": np.asarray(ord_, dtype=int),
             "FIBER": np.asarray(fib),
         }
@@ -949,6 +945,7 @@ class TestCalculateWlsCoeffs:
             ),
             "FIT_MEAN": np.array([float(c) for _ in orders for c in cols]),
             "PIX_GUESS": np.array([c for _ in orders for c in cols]),
+            "CONVERGED": np.ones(len(orders) * len(cols), dtype=bool),
             "ECHELLE_ORDER": np.array([o for o in orders for _ in cols]),
             "FIBER": np.array(["SCI1"] * (len(orders) * len(cols))),
         }
@@ -983,15 +980,17 @@ class TestCalculateWlsCoeffs:
         wave_fit = wls._evaluate_wls_coeffs(coeffs_fit, orders, nfiber=1)
         np.testing.assert_allclose(wave_fit, wave_true, rtol=1e-9)
 
-    def test_centroid_cut_excludes_off_window_and_unfit_lines(self):
-        # A line fit > window px from its guess and an unfit (NaN) line carry
-        # wrong wavelengths; both must be excluded, leaving the exact solution.
+    def test_excludes_off_window_unfit_and_unconverged_lines(self):
+        # A line fit > window px from its guess, an unfit (NaN) line and an
+        # in-window line whose fit did not converge carry wrong wavelengths; all
+        # must be excluded, leaving the exact solution.
         wls = WLS(FILE_LIST)
         orders, wave_true, lines = self._roundtrip(wls)
-        lines = {k: np.append(v, v[:2]) for k, v in lines.items()}
-        lines["WAVE"][-2:] = 9000.0
-        lines["FIT_MEAN"][-2] = lines["PIX_GUESS"][-2] + 6.0
-        lines["FIT_MEAN"][-1] = np.nan
+        lines = {k: np.append(v, v[:3]) for k, v in lines.items()}
+        lines["WAVE"][-3:] = 9000.0
+        lines["FIT_MEAN"][-3] = lines["PIX_GUESS"][-3] + 6.0
+        lines["FIT_MEAN"][-2] = np.nan
+        lines["CONVERGED"][-1] = False
 
         coeffs_fit = wls._calculate_wls_coeffs(lines, orders, window=5)
         wave_fit = wls._evaluate_wls_coeffs(coeffs_fit, orders, nfiber=1)
