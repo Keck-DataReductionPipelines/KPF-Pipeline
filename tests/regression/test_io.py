@@ -1247,10 +1247,9 @@ class TestJunkExclusion:
     @pytest.mark.parametrize(
         "cal_type, obj, datecode, exptime",
         [
-            # No row of its lamp history covers the date, so no exposure is
-            # nominal.
-            ("flat", "Flat", "20260501", 50.0),
-            ("thar", "ThAr_daily", "20260501", 20.0),
+            # The date precedes its lamp history, so no exposure is nominal.
+            ("flat", "Flat", "20221001", 0.2),
+            ("thar", "ThAr_daily", "20221001", 5.0),
         ],
     )
     def test_date_without_nominal_exptime_excluded(
@@ -1262,6 +1261,17 @@ class TestJunkExclusion:
         db = _mini_db(_rows(files, obj), exptime=exptime)
         with pytest.raises(ValueError, match="2 out-of-range EXPTIME"):
             _cluster(cal_type, db, min_stack_size=1)
+
+    @pytest.mark.parametrize(
+        "cal_type, obj", [("flat", "Flat"), ("thar", "ThAr_daily")]
+    )
+    def test_date_after_history_skips_exptime_check(self, caplog, cal_type, obj):
+        files = [f"/data/L0/29991231/KP.29991231.{s:05d}.00.fits" for s in (1000, 1100)]
+        db = _mini_db(_rows(files, obj), exptime=999.0)
+        with caplog.at_level(logging.WARNING):
+            lists = _cluster(cal_type, db, min_stack_size=1)
+        assert set(fn for cluster in lists for fn in cluster) == set(files)
+        assert f"skipping EXPTIME check for 2 {cal_type} frame(s)" in caplog.text
 
     def test_all_nan_native_object_keeps_frames(self):
         # An all-NaN NATIVE_OBJECT column (seen on Nov 2022 nights) is float dtype.

@@ -547,8 +547,9 @@ class FileHandler:
     def _validate_exposure_time(cal_type, cal_df):
         """Mask of the ``cal_df`` frames whose requested EXPTIME suits
         ``cal_type``; a flat or ThAr frame needs the nominal value for its
-        datecode, so a date no history row covers admits none. The rest are
-        logged."""
+        datecode, so a date no history row covers admits none, except that a
+        date after the history ends skips the check with a warning. The rest
+        are logged."""
         exptime = pd.to_numeric(cal_df["EXPTIME"], errors="coerce")
         if cal_type == "bias":
             valid = exptime <= 0.1
@@ -565,7 +566,17 @@ class FileHandler:
                 ["FIRST_DATECODE", "LAST_DATECODE", "EXPTIME"]
             ].values:
                 nominal[(datecode >= first) & (datecode <= last)] = t
-            valid = exptime == nominal
+            unchecked = datecode > history["LAST_DATECODE"].max()
+            if unchecked.any():
+                logger.warning(
+                    "skipping EXPTIME check for %d %s frame(s) dated after %s, "
+                    "the end of reference/%s_lamp_history.csv",
+                    unchecked.sum(),
+                    cal_type,
+                    history["LAST_DATECODE"].max(),
+                    cal_type,
+                )
+            valid = (exptime == nominal) | unchecked
         for fn, t in cal_df.loc[~valid, ["FILENAME", "EXPTIME"]].values:
             logger.info(
                 "excluding %s %s: EXPTIME=%s", cal_type, os.path.basename(fn), t
