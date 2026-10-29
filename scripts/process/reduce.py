@@ -39,12 +39,15 @@ from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.io import kpf_directory, kpf_filepath, load_junk_obs_ids
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
-from recipes.kpf_drp_masters import STAGES
+from recipes.kpf_drp_masters import STAGES as MASTERS_STAGES
+from recipes.kpf_drp_science import STAGES as SCIENCE_STAGES
 from scripts._argparse import (
     data_dirs_parser,
     logging_parser,
     recipe_and_config_parser,
     resolve_dir_shortcuts,
+    stages_override,
+    stages_parser,
 )
 from scripts.process import (
     DEFAULT_MASTERS_CONFIG,
@@ -69,6 +72,7 @@ def main(argv=None):
             recipe_and_config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
+            stages_parser(MASTERS_STAGES + SCIENCE_STAGES),
         ],
     )
     shortcut = parser.add_mutually_exclusive_group()
@@ -99,13 +103,6 @@ def main(argv=None):
         default=None,
         help="obs_id, e.g. KP.20240405.40113.57 (science only; exclusive with -d)",
     )
-    parser.add_argument(
-        "--stages",
-        nargs="+",
-        choices=STAGES,
-        default=None,
-        help="masters stages to run (default: all); the batch runs one at a time",
-    )
     args = resolve_dir_shortcuts(parser.parse_args(argv))
 
     if args.shortcut:
@@ -125,8 +122,14 @@ def main(argv=None):
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
     if args.recipe == DEFAULT_SCIENCE_RECIPE and args.datecode:
         parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
-    if args.recipe == DEFAULT_SCIENCE_RECIPE and args.stages:
-        parser.error("--stages applies to the masters recipe only")
+    # Science reduces one obs_id (-o), masters one night (-d).
+    stages = SCIENCE_STAGES if args.obs_id else MASTERS_STAGES
+    unknown = [s for s in args.stages or () if s not in stages]
+    if unknown:
+        parser.error(
+            f"--stages {' '.join(unknown)} not in this recipe's stages: "
+            f"{', '.join(stages)}"
+        )
 
     overrides = {}
     if args.kpf_data_input or args.kpf_masters_output or args.kpf_science_output:
@@ -143,6 +146,7 @@ def main(argv=None):
             overrides["LOGGER"]["log_dir"] = args.log_dir
         if args.log_level:
             overrides["LOGGER"]["log_level"] = args.log_level
+    overrides |= stages_override(args, stages)
 
     config = ConfigHandler(args.config, overrides=overrides or None)
 
@@ -259,7 +263,7 @@ def clear_stale_outputs(config, args):
     Science (``-o obs_id``): the three per-obs_id paths under
     ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): the master products in the
     night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded) of
-    the earliest stage being run (``--stages``, default all) and every stage after
+    the earliest stage enabled in config [STAGES] and every stage after
     it, since each is built from the ones before; plus, with the thar stage, the
     whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the diagnostics
     HDF5), so a rebuilt thar master can never co-exist with a prior run's frame
@@ -281,8 +285,9 @@ def clear_stale_outputs(config, args):
         masters_dir = kpf_directory(
             kind="masters", data_root=data_root, datecode=args.datecode
         )
-        first = min(STAGES.index(stage) for stage in args.stages or STAGES)
-        stages = STAGES[first:]
+        switches = config.get_params(["STAGES"])
+        enabled = [s for s in MASTERS_STAGES if switches[s]]
+        stages = MASTERS_STAGES[MASTERS_STAGES.index(enabled[0]) :] if enabled else ()
         for stage in stages:
             for pattern in _MASTER_OUTPUT_GLOBS:
                 paths += glob.glob(

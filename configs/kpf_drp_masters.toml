@@ -12,6 +12,13 @@ console = true                          # mirror records to stderr
 chips = ["GREEN", "RED"]
 fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
 
+[STAGES]
+bias = true
+dark = true
+flat = true
+order_trace = true
+thar = true
+
 [BIAS]
 min_stack_size = 5      # min frames extracted to L1, else the master is withheld
 max_stack_size = 20

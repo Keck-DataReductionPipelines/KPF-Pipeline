@@ -20,8 +20,9 @@ from recipes._logging import masters_run_summary
 # would not identify this module in the log.
 logger = logging.getLogger("kpfpipe.recipe.masters")
 
-# Recipe stages in run order; --stages selects a subset (the batch runs one stage
-# across every night before the next, so cross-night masters exist when needed).
+# Recipe stages in run order. Config [STAGES] switches each on or off, and --stages
+# overrides it (the batch runs one stage across every night before the next, so
+# cross-night masters exist when needed).
 STAGES = ("bias", "dark", "flat", "order_trace", "thar")
 
 
@@ -35,7 +36,8 @@ def main(config, args):
         )
 
     datecode = args.datecode
-    stages = args.stages or STAGES
+    switches = config.get_params(["STAGES"])
+    stages = [s for s in STAGES if switches[s]]
     logger.info("building masters for %s (stages: %s)", datecode, ", ".join(stages))
 
     data_dirs = config.get_params(["DATA_DIRS"])

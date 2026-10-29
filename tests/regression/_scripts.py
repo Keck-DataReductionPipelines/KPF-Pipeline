@@ -60,10 +60,14 @@ def run_script(script, *argv, timeout=CHILD_TIMEOUT):
 class _FakeConfig:
     """Stand-in for ConfigHandler in the exit-code tests (no real file read)."""
 
-    def __init__(self, path):
-        pass
+    def __init__(self, path, overrides=None):
+        # Every masters stage on, as in the shipped config, unless overridden.
+        stages = dict.fromkeys(("bias", "dark", "flat", "order_trace", "thar"), True)
+        self.stages = (overrides or {}).get("STAGES", stages)
 
     def get_params(self, keys):
+        if keys == ["STAGES"]:
+            return self.stages
         return {"KPF_DATA_INPUT": "/in", "log_dir": "/l"}
 
 

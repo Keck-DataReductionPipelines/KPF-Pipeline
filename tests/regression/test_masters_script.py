@@ -360,6 +360,30 @@ class TestMainExitCode:
             for _, argv in tasks:
                 assert argv[-2:] == ["--stages", stage]
 
+    def test_stages_flag_runs_only_those_stages_in_order(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        m.main(["--dates", "20240405", "--stages", "flat", "bias"])
+        assert [call["args"][1][0][1][-1] for call in calls] == ["bias", "flat"]
+
+    def test_stage_switched_off_in_config_is_skipped(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+
+        class _NoDarkConfig(_FakeConfig):
+            def __init__(self, path, overrides=None):
+                super().__init__(path, overrides)
+                self.stages = {**self.stages, "dark": False}
+
+        monkeypatch.setattr(m, "ConfigHandler", _NoDarkConfig)
+        m.main(["--dates", "20240405"])
+        assert [call["args"][1][0][1][-1] for call in calls] == [
+            "bias",
+            "flat",
+            "order_trace",
+            "thar",
+        ]
+
     def test_a_failure_in_any_stage_fails_the_batch(self, m, monkeypatch):
         self._patch(m, monkeypatch, failed=[])
         results = iter([set(), {"20240405"}] + [set()] * (len(m.STAGES) - 2))

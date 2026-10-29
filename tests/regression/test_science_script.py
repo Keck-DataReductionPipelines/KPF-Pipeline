@@ -305,6 +305,20 @@ class TestMainExitCode:
         assert "--kpf_science_output" in argv
         assert argv[argv.index("--kpf_science_output") + 1] == "/out"
 
+    def test_stages_reach_every_child(self, s, monkeypatch):
+        calls = []
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        s.main(["--obs_ids", _OID1, "--stages", "astro_query", "image_assembly"])
+        for _, argv in calls[0][0][1]:
+            assert argv[-3:] == ["--stages", "astro_query", "image_assembly"]
+
+    def test_no_stages_forwarded_by_default(self, s, monkeypatch):
+        calls = []
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        s.main(["--obs_ids", _OID1])
+        _, argv = calls[0][0][1][0]
+        assert "--stages" not in argv
+
     def test_forwards_dir_and_log_overrides_to_each_child(self, s, monkeypatch):
         # The sibling of masters' forwarding test: every override the orchestrator
         # resolved must reach each fanned-out reduce, or a child silently falls

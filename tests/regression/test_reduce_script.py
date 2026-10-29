@@ -228,11 +228,51 @@ class TestGuards:
         assert exc.value.code == 2
         assert "science recipe takes -o/--obs_id" in capsys.readouterr().err
 
-    def test_science_rejects_stages(self, capsys):
+    def test_science_stages_override_config(self, monkeypatch):
+        seen = {}
+
+        def _capture(path, overrides=None):
+            seen.update(overrides or {})
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _capture)
+        with pytest.raises(SystemExit):
+            red.main(["--science", "-o", _OID, "--stages", "image_assembly"])
+        assert seen["STAGES"] == {
+            st: st == "image_assembly" for st in red.SCIENCE_STAGES
+        }
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--science", "-o", _OID, "--stages", "bias"],
+            ["--masters", "-d", "20240405", "--stages", "image_assembly"],
+        ],
+    )
+    def test_rejects_the_other_recipes_stages(self, argv, capsys):
         with pytest.raises(SystemExit) as exc:
-            red.main(["--science", "-o", _OID, "--stages", "bias"])
+            red.main(argv)
         assert exc.value.code == 2
-        assert "--stages applies to the masters recipe only" in capsys.readouterr().err
+        assert "not in this recipe's stages" in capsys.readouterr().err
+
+    def test_stages_override_config(self, monkeypatch):
+        # --stages switches on exactly the named stages in the config's [STAGES].
+        seen = {}
+
+        def _capture(path, overrides=None):
+            seen.update(overrides or {})
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _capture)
+        with pytest.raises(SystemExit):
+            red.main(["--masters", "-d", "20240405", "--stages", "flat", "dark"])
+        assert seen["STAGES"] == {
+            "bias": False,
+            "dark": True,
+            "flat": True,
+            "order_trace": False,
+            "thar": False,
+        }
 
     def test_unknown_stage_is_rejected(self, capsys):
         with pytest.raises(SystemExit) as exc:
@@ -338,18 +378,21 @@ class TestRecipeLoading:
 
 
 class _Config:
-    """Minimal ConfigHandler stub yielding the DATA_DIRS clear_stale_outputs reads."""
+    """Minimal ConfigHandler stub yielding the DATA_DIRS and [STAGES] that
+    clear_stale_outputs reads; `stages` (default all) are the ones switched on."""
 
-    def __init__(self, data_dirs):
+    def __init__(self, data_dirs, stages=None):
         self._data_dirs = data_dirs
+        self._stages = {
+            st: st in (stages or red.MASTERS_STAGES) for st in red.MASTERS_STAGES
+        }
 
     def get_params(self, keys):
-        assert keys == ["DATA_DIRS"]
-        return self._data_dirs
+        return self._stages if keys == ["STAGES"] else self._data_dirs
 
 
-def _args(obs_id=None, datecode=None, stages=None):
-    return argparse.Namespace(obs_id=obs_id, datecode=datecode, stages=stages)
+def _args(obs_id=None, datecode=None):
+    return argparse.Namespace(obs_id=obs_id, datecode=datecode)
 
 
 class TestClearStaleOutputs:
@@ -458,8 +501,8 @@ class TestClearStaleOutputs:
             open(os.path.join(night, name), "w").close()
 
         red.clear_stale_outputs(
-            _Config({"KPF_MASTERS_OUTPUT": masters_root}),
-            _args(datecode="20240405", stages=stages),
+            _Config({"KPF_MASTERS_OUTPUT": masters_root}, stages=stages),
+            _args(datecode="20240405"),
         )
 
         assert sorted(os.listdir(night)) == sorted(products[st] for st in kept)

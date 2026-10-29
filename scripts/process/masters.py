@@ -15,7 +15,8 @@ The range form enumerates the datecode dirs present under ``{KPF_DATA_INPUT}/L0`
 within [START, END].
 
 Builds run stage by stage: every night's bias, then every night's dark, and so on
-through the recipe's ``STAGES`` (``--stages``), each stage a bounded process pool.
+through the stages enabled in config [STAGES] (``--stages`` overrides), each stage a
+bounded process pool.
 A night's masters are associated from nearby nights' (``masters_search_window_days``),
 so each stage starts only after every night has finished the previous one -- the
 masters chosen are then those a chronological one-night-at-a-time run would choose,
@@ -50,6 +51,8 @@ from scripts._argparse import (
     resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    stages_override,
+    stages_parser,
 )
 from scripts._dispatch import (
     _MASTERS_JOBS,
@@ -97,6 +100,7 @@ def parse_args(argv=None):
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
             dates_parser("builds every L0 night in it"),
+            stages_parser(STAGES),
         ],
     )
     args = resolve_dates(ap, ap.parse_args(argv))
@@ -142,7 +146,10 @@ def main(argv=None):
 
     # Read the effective config (the masters default unless -c overrides) to resolve
     # the L0 input root and log dir; subprocesses get recipe/config via -r/-c.
-    config = ConfigHandler(args.config or DEFAULT_MASTERS_CONFIG)
+    config = ConfigHandler(
+        args.config or DEFAULT_MASTERS_CONFIG,
+        overrides=stages_override(args, STAGES) or None,
+    )
     logger_params = config.get_params(["LOGGER"])
     data_input = (
         args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
@@ -194,7 +201,10 @@ def main(argv=None):
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
     failed = set()
+    switches = config.get_params(["STAGES"])
     for stage in STAGES:
+        if not switches[stage]:
+            continue
         logger.info("stage %s: all %d night(s)", stage, len(datecodes))
         tasks = [
             _cli_task(

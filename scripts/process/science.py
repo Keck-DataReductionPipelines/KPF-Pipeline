@@ -16,7 +16,8 @@ nights the frames span are warmed up front by a parallel per-datecode pre-scan
 (``--cache``, ``rw`` by default; ``r`` skips the pre-scan and leaves each reduce to
 read-only); the first frame then runs alone as a canary to warm the *other* shared
 caches, then the rest fan out (paced apart, since the per-frame L0 pointing QC
-queries SIMBAD/Gaia). The run is fail-soft (a frame that fails to reduce is
+queries SIMBAD/Gaia). ``--stages`` is forwarded to every frame, overriding the
+config's [STAGES]. The run is fail-soft (a frame that fails to reduce is
 reported and
 the others continue) but exits nonzero if any frame failed.
 """
@@ -31,6 +32,7 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler, read_token_file
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
+from recipes.kpf_drp_science import STAGES
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
@@ -39,6 +41,7 @@ from scripts._argparse import (
     recipe_and_config_parser,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    stages_parser,
 )
 from scripts._dispatch import (
     _default_science_jobs,
@@ -75,6 +78,7 @@ def parse_args(argv=None):
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
+            stages_parser(STAGES),
         ],
     )
     ap.add_argument(
@@ -170,6 +174,8 @@ def main(argv=None):
     ):
         if value:
             forward += [flag, value]
+    if args.stages:
+        forward += ["--stages", *args.stages]
 
     obs_ids = args.obs_ids
 

@@ -191,7 +191,7 @@ def _wire_recipe(tmp_path, monkeypatch, stacks, failing=()):
             }
         },
     )
-    args = argparse.Namespace(datecode="20240405", obs_id=None, stages=None)
+    args = argparse.Namespace(datecode="20240405", obs_id=None)
     return recipe, config, args, record
 
 
@@ -353,7 +353,7 @@ class TestMastersRecipeMasterFailure:
 
 
 class TestMastersRecipeStageSelection:
-    """``args.stages`` runs a subset, as the batch does one stage at a time."""
+    """Config [STAGES] runs a subset, as the batch does one stage at a time."""
 
     @staticmethod
     def _wired(tmp_path, monkeypatch, stages):
@@ -362,7 +362,7 @@ class TestMastersRecipeStageSelection:
             monkeypatch,
             {cal_type: [files] for cal_type, files in STACK_FILES.items()},
         )
-        args.stages = stages
+        config.config["STAGES"] = {st: st in stages for st in recipe.STAGES}
         return recipe, config, args, record
 
     def test_runs_only_the_selected_stage(self, tmp_path, monkeypatch):
@@ -409,14 +409,14 @@ class TestMastersRecipeErrors:
 
     def test_nonexistent_l0_dir_raises(self, tmp_path):
         config = self._make_config(tmp_path, tmp_path)
-        args = argparse.Namespace(datecode="20240405", obs_id=None, stages=None)
+        args = argparse.Namespace(datecode="20240405", obs_id=None)
         recipe = _load_masters_recipe()
         with pytest.raises(SystemExit, match="L0 data directory not found"):
             recipe.main(config, args)
 
     def test_missing_datecode_raises(self, tmp_path):
         config = self._make_config(tmp_path, tmp_path)
-        args = argparse.Namespace(datecode=None, obs_id=None, stages=None)
+        args = argparse.Namespace(datecode=None, obs_id=None)
         recipe = _load_masters_recipe()
         with pytest.raises(SystemExit, match="--datecode is required"):
             recipe.main(config, args)
@@ -432,7 +432,7 @@ class TestMastersRecipeErrors:
             f'KPF_MASTERS_OUTPUT = "{tmp_path}"\n[BIAS]\nmax_stack_size = 20\n'
         )
         config = ConfigHandler(str(cfg))
-        args = argparse.Namespace(datecode="20240405", obs_id=None, stages=None)
+        args = argparse.Namespace(datecode="20240405", obs_id=None)
         recipe = _load_masters_recipe()
         with pytest.raises(KeyError, match="min_stack_size"):
             recipe.main(config, args)
