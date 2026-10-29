@@ -28,7 +28,7 @@ class Dark(BaseMasterModule):
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: stack_sigma, min_stack_size,
         chips, bias (master-bias calibration override), and the calibration-
-        association keys masters_search_window_days and KPF_MASTERS_OUTPUT.
+        association keys *_search_window_days and KPF_MASTERS_OUTPUT.
     """
 
     _STANDARD_CALIBRATIONS = ("bias",)

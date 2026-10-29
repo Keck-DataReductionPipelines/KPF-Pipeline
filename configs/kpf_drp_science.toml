@@ -34,7 +34,10 @@ overscan_method = "rowmedian"
 readnoise_sigma = 10.0
 
 [MODULE_CALIBRATION_ASSOCIATION]
-masters_search_window_days = [-5, 0]
+bias_search_window_days = [-1, 0]
+dark_search_window_days = [-1, 0]
+flat_search_window_days = [-1, 0]
+wls_search_window_days = [-1, 0]
 
 [MODULE_IMAGE_PROCESSING]
 bias = true

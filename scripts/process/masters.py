@@ -17,7 +17,7 @@ within [START, END].
 Builds run stage by stage: every night's bias, then every night's dark, and so on
 through the stages enabled in config [STAGES] (``--stages`` overrides), each stage a
 bounded process pool.
-A night's masters are associated from nearby nights' (``masters_search_window_days``),
+A night's masters are associated from nearby nights' (``*_search_window_days``),
 so each stage starts only after every night has finished the previous one -- the
 masters chosen are then those a chronological one-night-at-a-time run would choose,
 however wide the window. All of a night's stages append to its one log in the run
