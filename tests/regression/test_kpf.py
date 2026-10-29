@@ -1,5 +1,7 @@
 """Tests for kpfpipe.utils.kpf: KPF timestamp/obs_id conversion utilities."""
 
+from datetime import datetime
+
 import pytest
 
 from kpfpipe.utils.kpf import (
@@ -7,6 +9,7 @@ from kpfpipe.utils.kpf import (
     get_obs_id,
     get_timestamp,
     hst_to_utc,
+    instrument_era,
     is_datecode,
     is_obs_id,
     is_timestamp,
@@ -271,3 +274,21 @@ class TestKpfTimestampToEprvValidation:
     def test_raises_on_invalid_date(self):
         with pytest.raises(ValueError, match="Invalid KPF timestamp"):
             kpf_timestamp_to_eprv_timestamp("20249999.40113.57")
+
+
+class TestInstrumentEra:
+    # Era 2.0 starts 2024-02-23 12:00:01 UT; 1.5 ends at 12:00:00.
+    @pytest.mark.parametrize(
+        "obs_time, era",
+        [
+            (datetime(2024, 2, 23, 12, 0, 0), "1.5"),
+            (datetime(2024, 2, 23, 12, 0, 1), "2.0"),
+            (datetime(2024, 1, 1), "1.0"),
+        ],
+    )
+    def test_era_at_boundary(self, obs_time, era):
+        assert instrument_era(obs_time) == era
+
+    def test_uncovered_time_raises(self):
+        with pytest.raises(ValueError, match="No KPF instrument era covers"):
+            instrument_era(datetime(2999, 1, 1))

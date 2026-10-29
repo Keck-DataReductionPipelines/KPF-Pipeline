@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 from astropy.coordinates import Angle
 
-from kpfpipe import INSTRUMENT_ERAS, __githash__, __version__
+from kpfpipe import __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level1 import KPF1
 from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.header import HeaderParser
-from kpfpipe.utils.kpf import get_datecode, get_obs_id
+from kpfpipe.utils.kpf import get_datecode, get_obs_id, instrument_era
 
 logger = logging.getLogger(__name__)
 
@@ -251,22 +251,12 @@ class KPF0(KPFDataModel):
         """Stamp INSTERA from JD_UTC against ``INSTRUMENT_ERAS``.
 
         Runs after ``_timestamp``, which is what supplies JD_UTC. A frame no era
-        covers has no reference calibrations, so this raises rather than
-        shipping an unattributable product.
+        covers raises (see ``instrument_era``).
         """
         obs_time = pd.to_datetime(
             self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
         )
-        eras = INSTRUMENT_ERAS
-        in_era = eras[
-            (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
-        ]
-        if in_era.empty:
-            raise ValueError(
-                f"No KPF instrument era covers {obs_time}; the eras of "
-                f"reference/instrument_eras.csv do not span it"
-            )
-        self.set_keyword("INSTERA", str(in_era.iloc[0]["INSTERA"]))
+        self.set_keyword("INSTERA", instrument_era(obs_time))
 
     def _observation_settings(self):
         """Stamp every value ``HeaderParser`` derives from the native header.

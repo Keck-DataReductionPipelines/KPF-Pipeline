@@ -1,6 +1,7 @@
 """Unit tests for CalibrationAssociation."""
 
 import logging
+from datetime import datetime
 
 import pandas as pd
 import pytest
@@ -8,6 +9,7 @@ from astropy.io import fits
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.modules.calibration_association import CalibrationAssociation
+from kpfpipe.utils.kpf import instrument_era
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -19,6 +21,7 @@ class MockL1:
         # Headers are fits.Header, mirroring the real KPF data models.
         primary = fits.Header()
         primary["DATE-OBS"] = date_obs
+        primary["INSTERA"] = instrument_era(datetime.fromisoformat(date_obs))
         self.obs_id = "KP.20240405.40113.57"
         self.headers = {
             "PRIMARY": primary,
@@ -160,6 +163,34 @@ class TestFindMasterFiles:
         result = mod._find_master_files("bias", "2024-04-05T11:08:33")
 
         assert result == []
+
+
+class TestEraBoundary:
+    # Era 2.0 starts 2024-02-23 12:00:01 UT; the frame is two hours into it.
+    DATE_OBS = "2024-02-23T14:00:00"
+
+    def test_ignores_a_nearer_master_from_another_era(self, tmp_path):
+        d = tmp_path / "masters"
+        (d / "20240223").mkdir(parents=True)
+        (d / "20240224").mkdir()
+        _stub_master(d / "20240223", "KP.20240223.39600.00", "bias")  # era 1.5
+        _stub_master(d / "20240224", "KP.20240224.36000.00", "bias")  # era 2.0
+
+        mod = _make_module(tmp_path, self.DATE_OBS)
+        result = mod._find_master_files(
+            "bias", self.DATE_OBS, masters_search_window_days=[-5, 1]
+        )
+
+        assert [ts for _, ts in result] == ["20240224.36000.00"]
+
+    def test_raises_when_only_another_eras_master_exists(self, tmp_path):
+        d = tmp_path / "masters" / "20240223"
+        d.mkdir(parents=True)
+        _stub_master(d, "KP.20240223.39600.00", "bias")  # era 1.5
+
+        mod = _make_module(tmp_path, self.DATE_OBS)
+        with pytest.raises(FileNotFoundError, match="in instrument era 2.0"):
+            mod.perform(["bias"])
 
 
 # ---------------------------------------------------------------------------

@@ -17,10 +17,10 @@ from astropy.io import fits
 from astropy.table import Table
 
 from kpfpipe import INSTRUMENT_ERAS
-from kpfpipe.data_models import level0
 from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
+from kpfpipe.utils import kpf
 from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.header import HeaderParser
 
@@ -567,7 +567,7 @@ class TestStandardizedPrimary:
     def test_frame_between_eras_is_rejected(self, monkeypatch):
         # The reference eras are contiguous; dropping 1.5 opens a 1.0 -> 2.0 gap.
         eras = INSTRUMENT_ERAS[INSTRUMENT_ERAS["INSTERA"].astype(str) != "1.5"]
-        monkeypatch.setattr(level0, "INSTRUMENT_ERAS", eras)
+        monkeypatch.setattr(kpf, "INSTRUMENT_ERAS", eras)
         l0 = self._dated_l0(60355.0)  # 2024-02-15
         with pytest.raises(ValueError, match="No KPF instrument era covers"):
             l0.standardize_headers()

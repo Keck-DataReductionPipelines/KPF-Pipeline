@@ -12,7 +12,11 @@ from datetime import datetime, timedelta
 from kpfpipe import DEFAULT_CFG, DETECTOR
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler
-from kpfpipe.utils.kpf import get_timestamp, kpf_timestamp_to_datetime
+from kpfpipe.utils.kpf import (
+    get_timestamp,
+    instrument_era,
+    kpf_timestamp_to_datetime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +100,8 @@ class CalibrationAssociation:
         """
         Return sorted (filepath, kpf_timestamp) tuples for all masters of
         ``cal_type`` within the [days_before, days_after] window around
-        ``date_obs``. Raises ValueError for an unsupported ``cal_type``.
+        ``date_obs`` and in the frame's instrument era (INSTERA). Raises
+        ValueError for an unsupported ``cal_type``.
         """
         if cal_type not in _LEVEL_BY_CAL_TYPE:
             raise ValueError(
@@ -109,6 +114,7 @@ class CalibrationAssociation:
         obs_date = datetime.fromisoformat(date_obs).date()
         days_before, days_after = masters_search_window_days
         level = _LEVEL_BY_CAL_TYPE[cal_type]
+        instera = str(self.l1_obj.headers["PRIMARY"]["INSTERA"])
 
         master_files = []
         for delta in range(days_before, days_after + 1):
@@ -123,6 +129,10 @@ class CalibrationAssociation:
                         filepath,
                         e,
                     )
+                    continue
+                # Calibrations never cross instrument eras. A master's inputs
+                # share one era, so its (first-input) timestamp names it.
+                if instrument_era(kpf_timestamp_to_datetime(ts)) != instera:
                     continue
                 master_files.append((filepath, ts))
 
@@ -237,7 +247,8 @@ class CalibrationAssociation:
             if filepath is None:
                 raise FileNotFoundError(
                     f"No '{cal_type}' master found for {date_obs} "
-                    f"within window {masters_search_window_days} days"
+                    f"within window {masters_search_window_days} days "
+                    f"in instrument era {self.l1_obj.headers['PRIMARY']['INSTERA']}"
                 )
 
             self._calibrations[cal_type] = {"filepath": filepath}

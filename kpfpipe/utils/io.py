@@ -1,6 +1,7 @@
 """KPF data-file discovery: FileHandler class plus path builders."""
 
 import glob
+import itertools
 import logging
 import os
 import re
@@ -17,6 +18,7 @@ from kpfpipe.utils.kpf import (
     get_datecode,
     get_obs_id,
     get_timestamp,
+    instrument_era,
     is_datecode,
     is_obs_id,
     kpf_timestamp_to_datetime,
@@ -663,10 +665,11 @@ class FileHandler:
           datecode), spanning HST midnight. Used for darks, whose sparse sequences
           routinely straddle HST midnight and belong in a single nightly stack.
 
-        Every returned stack has at least ``min_stack_size`` files; undersized
-        stacks are dropped with a warning, and when none meets the threshold (or
-        no frame survives selection) it warns and returns an empty list. A stack
-        with more than ``max_stack_size`` files is truncated to its first
+        A stack spanning an instrument-era boundary is split there, so no stack
+        mixes eras. Every returned stack has at least ``min_stack_size`` files;
+        undersized stacks are dropped with a warning, and when none meets the
+        threshold (or no frame survives selection) it warns and returns an empty
+        list. A stack with more than ``max_stack_size`` files is truncated to its first
         ``max_stack_size`` (earliest by time), with a warning.
 
         Parameters
@@ -743,6 +746,23 @@ class FileHandler:
             cal_df = self._select_frames(cal_type, exclude_junk=exclude_junk)
             files = sorted(cal_df["FILENAME"], key=self._seconds_since_j2000)
             clusters = [files] if files else []
+
+        # Calibrations never cross instrument eras: split a time-sorted stack
+        # wherever the era changes.
+        def era(fn):
+            return instrument_era(kpf_timestamp_to_datetime(get_timestamp(fn)))
+
+        split = []
+        for c in clusters:
+            parts = [list(g) for _, g in itertools.groupby(c, key=era)]
+            if len(parts) > 1:
+                logger.info(
+                    "splitting %s stack at instrument-era boundary into sizes %s",
+                    cal_type,
+                    [len(p) for p in parts],
+                )
+            split += parts
+        clusters = split
 
         sizes = [len(c) for c in clusters]
         for c in clusters:

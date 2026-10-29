@@ -240,6 +240,19 @@ class TestBuildCalibrationStacks:
         assert _cluster("dark", _make_mini_db(), min_stack_size=5) == []
         assert "no cluster with at least" in caplog.text
 
+    def test_splits_stack_at_instrument_era_boundary(self, caplog):
+        # One session straddling the 1.5 -> 2.0 boundary (2024-02-23 12:00 UT).
+        before, after = (
+            [f"/data/L0/20240223/KP.20240223.{t:05d}.00.fits" for t in ts]
+            for ts in ((42900, 43000, 43100), (43300, 43400))
+        )
+        db = _mini_db(_rows(before + after, "Bias"))
+        with caplog.at_level(logging.INFO):
+            assert _cluster("bias", db) == [before, after]
+        assert "instrument-era boundary" in caplog.text
+        # Each part meets min_stack_size on its own.
+        assert _cluster("bias", db, min_stack_size=3) == [before]
+
     def test_drops_small_cluster_keeps_large(self):
         db, _ = _mixed_bias_db()
         lists = _cluster("bias", db, min_stack_size=5)
@@ -1344,7 +1357,7 @@ class TestJunkExclusion:
         "cal_type, obj", [("flat", "Flat"), ("thar", "ThAr_daily")]
     )
     def test_date_after_history_skips_exptime_check(self, caplog, cal_type, obj):
-        files = [f"/data/L0/29991231/KP.29991231.{s:05d}.00.fits" for s in (1000, 1100)]
+        files = [f"/data/L0/20391231/KP.20391231.{s:05d}.00.fits" for s in (1000, 1100)]
         db = _mini_db(_rows(files, obj), exptime=999.0)
         with caplog.at_level(logging.WARNING):
             lists = _cluster(cal_type, db, min_stack_size=1)
