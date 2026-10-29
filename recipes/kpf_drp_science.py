@@ -34,6 +34,22 @@ from recipes._logging import science_run_summary
 # would not identify this module in the log.
 logger = logging.getLogger("kpfpipe.recipe.science")
 
+# Recipe stages in run order. Config [STAGES] switches each on or off, and --stages
+# overrides it. A stage switched off within a level passes the product through; one
+# that creates the next level (image_assembly, spectral_extraction,
+# cross_correlation) ends the run there, since every later stage needs its product.
+STAGES = (
+    "astro_query",
+    "image_assembly",
+    "calibration_association",
+    "image_processing",
+    "spectral_extraction",
+    "wavelength_calibration",
+    "barycentric_correction",
+    "cross_correlation",
+    "radial_velocity",
+)
+
 
 def main(config, args):
     t0 = time.monotonic()
@@ -46,7 +62,9 @@ def main(config, args):
         )
 
     obs_id = args.obs_id
-    logger.info("reducing %s", obs_id)
+    switches = config.get_params(["STAGES"])
+    stages = [s for s in STAGES if switches[s]]
+    logger.info("reducing %s (stages: %s)", obs_id, ", ".join(stages))
 
     data_dirs = config.get_params(["DATA_DIRS"])
     data_root_in = data_dirs["KPF_DATA_INPUT"]
@@ -58,12 +76,13 @@ def main(config, args):
     # Resolves into l0's CATALOG_RECORD, consumed by L0 diagnostics and
     # barycentric correction. SoCal has no catalog object; barycorr uses the
     # solar ephemeris instead.
-    if l0.headers["PRIMARY"].get("ISSOLAR"):
-        logger.info("SoCal frame %s: no catalog astrometry to resolve", obs_id)
-    else:
-        logger.info("resolving catalog astrometry for %s", obs_id)
-        astro_query = AstroQuery(l0, config)
-        l0 = astro_query.perform()
+    if "astro_query" in stages:
+        if l0.headers["PRIMARY"].get("ISSOLAR"):
+            logger.info("SoCal frame %s: no catalog astrometry to resolve", obs_id)
+        else:
+            logger.info("resolving catalog astrometry for %s", obs_id)
+            astro_query = AstroQuery(l0, config)
+            l0 = astro_query.perform()
 
     logger.info("generating L0 quicklook plots for %s", obs_id)
     l0_qlp_dir = kpf_directory(
@@ -77,21 +96,26 @@ def main(config, args):
     logger.info("running L0 checkpoint for %s", obs_id)
     CheckpointL0(l0).run()
 
+    if "image_assembly" not in stages:
+        logger.info("image_assembly off; stopping after L0")
+        return
     logger.info("assembling L0 -> L1 FFI for %s", obs_id)
     image_assembly = ImageAssembly(l0, config)
     l1 = image_assembly.perform()
 
     # Flat frames are part of the desired set, but master-flat construction and
     # flat division aren't implemented yet, so the basic path doesn't need them.
-    logger.info("associating calibration masters for %s", obs_id)
-    calibration_association = CalibrationAssociation(l1, config)
-    l1 = calibration_association.perform(["bias", "dark", "thar"])
+    if "calibration_association" in stages:
+        logger.info("associating calibration masters for %s", obs_id)
+        calibration_association = CalibrationAssociation(l1, config)
+        l1 = calibration_association.perform(["bias", "dark", "thar"])
 
     # Currently performs bias and dark subtraction; flat correction remains
     # disabled in config.
-    logger.info("applying image processing for %s", obs_id)
-    image_processing = ImageProcessing(l1, config)
-    l1 = image_processing.perform()
+    if "image_processing" in stages:
+        logger.info("applying image processing for %s", obs_id)
+        image_processing = ImageProcessing(l1, config)
+        l1 = image_processing.perform()
 
     logger.info("generating L1 quicklook plots for %s", obs_id)
     l1_qlp_dir = kpf_directory(
@@ -102,22 +126,27 @@ def main(config, args):
     logger.info("running L1 checkpoint for %s", obs_id)
     CheckpointL1(l1).run()
 
+    if "spectral_extraction" not in stages:
+        logger.info("spectral_extraction off; stopping after L1")
+        return
     # RV analysis operates on per-order flux rather than the raw image.
     logger.info("extracting 1D spectra for %s", obs_id)
     spectral_extraction = SpectralExtraction(l1, config)
     l2 = spectral_extraction.perform()
 
     # Per-fiber WAVE arrays from the WLS master: calibrated axis [Å, vacuum].
-    logger.info("attaching wavelength solution for %s", obs_id)
-    wavelength_calibration = WavelengthCalibration(l2, config)
-    l2 = wavelength_calibration.perform()
+    if "wavelength_calibration" in stages:
+        logger.info("attaching wavelength solution for %s", obs_id)
+        wavelength_calibration = WavelengthCalibration(l2, config)
+        l2 = wavelength_calibration.perform()
 
     # Apply the per-order barycentric correction so the spectra are placed in
     # the Solar System barycentric frame for long-term RV stability. Writes
     # BJD_TDB, BARYCORR_KMS [km/s], and BARYCORR_Z to the headers.
-    logger.info("applying barycentric correction for %s", obs_id)
-    barycentric_correction = BarycentricCorrection(l2, config)
-    l2 = barycentric_correction.perform()
+    if "barycentric_correction" in stages:
+        logger.info("applying barycentric correction for %s", obs_id)
+        barycentric_correction = BarycentricCorrection(l2, config)
+        l2 = barycentric_correction.perform()
 
     logger.info("generating L2 quicklook plots for %s", obs_id)
     l2_qlp_dir = kpf_directory(
@@ -132,14 +161,18 @@ def main(config, args):
     l2_out_path = kpf_filepath(obs_id, "L2", data_root=data_root_science)
     l2.to_fits(l2_out_path)
 
+    if "cross_correlation" not in stages:
+        logger.info("cross_correlation off; stopping after L2")
+        return
     logger.info("cross-correlating spectra for %s", obs_id)
     cross_correlation = CrossCorrelation(l2, config)
     l4 = cross_correlation.perform()
 
     # Fit the CCFs to radial velocities -- the primary scientific product.
-    logger.info("computing radial velocities for %s", obs_id)
-    radial_velocity = RadialVelocity(l4, config)
-    l4 = radial_velocity.perform()
+    if "radial_velocity" in stages:
+        logger.info("computing radial velocities for %s", obs_id)
+        radial_velocity = RadialVelocity(l4, config)
+        l4 = radial_velocity.perform()
 
     logger.info("generating L4 quicklook plots for %s", obs_id)
     l4_qlp_dir = kpf_directory(

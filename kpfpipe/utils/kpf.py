@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
+from kpfpipe import INSTRUMENT_ERAS
+
 # The obs_id/KOAID shape, as a string so utils/io.py can embed it in the larger
 # filename patterns it builds, and compiled here for matching.
 OBS_ID_REGEX = r"KP\.\d{8}\.\d{5}\.\d{2}"
@@ -157,6 +159,24 @@ def kpf_timestamp_to_eprv_timestamp(timestamp):
     mm = (total_seconds % 3600) // 60
     ss = total_seconds % 60
     return f"{date_str}T{hh:02d}{mm:02d}{ss:02d}"
+
+
+def instrument_era(obs_time):
+    """The INSTERA (str) of the ``INSTRUMENT_ERAS`` era covering ``obs_time``.
+
+    A time no era covers has no reference calibrations, so this raises rather
+    than returning an unattributable era.
+    """
+    eras = INSTRUMENT_ERAS
+    in_era = eras[
+        (eras["UT_start_date"] <= obs_time) & (obs_time <= eras["UT_end_date"])
+    ]
+    if in_era.empty:
+        raise ValueError(
+            f"No KPF instrument era covers {obs_time}; the eras of "
+            f"reference/instrument_eras.csv do not span it"
+        )
+    return str(in_era.iloc[0]["INSTERA"])
 
 
 def select_era_reference(pattern, kind, primary, obs_id, eras):

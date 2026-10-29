@@ -595,6 +595,36 @@ class TestScienceRecipeWiring:
         assert run["summary"] == "l4"
 
 
+class TestScienceRecipeStageSelection:
+    """Config [STAGES]: an in-level stage switched off passes the product through;
+    a level-creating one ends the run after the level before it."""
+
+    @staticmethod
+    def _run(tmp_path, monkeypatch, off):
+        recipe, config, args, record = _wire_science_recipe(tmp_path, monkeypatch)
+        config.config["STAGES"] = {st: st not in off for st in recipe.STAGES}
+        recipe.main(config, args)
+        return [call[0] for call in record["calls"]], record
+
+    def test_in_level_stage_is_passed_through(self, tmp_path, monkeypatch):
+        calls, record = self._run(tmp_path, monkeypatch, {"barycentric_correction"})
+        assert "BarycentricCorrection" not in calls
+        assert [tag for tag, _ in record["written"]] == ["l2", "l4"]
+
+    def test_level_creating_stage_off_stops_after_the_level_before(
+        self, tmp_path, monkeypatch
+    ):
+        calls, record = self._run(tmp_path, monkeypatch, {"spectral_extraction"})
+        assert calls[-1] == "CheckpointL1"
+        assert record["written"] == []
+        assert record["summary"] is None
+
+    def test_cross_correlation_off_writes_l2_only(self, tmp_path, monkeypatch):
+        calls, record = self._run(tmp_path, monkeypatch, {"cross_correlation"})
+        assert calls[-1] == "CheckpointL2"
+        assert [tag for tag, _ in record["written"]] == ["l2"]
+
+
 # ---------------------------------------------------------------------------
 # Science recipe error paths
 # ---------------------------------------------------------------------------

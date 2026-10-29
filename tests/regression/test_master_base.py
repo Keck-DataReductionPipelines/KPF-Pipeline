@@ -358,7 +358,8 @@ class TestProcessFrame:
             FILE_LIST,
             config={
                 "KPF_MASTERS_OUTPUT": "/masters",
-                "masters_search_window_days": [-3, 1],
+                "bias_search_window_days": [-3, 1],
+                "dark_search_window_days": [-2, 0],
             },
         )
         frame_in = MagicMock(name="l1_in")
@@ -372,7 +373,8 @@ class TestProcessFrame:
             dark._process_frame(frame_in)
 
         ca_config = mock_ca.call_args[0][1]
-        assert ca_config["masters_search_window_days"] == [-3, 1]
+        assert ca_config["bias_search_window_days"] == [-3, 1]
+        assert ca_config["dark_search_window_days"] == [-2, 0]
 
     def test_omits_search_window_when_unset(self):
         # With no configured window the key is omitted, so CalibrationAssociation
@@ -389,7 +391,7 @@ class TestProcessFrame:
             dark._process_frame(frame_in)
 
         ca_config = mock_ca.call_args[0][1]
-        assert "masters_search_window_days" not in ca_config
+        assert not [k for k in ca_config if k.endswith("_search_window_days")]
 
 
 class TestLoadMaster:
@@ -1159,9 +1161,10 @@ class TestConfigSectionPlumbing:
         # need this section; a reset to the default window would silently change
         # which master calibrates which frame.
         config = self._config(
-            MODULE_CALIBRATION_ASSOCIATION={"masters_search_window_days": [-3, 1]}
+            MODULE_CALIBRATION_ASSOCIATION={"bias_search_window_days": [-3, 1]}
         )
-        assert cls(FILE_LIST, config)._masters_search_window_days == [-3, 1]
+        windows = cls(FILE_LIST, config)._search_windows
+        assert windows["bias_search_window_days"] == [-3, 1]
 
 
 class TestInputFilesProvenance:

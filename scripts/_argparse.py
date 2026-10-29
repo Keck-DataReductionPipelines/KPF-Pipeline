@@ -1,7 +1,8 @@
 """Shared argparse parent parsers for the ``kpfpipe`` CLI commands.
 
 Common flag groups -- recipe/config selection, data-dir overrides, logging
-overrides, the fan-out pool controls, and the mini-db ``--cache`` mode -- factored
+overrides, stage selection, the fan-out pool controls, and the mini-db ``--cache``
+mode -- factored
 out so the subcommand parsers (``reduce``/``masters``/``science``) compose them via
 ``parents=[...]`` instead of each re-declaring the same flags. Every factory
 returns a fresh ``add_help=False`` parser to slot in as a parent. The
@@ -245,6 +246,31 @@ def cache_parser(default="r"):
         "and write, 'rw' reuse a current cache else write (default: %(default)s)",
     )
     return p
+
+
+def stages_parser(stages):
+    """``--stages``, which overrides the config's [STAGES] switches.
+
+    The caller passes the recipe's stage names (this layer never imports recipes).
+    """
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument(
+        "--stages",
+        nargs="+",
+        choices=stages,
+        default=None,
+        help="run only these stages, overriding config [STAGES] (default: as "
+        "configured)",
+    )
+    return p
+
+
+def stages_override(args, stages):
+    """The config override for ``--stages``: only the named stages switched on, or
+    ``{}`` when the flag is unset."""
+    if not args.stages:
+        return {}
+    return {"STAGES": {stage: stage in args.stages for stage in stages}}
 
 
 def pool_parser(jobs_help):

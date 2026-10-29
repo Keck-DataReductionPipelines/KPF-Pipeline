@@ -23,6 +23,7 @@ Library code only ever calls ``logging.getLogger(__name__)``; with no handlers
 installed (e.g. recipes driven directly by tests) records are simply dropped.
 """
 
+import glob
 import logging
 import os
 import sys
@@ -146,6 +147,9 @@ def setup_logging(
       instances starting the same second) it retries with a numeric suffix
       (``.1``, ``.2``, ...) so concurrent instances never share a file
       (DRP-RUN-12).
+    - Appends instead when the run already holds a log for this recipe and
+      target, so one target keeps one log per run (the masters batch runs each
+      night once per stage, one stage after another).
     - Formats records with UT timestamps (``time.gmtime``).
     - Sets the root logger level, pins chatty third-party loggers to
       WARNING, and calls ``logging.captureWarnings(True)`` so any
@@ -181,7 +185,7 @@ def setup_logging(
     Returns
     -------
     str
-        The absolute path of the created log file.
+        The absolute path of the log file.
 
     Raises
     ------
@@ -199,10 +203,15 @@ def setup_logging(
     if not log_dir or not isinstance(log_dir, str):
         raise ValueError(f"log_dir must be a non-empty string; got {log_dir!r}")
     run_dir = os.path.join(log_dir, run_id or f"run_{_ut_stamp()}")
-    log_path = log_filename(run_dir, recipe_name, target)
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-
-    file_handler = _open_file_handler(log_path)
+    existing = sorted(
+        glob.glob(os.path.join(run_dir, f"kpf_{recipe_name}_{target}_*.log"))
+    )
+    if existing:
+        file_handler = logging.FileHandler(existing[0], mode="a", encoding="utf-8")
+    else:
+        log_path = log_filename(run_dir, recipe_name, target)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        file_handler = _open_file_handler(log_path)
     file_handler.set_name("kpfpipe_file")
     log_path = file_handler.baseFilename
 

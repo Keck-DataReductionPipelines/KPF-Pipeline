@@ -47,7 +47,7 @@ class BaseMasterModule:
         required).
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: stack_sigma, min_stack_size,
-        bias, dark, flat, masters_search_window_days, KPF_MASTERS_OUTPUT.
+        bias, dark, flat, *_search_window_days, KPF_MASTERS_OUTPUT.
     """
 
     # Module defaults; subclasses extend via ``{**BaseMasterModule._DEFAULT_CFG, ...}``.
@@ -119,7 +119,10 @@ class BaseMasterModule:
 
         self._l1_obj_cache = {}
         self._masters_output = params.get("KPF_MASTERS_OUTPUT")
-        self._masters_search_window_days = params.get("masters_search_window_days")
+        # Per-type CalibrationAssociation search windows, forwarded as given.
+        self._search_windows = {
+            k: v for k, v in params.items() if k.endswith("_search_window_days")
+        }
 
         # One cached master (KPFMasterL1) and its path per calibration type.
         # Frames in a stack are taken close in time; caching lets ``_process_frame``
@@ -288,11 +291,10 @@ class BaseMasterModule:
         cal_types = [name for name, value in calibrations.items() if value is True]
         try:
             if cal_types:
-                ca_config = {"KPF_MASTERS_OUTPUT": self._masters_output}
-                if self._masters_search_window_days is not None:
-                    ca_config["masters_search_window_days"] = (
-                        self._masters_search_window_days
-                    )
+                ca_config = {
+                    "KPF_MASTERS_OUTPUT": self._masters_output,
+                    **self._search_windows,
+                }
                 calibration_association = CalibrationAssociation(l1_obj, ca_config)
                 l1_obj = calibration_association.perform(cal_types)
 
@@ -453,7 +455,8 @@ class BaseMasterModule:
 
         if i < 2:
             raise ValueError(
-                f"Stacking requires at least two frames; only {i} of {nframe} loaded"
+                f"Stacking requires at least two frames; only {i} of {nframe} "
+                "loaded and processed"
             )
 
         if i < nframe:

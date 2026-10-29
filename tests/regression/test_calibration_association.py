@@ -1,6 +1,7 @@
 """Unit tests for CalibrationAssociation."""
 
 import logging
+from datetime import datetime
 
 import pandas as pd
 import pytest
@@ -8,6 +9,7 @@ from astropy.io import fits
 
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.modules.calibration_association import CalibrationAssociation
+from kpfpipe.utils.kpf import instrument_era
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -19,6 +21,7 @@ class MockL1:
         # Headers are fits.Header, mirroring the real KPF data models.
         primary = fits.Header()
         primary["DATE-OBS"] = date_obs
+        primary["INSTERA"] = instrument_era(datetime.fromisoformat(date_obs))
         self.obs_id = "KP.20240405.40113.57"
         self.headers = {
             "PRIMARY": primary,
@@ -47,9 +50,11 @@ class MockL1:
             raise KeyError(f"{key!r} is not routed by this mock; extend it")
 
 
-def _make_module(tmp_path, date_obs="2024-04-05T11:08:33"):
+def _make_module(tmp_path, date_obs="2024-04-05T11:08:33", **cfg):
     l1 = MockL1(date_obs)
-    return CalibrationAssociation(l1, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
+    return CalibrationAssociation(
+        l1, config={"KPF_MASTERS_OUTPUT": str(tmp_path), **cfg}
+    )
 
 
 _LEVEL_BY_CAL_TYPE = {
@@ -85,7 +90,7 @@ class TestFindMasterFiles:
         assert len(result) == 1
         assert result[0][1] == "20240405.03637.74"
 
-    def test_searches_previous_day_by_default(self, tmp_path):
+    def test_searches_one_day_back_by_default(self, tmp_path):
         # Default window is [-1, 0] days.
         d = tmp_path / "masters" / "20240404"
         d.mkdir(parents=True)
@@ -108,17 +113,36 @@ class TestFindMasterFiles:
 
         assert result == []
 
-    def test_masters_search_window_days_override_expands_range(self, tmp_path):
-        d = tmp_path / "masters" / "20240403"
+    def test_config_window_expands_range(self, tmp_path):
+        d = tmp_path / "masters" / "20240329"
         d.mkdir(parents=True)
-        _stub_master(d, "KP.20240403.03637.74", "bias")
+        _stub_master(d, "KP.20240329.03637.74", "bias")
 
-        mod = _make_module(tmp_path)
-        result = mod._find_master_files(
-            "bias", "2024-04-05T11:08:33", masters_search_window_days=[-2, 0]
-        )
+        mod = _make_module(tmp_path, bias_search_window_days=[-7, 0])
+        result = mod._find_master_files("bias", "2024-04-05T11:08:33")
 
         assert len(result) == 1
+
+    def test_each_cal_type_uses_its_own_window(self, tmp_path):
+        # Three days back: inside dark's [-5, 0], outside bias's default [-1, 0].
+        d = tmp_path / "masters" / "20240402"
+        d.mkdir(parents=True)
+        _stub_master(d, "KP.20240402.03637.74", "bias")
+        _stub_master(d, "KP.20240402.03637.74", "dark")
+
+        mod = _make_module(tmp_path, dark_search_window_days=[-5, 0])
+
+        assert mod._find_master_files("bias", "2024-04-05T11:08:33") == []
+        assert len(mod._find_master_files("dark", "2024-04-05T11:08:33")) == 1
+
+    def test_thar_uses_the_wls_window(self, tmp_path):
+        d = tmp_path / "masters" / "20240402"
+        d.mkdir(parents=True)
+        _stub_master(d, "KP.20240402.03637.74", "thar")
+
+        mod = _make_module(tmp_path, wls_search_window_days=[-5, 0])
+
+        assert len(mod._find_master_files("thar", "2024-04-05T11:08:33")) == 1
 
     def test_returns_empty_when_no_files(self, tmp_path):
         mod = _make_module(tmp_path)
@@ -160,6 +184,32 @@ class TestFindMasterFiles:
         result = mod._find_master_files("bias", "2024-04-05T11:08:33")
 
         assert result == []
+
+
+class TestEraBoundary:
+    # Era 2.0 starts 2024-02-23 12:00:01 UT; the frame is two hours into it.
+    DATE_OBS = "2024-02-23T14:00:00"
+
+    def test_ignores_a_nearer_master_from_another_era(self, tmp_path):
+        d = tmp_path / "masters"
+        (d / "20240223").mkdir(parents=True)
+        (d / "20240224").mkdir()
+        _stub_master(d / "20240223", "KP.20240223.39600.00", "bias")  # era 1.5
+        _stub_master(d / "20240224", "KP.20240224.36000.00", "bias")  # era 2.0
+
+        mod = _make_module(tmp_path, self.DATE_OBS, bias_search_window_days=[-5, 1])
+        result = mod._find_master_files("bias", self.DATE_OBS)
+
+        assert [ts for _, ts in result] == ["20240224.36000.00"]
+
+    def test_raises_when_only_another_eras_master_exists(self, tmp_path):
+        d = tmp_path / "masters" / "20240223"
+        d.mkdir(parents=True)
+        _stub_master(d, "KP.20240223.39600.00", "bias")  # era 1.5
+
+        mod = _make_module(tmp_path, self.DATE_OBS)
+        with pytest.raises(FileNotFoundError, match="in instrument era 2.0"):
+            mod.perform(["bias"])
 
 
 # ---------------------------------------------------------------------------
@@ -353,18 +403,18 @@ class TestPerform:
         with pytest.raises(FileNotFoundError, match="dark"):
             mod.perform(["bias", "dark"])
 
-    def test_masters_search_window_days_override(self, tmp_path):
-        # Master is 2 days before the science frame; only found with wider window.
-        d = tmp_path / "masters" / "20240403"
+    def test_search_window_kwarg_overrides_config(self, tmp_path):
+        # Master is 7 days before the science frame; only found with wider window.
+        d = tmp_path / "masters" / "20240329"
         d.mkdir(parents=True)
-        _stub_master(d, "KP.20240403.03637.74", "bias")
+        _stub_master(d, "KP.20240329.03637.74", "bias")
 
         mod = _make_module(tmp_path)
         with pytest.raises(FileNotFoundError, match="No 'bias' master found"):
-            mod.perform(["bias"])  # default window doesn't reach 2 days back
+            mod.perform(["bias"])  # default window doesn't reach 7 days back
 
         mod2 = _make_module(tmp_path)
-        mod2.perform(["bias"], masters_search_window_days=[-2, 0])
+        mod2.perform(["bias"], bias_search_window_days=[-7, 0])
         entry = mod2.l1_obj.receipt_read_entry("calibration_association")
         assert entry["biasfile"] is not None
 

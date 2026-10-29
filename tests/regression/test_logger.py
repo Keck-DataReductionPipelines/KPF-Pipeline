@@ -96,25 +96,41 @@ class TestSetupLogging:
         assert "too quiet" not in text
         assert "loud enough" in text
 
-    def test_unique_filename_on_collision(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
+    def test_later_setup_for_the_same_target_appends(self, tmp_path):
+        # The masters batch runs each night once per stage under one run id; the
+        # night keeps the stamped log its first stage created.
         first = kpflog.setup_logging(
-            str(tmp_path), "science", "t", _RUN_ID, console=False
+            str(tmp_path), "masters", "20240405", _RUN_ID, console=False
         )
+        logging.getLogger("kpfpipe.x").info("bias stage")
         second = kpflog.setup_logging(
-            str(tmp_path), "science", "t", _RUN_ID, console=False
+            str(tmp_path), "masters", "20240405", _RUN_ID, console=False
         )
-        assert second == f"{first}.1"
+        logging.getLogger("kpfpipe.x").info("dark stage")
+        assert second == first
+        assert re.search(r"kpf_masters_20240405_\d{8}T\d{6}\.log$", first)
+        text = _read(first)
+        assert "bias stage" in text and "dark stage" in text
+
+    def test_unique_filename_on_collision(self, tmp_path):
+        # Two instances creating the same log in the same second never share it.
+        path = str(tmp_path / "kpf_science_t_20260702T140322.log")
+        first = kpflog._open_file_handler(path)
+        second = kpflog._open_file_handler(path)
+        first.close()
+        second.close()
+        assert second.baseFilename == f"{first.baseFilename}.1"
 
     def test_collision_retries_are_exhausted_loudly(self, tmp_path, monkeypatch):
         # The retry loop must terminate: turning it into `while True` would hang
         # a run forever instead of failing it.
-        monkeypatch.setattr(kpflog.time, "gmtime", lambda *a: _UT_FROZEN)
         monkeypatch.setattr(kpflog, "_MAX_COLLISION_RETRIES", 1)
-        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
-        kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
+        path = str(tmp_path / "kpf_science_t_20260702T140322.log")
+        handlers = [kpflog._open_file_handler(path) for _ in range(2)]
+        for handler in handlers:
+            handler.close()
         with pytest.raises(FileExistsError, match="unique log file"):
-            kpflog.setup_logging(str(tmp_path), "science", "t", _RUN_ID, console=False)
+            kpflog._open_file_handler(path)
 
     def test_repeated_setup_no_duplicate_handlers(self, tmp_path):
         root = logging.getLogger()

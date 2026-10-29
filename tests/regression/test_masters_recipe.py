@@ -80,7 +80,7 @@ STACK_FILES = {
 # asserted, not the numbers alone.
 STACK_LIMITS = {
     "bias": ("time_of_day", 5, 20),
-    "dark": ("obs_night", 3, 20),
+    "dark": ("hst_day", 3, 20),
     "flat": ("time_of_day", 5, 20),
     "thar": ("time_of_day", 5, 20),
 }
@@ -93,18 +93,20 @@ def _wire_recipe(tmp_path, monkeypatch, stacks, failing=()):
     """Load the recipe, replace every stage on it, and return it ready to run.
 
     ``stacks`` maps a cal type to the list of stacks ``build_calibration_stacks``
-    returns for it, or to an exception instance to raise instead -- the two
-    outcomes production has (``kpfpipe/utils/io.py`` raises when no cluster meets
-    ``min_stack_size``). A stack whose first file is in ``failing`` raises
-    ``ValueError`` from its make_master call, as a failed stack gate does.
+    returns for it -- empty when the night has none (``kpfpipe/utils/io.py``
+    warns and returns ``[]`` when no cluster meets ``min_stack_size``). A stack
+    whose first file is in ``failing`` raises ``ValueError`` from its make_master
+    call, as a failed stack gate does.
 
     Returns ``(recipe, config, args, record)``. ``record["calls"]`` holds one
     ``(stage, files, output_path, stack_kwargs)`` tuple per stage in call order;
     ``stack_kwargs`` are the keywords the stage's stack source was called with.
     ``record["output_dirs"]`` holds the directory each stage was handed.
+    ``record["on_disk"]`` maps a cal type to the masters ``find_masters`` returns:
+    those written this run, plus any a test seeds as written by an earlier run.
     """
     recipe = _load_masters_recipe()
-    record = {"calls": [], "built": [], "failed": [], "output_dirs": {}}
+    record = {"calls": [], "built": [], "failed": [], "output_dirs": {}, "on_disk": {}}
     stack_kwargs = {}
 
     (tmp_path / "L0" / "20240405").mkdir(parents=True, exist_ok=True)
@@ -118,10 +120,10 @@ def _wire_recipe(tmp_path, monkeypatch, stacks, failing=()):
 
         def build_calibration_stacks(self, cal_type, **kwargs):
             stack_kwargs[cal_type] = kwargs
-            outcome = stacks[cal_type]
-            if isinstance(outcome, Exception):
-                raise outcome
-            return outcome
+            return stacks[cal_type]
+
+        def find_masters(self, cal_type, level, datecode):
+            return sorted(record["on_disk"].get(cal_type, []))
 
     def _stage(name):
         class StubStage:
@@ -142,6 +144,7 @@ def _wire_recipe(tmp_path, monkeypatch, stacks, failing=()):
                     (name, tuple(self._files), self.output_path, stack_kwargs[name])
                 )
                 record["output_dirs"][name] = output_dir
+                record["on_disk"].setdefault(name, []).append(self.output_path)
 
             def make_master_l1(self, output_dir=None):
                 self._record("L1", output_dir)
@@ -172,7 +175,7 @@ def _wire_recipe(tmp_path, monkeypatch, stacks, failing=()):
     monkeypatch.setattr(recipe, "WLS", _stage("thar"))
     monkeypatch.setattr(recipe, "OrderTrace", StubOrderTrace)
 
-    def capture_summary(datecode, built, failed, elapsed):
+    def capture_summary(datecode, stages, built, failed, elapsed):
         record["built"] = built
         record["failed"] = failed
         return "<summary>"
@@ -270,35 +273,33 @@ class TestMastersRecipeStages:
 class TestMastersRecipeStackFailure:
     """A night with nothing to stack for one cal type.
 
-    ``build_calibration_stacks`` raises when no cluster meets ``min_stack_size``
-    (``kpfpipe/utils/io.py``); it never returns an empty list. The recipe only
-    tolerates failures of individual masters, not of the stack builder, so the
-    run aborts mid-way -- after the earlier masters are already on disk. That
-    partial-night behaviour is pinned here so neither a broader ``try/except``
-    nor a ``min_stack_size`` change alters it silently.
+    ``build_calibration_stacks`` returns no stacks (with a warning) when no
+    cluster meets ``min_stack_size`` (``kpfpipe/utils/io.py``). The recipe moves on,
+    so later stages can still use masters from nearby nights, then fails the run
+    naming the empty stage.
     """
 
     @pytest.fixture
     def wired(self, tmp_path, monkeypatch):
         stacks = {cal_type: [files] for cal_type, files in STACK_FILES.items()}
-        stacks["dark"] = ValueError("no dark cluster meets min_stack_size for 20240405")
+        stacks["dark"] = []
         return _wire_recipe(tmp_path, monkeypatch, stacks)
 
-    def test_propagates_the_stack_failure(self, wired):
-        recipe, config, args, _ = wired
-        with pytest.raises(ValueError, match="min_stack_size"):
-            recipe.main(config, args)
-
-    def test_aborts_after_the_stage_that_already_ran(self, wired):
+    def test_runs_the_later_stages_then_fails(self, wired):
         recipe, config, args, record = wired
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError, match=r"no master built for: dark;"):
             recipe.main(config, args)
-        # The bias masters are on disk; flat, order trace and WLS never happen.
-        assert [call[0] for call in record["calls"]] == ["bias"]
+        assert [call[0] for call in record["calls"]] == [
+            "bias",
+            "flat",
+            "order_trace",
+            "thar",
+        ]
 
 
 class TestMastersRecipeMasterFailure:
-    """A failed master is logged and skipped; a step with no master stops the run."""
+    """A failed master is logged and skipped; a step with no master fails the run
+    after the later steps have run."""
 
     @staticmethod
     def _stacks(dark_stacks):
@@ -329,7 +330,9 @@ class TestMastersRecipeMasterFailure:
             "thar",
         ]
 
-    def test_stops_when_every_master_of_a_step_fails(self, tmp_path, monkeypatch):
+    def test_fails_after_the_later_steps_when_every_master_of_a_step_fails(
+        self, tmp_path, monkeypatch
+    ):
         darks = STACK_FILES["dark"]
         recipe, config, args, record = _wire_recipe(
             tmp_path,
@@ -337,11 +340,54 @@ class TestMastersRecipeMasterFailure:
             self._stacks([darks[:1], darks[1:]]),
             failing={darks[0], darks[1]},
         )
-        with pytest.raises(RuntimeError, match="every dark master failed"):
+        with pytest.raises(RuntimeError, match=r"no master built for: dark;"):
             recipe.main(config, args)
-        assert [call[0] for call in record["calls"]] == ["bias"]
-        # The summary is still logged on abort, with both failures in it.
+        assert [call[0] for call in record["calls"]] == [
+            "bias",
+            "flat",
+            "order_trace",
+            "thar",
+        ]
+        # The summary is still logged on failure, with both failures in it.
         assert [entry[1] for entry in record["failed"]] == [darks[0], darks[1]]
+
+
+class TestMastersRecipeStageSelection:
+    """Config [STAGES] runs a subset, as the batch does one stage at a time."""
+
+    @staticmethod
+    def _wired(tmp_path, monkeypatch, stages):
+        recipe, config, args, record = _wire_recipe(
+            tmp_path,
+            monkeypatch,
+            {cal_type: [files] for cal_type, files in STACK_FILES.items()},
+        )
+        config.config["STAGES"] = {st: st in stages for st in recipe.STAGES}
+        return recipe, config, args, record
+
+    def test_runs_only_the_selected_stage(self, tmp_path, monkeypatch):
+        recipe, config, args, record = self._wired(tmp_path, monkeypatch, ["dark"])
+        recipe.main(config, args)
+        assert [call[0] for call in record["calls"]] == ["dark"]
+        assert [entry[0] for entry in record["built"]] == ["dark"]
+
+    def test_traces_a_flat_written_by_an_earlier_run(self, tmp_path, monkeypatch):
+        recipe, config, args, record = self._wired(
+            tmp_path, monkeypatch, ["order_trace"]
+        )
+        flat = str(tmp_path / "KP.20240405.00020.86_master_flat_L1.fits")
+        record["on_disk"]["flat"] = [flat]
+        recipe.main(config, args)
+        assert [call[:2] for call in record["calls"]] == [("order_trace", (flat,))]
+
+    def test_fails_naming_only_selected_stages_that_built_nothing(
+        self, tmp_path, monkeypatch
+    ):
+        recipe, config, args, record = self._wired(
+            tmp_path, monkeypatch, ["order_trace"]
+        )
+        with pytest.raises(RuntimeError, match=r"no master built for: order_trace;"):
+            recipe.main(config, args)
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +444,7 @@ class TestMastersSummary:
     def test_built_masters_listed(self):
         text = masters_run_summary(
             "20240405",
+            ["bias", "thar"],
             [
                 ("bias", "/m/kpf_20240405_bias_L1.fits", 32),
                 ("thar", "/m/kpf_20240405_thar_L2.fits", 12),
@@ -405,7 +452,7 @@ class TestMastersSummary:
             [],
             240.5,
         )
-        assert "masters run summary: 20240405" in text
+        assert "===== masters run summary: 20240405 (bias, thar) =====" in text
         assert "bias   kpf_20240405_bias_L1.fits  (32 frames)" in text
         assert "thar   kpf_20240405_thar_L2.fits  (12 frames)" in text
         assert "elapsed:  240.5 s" in text
@@ -413,12 +460,13 @@ class TestMastersSummary:
         assert text.startswith("\n\n") and text.endswith("\n\n")
 
     def test_no_masters_built(self):
-        text = masters_run_summary("20240405", [], [], 1.0)
+        text = masters_run_summary("20240405", ["dark"], [], [], 1.0)
         assert "(no masters built)" in text
 
     def test_failed_masters_listed_under_sentinel(self):
         text = masters_run_summary(
             "20240405",
+            ["bias", "dark", "thar"],
             [("bias", "/m/kpf_20240405_bias_L1.fits", 32)],
             [
                 ("dark", "/l0/KP.20240405.04184.73.fits", ValueError("too few")),

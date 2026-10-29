@@ -196,8 +196,9 @@ class HeaderParser:
         WMKO uses OBJECT as free-form metadata; the DRP uses it to name what
         was observed. A solar Target frame (native OBJECT ``SoCal`` and TARGNAME
         ``Sun``) is ``SoCal``; any other Target frame's OBJECT is its target
-        identifier (e.g. ``10700``), trusted only when the native OBJECT and
-        TARGNAME agree. A Target frame failing its check (including only one
+        identifier (e.g. ``10700``): the native OBJECT, trusted only when it and
+        TARGNAME agree, or TARGNAME when the native OBJECT is blank (warned).
+        A Target frame failing its check (including only one
         of the two cards naming the Sun) is ``Unknown``. A calibration frame's OBJECT is
         `cal_object`, derived from IMTYPE/OCTAGON alone (e.g. ``ThAr_daily``,
         ``WideFlat``); a native OBJECT that is no ``autocal-*`` label agreeing
@@ -217,6 +218,9 @@ class HeaderParser:
             solar = {obj.lower(), targname.lower()} & {"socal", "sun"}
             if obj and obj == targname and not solar:
                 return obj
+            if not obj and targname and not solar:
+                self._warn(f"OBJECT blank; OBJECT is TARGNAME {targname!r}")
+                return targname
             self._warn(
                 f"OBJECT {obj!r} disagrees with TARGNAME {targname!r}; "
                 "OBJECT is Unknown"

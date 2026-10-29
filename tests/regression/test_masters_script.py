@@ -195,6 +195,10 @@ class TestCliTask:
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", "/c.toml", "-d", "20240405",
         ]  # fmt: skip
 
+    def test_stage_is_appended(self, m):
+        _, argv = m._cli_task("20240405", [], stage="dark")
+        assert argv[-2:] == ["--stages", "dark"]
+
 
 # ---------------------------------------------------------------------------
 # main exit-code contract
@@ -212,6 +216,8 @@ class TestMainExitCode:
         _stub_batch_log(monkeypatch, m)
         monkeypatch.setattr(m, "datecodes_in_range", lambda di, s, e: ["20240405"])
         monkeypatch.setattr(m, "warm_mini_db_caches", lambda *a, **k: (0, 0))
+        # Every night holds L0 FITS unless a test says otherwise.
+        monkeypatch.setattr(m.glob, "glob", lambda pattern: [pattern])
 
         def _fake_run_stage(*a, **k):
             if calls is not None:
@@ -229,6 +235,15 @@ class TestMainExitCode:
         with pytest.raises(SystemExit) as exc:
             m.main(["--dates", "20240405"])
         assert exc.value.code == 1
+
+    def test_empty_night_is_skipped_not_failed(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        monkeypatch.setattr(
+            m.glob, "glob", lambda pattern: [] if "20240406" in pattern else [pattern]
+        )
+        m.main(["--dates", "20240405", "20240406"])  # no SystemExit
+        assert all([t[0] for t in c["args"][1]] == ["20240405"] for c in calls)
 
     def test_fan_out_is_staggered(self, m, monkeypatch):
         # Masters passes its stagger interval to run_stage so the lockstep
@@ -257,7 +272,7 @@ class TestMainExitCode:
             m, "run_stage", lambda *a, **k: order.append("run_stage") or set()
         )
         m.main(["--dates", "20240405"])
-        assert order == ["warm", "run_stage"]
+        assert order == ["warm"] + ["run_stage"] * len(m.STAGES)
         assert warm_args["data_input"] == "/in"  # resolved L0 input root
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["jobs"] == m._default_masters_jobs()
@@ -330,7 +345,52 @@ class TestMainExitCode:
         )
         assert (log_dir, run_id) == ("/logs", parent)
         _, argv = calls[0]["args"][1][0]
-        assert argv[-4:] == ["--log_dir", "/logs", "--run_id", parent]
+        fwd = {argv[i]: argv[i + 1] for i in range(len(argv) - 1)}
+        assert (fwd["--log_dir"], fwd["--run_id"]) == ("/logs", parent)
+
+    def test_runs_every_night_through_one_stage_at_a_time(self, m, monkeypatch):
+        # Each stage is a barrier: every night runs it before any runs the next.
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        m.main(["--dates", "20240405", "20240406"])
+        assert len(calls) == len(m.STAGES)
+        for stage, call in zip(m.STAGES, calls, strict=True):
+            tasks = call["args"][1]
+            assert [tag for tag, _ in tasks] == ["20240405", "20240406"]
+            for _, argv in tasks:
+                assert argv[-2:] == ["--stages", stage]
+
+    def test_stages_flag_runs_only_those_stages_in_order(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+        m.main(["--dates", "20240405", "--stages", "flat", "bias"])
+        assert [call["args"][1][0][1][-1] for call in calls] == ["bias", "flat"]
+
+    def test_stage_switched_off_in_config_is_skipped(self, m, monkeypatch):
+        calls = []
+        self._patch(m, monkeypatch, failed=[], calls=calls)
+
+        class _NoDarkConfig(_FakeConfig):
+            def __init__(self, path, overrides=None):
+                super().__init__(path, overrides)
+                self.stages = {**self.stages, "dark": False}
+
+        monkeypatch.setattr(m, "ConfigHandler", _NoDarkConfig)
+        m.main(["--dates", "20240405"])
+        assert [call["args"][1][0][1][-1] for call in calls] == [
+            "bias",
+            "flat",
+            "order_trace",
+            "thar",
+        ]
+
+    def test_a_failure_in_any_stage_fails_the_batch(self, m, monkeypatch):
+        self._patch(m, monkeypatch, failed=[])
+        results = iter([set(), {"20240405"}] + [set()] * (len(m.STAGES) - 2))
+        monkeypatch.setattr(m, "run_stage", lambda *a, **k: next(results))
+        with pytest.raises(SystemExit) as exc:
+            m.main(["--dates", "20240405", "20240406"])
+        assert exc.value.code == 1
 
     def test_errors_when_log_dir_unset(self, m, monkeypatch):
         # A missing log_dir is fatal before any fan-out.

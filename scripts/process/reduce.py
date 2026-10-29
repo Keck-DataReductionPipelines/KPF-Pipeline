@@ -39,11 +39,15 @@ from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.io import kpf_directory, kpf_filepath, load_junk_obs_ids
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
+from recipes.kpf_drp_masters import STAGES as MASTERS_STAGES
+from recipes.kpf_drp_science import STAGES as SCIENCE_STAGES
 from scripts._argparse import (
     data_dirs_parser,
     logging_parser,
     recipe_and_config_parser,
     resolve_dir_shortcuts,
+    stages_override,
+    stages_parser,
 )
 from scripts.process import (
     DEFAULT_MASTERS_CONFIG,
@@ -68,6 +72,7 @@ def main(argv=None):
             recipe_and_config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
+            stages_parser(MASTERS_STAGES + SCIENCE_STAGES),
         ],
     )
     shortcut = parser.add_mutually_exclusive_group()
@@ -117,6 +122,14 @@ def main(argv=None):
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
     if args.recipe == DEFAULT_SCIENCE_RECIPE and args.datecode:
         parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
+    # Science reduces one obs_id (-o), masters one night (-d).
+    stages = SCIENCE_STAGES if args.obs_id else MASTERS_STAGES
+    unknown = [s for s in args.stages or () if s not in stages]
+    if unknown:
+        parser.error(
+            f"--stages {' '.join(unknown)} not in this recipe's stages: "
+            f"{', '.join(stages)}"
+        )
 
     overrides = {}
     if args.kpf_data_input or args.kpf_masters_output or args.kpf_science_output:
@@ -133,6 +146,7 @@ def main(argv=None):
             overrides["LOGGER"]["log_dir"] = args.log_dir
         if args.log_level:
             overrides["LOGGER"]["log_level"] = args.log_level
+    overrides |= stages_override(args, stages)
 
     config = ConfigHandler(args.config, overrides=overrides or None)
 
@@ -230,15 +244,11 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
     }
 
 
-# Glob patterns for a masters night's products: every L1/L2/L4 master in the
-# night's directory (KOAID prefix wildcarded). The WLS L2 master's per-frame
-# ThAr L2s and diagnostics HDF5 live in a thar_L2/ subdirectory that
-# clear_stale_outputs removes wholesale.
-_MASTER_OUTPUT_GLOBS = (
-    "*_master_*_L1.fits",
-    "*_master_*_L2.fits",
-    "*_master_*_L4.fits",
-)
+# Glob patterns for one masters stage's products in the night's directory (KOAID
+# prefix wildcarded): the FITS masters, and the order trace's CSV. The WLS L2
+# master's per-frame ThAr L2s and diagnostics HDF5 live in a thar_L2/ subdirectory
+# that clear_stale_outputs removes wholesale.
+_MASTER_OUTPUT_GLOBS = ("*_master_{stage}_L*.fits", "*_master_{stage}.csv")
 
 
 def clear_stale_outputs(config, args):
@@ -251,11 +261,14 @@ def clear_stale_outputs(config, args):
     reuses -- clearing up front guarantees the run's results stand alone.
 
     Science (``-o obs_id``): the three per-obs_id paths under
-    ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): every master product in the
-    night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded), plus
-    the whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the
-    diagnostics HDF5), so a rebuilt thar master can never co-exist with a prior
-    run's frame L2s or diagnostics. A no-op when nothing matches; raises KeyError
+    ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): the master products in the
+    night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded) of
+    the earliest stage enabled in config [STAGES] and every stage after
+    it, since each is built from the ones before; plus, with the thar stage, the
+    whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the diagnostics
+    HDF5), so a rebuilt thar master can never co-exist with a prior run's frame
+    L2s or diagnostics. Earlier stages' masters, which a staged batch run builds
+    on, are kept. A no-op when nothing matches; raises KeyError
     if the relevant output root is absent from [DATA_DIRS] (the recipe requires
     the same key, so failing here surfaces a broken config one step earlier).
     """
@@ -272,8 +285,14 @@ def clear_stale_outputs(config, args):
         masters_dir = kpf_directory(
             kind="masters", data_root=data_root, datecode=args.datecode
         )
-        for pattern in _MASTER_OUTPUT_GLOBS:
-            paths += glob.glob(os.path.join(masters_dir, pattern))
+        switches = config.get_params(["STAGES"])
+        enabled = [s for s in MASTERS_STAGES if switches[s]]
+        stages = MASTERS_STAGES[MASTERS_STAGES.index(enabled[0]) :] if enabled else ()
+        for stage in stages:
+            for pattern in _MASTER_OUTPUT_GLOBS:
+                paths += glob.glob(
+                    os.path.join(masters_dir, pattern.format(stage=stage))
+                )
         stack_subdir = kpf_directory(
             kind="cal_stack",
             data_root=data_root,
@@ -281,7 +300,7 @@ def clear_stale_outputs(config, args):
             datecode=args.datecode,
             cal_type="thar",
         )
-        if os.path.isdir(stack_subdir):
+        if "thar" in stages and os.path.isdir(stack_subdir):
             shutil.rmtree(stack_subdir)
             logger.info("removed stale output dir: %s", stack_subdir)
 

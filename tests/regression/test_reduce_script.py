@@ -228,6 +228,58 @@ class TestGuards:
         assert exc.value.code == 2
         assert "science recipe takes -o/--obs_id" in capsys.readouterr().err
 
+    def test_science_stages_override_config(self, monkeypatch):
+        seen = {}
+
+        def _capture(path, overrides=None):
+            seen.update(overrides or {})
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _capture)
+        with pytest.raises(SystemExit):
+            red.main(["--science", "-o", _OID, "--stages", "image_assembly"])
+        assert seen["STAGES"] == {
+            st: st == "image_assembly" for st in red.SCIENCE_STAGES
+        }
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--science", "-o", _OID, "--stages", "bias"],
+            ["--masters", "-d", "20240405", "--stages", "image_assembly"],
+        ],
+    )
+    def test_rejects_the_other_recipes_stages(self, argv, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(argv)
+        assert exc.value.code == 2
+        assert "not in this recipe's stages" in capsys.readouterr().err
+
+    def test_stages_override_config(self, monkeypatch):
+        # --stages switches on exactly the named stages in the config's [STAGES].
+        seen = {}
+
+        def _capture(path, overrides=None):
+            seen.update(overrides or {})
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _capture)
+        with pytest.raises(SystemExit):
+            red.main(["--masters", "-d", "20240405", "--stages", "flat", "dark"])
+        assert seen["STAGES"] == {
+            "bias": False,
+            "dark": True,
+            "flat": True,
+            "order_trace": False,
+            "thar": False,
+        }
+
+    def test_unknown_stage_is_rejected(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(["--masters", "-d", "20240405", "--stages", "biass"])
+        assert exc.value.code == 2
+        assert "invalid choice: 'biass'" in capsys.readouterr().err
+
     def test_missing_recipe_and_config_errors(self, capsys):
         # No --masters/--science and no explicit -r/-c pair.
         with pytest.raises(SystemExit) as exc:
@@ -326,14 +378,17 @@ class TestRecipeLoading:
 
 
 class _Config:
-    """Minimal ConfigHandler stub yielding the DATA_DIRS clear_stale_outputs reads."""
+    """Minimal ConfigHandler stub yielding the DATA_DIRS and [STAGES] that
+    clear_stale_outputs reads; `stages` (default all) are the ones switched on."""
 
-    def __init__(self, data_dirs):
+    def __init__(self, data_dirs, stages=None):
         self._data_dirs = data_dirs
+        self._stages = {
+            st: st in (stages or red.MASTERS_STAGES) for st in red.MASTERS_STAGES
+        }
 
     def get_params(self, keys):
-        assert keys == ["DATA_DIRS"]
-        return self._data_dirs
+        return self._stages if keys == ["STAGES"] else self._data_dirs
 
 
 def _args(obs_id=None, datecode=None):
@@ -416,6 +471,41 @@ class TestClearStaleOutputs:
         assert not os.path.exists(stack_subdir)
         for name in kept:
             assert os.path.exists(os.path.join(night, name)), name
+
+    @pytest.mark.parametrize(
+        "stages, kept",
+        [
+            (["dark"], ["bias"]),
+            (["order_trace"], ["bias", "dark", "flat"]),
+            (["dark", "thar"], ["bias"]),  # from the earliest selected stage on
+            (None, []),
+        ],
+    )
+    def test_masters_stage_run_clears_its_stage_and_downstream(
+        self, tmp_path, stages, kept
+    ):
+        # A staged batch run keeps the earlier stages' masters it builds on, but
+        # never leaves a later stage's master built from a replaced one.
+        masters_root = str(tmp_path / "m")
+        night = os.path.join(masters_root, "masters", "20240405")
+        os.makedirs(os.path.join(night, "thar_L2"))
+        koaid = "KP.20240405.40113.57"
+        products = {
+            "bias": f"{koaid}_master_bias_L1.fits",
+            "dark": f"{koaid}_master_dark_L1.fits",
+            "flat": f"{koaid}_master_flat_L1.fits",
+            "order_trace": f"{koaid}_master_order_trace.csv",
+            "thar": f"{koaid}_master_thar_L2.fits",
+        }
+        for name in products.values():
+            open(os.path.join(night, name), "w").close()
+
+        red.clear_stale_outputs(
+            _Config({"KPF_MASTERS_OUTPUT": masters_root}, stages=stages),
+            _args(datecode="20240405"),
+        )
+
+        assert sorted(os.listdir(night)) == sorted(products[st] for st in kept)
 
     def test_masters_noop_when_dir_absent(self, tmp_path):
         # A never-built night has no masters dir; glob matches nothing, no error.

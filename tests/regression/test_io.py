@@ -215,10 +215,10 @@ class TestBuildCalibrationStacks:
         for lst in _cluster("bias", _make_mini_db()):
             assert lst == sorted(lst)
 
-    def test_raises_when_no_cluster_meets_min(self):
+    def test_warns_and_returns_empty_when_no_cluster_meets_min(self, caplog):
         # Both bias clusters hold 5 files, so min_stack_size=6 drops everything.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("bias", _make_mini_db(), min_stack_size=6)
+        assert _cluster("bias", _make_mini_db(), min_stack_size=6) == []
+        assert "no cluster with at least" in caplog.text
 
     def test_stacks_require_a_mini_database(self):
         # Forgetting build_mini_database(datecode) must give a readable error,
@@ -227,14 +227,31 @@ class TestBuildCalibrationStacks:
         with pytest.raises(ValueError, match="no mini database"):
             FileHandler({}).build_calibration_stacks("bias")
 
-    def test_raises_when_no_frames_found(self):
-        with pytest.raises(ValueError, match="No usable 'flat' calibration frames"):
-            _cluster("flat", _make_mini_db())
+    @pytest.mark.parametrize("groupby", ["time_of_day", "obs_night"])
+    def test_warns_and_returns_empty_when_no_frames_found(self, caplog, groupby):
+        assert _cluster("flat", _make_mini_db(), groupby=groupby) == []
+        assert "Skipping flat stacking" in caplog.text
+        assert "no usable 'flat' calibration frames" in caplog.text
+        # One skip message, not a second from the empty clustering.
+        assert "no cluster with at least" not in caplog.text
 
-    def test_raises_when_only_cluster_below_min(self):
+    def test_warns_and_returns_empty_when_only_cluster_below_min(self, caplog):
         # The only dark cluster holds 3 files, below min_stack_size=5.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            _cluster("dark", _make_mini_db(), min_stack_size=5)
+        assert _cluster("dark", _make_mini_db(), min_stack_size=5) == []
+        assert "no cluster with at least" in caplog.text
+
+    def test_splits_stack_at_instrument_era_boundary(self, caplog):
+        # One session straddling the 1.5 -> 2.0 boundary (2024-02-23 12:00 UT).
+        before, after = (
+            [f"/data/L0/20240223/KP.20240223.{t:05d}.00.fits" for t in ts]
+            for ts in ((42900, 43000, 43100), (43300, 43400))
+        )
+        db = _mini_db(_rows(before + after, "Bias"))
+        with caplog.at_level(logging.INFO):
+            assert _cluster("bias", db) == [before, after]
+        assert "instrument-era boundary" in caplog.text
+        # Each part meets min_stack_size on its own.
+        assert _cluster("bias", db, min_stack_size=3) == [before]
 
     def test_drops_small_cluster_keeps_large(self):
         db, _ = _mixed_bias_db()
@@ -259,14 +276,6 @@ class TestBuildCalibrationStacks:
         lists = _cluster("bias", db, min_stack_size=5)
         assert len(lists) == 1
         assert lists[0] == sorted(before + after)
-
-    def test_hst_day_splits_at_midnight(self):
-        # hst_day splits at midnight even when the frames are less than a gap apart.
-        db, before, after = _midnight_bias_db()
-        lists = _cluster("bias", db, min_stack_size=5, groupby="hst_day")
-        assert len(lists) == 2
-        assert lists[0] == sorted(before)
-        assert lists[1] == sorted(after)
 
     def test_obs_night_single_stack_spans_midnight(self):
         # obs_night spans both a >2 hr gap and HST midnight (the sparse-dark case).
@@ -336,6 +345,90 @@ class TestBuildCalibrationStacks:
         assert _cluster("flat", db) == [sorted(_BIAS_A)]
 
 
+def _darks(datecode, seconds):
+    """Dark frames in UT directory ``datecode`` at the given seconds of day."""
+    files = [f"/data/L0/{datecode}/KP.{datecode}.{s:05d}.00.fits" for s in seconds]
+    return _mini_db(_rows(files, "Dark")), files
+
+
+class TestHstDay:
+    """hst_day stacks HST day D-1 from the D-1 and D UT directories.
+
+    HST day D-1 is UT D-1 10:00 (36000 s) to UT D 10:00. The previous night's
+    mini_db is stubbed; ``previous`` maps each datecode with an L0 directory on
+    disk to the mini_db its load returns.
+    """
+
+    @pytest.fixture
+    def run(self, tmp_path, monkeypatch):
+        def _run(datecode, today, previous=(), groupby="hst_day", **kwargs):
+            previous = dict(previous)
+            for d in previous:
+                (tmp_path / "L0" / d).mkdir(parents=True)
+                (tmp_path / "L0" / d / f"KP.{d}.00000.00.fits").touch()
+            loaded = []
+
+            def fake_build(self, d, cache=False):
+                loaded.append(d)
+                return previous[d]
+
+            monkeypatch.setattr(FileHandler, "build_mini_database", fake_build)
+            fh = FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
+            fh._datecode = datecode
+            fh._mini_db = today
+            stacks = fh.build_calibration_stacks("dark", groupby=groupby, **kwargs)
+            return stacks, loaded
+
+        return _run
+
+    def test_boundary_seconds(self, run):
+        # UT 09:59:59 is HST 23:59:59 of the day before; UT 10:00:00 is HST 00:00.
+        prev_db, prev = _darks("20240404", [35999, 36000, 60000])
+        today_db, today = _darks("20240405", [35999, 36000])
+        stacks, loaded = run("20240405", today_db, {"20240404": prev_db})
+        assert loaded == ["20240404"]
+        assert stacks == [[prev[1], prev[2], today[0]]]
+
+    def test_combines_directories_to_reach_min_stack_size(self, run):
+        # Two morning darks (UT dir D-1) and two evening darks (UT dir D): neither
+        # directory alone reaches min_stack_size=3.
+        prev_db, prev = _darks("20240404", [61200, 61500])
+        today_db, today = _darks("20240405", [3600, 3900])
+        stacks, _ = run("20240405", today_db, {"20240404": prev_db}, min_stack_size=3)
+        assert stacks == [prev + today]
+
+    @pytest.mark.parametrize(
+        "datecode, previous_datecode",
+        [("20240301", "20240229"), ("20240101", "20231231"), ("20230301", "20230228")],
+    )
+    def test_previous_datecode_crosses_calendar_boundaries(
+        self, run, datecode, previous_datecode
+    ):
+        prev_db, prev = _darks(previous_datecode, [50000])
+        today_db, today = _darks(datecode, [3600])
+        stacks, loaded = run(datecode, today_db, {previous_datecode: prev_db})
+        assert loaded == [previous_datecode]
+        assert stacks == [prev + today]
+
+    def test_missing_previous_directory_uses_today_only(self, run, caplog):
+        today_db, today = _darks("20240405", [3600, 3900, 36000])
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.utils.io"):
+            stacks, loaded = run("20240405", today_db)
+        assert loaded == []
+        assert stacks == [today[:2]]
+        assert "no L0 frames for 20240404" in caplog.text
+
+    @pytest.mark.parametrize("groupby", ["time_of_day", "obs_night"])
+    def test_other_modes_read_only_the_loaded_directory(self, run, groupby):
+        prev_db, _ = _darks("20240404", [61200])
+        today_db, today = _darks("20240405", [3600, 36000])
+        stacks, loaded = run(
+            "20240405", today_db, {"20240404": prev_db}, groupby=groupby
+        )
+        assert loaded == []
+        assert sorted(f for s in stacks for f in s) == today
+
+
 # build_calibration_stacks (real data)
 
 
@@ -360,10 +453,10 @@ class TestBuildCalibrationStacksRealData:
         assert len(lists[0]) == 5
         assert lists[0] == sorted(lists[0])
 
-    def test_dark_raises_on_undersized_clusters(self, fh):
+    def test_dark_undersized_clusters_give_no_stacks(self, fh, caplog):
         # The testdata's dark clusters hold 2 and 3 frames, below min_stack_size=5.
-        with pytest.raises(ValueError, match="no cluster with at least"):
-            fh.build_calibration_stacks("dark", min_stack_size=5)
+        assert fh.build_calibration_stacks("dark", min_stack_size=5) == []
+        assert "no cluster with at least" in caplog.text
 
     def test_dark_obs_night_single_stack(self, fh):
         # The night's 5 dark frames span two HST days (2 + 3); obs_night merges them.
@@ -1251,20 +1344,20 @@ class TestJunkExclusion:
         ],
     )
     def test_date_without_nominal_exptime_excluded(
-        self, cal_type, obj, datecode, exptime
+        self, cal_type, obj, datecode, exptime, caplog
     ):
         files = [
             f"/data/L0/{datecode}/KP.{datecode}.{s:05d}.00.fits" for s in (1000, 1100)
         ]
         db = _mini_db(_rows(files, obj), exptime=exptime)
-        with pytest.raises(ValueError, match="2 out-of-range EXPTIME"):
-            _cluster(cal_type, db, min_stack_size=1)
+        assert _cluster(cal_type, db, min_stack_size=1) == []
+        assert "2 out-of-range EXPTIME" in caplog.text
 
     @pytest.mark.parametrize(
         "cal_type, obj", [("flat", "Flat"), ("thar", "ThAr_daily")]
     )
     def test_date_after_history_skips_exptime_check(self, caplog, cal_type, obj):
-        files = [f"/data/L0/29991231/KP.29991231.{s:05d}.00.fits" for s in (1000, 1100)]
+        files = [f"/data/L0/20391231/KP.20391231.{s:05d}.00.fits" for s in (1000, 1100)]
         db = _mini_db(_rows(files, obj), exptime=999.0)
         with caplog.at_level(logging.WARNING):
             lists = _cluster(cal_type, db, min_stack_size=1)
