@@ -105,6 +105,10 @@ def test_exptime_is_elapsed():
         # Target: the target, when native OBJECT and TARGNAME agree.
         (_hdr("Object", OBJECT=" 10700 ", TARGNAME="10700"), "10700"),
         (_hdr("Object", OBJECT="10700", TARGNAME="HD 10700"), "Unknown"),
+        # A blank OBJECT takes TARGNAME; a blank TARGNAME leaves OBJECT untrusted.
+        (_hdr("Object", OBJECT="", TARGNAME="K2-157"), "K2-157"),
+        (_hdr("Object", OBJECT="K2-157", TARGNAME=""), "Unknown"),
+        (_hdr("Object", OBJECT="", TARGNAME="Sun"), "Unknown"),
         (_hdr("Object", OBJECT="", TARGNAME=""), "Unknown"),
         # Solar: exactly OBJECT SoCal with TARGNAME Sun; one alone is Unknown.
         (_hdr("Object", OBJECT="SoCal", TARGNAME="target"), "Unknown"),
@@ -296,6 +300,10 @@ def test_consistent_frame_has_no_warnings():
         (
             _hdr("Object", OBJECT="10700", TARGNAME="HD 10700"),
             "OBJECT '10700' disagrees with TARGNAME 'HD 10700'",
+        ),
+        (
+            _hdr("Object", OBJECT="", TARGNAME="K2-157"),
+            "OBJECT blank; OBJECT is TARGNAME 'K2-157'",
         ),
         (
             _hdr(
