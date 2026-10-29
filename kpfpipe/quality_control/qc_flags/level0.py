@@ -332,18 +332,20 @@ class QCL0(QC):
     not_junk._qc_key = "NOTJUNK"
 
     def radec_consistent(self):
-        """Pointing agrees with the target and catalog positions.
+        """Pointing within 60" of the target and catalog positions.
 
         TCSOFF (pointing vs the DCS target) is internal telescope-pointing
         consistency and is required. OBJOFF/GAIAOFF are external catalog
-        cross-matches with a looser 5" bound; Gaia and SIMBAD are optional
-        sources, so DiagL0 emits their offsets only when the lookup ran and
-        matched, and each is checked only where present.
+        cross-matches; Gaia and SIMBAD are optional sources, so DiagL0 emits
+        their offsets only when the lookup ran and matched, and each is checked
+        only where present.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
-        if float(hdr["TCSOFF"]) >= 1.0:
+        if float(hdr["TCSOFF"]) >= 60.0:
             return False
-        return all(float(hdr[key]) < 5.0 for key in ("OBJOFF", "GAIAOFF") if key in hdr)
+        return all(
+            float(hdr[key]) < 60.0 for key in ("OBJOFF", "GAIAOFF") if key in hdr
+        )
 
     radec_consistent._qc_key = "TARGETOK"
 

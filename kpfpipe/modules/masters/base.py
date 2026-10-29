@@ -83,7 +83,7 @@ class BaseMasterModule:
     # it is not declared for calibration frames, so it writes no card on the
     # frames a stack is built from, and the `qc[kw][0]` read below would raise a
     # bare KeyError rather than reject the frame.
-    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "EXPTIMOK", "NOTJUNK")
+    _REQUIRED_L0_QC_FLAGS = ("DATAPRL0", "EXPTIMOK", "NOTJUNK", "READOK")
 
     # Exposure-time threshold (seconds) for frame admission in ``_load_frame``:
     # a bias must be <= this (stacked with T=1), every other master type above
