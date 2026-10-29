@@ -230,7 +230,10 @@ class TestBuildCalibrationStacks:
     @pytest.mark.parametrize("groupby", ["time_of_day", "obs_night"])
     def test_warns_and_returns_empty_when_no_frames_found(self, caplog, groupby):
         assert _cluster("flat", _make_mini_db(), groupby=groupby) == []
-        assert "No usable 'flat' calibration frames" in caplog.text
+        assert "Skipping flat stacking" in caplog.text
+        assert "no usable 'flat' calibration frames" in caplog.text
+        # One skip message, not a second from the empty clustering.
+        assert "no cluster with at least" not in caplog.text
 
     def test_warns_and_returns_empty_when_only_cluster_below_min(self, caplog):
         # The only dark cluster holds 3 files, below min_stack_size=5.

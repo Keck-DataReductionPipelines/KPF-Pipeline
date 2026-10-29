@@ -517,11 +517,14 @@ class FileHandler:
             # Per-filter counts separate a night with no such frames from one
             # whose frames were all excluded.
             logger.warning(
-                "No usable '%s' calibration frames: %d with OBJECT=%r; excluded %d "
+                "Skipping %s stacking for %s: no usable '%s' calibration frames "
+                "(%d with OBJECT=%r; excluded %d "
                 "on junk list, %d without SKYSRC=SCISRC=CALSRC=%s [%s], %d "
                 "single-CCD, %d native OBJECT "
                 "flush-persistence/test/noise/superflat/check, %d out-of-range "
-                "EXPTIME",
+                "EXPTIME)",
+                cal_type,
+                self._datecode,
                 cal_type,
                 n_object,
                 obj,
@@ -755,14 +758,17 @@ class FileHandler:
         clusters = [c for c in clusters if len(c) >= min_stack_size]
 
         if not clusters:
-            logger.warning(
-                "'%s' groupby=%s produced no cluster with at least "
-                "min_stack_size=%d files (cluster sizes: %s)",
-                cal_type,
-                groupby,
-                min_stack_size,
-                sizes,
-            )
+            # With no frames at all, _select_frames has already said so.
+            if sizes:
+                logger.warning(
+                    "Skipping %s stacking for %s: no cluster with at least "
+                    "min_stack_size=%d files (groupby=%s, cluster sizes: %s)",
+                    cal_type,
+                    self._datecode,
+                    min_stack_size,
+                    groupby,
+                    sizes,
+                )
             return []
 
         if max_stack_size is not None:
