@@ -1,5 +1,7 @@
 """Tests for L2 quicklook plots (wavelength-aware extracted spectra)."""
 
+import logging
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -124,9 +126,18 @@ class TestRequiresWave:
         with pytest.raises(ValueError, match="WAVE is not populated"):
             getattr(PlotL2(l2_no_wave), method)("green")
 
-    def test_run_all_raises_without_wave(self, l2_no_wave):
-        with pytest.raises(ValueError, match="WAVE is not populated"):
-            PlotL2(l2_no_wave).run("all")
+    def test_run_all_logs_and_continues_without_wave(self, l2_no_wave, caplog):
+        # Quicklook never aborts the pipeline: each failure is logged and the
+        # summary names it.
+        with caplog.at_level(logging.INFO):
+            assert PlotL2(l2_no_wave).run("all") == {}
+        errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert errors and all(
+            "WAVE is not populated" in str(r.exc_info[1]) for r in errors
+        )
+        summary = caplog.records[-1]
+        assert summary.levelno == logging.WARNING
+        assert "0 generated" in summary.getMessage()
 
 
 # ---------------------------------------------------------------------------
