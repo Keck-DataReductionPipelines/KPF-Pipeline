@@ -1,0 +1,35 @@
+[DATA_DIRS]
+KPF_DATA_INPUT = "/data/kpf/"
+KPF_MASTERS_OUTPUT = "/data/kpf-next/masters-root/"
+KPF_SCIENCE_OUTPUT = "/data/kpf-next/science-root/"
+KPF_ENGINEERING_OUTPUT = "/data/kpf-next/engineering-root/"
+
+[LOGGER]
+log_dir = "/data/kpf-next/logs/"        # one parent dir for all logs (DRP-RUN-09)
+log_level = "DEBUG"                     # production level
+console = true                          # mirror records to stderr
+
+[TRACES]
+chips = ["GREEN", "RED"]
+fibers = ["SKY", "SCI1", "SCI2", "SCI3", "CAL"]
+
+[STAGES]
+image_assembly = true
+calibration_association = true
+spectral_extraction = true
+wavelength_calibration = true
+
+[MODULE_IMAGE_ASSEMBLY]
+overscan_method = "rowmedian"
+readnoise_sigma = 10.0
+
+[MODULE_CALIBRATION_ASSOCIATION]
+bias_search_window_days = [-30, 0]
+dark_search_window_days = [-30, 0]
+flat_search_window_days = [-15, 0]
+wls_search_window_days = [-7, 0]
+
+[MODULE_SPECTRAL_EXTRACTION]
+extraction_method = "box"
+
+[MODULE_WAVELENGTH_CALIBRATION]

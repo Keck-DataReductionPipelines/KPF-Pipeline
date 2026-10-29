@@ -9,6 +9,26 @@ setup module stays free of domain content.
 import os
 
 
+def _base(path):
+    return os.path.basename(path) if path else "n/a"
+
+
+def _receipt_paths(obj, function, arg_key):
+    # Every matching row, unlike receipt_read_entry's most-recent one.
+    table = getattr(obj, "receipt", None)
+    if table is None or getattr(table, "empty", True):
+        return []
+    out = []
+    for _, row in table.iterrows():
+        if row.get("FUNCTION") != function:
+            continue
+        for token in str(row.get("ARGS", "")).split(", "):
+            key, _, value = token.partition("=")
+            if key.strip() == arg_key and value.strip():
+                out.append(value.strip())
+    return out
+
+
 def science_run_summary(l4, elapsed_s):
     """Format the science recipe's end-of-run verdict from the finished L4.
 
@@ -21,25 +41,6 @@ def science_run_summary(l4, elapsed_s):
     surrounding blank lines make the block stand out by eye in the log.
     """
     primary = l4.headers.get("PRIMARY", {})
-
-    def base(path):
-        return os.path.basename(path) if path else "n/a"
-
-    def receipt_paths(function, arg_key):
-        # Every matching row, unlike receipt_read_entry's most-recent one.
-        table = getattr(l4, "receipt", None)
-        if table is None or getattr(table, "empty", True):
-            return []
-        out = []
-        for _, row in table.iterrows():
-            if row.get("FUNCTION") != function:
-                continue
-            for token in str(row.get("ARGS", "")).split(", "):
-                key, _, value = token.partition("=")
-                if key.strip() == arg_key and value.strip():
-                    out.append(value.strip())
-        return out
-
     obs_id = getattr(l4, "obs_id", None) or primary.get("ORIGID") or "unknown"
     cal = l4.receipt_read_entry("calibration_association")
     masters = {
@@ -47,12 +48,12 @@ def science_run_summary(l4, elapsed_s):
         "dark": cal.get("darkfile"),
         "thar": cal.get("wlsfile"),
     }
-    masters_str = "  ".join(f"{k}={base(v)}" for k, v in masters.items())
+    masters_str = "  ".join(f"{k}={_base(v)}" for k, v in masters.items())
     # First from_fits is the original L0 read; a reload would append its own.
-    inputs = receipt_paths("from_fits", "fn")[:1]
-    outputs = receipt_paths("to_fits", "out_filepath")
-    inputs_str = "  ".join(base(p) for p in inputs) or "n/a"
-    outputs_str = "  ".join(base(p) for p in outputs) or "n/a"
+    inputs = _receipt_paths(l4, "from_fits", "fn")[:1]
+    outputs = _receipt_paths(l4, "to_fits", "out_filepath")
+    inputs_str = "  ".join(_base(p) for p in inputs) or "n/a"
+    outputs_str = "  ".join(_base(p) for p in outputs) or "n/a"
 
     rv, rverr, bjd = primary.get("RV"), primary.get("RVERR"), primary.get("BJDTDB")
     if isinstance(rv, (int, float)):
@@ -68,6 +69,29 @@ def science_run_summary(l4, elapsed_s):
         f"  masters:  {masters_str}",
         f"  outputs:  {outputs_str}",
         f"  RV:       {rv_line}",
+        f"  elapsed:  {elapsed_s:.1f} s",
+    ]
+    return "\n\n" + "\n".join(lines) + "\n\n"
+
+
+def engineering_run_summary(l2, elapsed_s):
+    """Format the engineering recipe's end-of-run verdict from the finished L2.
+
+    Like the science summary minus the RV line: obs_id, the L0 input, the ThAr
+    master (``n/a`` when none was associated), the written outputs, and the
+    wall-clock elapsed.
+    """
+    primary = l2.headers.get("PRIMARY", {})
+    obs_id = getattr(l2, "obs_id", None) or primary.get("ORIGID") or "unknown"
+    thar = l2.receipt_read_entry("calibration_association").get("wlsfile")
+    inputs = _receipt_paths(l2, "from_fits", "fn")[:1]
+    outputs = _receipt_paths(l2, "to_fits", "out_filepath")
+
+    lines = [
+        f"===== engineering run summary: {obs_id} =====",
+        f"  inputs:   {'  '.join(_base(p) for p in inputs) or 'n/a'}",
+        f"  thar:     {_base(thar)}",
+        f"  outputs:  {'  '.join(_base(p) for p in outputs) or 'n/a'}",
         f"  elapsed:  {elapsed_s:.1f} s",
     ]
     return "\n\n" + "\n".join(lines) + "\n\n"
