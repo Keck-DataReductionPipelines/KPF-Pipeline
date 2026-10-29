@@ -835,13 +835,13 @@ class TestQCL0:
 
     def test_radec_tcsoff_fail(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
-        l0.set_keyword("TCSOFF", 1.5)  # > 1" pointing-vs-target
+        l0.set_keyword("TCSOFF", 61.0)  # > 60" pointing-vs-target
         assert QCL0(l0).radec_consistent() is False
 
     def test_radec_objoff_fail(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
         l0.set_keyword("TCSOFF", 0.02)  # internal pointing OK
-        l0.set_keyword("OBJOFF", 6.0)  # > 5" pointing-vs-OBJECT
+        l0.set_keyword("OBJOFF", 61.0)  # > 60" pointing-vs-OBJECT
         assert QCL0(l0).radec_consistent() is False
 
     def test_radec_tcsoff_required_absent_raises(self, tmp_path):

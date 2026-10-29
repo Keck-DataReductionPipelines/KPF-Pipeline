@@ -12,6 +12,7 @@ visualization: it never writes to product headers or science extensions.
 
 import logging
 import os
+import time
 from datetime import UTC, datetime
 
 import matplotlib.pyplot as plt
@@ -146,9 +147,11 @@ class Plot:
 
         Saved-and-closed when ``output_dir`` is set, returned open when it is
         None. ``plot_kwargs`` forward to each plot method (e.g. ``full_res`` for
-        the L0/L1 image plots). A plot method that raises is logged at ERROR
-        (naming the plot and chip) and its exception propagates unchanged --
-        fail-fast; this stage records rather than swallows.
+        the L0/L1 image plots). Quicklook informs; it never aborts the pipeline.
+        A plot (or chip check) that raises is logged at ERROR with its traceback
+        and the run continues. Each generated plot logs its elapsed time; a
+        closing summary counts what was generated, failed and skipped, naming
+        each failure and each skip with its reason (WARNING if anything failed).
 
         Parameters
         ----------
@@ -166,28 +169,81 @@ class Plot:
             If ``which`` is neither 'all' nor a known plot method name.
         """
         names = self._resolve_plot_names(which)
+        start = time.perf_counter()
         if self.output_dir is not None:
-            os.makedirs(self.output_dir, exist_ok=True)
+            try:
+                os.makedirs(self.output_dir, exist_ok=True)
+            except Exception as e:
+                logger.exception(
+                    "%s quicklook output dir %s could not be created (%s: %s); "
+                    "no plots generated",
+                    self.LEVEL,
+                    self.output_dir,
+                    type(e).__name__,
+                    e,
+                )
+                return {}
 
         figures = {}
+        failed = []
+        skipped = []
         for chip in _CHIPS:
-            if not self._has_chip(chip):
-                logger.debug(
-                    "%s quicklook: no data for %s CCD, skipping", self.LEVEL, chip
+            try:
+                has_chip = self._has_chip(chip)
+            except Exception as e:
+                logger.exception(
+                    "%s quicklook %s chip check failed (%s: %s); "
+                    "exception caught, its plots skipped, quicklook continues",
+                    self.LEVEL,
+                    chip.upper(),
+                    type(e).__name__,
+                    e,
                 )
+                failed.extend(f"{name}/{chip.upper()}" for name in names)
+                continue
+            if not has_chip:
+                skipped.extend(f"{name}/{chip.upper()}: no data" for name in names)
                 continue
             for name in names:
+                plot_start = time.perf_counter()
                 try:
                     fig = getattr(self, name)(chip, **plot_kwargs)
-                    if fig is None:
-                        continue
-                    figures[f"{name}_{chip}"] = fig
-                    # Close only saved figures (open ones are returned for display).
-                    if self.output_dir is not None:
-                        plt.close(fig)
                 except Exception as e:
-                    logger.error(
-                        "%s plot %r on %s raised: %s", self.LEVEL, name, chip, e
+                    logger.exception(
+                        "%s quicklook %r on %s could not be generated (%s: %s); "
+                        "exception caught, plot skipped, quicklook continues",
+                        self.LEVEL,
+                        name,
+                        chip.upper(),
+                        type(e).__name__,
+                        e,
                     )
-                    raise
+                    failed.append(f"{name}/{chip.upper()}")
+                    continue
+                if fig is None:
+                    skipped.append(f"{name}/{chip.upper()}: nothing to plot")
+                    continue
+                figures[f"{name}_{chip}"] = fig
+                # Close only saved figures (open ones are returned for display).
+                if self.output_dir is not None:
+                    plt.close(fig)
+                logger.info(
+                    "%s quicklook %r on %s generated in %.2f s",
+                    self.LEVEL,
+                    name,
+                    chip.upper(),
+                    time.perf_counter() - plot_start,
+                )
+
+        logger.log(
+            logging.WARNING if failed else logging.INFO,
+            "%s quicklook: %d generated, %d failed%s, %d skipped%s in %.2f s",
+            self.LEVEL,
+            len(figures),
+            len(failed),
+            f" ({', '.join(failed)})" if failed else "",
+            len(skipped),
+            f" ({', '.join(skipped)})" if skipped else "",
+            time.perf_counter() - start,
+        )
         return figures
