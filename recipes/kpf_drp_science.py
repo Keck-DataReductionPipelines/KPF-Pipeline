@@ -196,4 +196,4 @@ def main(config, args):
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit("recipes run only via kpfpipe (see kpfpipe --help), not python")
