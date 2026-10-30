@@ -13,6 +13,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+QC_LEVELS = ("none", "default", "strict", "engineering")
+
 
 class Checkpoint:
     """Base runner for per-level checkpoint methods.
@@ -21,16 +23,31 @@ class Checkpoint:
     ----------
     kpf_obj : KPFDataModel
         Finished data product whose flags/headers are read (never written).
+    qc_level : str
+        QC strictness, one of ``QC_LEVELS``; selects this level's
+        ``RAISE_FLAGS`` entry.
     """
 
     LEVEL = None  # Subclasses set the level tag ("L0", "L1", "L2", "L4").
-    RAISE_FLAGS = ()  # QC keywords whose failure (0) raises; every other 0 warns.
+    # qc_level -> QC keywords whose failure (0) raises; every other 0 warns.
+    RAISE_FLAGS = {}
     DIAGNOSTICS = ()  # Paired Diagnostics classes, run first by run(), in order.
     QC = None  # Paired QC class, run second; its results land in self.qc_results.
 
-    def __init__(self, kpf_obj):
+    def __init__(self, kpf_obj, qc_level="default"):
         self.kpf_obj = kpf_obj
         self.qc_results = {}  # pass/fail dict from the folded QC.run() (empty if none)
+
+        self.qc_level = qc_level
+        if self.qc_level not in QC_LEVELS:
+            raise ValueError(
+                f"unrecognized qc_level {self.qc_level!r}; expected one of {QC_LEVELS}"
+            )
+        if self.qc_level not in self.RAISE_FLAGS:
+            raise NotImplementedError(
+                f"qc_level {self.qc_level!r} not yet implemented for {self.LEVEL}"
+            )
+        self.raise_flags = self.RAISE_FLAGS[self.qc_level]
 
     def run(self):
         """Run the paired Diagnostics and QC, then every checkpoint method.
@@ -80,7 +97,7 @@ class Checkpoint:
     raise_on_unregistered_keyword._checkpoint_name = "raise_on_unregistered_keyword"
 
     def raise_on_fatal_qc_flag(self):
-        """Raise on a failed flag in this level's ``RAISE_FLAGS``; warn on any other.
+        """Raise on a failed flag in this qc_level's ``RAISE_FLAGS``; warn on any other.
 
         The warning names every failing flag on QUALITY_CONTROL, which accumulates
         L0->L4; the QC stage already logged each one with its comment. A flag the
@@ -88,7 +105,7 @@ class Checkpoint:
         """
         header = self.kpf_obj.headers["QUALITY_CONTROL"]
         reg = self.kpf_obj.keyword_registry
-        for key in sorted(self.RAISE_FLAGS):
+        for key in sorted(self.raise_flags):
             if header.get(key) == 0:
                 raise ValueError(f"QC checkpoint failed: {key} = 0 ({self.LEVEL})")
         failing = sorted(key for key in reg.qc_flag_keywords if header.get(key) == 0)

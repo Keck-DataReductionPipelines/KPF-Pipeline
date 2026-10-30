@@ -455,7 +455,7 @@ def _wire_science_recipe(tmp_path, monkeypatch, solar=False):
 
     def _checkpoint(name):
         class StubCheckpoint:
-            def __init__(self, obj):
+            def __init__(self, obj, qc_level="default"):
                 self._obj = obj
 
             def run(self):

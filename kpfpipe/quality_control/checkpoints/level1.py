@@ -10,6 +10,10 @@ class CheckpointL1(Checkpoint):
 
     LEVEL = "L1"
     # Missing assembled CCDs or a required PRIMARY keyword is fatal; others warn.
-    RAISE_FLAGS = ("DATAPRL1",)
+    RAISE_FLAGS = {
+        "none": (),
+        "default": ("DATAPRL1",),
+        "engineering": (),
+    }
     DIAGNOSTICS = (DiagL1,)
     QC = QCL1

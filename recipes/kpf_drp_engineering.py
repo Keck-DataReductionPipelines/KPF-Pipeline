@@ -6,9 +6,9 @@ simplified data flow: assemble the FFI, extract the spectra, and append a
 wavelength solution. Diagnostics/QC/quicklook run at each level; L2 is
 written to disk.
 
-Unlike the science recipe, this one completes the run: a failed QC
-checkpoint or a missing ThAr master is logged as a warning and processing
-continues. No external catalog or database queries are made.
+QC checkpoint strictness is set by [QUALITY_CONTROL] qc_level ("engineering"
+in the shipped config). A missing ThAr master is logged as a warning and
+processing continues. No external catalog or database queries are made.
 """
 
 import logging
@@ -47,15 +47,6 @@ RECIPE_STAGES = (
 )
 
 
-def _run_checkpoint(checkpoint, level):
-    # Checkpoint.run writes diagnostics and QC flags before it raises, so the
-    # product keeps its QC history; the run continues regardless.
-    try:
-        checkpoint.run()
-    except ValueError as e:
-        logger.warning("%s checkpoint failed; continuing: %s", level, e)
-
-
 def main(config, args):
     t0 = time.monotonic()
     logger.info("entering kpf_drp_engineering pipeline")
@@ -69,6 +60,8 @@ def main(config, args):
     obs_id = args.obs_id
     stages = [s for s in RECIPE_STAGES if config.get_params(["STAGES"])[s]]
     logger.info("reducing %s (stages: %s)", obs_id, ", ".join(stages))
+
+    qc_level = config.get_params(["QUALITY_CONTROL"])["qc_level"]
 
     data_dirs = config.get_params(["DATA_DIRS"])
     data_root_in = data_dirs["KPF_DATA_INPUT"]
@@ -91,7 +84,7 @@ def main(config, args):
     # QUALITY_CONTROL, which to_kpf1 propagates downstream so L1/L2 carry
     # the full append-only QC history.
     logger.info("running L0 checkpoint for %s", obs_id)
-    _run_checkpoint(CheckpointL0(l0), "L0")
+    CheckpointL0(l0, qc_level=qc_level).run()
 
     if "image_assembly" not in stages:
         logger.info("image_assembly off; stopping after L0")
@@ -122,7 +115,7 @@ def main(config, args):
     PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
     logger.info("running L1 checkpoint for %s", obs_id)
-    _run_checkpoint(CheckpointL1(l1), "L1")
+    CheckpointL1(l1, qc_level=qc_level).run()
 
     if "spectral_extraction" not in stages:
         logger.info("spectral_extraction off; stopping after L1")
@@ -149,7 +142,7 @@ def main(config, args):
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 
     logger.info("running L2 checkpoint for %s", obs_id)
-    _run_checkpoint(CheckpointL2(l2), "L2")
+    CheckpointL2(l2, qc_level=qc_level).run()
 
     # Write L2 (extracted 1D spectra) to disk.
     l2_out_path = kpf_filepath(obs_id, "L2", data_root=data_root_out, engineering=True)

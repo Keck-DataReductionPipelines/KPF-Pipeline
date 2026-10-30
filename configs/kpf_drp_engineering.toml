@@ -19,6 +19,9 @@ calibration_association = true
 spectral_extraction = true
 wavelength_calibration = true
 
+[QUALITY_CONTROL]
+qc_level = "engineering"    # "none", "default", "strict", or "engineering"
+
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"
 readnoise_sigma = 10.0

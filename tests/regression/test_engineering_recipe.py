@@ -2,7 +2,8 @@
 
 Integration tests run the recipe (L0 -> L1 -> L2) against a real star
 observation from tests/testdata/L0/20240405/, with no catalog query, so the
-L0 TARGETOK and L2 DATAPRL2 checkpoints fail and must not stop the run.
+L0 TARGETOK and L2 DATAPRL2 flags fail; the engineering qc_level keeps them
+non-fatal, so they must not stop the run.
 """
 
 import argparse

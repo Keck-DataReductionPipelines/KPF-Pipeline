@@ -68,6 +68,8 @@ def main(config, args):
     stages = [s for s in RECIPE_STAGES if config.get_params(["STAGES"])[s]]
     logger.info("reducing %s (stages: %s)", obs_id, ", ".join(stages))
 
+    qc_level = config.get_params(["QUALITY_CONTROL"])["qc_level"]
+
     data_dirs = config.get_params(["DATA_DIRS"])
     data_root_in = data_dirs["KPF_DATA_INPUT"]
     data_root_science = data_dirs["KPF_SCIENCE_OUTPUT"]
@@ -96,7 +98,7 @@ def main(config, args):
     # QUALITY_CONTROL, which to_kpf1 propagates downstream so L1/L2/L4 carry
     # the full append-only QC history.
     logger.info("running L0 checkpoint for %s", obs_id)
-    CheckpointL0(l0).run()
+    CheckpointL0(l0, qc_level=qc_level).run()
 
     if "image_assembly" not in stages:
         logger.info("image_assembly off; stopping after L0")
@@ -126,7 +128,7 @@ def main(config, args):
     PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
     logger.info("running L1 checkpoint for %s", obs_id)
-    CheckpointL1(l1).run()
+    CheckpointL1(l1, qc_level=qc_level).run()
 
     if "spectral_extraction" not in stages:
         logger.info("spectral_extraction off; stopping after L1")
@@ -157,7 +159,7 @@ def main(config, args):
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 
     logger.info("running L2 checkpoint for %s", obs_id)
-    CheckpointL2(l2).run()
+    CheckpointL2(l2, qc_level=qc_level).run()
 
     # Write L2 (extracted 1D spectra) to disk.
     l2_out_path = kpf_filepath(obs_id, "L2", data_root=data_root_science)
@@ -183,7 +185,7 @@ def main(config, args):
     PlotL4(l4, output_dir=l4_qlp_dir, obs_id=obs_id).run("all")
 
     logger.info("running L4 checkpoint for %s", obs_id)
-    CheckpointL4(l4).run()
+    CheckpointL4(l4, qc_level=qc_level).run()
 
     # Write L4 (RVs and CCFs) to disk.
     l4_out_path = kpf_filepath(obs_id, "L4", data_root=data_root_science)

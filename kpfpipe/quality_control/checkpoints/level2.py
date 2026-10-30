@@ -10,6 +10,10 @@ class CheckpointL2(Checkpoint):
 
     LEVEL = "L2"
     # Missing extracted flux or a required PRIMARY keyword is fatal; others warn.
-    RAISE_FLAGS = ("DATAPRL2",)
+    RAISE_FLAGS = {
+        "none": (),
+        "default": ("DATAPRL2",),
+        "engineering": (),
+    }
     DIAGNOSTICS = (DiagL2,)
     QC = QCL2

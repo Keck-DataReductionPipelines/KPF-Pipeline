@@ -19,6 +19,9 @@ flat = true
 order_trace = true
 thar = true
 
+[QUALITY_CONTROL]
+qc_level = "default"    # "none", "default", "strict", or "engineering"
+
 [BIAS]
 min_stack_size = 5      # min frames extracted to L1, else the master is withheld
 max_stack_size = 20
