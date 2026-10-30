@@ -33,6 +33,9 @@ from recipes._logging import engineering_run_summary
 # would not identify this module in the log.
 logger = logging.getLogger("kpfpipe.recipe.engineering")
 
+# What this recipe produces; the scripts layer gates selector checks and clearing on it.
+RECIPE_TYPE = "engineering"
+
 # Recipe stages in run order. Config [STAGES] switches each on or off, and --stages
 # overrides it. A stage switched off within a level passes the product through; one
 # that creates the next level (image_assembly, spectral_extraction) ends the run

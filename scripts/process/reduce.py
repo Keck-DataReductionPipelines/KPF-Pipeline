@@ -4,15 +4,17 @@
 Loads the recipe, reads the config, applies CLI overrides, configures logging,
 clears the unit's stale products (see ``clear_stale_outputs``), and execs the
 recipe's ``main(config, args)``. It is both the in-process target of
-``kpfpipe run`` and the leaf the orchestrators (``masters.py``/``science.py``) fan
-out as ``python -m scripts.process.reduce`` subprocesses.
+``kpfpipe run`` and the leaf the orchestrators (``masters.py``/``science.py``/
+``engineering.py``) fan out as ``python -m scripts.process.reduce`` subprocesses.
 
-The recipe comes from exactly one of ``--masters``/``--science`` (repo-relative
-shortcuts, usable from any cwd) or ``-r``. A shortcut also supplies the default
-config, which ``-c`` overrides (``--science -c my.toml``); ``-r`` requires ``-c``.
-The recipe's declared ``RECIPE_TYPE`` alone decides the target selector (an
-obs_id ``-o`` for science, a datecode ``-d`` for masters), its ``RECIPE_STAGES``
-the valid ``--stages``, and which stale products are cleared.
+The recipe comes from exactly one of ``--masters``/``--science``/``--engineering``
+(repo-relative shortcuts, usable from any cwd) or ``-r``. A shortcut also supplies
+the default config, which ``-c`` overrides (``--science -c my.toml``); ``-r``
+requires ``-c``. The recipe's declared ``RECIPE_TYPE`` alone decides the target
+selector (an obs_id ``-o`` for science and engineering, a datecode ``-d`` for
+masters), its ``RECIPE_STAGES`` the valid ``--stages``, and which stale products
+are cleared. A custom recipe may omit ``RECIPE_TYPE``: it then runs with any or no
+selector, but nothing is checked, gated, or cleared on its behalf.
 
 The following pairs of invocations are equivalent:
 
@@ -49,6 +51,8 @@ from scripts._argparse import (
     stages_parser,
 )
 from scripts.process import (
+    DEFAULT_ENGINEERING_CONFIG,
+    DEFAULT_ENGINEERING_RECIPE,
     DEFAULT_MASTERS_CONFIG,
     DEFAULT_MASTERS_RECIPE,
     DEFAULT_SCIENCE_CONFIG,
@@ -69,7 +73,7 @@ def main(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             config_parser(),
-            data_dirs_parser(science_output=True),
+            data_dirs_parser(science_output=True, engineering_output=True),
             logging_parser(),
             # Choices are the loaded recipe's RECIPE_STAGES, checked after parsing.
             stages_parser(),
@@ -91,6 +95,13 @@ def main(argv=None):
         help="shorthand for the default science recipe/config pair",
     )
     recipe_choice.add_argument(
+        "--engineering",
+        dest="shortcut",
+        action="store_const",
+        const=(DEFAULT_ENGINEERING_RECIPE, DEFAULT_ENGINEERING_CONFIG),
+        help="shorthand for the default engineering recipe/config pair",
+    )
+    recipe_choice.add_argument(
         "-r",
         "--recipe",
         default=None,
@@ -101,13 +112,14 @@ def main(argv=None):
         "-d",
         "--datecode",
         default=None,
-        help="datecode, e.g. 20240405 (masters only; mutually exclusive with -o)",
+        help="datecode, e.g. 20240405 (masters; mutually exclusive with -o)",
     )
     target.add_argument(
         "-o",
         "--obs_id",
         default=None,
-        help="obs_id, e.g. KP.20240405.40113.57 (science only; exclusive with -d)",
+        help="obs_id, e.g. KP.20240405.40113.57 (science, engineering; exclusive "
+        "with -d)",
     )
     args = resolve_dir_shortcuts(parser.parse_args(argv))
 
@@ -127,15 +139,16 @@ def main(argv=None):
         raise SystemExit(f"Recipe {args.recipe!r} has no main() function")
 
     # The recipe's declared type is the sole source of truth for what it reduces
-    # (science one obs_id, masters one night) and which products it owns.
+    # (science/engineering one obs_id, masters one night) and which products it
+    # owns. A custom recipe may declare none; it is then run as-is (warned below).
     recipe_type = getattr(recipe, "RECIPE_TYPE", None)
-    if recipe_type is None:
-        parser.error(f"recipe {args.recipe!r} declares no RECIPE_TYPE")
+    if recipe_type not in (None, "science", "masters", "engineering"):
+        parser.error(f"recipe {args.recipe!r} declares unknown RECIPE_TYPE")
     if recipe_type == "masters" and not args.datecode:
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
-    if recipe_type == "science" and not args.obs_id:
-        parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
-    stages = recipe.RECIPE_STAGES
+    if recipe_type in ("science", "engineering") and not args.obs_id:
+        parser.error(f"{recipe_type} recipe takes -o/--obs_id, not -d/--datecode")
+    stages = getattr(recipe, "RECIPE_STAGES", ())
     unknown = [s for s in args.stages or () if s not in stages]
     if unknown:
         parser.error(
@@ -144,14 +157,18 @@ def main(argv=None):
         )
 
     overrides = {}
-    if args.kpf_data_input or args.kpf_masters_output or args.kpf_science_output:
-        overrides["DATA_DIRS"] = {}
-        if args.kpf_data_input:
-            overrides["DATA_DIRS"]["KPF_DATA_INPUT"] = args.kpf_data_input
-        if args.kpf_masters_output:
-            overrides["DATA_DIRS"]["KPF_MASTERS_OUTPUT"] = args.kpf_masters_output
-        if args.kpf_science_output:
-            overrides["DATA_DIRS"]["KPF_SCIENCE_OUTPUT"] = args.kpf_science_output
+    data_dirs = {
+        key: value
+        for key, value in (
+            ("KPF_DATA_INPUT", args.kpf_data_input),
+            ("KPF_MASTERS_OUTPUT", args.kpf_masters_output),
+            ("KPF_SCIENCE_OUTPUT", args.kpf_science_output),
+            ("KPF_ENGINEERING_OUTPUT", args.kpf_engineering_output),
+        )
+        if value
+    }
+    if data_dirs:
+        overrides["DATA_DIRS"] = data_dirs
     if args.log_dir or args.log_level:
         overrides["LOGGER"] = {}
         if args.log_dir:
@@ -177,6 +194,11 @@ def main(argv=None):
     logger.info("config: %s", args.config)
     logger.info("data dirs: %s", config.get_params(["DATA_DIRS"]))
     logger.info("log file: %s", log_path)
+    if recipe_type is None:
+        logger.warning(
+            "recipe declares no RECIPE_TYPE: no target checks, frame gating, or "
+            "stale-output clearing are applied"
+        )
 
     # Junk and single-CCD frames never enter the science recipe.
     if recipe_type == "science":
@@ -272,19 +294,25 @@ def clear_stale_outputs(config, args, recipe):
     whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the diagnostics
     HDF5), so a rebuilt thar master can never co-exist with a prior run's frame
     L2s or diagnostics. Earlier stages' masters, which a staged batch run builds
-    on, are kept. A no-op when nothing matches; raises KeyError
+    on, are kept. Engineering (``-o obs_id``): the obs_id's ``kpf_EngL2`` under
+    ``KPF_ENGINEERING_OUTPUT``. A recipe declaring no ``RECIPE_TYPE`` owns nothing
+    here, so nothing is cleared. A no-op when nothing matches; raises KeyError
     if the relevant output root is absent from [DATA_DIRS] (the recipe requires
     the same key, so failing here surfaces a broken config one step earlier).
     """
+    recipe_type = getattr(recipe, "RECIPE_TYPE", None)
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []
-    if recipe.RECIPE_TYPE == "science" and is_obs_id(args.obs_id):
+    if recipe_type == "science" and is_obs_id(args.obs_id):
         data_root = data_dirs["KPF_SCIENCE_OUTPUT"]
         paths = [
             kpf_filepath(args.obs_id, level, data_root=data_root)
             for level in ("L1", "L2", "L4")
         ]
-    elif recipe.RECIPE_TYPE == "masters":
+    elif recipe_type == "engineering" and is_obs_id(args.obs_id):
+        data_root = data_dirs["KPF_ENGINEERING_OUTPUT"]
+        paths = [kpf_filepath(args.obs_id, "L2", data_root=data_root, engineering=True)]
+    elif recipe_type == "masters":
         data_root = data_dirs["KPF_MASTERS_OUTPUT"]
         masters_dir = kpf_directory(
             kind="masters", data_root=data_root, datecode=args.datecode

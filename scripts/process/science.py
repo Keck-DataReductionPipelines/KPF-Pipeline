@@ -29,8 +29,8 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import FileHandler, read_token_file
-from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_obs_id
+from kpfpipe.utils.io import FileHandler
+from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from recipes.kpf_drp_science import RECIPE_STAGES
 from scripts._argparse import (
@@ -41,6 +41,7 @@ from scripts._argparse import (
     pool_parser,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    resolve_obs_ids,
     stages_parser,
 )
 from scripts._dispatch import (
@@ -90,27 +91,7 @@ def parse_args(argv=None):
         "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
         "--obs_ids frames.txt",
     )
-    args = ap.parse_args(argv)
-
-    # Each --obs_ids value is an obs_id (reduced as-is) or a text file of obs_ids;
-    # expand file entries in place. A valid obs_id is always read as such, even if
-    # a like-named file exists.
-    obs_ids = []
-    for entry in args.obs_ids:
-        if is_obs_id(entry):
-            obs_ids.append(entry)
-        elif os.path.isfile(entry):
-            for oid in read_token_file(entry):
-                if not is_obs_id(oid):
-                    ap.error(f"not a valid obs_id in {entry}: {oid!r}")
-                obs_ids.append(oid)
-        else:
-            ap.error(
-                f"--obs_ids entry is neither an obs_id nor a readable file: {entry!r}"
-            )
-    if not obs_ids:
-        ap.error(f"--obs_ids produced no obs_ids (empty file?): {args.obs_ids}")
-    args.obs_ids = sorted(set(obs_ids))
+    args = resolve_obs_ids(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")

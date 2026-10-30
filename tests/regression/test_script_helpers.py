@@ -90,6 +90,16 @@ class TestDataDirsParser:
         with pytest.raises(SystemExit):
             parser.parse_args(["--kpf_science_output", "/s"])
 
+    def test_engineering_output_only_when_enabled(self):
+        ns = _parse(
+            [_argparse.data_dirs_parser(engineering_output=True)],
+            ["--kpf_engineering_output", "/e"],
+        )
+        assert ns.kpf_engineering_output == "/e"
+        assert not hasattr(
+            _parse([_argparse.data_dirs_parser()], []), ("kpf_engineering_output")
+        )
+
     def test_input_dir_aliases_data_input(self):
         ns = _parse([_argparse.data_dirs_parser()], ["--input_dir", "/in"])
         assert ns.kpf_data_input == "/in"
@@ -147,6 +157,18 @@ class TestResolveDirShortcuts:
             self._parser(science_output=False).parse_args(["--output_dir", "/out"])
         )
         assert ns.kpf_masters_output == "/out" and ns.log_dir == "/out/logs"
+        assert not hasattr(ns, "kpf_science_output")
+
+    def test_fans_out_to_engineering_output(self):
+        p = argparse.ArgumentParser(
+            parents=[
+                _argparse.data_dirs_parser(
+                    science_output=False, engineering_output=True
+                )
+            ]
+        )
+        ns = _argparse.resolve_dir_shortcuts(p.parse_args(["--output_dir", "/out"]))
+        assert ns.kpf_engineering_output == "/out"
         assert not hasattr(ns, "kpf_science_output")
 
     def test_noop_without_output_dir(self):
@@ -369,6 +391,57 @@ class TestResolveDates:
     def test_a_range_only_command_skips_the_exclusion_check(self):
         args = _resolve(["--date_range", "20240101", "20240131"], dates=False)
         assert args.date_range == ["20240101", "20240131"]
+
+
+_OID1 = "KP.20240405.40113.57"
+_OID2 = "KP.20240405.40237.36"
+
+
+def _resolve_obs_ids(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--obs_ids", nargs="+")
+    return _argparse.resolve_obs_ids(ap, ap.parse_args(argv))
+
+
+class TestResolveObsIds:
+    """The --obs_ids expansion the science and engineering drivers share."""
+
+    def test_obs_ids_pass_through_sorted_and_deduped(self):
+        assert _resolve_obs_ids(["--obs_ids", _OID2, _OID1, _OID1]).obs_ids == [
+            _OID1,
+            _OID2,
+        ]
+
+    def test_a_file_of_obs_ids_expands_in_place(self, tmp_path):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID2}\n\n{_OID1}\n")  # blank line skipped
+        assert _resolve_obs_ids(["--obs_ids", str(f)]).obs_ids == [_OID1, _OID2]
+
+    def test_inline_and_file_entries_merge(self, tmp_path):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID2}\n{_OID1}\n")  # _OID1 also given inline
+        args = _resolve_obs_ids(["--obs_ids", _OID1, str(f)])
+        assert args.obs_ids == [_OID1, _OID2]
+
+    def test_a_bad_obs_id_in_a_file_is_an_error(self, tmp_path, capsys):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID1}\nnot-an-obs-id\n")
+        with pytest.raises(SystemExit):
+            _resolve_obs_ids(["--obs_ids", str(f)])
+        assert "not a valid obs_id in" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("entry", ["/no/such/file.txt", "20240405"])
+    def test_an_entry_neither_obs_id_nor_file_is_an_error(self, entry, capsys):
+        with pytest.raises(SystemExit):
+            _resolve_obs_ids(["--obs_ids", entry])
+        assert "neither an obs_id nor a readable file" in capsys.readouterr().err
+
+    def test_an_empty_file_is_an_error(self, tmp_path, capsys):
+        f = tmp_path / "empty.txt"
+        f.write_text("\n  \n")
+        with pytest.raises(SystemExit):
+            _resolve_obs_ids(["--obs_ids", str(f)])
+        assert "produced no obs_ids" in capsys.readouterr().err
 
 
 # ===========================================================================

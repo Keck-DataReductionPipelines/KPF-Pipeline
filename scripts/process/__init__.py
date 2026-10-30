@@ -7,3 +7,6 @@ DEFAULT_SCIENCE_CONFIG = os.path.join(REPO_ROOT, "configs/kpf_drp_science.toml")
 
 DEFAULT_MASTERS_RECIPE = os.path.join(REPO_ROOT, "recipes/kpf_drp_masters.py")
 DEFAULT_MASTERS_CONFIG = os.path.join(REPO_ROOT, "configs/kpf_drp_masters.toml")
+
+DEFAULT_ENGINEERING_RECIPE = os.path.join(REPO_ROOT, "recipes/kpf_drp_engineering.py")
+DEFAULT_ENGINEERING_CONFIG = os.path.join(REPO_ROOT, "configs/kpf_drp_engineering.toml")

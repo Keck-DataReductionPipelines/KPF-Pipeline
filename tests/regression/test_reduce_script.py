@@ -13,6 +13,7 @@ import tempfile
 
 import pytest
 
+import recipes.kpf_drp_engineering as engineering_recipe
 import recipes.kpf_drp_masters as masters_recipe
 import recipes.kpf_drp_science as science_recipe
 from kpfpipe.utils.header import HeaderParser
@@ -257,13 +258,43 @@ class TestGuards:
         assert message in capsys.readouterr().err
         assert not cleared
 
-    def test_undeclared_recipe_is_refused(self, tmp_path, capsys):
-        recipe = tmp_path / "undeclared.py"
-        recipe.write_text("def main(config, args):\n    pass\n")
+    def test_engineering_rejects_datecode(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(["--engineering", "-d", "20240405"])
+        assert exc.value.code == 2
+        assert "engineering recipe takes -o/--obs_id" in capsys.readouterr().err
+
+    def test_unknown_recipe_type_is_rejected(self, tmp_path, capsys):
+        # A typo must not silently downgrade a recipe to undeclared.
+        recipe = tmp_path / "typo.py"
+        recipe.write_text(
+            "RECIPE_TYPE = 'sceince'\ndef main(config, args):\n    pass\n"
+        )
         with pytest.raises(SystemExit) as exc:
             red.main(["-r", str(recipe), "-c", str(_base_cfg(tmp_path)), "-o", _OID])
         assert exc.value.code == 2
-        assert "declares no RECIPE_TYPE" in capsys.readouterr().err
+        assert "unknown RECIPE_TYPE" in capsys.readouterr().err
+
+    def test_undeclared_recipe_rejects_stages(self, tmp_path, capsys):
+        recipe = tmp_path / "undeclared.py"
+        recipe.write_text("def main(config, args):\n    pass\n")
+        cfg = str(_base_cfg(tmp_path))
+        with pytest.raises(SystemExit) as exc:
+            red.main(["-r", str(recipe), "-c", cfg, "--stages", "bias"])
+        assert exc.value.code == 2
+        assert "not in this recipe's stages" in capsys.readouterr().err
+
+    def test_engineering_output_override_reaches_data_dirs(self, monkeypatch):
+        seen = {}
+
+        def _capture(path, overrides=None):
+            seen.update(overrides or {})
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _capture)
+        with pytest.raises(SystemExit):
+            red.main(["--engineering", "-o", _OID, "--kpf_engineering_output", "/e"])
+        assert seen["DATA_DIRS"] == {"KPF_ENGINEERING_OUTPUT": "/e"}
 
     def test_science_stages_override_config(self, monkeypatch):
         seen = {}
@@ -342,6 +373,45 @@ class TestGuards:
             red.main(["--science", "-d", "20240405", "-o", _OID])
         assert exc.value.code == 2
         assert "not allowed with argument" in capsys.readouterr().err
+
+
+class TestUndeclaredRecipe:
+    """A custom recipe without RECIPE_TYPE runs as-is: any or no selector, a warning,
+    and no clearing of any output type's products."""
+
+    @pytest.mark.parametrize(
+        "selector",
+        [["-o", _OID], ["-d", "20240405"], []],
+        ids=["obs_id", "date", "none"],
+    )
+    def test_runs_warns_and_clears_nothing(
+        self, selector, monkeypatch, tmp_path, caplog
+    ):
+        science_root = tmp_path / "sci"
+        cfg = tmp_path / "custom.toml"
+        cfg.write_text(
+            "[DATA_DIRS]\n"
+            'KPF_DATA_INPUT = "/cfg/in"\n'
+            'KPF_MASTERS_OUTPUT = "/cfg/m"\n'
+            f'KPF_SCIENCE_OUTPUT = "{science_root}"\n'
+            "[LOGGER]\n"
+            'log_dir = "/cfg/l"\n'
+        )
+        product = red.kpf_filepath(_OID, "L2", data_root=str(science_root))
+        os.makedirs(os.path.dirname(product))
+        open(product, "w").close()
+        sentinel = tmp_path / "ran.txt"
+        recipe = tmp_path / "custom.py"
+        recipe.write_text(
+            f"def main(config, args):\n    open({str(sentinel)!r}, 'w').close()\n"
+        )
+
+        with caplog.at_level(logging.WARNING, logger=red.logger.name):
+            _run(monkeypatch, ["-r", str(recipe), "-c", str(cfg), *selector])
+
+        assert sentinel.exists()
+        assert os.path.exists(product)
+        assert "declares no RECIPE_TYPE" in caplog.text
 
 
 class TestRecipeLoading:
@@ -571,6 +641,24 @@ class TestClearStaleOutputs:
             _args(datecode="20240405"),
             masters_recipe,
         )
+
+    def test_engineering_removes_only_its_own_l2(self, tmp_path):
+        # Same root for both: the engineering clear must leave the science L2 alone.
+        root = str(tmp_path)
+        eng = red.kpf_filepath(self._OID, "L2", data_root=root, engineering=True)
+        sci = red.kpf_filepath(self._OID, "L2", data_root=root)
+        for p in (eng, sci):
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p, "w").close()
+
+        red.clear_stale_outputs(
+            _Config({"KPF_ENGINEERING_OUTPUT": root, "KPF_SCIENCE_OUTPUT": root}),
+            _args(obs_id=self._OID),
+            engineering_recipe,
+        )
+
+        assert not os.path.exists(eng)
+        assert os.path.exists(sci)
 
 
 # ---------------------------------------------------------------------------

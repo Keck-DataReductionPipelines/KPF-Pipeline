@@ -19,7 +19,9 @@ pytestmark = pytest.mark.cli
 
 
 class TestDispatch:
-    @pytest.mark.parametrize("command", ["run", "masters", "science", "timeseries"])
+    @pytest.mark.parametrize(
+        "command", ["run", "masters", "science", "engineering", "timeseries"]
+    )
     def test_routes_to_command_with_forwarded_argv(self, command, monkeypatch):
         seen = []
         monkeypatch.setitem(cli._COMMANDS, command, lambda rest: seen.append(rest))

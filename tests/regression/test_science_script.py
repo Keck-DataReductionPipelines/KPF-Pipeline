@@ -1,6 +1,6 @@
 """Tests for scripts/process/science.py: the science-reduction driver.
 
-Covers the driver's own surface: arg parsing and obs_id validation, the
+Covers the driver's own surface: arg parsing, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
 at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
 is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
@@ -53,40 +53,9 @@ def _stub_batch_log(monkeypatch, mod):
 
 class TestParseArgs:
     def test_obs_ids(self, s):
+        # Expansion details are tested on resolve_obs_ids (test_script_helpers.py).
         ns = s.parse_args(["--obs_ids", _OID2, _OID1])
         assert ns.obs_ids == [_OID1, _OID2]  # sorted + deduped
-
-    def test_dedupes_obs_ids(self, s):
-        ns = s.parse_args(["--obs_ids", _OID1, _OID1])
-        assert ns.obs_ids == [_OID1]
-
-    def test_obs_ids_from_file(self, s, tmp_path):
-        f = tmp_path / "frames.txt"
-        f.write_text(f"{_OID2}\n\n{_OID1}\n")  # blank line skipped
-        ns = s.parse_args(["--obs_ids", str(f)])
-        assert ns.obs_ids == [_OID1, _OID2]  # sorted
-
-    def test_obs_ids_mixes_inline_and_file(self, s, tmp_path):
-        f = tmp_path / "frames.txt"
-        f.write_text(f"{_OID2}\n{_OID1}\n")  # _OID1 also given inline
-        ns = s.parse_args(["--obs_ids", _OID1, str(f)])
-        assert ns.obs_ids == [_OID1, _OID2]  # merged + deduped
-
-    def test_obs_ids_file_with_bad_obs_id_errors(self, s, tmp_path):
-        f = tmp_path / "frames.txt"
-        f.write_text(f"{_OID1}\nnot-an-obs-id\n")
-        with pytest.raises(SystemExit):
-            s.parse_args(["--obs_ids", str(f)])
-
-    def test_obs_ids_empty_file_errors(self, s, tmp_path):
-        f = tmp_path / "empty.txt"
-        f.write_text("\n  \n")
-        with pytest.raises(SystemExit):
-            s.parse_args(["--obs_ids", str(f)])
-
-    def test_obs_id_entry_neither_obs_id_nor_file_errors(self, s):
-        with pytest.raises(SystemExit):
-            s.parse_args(["--obs_ids", "/no/such/file.txt"])
 
     def test_obs_ids_required(self, s):
         with pytest.raises(SystemExit):

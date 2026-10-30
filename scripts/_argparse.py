@@ -21,7 +21,7 @@ import sys
 import time
 
 from kpfpipe.utils.io import read_token_file
-from kpfpipe.utils.kpf import is_datecode
+from kpfpipe.utils.kpf import is_datecode, is_obs_id
 
 
 def config_parser():
@@ -126,12 +126,40 @@ def resolve_dates(ap, args):
     return args
 
 
-def data_dirs_parser(science_output=True):
+def resolve_obs_ids(ap, args):
+    """Expand ``--obs_ids`` in place.
+
+    Each value is either an obs_id, used as-is, or a text file of obs_ids expanded in
+    place; a valid obs_id is always read as such, even if a like-named file exists.
+    The result is sorted and deduplicated. Takes the command's own `ap` so a bad
+    value reports as its usage error. Returns `args`.
+    """
+    obs_ids = []
+    for entry in args.obs_ids:
+        if is_obs_id(entry):
+            obs_ids.append(entry)
+        elif os.path.isfile(entry):
+            for oid in read_token_file(entry):
+                if not is_obs_id(oid):
+                    ap.error(f"not a valid obs_id in {entry}: {oid!r}")
+                obs_ids.append(oid)
+        else:
+            ap.error(
+                f"--obs_ids entry is neither an obs_id nor a readable file: {entry!r}"
+            )
+    if not obs_ids:
+        ap.error(f"--obs_ids produced no obs_ids (empty file?): {args.obs_ids}")
+    args.obs_ids = sorted(set(obs_ids))
+    return args
+
+
+def data_dirs_parser(science_output=True, engineering_output=False):
     """[DATA_DIRS] override flags, plus the ``--input_dir``/``--output_dir``
     convenience shortcuts. ``--kpf_science_output`` is included only when
-    `science_output` is true (masters produces no science output). ``--input_dir``
-    aliases ``--kpf_data_input``; ``--output_dir`` is fanned out post-parse by
-    `resolve_dir_shortcuts`."""
+    `science_output` is true (masters produces no science output), and
+    ``--kpf_engineering_output`` only when `engineering_output` is true.
+    ``--input_dir`` aliases ``--kpf_data_input``; ``--output_dir`` is fanned out
+    post-parse by `resolve_dir_shortcuts`."""
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(
         "--kpf_data_input",
@@ -146,12 +174,17 @@ def data_dirs_parser(science_output=True):
         p.add_argument(
             "--kpf_science_output", help="override [DATA_DIRS] KPF_SCIENCE_OUTPUT"
         )
+    if engineering_output:
+        p.add_argument(
+            "--kpf_engineering_output",
+            help="override [DATA_DIRS] KPF_ENGINEERING_OUTPUT",
+        )
     p.add_argument(
         "--output_dir",
         default=None,
         help="shortcut: root for every output directory not given its own explicit "
-        "flag -- the masters output, the science output (where applicable), the log "
-        "dir ({output_dir}/logs), and (timeseries) the plot dir "
+        "flag -- the masters output, the science and engineering outputs (where "
+        "applicable), the log dir ({output_dir}/logs), and (timeseries) the plot dir "
         "({output_dir}/QLP/timeseries)",
     )
     return p
@@ -166,6 +199,7 @@ def data_dirs_parser(science_output=True):
 _OUTPUT_DIR_SLOTS = {
     "kpf_masters_output": (),
     "kpf_science_output": (),
+    "kpf_engineering_output": (),
     "log_dir": ("logs",),
     "plot_dir": ("QLP", "timeseries"),
     "analysis_dir": ("analysis",),
