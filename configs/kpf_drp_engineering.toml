@@ -2,7 +2,7 @@
 KPF_DATA_INPUT = "/data/kpf/"
 KPF_MASTERS_OUTPUT = "/data/kpf-next/masters-root/"
 KPF_SCIENCE_OUTPUT = "/data/kpf-next/science-root/"
-KPF_ENGINEERING_OUTPUT = "/data/kpf-next/engineering-root/"
+KPF_ENGINEERING_OUTPUT = "/data/kpf-next/engineering-root/"   # products under {root}/engineering/
 
 [LOGGER]
 log_dir = "/data/kpf-next/logs/"        # one parent dir for all logs (DRP-RUN-09)

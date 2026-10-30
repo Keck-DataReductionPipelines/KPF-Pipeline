@@ -613,6 +613,20 @@ class TestKpfFilename:
             kpf_filename("KP.20240405.40113.57", "L4") == "kpf_SL4_20240405T110833.fits"
         )
 
+    def test_engineering_l2(self):
+        # Not EPRV-compliant, so never the "kpf_SL2" prefix.
+        assert (
+            kpf_filename("KP.20240405.40113.57", "L2", engineering=True)
+            == "kpf_EngL2_20240405T110833.fits"
+        )
+
+    def test_engineering_filepath_under_engineering_tree(self):
+        assert kpf_filepath(
+            "KP.20240405.40113.57", "L2", data_root="/r", engineering=True
+        ) == os.path.join(
+            "/r", "engineering", "L2", "20240405", "kpf_EngL2_20240405T110833.fits"
+        )
+
     def test_master(self):
         assert (
             kpf_filename("KP.20240405.03600.00", "L1", master="bias")

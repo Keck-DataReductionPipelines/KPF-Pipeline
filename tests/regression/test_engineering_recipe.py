@@ -44,7 +44,7 @@ def _run_recipe(out_root, masters_root):
         },
     )
     recipe.main(config, argparse.Namespace(obs_id=OBS_ID))
-    return kpf_filepath(OBS_ID, "L2", data_root=str(out_root))
+    return kpf_filepath(OBS_ID, "L2", data_root=str(out_root), engineering=True)
 
 
 @pytest.mark.slow
@@ -58,10 +58,20 @@ class TestEngineeringRecipe:
 
     @pytest.fixture(scope="class")
     def l2(self, out_root):
-        return KPF2.from_fits(kpf_filepath(OBS_ID, "L2", data_root=str(out_root)))
+        return KPF2.from_fits(
+            kpf_filepath(OBS_ID, "L2", data_root=str(out_root), engineering=True)
+        )
 
     def test_l2_written(self, out_root):
-        assert os.path.isfile(kpf_filepath(OBS_ID, "L2", data_root=str(out_root)))
+        path = kpf_filepath(OBS_ID, "L2", data_root=str(out_root), engineering=True)
+        assert os.path.isfile(path)
+        assert path == str(
+            out_root
+            / "engineering"
+            / "L2"
+            / "20240405"
+            / "kpf_EngL2_20240405T110833.fits"
+        )
 
     def test_receipt_chain(self, l2):
         modules = l2.receipt["FUNCTION"].values
@@ -83,7 +93,7 @@ class TestEngineeringRecipe:
 
     @pytest.mark.parametrize("level", ["L0", "L1", "L2"])
     def test_qlp_pngs_exist(self, out_root, level):
-        qlp_dir = out_root / "QLP" / "20240405" / OBS_ID / level
+        qlp_dir = out_root / "engineering" / "QLP" / "20240405" / OBS_ID / level
         assert any(qlp_dir.glob("*.png")), f"no {level} quicklook PNGs in {qlp_dir}"
 
 

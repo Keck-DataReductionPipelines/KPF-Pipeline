@@ -841,7 +841,7 @@ class FileHandler:
         return sorted(glob.glob(pattern))
 
 
-def kpf_filename(obs_id, level, *, master=None):
+def kpf_filename(obs_id, level, *, master=None, engineering=False):
     """Base filename for a KPF data product (no directory). The single source of
     the naming rule; ``<model>.generate_standard_filename()`` and ``kpf_filepath``
     both delegate here.
@@ -850,6 +850,7 @@ def kpf_filename(obs_id, level, *, master=None):
       L0:    {obs_id}.fits                       (KPF-native)
       L1:    kpf_L1_{YYYYMMDD}T{HHmmss}.fits      (no EPRV "S": no L1 standard)
       L2/L4: kpf_SL{N}_{YYYYMMDD}T{HHmmss}.fits   (EPRV standard)
+    Engineering (non-L0): kpf_EngL{N}_{YYYYMMDD}T{HHmmss}.fits (not EPRV).
     Master basename: {obs_id}_master_{master}_{level}.fits.
 
     Parameters
@@ -862,6 +863,8 @@ def kpf_filename(obs_id, level, *, master=None):
     master : str or None, optional
         Master calibration type ('bias'/'dark'/'flat'/'thar') for a master
         product, or None (the default) for a science product.
+    engineering : bool, optional
+        True for an engineering-recipe product (``kpf_EngL{N}`` prefix).
 
     Returns
     -------
@@ -899,8 +902,12 @@ def kpf_filename(obs_id, level, *, master=None):
         return f"{obs_id}.fits"
     eprv_ts = kpf_timestamp_to_eprv_timestamp(get_timestamp(obs_id))
     # L1 has no EPRV standard, so it keeps the KPF "kpf_L1" prefix (no "S");
-    # L2/L4 use the EPRV "kpf_SL{N}" prefix.
-    prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
+    # L2/L4 use the EPRV "kpf_SL{N}" prefix. Engineering products are not
+    # EPRV-compliant and take "kpf_EngL{N}" at every level.
+    if engineering:
+        prefix = f"kpf_EngL{level[1]}"
+    else:
+        prefix = "kpf_L1" if level == "L1" else f"kpf_SL{level[1]}"
     return f"{prefix}_{eprv_ts}.fits"
 
 
@@ -1054,7 +1061,7 @@ def kpf_directory(
     return os.path.join(data_root, "QLP", datecode, obs_id, level)
 
 
-def kpf_filepath(obs_id, level, *, data_root=None, master=None):
+def kpf_filepath(obs_id, level, *, data_root=None, master=None, engineering=False):
     """Build a filepath for a KPF data product: the product's directory
     (``kpf_directory``) joined with its basename (``kpf_filename``).
 
@@ -1079,6 +1086,9 @@ def kpf_filepath(obs_id, level, *, data_root=None, master=None):
         Master calibration type, one of 'bias', 'dark', 'flat', 'thar'. If
         provided, builds a master calibration path. If omitted, builds a
         science data path.
+    engineering : bool, optional
+        True for an engineering-recipe product: a ``kpf_EngL{N}`` basename in
+        the science layout under ``{data_root}/engineering``.
 
     Returns
     -------
@@ -1098,10 +1108,12 @@ def kpf_filepath(obs_id, level, *, data_root=None, master=None):
             f"data_root must be None or a non-empty string; got {data_root!r}"
         )
 
-    filename = kpf_filename(obs_id, level, master=master)
+    filename = kpf_filename(obs_id, level, master=master, engineering=engineering)
     if data_root is None:
         return filename
 
+    if engineering:
+        data_root = os.path.join(data_root, "engineering")
     kind = "masters" if master is not None else "science"
     return os.path.join(
         kpf_directory(kind=kind, data_root=data_root, level=level, obs_id=obs_id),
