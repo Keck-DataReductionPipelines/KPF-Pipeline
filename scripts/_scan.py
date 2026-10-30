@@ -2,8 +2,8 @@
 
 Every question that requires looking at the data tree lives here, so ``_argparse.py``
 above can parse arguments without knowing what is on disk: `datecodes_in_range`
-answers which nights a ``--date_range`` actually names, and the cache warmers below
-prepare them.
+answers which nights a ``--date_range`` actually names, `obs_ids_in_nights` which
+frames those nights hold, and the cache warmers below prepare them.
 
 The masters and science orchestrators warm the on-disk mini-database cache
 (``{KPF_DATA_INPUT}/vNext/mini_db/{datecode}_L0.csv``) once, up front, in parallel
@@ -20,12 +20,13 @@ of a ``kpfpipe.utils.io`` import.
 """
 
 import concurrent.futures
+import glob
 import logging
 import os
 import sys
 
 from kpfpipe.utils.io import FileHandler, datecode_dirs_in_range
-from kpfpipe.utils.kpf import is_datecode
+from kpfpipe.utils.kpf import is_datecode, is_obs_id
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,28 @@ def datecodes_in_range(data_input, start, end):
     if not nights:
         sys.exit(f"error: no datecode dirs under {l0_root} in range {start}..{end}")
     return nights
+
+
+def obs_ids_in_nights(data_input, datecodes):
+    """The obs_ids of every L0 frame in the given nights, sorted.
+
+    A night with no L0 frames is warned and skipped; stray files that are not named
+    by an obs_id are ignored. No frames in any night is fatal: silently doing
+    nothing would read as success.
+    """
+    obs_ids = []
+    for dc in datecodes:
+        paths = glob.glob(os.path.join(data_input, "L0", dc, "KP.*.fits"))
+        night = [os.path.basename(p)[: -len(".fits")] for p in paths]
+        night = [o for o in night if is_obs_id(o)]
+        if not night:
+            logger.warning("skipping %s: no L0 frames", dc)
+        obs_ids += night
+    if not obs_ids:
+        sys.exit(
+            f"error: no L0 frames under {data_input}/L0 for {', '.join(datecodes)}"
+        )
+    return sorted(obs_ids)
 
 
 def scan_night_to_cache(data_input, datecode, cache="rw"):

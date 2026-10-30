@@ -240,7 +240,7 @@ class TestGuards:
         with pytest.raises(SystemExit) as exc:
             red.main(["--science", "-d", "20240405"])
         assert exc.value.code == 2
-        assert "science recipe takes -o/--obs_id" in capsys.readouterr().err
+        assert "kpfpipe run reduces one science frame" in capsys.readouterr().err
 
     @pytest.mark.parametrize(
         "recipe, selector, message",
@@ -248,7 +248,7 @@ class TestGuards:
             (
                 science_recipe.__file__,
                 ["-d", "20240405"],
-                "science recipe takes -o/--obs_id",
+                "kpfpipe run reduces one science frame",
             ),
             (masters_recipe.__file__, ["-o", _OID], "masters recipe takes -d"),
         ],
@@ -271,7 +271,7 @@ class TestGuards:
         with pytest.raises(SystemExit) as exc:
             red.main(["--engineering", "-d", "20240405"])
         assert exc.value.code == 2
-        assert "engineering recipe takes -o/--obs_id" in capsys.readouterr().err
+        assert "kpfpipe run reduces one engineering frame" in capsys.readouterr().err
 
     def test_undeclared_recipe_rejects_stages(self, tmp_path, capsys):
         recipe = tmp_path / "undeclared.py"
@@ -514,7 +514,7 @@ class TestCustomRecipeGuard:
         with pytest.raises(SystemExit) as exc:
             red.main(["-r", str(link), "-c", cfg, "-d", "20240405"])
         assert exc.value.code == 2
-        assert "engineering recipe takes -o/--obs_id" in capsys.readouterr().err
+        assert "kpfpipe run reduces one engineering frame" in capsys.readouterr().err
 
 
 @pytest.mark.usefixtures("_stub_is_standard")

@@ -39,7 +39,8 @@ class TestParseArgs:
     @pytest.mark.parametrize(
         "argv",
         [
-            [],  # --obs_ids required
+            [],  # one of --obs_ids/--dates/--date_range required
+            ["--obs_ids", _OID1, "--dates", "20240405"],  # more than one
             ["--obs_ids", "not-an-obs-id"],
             ["--obs_ids", _OID1, "--jobs", "0"],
             ["--obs_ids", _OID1, "--job_timeout", "0"],
@@ -52,6 +53,11 @@ class TestParseArgs:
     def test_invalid_args_exit(self, e, argv):
         with pytest.raises(SystemExit):
             e.parse_args(argv)
+
+    def test_dates_and_date_range(self, e):
+        assert e.parse_args(["--dates", "20240405"]).dates == ["20240405"]
+        ns = e.parse_args(["--date_range", "20240401", "20240430"])
+        assert ns.date_range == ["20240401", "20240430"] and ns.obs_ids is None
 
     def test_jobs_unset_resolves_to_cores_default(self, e):
         assert e.parse_args(["--obs_ids", _OID1]).jobs == e._default_science_jobs()
@@ -156,6 +162,31 @@ class TestMain:
         self._patch(e, monkeypatch, failed=[], calls=calls)
         e.main(["--obs_ids", _OID1])
         assert "--stages" not in calls[0][0][1][0][1]
+
+    def test_dates_reduce_every_frame_of_the_night(self, e, monkeypatch):
+        # No Target filter and no gate: every L0 frame of the night is dispatched.
+        calls, seen = [], {}
+        self._patch(e, monkeypatch, failed=[], calls=calls)
+
+        def fake_nights(data_input, nights):
+            seen.update(data_input=data_input, nights=nights)
+            return [_OID1, _OID2]
+
+        monkeypatch.setattr(e, "obs_ids_in_nights", fake_nights)
+        e.main(["--dates", "20240405"])
+        assert seen == {"data_input": "/in", "nights": ["20240405"]}
+        assert [tag for tag, _ in calls[0][0][1]] == [_OID1, _OID2]
+
+    def test_date_range_expands_to_the_nights_on_disk(self, e, monkeypatch):
+        calls, seen = [], {}
+        self._patch(e, monkeypatch, failed=[], calls=calls)
+        monkeypatch.setattr(
+            e, "datecodes_in_range", lambda di, a, b: seen.update(r=(a, b)) or [a]
+        )
+        monkeypatch.setattr(e, "obs_ids_in_nights", lambda di, nights: [_OID1])
+        e.main(["--date_range", "20240405", "20240406"])
+        assert seen["r"] == ("20240405", "20240406")
+        assert [tag for tag, _ in calls[0][0][1]] == [_OID1]
 
     def test_errors_when_log_dir_unset(self, e, monkeypatch):
         monkeypatch.setattr(e, "configure_runtime", lambda: None)

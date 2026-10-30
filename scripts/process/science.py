@@ -6,10 +6,12 @@ A lightweight, fail-loud orchestrator: it dispatches each frame as a separate
 ``kpfpipe run`` leaf), so every frame gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which frames to reduce (discovering a target's frames from the L0 tree lives in
-the timeseries wrapper, not here), via the input form:
+the timeseries wrapper, not here), via one of the input forms:
 
     kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36
     kpfpipe science --obs_ids frames.txt        # a file of obs_ids
+    kpfpipe science --dates 20240405 20240712   # every Target frame of these nights
+    kpfpipe science --date_range 20240401 20240430
 
 Reductions run in a bounded process pool. The L0 mini-database caches for the
 nights the frames span are warmed up front by a parallel per-datecode pre-scan
@@ -37,11 +39,12 @@ from scripts._argparse import (
     cache_parser,
     config_parser,
     data_dirs_parser,
+    dates_parser,
     logging_parser,
     pool_parser,
     resolve_dir_shortcuts,
+    resolve_frame_selection,
     resolve_log_settings,
-    resolve_obs_ids,
     stages_parser,
 )
 from scripts._dispatch import (
@@ -49,7 +52,7 @@ from scripts._dispatch import (
     configure_runtime,
     run_stage,
 )
-from scripts._scan import warm_mini_db_caches
+from scripts._scan import datecodes_in_range, obs_ids_in_nights, warm_mini_db_caches
 from scripts.process import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 
 logger = logging.getLogger(__name__)
@@ -79,19 +82,19 @@ def parse_args(argv=None):
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
+            dates_parser("reduces the Target frames of every L0 night in it"),
             stages_parser(RECIPE_STAGES),
         ],
     )
     ap.add_argument(
         "--obs_ids",
         nargs="+",
-        required=True,
         metavar="OBS_ID_OR_FILE",
         help="one or more obs_ids to reduce, or a text file listing one obs_id per "
         "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
-        "--obs_ids frames.txt",
+        "--obs_ids frames.txt (mutually exclusive with --dates/--date_range)",
     )
-    args = resolve_obs_ids(ap, ap.parse_args(argv))
+    args = resolve_frame_selection(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
@@ -158,7 +161,13 @@ def main(argv=None):
     if args.stages:
         forward += ["--stages", *args.stages]
 
-    obs_ids = args.obs_ids
+    # Nights expand to every frame in them; the gate below keeps only Targets.
+    by_night = args.obs_ids is None
+    if by_night:
+        nights = args.dates or datecodes_in_range(data_input, *args.date_range)
+        obs_ids = obs_ids_in_nights(data_input, nights)
+    else:
+        obs_ids = args.obs_ids
 
     # Batch banner: the start of this invocation's decision trail.
     logger.info("kpfpipe %s science batch starting", kpfpipe.__version__)
@@ -166,27 +175,45 @@ def main(argv=None):
     logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
-    logger.info("reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids))
+    if by_night:
+        logger.info("reducing the Target frames of night(s): %s", ", ".join(nights))
+    else:
+        logger.info(
+            "reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids)
+        )
 
     # Warm the L0 mini-db caches up front, one thread per night (--cache, rw
     # default; --cache r skips the pre-scan and leaves reduces to read-only).
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
-    # Gate junk and single-CCD frames out of the science recipe.
+    # Gate junk and single-CCD frames out of the science recipe, and, for a night,
+    # every frame that is not a Target.
     status = {}
     for dc in datecodes:
         mini_db = FileHandler({"KPF_DATA_INPUT": data_input}).build_mini_database(
             dc, cache="r"
         )
         both_ccds = mini_db[["GREEN", "RED"]].eq(True).all(axis=1)
-        for fn, junk, both in zip(
-            mini_db["FILENAME"], mini_db["ISJUNK"].astype(bool), both_ccds, strict=True
+        targets = mini_db["DRP_OBSTYPE"] == "Target"
+        for fn, junk, both, target in zip(
+            mini_db["FILENAME"],
+            mini_db["ISJUNK"].astype(bool),
+            both_ccds,
+            targets,
+            strict=True,
         ):
-            status[get_obs_id(fn)] = (junk, both)
+            status[get_obs_id(fn)] = (junk, both, target)
+        if by_night:
+            logger.info("%s: %d Target frame(s)", dc, targets.sum())
+            if not targets.any():
+                logger.warning("skipping %s: no Target frames", dc)
+    if by_night:  # a frame the mini-db rejected is no known Target
+        obs_ids = [o for o in obs_ids if status.get(o, (0, 0, False))[2]]
+    requested = len(obs_ids)
     kept = []
     for o in obs_ids:
-        junk, both = status.get(o, (False, True))
+        junk, both, _ = status.get(o, (False, True, True))
         if junk:
             logger.info("skipping %s: junk frame", o)
         elif not both:
@@ -196,6 +223,8 @@ def main(argv=None):
         else:
             kept.append(o)
     obs_ids = kept
+    if by_night and not obs_ids:
+        sys.exit("error: no Target frames to reduce in the requested night(s)")
 
     tasks = [_cli_task(o, forward, config=args.config) for o in obs_ids]
     failed = run_stage(
@@ -213,7 +242,7 @@ def main(argv=None):
         "done: reduced %d/%d frame(s), %d skipped",
         reduced,
         len(obs_ids),
-        len(args.obs_ids) - len(obs_ids),
+        requested - len(obs_ids),
     )
     if failed:
         sys.exit(1)

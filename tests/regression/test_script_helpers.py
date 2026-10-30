@@ -444,6 +444,49 @@ class TestResolveObsIds:
         assert "produced no obs_ids" in capsys.readouterr().err
 
 
+def _resolve_frames(argv):
+    ap = argparse.ArgumentParser(parents=[_argparse.dates_parser("reduces it")])
+    ap.add_argument("--obs_ids", nargs="+")
+    return _argparse.resolve_frame_selection(ap, ap.parse_args(argv))
+
+
+class TestResolveFrameSelection:
+    """Exactly one of --obs_ids, --dates, --date_range, each resolved as usual."""
+
+    @pytest.mark.parametrize(
+        "argv, attr, expected",
+        [
+            (["--obs_ids", _OID2, _OID1], "obs_ids", [_OID1, _OID2]),
+            (["--dates", "20240712", "20240405"], "dates", ["20240405", "20240712"]),
+            (
+                ["--date_range", "20240401", "20240430"],
+                "date_range",
+                ["20240401", "20240430"],
+            ),
+        ],
+        ids=["obs_ids", "dates", "date_range"],
+    )
+    def test_each_form_resolves(self, argv, attr, expected):
+        assert getattr(_resolve_frames(argv), attr) == expected
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            [],
+            ["--obs_ids", _OID1, "--dates", "20240405"],
+            ["--obs_ids", _OID1, "--date_range", "20240401", "20240430"],
+            ["--dates", "20240405", "--date_range", "20240401", "20240430"],
+        ],
+        ids=["none", "obs_ids+dates", "obs_ids+range", "dates+range"],
+    )
+    def test_not_exactly_one_is_an_error(self, argv, capsys):
+        with pytest.raises(SystemExit):
+            _resolve_frames(argv)
+        assert "exactly one of --obs_ids, --dates, or --date_range" in (
+            capsys.readouterr().err
+        )
+
+
 # ===========================================================================
 # _dispatch.py -- shared subprocess fan-out engine
 # ===========================================================================
@@ -802,6 +845,39 @@ class TestDatecodesInRange:
             nights = _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
         assert nights == ["20240101"]
         assert "scratch" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# obs_ids_in_nights: the night -> frames expansion behind science/engineering --dates
+# ---------------------------------------------------------------------------
+
+
+class TestObsIdsInNights:
+    def _touch(self, root, datecode, *names):
+        night = root / "L0" / datecode
+        night.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (night / name).touch()
+
+    def test_collects_frames_sorted_ignoring_strays(self, tmp_path):
+        self._touch(tmp_path, "20240405", f"{_OID2}.fits", f"{_OID1}.fits")
+        self._touch(tmp_path, "20240405", "KP.notes.fits", f"{_OID1}.txt")
+        self._touch(tmp_path, "20240406", "KP.20240406.00100.00.fits")
+        obs_ids = _scan.obs_ids_in_nights(str(tmp_path), ["20240405", "20240406"])
+        assert obs_ids == [_OID1, _OID2, "KP.20240406.00100.00"]
+
+    def test_empty_night_is_warned_and_skipped(self, tmp_path, caplog):
+        self._touch(tmp_path, "20240405", f"{_OID1}.fits")
+        self._touch(tmp_path, "20240406")
+        with caplog.at_level(logging.WARNING, logger="scripts._scan"):
+            obs_ids = _scan.obs_ids_in_nights(str(tmp_path), ["20240405", "20240406"])
+        assert obs_ids == [_OID1]
+        assert "skipping 20240406: no L0 frames" in caplog.text
+
+    def test_no_frames_in_any_night_exits(self, tmp_path):
+        self._touch(tmp_path, "20240405")
+        with pytest.raises(SystemExit, match="no L0 frames"):
+            _scan.obs_ids_in_nights(str(tmp_path), ["20240405", "20240406"])
 
 
 # ---------------------------------------------------------------------------

@@ -5,10 +5,12 @@ A lightweight orchestrator: it dispatches each frame as a separate
 ``python -m scripts.process.reduce -r <engineering recipe> -o <obs_id>`` subprocess
 (the ``kpfpipe run`` leaf), so every frame gets its own log file, clean process
 state, and independent exit code. It reimplements no pipeline logic; the caller
-supplies which frames to reduce, via the input form:
+supplies which frames to reduce, via one of the input forms:
 
     kpfpipe engineering --obs_ids KP.20240405.40113.57 KP.20240405.40237.36
     kpfpipe engineering --obs_ids frames.txt        # a file of obs_ids
+    kpfpipe engineering --dates 20240405 20240712   # every frame of these nights
+    kpfpipe engineering --date_range 20240401 20240430
 
 Reductions run in a bounded process pool; the first frame runs alone as a canary
 to warm the shared caches, then the rest fan out, paced apart. Unlike ``kpfpipe
@@ -30,14 +32,16 @@ from recipes.kpf_drp_engineering import RECIPE_STAGES
 from scripts._argparse import (
     config_parser,
     data_dirs_parser,
+    dates_parser,
     logging_parser,
     pool_parser,
     resolve_dir_shortcuts,
+    resolve_frame_selection,
     resolve_log_settings,
-    resolve_obs_ids,
     stages_parser,
 )
 from scripts._dispatch import _default_science_jobs, configure_runtime, run_stage
+from scripts._scan import datecodes_in_range, obs_ids_in_nights
 from scripts.process import DEFAULT_ENGINEERING_CONFIG, DEFAULT_ENGINEERING_RECIPE
 
 logger = logging.getLogger(__name__)
@@ -64,19 +68,19 @@ def parse_args(argv=None):
             data_dirs_parser(science_output=False, engineering_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
+            dates_parser("reduces every L0 frame of every night in it"),
             stages_parser(RECIPE_STAGES),
         ],
     )
     ap.add_argument(
         "--obs_ids",
         nargs="+",
-        required=True,
         metavar="OBS_ID_OR_FILE",
         help="one or more obs_ids to reduce, or a text file listing one obs_id per "
         "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
-        "--obs_ids frames.txt",
+        "--obs_ids frames.txt (mutually exclusive with --dates/--date_range)",
     )
-    args = resolve_obs_ids(ap, ap.parse_args(argv))
+    args = resolve_frame_selection(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
@@ -114,9 +118,12 @@ def main(argv=None):
     configure_runtime()
     args = parse_args(argv)
 
-    # Read the effective config (the engineering default unless -c overrides) only
-    # for the log dir; subprocesses get recipe/config via -r/-c.
+    # Read the effective config (the engineering default unless -c overrides) for the
+    # L0 input root and log dir; subprocesses get recipe/config via -r/-c.
     config = ConfigHandler(args.config or DEFAULT_ENGINEERING_CONFIG)
+    data_input = (
+        args.kpf_data_input or config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
+    )
     # One run, one log directory: this batch's own DRP-RUN-08 decision trail and
     # every frame's per-reduction log land together in {log_dir}/{run_id}.
     log_dir, level = resolve_log_settings(args, config.get_params(["LOGGER"]))
@@ -141,7 +148,12 @@ def main(argv=None):
     if args.stages:
         forward += ["--stages", *args.stages]
 
-    obs_ids = args.obs_ids
+    # Nights expand to every frame in them.
+    if args.obs_ids is None:
+        nights = args.dates or datecodes_in_range(data_input, *args.date_range)
+        obs_ids = obs_ids_in_nights(data_input, nights)
+    else:
+        obs_ids = args.obs_ids
 
     # Batch banner: the start of this invocation's decision trail.
     logger.info("kpfpipe %s engineering batch starting", kpfpipe.__version__)

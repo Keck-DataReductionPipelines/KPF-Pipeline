@@ -170,7 +170,10 @@ def main(argv=None):
     if recipe_type == "masters" and not args.datecode:
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
     if recipe_type in ("science", "engineering") and not args.obs_id:
-        parser.error(f"{recipe_type} recipe takes -o/--obs_id, not -d/--datecode")
+        parser.error(
+            f"kpfpipe run reduces one {recipe_type} frame (-o/--obs_id); to reduce "
+            f"a night or many frames, use kpfpipe {recipe_type} --dates/--obs_ids"
+        )
     stages = getattr(recipe, "RECIPE_STAGES", ())
     unknown = [s for s in args.stages or () if s not in stages]
     if unknown:

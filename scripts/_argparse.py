@@ -153,6 +153,19 @@ def resolve_obs_ids(ap, args):
     return args
 
 
+def resolve_frame_selection(ap, args):
+    """Validate a frame command's selection: exactly one of ``--obs_ids``,
+    ``--dates``, or ``--date_range``, resolved by `resolve_obs_ids` or
+    `resolve_dates`. Nights expand to obs_ids later, once the data root is known
+    (`_scan.obs_ids_in_nights`). Returns `args`.
+    """
+    if sum(v is not None for v in (args.obs_ids, args.dates, args.date_range)) != 1:
+        ap.error("give exactly one of --obs_ids, --dates, or --date_range")
+    if args.obs_ids is not None:
+        return resolve_obs_ids(ap, args)
+    return resolve_dates(ap, args)
+
+
 def data_dirs_parser(science_output=True, engineering_output=False):
     """[DATA_DIRS] override flags, plus the ``--input_dir``/``--output_dir``
     convenience shortcuts. ``--kpf_science_output`` is included only when

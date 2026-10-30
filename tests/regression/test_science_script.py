@@ -57,9 +57,20 @@ class TestParseArgs:
         ns = s.parse_args(["--obs_ids", _OID2, _OID1])
         assert ns.obs_ids == [_OID1, _OID2]  # sorted + deduped
 
-    def test_obs_ids_required(self, s):
+    def test_dates_and_date_range(self, s):
+        # Expansion details are tested on resolve_dates (test_script_helpers.py).
+        assert s.parse_args(["--dates", "20240405"]).dates == ["20240405"]
+        ns = s.parse_args(["--date_range", "20240401", "20240430"])
+        assert ns.date_range == ["20240401", "20240430"] and ns.obs_ids is None
+
+    @pytest.mark.parametrize(
+        "argv",
+        [[], ["--obs_ids", _OID1, "--dates", "20240405"]],
+        ids=["neither", "both"],
+    )
+    def test_exactly_one_selection(self, s, argv):
         with pytest.raises(SystemExit):
-            s.parse_args([])
+            s.parse_args(argv)
 
     @pytest.mark.parametrize(
         "argv",
@@ -139,10 +150,13 @@ class TestCliTask:
 
 def _fake_file_handler(rows=()):
     """A FileHandler stand-in whose mini database holds `rows`, each an
-    ``(obs_id, isjunk, green, red)`` tuple."""
+    ``(obs_id, isjunk, green, red[, obstype])`` tuple (obstype default Target)."""
     mini_db = pd.DataFrame(
-        [(f"/in/L0/20240405/{o}.fits", j, g, r) for o, j, g, r in rows],
-        columns=["FILENAME", "ISJUNK", "GREEN", "RED"],
+        [
+            (f"/in/L0/20240405/{o}.fits", j, g, r, *(t or ["Target"]))
+            for o, j, g, r, *t in rows
+        ],
+        columns=["FILENAME", "ISJUNK", "GREEN", "RED", "DRP_OBSTYPE"],
     )
 
     class _FakeFileHandler:
@@ -298,6 +312,61 @@ class TestMainExitCode:
         # Both halves of the run directory, so the child joins the same one.
         assert fwd["--log_dir"] == "/out/logs"
         assert fwd["--run_id"] == "science_x"
+
+    def test_dates_reduce_only_a_nights_target_frames(self, s, monkeypatch, caplog):
+        # A night expands to its frames; calibrations drop silently, junk is still
+        # gated and counted as skipped.
+        calls, seen = [], {}
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        oid3 = "KP.20240405.40300.00"
+
+        def fake_nights(data_input, nights):
+            seen.update(data_input=data_input, nights=nights)
+            return [_OID1, _OID2, oid3]
+
+        monkeypatch.setattr(s, "obs_ids_in_nights", fake_nights)
+        monkeypatch.setattr(
+            s,
+            "FileHandler",
+            _fake_file_handler(
+                [
+                    (_OID1, False, True, True),
+                    (_OID2, False, True, True, "Bias"),
+                    (oid3, True, True, True),
+                ]
+            ),
+        )
+        with caplog.at_level(logging.INFO, logger=s.logger.name):
+            s.main(["--dates", "20240405"])
+        assert seen == {"data_input": "/in", "nights": ["20240405"]}
+        assert [tag for tag, _ in calls[0][0][1]] == [_OID1]
+        assert "done: reduced 1/1 frame(s), 1 skipped" in caplog.text
+
+    def test_date_range_expands_to_the_nights_on_disk(self, s, monkeypatch):
+        calls, seen = [], {}
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        monkeypatch.setattr(
+            s, "datecodes_in_range", lambda di, a, b: seen.update(r=(a, b)) or [a]
+        )
+        monkeypatch.setattr(s, "obs_ids_in_nights", lambda di, nights: [_OID1])
+        monkeypatch.setattr(
+            s, "FileHandler", _fake_file_handler([(_OID1, False, True, True)])
+        )
+        s.main(["--date_range", "20240405", "20240406"])
+        assert seen["r"] == ("20240405", "20240406")
+        assert [tag for tag, _ in calls[0][0][1]] == [_OID1]
+
+    def test_dates_without_target_frames_warn_and_exit(self, s, monkeypatch, caplog):
+        self._patch(s, monkeypatch, failed=[])
+        monkeypatch.setattr(s, "obs_ids_in_nights", lambda di, nights: [_OID1])
+        monkeypatch.setattr(
+            s, "FileHandler", _fake_file_handler([(_OID1, False, True, True, "Dark")])
+        )
+        with caplog.at_level(logging.WARNING, logger=s.logger.name):
+            with pytest.raises(SystemExit) as exc:
+                s.main(["--dates", "20240405"])
+        assert "no Target frames" in str(exc.value.code)
+        assert "skipping 20240405: no Target frames" in caplog.text
 
     def test_errors_when_log_dir_unset(self, s, monkeypatch):
         # A missing log_dir is fatal before any fan-out.
