@@ -164,19 +164,20 @@ class TestParseArgs:
 class TestCliTask:
     def test_builds_masters_argv_with_defaults(self, m):
         # No -c override: the masters recipe and default config are passed explicitly.
-        tag, argv = m._cli_task("20240405", ["--log_level", "DEBUG"])
+        tag, argv = m._cli_task("20240405", ["--log_level", "DEBUG"], stage="bias")
         assert tag == "20240405"
         assert argv == [
             sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", m.DEFAULT_MASTERS_CONFIG,
-            "-d", "20240405", "--log_level", "DEBUG",
+            "-d", "20240405", "--log_level", "DEBUG", "--stages", "bias",
         ]  # fmt: skip
 
     def test_config_override_keeps_default_recipe(self, m):
-        _, argv = m._cli_task("20240405", [], config="/c.toml")
+        _, argv = m._cli_task("20240405", [], stage="bias", config="/c.toml")
         assert argv == [
             sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", "/c.toml", "-d", "20240405",
+            "--stages", "bias",
         ]  # fmt: skip
 
     def test_stage_is_appended(self, m):

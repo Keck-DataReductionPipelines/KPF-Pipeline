@@ -60,7 +60,7 @@ class TestParseArgs:
         assert ns.date_range == ["20240401", "20240430"] and ns.obs_ids is None
 
     def test_jobs_unset_resolves_to_cores_default(self, e):
-        assert e.parse_args(["--obs_ids", _OID1]).jobs == e._default_science_jobs()
+        assert e.parse_args(["--obs_ids", _OID1]).jobs == e._default_frame_jobs()
 
     def test_output_dir_fans_out(self, e):
         # engineering has masters + engineering output and a log dir.

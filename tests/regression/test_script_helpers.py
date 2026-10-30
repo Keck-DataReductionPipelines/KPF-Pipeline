@@ -445,8 +445,9 @@ class TestResolveObsIds:
 
 
 def _resolve_frames(argv):
-    ap = argparse.ArgumentParser(parents=[_argparse.dates_parser("reduces it")])
-    ap.add_argument("--obs_ids", nargs="+")
+    ap = argparse.ArgumentParser(
+        parents=[_argparse.dates_parser("reduces it"), _argparse.obs_ids_parser()]
+    )
     return _argparse.resolve_frame_selection(ap, ap.parse_args(argv))
 
 
@@ -503,7 +504,7 @@ class TestDefaultScienceJobs:
     )
     def test_cap(self, monkeypatch, cpus, expected):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: cpus)
-        assert _dispatch._default_science_jobs() == expected
+        assert _dispatch._default_frame_jobs() == expected
 
 
 class TestDefaultMastersJobs:
@@ -527,9 +528,7 @@ class TestDefaultMastersJobs:
     def test_cores_floor_below_fixed_cap(self, monkeypatch):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 8)
         monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(256))
-        assert (
-            _dispatch._default_masters_jobs() == _dispatch._default_science_jobs() == 8
-        )
+        assert _dispatch._default_masters_jobs() == _dispatch._default_frame_jobs() == 8
 
     def test_unknown_ram_uses_cores_floor_only(self, monkeypatch):
         # 8 cores, not 256: at 256 the cores floor is 64 and never binds, so the

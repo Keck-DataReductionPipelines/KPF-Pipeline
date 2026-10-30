@@ -19,9 +19,8 @@ nights the frames span are warmed up front by a parallel per-datecode pre-scan
 read-only); the first frame then runs alone as a canary to warm the *other* shared
 caches, then the rest fan out (paced apart, since the per-frame L0 pointing QC
 queries SIMBAD/Gaia). ``--stages`` is forwarded to every frame, overriding the
-config's [STAGES]. The run is fail-soft (a frame that fails to reduce is
-reported and
-the others continue) but exits nonzero if any frame failed.
+config's [STAGES]. The run is fail-soft (a frame that fails to reduce is reported
+and the others continue) but exits nonzero if any frame failed.
 """
 
 import argparse
@@ -41,6 +40,7 @@ from scripts._argparse import (
     data_dirs_parser,
     dates_parser,
     logging_parser,
+    obs_ids_parser,
     pool_parser,
     resolve_dir_shortcuts,
     resolve_frame_selection,
@@ -48,7 +48,7 @@ from scripts._argparse import (
     stages_parser,
 )
 from scripts._dispatch import (
-    _default_science_jobs,
+    _default_frame_jobs,
     configure_runtime,
     run_stage,
 )
@@ -83,23 +83,16 @@ def parse_args(argv=None):
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
             dates_parser("reduces the Target frames of every L0 night in it"),
+            obs_ids_parser(),
             stages_parser(RECIPE_STAGES),
         ],
-    )
-    ap.add_argument(
-        "--obs_ids",
-        nargs="+",
-        metavar="OBS_ID_OR_FILE",
-        help="one or more obs_ids to reduce, or a text file listing one obs_id per "
-        "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
-        "--obs_ids frames.txt (mutually exclusive with --dates/--date_range)",
     )
     args = resolve_frame_selection(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
     if args.jobs is None:
-        args.jobs = _default_science_jobs()
+        args.jobs = _default_frame_jobs()
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
     return resolve_dir_shortcuts(args)
@@ -189,34 +182,30 @@ def main(argv=None):
 
     # Gate junk and single-CCD frames out of the science recipe, and, for a night,
     # every frame that is not a Target.
-    status = {}
+    # A frame absent from the mini-db (rejected by the scan) is in none of the sets:
+    # not a known Target, but not gated either.
+    junk, single_ccd, targets = set(), set(), set()
     for dc in datecodes:
         mini_db = FileHandler({"KPF_DATA_INPUT": data_input}).build_mini_database(
             dc, cache="r"
         )
-        both_ccds = mini_db[["GREEN", "RED"]].eq(True).all(axis=1)
-        targets = mini_db["DRP_OBSTYPE"] == "Target"
-        for fn, junk, both, target in zip(
-            mini_db["FILENAME"],
-            mini_db["ISJUNK"].astype(bool),
-            both_ccds,
-            targets,
-            strict=True,
-        ):
-            status[get_obs_id(fn)] = (junk, both, target)
+        ids = mini_db["FILENAME"].map(get_obs_id)
+        junk |= set(ids[mini_db["ISJUNK"].astype(bool)])
+        single_ccd |= set(ids[~mini_db[["GREEN", "RED"]].eq(True).all(axis=1)])
+        night_targets = set(ids[mini_db["DRP_OBSTYPE"] == "Target"])
+        targets |= night_targets
         if by_night:
-            logger.info("%s: %d Target frame(s)", dc, targets.sum())
-            if not targets.any():
+            logger.info("%s: %d Target frame(s)", dc, len(night_targets))
+            if not night_targets:
                 logger.warning("skipping %s: no Target frames", dc)
-    if by_night:  # a frame the mini-db rejected is no known Target
-        obs_ids = [o for o in obs_ids if status.get(o, (0, 0, False))[2]]
+    if by_night:
+        obs_ids = [o for o in obs_ids if o in targets]
     requested = len(obs_ids)
     kept = []
     for o in obs_ids:
-        junk, both, _ = status.get(o, (False, True, True))
-        if junk:
+        if o in junk:
             logger.info("skipping %s: junk frame", o)
-        elif not both:
+        elif o in single_ccd:
             logger.warning(
                 "skipping %s: DRP does not yet support single-CCD exposures", o
             )

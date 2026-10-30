@@ -114,14 +114,14 @@ def parse_args(argv=None):
     return resolve_dir_shortcuts(args)
 
 
-def _cli_task(datecode, forward, config=None, stage=None):
+def _cli_task(datecode, forward, *, stage, config=None):
     """Build a (tag, argv) task building one night via the ``kpfpipe run`` leaf.
 
     Passes the masters recipe and config (the default unless `config` overrides) to
     the leaf explicitly rather than leaning on its ``--masters`` shortcut,
     so the orchestrator is the single owner of what it runs. `forward` is the
     resolved dir/log overrides appended to every invocation; the tag (datecode)
-    keys the sentinel/log paths. `stage`, when given, becomes ``--stages``.
+    keys the sentinel/log paths. `stage` becomes ``--stages``, one stage per task.
     """
     argv = [
         sys.executable,
@@ -134,9 +134,9 @@ def _cli_task(datecode, forward, config=None, stage=None):
         "-d",
         datecode,
         *forward,
+        "--stages",
+        stage,
     ]
-    if stage:
-        argv += ["--stages", stage]
     return datecode, argv
 
 

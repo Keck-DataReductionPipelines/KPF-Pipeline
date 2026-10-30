@@ -809,6 +809,23 @@ class TestKpfDirectory:
         )
         assert path == "/data/QLP/20240405/KP.20240405.49597.71/L0"
 
+    @pytest.mark.parametrize(
+        "kind, expected",
+        [
+            ("science", "/data/engineering/L2/20240405"),
+            ("QLP", "/data/engineering/QLP/20240405/KP.20240405.49597.71/L2"),
+        ],
+    )
+    def test_engineering_roots_under_engineering(self, kind, expected):
+        path = kpf_directory(
+            kind=kind,
+            data_root="/data",
+            level="L2",
+            obs_id=self.OBS_ID,
+            engineering=True,
+        )
+        assert path == expected
+
     def test_cal_stack_by_obs_id(self):
         path = kpf_directory(
             kind="cal_stack",

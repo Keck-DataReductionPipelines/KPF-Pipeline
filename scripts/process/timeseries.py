@@ -52,7 +52,7 @@ from scripts._argparse import (
     resolve_dir_shortcuts,
     resolve_log_settings,
 )
-from scripts._dispatch import _default_science_jobs, configure_runtime
+from scripts._dispatch import _default_frame_jobs, configure_runtime
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 from scripts.plot.timeseries import PlotTimeseries
 from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_SCIENCE_CONFIG
@@ -290,7 +290,7 @@ def main(argv=None):
     logger.info("batch log: %s", log_path)
 
     # Steps 1-2: discover the target's science frames -> the nights they span.
-    scan_workers = args.jobs or _default_science_jobs()
+    scan_workers = args.jobs or _default_frame_jobs()
     obs_ids = discover_science_obs_ids(
         data_input, args.target, start, end, scan_workers, cache=args.cache
     )

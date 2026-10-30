@@ -962,7 +962,14 @@ _DIRECTORY_KINDS = ("science", "masters", "QLP", "cal_stack")
 
 
 def kpf_directory(
-    kind, *, data_root, level=None, obs_id=None, datecode=None, cal_type=None
+    kind,
+    *,
+    data_root,
+    level=None,
+    obs_id=None,
+    datecode=None,
+    cal_type=None,
+    engineering=False,
 ):
     """Output directory for a KPF product tree.
 
@@ -987,6 +994,9 @@ def kpf_directory(
                   master (e.g. ``cal_type='thar'``/``L2`` -> ``.../thar_L2``)
     ============  =========================================================
 
+    ``engineering=True`` roots the tree at ``{data_root}/engineering``, so the
+    engineering recipe's products and quicklooks mirror the science layout there.
+
     Parameters
     ----------
     kind : str
@@ -1005,6 +1015,8 @@ def kpf_directory(
     cal_type : str or None, optional
         Calibration type ('bias'/'dark'/'flat'/'thar') naming the stack
         subdirectory. Required for ``cal_stack``; unused otherwise.
+    engineering : bool, optional
+        True for an engineering-recipe tree, under ``{data_root}/engineering``.
 
     Returns
     -------
@@ -1039,6 +1051,8 @@ def kpf_directory(
         if not is_datecode(datecode):
             raise ValueError(f"datecode must be 'YYYYMMDD'; got '{datecode}'")
 
+    if engineering:
+        data_root = os.path.join(data_root, "engineering")
     if kind == "masters":
         return os.path.join(data_root, "masters", datecode)
 
@@ -1112,10 +1126,14 @@ def kpf_filepath(obs_id, level, *, data_root=None, master=None, engineering=Fals
     if data_root is None:
         return filename
 
-    if engineering:
-        data_root = os.path.join(data_root, "engineering")
     kind = "masters" if master is not None else "science"
     return os.path.join(
-        kpf_directory(kind=kind, data_root=data_root, level=level, obs_id=obs_id),
+        kpf_directory(
+            kind=kind,
+            data_root=data_root,
+            level=level,
+            obs_id=obs_id,
+            engineering=engineering,
+        ),
         filename,
     )

@@ -101,7 +101,7 @@ class TestParseArgs:
 
     def test_jobs_unset_stays_none(self, ts):
         # Unset --jobs stays None so each stage picks its own default; the
-        # discovery scan falls back to _default_science_jobs() in main().
+        # discovery scan falls back to _default_frame_jobs() in main().
         assert ts.parse_args(_BASE_ARGS).jobs is None
 
     def test_job_timeout_default_and_override(self, ts):

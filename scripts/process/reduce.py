@@ -16,7 +16,7 @@ masters), its ``RECIPE_STAGES`` the valid ``--stages``, and which stale products
 are cleared. A type is honored only for that type's standard recipe under
 ``{REPO_ROOT}/recipes/``; any other recipe (undeclared, unrecognized, or custom)
 runs with any or no selector, but nothing is checked, gated, or cleared on its
-behalf, and it runs only once confirmed at a [y/n] prompt or with ``--force-run``.
+behalf, and it runs only once confirmed at a [y/n] prompt or with ``--force_run``.
 
 The following pairs of invocations are equivalent:
 
@@ -137,7 +137,7 @@ def main(argv=None):
         "with -d)",
     )
     parser.add_argument(
-        "--force-run",
+        "--force_run",
         action="store_true",
         help="run a custom/undeclared recipe without the confirmation prompt",
     )
@@ -168,7 +168,10 @@ def main(argv=None):
     else:
         recipe_type = None
     if recipe_type == "masters" and not args.datecode:
-        parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
+        parser.error(
+            "kpfpipe run builds one masters night (-d/--datecode); to build many "
+            "nights, use kpfpipe masters --dates/--date_range"
+        )
     if recipe_type in ("science", "engineering") and not args.obs_id:
         parser.error(
             f"kpfpipe run reduces one {recipe_type} frame (-o/--obs_id); to reduce "
@@ -186,7 +189,7 @@ def main(argv=None):
         if not sys.stdin.isatty():
             raise SystemExit(
                 f"{_CUSTOM_WARNING}\nRun aborted (no terminal to confirm; pass "
-                "--force-run)"
+                "--force_run)"
             )
         answer = input(
             f"{_CUSTOM_WARNING} Are you sure that you want to proceed [y/n]? "
@@ -195,7 +198,7 @@ def main(argv=None):
             raise SystemExit("Run aborted")
         print(
             f"Executing {args.recipe}; to silence this warning in the future pass "
-            "--force-run"
+            "--force_run"
         )
 
     overrides = {}
@@ -332,17 +335,16 @@ def clear_stale_outputs(config, args, recipe_type, stages):
     per-obs_id L1/L2/L4 paths under ``KPF_SCIENCE_OUTPUT``. Masters (``-d
     datecode``): the master products in the night's directory under
     ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded) of the earliest `stages`
-    stage enabled in config
-    [STAGES] and every stage after
-    it, since each is built from the ones before; plus, with the thar stage, the
-    whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the diagnostics
-    HDF5), so a rebuilt thar master can never co-exist with a prior run's frame
-    L2s or diagnostics. Earlier stages' masters, which a staged batch run builds
-    on, are kept. Engineering (``-o obs_id``): the obs_id's ``kpf_EngL2`` under
-    ``KPF_ENGINEERING_OUTPUT``. A custom recipe owns nothing here, so nothing is
-    cleared. A no-op when nothing matches; raises KeyError
-    if the relevant output root is absent from [DATA_DIRS] (the recipe requires
-    the same key, so failing here surfaces a broken config one step earlier).
+    stage enabled in config [STAGES] and every stage after it, since each is built
+    from the ones before; plus, with the thar stage, the whole WLS ``thar_L2/``
+    subdirectory (per-frame ThAr L2s and the diagnostics HDF5), so a rebuilt thar
+    master can never co-exist with a prior run's frame L2s or diagnostics. Earlier
+    stages' masters, which a staged batch run builds on, are kept. Engineering
+    (``-o obs_id``): the obs_id's ``kpf_EngL2`` under ``KPF_ENGINEERING_OUTPUT``.
+    A custom recipe owns nothing here, so nothing is cleared. A no-op when nothing
+    matches; raises KeyError if the relevant output root is absent from
+    [DATA_DIRS] (the recipe requires the same key, so failing here surfaces a
+    broken config one step earlier).
     """
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []
@@ -367,16 +369,17 @@ def clear_stale_outputs(config, args, recipe_type, stages):
                 paths += glob.glob(
                     os.path.join(masters_dir, pattern.format(stage=stage))
                 )
-        stack_subdir = kpf_directory(
-            kind="cal_stack",
-            data_root=data_root,
-            level="L2",
-            datecode=args.datecode,
-            cal_type="thar",
-        )
-        if "thar" in cleared and os.path.isdir(stack_subdir):
-            shutil.rmtree(stack_subdir)
-            logger.info("removed stale output dir: %s", stack_subdir)
+        if "thar" in cleared:
+            stack_subdir = kpf_directory(
+                kind="cal_stack",
+                data_root=data_root,
+                level="L2",
+                datecode=args.datecode,
+                cal_type="thar",
+            )
+            if os.path.isdir(stack_subdir):
+                shutil.rmtree(stack_subdir)
+                logger.info("removed stale output dir: %s", stack_subdir)
 
     for path in paths:
         if os.path.isfile(path):

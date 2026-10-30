@@ -57,7 +57,7 @@ from scripts._argparse import (
     resolve_log_settings,
 )
 from scripts._dispatch import (
-    _default_science_jobs,
+    _default_frame_jobs,
     _run_one,
     _terminate_all_children,
     configure_runtime,
@@ -156,7 +156,7 @@ def parse_args(argv=None):
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
     if args.jobs is None:
-        args.jobs = _default_science_jobs()
+        args.jobs = _default_frame_jobs()
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
     return resolve_dir_shortcuts(args)

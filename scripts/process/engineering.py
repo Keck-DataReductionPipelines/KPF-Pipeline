@@ -34,13 +34,14 @@ from scripts._argparse import (
     data_dirs_parser,
     dates_parser,
     logging_parser,
+    obs_ids_parser,
     pool_parser,
     resolve_dir_shortcuts,
     resolve_frame_selection,
     resolve_log_settings,
     stages_parser,
 )
-from scripts._dispatch import _default_science_jobs, configure_runtime, run_stage
+from scripts._dispatch import _default_frame_jobs, configure_runtime, run_stage
 from scripts._scan import datecodes_in_range, obs_ids_in_nights
 from scripts.process import DEFAULT_ENGINEERING_CONFIG, DEFAULT_ENGINEERING_RECIPE
 
@@ -69,23 +70,16 @@ def parse_args(argv=None):
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             dates_parser("reduces every L0 frame of every night in it"),
+            obs_ids_parser(),
             stages_parser(RECIPE_STAGES),
         ],
-    )
-    ap.add_argument(
-        "--obs_ids",
-        nargs="+",
-        metavar="OBS_ID_OR_FILE",
-        help="one or more obs_ids to reduce, or a text file listing one obs_id per "
-        "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
-        "--obs_ids frames.txt (mutually exclusive with --dates/--date_range)",
     )
     args = resolve_frame_selection(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
     if args.jobs is None:
-        args.jobs = _default_science_jobs()
+        args.jobs = _default_frame_jobs()
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
     return resolve_dir_shortcuts(args)

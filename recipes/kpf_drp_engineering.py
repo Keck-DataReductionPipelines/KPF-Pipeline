@@ -12,7 +12,6 @@ continues. No external catalog or database queries are made.
 """
 
 import logging
-import os
 import time
 
 from kpfpipe.data_models import KPF0
@@ -74,15 +73,17 @@ def main(config, args):
     data_dirs = config.get_params(["DATA_DIRS"])
     data_root_in = data_dirs["KPF_DATA_INPUT"]
     data_root_out = data_dirs["KPF_ENGINEERING_OUTPUT"]
-    # Engineering QLPs mirror the science layout under {root}/engineering/.
-    qlp_root = os.path.join(data_root_out, "engineering")
 
     fn = kpf_filepath(obs_id, "L0", data_root=data_root_in)
     l0 = KPF0.from_fits(fn, standardize=True)
 
     logger.info("generating L0 quicklook plots for %s", obs_id)
     l0_qlp_dir = kpf_directory(
-        kind="QLP", data_root=qlp_root, level="L0", obs_id=obs_id
+        kind="QLP",
+        data_root=data_root_out,
+        level="L0",
+        obs_id=obs_id,
+        engineering=True,
     )
     PlotL0(l0, output_dir=l0_qlp_dir).run("all")
 
@@ -112,7 +113,11 @@ def main(config, args):
 
     logger.info("generating L1 quicklook plots for %s", obs_id)
     l1_qlp_dir = kpf_directory(
-        kind="QLP", data_root=qlp_root, level="L1", obs_id=obs_id
+        kind="QLP",
+        data_root=data_root_out,
+        level="L1",
+        obs_id=obs_id,
+        engineering=True,
     )
     PlotL1(l1, output_dir=l1_qlp_dir).run("all")
 
@@ -135,7 +140,11 @@ def main(config, args):
 
     logger.info("generating L2 quicklook plots for %s", obs_id)
     l2_qlp_dir = kpf_directory(
-        kind="QLP", data_root=qlp_root, level="L2", obs_id=obs_id
+        kind="QLP",
+        data_root=data_root_out,
+        level="L2",
+        obs_id=obs_id,
+        engineering=True,
     )
     PlotL2(l2, output_dir=l2_qlp_dir, obs_id=obs_id).run("all")
 

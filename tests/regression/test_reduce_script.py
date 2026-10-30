@@ -234,7 +234,7 @@ class TestGuards:
         with pytest.raises(SystemExit) as exc:
             red.main(["--masters", "-o", _OID])
         assert exc.value.code == 2
-        assert "masters recipe takes -d/--datecode" in capsys.readouterr().err
+        assert "kpfpipe run builds one masters night" in capsys.readouterr().err
 
     def test_science_rejects_datecode(self, capsys):
         with pytest.raises(SystemExit) as exc:
@@ -250,7 +250,11 @@ class TestGuards:
                 ["-d", "20240405"],
                 "kpfpipe run reduces one science frame",
             ),
-            (masters_recipe.__file__, ["-o", _OID], "masters recipe takes -d"),
+            (
+                masters_recipe.__file__,
+                ["-o", _OID],
+                "kpfpipe run builds one masters night",
+            ),
         ],
     )
     def test_relative_r_gets_the_declared_types_guard(
@@ -404,7 +408,7 @@ class TestUndeclaredRecipe:
             f"def main(config, args):\n    open({str(sentinel)!r}, 'w').close()\n"
         )
 
-        argv = ["-r", str(recipe), "-c", str(cfg), *selector, "--force-run"]
+        argv = ["-r", str(recipe), "-c", str(cfg), *selector, "--force_run"]
         with caplog.at_level(logging.WARNING, logger=red.logger.name):
             _run(monkeypatch, argv)
 
@@ -415,7 +419,7 @@ class TestUndeclaredRecipe:
 
 class TestCustomRecipeGuard:
     """Any recipe but a type's standard one runs as custom: confirmed at a [y/n]
-    prompt (or --force-run), and never handed the declared type's clearing."""
+    prompt (or --force_run), and never handed the declared type's clearing."""
 
     def _setup(self, tmp_path, decl=_SCIENCE_DECL):
         science_root = tmp_path / "sci"
@@ -460,7 +464,7 @@ class TestCustomRecipeGuard:
         with pytest.raises(SystemExit) as exc:
             _run(monkeypatch, argv)
         assert "Run aborted" in str(exc.value.code)
-        assert "--force-run" in str(exc.value.code)
+        assert "--force_run" in str(exc.value.code)
         assert not sentinel.exists()
 
     def test_yes_runs_and_points_at_force_run(self, monkeypatch, tmp_path, capsys):
@@ -469,7 +473,7 @@ class TestCustomRecipeGuard:
         _run(monkeypatch, argv)
         assert sentinel.exists()
         out = capsys.readouterr().out
-        assert "Executing" in out and "--force-run" in out
+        assert "Executing" in out and "--force_run" in out
 
     @pytest.mark.parametrize("answer", ["n", "", "maybe"])
     def test_anything_but_yes_aborts(self, answer, monkeypatch, tmp_path):
@@ -484,7 +488,7 @@ class TestCustomRecipeGuard:
     def test_force_run_skips_the_prompt(self, monkeypatch, tmp_path):
         argv, _, sentinel = self._setup(tmp_path)
         monkeypatch.setattr("builtins.input", pytest.fail)
-        _run(monkeypatch, [*argv, "--force-run"])
+        _run(monkeypatch, [*argv, "--force_run"])
         assert sentinel.exists()
 
     @pytest.mark.parametrize(
