@@ -13,8 +13,10 @@ the default config, which ``-c`` overrides (``--science -c my.toml``); ``-r``
 requires ``-c``. The recipe's declared ``RECIPE_TYPE`` alone decides the target
 selector (an obs_id ``-o`` for science and engineering, a datecode ``-d`` for
 masters), its ``RECIPE_STAGES`` the valid ``--stages``, and which stale products
-are cleared. A custom recipe may omit ``RECIPE_TYPE``: it then runs with any or no
-selector, but nothing is checked, gated, or cleared on its behalf.
+are cleared. A type is honored only for that type's standard recipe under
+``{REPO_ROOT}/recipes/``; any other recipe (undeclared, unrecognized, or custom)
+runs with any or no selector, but nothing is checked, gated, or cleared on its
+behalf, and it runs only once confirmed at a [y/n] prompt or with ``--force-run``.
 
 The following pairs of invocations are equivalent:
 
@@ -60,6 +62,19 @@ from scripts.process import (
 )
 
 logger = logging.getLogger("kpfpipe.cli")
+
+# The only recipe each RECIPE_TYPE is honored for; any other recipe runs as custom.
+_STANDARD_RECIPES = {
+    "science": DEFAULT_SCIENCE_RECIPE,
+    "masters": DEFAULT_MASTERS_RECIPE,
+    "engineering": DEFAULT_ENGINEERING_RECIPE,
+}
+
+_CUSTOM_WARNING = (
+    "Attempting to run an undeclared, unrecognized, or custom recipe. Before "
+    "continuing, double-check your output directories and be sure that you are not "
+    "unintentionally overwriting any reduced files."
+)
 
 
 def main(argv=None):
@@ -121,6 +136,11 @@ def main(argv=None):
         help="obs_id, e.g. KP.20240405.40113.57 (science, engineering; exclusive "
         "with -d)",
     )
+    parser.add_argument(
+        "--force-run",
+        action="store_true",
+        help="run a custom/undeclared recipe without the confirmation prompt",
+    )
     args = resolve_dir_shortcuts(parser.parse_args(argv))
 
     if args.shortcut:
@@ -140,10 +160,13 @@ def main(argv=None):
 
     # The recipe's declared type is the sole source of truth for what it reduces
     # (science/engineering one obs_id, masters one night) and which products it
-    # owns. A custom recipe may declare none; it is then run as-is (warned below).
-    recipe_type = getattr(recipe, "RECIPE_TYPE", None)
-    if recipe_type not in (None, "science", "masters", "engineering"):
-        parser.error(f"recipe {args.recipe!r} declares unknown RECIPE_TYPE")
+    # owns. It is honored only for that type's standard recipe, so a custom recipe
+    # cannot claim one; any other recipe is run as-is once confirmed (below).
+    standard = _STANDARD_RECIPES.get(getattr(recipe, "RECIPE_TYPE", None))
+    if standard and os.path.realpath(args.recipe) == os.path.realpath(standard):
+        recipe_type = recipe.RECIPE_TYPE
+    else:
+        recipe_type = None
     if recipe_type == "masters" and not args.datecode:
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
     if recipe_type in ("science", "engineering") and not args.obs_id:
@@ -154,6 +177,22 @@ def main(argv=None):
         parser.error(
             f"--stages {' '.join(unknown)} not in this recipe's stages: "
             f"{', '.join(stages)}"
+        )
+    # Before the config and logging are built, so an aborted run leaves nothing.
+    if recipe_type is None and not args.force_run:
+        if not sys.stdin.isatty():
+            raise SystemExit(
+                f"{_CUSTOM_WARNING}\nRun aborted (no terminal to confirm; pass "
+                "--force-run)"
+            )
+        answer = input(
+            f"{_CUSTOM_WARNING} Are you sure that you want to proceed [y/n]? "
+        )
+        if answer.strip().lower() not in ("y", "yes"):
+            raise SystemExit("Run aborted")
+        print(
+            f"Executing {args.recipe}; to silence this warning in the future pass "
+            "--force-run"
         )
 
     overrides = {}
@@ -196,7 +235,7 @@ def main(argv=None):
     logger.info("log file: %s", log_path)
     if recipe_type is None:
         logger.warning(
-            "recipe declares no RECIPE_TYPE: no target checks, frame gating, or "
+            "custom/undeclared recipe: no target checks, frame gating, or "
             "stale-output clearing are applied"
         )
 
@@ -216,7 +255,7 @@ def main(argv=None):
 
     # Clear prior products so this run's outputs stand alone. After the load, never
     # before: a mistyped -r must not destroy a night's products on its way out.
-    clear_stale_outputs(config, args, recipe)
+    clear_stale_outputs(config, args, recipe_type, stages)
 
     try:
         recipe.main(config, args)
@@ -276,7 +315,7 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
 _MASTER_OUTPUT_GLOBS = ("*_master_{stage}_L*.fits", "*_master_{stage}.csv")
 
 
-def clear_stale_outputs(config, args, recipe):
+def clear_stale_outputs(config, args, recipe_type, stages):
     """Delete the recipe's existing products for this unit before it is reduced.
 
     Re-reducing should overwrite, never silently co-exist with, a prior run's
@@ -285,22 +324,23 @@ def clear_stale_outputs(config, args, recipe):
     changed input set can orphan a stale product under a name the rebuild never
     reuses -- clearing up front guarantees the run's results stand alone.
 
-    Keyed on ``recipe.RECIPE_TYPE``. Science (``-o obs_id``): the three per-obs_id
-    L1/L2/L4 paths under ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): the
-    master products in the night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID
-    prefix wildcarded) of the earliest ``RECIPE_STAGES`` stage enabled in config
+    Keyed on `recipe_type`, the recipe's honored ``RECIPE_TYPE`` (None for a custom
+    recipe); `stages` is its ``RECIPE_STAGES``. Science (``-o obs_id``): the three
+    per-obs_id L1/L2/L4 paths under ``KPF_SCIENCE_OUTPUT``. Masters (``-d
+    datecode``): the master products in the night's directory under
+    ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded) of the earliest `stages`
+    stage enabled in config
     [STAGES] and every stage after
     it, since each is built from the ones before; plus, with the thar stage, the
     whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the diagnostics
     HDF5), so a rebuilt thar master can never co-exist with a prior run's frame
     L2s or diagnostics. Earlier stages' masters, which a staged batch run builds
     on, are kept. Engineering (``-o obs_id``): the obs_id's ``kpf_EngL2`` under
-    ``KPF_ENGINEERING_OUTPUT``. A recipe declaring no ``RECIPE_TYPE`` owns nothing
-    here, so nothing is cleared. A no-op when nothing matches; raises KeyError
+    ``KPF_ENGINEERING_OUTPUT``. A custom recipe owns nothing here, so nothing is
+    cleared. A no-op when nothing matches; raises KeyError
     if the relevant output root is absent from [DATA_DIRS] (the recipe requires
     the same key, so failing here surfaces a broken config one step earlier).
     """
-    recipe_type = getattr(recipe, "RECIPE_TYPE", None)
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []
     if recipe_type == "science" and is_obs_id(args.obs_id):
@@ -317,10 +357,9 @@ def clear_stale_outputs(config, args, recipe):
         masters_dir = kpf_directory(
             kind="masters", data_root=data_root, datecode=args.datecode
         )
-        all_stages = recipe.RECIPE_STAGES
-        enabled = [s for s in all_stages if config.get_params(["STAGES"])[s]]
-        stages = all_stages[all_stages.index(enabled[0]) :] if enabled else ()
-        for stage in stages:
+        enabled = [s for s in stages if config.get_params(["STAGES"])[s]]
+        cleared = stages[stages.index(enabled[0]) :] if enabled else ()
+        for stage in cleared:
             for pattern in _MASTER_OUTPUT_GLOBS:
                 paths += glob.glob(
                     os.path.join(masters_dir, pattern.format(stage=stage))
@@ -332,7 +371,7 @@ def clear_stale_outputs(config, args, recipe):
             datecode=args.datecode,
             cal_type="thar",
         )
-        if "thar" in stages and os.path.isdir(stack_subdir):
+        if "thar" in cleared and os.path.isdir(stack_subdir):
             shutil.rmtree(stack_subdir)
             logger.info("removed stale output dir: %s", stack_subdir)
 
