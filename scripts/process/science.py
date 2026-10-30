@@ -32,13 +32,13 @@ from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import FileHandler, read_token_file
 from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
-from recipes.kpf_drp_science import STAGES
+from recipes.kpf_drp_science import RECIPE_STAGES
 from scripts._argparse import (
     cache_parser,
+    config_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
-    recipe_and_config_parser,
     resolve_dir_shortcuts,
     resolve_log_settings,
     stages_parser,
@@ -73,12 +73,12 @@ def parse_args(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_and_config_parser(),
+            config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
-            stages_parser(STAGES),
+            stages_parser(RECIPE_STAGES),
         ],
     )
     ap.add_argument(
@@ -121,12 +121,12 @@ def parse_args(argv=None):
     return resolve_dir_shortcuts(args)
 
 
-def _cli_task(obs_id, forward, config=None, recipe=None):
+def _cli_task(obs_id, forward, config=None):
     """Build a (tag, argv) task reducing one frame via the ``kpfpipe run`` leaf.
 
-    Passes recipe/config to the leaf explicitly (the science defaults unless
-    `recipe`/`config` override) rather than leaning on its ``--science`` shortcut,
-    so the orchestrator is the single owner of what it runs. `forward` is the
+    Passes the science recipe and config (the default unless `config` overrides) to
+    the leaf explicitly rather than leaning on its ``--science`` shortcut, so the
+    orchestrator is the single owner of what it runs. `forward` is the
     resolved dir/log overrides appended to every invocation; the tag (obs_id)
     keys the sentinel/log paths.
     """
@@ -135,7 +135,7 @@ def _cli_task(obs_id, forward, config=None, recipe=None):
         "-m",
         "scripts.process.reduce",
         "-r",
-        recipe or DEFAULT_SCIENCE_RECIPE,
+        DEFAULT_SCIENCE_RECIPE,
         "-c",
         config or DEFAULT_SCIENCE_CONFIG,
         "-o",
@@ -216,9 +216,7 @@ def main(argv=None):
             kept.append(o)
     obs_ids = kept
 
-    tasks = [
-        _cli_task(o, forward, config=args.config, recipe=args.recipe) for o in obs_ids
-    ]
+    tasks = [_cli_task(o, forward, config=args.config) for o in obs_ids]
     failed = run_stage(
         "science",
         tasks,

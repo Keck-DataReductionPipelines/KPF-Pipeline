@@ -59,29 +59,21 @@ class TestParseArgs:
         assert ns.target == "10700"
         assert ns.date_range == ["20240101", "20240131"]
 
-    def test_recipe_config_overrides_default_to_none(self, ts):
+    def test_config_overrides_default_to_none(self, ts):
         ns = ts.parse_args(_BASE_ARGS)
-        assert ns.masters_recipe is None
         assert ns.masters_config is None
-        assert ns.science_recipe is None
         assert ns.science_config is None
 
-    def test_recipe_config_overrides_parse(self, ts):
+    def test_config_overrides_parse(self, ts):
         ns = ts.parse_args(
-            _BASE_ARGS
-            + [
-                "--masters_recipe",
-                "/m.py",
-                "--masters_config",
-                "/m.toml",
-                "--science_recipe",
-                "/s.py",
-                "--science_config",
-                "/s.toml",
-            ]  # fmt: skip
+            _BASE_ARGS + ["--masters_config", "/m.toml", "--science_config", "/s.toml"]
         )
-        assert ns.masters_recipe == "/m.py" and ns.masters_config == "/m.toml"
-        assert ns.science_recipe == "/s.py" and ns.science_config == "/s.toml"
+        assert ns.masters_config == "/m.toml" and ns.science_config == "/s.toml"
+
+    def test_rejects_recipe_overrides(self, ts):
+        # Each stage runs its fixed recipe.
+        with pytest.raises(SystemExit):
+            ts.parse_args(_BASE_ARGS + ["--science_recipe", "/s.py"])
 
     def test_stage_toggles_default_on(self, ts):
         ns = ts.parse_args(_BASE_ARGS)
@@ -172,14 +164,13 @@ class TestOrchestratorArgv:
             "--dates", "20240101", "20240102", "--log_dir", "/l",
         ]  # fmt: skip
 
-    def test_science_with_recipe_and_config(self, ts):
+    def test_science_with_config(self, ts):
         argv = ts._orchestrator_argv(
-            "science", "--obs_ids", [_OID1], ["--jobs", "3"],
-            recipe="/s.py", config="/s.toml",
-        )  # fmt: skip
+            "science", "--obs_ids", [_OID1], ["--jobs", "3"], config="/s.toml"
+        )
         assert argv == [
             sys.executable, "-m", "scripts.process.science",
-            "-r", "/s.py", "-c", "/s.toml", "--obs_ids", _OID1, "--jobs", "3",
+            "-c", "/s.toml", "--obs_ids", _OID1, "--jobs", "3",
         ]  # fmt: skip
 
     def test_units_precede_forward(self, ts):
@@ -381,11 +372,9 @@ class TestMainDispatch:
         assert "20240101" in calls[0] and "20240102" in calls[0]  # both nights
         assert "scripts.process.science" in calls[1]
         assert a in calls[1] and b in calls[1]  # every frame reduced
-        # Each stage's default recipe+config is routed explicitly rather than
-        # left to the orchestrator's own default.
-        assert ts.DEFAULT_MASTERS_RECIPE in calls[0]
+        # Each stage's default config is routed explicitly rather than left to
+        # the orchestrator's own default; the recipe is the orchestrator's own.
         assert ts.DEFAULT_MASTERS_CONFIG in calls[0]
-        assert ts.DEFAULT_SCIENCE_RECIPE in calls[1]
         assert ts.DEFAULT_SCIENCE_CONFIG in calls[1]
         # Discovery is the sole mini-db writer, so both stages are forced
         # read-only (--cache r) rather than re-warming the caches.

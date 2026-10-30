@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Run one recipe on one unit (the ``kpfpipe run`` leaf).
 
-Reads the config, applies CLI overrides, configures logging, loads the recipe,
-clears the unit's stale L1/L2/L4 products (see ``clear_stale_outputs``), and execs
-the recipe's ``main(config, args)``. It is both the in-process target of
+Loads the recipe, reads the config, applies CLI overrides, configures logging,
+clears the unit's stale products (see ``clear_stale_outputs``), and execs the
+recipe's ``main(config, args)``. It is both the in-process target of
 ``kpfpipe run`` and the leaf the orchestrators (``masters.py``/``science.py``) fan
 out as ``python -m scripts.process.reduce`` subprocesses.
 
-Recipe + config come from ``--masters``/``--science`` (repo-relative shortcuts,
-usable from any cwd) or an explicit ``-r/-c`` pair; the shortcuts supply defaults
-that ``-r/-c`` override, so ``--science -c my.toml`` runs the science recipe
-against a custom config. Provide an obs_id (``-o``) for science, a datecode
-(``-d``) for masters.
+The recipe comes from exactly one of ``--masters``/``--science`` (repo-relative
+shortcuts, usable from any cwd) or ``-r``. A shortcut also supplies the default
+config, which ``-c`` overrides (``--science -c my.toml``); ``-r`` requires ``-c``.
+The recipe's declared ``RECIPE_TYPE`` alone decides the target selector (an
+obs_id ``-o`` for science, a datecode ``-d`` for masters), its ``RECIPE_STAGES``
+the valid ``--stages``, and which stale products are cleared.
 
 The following pairs of invocations are equivalent:
 
@@ -39,12 +40,10 @@ from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.io import kpf_directory, kpf_filepath, load_junk_obs_ids
 from kpfpipe.utils.kpf import is_obs_id
 from kpfpipe.utils.logger import setup_logging
-from recipes.kpf_drp_masters import STAGES as MASTERS_STAGES
-from recipes.kpf_drp_science import STAGES as SCIENCE_STAGES
 from scripts._argparse import (
+    config_parser,
     data_dirs_parser,
     logging_parser,
-    recipe_and_config_parser,
     resolve_dir_shortcuts,
     stages_override,
     stages_parser,
@@ -69,26 +68,33 @@ def main(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_and_config_parser(),
+            config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
-            stages_parser(MASTERS_STAGES + SCIENCE_STAGES),
+            # Choices are the loaded recipe's RECIPE_STAGES, checked after parsing.
+            stages_parser(),
         ],
     )
-    shortcut = parser.add_mutually_exclusive_group()
-    shortcut.add_argument(
+    recipe_choice = parser.add_mutually_exclusive_group(required=True)
+    recipe_choice.add_argument(
         "--masters",
         dest="shortcut",
         action="store_const",
         const=(DEFAULT_MASTERS_RECIPE, DEFAULT_MASTERS_CONFIG),
         help="shorthand for the default masters recipe/config pair",
     )
-    shortcut.add_argument(
+    recipe_choice.add_argument(
         "--science",
         dest="shortcut",
         action="store_const",
         const=(DEFAULT_SCIENCE_RECIPE, DEFAULT_SCIENCE_CONFIG),
         help="shorthand for the default science recipe/config pair",
+    )
+    recipe_choice.add_argument(
+        "-r",
+        "--recipe",
+        default=None,
+        help="recipe .py to run (requires -c/--config)",
     )
     target = parser.add_mutually_exclusive_group()
     target.add_argument(
@@ -106,24 +112,30 @@ def main(argv=None):
     args = resolve_dir_shortcuts(parser.parse_args(argv))
 
     if args.shortcut:
-        # An explicit -r/-c overrides the corresponding half of the shortcut's
-        # (recipe, config) default pair.
-        recipe_def, config_def = args.shortcut
-        args.recipe = args.recipe or recipe_def
+        # -c overrides the shortcut's default config.
+        args.recipe, config_def = args.shortcut
         args.config = args.config or config_def
+    elif not args.config:
+        parser.error("-r/--recipe requires -c/--config")
 
-    if not args.recipe or not args.config:
-        parser.error(
-            "must specify --masters, --science, or both -r/--recipe and -c/--config"
-        )
+    if not os.path.isfile(args.recipe):
+        raise SystemExit(f"Recipe file not found: {args.recipe}")
+    spec = importlib.util.spec_from_file_location("recipe", args.recipe)
+    recipe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(recipe)
+    if not hasattr(recipe, "main"):
+        raise SystemExit(f"Recipe {args.recipe!r} has no main() function")
 
-    # Guard the default recipes against the wrong target selector.
-    if args.recipe == DEFAULT_MASTERS_RECIPE and args.obs_id:
+    # The recipe's declared type is the sole source of truth for what it reduces
+    # (science one obs_id, masters one night) and which products it owns.
+    recipe_type = getattr(recipe, "RECIPE_TYPE", None)
+    if recipe_type is None:
+        parser.error(f"recipe {args.recipe!r} declares no RECIPE_TYPE")
+    if recipe_type == "masters" and not args.datecode:
         parser.error("masters recipe takes -d/--datecode, not -o/--obs_id")
-    if args.recipe == DEFAULT_SCIENCE_RECIPE and args.datecode:
+    if recipe_type == "science" and not args.obs_id:
         parser.error("science recipe takes -o/--obs_id, not -d/--datecode")
-    # Science reduces one obs_id (-o), masters one night (-d).
-    stages = SCIENCE_STAGES if args.obs_id else MASTERS_STAGES
+    stages = recipe.RECIPE_STAGES
     unknown = [s for s in args.stages or () if s not in stages]
     if unknown:
         parser.error(
@@ -166,17 +178,8 @@ def main(argv=None):
     logger.info("data dirs: %s", config.get_params(["DATA_DIRS"]))
     logger.info("log file: %s", log_path)
 
-    if not os.path.isfile(args.recipe):
-        raise SystemExit(f"Recipe file not found: {args.recipe}")
-
-    spec = importlib.util.spec_from_file_location("recipe", args.recipe)
-    recipe = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(recipe)
-    if not hasattr(recipe, "main"):
-        raise SystemExit(f"Recipe {args.recipe!r} has no main() function")
-
     # Junk and single-CCD frames never enter the science recipe.
-    if args.obs_id:
+    if recipe_type == "science":
         data_input = config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
         if args.obs_id in load_junk_obs_ids(data_input):
             logger.info("skipping %s: junk frame", args.obs_id)
@@ -189,9 +192,9 @@ def main(argv=None):
             )
             return
 
-    # Clear prior L1/L2/L4 products so this run's outputs stand alone. After the load,
-    # never before: a mistyped -r must not destroy a night's products on its way out.
-    clear_stale_outputs(config, args)
+    # Clear prior products so this run's outputs stand alone. After the load, never
+    # before: a mistyped -r must not destroy a night's products on its way out.
+    clear_stale_outputs(config, args, recipe)
 
     try:
         recipe.main(config, args)
@@ -251,8 +254,8 @@ def resolve_logging(config, recipe_path, obs_id, datecode):
 _MASTER_OUTPUT_GLOBS = ("*_master_{stage}_L*.fits", "*_master_{stage}.csv")
 
 
-def clear_stale_outputs(config, args):
-    """Delete any existing L1/L2/L4 products for this unit before it is reduced.
+def clear_stale_outputs(config, args, recipe):
+    """Delete the recipe's existing products for this unit before it is reduced.
 
     Re-reducing should overwrite, never silently co-exist with, a prior run's
     products. Some are not always rewritten (the science recipe leaves L1 in
@@ -260,10 +263,11 @@ def clear_stale_outputs(config, args):
     changed input set can orphan a stale product under a name the rebuild never
     reuses -- clearing up front guarantees the run's results stand alone.
 
-    Science (``-o obs_id``): the three per-obs_id paths under
-    ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): the master products in the
-    night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID prefix wildcarded) of
-    the earliest stage enabled in config [STAGES] and every stage after
+    Keyed on ``recipe.RECIPE_TYPE``. Science (``-o obs_id``): the three per-obs_id
+    L1/L2/L4 paths under ``KPF_SCIENCE_OUTPUT``. Masters (``-d datecode``): the
+    master products in the night's directory under ``KPF_MASTERS_OUTPUT`` (KOAID
+    prefix wildcarded) of the earliest ``RECIPE_STAGES`` stage enabled in config
+    [STAGES] and every stage after
     it, since each is built from the ones before; plus, with the thar stage, the
     whole WLS ``thar_L2/`` subdirectory (per-frame ThAr L2s and the diagnostics
     HDF5), so a rebuilt thar master can never co-exist with a prior run's frame
@@ -274,20 +278,20 @@ def clear_stale_outputs(config, args):
     """
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []
-    if args.obs_id and is_obs_id(args.obs_id):
+    if recipe.RECIPE_TYPE == "science" and is_obs_id(args.obs_id):
         data_root = data_dirs["KPF_SCIENCE_OUTPUT"]
         paths = [
             kpf_filepath(args.obs_id, level, data_root=data_root)
             for level in ("L1", "L2", "L4")
         ]
-    elif args.datecode:
+    elif recipe.RECIPE_TYPE == "masters":
         data_root = data_dirs["KPF_MASTERS_OUTPUT"]
         masters_dir = kpf_directory(
             kind="masters", data_root=data_root, datecode=args.datecode
         )
-        switches = config.get_params(["STAGES"])
-        enabled = [s for s in MASTERS_STAGES if switches[s]]
-        stages = MASTERS_STAGES[MASTERS_STAGES.index(enabled[0]) :] if enabled else ()
+        all_stages = recipe.RECIPE_STAGES
+        enabled = [s for s in all_stages if config.get_params(["STAGES"])[s]]
+        stages = all_stages[all_stages.index(enabled[0]) :] if enabled else ()
         for stage in stages:
             for pattern in _MASTER_OUTPUT_GLOBS:
                 paths += glob.glob(

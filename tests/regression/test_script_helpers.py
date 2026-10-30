@@ -51,24 +51,22 @@ def _parse(parents, argv):
     return argparse.ArgumentParser(parents=parents).parse_args(argv)
 
 
-class TestRecipeParser:
-    def test_adds_recipe_and_config(self):
-        ns = _parse(
-            [_argparse.recipe_and_config_parser()], ["-r", "/x.py", "-c", "/y.toml"]
+class TestConfigParser:
+    def test_adds_config(self):
+        assert _parse([_argparse.config_parser()], ["-c", "/y.toml"]).config == (
+            "/y.toml"
         )
-        assert ns.recipe == "/x.py"
+
+    def test_long_option(self):
+        ns = _parse([_argparse.config_parser()], ["--config", "/y.toml"])
         assert ns.config == "/y.toml"
 
-    def test_long_options(self):
-        ns = _parse(
-            [_argparse.recipe_and_config_parser()],
-            ["--recipe", "/x.py", "--config", "/y.toml"],
-        )
-        assert (ns.recipe, ns.config) == ("/x.py", "/y.toml")
-
     def test_default_none(self):
-        ns = _parse([_argparse.recipe_and_config_parser()], [])
-        assert ns.recipe is None and ns.config is None
+        assert _parse([_argparse.config_parser()], []).config is None
+
+    def test_no_recipe_option(self):
+        with pytest.raises(SystemExit):
+            _parse([_argparse.config_parser()], ["-r", "/x.py"])
 
 
 class TestDataDirsParser:

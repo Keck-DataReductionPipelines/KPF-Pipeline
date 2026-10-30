@@ -34,11 +34,14 @@ from recipes._logging import science_run_summary
 # would not identify this module in the log.
 logger = logging.getLogger("kpfpipe.recipe.science")
 
+# What this recipe produces; the scripts layer gates selector checks and clearing on it.
+RECIPE_TYPE = "science"
+
 # Recipe stages in run order. Config [STAGES] switches each on or off, and --stages
 # overrides it. A stage switched off within a level passes the product through; one
 # that creates the next level (image_assembly, spectral_extraction,
 # cross_correlation) ends the run there, since every later stage needs its product.
-STAGES = (
+RECIPE_STAGES = (
     "astro_query",
     "image_assembly",
     "calibration_association",
@@ -62,8 +65,7 @@ def main(config, args):
         )
 
     obs_id = args.obs_id
-    switches = config.get_params(["STAGES"])
-    stages = [s for s in STAGES if switches[s]]
+    stages = [s for s in RECIPE_STAGES if config.get_params(["STAGES"])[s]]
     logger.info("reducing %s (stages: %s)", obs_id, ", ".join(stages))
 
     data_dirs = config.get_params(["DATA_DIRS"])

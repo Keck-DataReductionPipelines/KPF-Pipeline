@@ -49,10 +49,10 @@ from kpfpipe.utils.io import load_junk_obs_ids
 from kpfpipe.utils.kpf import get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
+    config_parser,
     data_dirs_parser,
     logging_parser,
     pool_parser,
-    recipe_and_config_parser,
     resolve_dir_shortcuts,
     resolve_log_settings,
 )
@@ -103,7 +103,7 @@ def parse_args(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_and_config_parser(),
+            config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
@@ -400,9 +400,7 @@ class Realtime:
                 reason=reason,
             )
             return
-        _tag, argv = _cli_task(
-            obs_id, self.forward, config=self.args.config, recipe=self.args.recipe
-        )
+        _tag, argv = _cli_task(obs_id, self.forward, config=self.args.config)
         logger.info("dispatch %s", obs_id)
         self.ledger.mark(
             key,

@@ -602,7 +602,7 @@ class TestScienceRecipeStageSelection:
     @staticmethod
     def _run(tmp_path, monkeypatch, off):
         recipe, config, args, record = _wire_science_recipe(tmp_path, monkeypatch)
-        config.config["STAGES"] = {st: st not in off for st in recipe.STAGES}
+        config.config["STAGES"] = {st: st not in off for st in recipe.RECIPE_STAGES}
         recipe.main(config, args)
         return [call[0] for call in record["calls"]], record
 

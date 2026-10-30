@@ -37,7 +37,7 @@ logger = logging.getLogger("kpfpipe.recipe.engineering")
 # overrides it. A stage switched off within a level passes the product through; one
 # that creates the next level (image_assembly, spectral_extraction) ends the run
 # there, since every later stage needs its product.
-STAGES = (
+RECIPE_STAGES = (
     "image_assembly",
     "calibration_association",
     "spectral_extraction",
@@ -65,8 +65,7 @@ def main(config, args):
         )
 
     obs_id = args.obs_id
-    switches = config.get_params(["STAGES"])
-    stages = [s for s in STAGES if switches[s]]
+    stages = [s for s in RECIPE_STAGES if config.get_params(["STAGES"])[s]]
     logger.info("reducing %s (stages: %s)", obs_id, ", ".join(stages))
 
     data_dirs = config.get_params(["DATA_DIRS"])

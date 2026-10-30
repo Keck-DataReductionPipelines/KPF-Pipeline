@@ -55,12 +55,7 @@ from scripts._argparse import (
 from scripts._dispatch import _default_science_jobs, configure_runtime
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 from scripts.plot.timeseries import PlotTimeseries
-from scripts.process import (
-    DEFAULT_MASTERS_CONFIG,
-    DEFAULT_MASTERS_RECIPE,
-    DEFAULT_SCIENCE_CONFIG,
-    DEFAULT_SCIENCE_RECIPE,
-)
+from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_SCIENCE_CONFIG
 
 logger = logging.getLogger(__name__)
 
@@ -119,25 +114,13 @@ def parse_args(argv=None):
         help="directory for the RV plots (default: "
         "{KPF_SCIENCE_OUTPUT}/QLP/timeseries)",
     )
-    # Two recipe/config pairs (masters + science), so the shared single -r/-c
-    # parser does not fit; each is forwarded to its stage only when set.
-    ap.add_argument(
-        "--masters_recipe",
-        default=None,
-        help="masters recipe .py forwarded to the masters stage (default: the "
-        "masters stage's own default recipe)",
-    )
+    # Two configs (masters + science), so the shared single -c parser does not fit.
+    # Each stage runs its own fixed recipe.
     ap.add_argument(
         "--masters_config",
         default=None,
         help="masters recipe TOML forwarded to the masters stage (default: the "
         "masters stage's own default config)",
-    )
-    ap.add_argument(
-        "--science_recipe",
-        default=None,
-        help="science recipe .py forwarded to the science stage (default: the "
-        "science stage's own default recipe)",
     )
     ap.add_argument(
         "--science_config",
@@ -205,17 +188,15 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     return obs_ids
 
 
-def _orchestrator_argv(module, unit_flag, units, forward, recipe=None, config=None):
+def _orchestrator_argv(module, unit_flag, units, forward, config=None):
     """Build the argv for one orchestrator subprocess (masters or science).
 
     Runs ``python -m scripts.process.{module} {unit_flag} {units...}`` with the
-    dir/log/pool overrides in `forward`, plus ``-r``/``-c`` when a recipe/config is
-    given. The unit list precedes `forward` so the ``--dates``/``--obs_ids``
+    dir/log/pool overrides in `forward`, plus ``-c`` when a config is given. The
+    unit list precedes `forward` so the ``--dates``/``--obs_ids``
     ``nargs`` stops at the first forwarded flag.
     """
     argv = [sys.executable, "-m", f"scripts.process.{module}"]
-    if recipe:
-        argv += ["-r", recipe]
     if config:
         argv += ["-c", config]
     argv += [unit_flag, *units, *forward]
@@ -255,12 +236,10 @@ def main(argv=None):
     args = parse_args(argv)
     start, end = args.date_range
 
-    # Resolve each stage's recipe+config (its default unless overridden) and pass
-    # both explicitly, so timeseries owns exactly what runs. The science config
+    # Resolve each stage's config (its default unless overridden) and pass it
+    # explicitly, so timeseries owns exactly what runs. The science config
     # also supplies this wrapper's L0 input root + log dir/level.
-    masters_recipe = args.masters_recipe or DEFAULT_MASTERS_RECIPE
     masters_config = args.masters_config or DEFAULT_MASTERS_CONFIG
-    science_recipe = args.science_recipe or DEFAULT_SCIENCE_RECIPE
     science_config = args.science_config or DEFAULT_SCIENCE_CONFIG
     science_dirs = ConfigHandler(science_config).get_params(["DATA_DIRS"])
     logger_params = ConfigHandler(science_config).get_params(["LOGGER"])
@@ -335,7 +314,6 @@ def main(argv=None):
             "--dates",
             datecodes,
             common_forward,
-            recipe=masters_recipe,
             config=masters_config,
         )
         logger.info("dispatching masters for %d night(s)", len(datecodes))
@@ -353,7 +331,6 @@ def main(argv=None):
             "--obs_ids",
             obs_ids,
             science_forward,
-            recipe=science_recipe,
             config=science_config,
         )
         logger.info("dispatching science for %d frame(s)", len(obs_ids))

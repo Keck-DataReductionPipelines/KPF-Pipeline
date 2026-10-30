@@ -1,6 +1,6 @@
 """Shared argparse parent parsers for the ``kpfpipe`` CLI commands.
 
-Common flag groups -- recipe/config selection, data-dir overrides, logging
+Common flag groups -- config selection, data-dir overrides, logging
 overrides, stage selection, the fan-out pool controls, and the mini-db ``--cache``
 mode -- factored
 out so the subcommand parsers (``reduce``/``masters``/``science``) compose them via
@@ -24,21 +24,13 @@ from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf import is_datecode
 
 
-def recipe_and_config_parser():
-    """Recipe + config selection (``-r``/``-c``), shared by all three commands.
+def config_parser():
+    """Config selection (``-c``), shared by every recipe-running command.
 
-    They override the command's default recipe/config pair: for the orchestrators
-    that default is their fixed kind's pair; for ``run`` it comes from a
-    ``--masters``/``--science`` shortcut (or, given neither, ``-r``/``-c`` are the
-    base specification).
+    Overrides the command's default config. The recipe is never overridden here:
+    each orchestrator runs its fixed recipe, and ``run`` selects its own.
     """
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument(
-        "-r",
-        "--recipe",
-        default=None,
-        help="recipe .py to run; overrides the default recipe",
-    )
     p.add_argument(
         "-c",
         "--config",
@@ -248,10 +240,11 @@ def cache_parser(default="r"):
     return p
 
 
-def stages_parser(stages):
+def stages_parser(stages=None):
     """``--stages``, which overrides the config's [STAGES] switches.
 
-    The caller passes the recipe's stage names (this layer never imports recipes).
+    The caller passes the recipe's stage names as choices (this layer never imports
+    recipes); ``None`` when the recipe is only known after parsing.
     """
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(

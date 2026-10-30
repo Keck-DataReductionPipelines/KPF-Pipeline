@@ -108,12 +108,10 @@ class TestParseArgs:
     def test_config_defaults_to_none(self, s):
         assert s.parse_args(["--obs_ids", _OID1]).config is None
 
-    def test_recipe_defaults_to_none(self, s):
-        assert s.parse_args(["--obs_ids", _OID1]).recipe is None
-
-    def test_recipe_override_parses(self, s):
-        ns = s.parse_args(["--obs_ids", _OID1, "-r", "/x.py"])
-        assert ns.recipe == "/x.py"
+    def test_rejects_recipe_override(self, s):
+        # The orchestrator runs its fixed recipe; -r is not accepted.
+        with pytest.raises(SystemExit):
+            s.parse_args(["--obs_ids", _OID1, "-r", "/x.py"])
 
     def test_jobs_unset_resolves_to_cores_default(self, s):
         ns = s.parse_args(["--obs_ids", _OID1])
@@ -148,27 +146,13 @@ class TestParseArgs:
 
 class TestCliTask:
     def test_builds_science_argv_with_defaults(self, s):
-        # No -r/-c override: the science default recipe/config are passed explicitly.
+        # No -c override: the science recipe and default config are passed explicitly.
         tag, argv = s._cli_task(_OID1, ["--log_level", "DEBUG"])
         assert tag == _OID1
         assert argv == [
             sys.executable, "-m", "scripts.process.reduce",
             "-r", s.DEFAULT_SCIENCE_RECIPE, "-c", s.DEFAULT_SCIENCE_CONFIG,
             "-o", _OID1, "--log_level", "DEBUG",
-        ]  # fmt: skip
-
-    def test_recipe_and_config_overrides(self, s):
-        _, argv = s._cli_task(_OID1, [], config="/c.toml", recipe="/x.py")
-        assert argv == [
-            sys.executable, "-m", "scripts.process.reduce",
-            "-r", "/x.py", "-c", "/c.toml", "-o", _OID1,
-        ]  # fmt: skip
-
-    def test_recipe_override_keeps_default_config(self, s):
-        _, argv = s._cli_task(_OID1, [], recipe="/x.py")
-        assert argv == [
-            sys.executable, "-m", "scripts.process.reduce",
-            "-r", "/x.py", "-c", s.DEFAULT_SCIENCE_CONFIG, "-o", _OID1,
         ]  # fmt: skip
 
     def test_config_override_keeps_default_recipe(self, s):

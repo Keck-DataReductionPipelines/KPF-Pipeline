@@ -40,14 +40,14 @@ import sys
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.logger import setup_batch_logging
-from recipes.kpf_drp_masters import STAGES
+from recipes.kpf_drp_masters import RECIPE_STAGES
 from scripts._argparse import (
     cache_parser,
+    config_parser,
     data_dirs_parser,
     dates_parser,
     logging_parser,
     pool_parser,
-    recipe_and_config_parser,
     resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
@@ -94,13 +94,13 @@ def parse_args(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_and_config_parser(),
+            config_parser(),
             data_dirs_parser(science_output=False),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
             dates_parser("builds every L0 night in it"),
-            stages_parser(STAGES),
+            stages_parser(RECIPE_STAGES),
         ],
     )
     args = resolve_dates(ap, ap.parse_args(argv))
@@ -114,11 +114,11 @@ def parse_args(argv=None):
     return resolve_dir_shortcuts(args)
 
 
-def _cli_task(datecode, forward, config=None, recipe=None, stage=None):
+def _cli_task(datecode, forward, config=None, stage=None):
     """Build a (tag, argv) task building one night via the ``kpfpipe run`` leaf.
 
-    Passes recipe/config to the leaf explicitly (the masters defaults unless
-    `recipe`/`config` override) rather than leaning on its ``--masters`` shortcut,
+    Passes the masters recipe and config (the default unless `config` overrides) to
+    the leaf explicitly rather than leaning on its ``--masters`` shortcut,
     so the orchestrator is the single owner of what it runs. `forward` is the
     resolved dir/log overrides appended to every invocation; the tag (datecode)
     keys the sentinel/log paths. `stage`, when given, becomes ``--stages``.
@@ -128,7 +128,7 @@ def _cli_task(datecode, forward, config=None, recipe=None, stage=None):
         "-m",
         "scripts.process.reduce",
         "-r",
-        recipe or DEFAULT_MASTERS_RECIPE,
+        DEFAULT_MASTERS_RECIPE,
         "-c",
         config or DEFAULT_MASTERS_CONFIG,
         "-d",
@@ -148,7 +148,7 @@ def main(argv=None):
     # the L0 input root and log dir; subprocesses get recipe/config via -r/-c.
     config = ConfigHandler(
         args.config or DEFAULT_MASTERS_CONFIG,
-        overrides=stages_override(args, STAGES) or None,
+        overrides=stages_override(args, RECIPE_STAGES) or None,
     )
     logger_params = config.get_params(["LOGGER"])
     data_input = (
@@ -201,17 +201,14 @@ def main(argv=None):
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
     failed = set()
-    switches = config.get_params(["STAGES"])
-    for stage in STAGES:
-        if not switches[stage]:
-            continue
+    stages = [s for s in RECIPE_STAGES if config.get_params(["STAGES"])[s]]
+    for stage in stages:
         logger.info("stage %s: all %d night(s)", stage, len(datecodes))
         tasks = [
             _cli_task(
                 dc,
                 forward,
                 config=args.config,
-                recipe=args.recipe,
                 stage=stage,
             )
             for dc in datecodes
