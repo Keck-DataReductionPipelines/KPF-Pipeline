@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build nightly master calibrations for a set of datecodes (``kpfpipe masters``).
 
-A lightweight, fail-loud orchestrator: it dispatches each night as a separate
-``python -m scripts.process.reduce --masters -d <datecode>`` subprocess (the
+A lightweight orchestrator: it dispatches each night as a separate
+``python -m scripts.process.reduce -r <masters recipe> -d <datecode>`` subprocess (the
 ``kpfpipe run`` leaf), so every night gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which nights to build, via two mutually exclusive input forms:

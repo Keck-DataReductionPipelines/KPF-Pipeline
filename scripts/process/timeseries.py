@@ -88,7 +88,8 @@ def parse_args(argv=None):
         help="star id as it appears in the L0 OBJECT header, e.g. 10700",
     )
     # Stage toggles (which *stage* to run) -- unrelated to reduce's
-    # --masters/--science recipe shortcuts, which live only on that leaf's parser.
+    # --masters/--science/--engineering recipe shortcuts, which live only on that
+    # leaf's parser.
     ap.add_argument(
         "--masters",
         action=argparse.BooleanOptionalAction,

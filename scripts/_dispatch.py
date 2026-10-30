@@ -3,8 +3,8 @@
 Runs a set of recipe subprocesses -- one serial canary to warm the shared
 on-disk caches, then a bounded pool -- with per-job timeout kills, clean
 interrupt teardown, and fail-fast/fail-soft failure handling. Shared by
-``masters.py``/``science.py``; depends only on stdlib + ``kpfpipe``, never on
-``tools``.
+``masters.py``/``science.py``/``engineering.py``; depends only on stdlib +
+``kpfpipe``, never on ``tools``.
 """
 
 import concurrent.futures
@@ -153,10 +153,11 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
     without launching once teardown has begun (`_interrupted`), and also
     kills-then-returns 130 if teardown begins between launching and tracking.
 
-    `launch_interval` (seconds, >0 for science and masters) throttles the launch,
+    `launch_interval` (seconds, >0 for every driver) throttles the launch,
     holding the lock across the sleep so pool workers launch one interval apart
     (science paces the SIMBAD/Gaia queries; masters desynchronizes the disk-read
-    phase). The canary launches first, so it never waits.
+    phase; engineering paces as a precaution). The canary launches first, so it
+    never waits.
     """
     if _interrupted.is_set():
         return 130, ""
@@ -233,8 +234,8 @@ def run_stage(
     * True (default): fail-fast. A failed canary skips the fan-out; a failed pool
       job stops new launches (in-flight jobs finish). Any failure prints a per-unit
       sentinel and exits(1).
-    * False (the standalone masters/science drivers): fail-soft. Every unit is
-      attempted (a failed canary still fans out), failures are warned but do not
+    * False (the standalone masters/science/engineering drivers): fail-soft. Every
+      unit is attempted (a failed canary still fans out), failures are warned but do not
       exit, and the caller inspects the returned failure set for its exit code.
 
     `launch_interval` (seconds) spaces the fan-out launches apart (science passes

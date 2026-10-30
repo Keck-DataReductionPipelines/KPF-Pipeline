@@ -3,7 +3,7 @@
 tools/cli.py is a thin, git-style router: it maps the first argument to a
 subcommand under ``scripts/process/`` and forwards the remaining argv verbatim.
 Only the routing, usage banner, and unknown-command error are covered here; the
-subcommands' own parsing lives in test_{reduce,masters,science}_script.py.
+subcommands' own parsing lives in test_{reduce,masters,science,engineering}_script.py.
 """
 
 import pytest

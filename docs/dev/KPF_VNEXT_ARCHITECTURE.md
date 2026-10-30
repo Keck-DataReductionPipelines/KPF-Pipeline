@@ -60,8 +60,8 @@ kpfpipe/            scientist-facing building blocks (importable, no orchestrati
   modules/          processing algorithms (science + masters)
   quality_control/  quality control layers (diagnostics, qc_flags, checkpoints, quicklook)
   utils/            shared helpers (io, logger, config, stats, astro, kpf)
-recipes/            compose modules into an end-to-end reduction (kpf_drp_{science,masters}.py)
-configs/            default recipe parameters (kpf_drp_{science,masters}.toml)
+recipes/            compose modules into an end-to-end reduction (kpf_drp_{science,masters,engineering}.py)
+configs/            default recipe parameters (kpf_drp_{science,masters,engineering}.toml)
 scripts/            run recipes many times (processing/, plotting/, analyze/)
 tools/              the `kpfpipe` CLI dispatcher (cli.py) and operator tools
 reference/          static reference data (detector.toml, line lists, order traces, etc.)
@@ -272,10 +272,12 @@ products (see *Masters Pipeline*).
 ### Recipes & configs
 
 `recipes/` compose modules into an end-to-end reduction: `kpf_drp_science.py` runs the
-science flow, `kpf_drp_masters.py` builds the nightly masters. Each recipe exposes a
+science flow, `kpf_drp_masters.py` builds the nightly masters, `kpf_drp_engineering.py` runs a
+complete-the-run L0→L2 engineering flow (no catalog/DB queries). Each recipe declares its
+`RECIPE_TYPE` and `RECIPE_STAGES`, and exposes a
 `main(config, args)` entry that tests call directly with no logging configured — logging
 setup lives in the scripts layer, never in recipes. Default parameters live in
-`configs/kpf_drp_{science,masters}.toml`.
+`configs/kpf_drp_{science,masters,engineering}.toml`.
 
 ### Scripts
 
@@ -293,7 +295,7 @@ The drivers share a set of **`tools`-free** orchestration helpers, which sit at 
 `scripts/` root rather than inside `process/` because more than one sub-package composes them:
 
 - `_argparse.py` — shared argparse parent-parsers composed via `parents=[…]`, so each common flag
-  (recipe/config, data dirs, logging, pool, cache) is declared once, plus two post-parse resolvers:
+  (config, data dirs, logging, pool, cache) is declared once, plus two post-parse resolvers:
   `resolve_dir_shortcuts` expands the `--input_dir`/`--output_dir` convenience shortcuts into their
   per-directory slots, and `resolve_log_settings` settles the log dir/level (see *Logging*).
 - `_dispatch.py` — the process-pool engine that fans units out as subprocesses.
@@ -302,16 +304,18 @@ The drivers share a set of **`tools`-free** orchestration helpers, which sit at 
   (`FileHandler`) importer, so `_dispatch.py` stays io-free.
 
 The default recipe/config path constants live in `scripts/process/__init__.py`
-(`DEFAULT_{MASTERS,SCIENCE}_{RECIPE,CONFIG}`) — the single source the `--masters`/`--science`
+(`DEFAULT_{MASTERS,SCIENCE,ENGINEERING}_{RECIPE,CONFIG}`) — the single source the
+`--masters`/`--science`/`--engineering`
 shortcuts resolve against.
 
-**Fan-out concurrency differs by orchestrator.** Science sizes its pool from cores (`--jobs`); the
+**Fan-out concurrency differs by orchestrator.** Science and engineering size their pools from cores (`--jobs`); the
 `masters` orchestrator instead caps at a **fixed** `_MASTERS_JOBS` (16, in `_dispatch.py`),
 independent of `--jobs`, cores, or RAM, because masters stacking degrades with the *number* of
 concurrent jobs (OS memory-mapping contention) rather than with compute or memory pressure — so do
-**not** swap in a cores- or RAM-derived cap. Both orchestrators also **stagger** their subprocess
+**not** swap in a cores- or RAM-derived cap. All three orchestrators also **stagger** their subprocess
 launches (`_LAUNCH_INTERVAL`): masters by 5.0 s to desync the I/O-heavy read phase each build opens,
-science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries `AstroQuery` fires per frame at startup
+science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries `AstroQuery` fires per frame at startup,
+engineering by 1.0 s as a precaution
 (rationale in each module's comment). These caps and intervals were tuned empirically on
 Caltech's shrek server — heuristics, not definitive values; re-confirm against a real run before
 changing them.
@@ -324,8 +328,10 @@ the remaining argv verbatim (each subcommand owns its own argparse). Full flag u
 `kpfpipe --help` and `kpfpipe <command> --help`; the subcommands differ by *role*:
 
 - **`kpfpipe run`** (→ `reduce.py`) — the **leaf**: runs one recipe on one unit, in-process. Owns
-  config-override assembly, `setup_logging`, the DRP-RUN-08 banner, and the recipe `exec`.
-- **`kpfpipe science` / `kpfpipe masters`** (→ `science.py`/`masters.py`) — **orchestrators**: fan a
+  config-override assembly, `setup_logging`, the DRP-RUN-08 banner, the recipe `exec`, and the
+guard that honors `RECIPE_TYPE` only for the standard recipes (any other recipe needs a y/n
+confirmation or `--force_run`).
+- **`kpfpipe science` / `masters` / `engineering`** (→ `science.py`/`masters.py`/`engineering.py`) — **orchestrators**: fan a
   batch of units out as one `python -m scripts.process.reduce` subprocess each (own log, clean
   process state, independent exit) via `_dispatch.py`.
 - **`kpfpipe timeseries`** (→ `timeseries.py`) — a **thin wrapper** above the orchestrators: discovers
@@ -398,8 +404,8 @@ recipes/modules/tests. Two sibling entry points configure it:
   the `kpfpipe run` entry) before the recipe runs, writing that reduction's per-unit log with a
   stderr console echo.
 - **`setup_batch_logging`** — a thin wrapper called once at the top of each fan-out driver's `main()`
-  (the `science.py`/`masters.py` orchestrators **and** the `timeseries.py` wrapper — three callers,
-  `label` ∈ `science`/`masters`/`timeseries`). It writes a `kpf_{label}_batch_{stamp}.log` of the
+  (the `science.py`/`masters.py`/`engineering.py` orchestrators **and** the `timeseries.py` wrapper,
+  `label` ∈ `science`/`masters`/`engineering`/`timeseries`). It writes a `kpf_{label}_batch_{stamp}.log` of the
   *batch's own* decision points (dispatch banner, per-unit ok/FAILED, failure sentinels; for
   `timeseries`, its discovery + per-stage dispatch trail), with the console echo pinned to **stdout**
   so an operator can watch fan-out live. It also returns this run's id, which the driver forwards to
@@ -466,13 +472,14 @@ use one instance per thread; the on-disk mini-db cache is shared safely, keyed b
 
 ### io.py path builders
 
-Science filenames: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`.
+Science filenames: `L0 = {obs_id}.fits` (KPF-native `KP.*`); `L1 = kpf_L1_{YYYYMMDD}T{HHmmss}.fits` — note **no EPRV "S"**, because the EPRV standard defines no L1 (its filename regex only accepts `SL2`/`SL3`/`SL4`); `L2/L4 = kpf_SL{N}_…` (EPRV-standard). Masters (WMKO DRP-RUN-05): `{KOAID-of-first-input}_master_{type}_L{N}.fits`. Engineering (not EPRV): `kpf_EngL{N}_…`, in the science layout under `{root}/engineering/`.
 
 Two authorities encode these names and **must agree per level**: `kpf_filepath()` (`utils/io.py`) —
 the pipeline's path builder (output directory + basename, from an obs_id string), what recipes use to
 write — and `<model>.generate_standard_filename()` — basename only, the `to_fits(fn=None)` fallback.
 `kpf_filepath` composes two single-authority helpers: `kpf_directory` (the sole authority for an
-**output** directory — the `science`/`masters`/`QLP` layouts above) and `kpf_filename` (**the sole
+**output** directory — the `science`/`masters`/`QLP` layouts above, rooted under
+`{root}/engineering/` for engineering products) and `kpf_filename` (**the sole
 authority for the naming rule**). All four science models' `generate_standard_filename` delegate to
 `kpf_filename(self.obs_id, level)`, so the object- and string-keyed builders cannot drift — which is
 why every model must carry `obs_id` on every construction path (see the `ORIGID` note under *Header

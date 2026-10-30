@@ -124,7 +124,7 @@ def _share_with_all_users(path, mode):
 def read_token_file(path):
     """Read whitespace-stripped, non-blank lines from a text file.
 
-    Backs the ``--dates`` (masters) and ``--obs_ids`` (science) flags, which
+    Backs the batch commands' ``--dates`` and ``--obs_ids`` flags, which
     each accept a reference file listing one unit -- a datecode or an obs_id --
     per line instead of inline values. Whitespace is stripped from each line and
     blank lines are dropped; validating that each token is a real datecode/obs_id

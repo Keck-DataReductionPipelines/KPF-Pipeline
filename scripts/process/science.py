@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Reduce a set of science frames end-to-end, L0 -> L4 (``kpfpipe science``).
 
-A lightweight, fail-loud orchestrator: it dispatches each frame as a separate
-``python -m scripts.process.reduce --science -o <obs_id>`` subprocess (the
+A lightweight orchestrator: it dispatches each frame as a separate
+``python -m scripts.process.reduce -r <science recipe> -o <obs_id>`` subprocess (the
 ``kpfpipe run`` leaf), so every frame gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which frames to reduce (discovering a target's frames from the L0 tree lives in

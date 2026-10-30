@@ -62,7 +62,7 @@ class _BatchConsoleFilter(logging.Filter):
     trail, but INFO records propagated up from library loggers in the driver
     process (discovery, FITS/astropy chatter) make it noisy. So below WARNING,
     only records from the orchestrator's own code reach the console -- the
-    ``scripts.*`` namespace (masters/science/_dispatch/plots) or ``__main__`` (a
+    ``scripts.*`` namespace (the process drivers, _dispatch, plots) or ``__main__`` (a
     driver launched as ``python -m scripts.process.<name>``, whose module
     logger is named ``__main__``). WARNING and above always pass, so per-unit
     failures and warnings are never hidden. Attached to the console handler only,

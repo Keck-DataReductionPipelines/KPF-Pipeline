@@ -2,7 +2,7 @@
 
 Pure string builders for the compact run-verdict block each recipe logs at
 completion. They live here (not in ``kpfpipe/utils/logger.py``, which is
-logging-setup infrastructure) so both recipes share one rendering while the
+logging-setup infrastructure) so the recipes share one rendering while the
 setup module stays free of domain content.
 """
 

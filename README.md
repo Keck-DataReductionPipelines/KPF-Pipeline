@@ -88,13 +88,15 @@ kpfpipe run --science -o KP.20240405.40113.57 \
 ```
 
 The masters recipe writes master bias/dark L1 products and a master ThAr WLS L2
-product. The science recipe writes L2/L4 FITS products and quicklook PNGs.
+product. The science recipe writes L2/L4 FITS products and quicklook PNGs. The
+engineering recipe (`--engineering`) writes `kpf_EngL2` products under
+`{root}/engineering/`, with no catalog or database queries.
 
-`--masters`/`--science` set the recipe **and** a default config; pass `-c` to run
+`--masters`/`--science`/`--engineering` set the recipe **and** a default config; pass `-c` to run
 that recipe against a custom config (e.g. `kpfpipe run --science -c my.toml -o …`).
 
 `kpfpipe` is a dispatcher: `kpfpipe run` reduces one recipe on one unit
-(above), while `kpfpipe masters` / `kpfpipe science` fan out a batch — one
+(above), while `kpfpipe masters` / `science` / `engineering` fan out a batch — one
 `run` subprocess per unit, each with its own log and exit code:
 
 ```bash
@@ -102,6 +104,8 @@ kpfpipe masters --dates 20240405 20240712 --kpf_data_input /data/kpf ...
 kpfpipe masters --dates nights.txt   # or a file listing one datecode per line
 kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 ...
 kpfpipe science --obs_ids frames.txt   # or a file listing one obs_id per line
+kpfpipe science --dates 20240405      # every Target frame of a night
+kpfpipe engineering --obs_ids KP.20240405.40113.57 ...
 ```
 
 `kpfpipe timeseries` reduces one star's RV timeseries over a datecode range: it

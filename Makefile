@@ -53,7 +53,7 @@ PROFILE_MODULES = image_assembly image_processing spectral_extraction \
 	radial_velocity calibration_association master_bias master_dark \
 	master_order_trace master_wls
 
-# Run every harness (both recipes + all per-module files) and regenerate reports.
+# Run every harness (science + masters recipes + all per-module files) and regenerate reports.
 profile: profile-masters profile-science $(addprefix profile-,$(PROFILE_MODULES))
 
 # End-to-end recipes (ranked across modules to find the dominant stage).

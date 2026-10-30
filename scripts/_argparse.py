@@ -2,8 +2,8 @@
 
 Common flag groups -- config selection, data-dir overrides, logging
 overrides, stage selection, the fan-out pool controls, and the mini-db ``--cache``
-mode -- factored
-out so the subcommand parsers (``reduce``/``masters``/``science``) compose them via
+mode -- factored out so the subcommand parsers
+(``reduce``/``masters``/``science``/``engineering``) compose them via
 ``parents=[...]`` instead of each re-declaring the same flags. Every factory
 returns a fresh ``add_help=False`` parser to slot in as a parent. The
 ``kpfpipe analyze`` scripts compose `analysis_parser`, itself built from these same
@@ -218,12 +218,12 @@ def data_dirs_parser(science_output=True, engineering_output=False):
     return p
 
 
-# Where each --output_dir slot lands beneath the given root. The masters/science
-# outputs take the root verbatim (their path builders add the substructure); every
-# directory a flag names outright -- log, plot, analysis -- gets its conventional
-# subdirectory here, so --output_dir yields the same layout an explicit
-# --log_dir/--plot_dir/--analysis_dir would (the plot subdir matches the timeseries
-# default of {science_output}/QLP/timeseries).
+# Where each --output_dir slot lands beneath the given root. The
+# masters/science/engineering outputs take the root verbatim (their path builders
+# add the substructure); every directory a flag names outright -- log, plot,
+# analysis -- gets its conventional subdirectory here, so --output_dir yields the
+# same layout an explicit --log_dir/--plot_dir/--analysis_dir would (the plot
+# subdir matches the timeseries default of {science_output}/QLP/timeseries).
 _OUTPUT_DIR_SLOTS = {
     "kpf_masters_output": (),
     "kpf_science_output": (),
@@ -333,7 +333,7 @@ def pool_parser(jobs_help):
 
     ``--jobs`` help differs per command (masters cites its fixed cap, science its
     cores-based default), so the caller passes it in; ``--job_timeout`` is
-    identical across masters and science and lives here so it is written once. Both
+    identical across the orchestrators and lives here so it is written once. Both
     default to ``None``/``1200`` and are validated + resolved post-parse by each
     command's ``parse_args``.
     """
