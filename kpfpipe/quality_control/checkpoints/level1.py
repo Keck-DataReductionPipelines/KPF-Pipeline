@@ -13,7 +13,7 @@ class CheckpointL1(Checkpoint):
     RAISE_FLAGS = {
         "none": (),
         "default": ("DATAPRL1",),
-        "engineering": (),
+        "engineering": ("DATAPRL1",),
     }
     DIAGNOSTICS = (DiagL1,)
     QC = QCL1

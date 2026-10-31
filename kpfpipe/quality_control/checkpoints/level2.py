@@ -13,6 +13,9 @@ class CheckpointL2(Checkpoint):
     RAISE_FLAGS = {
         "none": (),
         "default": ("DATAPRL2",),
+        # DATAPRL2 requires WAVE and, for science frames, barycentric arrays. The
+        # engineering recipe makes no catalog query (so no barycentric correction)
+        # and may lack a viable WLS master, so will very often fail DATAPRL2.
         "engineering": (),
     }
     DIAGNOSTICS = (DiagL2,)
