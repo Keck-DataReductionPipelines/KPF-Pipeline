@@ -387,7 +387,7 @@ A level whose metrics span several unrelated extensions splits them into per-ext
 
 ### Checkpoints
 
-`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `raise_on_unregistered_keyword` (structural header validation — see *Header standardization*) and `raise_on_fatal_qc_flag`. The fatal scan is scoped to the subclass's own `RAISE_FLAGS`: a `0` there raises. The summary that follows then warns on **every** failing flag on QUALITY_CONTROL (`keyword_registry.qc_flag_keywords`, the cross-level L0→L4 accumulation), so a propagated lower-level `0` is still named. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
+`kpfpipe/quality_control/checkpoints/` — reads the 0/1 QC flags and the product headers and **emits warnings or raises errors** (never writes). Two inherited base checkpoints: `raise_on_unregistered_keyword` (structural header validation — see *Header standardization*) and `raise_on_fatal_qc_flag`. The fatal scan is scoped to the subclass's own `RAISE_FLAGS` entry for the checkpoint's `qc_level` (`none`/`default`/`strict`/`engineering`; the recipe reads it from `[QUALITY_CONTROL]` and passes it to the constructor): a `0` there raises. The summary that follows then warns on **every** failing flag on QUALITY_CONTROL (`keyword_registry.qc_flag_keywords`, the cross-level L0→L4 accumulation), so a propagated lower-level `0` is still named. `CheckpointL0`/`L1`/`L2`/`L4` set `LEVEL` + `RAISE_FLAGS`.
 
 ### Quicklook plots
 
