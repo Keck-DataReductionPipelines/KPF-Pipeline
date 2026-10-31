@@ -59,24 +59,20 @@ class TestHstToUtc:
 
 
 class TestKpfTimestampToEprv:
-    def test_basic_conversion(self):
-        # 40113s = 11:08:33
-        assert kpf_timestamp_to_eprv_timestamp("20240405.40113.57") == "20240405T110833"
-
-    def test_midnight(self):
-        assert kpf_timestamp_to_eprv_timestamp("20240405.00000.00") == "20240405T000000"
-
-    def test_end_of_day(self):
-        # 86399s = 23:59:59
-        assert kpf_timestamp_to_eprv_timestamp("20240405.86399.00") == "20240405T235959"
-
-    def test_one_hour(self):
-        assert kpf_timestamp_to_eprv_timestamp("20240405.03600.00") == "20240405T010000"
-
-    def test_frame_field_dropped(self):
-        result = kpf_timestamp_to_eprv_timestamp("20240405.40113.57")
-        assert "57" not in result
-        assert "." not in result
+    @pytest.mark.parametrize(
+        "timestamp, expected",
+        [
+            (
+                "20240405.40113.57",
+                "20240405T110833",
+            ),  # 40113 s = 11:08:33; frame dropped
+            ("20240405.00000.00", "20240405T000000"),  # midnight
+            ("20240405.86399.00", "20240405T235959"),  # 86399 s = 23:59:59
+            ("20240405.03600.00", "20240405T010000"),  # one hour
+        ],
+    )
+    def test_conversion(self, timestamp, expected):
+        assert kpf_timestamp_to_eprv_timestamp(timestamp) == expected
 
 
 class TestGetObsId:
@@ -118,162 +114,75 @@ class TestGetTimestamp:
             get_timestamp("notimestamp.fits")
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Validation: predicates reject semantically invalid input
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
-class TestIsObsId:
-    def test_valid_obs_id(self):
-        assert is_obs_id("KP.20240405.40113.57") is True
-
-    def test_rejects_bad_date(self):
-        # Format matches but month 99 is not a real date.
-        assert is_obs_id("KP.20249999.40113.57") is False
-
-    def test_rejects_seconds_out_of_range(self):
-        # SSSSS = 99999 > 86399.
-        assert is_obs_id("KP.20240405.99999.57") is False
-
-    def test_rejects_wrong_format(self):
-        assert is_obs_id("20240405.40113.57") is False
-
-    def test_rejects_non_string(self):
-        assert is_obs_id(None) is False
-        assert is_obs_id(12345) is False
-
-
-class TestIsDatecode:
-    def test_valid_datecode(self):
-        assert is_datecode("20240405") is True
-
-    def test_rejects_bad_date(self):
-        # Format matches but month 99 is not a real date.
-        assert is_datecode("20249999") is False
-
-    def test_rejects_wrong_format(self):
-        assert is_datecode("2024-04-05") is False
-
-    def test_rejects_non_string(self):
-        assert is_datecode(None) is False
-        assert is_datecode(20240405) is False
+class TestPredicates:
+    @pytest.mark.parametrize(
+        "predicate, value, expected",
+        [
+            (is_obs_id, "KP.20240405.40113.57", True),
+            (is_obs_id, "KP.20249999.40113.57", False),  # month 99: not a date
+            (is_obs_id, "KP.20240405.99999.57", False),  # 99999 s > 86399
+            (is_obs_id, "20240405.40113.57", False),  # wrong format
+            (is_obs_id, None, False),
+            (is_obs_id, 12345, False),
+            (is_datecode, "20240405", True),
+            (is_datecode, "20249999", False),  # month 99: not a date
+            (is_datecode, "2024-04-05", False),  # wrong format
+            (is_datecode, None, False),
+            (is_datecode, 20240405, False),
+            (is_timestamp, "20240405.40113.57", True),
+            (is_timestamp, "20249999.40113.57", False),  # month 99: not a date
+            (is_timestamp, "20240405.99999.57", False),  # 99999 s > 86399
+            (is_timestamp, "20240405T110833", False),  # wrong format
+            (is_timestamp, None, False),
+        ],
+    )
+    def test_classifies_input(self, predicate, value, expected):
+        assert predicate(value) is expected
 
 
-class TestIsTimestamp:
-    def test_valid_timestamp(self):
-        assert is_timestamp("20240405.40113.57") is True
-
-    def test_rejects_bad_date(self):
-        assert is_timestamp("20249999.40113.57") is False
-
-    def test_rejects_seconds_out_of_range(self):
-        assert is_timestamp("20240405.99999.57") is False
-
-    def test_rejects_wrong_format(self):
-        assert is_timestamp("20240405T110833") is False
-
-    def test_rejects_non_string(self):
-        assert is_timestamp(None) is False
+# ------------------------------------------------------------------
+# Validation: extractors and converters raise on malformed or semantically
+# invalid timestamps rather than producing wrong output (a day rollover from
+# seconds > 86399, or an hour >= 24)
+# ------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# Validation: extractors raise on semantically invalid embedded timestamps
-# ---------------------------------------------------------------------------
+_INVALID = "Invalid KPF timestamp"
+_NOT_STRING = "must be a string"
 
 
-class TestGetObsIdValidation:
-    def test_raises_on_invalid_date(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            get_obs_id("KP.20249999.40113.57.fits")
-
-    def test_raises_on_seconds_out_of_range(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            get_obs_id("KP.20240405.99999.57.fits")
-
-    def test_raises_on_non_string(self):
-        with pytest.raises(ValueError, match="must be a string"):
-            get_obs_id(None)
-
-
-class TestGetDatecodeValidation:
-    def test_raises_on_invalid_date(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            get_datecode("KP.20249999.40113.57")
-
-    def test_raises_on_seconds_out_of_range(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            get_datecode("KP.20240405.99999.57")
-
-    def test_raises_on_non_string(self):
-        with pytest.raises(ValueError, match="must be a string"):
-            get_datecode(None)
-
-
-class TestGetTimestampValidation:
-    def test_raises_on_invalid_date(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            get_timestamp("KP.20249999.40113.57.fits")
-
-    def test_raises_on_seconds_out_of_range(self):
-        # The path contains a syntactically-matching but invalid timestamp.
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            get_timestamp("KP.20240405.99999.57.fits")
-
-    def test_raises_on_non_string(self):
-        with pytest.raises(ValueError, match="must be a string"):
-            get_timestamp(None)
-
-
-# ---------------------------------------------------------------------------
-# Validation: converters reject malformed input rather than silently
-# producing wrong output (the day-rollover and hh>=24 slips).
-# ---------------------------------------------------------------------------
-
-
-class TestKpfTimestampToDatetimeValidation:
-    def test_raises_on_seconds_out_of_range(self):
-        # Previously: silently rolled over into the next day.
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            kpf_timestamp_to_datetime("20240405.99999.57")
-
-    def test_raises_on_invalid_date(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            kpf_timestamp_to_datetime("20249999.40113.57")
-
-    def test_raises_on_wrong_format(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            kpf_timestamp_to_datetime("not-a-timestamp")
-
-
-class TestUtcToHstValidation:
-    def test_raises_on_seconds_out_of_range(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            utc_to_hst("20240405.99999.57")
-
-    def test_raises_on_wrong_format(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            utc_to_hst("20240405T110833")
-
-
-class TestHstToUtcValidation:
-    def test_raises_on_seconds_out_of_range(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            hst_to_utc("20240405.99999.57")
-
-    def test_raises_on_wrong_format(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            hst_to_utc("not-a-timestamp")
-
-
-class TestKpfTimestampToEprvValidation:
-    def test_raises_on_seconds_out_of_range(self):
-        # Previously: produced 'YYYYMMDDT273739' with hh=27.
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            kpf_timestamp_to_eprv_timestamp("20240405.99999.57")
-
-    def test_raises_on_invalid_date(self):
-        with pytest.raises(ValueError, match="Invalid KPF timestamp"):
-            kpf_timestamp_to_eprv_timestamp("20249999.40113.57")
+class TestTimestampValidation:
+    @pytest.mark.parametrize(
+        "func, value, match",
+        [
+            (get_obs_id, "KP.20249999.40113.57.fits", _INVALID),
+            (get_obs_id, "KP.20240405.99999.57.fits", _INVALID),
+            (get_obs_id, None, _NOT_STRING),
+            (get_datecode, "KP.20249999.40113.57", _INVALID),
+            (get_datecode, "KP.20240405.99999.57", _INVALID),
+            (get_datecode, None, _NOT_STRING),
+            (get_timestamp, "KP.20249999.40113.57.fits", _INVALID),
+            (get_timestamp, "KP.20240405.99999.57.fits", _INVALID),
+            (get_timestamp, None, _NOT_STRING),
+            (kpf_timestamp_to_datetime, "20240405.99999.57", _INVALID),
+            (kpf_timestamp_to_datetime, "20249999.40113.57", _INVALID),
+            (kpf_timestamp_to_datetime, "not-a-timestamp", _INVALID),
+            (utc_to_hst, "20240405.99999.57", _INVALID),
+            (utc_to_hst, "20240405T110833", _INVALID),
+            (hst_to_utc, "20240405.99999.57", _INVALID),
+            (hst_to_utc, "not-a-timestamp", _INVALID),
+            (kpf_timestamp_to_eprv_timestamp, "20240405.99999.57", _INVALID),
+            (kpf_timestamp_to_eprv_timestamp, "20249999.40113.57", _INVALID),
+        ],
+    )
+    def test_invalid_input_raises(self, func, value, match):
+        with pytest.raises(ValueError, match=match):
+            func(value)
 
 
 class TestInstrumentEra:
@@ -292,3 +201,13 @@ class TestInstrumentEra:
     def test_uncovered_time_raises(self):
         with pytest.raises(ValueError, match="No KPF instrument era covers"):
             instrument_era(datetime(2999, 1, 1))
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=ValueError,
+        reason="prod bug: kpf.py:171 / level0.py:256 -- reference eras leave a 1 s "
+        "gap between rows, so a sub-second timestamp inside it has no era",
+    )
+    def test_sub_second_time_at_a_boundary_has_an_era(self):
+        # Frame timestamps carry sub-second precision (DATE-OBS is to the ms).
+        assert instrument_era(datetime(2024, 2, 23, 12, 0, 0, 500000)) in {"1.5", "2.0"}

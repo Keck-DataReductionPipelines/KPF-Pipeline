@@ -3,7 +3,7 @@
 Covers arg parsing, UT night selection, the settled-frame scan, OBSTYPE
 classification, the exactly-once ledger, and one-pass (``--once``) runs with the
 subprocess launcher stubbed: what gets dispatched, what gets skipped, what the
-heartbeat status file and the run.json say, and that a second pass over the same
+heartbeat status file and the ledger say, and that a second pass over the same
 tree dispatches nothing. Synthetic L0 trees only -- no real reduction runs.
 """
 
@@ -25,9 +25,9 @@ _NIGHT = "20240405"
 _NOW = 1712277000.0
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # parse_args / watch_datecodes
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestParseArgs:
@@ -70,9 +70,9 @@ class TestWatchDatecodes:
         assert rt.watch_datecodes(_NOW, nights=1) == ["20240405"]
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # scan_settled_frames / classify_frame
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _age(path, seconds, now=_NOW):
@@ -152,7 +152,7 @@ class TestClassifyFrame:
         kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
         assert kind == "rejected" and "cannot classify frame (IMTYPE='Sky'" in reason
 
-    def test_unexpected_error_propagates(self, monkeypatch, tmp_path):
+    def test_unexpected_error_raises(self, monkeypatch, tmp_path):
         oid = write_l0_tree(tmp_path, _NIGHT, 100)
 
         def boom(self, source):
@@ -163,9 +163,9 @@ class TestClassifyFrame:
             rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Ledger
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestLedger:
@@ -200,9 +200,9 @@ class TestLedger:
             rt.Ledger(str(p)).load()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # --once end to end (launcher stubbed)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class _FakeRunOne:

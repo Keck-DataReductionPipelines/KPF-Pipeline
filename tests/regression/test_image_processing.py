@@ -28,9 +28,9 @@ _DARK_SNR = 40.0  # master dark SNR
 _EXPTIME = 4.0  # != 1 so dark scaling is observable
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Helpers / fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class MockL1:
@@ -116,9 +116,9 @@ def _master_dark(tmp_path):
     return KPFMasterL1.from_fits(path)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestDtypeProvenance
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestDtypeProvenance:
@@ -142,9 +142,9 @@ class TestDtypeProvenance:
             assert_dtype(mod.l1_obj.data[ext], L1_IMAGE, f"{ext} after bias+dark")
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestInit
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestInit:
@@ -172,23 +172,18 @@ class TestInit:
         assert mod._dark_ml1 is None
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestSubtractBias
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestSubtractBias:
-    def test_subtracts_correct_values_green(self, tmp_path):
+    @pytest.mark.parametrize("chip", CHIPS)
+    def test_subtracts_correct_values(self, tmp_path, chip):
         mod = _make_module()
-        mod.subtract_bias("GREEN", _master_bias(tmp_path))
+        mod.subtract_bias(chip, _master_bias(tmp_path))
         expected = _CCD_VALUE - _BIAS_VALUE
-        np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
-
-    def test_subtracts_correct_values_red(self, tmp_path):
-        mod = _make_module()
-        mod.subtract_bias("RED", _master_bias(tmp_path))
-        expected = _CCD_VALUE - _BIAS_VALUE
-        np.testing.assert_allclose(mod.l1_obj.data["RED_CCD"], expected)
+        np.testing.assert_allclose(mod.l1_obj.data[f"{chip}_CCD"], expected)
 
     def test_modifies_in_place(self, tmp_path):
         mod = _make_module()
@@ -235,23 +230,18 @@ class TestSubtractBias:
         )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestSubtractDark
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestSubtractDark:
-    def test_subtracts_scaled_by_exptime_green(self, tmp_path):
+    @pytest.mark.parametrize("chip", CHIPS)
+    def test_subtracts_scaled_by_exptime(self, tmp_path, chip):
         mod = _make_module()
-        mod.subtract_dark("GREEN", _master_dark(tmp_path))
+        mod.subtract_dark(chip, _master_dark(tmp_path))
         expected = _CCD_VALUE - _DARK_VALUE * _EXPTIME
-        np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
-
-    def test_subtracts_scaled_by_exptime_red(self, tmp_path):
-        mod = _make_module()
-        mod.subtract_dark("RED", _master_dark(tmp_path))
-        expected = _CCD_VALUE - _DARK_VALUE * _EXPTIME
-        np.testing.assert_allclose(mod.l1_obj.data["RED_CCD"], expected)
+        np.testing.assert_allclose(mod.l1_obj.data[f"{chip}_CCD"], expected)
 
     def test_scaling_is_applied_not_raw_subtraction(self, tmp_path):
         # Guard against a literal copy of subtract_bias (no exptime factor):
@@ -281,9 +271,67 @@ class TestSubtractDark:
         np.testing.assert_allclose(mod.l1_obj.data["GREEN_VAR"], expected, rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+# TestMasterRegistration
+# ------------------------------------------------------------------
+
+# A ramp that no flip or transpose maps onto itself (0..15, row-major).
+_RAMP = np.arange(np.prod(_SHAPE), dtype=np.float32).reshape(_SHAPE) / 8.0
+# Per-chip (bias, bias SNR, dark rate, dark SNR) offsets, so a chip swap shows.
+_CHIP_MASTERS = {
+    "GREEN": (_RAMP + 1.0, 50.0, _RAMP.T * 0.5 + 0.25, 40.0),
+    "RED": (_RAMP[::-1] + 3.0, 25.0, _RAMP[:, ::-1] * 0.25 + 0.5, 20.0),
+}
+
+
+def _write_patterned_masters(tmp_path):
+    """Write master bias and dark whose IMG differs per chip and per pixel."""
+    for kind, img_i, snr_i in (("bias", 0, 1), ("dark", 2, 3)):
+        hdus = [fits.PrimaryHDU()]
+        for chip in CHIPS:
+            spec = _CHIP_MASTERS[chip]
+            hdus.append(fits.ImageHDU(data=spec[img_i], name=f"{chip}_IMG"))
+            hdus.append(
+                fits.ImageHDU(
+                    data=np.full(_SHAPE, spec[snr_i], dtype=np.float32),
+                    name=f"{chip}_SNR",
+                )
+            )
+        fits.HDUList(hdus).writeto(str(tmp_path / f"master_{kind}.fits"))
+
+
+class TestMasterRegistration:
+    """Uniform masters hide chip swaps and flipped or transposed images. These
+    masters differ per chip and per pixel, so every pixel is checked against
+    its own master value."""
+
+    @pytest.mark.parametrize("chip", CHIPS)
+    def test_bias_and_dark_subtracted_pixel_by_pixel(self, tmp_path, chip):
+        _write_patterned_masters(tmp_path)
+        mod = _make_module(
+            bias_file="master_bias.fits",
+            bias_dir=str(tmp_path),
+            dark_file="master_dark.fits",
+            dark_dir=str(tmp_path),
+        )
+        mod.perform(bias=True, dark=True)
+        bias, bias_snr, dark, dark_snr = _CHIP_MASTERS[chip]
+        expected_ccd = _CCD_VALUE - bias - dark * _EXPTIME
+        expected_var = (
+            _VAR_VALUE + (bias / bias_snr) ** 2 + (_EXPTIME * dark / dark_snr) ** 2
+        )
+        # float32 images: rtol 1e-5 is a few float32 ulps on values of order 10.
+        np.testing.assert_allclose(
+            mod.l1_obj.data[f"{chip}_CCD"], expected_ccd, rtol=1e-5
+        )
+        np.testing.assert_allclose(
+            mod.l1_obj.data[f"{chip}_VAR"], expected_var, rtol=1e-5
+        )
+
+
+# ------------------------------------------------------------------
 # TestPerform
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPerform:
@@ -300,30 +348,20 @@ class TestPerform:
         result = mod_with_bias.perform()
         assert result is mod_with_bias.l1_obj
 
-    def test_bias_subtracted_green(self, mod_with_bias):
+    @pytest.mark.parametrize("chip", CHIPS)
+    def test_bias_subtracted(self, mod_with_bias, chip):
         mod_with_bias.perform()
         np.testing.assert_allclose(
-            mod_with_bias.l1_obj.data["GREEN_CCD"], _CCD_VALUE - _BIAS_VALUE
-        )
-
-    def test_bias_subtracted_red(self, mod_with_bias):
-        mod_with_bias.perform()
-        np.testing.assert_allclose(
-            mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE - _BIAS_VALUE
+            mod_with_bias.l1_obj.data[f"{chip}_CCD"], _CCD_VALUE - _BIAS_VALUE
         )
 
     def test_bias_path_recorded(self, mod_with_bias, tmp_path):
         mod_with_bias.perform()
         assert mod_with_bias._bias_path == str(tmp_path / "master_bias.fits")
 
-    def test_biassub_header_set(self, mod_with_bias):
-        mod_with_bias.perform()
-        assert (
-            mod_with_bias.l1_obj.receipt_read_entry("image_processing")["biassub"]
-            == "1"
-        )
-
     def test_receipt_entry_added(self, mod_with_bias):
+        # All three applied-step flags are written on every run: QCL1 gates
+        # flat_ok on the 0 as much as on the 1.
         mod_with_bias.perform()
         entry = mod_with_bias.l1_obj.receipt_read_entry("image_processing")
         assert entry == {"biassub": "1", "darksub": "0", "flatdiv": "0"}
@@ -335,7 +373,7 @@ class TestPerform:
         )
         np.testing.assert_allclose(mod_with_bias.l1_obj.data["RED_CCD"], _CCD_VALUE)
 
-    def test_raises_when_headers_missing(self):
+    def test_headers_missing_raises(self):
         mod = _make_module()  # no biasfile
         with pytest.raises(FileNotFoundError, match="biasfile"):
             mod.perform()
@@ -347,22 +385,6 @@ class TestPerform:
         np.testing.assert_allclose(result.data["RED_CCD"], _CCD_VALUE)
         assert result.receipt_read_entry("image_processing")["biassub"] == "0"
         assert mod._bias_path is None
-
-    def test_darksub_header_false_when_dark_off(self, mod_with_bias):
-        mod_with_bias.perform()
-        assert (
-            mod_with_bias.l1_obj.receipt_read_entry("image_processing")["darksub"]
-            == "0"
-        )
-
-    def test_flatdiv_header_false_when_flat_off(self, mod_with_bias):
-        # All three applied-step flags are written on every run: QCL1 gates
-        # flat_ok on the 0 as much as on the 1.
-        mod_with_bias.perform()
-        assert (
-            mod_with_bias.l1_obj.receipt_read_entry("image_processing")["flatdiv"]
-            == "0"
-        )
 
     def test_flat_true_raises_not_implemented(self, mod_with_bias):
         with pytest.raises(NotImplementedError, match="flat"):
@@ -414,9 +436,9 @@ class TestPerform:
             mod.perform(bias=str(tmp_path / "nonexistent.fits"), dark=False)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestPerformDark
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPerformDark:
@@ -523,9 +545,9 @@ class TestPerformDark:
             mod.perform(bias=False)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestCalibrationGuard
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestCalibrationGuard:
@@ -591,9 +613,9 @@ class TestCalibrationGuard:
         np.testing.assert_allclose(mod.l1_obj.data["GREEN_CCD"], expected)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestMasterCache
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestMasterCache:

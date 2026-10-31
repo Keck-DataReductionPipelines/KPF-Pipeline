@@ -16,11 +16,9 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-from kpfpipe import INSTRUMENT_ERAS
 from kpfpipe.data_models.config import TRACE_MAP
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.utils import kpf
 from kpfpipe.utils.astro import KECK_LOCATION
 from kpfpipe.utils.header import HeaderParser
 
@@ -122,11 +120,11 @@ class TestKPF0:
         l0 = KPF0.from_fits(synthetic_l0_file)
         assert l0.generate_standard_filename() == "KP.20240113.23249.10.fits"
 
-    def test_file_not_found(self):
+    def test_file_not_found_raises(self):
         with pytest.raises(IOError, match="does not exist"):
             KPF0.from_fits("/nonexistent/path.fits")
 
-    def test_non_fits_file(self, tmp_path):
+    def test_non_fits_file_raises(self, tmp_path):
         fn = str(tmp_path / "not_a_fits.txt")
         with open(fn, "w") as f:
             f.write("hello")
@@ -144,13 +142,13 @@ class TestKPF0ErrorPaths:
             extra_hdus=extra_hdus,
         )
 
-    def test_raises_on_unknown_extension(self, tmp_path):
+    def test_unknown_extension_raises(self, tmp_path):
         weird = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32), name="MYSTERY")
         fn = self._minimal_l0(tmp_path, extra_hdus=[weird])
         with pytest.raises(ValueError, match="Non-standard extension 'MYSTERY'"):
             KPF0.from_fits(fn)
 
-    def test_raises_on_unnamed_extension(self, tmp_path):
+    def test_unnamed_extension_raises(self, tmp_path):
         unnamed = fits.ImageHDU(data=np.zeros((4, 4), dtype=np.float32))
         fn = self._minimal_l0(tmp_path, extra_hdus=[unnamed])
         with pytest.raises(ValueError, match=r"\(HDU \d+ has no EXTNAME\)"):
@@ -178,7 +176,7 @@ class TestKPF0ErrorPaths:
         with pytest.raises(ValueError, match="valid observation ID"):
             KPF0().generate_standard_filename()
 
-    def test_to_fits_rejects_non_fits_name(self, synthetic_l0_file, tmp_path):
+    def test_to_fits_non_fits_name_raises(self, synthetic_l0_file, tmp_path):
         l0 = KPF0.from_fits(synthetic_l0_file)
         with pytest.raises(NameError, match="must end with .fits"):
             l0.to_fits(str(tmp_path / "output.txt"))
@@ -298,7 +296,7 @@ class TestKPF0Provenance:
         assert prim["PROGRAM"] == "UNKNOWN"
         assert "GRPROGNA/RDPROGNA disagree" in caplog.text
 
-    def test_raises_when_ofname_absent(self, tmp_path):
+    def test_ofname_absent_raises(self, tmp_path):
         # Without OFNAME there is no KOAID (the archive obs_id), so fail loud
         # rather than stamp a placeholder.
         fn = write_minimal_l0(
@@ -546,7 +544,7 @@ class TestStandardizedPrimary:
         l0.standardize_headers()
         assert l0.headers["PRIMARY"]["INSTERA"] == "1.0"
 
-    def test_undated_frame_is_rejected(self):
+    def test_undated_frame_raises(self):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Bias"
         l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
@@ -554,23 +552,35 @@ class TestStandardizedPrimary:
             l0.standardize_headers()
 
     @pytest.mark.parametrize("mjd", [0.0, -1.0, "UNKNOWN", ""])
-    def test_invalid_mjd_obs_is_rejected(self, mjd):
+    def test_invalid_mjd_obs_raises(self, mjd):
         with pytest.raises(ValueError, match="is not a valid MJD"):
             self._dated_l0(mjd).standardize_headers()
 
-    def test_mjd_obs_off_the_datecode_is_rejected(self):
+    def test_mjd_obs_off_the_datecode_raises(self):
         l0 = self._dated_l0(60507.0)  # 2024-07-16
         l0.obs_id = "KP.20240717.00561.67"
         with pytest.raises(ValueError, match="falls on 20240716, not the obs_id's"):
             l0.standardize_headers()
 
-    def test_frame_between_eras_is_rejected(self, monkeypatch):
-        # The reference eras are contiguous; dropping 1.5 opens a 1.0 -> 2.0 gap.
-        eras = INSTRUMENT_ERAS[INSTRUMENT_ERAS["INSTERA"].astype(str) != "1.5"]
-        monkeypatch.setattr(kpf, "INSTRUMENT_ERAS", eras)
-        l0 = self._dated_l0(60355.0)  # 2024-02-15
+    def test_frame_between_eras_raises(self):
+        # 1995-10-10 predates the first era (2000-01-01): no era covers it.
+        l0 = self._dated_l0(50000.0)
         with pytest.raises(ValueError, match="No KPF instrument era covers"):
             l0.standardize_headers()
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=ValueError,
+        reason="prod bug: level0.py:240-246 -- the datecode check reads MJD-OBS, "
+        "which trails the obs_id's DATE-BEG by up to ~0.45 s, so a frame begun "
+        "just after UT midnight is rejected",
+    )
+    def test_frame_begun_just_after_ut_midnight_is_accepted(self):
+        # DATE-BEG 00:00:00.30 names the obs_id; MJD-OBS reads 0.1 s earlier.
+        l0 = self._dated_l0(60405.0 - 0.1 / 86400)
+        l0.obs_id = "KP.20240405.00000.30"
+        l0.standardize_headers()
+        assert l0.headers["PRIMARY"]["DATE-OBS"].startswith("2024-04-04T23:59:59")
 
     @staticmethod
     def _dated_l0(mjd):
@@ -595,7 +605,7 @@ _ALL_FIBERS = {
 class TestHeaderKeywords:
     """Frame identity, illumination and readout are stamped from HeaderParser.
 
-    HeaderParser's rules are tested in test_header_parser.py; these tests pin
+    HeaderParser's rules are tested in test_header.py; these tests pin
     that standardization stamps its output and rejects what it cannot classify.
     """
 
@@ -656,7 +666,7 @@ class TestHeaderKeywords:
             ("Arclamp", {"OCTAGON": "BrdbandFiber", **_ALL_FIBERS}),
         ],
     )
-    def test_unclassifiable_frame_is_rejected(self, imtype, native):
+    def test_unclassifiable_frame_raises(self, imtype, native):
         with pytest.raises(ValueError, match="cannot classify frame"):
             self._standardize(imtype, **native)
 
@@ -863,7 +873,7 @@ class TestIdempotencyAndGate:
         assert dict(l0.headers["INSTRUMENT_HEADER"]) == native_before
         assert list(l0.receipt["FUNCTION"]) == receipts_before
 
-    def test_to_kpf1_rejects_an_unstandardized_l0(self, synthetic_l0_file):
+    def test_to_kpf1_unstandardized_l0_raises(self, synthetic_l0_file):
         l0 = KPF0.from_fits(synthetic_l0_file)
         with pytest.raises(ValueError, match="call standardize_headers"):
             l0.to_kpf1()

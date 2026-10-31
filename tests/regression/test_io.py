@@ -12,6 +12,7 @@ import os
 import stat
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from astropy.io import fits
@@ -192,11 +193,11 @@ class TestSecondsSinceJ2000:
         start_next_year = fh._seconds_since_j2000("20240101.00000.00")
         assert start_next_year - end == 60
 
-    def test_raises_on_invalid_timestamp(self):
+    def test_invalid_timestamp_raises(self):
         with pytest.raises(ValueError, match="Invalid KPF timestamp"):
             FileHandler({})._seconds_since_j2000("KP.20240405.99999.57.fits")
 
-    def test_raises_when_no_timestamp_found(self):
+    def test_no_timestamp_found_raises(self):
         with pytest.raises(ValueError, match="No KPF timestamp found"):
             FileHandler({})._seconds_since_j2000("notimestamp.fits")
 
@@ -220,7 +221,7 @@ class TestBuildCalibrationStacks:
         assert _cluster("bias", _make_mini_db(), min_stack_size=6) == []
         assert "no cluster with at least" in caplog.text
 
-    def test_stacks_require_a_mini_database(self):
+    def test_stacks_without_mini_database_raises(self):
         # Forgetting build_mini_database(datecode) must give a readable error,
         # not a TypeError from inside pandas. All three groupby modes funnel
         # through _select_frames, so this one guard covers them all.
@@ -530,33 +531,6 @@ class TestKpfFilepath:
         )
         assert path == "/data/masters/20240405/KP.20240405.14000.00_master_flat_L1.fits"
 
-    def test_science_l0(self):
-        path = kpf_filepath("KP.20240405.49597.71", "L0", data_root="/data")
-        assert path == "/data/L0/20240405/KP.20240405.49597.71.fits"
-
-    def test_science_l1(self):
-        # L1 keeps the "kpf_L1" prefix: the EPRV standard defines no L1.
-        # 49597 s of day = 13:46:37.
-        path = kpf_filepath("KP.20240405.49597.71", "L1", data_root="/data")
-        assert path == "/data/L1/20240405/kpf_L1_20240405T134637.fits"
-
-    def test_science_l2(self):
-        # 40113 s of day = 11:08:33.
-        path = kpf_filepath("KP.20240405.40113.57", "L2", data_root="/data")
-        assert path == "/data/L2/20240405/kpf_SL2_20240405T110833.fits"
-
-    def test_science_l4(self):
-        path = kpf_filepath("KP.20240405.40113.57", "L4", data_root="/data")
-        assert path == "/data/L4/20240405/kpf_SL4_20240405T110833.fits"
-
-    def test_science_l2_midnight_boundary(self):
-        path = kpf_filepath("KP.20240405.03600.00", "L2", data_root="/data")
-        assert path == "/data/L2/20240405/kpf_SL2_20240405T010000.fits"
-
-    def test_science_l2_zero_seconds(self):
-        path = kpf_filepath("KP.20240405.00000.00", "L2", data_root="/data")
-        assert path == "/data/L2/20240405/kpf_SL2_20240405T000000.fits"
-
     def test_omitted_data_root_returns_bare_filename(self):
         # kpf_filepath's own branch: with no data_root it returns kpf_filename's
         # result unjoined. The per-level filename literals live in TestKpfFilename.
@@ -581,11 +555,23 @@ class TestKpfFilepath:
         ):
             kpf_filepath("KP.20240405.40113.57", "L2", data_root=12345)
 
-    def test_composes_directory_and_filename(self):
-        obs_id = "KP.20240405.40113.57"
-        assert kpf_filepath(obs_id, "L2", data_root="/data") == os.path.join(
-            kpf_directory(kind="science", data_root="/data", level="L2", obs_id=obs_id),
-            kpf_filename(obs_id, "L2"),
+    @pytest.mark.parametrize(
+        "obs_id, level",
+        [
+            ("KP.20240405.49597.71", "L0"),
+            ("KP.20240405.49597.71", "L1"),
+            ("KP.20240405.40113.57", "L2"),
+            ("KP.20240405.40113.57", "L4"),
+            ("KP.20240405.00000.00", "L2"),  # second 0 of the day
+        ],
+    )
+    def test_composes_directory_and_filename(self, obs_id, level):
+        # The per-level filename literals live in TestKpfFilename.
+        assert kpf_filepath(obs_id, level, data_root="/data") == os.path.join(
+            kpf_directory(
+                kind="science", data_root="/data", level=level, obs_id=obs_id
+            ),
+            kpf_filename(obs_id, level),
         )
 
 
@@ -719,7 +705,7 @@ class TestFindMasters:
         fh = FileHandler({"KPF_MASTERS_OUTPUT": str(tmp_path)})
         assert fh.find_masters("bias", "L1", "20240405") == []
 
-    def test_raises_without_masters_output(self):
+    def test_without_masters_output_raises(self):
         with pytest.raises(ValueError, match="KPF_MASTERS_OUTPUT"):
             FileHandler({}).find_masters("bias", "L1", "20240405")
 
@@ -740,6 +726,31 @@ class TestFindMasters:
         fh = FileHandler({"KPF_MASTERS_OUTPUT": root})
         assert fh.find_masters(cal_type, level, "20240405") == [written]
 
+    # A master interrupted mid-write (to_fits is not atomic) keeps its final name.
+    @pytest.mark.filterwarnings("ignore:File may have been truncated")
+    @pytest.mark.parametrize(
+        "keep, error", [(0.0, OSError), (0.5, ValueError)], ids=["zero-byte", "half"]
+    )
+    def test_partial_master_is_listed_and_fails_loudly_on_load(
+        self, tmp_path, keep, error
+    ):
+        root = str(tmp_path)
+        path = kpf_filepath("KP.20240405.03600.00", "L1", data_root=root, master="bias")
+        os.makedirs(os.path.dirname(path))
+        hdus = [fits.PrimaryHDU()] + [
+            fits.ImageHDU(np.ones((64, 64), dtype=np.float32), name=f"GREEN_{ext}")
+            for ext in ("IMG", "SNR")
+        ]
+        fits.HDUList(hdus).writeto(path)
+        os.truncate(path, int(os.path.getsize(path) * keep))
+
+        # Discovery is by name alone, so the partial file is a candidate ...
+        fh = FileHandler({"KPF_MASTERS_OUTPUT": root})
+        assert fh.find_masters("bias", "L1", "20240405") == [path]
+        # ... and loading it raises rather than yielding a short master.
+        with pytest.raises(error):
+            KPFMasterL1.from_fits(path)
+
 
 # Filename-convention consistency contract
 
@@ -749,8 +760,7 @@ class TestFilenameConsistency:
     `generate_standard_filename` must produce the same basename at every level.
 
     Both route through `kpf_filename`, so this guards that each model carries its
-    `obs_id` and delegates at the right level rather than diverging silently (the
-    kind of bug behind the old `kpf_SL1` mix-up).
+    `obs_id` and delegates at the right level rather than diverging silently.
     """
 
     OBS_ID = "KP.20240405.49597.71"  # 49597 s of day = 13:46:37 UT
@@ -871,7 +881,7 @@ class TestKpfDirectory:
                 cal_type="thar",
             )
 
-    def test_qlp_rejects_datecode(self):
+    def test_qlp_datecode_raises(self):
         with pytest.raises(ValueError, match="requires obs_id"):
             kpf_directory(
                 kind="QLP", data_root="/data", level="L0", datecode="20240405"
@@ -981,43 +991,46 @@ class TestBuildMiniDatabaseErrors:
             FileHandler({}).build_mini_database("20240405")
 
 
-def test_mini_db_comments_count_parser_warnings(tmp_path, caplog):
-    # COMMENTS counts each frame's HeaderParser warnings (details in the log), so
-    # a mislabeled frame is flagged even when it is still usable.
-    clean = {
-        **dict.fromkeys(("GREEN", "RED", "CA_HK", "EXPMETER"), "NO"),
-        **dict(SCISEL="open", SKYSEL="open", SIMCALSH="closed"),
-        **{"SCI-OBJ": "Target", "SKY-OBJ": "Sky", "CAL-OBJ": "None"},
-    }
-    for seconds, targname in ((1000, "10700"), (2000, "HD 10700")):
+class TestBuildMiniDatabaseComments:
+    """COMMENTS on synthetic frames; unmarked so it stays in the fast subset."""
+
+    def test_comments_count_parser_warnings(self, tmp_path, caplog):
+        # COMMENTS counts each frame's HeaderParser warnings (details in the log), so
+        # a mislabeled frame is flagged even when it is still usable.
+        clean = {
+            **dict.fromkeys(("GREEN", "RED", "CA_HK", "EXPMETER"), "NO"),
+            **dict(SCISEL="open", SKYSEL="open", SIMCALSH="closed"),
+            **{"SCI-OBJ": "Target", "SKY-OBJ": "Sky", "CAL-OBJ": "None"},
+        }
+        for seconds, targname in ((1000, "10700"), (2000, "HD 10700")):
+            write_l0_tree(
+                tmp_path,
+                "20240405",
+                seconds,
+                obj="10700",
+                targname=targname,
+                extra_cards=clean,
+            )
+        # A calibration frame classified from IMTYPE + OCTAGON names both cards.
+        # It is fatal: KPF0 rejects an unclassifiable frame.
         write_l0_tree(
             tmp_path,
             "20240405",
-            seconds,
-            obj="10700",
-            targname=targname,
-            extra_cards=clean,
+            3000,
+            imtype="Arclamp",
+            extra_cards={**clean, "OCTAGON": "Home"},
         )
-    # A calibration frame classified from IMTYPE + OCTAGON names both cards.
-    # It is fatal: KPF0 rejects an unclassifiable frame.
-    write_l0_tree(
-        tmp_path,
-        "20240405",
-        3000,
-        imtype="Arclamp",
-        extra_cards={**clean, "OCTAGON": "Home"},
-    )
-    with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.header"):
-        mini_db = FileHandler({"KPF_DATA_INPUT": str(tmp_path)}).build_mini_database(
-            "20240405"
-        )
-    assert list(mini_db["DRP_OBJECT"]) == ["10700", "Unknown", "Unknown"]
-    assert pd.isna(mini_db["COMMENTS"][0])
-    assert mini_db["COMMENTS"][1] == "WARNINGS: 0 fatal, 1 non-fatal"
-    assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
-    # The details are in the log, keyed by filename.
-    assert "OBJECT '10700' disagrees with TARGNAME 'HD 10700'" in caplog.text
-    assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home'" in caplog.text
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.header"):
+            mini_db = FileHandler(
+                {"KPF_DATA_INPUT": str(tmp_path)}
+            ).build_mini_database("20240405")
+        assert list(mini_db["DRP_OBJECT"]) == ["10700", "Unknown", "Unknown"]
+        assert pd.isna(mini_db["COMMENTS"][0])
+        assert mini_db["COMMENTS"][1] == "WARNINGS: 0 fatal, 1 non-fatal"
+        assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
+        # The details are in the log, keyed by filename.
+        assert "OBJECT '10700' disagrees with TARGNAME 'HD 10700'" in caplog.text
+        assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home'" in caplog.text
 
 
 # build_mini_database on-disk cache (read/write + staleness guardrails):
@@ -1157,7 +1170,7 @@ class TestMiniDatabaseCache:
         assert row["COMMENTS"] == "WARNINGS: 1 fatal, 0 non-fatal"
         assert "Unparsable card (ELAPSED)" in caplog.text
 
-    def test_unexpected_parser_error_propagates(self, monkeypatch, tmp_path):
+    def test_unexpected_parser_error_raises(self, monkeypatch, tmp_path):
         # Anything but an unreadable file or HeaderError is a pipeline bug.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
 

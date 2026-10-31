@@ -317,9 +317,7 @@ class TestDetection:
         assert len(kept) == len(clusters) - 1
         assert levels_kept == {50.0, 1000.0}
 
-    def test_refuses_a_frame_whose_median_cluster_is_negative(
-        self, tmp_path, monkeypatch
-    ):
+    def test_negative_median_cluster_raises(self, tmp_path, monkeypatch):
         image = np.zeros((60, 400), dtype=np.float32)
         clusters = []
         for level, row in zip([1000.0] + [-500.0] * 10, range(4, 59, 5), strict=True):
@@ -390,7 +388,7 @@ class TestDetection:
         assert len(kept) == len(ordinary)
         assert all(cluster["npixel"] == 3 * columns.size for cluster in kept)
 
-    def test_reports_an_unexpected_trace_count(self, tmp_path, monkeypatch):
+    def test_unexpected_trace_count_raises(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=3)
         tracer = _tracer(tmp_path, image, monkeypatch, norder=2)
 
@@ -434,7 +432,7 @@ class TestCalIdentification:
 
         assert tracer._flag_cal_clusters(metadata)["is_cal"].sum() == 3
 
-    def test_reports_a_flat_with_no_identifiable_cal(self, tmp_path, monkeypatch):
+    def test_flat_with_no_identifiable_cal_raises(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat()
         tracer = _tracer(tmp_path, image, monkeypatch)
         _curated_clusters(tracer)
@@ -445,7 +443,7 @@ class TestCalIdentification:
         with pytest.raises(ValueError, match="cannot phase the fiber pattern"):
             tracer._flag_cal_clusters(metadata)
 
-    def test_reports_too_few_cal_orderlets_for_the_cluster_count(
+    def test_too_few_cal_orderlets_for_the_cluster_count_raises(
         self, tmp_path, monkeypatch
     ):
         image, _ = _synthetic_flat(norder=4)
@@ -519,7 +517,7 @@ class TestTraceIdentity:
 
         assert list(phased["Fiber"]) == _FIBERS * 2 + ["SKY"]
 
-    def test_names_the_ccd_when_no_cal_can_be_phased(self, master_path):
+    def test_no_phaseable_cal_raises(self, master_path):
         # _flag_cal_clusters knows nothing of the CCD it was handed, so the
         # caller that does names it; two CCDs fail this way for different
         # reasons and the message has to say which one is being read.
@@ -530,7 +528,7 @@ class TestTraceIdentity:
         with pytest.raises(ValueError, match="^RED: 0 CAL orderlets identified"):
             tracer._assign_fiber_identities("RED", metadata)
 
-    def test_reports_an_order_short_of_the_fiber_pattern(self, master_path):
+    def test_order_short_of_the_fiber_pattern_raises(self, master_path):
         # An orderlet missing between two CALs leaves an order of four, which
         # cannot be told apart from an order whose fibers are mislabelled.
         rows = [100, 119, 138, 157, 176, 191, 210, 229]
@@ -540,7 +538,7 @@ class TestTraceIdentity:
         with pytest.raises(ValueError, match="2 orderlets below the CAL at row 229"):
             tracer._assign_fiber_identities("GREEN", metadata)
 
-    def test_reports_an_order_beyond_the_fiber_pattern(self, master_path):
+    def test_order_beyond_the_fiber_pattern_raises(self, master_path):
         # Seven clusters below the only CAL: more than a clipped edge explains.
         rows = [62, 81, 100, 119, 138, 157, 176]
         metadata = _fiber_metadata(rows, cal_indices={6})
@@ -723,16 +721,16 @@ class TestConfiguration:
         assert tracer.chips == ("GREEN", "RED")
         assert tracer.poly_degree == 2
 
-    def test_rejects_an_unusable_config(self, master_path):
+    def test_unusable_config_raises(self, master_path):
         with pytest.raises(TypeError, match="config must be"):
             OrderTrace(master_path, config=1)
 
-    def test_rejects_a_negative_polynomial_degree(self, master_path):
+    def test_negative_polynomial_degree_raises(self, master_path):
         tracer = OrderTrace(master_path, {"poly_degree": -1})
         with pytest.raises(ValueError, match="poly_degree must be non-negative"):
             tracer._trace_fields()
 
-    def test_rejects_an_unknown_field_selection(self, master_path):
+    def test_unknown_field_selection_raises(self, master_path):
         tracer = OrderTrace(master_path)
         with pytest.raises(ValueError, match="which must be one of"):
             tracer._trace_fields(which="labels")
@@ -754,7 +752,7 @@ class TestMasterFlatLoading:
         assert set(tracer._image) == {"GREEN", "RED"}
         assert tracer._image["RED"] is master_flat.data["RED_IMG"]
 
-    def test_rejects_non_flat_master(self, tmp_path, monkeypatch):
+    def test_non_flat_master_raises(self, tmp_path, monkeypatch):
         master_path = tmp_path / "KP.20240405.00020.86_master_dark_L1.fits"
         master_path.touch()
         dark_master = StubMasterFlat(
@@ -767,7 +765,7 @@ class TestMasterFlatLoading:
         with pytest.raises(ValueError, match="not a vNext flat master"):
             OrderTrace(master_path)
 
-    def test_reports_a_missing_master_flat(self, tmp_path):
+    def test_missing_master_flat_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError, match="Master flat not found"):
             OrderTrace(tmp_path / "absent_master_flat_L1.fits")
 
@@ -807,7 +805,7 @@ class TestCSVWriting:
         assert tracer.output_path == output
         assert pd.read_csv(output)["Fiber"].tolist() == ["SKY"]
 
-    def test_refuses_to_save_before_make_master(self, tmp_path, master_path):
+    def test_save_before_make_master_raises(self, tmp_path, master_path):
         tracer = OrderTrace(master_path)
         with pytest.raises(RuntimeError, match="run make_master"):
             tracer.save_master(tmp_path / "traces.csv")
@@ -928,7 +926,7 @@ class TestApertureConstraint:
         assert (below.to_numpy() < (mid_dispersion - 2.0) / 2.0).all()
         _assert_apertures_disjoint(table, image.shape[1])
 
-    def test_rejects_neighbours_whose_centerlines_cross(self, tmp_path, monkeypatch):
+    def test_crossing_neighbour_centerlines_raises(self, tmp_path, monkeypatch):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
         # Tilt SCI1 down through SKY so the two touch and then cross. Detection
         # cannot deliver such a pair -- they would be one cluster -- but a fit
@@ -942,7 +940,7 @@ class TestApertureConstraint:
         with pytest.raises(ValueError, match="orderlet gap"):
             tracer.estimate_trace_apertures("GREEN")
 
-    def test_rejects_traces_too_close_for_the_gap(self, tmp_path, monkeypatch):
+    def test_traces_too_close_for_the_gap_raises(self, tmp_path, monkeypatch):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
         # The clamp reads the widths to see where an aperture is on the
         # detector, which the aperture step would have measured by now.
@@ -1046,9 +1044,7 @@ class TestApertureConstraint:
         assert (table[["BottomEdge", "TopEdge"]] > 0).all(axis=None)
         assert (table["X1"] <= table["X2"]).all()
 
-    def test_reports_a_trace_whose_widths_cannot_be_measured(
-        self, tmp_path, monkeypatch
-    ):
+    def test_unmeasurable_trace_widths_raises(self, tmp_path, monkeypatch):
         tracer = _fitted_tracer(tmp_path, monkeypatch)
 
         def fail(*args, **kwargs):
@@ -1066,7 +1062,7 @@ class TestApertureConstraint:
         assert (fitted["Status"] == "unknown").all()
         assert fitted["PolyfitRMS"].notna().all()
 
-    def test_reports_a_trace_that_cannot_be_fitted(self, tmp_path, monkeypatch):
+    def test_unfittable_trace_raises(self, tmp_path, monkeypatch):
         image, _ = _synthetic_flat(norder=1)
         tracer = _tracer(tmp_path, image, monkeypatch, norder=1)
         tracer.detect_traces("GREEN")
@@ -1099,7 +1095,7 @@ class TestApertureConstraint:
         # The profiles are a property of the image, so they survive.
         assert sampled["profiles"] is profiles
 
-    def test_validation_rejects_overlapping_apertures(self, master_path, monkeypatch):
+    def test_overlapping_apertures_raises(self, master_path, monkeypatch):
         tracer = self._make_tracer(master_path, monkeypatch, norder=1)
         centers = [100.0, 120.0, 140.0, 160.0, 180.0]
         edges = [(6.0, 6.0), (6.0, 6.0), (6.0, 25.0), (25.0, 6.0), (6.0, 6.0)]
@@ -1123,9 +1119,7 @@ class TestApertureConstraint:
         with pytest.raises(ValueError, match="apertures overlap"):
             tracer._validate_trace_table("GREEN")
 
-    def test_validation_rejects_a_trace_that_leaves_and_returns(
-        self, master_path, monkeypatch
-    ):
+    def test_trace_that_leaves_and_returns_raises(self, master_path, monkeypatch):
         tracer = self._make_tracer(master_path, monkeypatch, norder=1)
         rows = [
             {

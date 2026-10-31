@@ -15,9 +15,9 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Network guard -- deliberately module-scope, not a fixture
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 #
 # Every catalog query the pipeline makes is mocked, and this makes that a rule
 # the suite enforces rather than a claim its docstrings make: a test that loses
@@ -114,9 +114,9 @@ def image_hdu(name, shape, rng, dtype=np.float32):
     return fits.ImageHDU(data=rng.random(shape).astype(dtype), name=name)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Pytest configuration / markers
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def pytest_configure(config):
@@ -127,12 +127,12 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
-        "slow: touches the real tests/testdata truth frames. Paired with "
-        "requires_testdata rather than overlapping it: requires_testdata says "
-        "the frames must be present, slow says the fast pre-commit subset "
-        "(`-m 'not slow'`) skips the cost of reading them. Not a timing claim -- "
-        "do not mark a synthetic test slow because it feels slow, and do not "
-        "leave a real-data test unmarked because it happens to be quick.",
+        "slow: integration or heavy-compute test -- anything touching the real "
+        "tests/testdata truth frames (full L0->L2, real-frame assembly/overscan, "
+        "master stacking, WLS orientation); excluded from the fast pre-commit "
+        "subset. Every requires_testdata test is also slow, even if quick: "
+        "requires_testdata says the frames must be present, slow says the fast "
+        "subset skips them.",
     )
     config.addinivalue_line(
         "markers",
@@ -148,10 +148,8 @@ def pytest_configure(config):
         "because the PNG rendering is slow. Names the MODULE under test, not "
         "the technique: a test elsewhere in the tree that happens to render a "
         "figure does not get this marker, so `-m quicklook` collects exactly "
-        "the plots a developer is working on and nothing else. "
-        "(scripts/quality_control/qlp.py drives these renderers, but it is a "
-        "reporting entry point and so carries `cli`.) Run in the full suite or "
-        "focused with `-m quicklook`",
+        "the plots a developer is working on and nothing else. Run in the full "
+        "suite or focused with `-m quicklook`",
     )
 
 
@@ -165,9 +163,27 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Applicability gate
+# ------------------------------------------------------------------
+
+
+@pytest.fixture
+def ungated(monkeypatch):
+    """Declare every metric/check applicable, for tests of a stub QC subclass.
+
+    A stub Diagnostics/QC class has no ``config/*-applicability.csv``; the gate
+    itself is covered by ``TestDiagnosticsApplicability`` / ``TestQCApplicability``.
+    """
+    from kpfpipe.quality_control.applicability import applicability
+
+    monkeypatch.setattr(applicability, "applies", lambda *_: True)
+    monkeypatch.setattr(applicability, "frame_type", lambda _: "Target")
+
+
+# ------------------------------------------------------------------
 # Synthetic-FITS fixtures (shared across data-model level modules)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _catalog_record_hdu():

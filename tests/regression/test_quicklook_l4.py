@@ -103,9 +103,9 @@ def l4():
     return _make_l4()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Constructor / obs_id resolution
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestConstructor:
@@ -119,9 +119,9 @@ class TestConstructor:
         assert PlotL4(l4).name == "Tau Ceti"
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # ccf_grid plot
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestCcfGrid:
@@ -156,9 +156,9 @@ class TestCcfGrid:
         assert PlotL4(l4).ccf_grid("red") is None
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Per-order annotations (parity with v2.12 plot_CCF_grid)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _sci2_panel(fig):
@@ -199,9 +199,14 @@ class TestCcfGridAnnotations:
         plt.close(fig)
 
     def test_renders_without_rv_tables(self):
-        # No RV tables -> annotations are omitted but the plot still renders.
+        # No RV tables -> the CCFs are still drawn, but the SCI2 panel carries
+        # only its order-number labels: no combined RV, column headers, per-order
+        # delta-RV, or weights.
         fig = PlotL4(_make_l4(with_rv=False)).ccf_grid("green")
-        assert isinstance(fig, plt.Figure)
+        panel = _sci2_panel(fig)
+        assert panel.lines
+        texts = [t.get_text() for t in panel.texts]
+        assert texts and all(t.isdigit() for t in texts), texts
         plt.close(fig)
 
     def test_unilluminated_fiber_panel_says_not_illuminated(self, l4):
@@ -234,9 +239,9 @@ class TestVelocityGrid:
             PlotL4(l4)._velocity_grid("SCI2", NVEL)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # run() driver
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestRun:
@@ -257,9 +262,9 @@ class TestRun:
         assert set(figs) == {"ccf_grid_green"}
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # File output
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestOutput:

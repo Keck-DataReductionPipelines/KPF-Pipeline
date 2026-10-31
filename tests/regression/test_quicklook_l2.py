@@ -67,9 +67,9 @@ def l2_no_wave():
     return _make_l2(with_wave=False)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Constructor / obs_id resolution
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestConstructor:
@@ -85,19 +85,26 @@ class TestConstructor:
         assert PlotL2(l2).name == "Tau Ceti"
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Individual plots (wavelength present)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPlots:
-    # A parametrized "every method returns a Figure" test used to live here. It
-    # rendered the same ten figures TestRun::test_run_all_returns_all_plots_both_chips
-    # already renders, and asserted strictly less about them.
-
     def test_spectrum_single_order_explicit_order(self, l2):
+        # order is 1-indexed: order=3 plots row 2 of every fiber's WAVE/FLUX.
         fig = PlotL2(l2).spectrum_single_order("green", order=3)
-        assert isinstance(fig, plt.Figure)
+        (ax,) = fig.axes
+        assert "order 3" in ax.get_title()
+        lines = {line.get_label(): line for line in ax.get_lines()}
+        assert set(lines) == set(_FIBERS)
+        for fiber, line in lines.items():
+            np.testing.assert_array_equal(
+                line.get_xdata(), l2.data[f"GREEN_{fiber}_WAVE"][2]
+            )
+            np.testing.assert_array_equal(
+                line.get_ydata(), l2.data[f"GREEN_{fiber}_FLUX"][2]
+            )
         plt.close(fig)
 
     def test_spectrum_single_order_out_of_range_raises(self, l2):
@@ -115,9 +122,9 @@ class TestPlots:
         plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Fail loudly when wavelength solution is absent
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestRequiresWave:
@@ -140,9 +147,9 @@ class TestRequiresWave:
         assert "0 generated" in summary.getMessage()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # run(which) dispatch
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestRun:
@@ -161,14 +168,14 @@ class TestRun:
         with pytest.raises(ValueError, match="unknown plot"):
             PlotL2(l2).run("bogus")
 
-    def test_run_requires_which(self, l2):
+    def test_run_without_which_raises(self, l2):
         with pytest.raises(TypeError):
             PlotL2(l2).run()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # File saving
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestFileSaving:

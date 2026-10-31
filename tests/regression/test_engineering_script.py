@@ -12,8 +12,7 @@ import pytest
 
 from scripts.process import engineering as _engineering
 
-from ._scripts import _FakeConfig, _NoLogDirConfig
-from .test_science_script import _stub_batch_log
+from ._scripts import _FakeConfig, _NoLogDirConfig, _stub_batch_log
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
@@ -27,9 +26,9 @@ def e():
     return _engineering
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # parse_args
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestParseArgs:
@@ -70,9 +69,9 @@ class TestParseArgs:
         assert ns.log_dir == "/out/logs"
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _cli_task
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestCliTask:
@@ -90,16 +89,16 @@ class TestCliTask:
         assert argv[3:7] == ["-r", e.DEFAULT_ENGINEERING_RECIPE, "-c", "/c.toml"]
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # main exit-code contract
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestMain:
-    def _patch(self, e, monkeypatch, failed, calls=None):
+    def _patch(self, e, monkeypatch, tmp_path, failed, calls=None):
         monkeypatch.setattr(e, "configure_runtime", lambda: None)
         monkeypatch.setattr(e, "ConfigHandler", _FakeConfig)
-        _stub_batch_log(monkeypatch, e)
+        _stub_batch_log(monkeypatch, e, tmp_path)
 
         def fake_run_stage(*args, **kwargs):
             if calls is not None:
@@ -108,26 +107,26 @@ class TestMain:
 
         monkeypatch.setattr(e, "run_stage", fake_run_stage)
 
-    def test_every_frame_is_reduced(self, e, monkeypatch):
+    def test_every_frame_is_reduced(self, e, monkeypatch, tmp_path):
         # No junk/single-CCD gate: every requested frame reaches the fan-out.
         calls = []
-        self._patch(e, monkeypatch, failed=[], calls=calls)
+        self._patch(e, monkeypatch, tmp_path, failed=[], calls=calls)
         e.main(["--obs_ids", _OID1, _OID2])
         assert [tag for tag, _ in calls[0][0][1]] == [_OID1, _OID2]
 
-    def test_exits_zero_when_all_reduced(self, e, monkeypatch):
-        self._patch(e, monkeypatch, failed=[])
+    def test_exits_zero_when_all_reduced(self, e, monkeypatch, tmp_path):
+        self._patch(e, monkeypatch, tmp_path, failed=[])
         e.main(["--obs_ids", _OID1])  # no SystemExit
 
-    def test_exits_nonzero_when_any_failed(self, e, monkeypatch):
-        self._patch(e, monkeypatch, failed=[_OID1])
+    def test_exits_nonzero_when_any_failed(self, e, monkeypatch, tmp_path):
+        self._patch(e, monkeypatch, tmp_path, failed=[_OID1])
         with pytest.raises(SystemExit) as exc:
             e.main(["--obs_ids", _OID1])
         assert exc.value.code == 1
 
-    def test_fan_out_is_fail_soft_and_paced(self, e, monkeypatch):
+    def test_fan_out_is_fail_soft_and_paced(self, e, monkeypatch, tmp_path):
         calls = []
-        self._patch(e, monkeypatch, failed=[], calls=calls)
+        self._patch(e, monkeypatch, tmp_path, failed=[], calls=calls)
         e.main(["--obs_ids", _OID1, "--job_timeout", "42"])
         args, kwargs = calls[0]
         assert args[0] == "engineering"
@@ -135,9 +134,11 @@ class TestMain:
         assert kwargs["job_timeout"] == 42
         assert kwargs["launch_interval"] == e._LAUNCH_INTERVAL > 0
 
-    def test_forwards_dir_log_and_stage_overrides_to_each_child(self, e, monkeypatch):
+    def test_forwards_dir_log_and_stage_overrides_to_each_child(
+        self, e, monkeypatch, tmp_path
+    ):
         calls = []
-        self._patch(e, monkeypatch, failed=[], calls=calls)
+        self._patch(e, monkeypatch, tmp_path, failed=[], calls=calls)
         e.main(
             [
                 "--obs_ids", _OID1,
@@ -157,16 +158,16 @@ class TestMain:
         assert fwd["--run_id"] == "engineering_x"
         assert argv[-2:] == ["--stages", "image_assembly"]
 
-    def test_no_stages_forwarded_by_default(self, e, monkeypatch):
+    def test_no_stages_forwarded_by_default(self, e, monkeypatch, tmp_path):
         calls = []
-        self._patch(e, monkeypatch, failed=[], calls=calls)
+        self._patch(e, monkeypatch, tmp_path, failed=[], calls=calls)
         e.main(["--obs_ids", _OID1])
         assert "--stages" not in calls[0][0][1][0][1]
 
-    def test_dates_reduce_every_frame_of_the_night(self, e, monkeypatch):
+    def test_dates_reduce_every_frame_of_the_night(self, e, monkeypatch, tmp_path):
         # No Target filter and no gate: every L0 frame of the night is dispatched.
         calls, seen = [], {}
-        self._patch(e, monkeypatch, failed=[], calls=calls)
+        self._patch(e, monkeypatch, tmp_path, failed=[], calls=calls)
 
         def fake_nights(data_input, nights):
             seen.update(data_input=data_input, nights=nights)
@@ -177,9 +178,9 @@ class TestMain:
         assert seen == {"data_input": "/in", "nights": ["20240405"]}
         assert [tag for tag, _ in calls[0][0][1]] == [_OID1, _OID2]
 
-    def test_date_range_expands_to_the_nights_on_disk(self, e, monkeypatch):
+    def test_date_range_expands_to_the_nights_on_disk(self, e, monkeypatch, tmp_path):
         calls, seen = [], {}
-        self._patch(e, monkeypatch, failed=[], calls=calls)
+        self._patch(e, monkeypatch, tmp_path, failed=[], calls=calls)
         monkeypatch.setattr(
             e, "datecodes_in_range", lambda di, a, b: seen.update(r=(a, b)) or [a]
         )

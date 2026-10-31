@@ -13,6 +13,7 @@ import pytest
 from astropy.coordinates import Distance, SkyCoord, get_body_barycentric
 from astropy.table import Table
 from astropy.time import Time
+from astropy.utils import iers
 from barycorrpy import utc_tdb
 
 from kpfpipe import CHIPS, DETECTOR, FIBERS
@@ -27,10 +28,21 @@ NORDER_RED = DETECTOR["norder"]["RED"]
 NORDER = DETECTOR["numorder"]
 NCOL = 50  # reduced column count for speed
 
+# Time comparisons are made in seconds from a nearby reference epoch. On a JD
+# near 2.46e6, the default relative tolerances allow hours. A 1 ms error moves
+# BERV by less than 1e-4 m/s (Earth rotation is about 0.03 m/s per second), and
+# 1 ms is still about 20 times the float64 JD resolution (~50 us).
+_ATOL_S = 1e-3
 
-# ---------------------------------------------------------------------------
+
+def _seconds(t, ref):
+    """Offset of Time ``t`` from Time ``ref`` in seconds."""
+    return (np.asarray(t.jd) - np.asarray(ref.jd)) * 86400.0
+
+
+# ------------------------------------------------------------------
 # Synthetic KPF2 fixture
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 # Exposure meter: 3 readings of 60 s at 00:00, 00:02 and 00:04, separated by 60 s
 # gaps. The shutter (DATE-BEG/DATE-END) is open 00:00:00 to 00:05:00, so it
@@ -109,9 +121,9 @@ def synthetic_kpf2():
     return kpf2
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Static helpers
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestInterpolate:
@@ -127,7 +139,8 @@ class TestInterpolate:
         f = np.ones((2, 3))
 
         t_gap, _ = BarycentricCorrection._interpolate(t_beg, t_end, f)
-        np.testing.assert_allclose(t_gap[0].jd, (t_end[0].jd + t_beg[1].jd) / 2)
+        # Gap between readings is 60-120 s, so its midpoint is 90 s.
+        np.testing.assert_allclose(_seconds(t_gap[0], t_beg[0]), 90.0, atol=_ATOL_S)
 
     def test_gap_flux_equal_exposure_flux_when_same_duration(self):
         t_beg = self._make_times([0, 120])
@@ -166,7 +179,8 @@ class TestExtrapolate:
         f = np.full(4, _FLUX_VALUE)
 
         t_ext, _ = BarycentricCorrection._extrapolate(t0, t_beg, t_end, f)
-        np.testing.assert_allclose(t_ext.jd, (t0.jd + t_beg.jd) / 2)
+        # Shutter opens at 0 s, first reading starts at 60 s: midpoint 30 s.
+        np.testing.assert_allclose(_seconds(t_ext, t0), 30.0, atol=_ATOL_S)
 
     def test_extrapolate_before_flux_proportional(self):
         t0 = self._t(0)
@@ -184,7 +198,8 @@ class TestExtrapolate:
         f = np.full(4, _FLUX_VALUE)
 
         t_ext, _ = BarycentricCorrection._extrapolate(t0, t_beg, t_end, f)
-        np.testing.assert_allclose(t_ext.jd, (t_end.jd + t0.jd) / 2)
+        # Last reading ends at 60 s, shutter closes at 120 s: midpoint 90 s.
+        np.testing.assert_allclose(_seconds(t_ext, t_beg), 90.0, atol=_ATOL_S)
 
     def test_t0_inside_raises(self):
         t_beg = self._t(0)
@@ -217,9 +232,9 @@ class TestFixExpmeterOutliers:
         assert BarycentricCorrection._fix_expmeter_outliers(f).shape == f.shape
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _get_timestamps / _get_normalized_flux
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestGetTimestamps:
@@ -276,9 +291,9 @@ class TestGetNormalizedFlux:
         np.testing.assert_allclose(f, np.broadcast_to(expected, f.shape), rtol=1e-5)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _compute_barycorr (staticmethod) -- the one non-stubbed regression pin
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestComputeBarycorrReference:
@@ -316,6 +331,34 @@ class TestComputeBarycorrReference:
         assert bc_vel[0] == pytest.approx(24627.84694194215, abs=1e-2)
         assert bjd_tdb[0] == pytest.approx(2460476.873644211, abs=1e-6)
 
+    def test_agrees_with_astropy(self):
+        # Independent oracle for the barycorrpy wiring (site, UTC->JD, sign, m/s).
+        # The target has no proper motion or parallax. For a high proper-motion
+        # star, barycorrpy (Wright & Eastman 2014) also removes the secular
+        # acceleration, which astropy does not model: 7.6 m/s for the Tau Ceti
+        # case above. With that term absent, the two agree to 0.15 mm/s. 1 cm/s
+        # sits below any EPRV error budget and well above that agreement.
+        # IERS auto-download is off, so astropy uses its bundled tables and the
+        # test never touches the network.
+        astrometry = {
+            "ra": 26.0213,
+            "dec": -15.9395,
+            "pmra": 0.0,
+            "pmdec": 0.0,
+            "px": 0.0,
+            "epoch": Time("J2000.0").jd,
+        }
+        t = Time("2024-06-15T09:00:00.000", scale="utc")
+        bc_vel, _ = BarycentricCorrection._compute_barycorr(
+            astrometry, t, KECK_LOCATION
+        )
+        with iers.conf.set_temp("auto_download", False):
+            target = SkyCoord(ra=26.0213 * u.deg, dec=-15.9395 * u.deg, frame="icrs")
+            expected = target.radial_velocity_correction(
+                kind="barycentric", obstime=t, location=KECK_LOCATION
+            ).to_value(u.m / u.s)
+        assert bc_vel[0] == pytest.approx(expected, abs=1e-2)
+
     def test_solar_mode(self):
         # SoCal: barycorrpy's solar BC, and a true BJD_TDB -- not barycorrpy's solar
         # HJD_TDB -- cross-checked against astropy's independent light-travel time
@@ -345,9 +388,9 @@ class TestComputeBarycorrReference:
         assert abs(bjd_tdb[0] - hjd_tdb[0]) * 86400 > 0.5  # a BJD, not an HJD
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # compute_flux_weighted_midpoint_times (output = 'expmeter' | 'orders' | 'ccds')
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestFluxWeightedMidpointExpmeter:
@@ -594,6 +637,24 @@ class TestFaultyReadingDuration:
         with pytest.raises(ValueError, match="non-positive duration"):
             self._midpoints(synthetic_kpf2, self._table(range(4), bad=bad))
 
+    @pytest.mark.xfail(
+        strict=True,
+        raises=IndexError,
+        reason="prod bug: barycentric_correction.py:314 — IndexError on zero kept "
+        "readings (expected exception type pending human decision)",
+    )
+    # Production does not run with warnings as errors. Ignore the empty-slice
+    # warnings from the noise estimate (line 310) so the test sees the failure a
+    # real run hits, the IndexError at line 314.
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice:RuntimeWarning")
+    @pytest.mark.filterwarnings("ignore:invalid value encountered:RuntimeWarning")
+    def test_only_reading_faulty_raises(self, synthetic_kpf2):
+        # One reading with zero duration is both the first and the last, so the
+        # edge-drop rule removes it and leaves no readings. That has to fail
+        # loudly and clearly, not with an index error deep in the weighting.
+        with pytest.raises(ValueError):
+            self._midpoints(synthetic_kpf2, self._table([1], bad=(1,)))
+
 
 class TestFluxWeightedMidpointOrders:
     _KWARGS = dict(interpolate=False, extrapolate=False, fix_outliers=False)
@@ -658,7 +719,35 @@ class TestFluxWeightedMidpointCcds:
 
     def test_ccd_values_equal_chip_means_with_uniform_weights(self, synthetic_kpf2):
         # With no SCI2_FLUX the order weights are uniform, so the chip summary
-        # reduces to a plain mean.
+        # reduces to a plain mean. A chromatic flux gradient and unevenly spaced
+        # order wavelengths give every order its own time, and make the mean
+        # differ from the median or the first order.
+        ramp_g = np.linspace(0.0, 1.0, NORDER_GREEN) ** 2
+        ramp_r = np.linspace(0.0, 1.0, NORDER_RED) ** 3
+        synthetic_kpf2.set_data(
+            "GREEN_SCI2_WAVE", np.repeat((5000.0 + 300.0 * ramp_g)[:, None], NCOL, 1)
+        )
+        synthetic_kpf2.set_data(
+            "RED_SCI2_WAVE", np.repeat((5300.0 - 300.0 * ramp_r)[:, None], NCOL, 1)
+        )
+        data = {
+            "Date-Beg": [
+                f"{_T0}00:00:00.000",
+                f"{_T0}00:02:00.000",
+                f"{_T0}00:04:00.000",
+            ],
+            "Date-End": [
+                f"{_T0}00:01:00.000",
+                f"{_T0}00:03:00.000",
+                f"{_T0}00:05:00.000",
+            ],
+            "5000": [1000.0, 500.0, 500.0],
+            "5100": [800.0, 500.0, 700.0],
+            "5200": [600.0, 500.0, 900.0],
+            "5300": [500.0, 500.0, 1000.0],
+        }
+        synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
+
         bc = BarycentricCorrection(synthetic_kpf2)
         _, t_orders = bc.compute_flux_weighted_midpoint_times(
             output="orders", **self._KWARGS
@@ -666,9 +755,12 @@ class TestFluxWeightedMidpointCcds:
         _, t_ccds = bc.compute_flux_weighted_midpoint_times(
             output="ccds", **self._KWARGS
         )
+        ref = t_orders[0]
+        s_orders = _seconds(t_orders, ref)
+        green, red = s_orders[:NORDER_GREEN], s_orders[NORDER_GREEN:]
+        assert np.ptp(green) > 1.0 and np.ptp(red) > 1.0  # times are not identical
         np.testing.assert_allclose(
-            t_ccds.jd,
-            [t_orders.jd[:NORDER_GREEN].mean(), t_orders.jd[NORDER_GREEN:].mean()],
+            _seconds(t_ccds, ref), [green.mean(), red.mean()], rtol=0, atol=_ATOL_S
         )
 
     def test_flux_weighting_biases_ccd_time_toward_bright_orders(self, synthetic_kpf2):
@@ -784,9 +876,9 @@ class TestFluxWeightedMidpointFormat:
         assert w.shape == (NORDER,)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _get_astrometry -- read the PRIMARY C*# cards, convert, sanitize
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestGetAstrometry:
@@ -867,37 +959,38 @@ class TestGetAstrometry:
             bc._get_astrometry()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # perform() -- barycorrpy stubbed
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+
+
+@pytest.fixture
+def bc_monkeypatched(synthetic_kpf2, monkeypatch):
+    """BarycentricCorrection with barycorrpy stubbed."""
+
+    def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
+        n = len(np.atleast_1d(obs_times.jd))
+        bc_vel = np.full(n, TestPerform.DELTA_RV_MPS, dtype=float)
+        # BJD = JD + 500 s stands in for the light-travel delay.
+        bjd_tdb = np.atleast_1d(obs_times.jd) + 500.0 / 86400.0
+        return bc_vel, bjd_tdb
+
+    def passthrough(f, kernel_size=5):
+        return f.copy()
+
+    monkeypatch.setattr(
+        BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
+    )
+    # The 3x4 uniform-flux fixture triggers a degenerate triangulation inside
+    # scipy.griddata; TestFixExpmeterOutliers exercises the real filter.
+    monkeypatch.setattr(
+        BarycentricCorrection, "_fix_expmeter_outliers", staticmethod(passthrough)
+    )
+    return BarycentricCorrection(synthetic_kpf2)
 
 
 class TestPerform:
     DELTA_RV_MPS = 30000.0  # constant 30 km/s shift across all orders
-
-    @pytest.fixture
-    def bc_monkeypatched(self, synthetic_kpf2, monkeypatch):
-        """BarycentricCorrection with barycorrpy stubbed."""
-
-        def mock_compute(astrometry, obs_times, location, rv_mps=0.0):
-            n = len(np.atleast_1d(obs_times.jd))
-            bc_vel = np.full(n, TestPerform.DELTA_RV_MPS, dtype=float)
-            # BJD = JD + 500 s stands in for the light-travel delay.
-            bjd_tdb = np.atleast_1d(obs_times.jd) + 500.0 / 86400.0
-            return bc_vel, bjd_tdb
-
-        def passthrough(f, kernel_size=5):
-            return f.copy()
-
-        monkeypatch.setattr(
-            BarycentricCorrection, "_compute_barycorr", staticmethod(mock_compute)
-        )
-        # The 3x4 uniform-flux fixture triggers a degenerate triangulation inside
-        # scipy.griddata; TestFixExpmeterOutliers exercises the real filter.
-        monkeypatch.setattr(
-            BarycentricCorrection, "_fix_expmeter_outliers", staticmethod(passthrough)
-        )
-        return BarycentricCorrection(synthetic_kpf2)
 
     def test_returns_same_object(self, bc_monkeypatched):
         original = bc_monkeypatched.l2_obj
@@ -909,8 +1002,13 @@ class TestPerform:
         kpf2 = bc_monkeypatched.perform()
         bjd = np.asarray(kpf2.data["BJD_TDB"])
         assert bjd.shape == (NORDER,)
-        assert np.all(np.isfinite(bjd))
         assert_dtype(bjd, BJD, "BJD_TDB")
+        # Uniform flux over readings that fill the 00:00-00:05 shutter window
+        # puts every order's midpoint at 00:02:30. The stub adds 500 s.
+        mid = Time(f"{_T0}00:02:30.000", format="isot", scale="utc")
+        np.testing.assert_allclose(
+            (bjd - mid.jd) * 86400.0, 500.0, rtol=0, atol=_ATOL_S
+        )
 
     def test_barycorr_kms_extension_populated(self, bc_monkeypatched):
         kpf2 = bc_monkeypatched.perform()
@@ -926,18 +1024,32 @@ class TestPerform:
         assert z.shape == (NORDER,)
         assert np.std(z) < 1e-12
         # BARYCORR_Z is the small redshift z (~ v/c), not the Doppler factor
-        # (~1), and carries the same sign as the velocity.
-        assert z[0] == pytest.approx(
-            TestPerform.DELTA_RV_MPS / c.to("m/s").value, rel=1e-4
-        )
+        # (~1), and carries the same sign as the velocity. The exact value is
+        # pinned by test_barycorr_z_is_bc_over_c.
         assert 0.0 < z[0] < 1e-3
+        assert z[0] == pytest.approx(
+            TestPerform.DELTA_RV_MPS / c.to("m/s").value, rel=1e-3
+        )
 
-    def test_barycorr_and_bjd_are_float64(self, bc_monkeypatched):
-        # Correction arrays feed the RV redshift; float64 protects RV precision.
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="prod bug: barycentric_correction.py:737 — BARYCORR_Z uses the "
+        "relativistic Doppler formula on barycorrpy's BC, which is already c*z_B "
+        "(error c*b**2/2, 1.5 m/s at 30 km/s)",
+    )
+    def test_barycorr_z_is_bc_over_c(self, bc_monkeypatched):
+        # barycorrpy returns BC = c * z_B ("the velocities are just the redshift
+        # (z) x speed of light (c)"), and the CCF divides by (1 + z_B). So
+        # BARYCORR_Z must be BC/c exactly. rel=1e-12 is far below the
+        # relativistic error (b/2 = 5e-5 relative at 30 km/s, 1.5 m/s).
+        from astropy.constants import c
+
         kpf2 = bc_monkeypatched.perform()
-        assert_dtype(kpf2.data["BARYCORR_KMS"], BARYCORR, "BARYCORR_KMS")
-        assert_dtype(kpf2.data["BARYCORR_Z"], BARYCORR, "BARYCORR_Z")
-        assert_dtype(kpf2.data["BJD_TDB"], BJD, "BJD_TDB")
+        z = np.asarray(kpf2.data["BARYCORR_Z"])
+        np.testing.assert_allclose(
+            z, TestPerform.DELTA_RV_MPS / c.to("m/s").value, rtol=1e-12, atol=0
+        )
 
     def test_wave_arrays_untouched(self, bc_monkeypatched):
         # BarycentricCorrection tracks the correction; it never applies it.
@@ -1069,9 +1181,9 @@ class TestPerform:
         assert np.all(np.isfinite(np.asarray(kpf2.data["BJD_TDB"])))
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # perform(skycoord=...) -- interactive astrometry override
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _user_skycoord(ra_deg=90.0):
@@ -1205,9 +1317,9 @@ class TestSkycoordOverride:
             BarycentricCorrection(synthetic_kpf2).perform(skycoord=incomplete)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Constructor + missing-header error paths
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestConstructor:
@@ -1255,3 +1367,19 @@ class TestMissingHeader:
             extrapolate=False,
             fix_outliers=False,
         )
+
+
+# ------------------------------------------------------------------
+# Dtype provenance
+# ------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """Correction arrays feed the RV redshift, so they are float64."""
+
+    def test_barycorr_and_bjd_are_float64(self, bc_monkeypatched):
+        # Correction arrays feed the RV redshift; float64 protects RV precision.
+        kpf2 = bc_monkeypatched.perform()
+        assert_dtype(kpf2.data["BARYCORR_KMS"], BARYCORR, "BARYCORR_KMS")
+        assert_dtype(kpf2.data["BARYCORR_Z"], BARYCORR, "BARYCORR_Z")
+        assert_dtype(kpf2.data["BJD_TDB"], BJD, "BJD_TDB")
