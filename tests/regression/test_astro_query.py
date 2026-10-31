@@ -9,8 +9,11 @@ That is enforced, not just intended -- tests/conftest.py blocks connects to the
 catalog hosts for the whole suite.
 """
 
+import json
 import logging
 import re
+import subprocess
+import sys
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
@@ -25,6 +28,8 @@ from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import _RETRY_WAITS
+
+from ._scripts import REPO_ROOT
 
 
 def _ra_str(deg):
@@ -241,7 +246,7 @@ class TestAstrometryPriority:
         aq = AstroQuery(_l0_for_query())
         assert "wmko" not in aq.astrometry_priority
 
-    def test_source_outside_priority_cannot_anchor(self):
+    def test_source_outside_priority_anchoring_raises(self):
         with pytest.raises(ValueError, match="astrometry_priority"):
             _merge({"wmko": _record("W")}, priority=("gaia", "simbad"))
 
@@ -447,9 +452,9 @@ class TestReadWmkoHeader:
         assert "wmko" in [str(s) for s in table["source"]]
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # External Gaia / SIMBAD queries -- mocked (no network)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 # Default one-row result values, keyed to each catalog's column schema. pmra/pmdec
 # are 500 / -250 mas/yr so the mas -> arcsec/yr conversion is visible (0.5 / -0.25).
@@ -806,9 +811,9 @@ class TestExternalQueries:
                 aq.query_simbad()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Request vs parse -- the fields asked for are the fields read back
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _adql_select_columns(query):
@@ -941,9 +946,9 @@ class TestBareGaiaIdResolution:
             self._query()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # perform() -- the real entry point, with both catalogs mocked (no network)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _perform(**config):
@@ -1032,20 +1037,20 @@ class TestConstructor:
         return l0
 
     @pytest.mark.parametrize("obstype", ["Bias", "Flat", None])
-    def test_rejects_non_object_frames(self, obstype):
+    def test_non_object_frame_raises(self, obstype):
         # The class docstring's headline promise. Without it, AstroQuery would
         # fire SIMBAD lookups on OBJECT='bias' and write a bogus CATALOG_RECORD
         # that to_kpf1 copies onto the EPRV C*# cards.
         with pytest.raises(ValueError, match="science frames"):
             AstroQuery(self._l0(obstype))
 
-    def test_rejects_socal_frames(self):
+    def test_socal_frame_raises(self):
         l0 = self._l0("Target")
         l0.headers["PRIMARY"]["ISSOLAR"] = True
         with pytest.raises(ValueError, match="SoCal"):
             AstroQuery(l0)
 
-    def test_rejects_unsupported_config_type(self):
+    def test_unsupported_config_type_raises(self):
         with pytest.raises(TypeError, match="must be None, dict, or ConfigHandler"):
             AstroQuery(self._l0("Target"), config=["gaia"])
 
@@ -1059,3 +1064,51 @@ class TestConstructor:
         )
         aq = AstroQuery(self._l0("Target"), config=ConfigHandler(str(cfg)))
         assert aq.do_gaia_query is False
+
+
+# ------------------------------------------------------------------
+# Import purity -- witnessed in a child, because this suite's conftest hides it
+# ------------------------------------------------------------------
+
+# Records every outbound connect, imports the module, and reports what it saw.
+# Run through `python -c` so no conftest loads: the suite's own network guard
+# would mask exactly the connection this is here to detect.
+_IMPORT_PROBE = """
+import json, socket, sys
+hits = []
+socket.socket.connect = lambda self, addr, *a, **k: hits.append(addr)
+socket.create_connection = lambda addr, *a, **k: hits.append(addr)
+import kpfpipe.modules.astro_query
+print(json.dumps({
+    "hits": [str(h) for h in hits],
+    "astroquery": sorted(m for m in sys.modules if m.startswith("astroquery")),
+}))
+"""
+
+
+class TestImportPurity:
+    def test_importing_astro_query_touches_no_network(self):
+        """Importing the module must not open a connection, nor pull in a client.
+
+        ``astroquery.gaia`` builds a module-level ``GaiaClass()`` whose constructor
+        fetches ESA status messages, so importing it *is* a connection. Both client
+        imports are deferred into the factories to keep that off every code path
+        that never queries a catalog -- this is the only thing that witnesses it.
+        """
+        proc = subprocess.run(
+            [sys.executable, "-c", _IMPORT_PROBE],
+            cwd=REPO_ROOT,
+            env={"PYTHONPATH": REPO_ROOT, "PATH": "/usr/bin:/bin"},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert proc.returncode == 0, proc.stderr
+        seen = json.loads(proc.stdout.strip().splitlines()[-1])
+
+        assert seen["hits"] == []
+        # astroquery.exceptions is imported at module scope for the retryable-error
+        # tuple; it is cheap and reaches nothing. The two client modules are what
+        # must stay out, so name them rather than the package.
+        assert "astroquery.gaia" not in seen["astroquery"]
+        assert "astroquery.simbad" not in seen["astroquery"]

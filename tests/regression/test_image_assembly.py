@@ -30,9 +30,9 @@ L0_BIAS = str(TESTDATA_L0_DIR / "KP.20240405.03637.74.fits")
 L0_FLAT = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Synthetic 4-amp L0 fixture (no real data needed)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -51,9 +51,9 @@ def synthetic_4amp_l0(tmp_path_factory):
     )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # 2-amp regression tests (real data)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -67,21 +67,12 @@ class TestImageAssemblyBias:
         ia = ImageAssembly(l0)
         return ia.perform(), ia
 
-    def test_returns_kpf1(self, l1_bias):
-        l1, _ = l1_bias
-        assert isinstance(l1, KPF1)
-        assert l1.level == 1
-
     @pytest.mark.parametrize("chip", CHIPS)
     def test_ccd_shape(self, l1_bias, chip):
         l1, _ = l1_bias
         assert l1.data[f"{chip}_CCD"].shape == (4080, 4080)
+        assert l1.data[f"{chip}_VAR"].shape == (4080, 4080)
         assert_dtype(l1.data[f"{chip}_CCD"], L1_IMAGE, f"{chip}_CCD")
-
-    def test_variance_frames_exist(self, l1_bias):
-        l1, _ = l1_bias
-        assert l1.data["GREEN_VAR"].shape == (4080, 4080)
-        assert l1.data["RED_VAR"].shape == (4080, 4080)
 
     def test_variance_positive(self, l1_bias):
         l1, _ = l1_bias
@@ -112,23 +103,48 @@ class TestImageAssemblyBias:
         val = l1.headers["PRIMARY"].get("DATALVL")
         assert val == "L1"
 
-    def test_read_noise_in_header(self, l1_bias):
-        l1, _ = l1_bias
-        # 2-amp mode names the amps RNGREEN1/2 and RNRED1/2.
-        assert "RNGREEN1" in l1.headers["QUALITY_CONTROL"]
-        assert "RNRED1" in l1.headers["QUALITY_CONTROL"]
+    def test_read_noise_values_in_header(self, l1_bias):
+        # 2-amp mode names the amps RNGREEN1/2 and RNRED1/2. KPF read noise is
+        # a few e-, so 2-10 e- catches a unit slip (ADU vs e-, or a variance
+        # written as a std). AMP1 values are an oracle pinned to this frame
+        # (header carries 4 decimals).
+        qc = l1_bias[0].headers["QUALITY_CONTROL"]
+        for card in ("RNGREEN1", "RNGREEN2", "RNRED1", "RNRED2"):
+            assert 2.0 < qc[card] < 10.0, f"{card} = {qc[card]} e-"
+        assert qc["RNGREEN1"] == pytest.approx(5.32, abs=0.01)
+        assert qc["RNRED1"] == pytest.approx(6.02, abs=0.01)
 
-    def test_read_noise_reasonable(self, l1_bias):
-        # 1-20 e- brackets any physically sane KPF read noise.
-        _, ia = l1_bias
-        for channel_ext, rn in ia.readnoise.items():
-            assert 1.0 < rn < 20.0, f"Read noise for {channel_ext} = {rn} e-"
+    def test_read_noise_header_matches_measurement(self, l1_bias):
+        # The QC cards carry the per-amp values measure_read_noise produced.
+        l1, ia = l1_bias
+        qc = l1.headers["QUALITY_CONTROL"]
+        for chip, card in (("GREEN", "RNGREEN"), ("RED", "RNRED")):
+            for amp in (1, 2):
+                assert qc[f"{card}{amp}"] == pytest.approx(
+                    ia.readnoise[f"{chip}_AMP{amp}"], abs=1e-4
+                )
 
-    def test_rnng_in_header(self, l1_bias):
-        l1, _ = l1_bias
-        # 2-amp mode names the amps RNNGGR1/2 and RNNGRD1/2.
-        assert "RNNGGR1" in l1.headers["QUALITY_CONTROL"]
-        assert "RNNGRD1" in l1.headers["QUALITY_CONTROL"]
+    def test_rnng_values_in_header(self, l1_bias):
+        # RNNG = sqrt(2/pi) * std / mean-abs-dev is 1 for Gaussian read noise;
+        # this frame's overscans measure 1.00-1.04. [0.95, 1.10] flags a
+        # non-Gaussian (pattern/burst) overscan without tripping on the real one.
+        qc = l1_bias[0].headers["QUALITY_CONTROL"]
+        for card in ("RNNGGR1", "RNNGGR2", "RNNGRD1", "RNNGRD2"):
+            assert 0.95 < qc[card] < 1.10, f"{card} = {qc[card]}"
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="prod bug: image_assembly.py:403-426 -- stitch_ffi adds read "
+        "noise as a std, not rn**2, so VAR is ~3x low in read-noise pixels",
+    )
+    @pytest.mark.parametrize("chip", CHIPS)
+    def test_variance_floor_is_read_noise_squared(self, l1_bias, chip):
+        # A bias frame's per-pixel variance is at least the read-noise variance
+        # rn**2 (the Poisson term only adds). The weakest amp's rn sets the floor.
+        l1, ia = l1_bias
+        rn_min = min(rn for ext, rn in ia.readnoise.items() if ext.startswith(chip))
+        assert np.median(l1.data[f"{chip}_VAR"]) >= rn_min**2
 
     def test_overscan_applied_in_receipt(self, l1_bias):
         l1, _ = l1_bias
@@ -183,9 +199,9 @@ class TestImageAssemblyFlat:
         assert np.nanmedian(l1_flat.data["RED_VAR"]) > 10.0
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # 4-amp mode tests (synthetic data)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestImageAssembly4Amp:
@@ -250,9 +266,38 @@ class TestImageAssembly4Amp:
         assert not np.any(np.isnan(l1.data["RED_CCD"]))
 
 
-# ---------------------------------------------------------------------------
+class TestVarianceModel:
+    """stitch_ffi's VAR must equal the pixel variance: signal + rn**2 [e-**2]."""
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="prod bug: image_assembly.py:403-426 -- stitch_ffi adds read "
+        "noise as a std, not rn**2, so VAR is ~3x low in read-noise pixels",
+    )
+    def test_var_equals_empirical_pixel_variance(self, synthetic_4amp_l0):
+        # Overscan-subtracted amps in e-: signal S = 50 e- plus Gaussian noise of
+        # the variance the model claims, S + rn**2 = 75 e-**2 at rn = 5 e-. S sits
+        # 5.8 sigma above zero, so |data| is an unbiased Poisson term. The 3%
+        # band covers the median-of-|data| scatter; the std-for-variance slip
+        # gives 55 e-**2, 27% low.
+        signal, rn = 50.0, 5.0
+        rng = np.random.default_rng(31)
+        ia = ImageAssembly(standardized_l0(synthetic_4amp_l0))
+        shape = ia.dims["GREEN"]
+        for amp in range(1, ia.namp["GREEN"] + 1):
+            ia.l0_obj.data[f"GREEN_AMP{amp}"] = (
+                signal + rng.normal(0.0, np.sqrt(signal + rn**2), shape)
+            ).astype(np.float32)
+            ia.readnoise[f"GREEN_AMP{amp}"] = rn
+        ccd, var = ia.stitch_ffi("GREEN")
+        assert np.var(ccd) == pytest.approx(signal + rn**2, rel=0.01)
+        assert np.median(var) == pytest.approx(np.var(ccd), rel=0.03)
+
+
+# ------------------------------------------------------------------
 # Dtype provenance (L1 CCD/VAR float32; L0 amps never upscale to float64)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestDtypeProvenance:
@@ -359,9 +404,9 @@ class TestOrientFFI:
         np.testing.assert_array_equal(out, expected)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Expmeter wavelength unit conversion (nm -> Angstrom at L0 -> L1)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -466,9 +511,9 @@ class TestExpmeterWavelengthConversion:
         assert "4981.2" in l1.data["EXPMETER_SCI"].colnames
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Overscan methods and the config-typo guards (synthetic, no perform())
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestOverscanMethods:
@@ -566,9 +611,9 @@ class TestReadoutSetting:
         assert module.prescan == {"GREEN": 3, "RED": 3}
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # FITS round-trip tests (real data)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -595,19 +640,20 @@ class TestImageAssemblyRoundTrip:
         assert l1_read.obs_id == assembled.obs_id
 
 
-# ---------------------------------------------------------------------------
-# The INSTRUMENT_HEADER repoint gate (real data)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Native cards are read from INSTRUMENT_HEADER (real data)
+# ------------------------------------------------------------------
 
 
+@pytest.mark.slow
 @pytest.mark.requires_testdata
 class TestNativeReadsUseTheInstrumentHeader:
-    """``HeaderParser`` reads native cards, and every L0 module now runs after
-    standardization -- so PRIMARY no longer carries them.
+    """``HeaderParser`` reads native cards, and every L0 module runs after
+    standardization, so PRIMARY does not carry them.
 
-    ``EXPTIMOK`` is the direct assertion the exit checklist asks for: it is in
-    ``_REQUIRED_L0_QC_FLAGS``, so a missed repoint would drop every masters
-    frame; this catches it before a masters run does.
+    ``EXPTIMOK`` is in ``_REQUIRED_L0_QC_FLAGS``: a module reading the native
+    cards from PRIMARY instead of INSTRUMENT_HEADER would drop every masters
+    frame, and this catches it before a masters run does.
     """
 
     def test_read_mode_is_inferred_from_the_native_header(self):

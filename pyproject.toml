@@ -53,7 +53,10 @@ include = ["kpfpipe*", "tools*", "scripts*", "recipes*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Quiet output; re-run a single failure with --tb=long for full frame context.
-addopts = "-q --no-header --tb=short"
+# -rxX lists every known-bug xfail (and any XPASS) with its reason on every run.
+addopts = "-q --no-header --tb=short -rxX"
+# An xfail that passes means its bug is fixed: fail so the marker is removed.
+xfail_strict = true
 # Exempt only warnings that are expected *and* handled, and prefer
 # @pytest.mark.filterwarnings on the one test over widening this list.
 filterwarnings = [

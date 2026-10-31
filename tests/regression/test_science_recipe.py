@@ -8,6 +8,7 @@ import argparse
 import importlib.metadata
 import importlib.util
 import os
+import types
 from pathlib import Path
 
 import numpy as np
@@ -18,15 +19,16 @@ from kpfpipe import DETECTOR, SCI_FIBERS
 from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.data_models.level4 import KPF4
+from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.io import kpf_filepath
 from recipes._logging import science_run_summary
 
 from ._dtype_policy import CCF, RV_FLOAT, assert_dtype
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Test data paths and constants
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 TESTDATA_L0_DIR = TESTDATA_DIR / "L0" / "20240405"
@@ -48,9 +50,9 @@ def _load_recipe():
     return module
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Frozen catalog capture (stands in for the live SIMBAD/Gaia query)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 #
 # The four CATALOG_RECORD rows AstroQuery returned for OBS_ID on 2026-08-20,
 # captured verbatim from one live query (Gaia DR3, SIMBAD).
@@ -166,9 +168,9 @@ class _FrozenAstroQuery:
         return aq.l0_obj
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Science recipe integration (real L0 star data from tests/testdata/)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -216,12 +218,10 @@ class TestScienceRecipe:
         data_root = str(Path(recipe_output).parents[2])
         return KPF4.from_fits(kpf_filepath(OBS_ID, "L4", data_root=data_root))
 
-    def test_output_file_exists(self, recipe_output):
+    def test_output_filename_format(self, recipe_output):
         assert os.path.isfile(recipe_output), (
             f"Expected output not found: {recipe_output}"
         )
-
-    def test_output_filename_format(self, recipe_output):
         assert os.path.basename(recipe_output) == "kpf_SL2_20240405T110833.fits"
 
     def test_output_is_valid_kpf2(self, l2):
@@ -380,9 +380,9 @@ class TestScienceRecipe:
         assert "radial_velocity" in modules
 
     def test_l4_rv_products_present(self, l4):
-        # Structural only, by decision: the RV extensions exist, name their
-        # method, and are born in the dtypes the EPRV standard requires. No
-        # radial-velocity VALUE is pinned anywhere in this suite.
+        # Structural: the RV extensions exist, name their method, and are born
+        # in the dtypes the EPRV standard requires. The RV values are pinned
+        # only in test_l4_rv_products_are_deterministic.
         assert l4.headers["PRIMARY"].get("RVMETHOD") == "CCF"
         for fiber in SCI_FIBERS:
             assert_dtype(l4.data[f"{fiber}_CCF"], CCF, f"{fiber}_CCF")
@@ -391,30 +391,25 @@ class TestScienceRecipe:
             for col in ("RV", "RV_ERR", "BJD_TDB", "BERV"):
                 assert_dtype(np.asarray(table[col]), RV_FLOAT, f"{fiber}_RV[{col}]")
 
-    def test_qlp_l0_pngs_exist(self, recipe_output):
-        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L0"
-        assert (qlp_dir / f"{OBS_ID}_L0_stitched_image_green_zoomable.png").is_file()
-        assert (qlp_dir / f"{OBS_ID}_L0_stitched_image_red_zoomable.png").is_file()
-
-    def test_qlp_l1_pngs_exist(self, recipe_output):
-        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L1"
-        assert (qlp_dir / f"{OBS_ID}_L1_image_green_zoomable.png").is_file()
-        assert (qlp_dir / f"{OBS_ID}_L1_image_red_zoomable.png").is_file()
-
-    def test_qlp_l2_pngs_exist(self, recipe_output):
-        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L2"
-        assert (qlp_dir / f"{OBS_ID}_L2_snr_per_order_green_zoomable.png").is_file()
-        assert (qlp_dir / f"{OBS_ID}_L2_snr_per_order_red_zoomable.png").is_file()
-
-    def test_qlp_l4_pngs_exist(self, recipe_output):
-        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / "L4"
-        assert (qlp_dir / f"{OBS_ID}_L4_ccf_grid_green_zoomable.png").is_file()
-        assert (qlp_dir / f"{OBS_ID}_L4_ccf_grid_red_zoomable.png").is_file()
+    @pytest.mark.parametrize(
+        "level, plot",
+        [
+            ("L0", "stitched_image"),
+            ("L1", "image"),
+            ("L2", "snr_per_order"),
+            ("L4", "ccf_grid"),
+        ],
+    )
+    def test_qlp_pngs_exist(self, recipe_output, level, plot):
+        qlp_dir = Path(recipe_output).parents[2] / "QLP" / "20240405" / OBS_ID / level
+        for chip in ("green", "red"):
+            png = qlp_dir / f"{OBS_ID}_{level}_{plot}_{chip}_zoomable.png"
+            assert png.is_file(), png
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Recipe wiring (no testdata: every collaborator stubbed, real main() called)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _wire_science_recipe(tmp_path, monkeypatch, solar=False):
@@ -625,9 +620,9 @@ class TestScienceRecipeStageSelection:
         assert [tag for tag, _ in record["written"]] == ["l2"]
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Science recipe error paths
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestScienceRecipeErrors:
@@ -665,6 +660,34 @@ class TestScienceRecipeErrors:
         recipe = _load_recipe()
         with pytest.raises(SystemExit, match="--obs_id is required"):
             recipe.main(config, args)
+
+    def test_missing_master_aborts_before_any_product_is_written(
+        self, tmp_path, monkeypatch
+    ):
+        # No bias master in the window (masters not yet built, or cleared for a
+        # rebuild): the real CalibrationAssociation must stop the run before any
+        # calibration is applied or any L2/L4 is written.
+        recipe, config, args, record = _wire_science_recipe(tmp_path, monkeypatch)
+        l1 = types.SimpleNamespace(
+            obs_id=OBS_ID,
+            headers={
+                "PRIMARY": {"DATE-OBS": "2024-04-05T11:08:33.570", "INSTERA": "2.0"}
+            },
+        )
+
+        class AssembleToL1:
+            def __init__(self, obj, config=None):
+                pass
+
+            def perform(self):
+                return l1
+
+        monkeypatch.setattr(recipe, "ImageAssembly", AssembleToL1)
+        monkeypatch.setattr(recipe, "CalibrationAssociation", CalibrationAssociation)
+        with pytest.raises(FileNotFoundError, match="No 'bias' master found"):
+            recipe.main(config, args)
+        assert "ImageProcessing" not in [call[0] for call in record["calls"]]
+        assert record["written"] == []
 
 
 class _FakeL4:

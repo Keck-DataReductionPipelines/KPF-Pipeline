@@ -9,6 +9,7 @@ get a CCF-bearing L4, then exercise RadialVelocity on it.
 import copy
 import logging
 
+import astropy.units as u
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -18,6 +19,7 @@ from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
 from kpfpipe.modules.radial_velocity import RadialVelocity
+from kpfpipe.utils.astro import compute_doppler_factor
 
 from ._catalog import seed_sci2_cards
 from ._dtype_policy import RV_FLOAT, assert_dtype
@@ -26,7 +28,6 @@ from ._science import (
     NCOL,
     RANGE_KMS,
     SPEED_OF_LIGHT_KMS,
-    V_INJECT,
     absorption_spectrum,
     make_mask,
 )
@@ -34,10 +35,20 @@ from ._science import (
 NORDER = DETECTOR["numorder"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 
+# Injected RV [km/s], deliberately OFF the 0.25 km/s CCF grid so recovery
+# exercises the Gaussian fit rather than landing on a grid node.
+V_TRUE = 1.37
+# Noiseless RV recovery tolerance [km/s] = 1 m/s, the scale of an EPRV
+# instrument-error budget term. The CCF chain's own noiseless bias is ~0.3 m/s
+# for these 4 km/s lines: the mask holes have a fixed velocity width, so the CCF
+# continuum tilts as (1 + z(v)) and the constant-baseline Gaussian fit pulls the
+# centroid by about -(continuum/depth) * sigma**2 / c.
+RV_TOL = 1e-3
 
-# ---------------------------------------------------------------------------
+
+# ------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _make_l4(
@@ -49,17 +60,20 @@ def _make_l4(
     bjd=0.0,
     sysrv=0.0,
     perform_fibers=None,
+    v_green=V_TRUE,
+    v_red=V_TRUE,
 ):
-    """Synthetic KPF2 (absorption at MASK_CENTERS, shifted by V_INJECT) run
-    through CrossCorrelation (mask stubbed, narrow grid) into a KPF4."""
+    """Synthetic KPF2 (absorption at MASK_CENTERS, relativistically shifted by
+    ``v_green``/``v_red`` on the respective chip) run through CrossCorrelation
+    (mask stubbed, narrow grid) into a KPF4."""
     kpf2 = KPF2()
     seed_sci2_cards(kpf2, sci_obj=sci_obj, sky_obj=sky_obj, cal_obj=cal_obj)
     kpf2.headers["PRIMARY"]["CRV3"] = sysrv  # the stellar CCF grid center
 
     wave_1d = np.linspace(5000.0, 5050.0, NCOL)
-    lam_obs = MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS)
-    flux_1d = absorption_spectrum(wave_1d, lam_obs)
-    for chip, n in [("GREEN", NORDER_GREEN), ("RED", NORDER_RED)]:
+    for chip, n, v in [("GREEN", NORDER_GREEN, v_green), ("RED", NORDER_RED, v_red)]:
+        lam_obs = MASK_CENTERS * compute_doppler_factor(v * u.km / u.s)
+        flux_1d = absorption_spectrum(wave_1d, lam_obs)
         for fiber in FIBERS:
             kpf2.set_data(
                 f"{chip}_{fiber}_WAVE", np.tile(wave_1d, (n, 1)).astype(np.float64)
@@ -85,53 +99,48 @@ def _make_l4(
     )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _compute_rv_1d / _ccf_noise_corr_length (staticmethods)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+
+
+def _gaussian_ccf(v0=0.0, sigma=4.0, baseline=100.0, depth=30.0):
+    vel = np.arange(-402, 403) * 0.25
+    ccf = baseline - depth * np.exp(-0.5 * ((vel - v0) / sigma) ** 2)
+    ccf_var = ccf.copy()  # photon-noise proxy at the CCF count scale
+    vps = RadialVelocity._pixel_velocity_scale(5000.0, 5050.0, 4000)
+    return vel, ccf, ccf_var, vps
 
 
 class TestComputeRV:
-    def _ccf(self, v0=0.0, sigma=4.0, baseline=100.0, depth=30.0):
-        vel = np.arange(-402, 403) * 0.25
-        ccf = baseline - depth * np.exp(-0.5 * ((vel - v0) / sigma) ** 2)
-        ccf_var = ccf.copy()  # photon-noise proxy at the CCF count scale
-        vps = RadialVelocity._pixel_velocity_scale(5000.0, 5050.0, 4000)
-        return vel, ccf, ccf_var, vps
-
     def test_recovers_injected_rv(self):
-        vel, ccf, ccf_var, vps = self._ccf(v0=2.5)
+        # Off-grid v0; a Gaussian fit to an exact Gaussian CCF has no model
+        # error, so the 1 m/s budget is generous.
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=2.37)
         rv, _ = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
         )
-        assert rv == pytest.approx(2.5, abs=0.05)
+        assert rv == pytest.approx(2.37, abs=RV_TOL)
 
     def test_error_finite_and_positive(self):
-        vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=0.0)
         _, rv_err = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
         )
         assert np.isfinite(rv_err) and rv_err > 0
 
-    def test_returns_float64(self):
-        vel, ccf, ccf_var, vps = self._ccf(v0=1.0)
-        rv, rv_err = RadialVelocity._compute_rv_1d(
-            vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
-        )
-        assert_dtype(np.asarray(rv), RV_FLOAT, "RV scalar")
-        assert_dtype(np.asarray(rv_err), RV_FLOAT, "RV_ERR scalar")
-
     def test_even_window_pts_allowed(self):
         # min_npts is a minimum point count, not a centered odd window.
-        vel, ccf, ccf_var, vps = self._ccf(v0=1.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=1.13)
         rv, _ = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 8
         )
-        assert rv == pytest.approx(1.0, abs=0.05)
+        assert rv == pytest.approx(1.13, abs=RV_TOL)
 
     def test_nonphysical_variance_raises(self):
         # A non-positive CCF variance in the fit window is corrupt flux, not a
         # recoverable "no error" case -> fail loudly rather than return NaN.
-        vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=0.0)
         ccf_var[402] = -1.0  # index of v = 0, inside the +/-3 sigma fit window
         with pytest.raises(ValueError, match="non-physical"):
             RadialVelocity._compute_rv_1d(
@@ -141,18 +150,18 @@ class TestComputeRV:
     def test_negative_pixels_with_positive_sum_allowed(self):
         # Low-illumination (e.g. SKY) CCFs dip below zero; only a negative window
         # sum is non-physical.
-        vel, ccf, _, vps = self._ccf(baseline=20.0)
+        vel, ccf, _, vps = _gaussian_ccf(baseline=20.0)
         assert np.any(ccf < 0)
         ccf_var = np.full_like(ccf, 100.0)
         rv, rv_err = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
         )
-        assert rv == pytest.approx(0.0, abs=0.05)
+        assert rv == pytest.approx(0.0, abs=RV_TOL)
         assert np.isfinite(rv_err) and rv_err > 0
 
     def test_negative_sum_raises(self):
         # fit_nsigma=3 keeps the window on the dip, so the window sum is < 0.
-        vel, ccf, _, vps = self._ccf(baseline=5.0)
+        vel, ccf, _, vps = _gaussian_ccf(baseline=5.0)
         ccf_var = np.full_like(ccf, 100.0)
         with pytest.raises(ValueError, match="non-physical"):
             RadialVelocity._compute_rv_1d(
@@ -171,7 +180,7 @@ class TestComputeRV:
 
     def test_nonfinite_ccf_returns_nan(self):
         # Non-finite CCF values are not quietly masked out; the fit returns NaN.
-        vel, ccf, ccf_var, vps = self._ccf(v0=1.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=1.0)
         ccf[10] = np.nan
         rv, rv_err = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
@@ -189,11 +198,11 @@ class TestComputeRV:
         rv, rv_err = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
         )
-        assert rv == pytest.approx(v0, abs=0.1) and np.isnan(rv_err)
+        assert rv == pytest.approx(v0, abs=RV_TOL) and np.isnan(rv_err)
 
     def test_narrow_window_returns_nan(self):
         # A first-pass window narrower than min_npts grid points -> NaN, NaN.
-        vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=0.0)
         rv, rv_err = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-0.1, 0.1], 11
         )
@@ -201,7 +210,7 @@ class TestComputeRV:
 
     def test_first_pass_fit_failure_returns_nan(self, monkeypatch):
         # optimize_lsq raising on the first pass degrades to NaN, not a crash.
-        vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=0.0)
 
         def boom(*args, **kwargs):
             raise RuntimeError("singular matrix")
@@ -213,7 +222,7 @@ class TestComputeRV:
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_nonfinite_fit_params_return_nan(self, monkeypatch):
-        vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=0.0)
 
         def bad_fit(*args, **kwargs):
             return np.array([100.0, 30.0, np.nan, 4.0]), None
@@ -225,7 +234,7 @@ class TestComputeRV:
         assert np.isnan(rv) and np.isnan(rv_err)
 
     def test_second_pass_fit_failure_keeps_first_pass_rv(self, monkeypatch):
-        vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=0.0)
         calls = []
 
         def flaky(*args, **kwargs):
@@ -244,7 +253,7 @@ class TestComputeRV:
         # The photon error is 1/sqrt(N_scale) with N_scale = dv / corr_length, so
         # widening the mask hole lengthens the noise correlation and inflates
         # rv_err by exactly sqrt(L2/L1).
-        vel, ccf, ccf_var, vps = self._ccf(v0=0.0)
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=0.0)
         _, err_a = RadialVelocity._compute_rv_1d(
             vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
         )
@@ -254,6 +263,37 @@ class TestComputeRV:
         la = RadialVelocity._ccf_noise_corr_length(vps, 0.5)
         lb = RadialVelocity._ccf_noise_corr_length(vps, 1.0)
         assert err_b / err_a == pytest.approx((lb / la) ** 0.5, rel=1e-6)
+
+
+class TestRVErrorCalibration:
+    """RV_ERR must predict the actual scatter of RVs under photon noise."""
+
+    def test_rv_err_matches_monte_carlo_scatter(self):
+        # 200 seeded Poisson-like realizations of one order through the real
+        # CCF + fit. The std of a 200-sample estimate is uncertain by
+        # 1/sqrt(2*200) = 5%, so [0.8, 1.2] is a 4-sigma band: a mis-scaled error
+        # (e.g. a missing Boisse N_scale, sqrt(2) ~ 1.41 or worse) fails it.
+        rng = np.random.default_rng(20261031)
+        wave = np.linspace(5000.0, 5050.0, 6000)  # ~0.5 km/s per pixel
+        centers = np.linspace(5008.0, 5042.0, 40)
+        mask_width = 0.5
+        mask = make_mask(centers, width=mask_width)
+        vel = np.arange(-60, 61) * 0.25
+        flux0 = 1e4 * absorption_spectrum(wave, centers, sigma_kms=3.0)
+        vps = RadialVelocity._pixel_velocity_scale(wave[0], wave[-1], wave.size)
+        rvs, errs = [], []
+        for _ in range(200):
+            flux = flux0 + rng.normal(0.0, np.sqrt(flux0))
+            ccf, ccf_var = CrossCorrelation._compute_ccf_1d(
+                wave, flux, flux0, mask, vel, 0.0
+            )
+            rv, rv_err = RadialVelocity._compute_rv_1d(
+                vel, ccf, ccf_var, vps, mask_width, [-10.0, 10.0]
+            )
+            rvs.append(rv)
+            errs.append(rv_err)
+        ratio = np.std(rvs) / np.median(errs)
+        assert 0.8 <= ratio <= 1.2
 
 
 class TestPixelVelocityScale:
@@ -286,9 +326,9 @@ class TestCCFNoiseCorrLength:
         assert a == pytest.approx(b)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # compute_order_by_order_rvs / compute_weighted_rvs (L4 CCFs loaded)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -328,20 +368,20 @@ class TestComputeRVPublic:
         assert res["rv"].shape == (NORDER_GREEN,)
         assert res["rv_err"].shape == (NORDER_GREEN,)
 
-    def test_raises_without_loaded_ccf(self, rv_module):
+    def test_without_loaded_ccf_raises(self, rv_module):
         with pytest.raises(RuntimeError, match="not loaded"):
             rv_module.compute_order_by_order_rvs("GREEN", "SCI2")
 
     def test_recovers_injected_rv(self, rv_loaded):
         rv = rv_loaded.compute_order_by_order_rvs("GREEN", "SCI2")["rv"]
-        np.testing.assert_allclose(rv, V_INJECT, atol=0.1)
+        np.testing.assert_allclose(rv, V_TRUE, atol=RV_TOL)
 
     def test_per_ccd_rv_recovers_injected(self, rv_loaded):
         # The per-CCD error comes from the unweighted-summed CCF.
         ccd_rv, ccd_rv_err = rv_loaded.compute_weighted_rvs(
             ["GREEN"], "SCI2", combine_fibers=False, combine_ccds=False
         )["GREEN"]
-        assert ccd_rv == pytest.approx(V_INJECT, abs=0.1)
+        assert ccd_rv == pytest.approx(V_TRUE, abs=RV_TOL)
         assert np.isfinite(ccd_rv_err) and ccd_rv_err > 0
 
     def test_per_ccd_rv_sums_science_fibers(self, rv_loaded):
@@ -350,7 +390,7 @@ class TestComputeRVPublic:
         ccd_rv, ccd_rv_err = rv_loaded.compute_weighted_rvs(
             ["GREEN"], ["SCI1", "SCI2", "SCI3"], combine_fibers=True, combine_ccds=False
         )["GREEN"]
-        assert ccd_rv == pytest.approx(V_INJECT, abs=0.1)
+        assert ccd_rv == pytest.approx(V_TRUE, abs=RV_TOL)
         assert np.isfinite(ccd_rv_err) and ccd_rv_err > 0
 
     def test_combine_ccds_returns_tuple_and_recovers_injected(self, rv_loaded):
@@ -359,16 +399,16 @@ class TestComputeRVPublic:
             CHIPS, "SCI2", combine_fibers=False, combine_ccds=True
         )
         assert isinstance(out, tuple) and len(out) == 2
-        assert out[0] == pytest.approx(V_INJECT, abs=0.1)
+        assert out[0] == pytest.approx(V_TRUE, abs=RV_TOL)
         assert np.isfinite(out[1]) and out[1] > 0
 
-    def test_combine_fibers_requires_three_sci(self, rv_loaded):
+    def test_combine_fibers_without_three_sci_raises(self, rv_loaded):
         with pytest.raises(ValueError, match="three science fibers"):
             rv_loaded.compute_weighted_rvs(
                 ["GREEN"], "SCI2", combine_fibers=True, combine_ccds=False
             )
 
-    def test_no_combine_fibers_requires_single(self, rv_loaded):
+    def test_no_combine_fibers_without_single_raises(self, rv_loaded):
         with pytest.raises(ValueError, match="single fiber"):
             rv_loaded.compute_weighted_rvs(
                 ["GREEN"],
@@ -440,9 +480,35 @@ class TestComputeRVPublic:
         np.testing.assert_array_equal(w, expected)
 
 
-# ---------------------------------------------------------------------------
+class TestDeterminism:
+    def test_ccf_and_rv_bitwise_reproducible(self, monkeypatch, rv_l4):
+        # The same KPF2 must give bit-identical CCFs, CCF variances and RVs on a
+        # rebuild: RV stability work compares frames years apart, so any hidden
+        # state or order dependence in the chain is a science defect.
+        rebuilt = _make_l4(monkeypatch)
+        for fiber in ("SCI2", "SKY"):
+            np.testing.assert_array_equal(
+                rebuilt.data[f"{fiber}_CCF"], rv_l4.data[f"{fiber}_CCF"]
+            )
+            np.testing.assert_array_equal(
+                rebuilt.data[f"{fiber}_CCF_VAR"], rv_l4.data[f"{fiber}_CCF_VAR"]
+            )
+        config = {"rv_window": RANGE_KMS}
+        first = RadialVelocity(rebuilt, config=config).perform()
+        second = RadialVelocity(copy.deepcopy(rv_l4), config=config).perform()
+        for fiber in ("SCI2", "SKY"):
+            for column in ("RV", "RV_ERR"):
+                np.testing.assert_array_equal(
+                    np.asarray(first.data[f"{fiber}_RV"][column]),
+                    np.asarray(second.data[f"{fiber}_RV"][column]),
+                )
+        for card in ("RV", "RVERR", "RVGREEN", "RVRED"):
+            assert first.headers["PRIMARY"][card] == second.headers["PRIMARY"][card]
+
+
+# ------------------------------------------------------------------
 # perform (KPF4 -> KPF4)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPerform:
@@ -498,7 +564,7 @@ class TestPerform:
         _, l4 = performed
         for fiber in self._ILLUMINATED:
             rv = np.asarray(l4.data[f"{fiber}_RV"]["RV"])
-            np.testing.assert_allclose(rv, V_INJECT, atol=0.1)
+            np.testing.assert_allclose(rv, V_TRUE, atol=RV_TOL)
 
     def test_rv_headers(self, performed):
         _, l4 = performed
@@ -513,10 +579,10 @@ class TestPerform:
         # itself. Centering the CCF grid on the injected velocity does not move
         # the answer: the grid stays in absolute velocity, so the fitted RV
         # carries the systemic RV and nothing takes it back out.
-        l4 = _make_l4(monkeypatch, sysrv=V_INJECT)
+        l4 = _make_l4(monkeypatch, sysrv=V_TRUE)
         module = RadialVelocity(l4, config={"rv_window": RANGE_KMS})
         prim = module.perform().headers["PRIMARY"]
-        assert prim["RV"] == pytest.approx(V_INJECT, abs=0.1)
+        assert prim["RV"] == pytest.approx(V_TRUE, abs=RV_TOL)
         assert prim["SYSVEL"] == 0.0
         assert prim["SYSACC"] == 0.0
 
@@ -525,8 +591,8 @@ class TestPerform:
         # RV# table header (SCI2 lives on RV3), not onto PRIMARY.
         _, l4 = performed
         rv_hdr = l4.headers["RV3"]
-        assert rv_hdr["RVGREEN"] == pytest.approx(V_INJECT, abs=0.1)
-        assert rv_hdr["RVRED"] == pytest.approx(V_INJECT, abs=0.1)
+        assert rv_hdr["RVGREEN"] == pytest.approx(V_TRUE, abs=RV_TOL)
+        assert rv_hdr["RVRED"] == pytest.approx(V_TRUE, abs=RV_TOL)
         assert rv_hdr["ERVGREEN"] > 0 and rv_hdr["ERVRED"] > 0
         # RVGREEN is homed on PRIMARY and on every RV# table: the PRIMARY card is
         # the SCI-combined value, a separate write from this per-orderlet one.
@@ -538,10 +604,10 @@ class TestPerform:
         # PRIMARY: EPRV RV/RVERR plus the KPF SCI-combined per-CCD RVGREEN/RVRED.
         _, l4 = performed
         prim = l4.headers["PRIMARY"]
-        assert prim["RVGREEN"] == pytest.approx(V_INJECT, abs=0.1)
-        assert prim["RVRED"] == pytest.approx(V_INJECT, abs=0.1)
+        assert prim["RVGREEN"] == pytest.approx(V_TRUE, abs=RV_TOL)
+        assert prim["RVRED"] == pytest.approx(V_TRUE, abs=RV_TOL)
         assert prim["ERVGREEN"] > 0 and prim["ERVRED"] > 0
-        assert prim["RV"] == pytest.approx(V_INJECT, abs=0.1)
+        assert prim["RV"] == pytest.approx(V_TRUE, abs=RV_TOL)
         assert prim["RVERR"] > 0
         assert prim["RVMETHOD"] == "CCF"
         # RVGREEN is homed on PRIMARY and on every RV# table, so RV3 carries its
@@ -549,17 +615,25 @@ class TestPerform:
         assert "RVGREEN" in l4.headers["RV3"]
         assert "RV" not in l4.headers["RV3"]
 
-    def test_combined_rv_is_weighted_ccd_combine(self, performed):
-        # PRIMARY RV = (RVGREEN*Wg + RVRED*Wr)/(Wg+Wr), Wg/Wr the summed order
-        # weights; RVERR = inverse-variance combination of the per-CCD errors.
-        module, l4 = performed
-        prim = l4.headers["PRIMARY"]
-        wg = np.nansum(module._get_order_weights("GREEN", "SCI1"))
-        wr = np.nansum(module._get_order_weights("RED", "SCI1"))
-        expect_rv = (prim["RVGREEN"] * wg + prim["RVRED"] * wr) / (wg + wr)
-        expect_err = (1.0 / prim["ERVGREEN"] ** 2 + 1.0 / prim["ERVRED"] ** 2) ** -0.5
-        assert prim["RV"] == pytest.approx(expect_rv, abs=1e-9)
-        assert prim["RVERR"] == pytest.approx(expect_err, rel=1e-9)
+    def test_combined_rv_is_weighted_ccd_combine(self, monkeypatch):
+        # PRIMARY RV = (v_g*W_g + v_r*W_r)/(W_g + W_r), W the chip's summed CCF
+        # order weights. Distinct off-grid per-chip velocities make the weighting
+        # observable (equal velocities pass under any weights). The sums are an
+        # oracle hand-pinned from reference/ccf_order_weights.csv (G2_espresso:
+        # BP-RP 0.823 -> 5770 K): GREEN 12.2085, RED 2.9594. Only the RV value is
+        # pinned; the RVERR estimator is an open design question.
+        v_green, v_red = 1.12, 2.07
+        w_green, w_red = 12.2085, 2.9594
+        l4 = _make_l4(monkeypatch, v_green=v_green, v_red=v_red)
+        prim = (
+            RadialVelocity(l4, config={"rv_window": RANGE_KMS})
+            .perform()
+            .headers["PRIMARY"]
+        )
+        assert prim["RVGREEN"] == pytest.approx(v_green, abs=RV_TOL)
+        assert prim["RVRED"] == pytest.approx(v_red, abs=RV_TOL)
+        expect_rv = (v_green * w_green + v_red * w_red) / (w_green + w_red)
+        assert prim["RV"] == pytest.approx(expect_rv, abs=RV_TOL)
 
     def test_primary_berv_bjdtdb_from_per_order(self, rv_module):
         # PRIMARY BERV/BJDTDB are the WEIGHT-weighted mean of the rep SCI fiber's
@@ -621,9 +695,9 @@ class TestPerform:
         with fits.open(path) as hdul:
             rv = hdul["RV3"].header
             assert rv["RVMETHOD"] == "CCF"
-            assert rv["RVGREEN"] == pytest.approx(V_INJECT, abs=0.1)
+            assert rv["RVGREEN"] == pytest.approx(V_TRUE, abs=RV_TOL)
             # Only the EPRV combined RV belongs on PRIMARY.
-            assert hdul["PRIMARY"].header["RV"] == pytest.approx(V_INJECT, abs=0.1)
+            assert hdul["PRIMARY"].header["RV"] == pytest.approx(V_TRUE, abs=RV_TOL)
             assert hdul["PRIMARY"].header["RVERR"] > 0
             rv_table = hdul["RV3"].data
             assert rv_table["ORDER_ID"][0] == "GREEN_SCI2_0"
@@ -651,9 +725,9 @@ class TestPerform:
         assert np.all(np.isnan(np.asarray(l4.data["SKY_RV"]["RV"])))
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Constructor
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestConstructor:
@@ -667,3 +741,20 @@ class TestConstructor:
     def test_dict_config_overrides_default(self):
         rv = RadialVelocity(KPF4(), config={"rv_window": [-10.0, 10.0]})
         assert rv.rv_window == [-10.0, 10.0]
+
+
+# ------------------------------------------------------------------
+# Dtype provenance
+# ------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """RV and RV_ERR come out at the declared RV-column precision."""
+
+    def test_returns_float64(self):
+        vel, ccf, ccf_var, vps = _gaussian_ccf(v0=1.0)
+        rv, rv_err = RadialVelocity._compute_rv_1d(
+            vel, ccf, ccf_var, vps, 0.5, [-50.0, 50.0], 11
+        )
+        assert_dtype(np.asarray(rv), RV_FLOAT, "RV scalar")
+        assert_dtype(np.asarray(rv_err), RV_FLOAT, "RV_ERR scalar")

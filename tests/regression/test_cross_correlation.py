@@ -12,6 +12,7 @@ PRIMARY/combined-RV keywords.
 import logging
 import re
 
+import astropy.units as u
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -20,6 +21,8 @@ from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level2 import KPF2, NORDER_GREEN
 from kpfpipe.data_models.level4 import KPF4
 from kpfpipe.modules.cross_correlation import CrossCorrelation
+from kpfpipe.modules.radial_velocity import RadialVelocity
+from kpfpipe.utils.astro import compute_doppler_factor
 
 from ._catalog import seed_sci2_cards
 from ._dtype_policy import CCF, RV_FLOAT, assert_dtype
@@ -29,6 +32,7 @@ from ._science import (
     NVEL,
     RANGE_KMS,
     SPEED_OF_LIGHT_KMS,
+    STEP_KMS,
     V_INJECT,
     absorption_spectrum,
     make_mask,
@@ -37,56 +41,64 @@ from ._science import (
 NORDER = DETECTOR["numorder"]
 NORDER_RED = DETECTOR["norder"]["RED"]
 
+# A CCF argmin is quantized to the velocity grid, so an argmin check can only
+# resolve half a grid step (injected velocities sit on grid nodes). Sub-grid
+# accuracy is asserted on fitted RVs instead.
+ARGMIN_TOL = 0.5 * STEP_KMS
+# Noiseless fitted-RV tolerance [km/s] = 1 m/s (EPRV error-budget scale).
+RV_TOL = 1e-3
 
-# ---------------------------------------------------------------------------
+
+# ------------------------------------------------------------------
 # _compute_ccf_1d (staticmethod)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
+
+
+def _synthetic_order(v_dip=0.0, z=0.0):
+    wave = np.linspace(5000.0, 5050.0, 2000)
+    centers = np.linspace(5008.0, 5042.0, 20)
+    mask = make_mask(centers)
+    # Observed absorption that the CCF should align at velocity step v_dip.
+    lam_obs = centers * (1.0 + v_dip / SPEED_OF_LIGHT_KMS) / (1.0 + z)
+    flux = absorption_spectrum(wave, lam_obs)
+    var = flux.copy()  # photon-noise proxy
+    vel = np.arange(-402, 403) * 0.25
+    return wave, flux, var, mask, vel
 
 
 class TestComputeCCF:
-    def _order(self, v_dip=0.0, z=0.0):
-        wave = np.linspace(5000.0, 5050.0, 2000)
-        centers = np.linspace(5008.0, 5042.0, 20)
-        mask = make_mask(centers)
-        # Observed absorption that the CCF should align at velocity step v_dip.
-        lam_obs = centers * (1.0 + v_dip / SPEED_OF_LIGHT_KMS) / (1.0 + z)
-        flux = absorption_spectrum(wave, lam_obs)
-        var = flux.copy()  # photon-noise proxy
-        vel = np.arange(-402, 403) * 0.25
-        return wave, flux, var, mask, vel
-
     def test_dip_at_injected_velocity(self):
-        wave, flux, var, mask, vel = self._order(v_dip=3.0, z=0.0)
+        wave, flux, var, mask, vel = _synthetic_order(v_dip=3.0, z=0.0)
         ccf, _ = CrossCorrelation._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
-        assert vel[np.argmin(ccf)] == pytest.approx(3.0, abs=0.3)
+        assert vel[np.argmin(ccf)] == pytest.approx(3.0, abs=ARGMIN_TOL)
 
     def test_zero_velocity_dip(self):
-        wave, flux, var, mask, vel = self._order(v_dip=0.0, z=0.0)
+        wave, flux, var, mask, vel = _synthetic_order(v_dip=0.0, z=0.0)
         ccf, _ = CrossCorrelation._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
-        assert vel[np.argmin(ccf)] == pytest.approx(0.0, abs=0.3)
+        assert vel[np.argmin(ccf)] == pytest.approx(0.0, abs=ARGMIN_TOL)
 
     def test_barycorr_z_folds_in(self):
         z = 5.0 / SPEED_OF_LIGHT_KMS
-        wave, flux, var, mask, vel = self._order(v_dip=2.0, z=z)
+        wave, flux, var, mask, vel = _synthetic_order(v_dip=2.0, z=z)
         ccf, _ = CrossCorrelation._compute_ccf_1d(wave, flux, var, mask, vel, z)
-        assert vel[np.argmin(ccf)] == pytest.approx(2.0, abs=0.3)
+        assert vel[np.argmin(ccf)] == pytest.approx(2.0, abs=ARGMIN_TOL)
 
     def test_descending_wave_raises(self):
-        wave, flux, var, mask, vel = self._order(v_dip=0.0)
+        wave, flux, var, mask, vel = _synthetic_order(v_dip=0.0)
         with pytest.raises(ValueError, match="descending"):
             CrossCorrelation._compute_ccf_1d(
                 wave[::-1], flux[::-1], var[::-1], mask, vel, 0.0
             )
 
     def test_constant_wave_returns_zeros(self):
-        wave, flux, var, mask, vel = self._order()
+        wave, flux, var, mask, vel = _synthetic_order()
         ccf, _ = CrossCorrelation._compute_ccf_1d(
             np.full_like(wave, 5000.0), flux, var, mask, vel, 0.0
         )
         assert not np.any(ccf)
 
     def test_nan_wave_returns_zeros(self):
-        wave, flux, var, mask, vel = self._order()
+        wave, flux, var, mask, vel = _synthetic_order()
         wave = wave.copy()
         wave[1000] = np.nan
         ccf, _ = CrossCorrelation._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
@@ -104,7 +116,7 @@ class TestComputeCCF:
     def test_ccf_var_propagates_var_not_flux(self):
         # ccf_var carries the per-pixel VARIANCE, not the flux: scaling var
         # scales ccf_var but leaves the CCF value unchanged.
-        wave, flux, var, mask, vel = self._order(v_dip=0.0)
+        wave, flux, var, mask, vel = _synthetic_order(v_dip=0.0)
         ccf1, var1 = CrossCorrelation._compute_ccf_1d(wave, flux, var, mask, vel, 0.0)
         ccf2, var2 = CrossCorrelation._compute_ccf_1d(
             wave, flux, 4.0 * var, mask, vel, 0.0
@@ -112,19 +124,45 @@ class TestComputeCCF:
         np.testing.assert_allclose(ccf1, ccf2)
         np.testing.assert_allclose(var2, 4.0 * var1)
 
-    def test_ccf_1d_is_float64_from_float32_flux(self):
-        # A float64 CCF from float32 flux is the intended deliberate upcast.
-        wave, flux, var, mask, vel = self._order(v_dip=0.0)
-        ccf, ccf_var = CrossCorrelation._compute_ccf_1d(
-            wave, flux.astype(np.float32), var.astype(np.float32), mask, vel, 0.0
-        )
-        assert_dtype(ccf, CCF, "ccf")
-        assert_dtype(ccf_var, CCF, "ccf_var")
+
+class TestBarycentricConvention:
+    """The CCF consumes BARYCORR_Z in barycorrpy's convention, z = BC / c.
+
+    barycorrpy defines the corrected redshift as (1 + z_true) = (1 + z_B)(1 +
+    z_meas) with BC = c * z_B. A star at fixed barycentric velocity must give
+    the same RV at every BERV; an error of order BC**2 / (2c) (1.5 m/s at 30
+    km/s) would be an annual RV systematic.
+    """
+
+    def test_rv_independent_of_berv(self):
+        # 0.05 m/s bound: well below the 1.5 m/s a relativistic-vs-linear z mixup
+        # produces at |BC| = 30 km/s, and above float64 fit noise.
+        wave = np.linspace(5000.0, 5050.0, 6000)
+        centers = np.linspace(5010.0, 5040.0, 40)
+        mask = make_mask(centers, width=0.5)
+        vel = np.arange(-60, 61) * STEP_KMS
+        vps = RadialVelocity._pixel_velocity_scale(wave[0], wave[-1], wave.size)
+        v_star = 0.37  # km/s, barycentric, off-grid
+        rvs = []
+        for bc in (-30.0, 0.0, 30.0):
+            z_b = bc / SPEED_OF_LIGHT_KMS
+            lam_obs = centers * compute_doppler_factor(v_star * u.km / u.s) / (1 + z_b)
+            flux = 1e4 * absorption_spectrum(wave, lam_obs, sigma_kms=3.0)
+            ccf, ccf_var = CrossCorrelation._compute_ccf_1d(
+                wave, flux, flux, mask, vel, z_b
+            )
+            rvs.append(
+                RadialVelocity._compute_rv_1d(
+                    vel, ccf, ccf_var, vps, 0.5, [-10.0, 10.0]
+                )[0]
+            )
+        assert np.ptp(rvs) < 0.05e-3
+        assert rvs[1] == pytest.approx(v_star, abs=RV_TOL)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Dispatch / build helpers (header-only fixture)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -348,9 +386,9 @@ class TestBuildVelocityGrid:
         )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # compute_ccfs / perform  (synthetic KPF2 + monkeypatched mask)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
@@ -358,8 +396,9 @@ def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
     by V_INJECT) for every orderlet.
 
     ``berv`` (length NORDER, km/s) puts each order in its own barycentric frame:
-    BARYCORR_Z/_KMS carry it and the observed lines are placed at
-    ``MASK_CENTERS * (1 + V_INJECT/c) / (1 + z)``, the convention
+    BARYCORR_Z/_KMS carry it (z = berv/c, barycorrpy's convention) and the
+    observed lines are placed at ``MASK_CENTERS * D(V_INJECT) / (1 + z)``, D the
+    relativistic Doppler factor -- the convention
     ``_compute_ccf_1d`` implements (it divides the mask shift by ``1 + z``).
     Recovering V_INJECT then requires the module to have removed the right
     order's z. ``wave_offsets`` (length NORDER, Angstrom) gives each order its
@@ -383,7 +422,9 @@ def _build_cc_kpf2(berv=None, wave_offsets=None, bjd=None):
     rows = {}
     for order in range(NORDER):
         lam_obs = (
-            MASK_CENTERS * (1.0 + V_INJECT / SPEED_OF_LIGHT_KMS) / (1.0 + z[order])
+            MASK_CENTERS
+            * compute_doppler_factor(V_INJECT * u.km / u.s)
+            / (1.0 + z[order])
             + offsets[order]
         )
         wave = wave_1d + offsets[order]
@@ -456,7 +497,7 @@ class TestComputeCCFPublic:
     def test_dip_at_injected_velocity(self, cc_module):
         res = cc_module.compute_ccfs("GREEN", "SCI2")
         vel, ccf = res["velocity"], res["ccf"]
-        assert vel[np.argmin(ccf[0])] == pytest.approx(V_INJECT, abs=0.3)
+        assert vel[np.argmin(ccf[0])] == pytest.approx(V_INJECT, abs=ARGMIN_TOL)
 
     def test_caches_ccf(self, cc_module):
         res = cc_module.compute_ccfs("GREEN", "SCI2")
@@ -480,17 +521,26 @@ class TestComputeCCFPublic:
     def test_barycorr_z_removed_per_order(self, monkeypatch):
         # The plumbing under test is L2 BARYCORR_Z -> {chip}_BARYCORR_Z slice ->
         # barycorr_z[order]. A single constant z would survive a green/red slice
-        # swap or an order off-by-one, so every order gets its own BERV.
+        # swap or an order off-by-one, so every order gets its own BERV. Each
+        # order's CCF is fitted (not argmin'd) so a residual of a few m/s -- e.g.
+        # a neighbouring order's z, 50 m/s away -- cannot hide in the grid step.
         _stub_line_mask(monkeypatch)
         berv = -5.0 + 0.05 * np.arange(NORDER)
         cc = CrossCorrelation(
             _build_cc_kpf2(berv=berv), config={"ccf_window": RANGE_KMS}
         )
+        wave = np.linspace(5000.0, 5050.0, NCOL)
+        vps = RadialVelocity._pixel_velocity_scale(wave[0], wave[-1], NCOL)
         for chip in CHIPS:
             res = cc.compute_ccfs(chip, "SCI2")
-            vel, ccf = res["velocity"], res["ccf"]
-            recovered = vel[np.argmin(ccf, axis=1)]
-            np.testing.assert_allclose(recovered, V_INJECT, atol=0.3)
+            ccf_var = cc._ccf_var[f"{chip}_SCI2"]
+            recovered = [
+                RadialVelocity._compute_rv_1d(
+                    res["velocity"], ccf, var, vps, cc.ccf_mask_width, RANGE_KMS
+                )[0]
+                for ccf, var in zip(res["ccf"], ccf_var, strict=True)
+            ]
+            np.testing.assert_allclose(recovered, V_INJECT, rtol=0, atol=RV_TOL)
 
     def test_barycorr_z_sign_is_pinned(self, monkeypatch):
         # Negating only BARYCORR_Z (leaving the spectra alone) must displace the
@@ -503,7 +553,7 @@ class TestComputeCCFPublic:
         cc = CrossCorrelation(kpf2, config={"ccf_window": RANGE_KMS})
         res = cc.compute_ccfs("GREEN", "SCI2")
         recovered = res["velocity"][np.argmin(res["ccf"][0])]
-        assert recovered == pytest.approx(V_INJECT - 2 * berv[0], abs=0.3)
+        assert recovered == pytest.approx(V_INJECT - 2 * berv[0], abs=ARGMIN_TOL)
 
     def test_all_zero_ccf_raises(self, cc_module):
         # No usable signal across the whole orderlet -> fail loudly instead of
@@ -607,23 +657,23 @@ class TestPerform:
         vel = cc_module._velocity_grid["RED_SCI2"]
         for fiber in self._ILLUMINATED:
             ccf0 = np.asarray(l4.data[f"{fiber}_CCF"])[0]
-            assert vel[np.argmin(ccf0)] == pytest.approx(V_INJECT, abs=0.3)
+            assert vel[np.argmin(ccf0)] == pytest.approx(V_INJECT, abs=ARGMIN_TOL)
 
     def test_rv_table_weight_column_matches_order_weights(self, performed):
-        # The per-order CCF-combination weights (ccf_order_weights.csv, column
-        # by the orderlet's mask) are persisted as the WEIGHT column, green
-        # orders then red, matching _get_order_weights.
-        cc_module, l4 = performed
+        # The per-order CCF-combination weights are persisted as the WEIGHT
+        # column, green orders then red. Oracle values are hand-pinned from
+        # reference/ccf_order_weights.csv, G2_espresso column (the SCI target's
+        # BP-RP 0.823 -> G2; SKY also uses G2): GREEN 0..14 zero, GREEN 19 = 1.0,
+        # RED 1 = 0.1074; chip sums GREEN 12.2085, RED 2.9594.
+        _, l4 = performed
         for fiber in self._ILLUMINATED:
             weight = np.asarray(l4.data[f"{fiber}_RV"]["WEIGHT"], dtype=float)
-            expected = np.concatenate(
-                [
-                    cc_module._get_order_weights("GREEN", fiber),
-                    cc_module._get_order_weights("RED", fiber),
-                ]
-            )
             assert weight.shape == (NORDER,)
-            np.testing.assert_array_equal(weight, expected)
+            assert not np.any(weight[:15])
+            assert weight[19] == pytest.approx(1.0)
+            assert weight[NORDER_GREEN + 1] == pytest.approx(0.1074)
+            assert weight[:NORDER_GREEN].sum() == pytest.approx(12.2085)
+            assert weight[NORDER_GREEN:].sum() == pytest.approx(2.9594)
 
     def test_rv_table_order_id_and_echelle_columns(self, performed):
         # ORDER_ID is the KPF chip/fiber/order name, 0-based per chip (green then
@@ -750,3 +800,21 @@ class TestConstructor:
         out = capsys.readouterr().out
         assert "CrossCorrelation" in out
         assert "SCI2" in out
+
+
+# ------------------------------------------------------------------
+# Dtype provenance
+# ------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """The CCF is a deliberate float64 upcast from float32 flux."""
+
+    def test_ccf_1d_is_float64_from_float32_flux(self):
+        # A float64 CCF from float32 flux is the intended deliberate upcast.
+        wave, flux, var, mask, vel = _synthetic_order(v_dip=0.0)
+        ccf, ccf_var = CrossCorrelation._compute_ccf_1d(
+            wave, flux.astype(np.float32), var.astype(np.float32), mask, vel, 0.0
+        )
+        assert_dtype(ccf, CCF, "ccf")
+        assert_dtype(ccf_var, CCF, "ccf_var")

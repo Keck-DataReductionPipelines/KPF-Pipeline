@@ -60,10 +60,16 @@ class TestComputeRedshift:
         assert compute_redshift(+18.508 * u.km / u.s) > 0
         assert compute_redshift(-18.508 * u.km / u.s) < 0
 
-    def test_nonrelativistic_magnitude(self):
-        # For v << c, z ~ v/c.
+    def test_relativistic_formula(self):
+        # compute_redshift is the special-relativistic Doppler shift
+        # sqrt((1+b)/(1-b)) - 1. It differs from b = v/c by about b**2/2,
+        # 0.57 m/s at 18.5 km/s (relative 3e-5). rel=1e-12 pins the formula;
+        # the second assert shows that b alone would not pass.
         v = -18.508 * u.km / u.s
-        assert compute_redshift(v) == pytest.approx(v.value / C_KMS, rel=1e-4)
+        beta = v.value / C_KMS
+        exact = np.sqrt((1.0 + beta) / (1.0 - beta)) - 1.0
+        assert compute_redshift(v) == pytest.approx(exact, rel=1e-12)
+        assert abs(compute_redshift(v) - beta) > 0.25 * beta**2
 
     def test_factor_is_one_plus_z(self):
         v = 30.0 * u.km / u.s
