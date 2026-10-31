@@ -1,9 +1,9 @@
 """Shared argparse parent parsers for the ``kpfpipe`` CLI commands.
 
-Common flag groups -- recipe/config selection, data-dir overrides, logging
+Common flag groups -- config selection, data-dir overrides, logging
 overrides, stage selection, the fan-out pool controls, and the mini-db ``--cache``
-mode -- factored
-out so the subcommand parsers (``reduce``/``masters``/``science``) compose them via
+mode -- factored out so the subcommand parsers
+(``reduce``/``masters``/``science``/``engineering``) compose them via
 ``parents=[...]`` instead of each re-declaring the same flags. Every factory
 returns a fresh ``add_help=False`` parser to slot in as a parent. The
 ``kpfpipe analyze`` scripts compose `analysis_parser`, itself built from these same
@@ -21,24 +21,16 @@ import sys
 import time
 
 from kpfpipe.utils.io import read_token_file
-from kpfpipe.utils.kpf import is_datecode
+from kpfpipe.utils.kpf import is_datecode, is_obs_id
 
 
-def recipe_and_config_parser():
-    """Recipe + config selection (``-r``/``-c``), shared by all three commands.
+def config_parser():
+    """Config selection (``-c``), shared by every recipe-running command.
 
-    They override the command's default recipe/config pair: for the orchestrators
-    that default is their fixed kind's pair; for ``run`` it comes from a
-    ``--masters``/``--science`` shortcut (or, given neither, ``-r``/``-c`` are the
-    base specification).
+    Overrides the command's default config. The recipe is never overridden here:
+    each orchestrator runs its fixed recipe, and ``run`` selects its own.
     """
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument(
-        "-r",
-        "--recipe",
-        default=None,
-        help="recipe .py to run; overrides the default recipe",
-    )
     p.add_argument(
         "-c",
         "--config",
@@ -134,12 +126,68 @@ def resolve_dates(ap, args):
     return args
 
 
-def data_dirs_parser(science_output=True):
+def obs_ids_parser():
+    """The ``--obs_ids`` flag of the frame commands; validated by `resolve_obs_ids`
+    (via `resolve_frame_selection`)."""
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument(
+        "--obs_ids",
+        nargs="+",
+        metavar="OBS_ID_OR_FILE",
+        help="one or more obs_ids to reduce, or a text file listing one obs_id per "
+        "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
+        "--obs_ids frames.txt (mutually exclusive with --dates/--date_range)",
+    )
+    return p
+
+
+def resolve_obs_ids(ap, args):
+    """Expand ``--obs_ids`` in place.
+
+    Each value is either an obs_id, used as-is, or a text file of obs_ids expanded in
+    place; a valid obs_id is always read as such, even if a like-named file exists.
+    The result is sorted and deduplicated. Takes the command's own `ap` so a bad
+    value reports as its usage error. Returns `args`.
+    """
+    obs_ids = []
+    for entry in args.obs_ids:
+        if is_obs_id(entry):
+            obs_ids.append(entry)
+        elif os.path.isfile(entry):
+            for oid in read_token_file(entry):
+                if not is_obs_id(oid):
+                    ap.error(f"not a valid obs_id in {entry}: {oid!r}")
+                obs_ids.append(oid)
+        else:
+            ap.error(
+                f"--obs_ids entry is neither an obs_id nor a readable file: {entry!r}"
+            )
+    if not obs_ids:
+        ap.error(f"--obs_ids produced no obs_ids (empty file?): {args.obs_ids}")
+    args.obs_ids = sorted(set(obs_ids))
+    return args
+
+
+def resolve_frame_selection(ap, args):
+    """Validate a frame command's selection: exactly one of ``--obs_ids``,
+    ``--dates``, or ``--date_range``, resolved by `resolve_obs_ids` or
+    `resolve_dates`. Nights expand to obs_ids later, once the data root is known
+    (`_scan.obs_ids_in_nights`). Returns `args`.
+    """
+    if sum(v is not None for v in (args.obs_ids, args.dates, args.date_range)) != 1:
+        ap.error("give exactly one of --obs_ids, --dates, or --date_range")
+    if args.obs_ids is not None:
+        return resolve_obs_ids(ap, args)
+    return resolve_dates(ap, args)
+
+
+def data_dirs_parser(science_output=True, engineering_output=False):
     """[DATA_DIRS] override flags, plus the ``--input_dir``/``--output_dir``
     convenience shortcuts. ``--kpf_science_output`` is included only when
-    `science_output` is true (masters produces no science output). ``--input_dir``
-    aliases ``--kpf_data_input``; ``--output_dir`` is fanned out post-parse by
-    `resolve_dir_shortcuts`."""
+    `science_output` is true (masters produces no science output), and
+    ``--kpf_engineering_output`` only when `engineering_output` is true.
+    ``--input_dir`` aliases ``--kpf_data_input``; ``--output_dir`` is fanned out
+    post-parse by `resolve_dir_shortcuts`."""
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(
         "--kpf_data_input",
@@ -154,26 +202,32 @@ def data_dirs_parser(science_output=True):
         p.add_argument(
             "--kpf_science_output", help="override [DATA_DIRS] KPF_SCIENCE_OUTPUT"
         )
+    if engineering_output:
+        p.add_argument(
+            "--kpf_engineering_output",
+            help="override [DATA_DIRS] KPF_ENGINEERING_OUTPUT",
+        )
     p.add_argument(
         "--output_dir",
         default=None,
         help="shortcut: root for every output directory not given its own explicit "
-        "flag -- the masters output, the science output (where applicable), the log "
-        "dir ({output_dir}/logs), and (timeseries) the plot dir "
+        "flag -- the masters output, the science and engineering outputs (where "
+        "applicable), the log dir ({output_dir}/logs), and (timeseries) the plot dir "
         "({output_dir}/QLP/timeseries)",
     )
     return p
 
 
-# Where each --output_dir slot lands beneath the given root. The masters/science
-# outputs take the root verbatim (their path builders add the substructure); every
-# directory a flag names outright -- log, plot, analysis -- gets its conventional
-# subdirectory here, so --output_dir yields the same layout an explicit
-# --log_dir/--plot_dir/--analysis_dir would (the plot subdir matches the timeseries
-# default of {science_output}/QLP/timeseries).
+# Where each --output_dir slot lands beneath the given root. The
+# masters/science/engineering outputs take the root verbatim (their path builders
+# add the substructure); every directory a flag names outright -- log, plot,
+# analysis -- gets its conventional subdirectory here, so --output_dir yields the
+# same layout an explicit --log_dir/--plot_dir/--analysis_dir would (the plot
+# subdir matches the timeseries default of {science_output}/QLP/timeseries).
 _OUTPUT_DIR_SLOTS = {
     "kpf_masters_output": (),
     "kpf_science_output": (),
+    "kpf_engineering_output": (),
     "log_dir": ("logs",),
     "plot_dir": ("QLP", "timeseries"),
     "analysis_dir": ("analysis",),
@@ -248,10 +302,11 @@ def cache_parser(default="r"):
     return p
 
 
-def stages_parser(stages):
+def stages_parser(stages=None):
     """``--stages``, which overrides the config's [STAGES] switches.
 
-    The caller passes the recipe's stage names (this layer never imports recipes).
+    The caller passes the recipe's stage names as choices (this layer never imports
+    recipes); ``None`` when the recipe is only known after parsing.
     """
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(
@@ -278,7 +333,7 @@ def pool_parser(jobs_help):
 
     ``--jobs`` help differs per command (masters cites its fixed cap, science its
     cores-based default), so the caller passes it in; ``--job_timeout`` is
-    identical across masters and science and lives here so it is written once. Both
+    identical across the orchestrators and lives here so it is written once. Both
     default to ``None``/``1200`` and are validated + resolved post-parse by each
     command's ``parse_args``.
     """

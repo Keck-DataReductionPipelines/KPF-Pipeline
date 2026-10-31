@@ -126,12 +126,10 @@ class TestParseArgs:
     def test_config_defaults_to_none(self, m):
         assert m.parse_args(["--dates", "20240405"]).config is None
 
-    def test_recipe_defaults_to_none(self, m):
-        assert m.parse_args(["--dates", "20240405"]).recipe is None
-
-    def test_recipe_override_parses(self, m):
-        ns = m.parse_args(["--dates", "20240405", "-r", "/x.py"])
-        assert ns.recipe == "/x.py"
+    def test_rejects_recipe_override(self, m):
+        # The orchestrator runs its fixed recipe; -r is not accepted.
+        with pytest.raises(SystemExit):
+            m.parse_args(["--dates", "20240405", "-r", "/x.py"])
 
     def test_jobs_unset_resolves_to_masters_default(self, m):
         ns = m.parse_args(["--dates", "20240405"])
@@ -165,34 +163,21 @@ class TestParseArgs:
 
 class TestCliTask:
     def test_builds_masters_argv_with_defaults(self, m):
-        # No -r/-c override: the masters default recipe/config are passed explicitly.
-        tag, argv = m._cli_task("20240405", ["--log_level", "DEBUG"])
+        # No -c override: the masters recipe and default config are passed explicitly.
+        tag, argv = m._cli_task("20240405", ["--log_level", "DEBUG"], stage="bias")
         assert tag == "20240405"
         assert argv == [
             sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", m.DEFAULT_MASTERS_CONFIG,
-            "-d", "20240405", "--log_level", "DEBUG",
-        ]  # fmt: skip
-
-    def test_recipe_and_config_overrides(self, m):
-        _, argv = m._cli_task("20240405", [], config="/c.toml", recipe="/x.py")
-        assert argv == [
-            sys.executable, "-m", "scripts.process.reduce",
-            "-r", "/x.py", "-c", "/c.toml", "-d", "20240405",
-        ]  # fmt: skip
-
-    def test_recipe_override_keeps_default_config(self, m):
-        _, argv = m._cli_task("20240405", [], recipe="/x.py")
-        assert argv == [
-            sys.executable, "-m", "scripts.process.reduce",
-            "-r", "/x.py", "-c", m.DEFAULT_MASTERS_CONFIG, "-d", "20240405",
+            "-d", "20240405", "--log_level", "DEBUG", "--stages", "bias",
         ]  # fmt: skip
 
     def test_config_override_keeps_default_recipe(self, m):
-        _, argv = m._cli_task("20240405", [], config="/c.toml")
+        _, argv = m._cli_task("20240405", [], stage="bias", config="/c.toml")
         assert argv == [
             sys.executable, "-m", "scripts.process.reduce",
             "-r", m.DEFAULT_MASTERS_RECIPE, "-c", "/c.toml", "-d", "20240405",
+            "--stages", "bias",
         ]  # fmt: skip
 
     def test_stage_is_appended(self, m):
@@ -272,7 +257,7 @@ class TestMainExitCode:
             m, "run_stage", lambda *a, **k: order.append("run_stage") or set()
         )
         m.main(["--dates", "20240405"])
-        assert order == ["warm"] + ["run_stage"] * len(m.STAGES)
+        assert order == ["warm"] + ["run_stage"] * len(m.RECIPE_STAGES)
         assert warm_args["data_input"] == "/in"  # resolved L0 input root
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["jobs"] == m._default_masters_jobs()
@@ -353,8 +338,8 @@ class TestMainExitCode:
         calls = []
         self._patch(m, monkeypatch, failed=[], calls=calls)
         m.main(["--dates", "20240405", "20240406"])
-        assert len(calls) == len(m.STAGES)
-        for stage, call in zip(m.STAGES, calls, strict=True):
+        assert len(calls) == len(m.RECIPE_STAGES)
+        for stage, call in zip(m.RECIPE_STAGES, calls, strict=True):
             tasks = call["args"][1]
             assert [tag for tag, _ in tasks] == ["20240405", "20240406"]
             for _, argv in tasks:
@@ -386,7 +371,7 @@ class TestMainExitCode:
 
     def test_a_failure_in_any_stage_fails_the_batch(self, m, monkeypatch):
         self._patch(m, monkeypatch, failed=[])
-        results = iter([set(), {"20240405"}] + [set()] * (len(m.STAGES) - 2))
+        results = iter([set(), {"20240405"}] + [set()] * (len(m.RECIPE_STAGES) - 2))
         monkeypatch.setattr(m, "run_stage", lambda *a, **k: next(results))
         with pytest.raises(SystemExit) as exc:
             m.main(["--dates", "20240405", "20240406"])

@@ -43,7 +43,7 @@ from scripts._argparse import (
     resolve_dates,
     resolve_dir_shortcuts,
 )
-from scripts._dispatch import _default_science_jobs
+from scripts._dispatch import _default_frame_jobs
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
@@ -218,7 +218,7 @@ def main(argv=None):
     logger.info("date_range: %s..%s", start, end)
     logger.info("analysis log: %s", log_path)
 
-    jobs = args.jobs or _default_science_jobs()
+    jobs = args.jobs or _default_frame_jobs()
     rows = scan_lamp_serial_numbers(
         args.kpf_data_input, start, end, jobs, cache=args.cache
     )

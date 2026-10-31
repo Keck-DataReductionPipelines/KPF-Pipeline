@@ -23,6 +23,9 @@ barycentric_correction = true
 cross_correlation = true
 radial_velocity = true
 
+[QUALITY_CONTROL]
+qc_level = "default"    # "none", "default", "strict", or "engineering"
+
 [MODULE_ASTRO_QUERY]
 do_gaia_query = true
 do_simbad_query = true

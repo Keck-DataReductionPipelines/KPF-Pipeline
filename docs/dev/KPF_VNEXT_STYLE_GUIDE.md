@@ -240,7 +240,7 @@ modules — follow *its* conventions:
 Config files:
 
 - **TOML via stdlib `tomllib`**, one per recipe sharing the recipe basename. Sections are
-  `UPPER_SNAKE`: the fixed `[DATA_DIRS]`/`[TRACES]` globals plus per-module `[MODULE_<NAME>]`
+  `UPPER_SNAKE`: the fixed `[DATA_DIRS]`/`[TRACES]` globals, `[QUALITY_CONTROL]` (science/engineering only), plus per-module `[MODULE_<NAME>]`
   matching the class, pulled via `config.get_params([...])`. Keys are `lower_snake_case` (except
   `[DATA_DIRS]`, which is `UPPER_SNAKE`); floats carry an explicit `.0` in TOML arrays.
 

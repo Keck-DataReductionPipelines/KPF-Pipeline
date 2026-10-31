@@ -613,6 +613,20 @@ class TestKpfFilename:
             kpf_filename("KP.20240405.40113.57", "L4") == "kpf_SL4_20240405T110833.fits"
         )
 
+    def test_engineering_l2(self):
+        # Not EPRV-compliant, so never the "kpf_SL2" prefix.
+        assert (
+            kpf_filename("KP.20240405.40113.57", "L2", engineering=True)
+            == "kpf_EngL2_20240405T110833.fits"
+        )
+
+    def test_engineering_filepath_under_engineering_tree(self):
+        assert kpf_filepath(
+            "KP.20240405.40113.57", "L2", data_root="/r", engineering=True
+        ) == os.path.join(
+            "/r", "engineering", "L2", "20240405", "kpf_EngL2_20240405T110833.fits"
+        )
+
     def test_master(self):
         assert (
             kpf_filename("KP.20240405.03600.00", "L1", master="bias")
@@ -794,6 +808,23 @@ class TestKpfDirectory:
             kind="QLP", data_root="/data", level="L0", obs_id=self.OBS_ID
         )
         assert path == "/data/QLP/20240405/KP.20240405.49597.71/L0"
+
+    @pytest.mark.parametrize(
+        "kind, expected",
+        [
+            ("science", "/data/engineering/L2/20240405"),
+            ("QLP", "/data/engineering/QLP/20240405/KP.20240405.49597.71/L2"),
+        ],
+    )
+    def test_engineering_roots_under_engineering(self, kind, expected):
+        path = kpf_directory(
+            kind=kind,
+            data_root="/data",
+            level="L2",
+            obs_id=self.OBS_ID,
+            engineering=True,
+        )
+        assert path == expected
 
     def test_cal_stack_by_obs_id(self):
         path = kpf_directory(

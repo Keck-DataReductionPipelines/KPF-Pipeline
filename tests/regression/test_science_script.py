@@ -1,6 +1,6 @@
 """Tests for scripts/process/science.py: the science-reduction driver.
 
-Covers the driver's own surface: arg parsing and obs_id validation, the
+Covers the driver's own surface: arg parsing, the
 ``_cli_task`` argv it fans out, and the ``main`` exit-code contract (nonzero iff
 at least one frame failed). The shared fan-out engine lives in ``_dispatch`` and
 is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
@@ -53,44 +53,24 @@ def _stub_batch_log(monkeypatch, mod):
 
 class TestParseArgs:
     def test_obs_ids(self, s):
+        # Expansion details are tested on resolve_obs_ids (test_script_helpers.py).
         ns = s.parse_args(["--obs_ids", _OID2, _OID1])
         assert ns.obs_ids == [_OID1, _OID2]  # sorted + deduped
 
-    def test_dedupes_obs_ids(self, s):
-        ns = s.parse_args(["--obs_ids", _OID1, _OID1])
-        assert ns.obs_ids == [_OID1]
+    def test_dates_and_date_range(self, s):
+        # Expansion details are tested on resolve_dates (test_script_helpers.py).
+        assert s.parse_args(["--dates", "20240405"]).dates == ["20240405"]
+        ns = s.parse_args(["--date_range", "20240401", "20240430"])
+        assert ns.date_range == ["20240401", "20240430"] and ns.obs_ids is None
 
-    def test_obs_ids_from_file(self, s, tmp_path):
-        f = tmp_path / "frames.txt"
-        f.write_text(f"{_OID2}\n\n{_OID1}\n")  # blank line skipped
-        ns = s.parse_args(["--obs_ids", str(f)])
-        assert ns.obs_ids == [_OID1, _OID2]  # sorted
-
-    def test_obs_ids_mixes_inline_and_file(self, s, tmp_path):
-        f = tmp_path / "frames.txt"
-        f.write_text(f"{_OID2}\n{_OID1}\n")  # _OID1 also given inline
-        ns = s.parse_args(["--obs_ids", _OID1, str(f)])
-        assert ns.obs_ids == [_OID1, _OID2]  # merged + deduped
-
-    def test_obs_ids_file_with_bad_obs_id_errors(self, s, tmp_path):
-        f = tmp_path / "frames.txt"
-        f.write_text(f"{_OID1}\nnot-an-obs-id\n")
+    @pytest.mark.parametrize(
+        "argv",
+        [[], ["--obs_ids", _OID1, "--dates", "20240405"]],
+        ids=["neither", "both"],
+    )
+    def test_exactly_one_selection(self, s, argv):
         with pytest.raises(SystemExit):
-            s.parse_args(["--obs_ids", str(f)])
-
-    def test_obs_ids_empty_file_errors(self, s, tmp_path):
-        f = tmp_path / "empty.txt"
-        f.write_text("\n  \n")
-        with pytest.raises(SystemExit):
-            s.parse_args(["--obs_ids", str(f)])
-
-    def test_obs_id_entry_neither_obs_id_nor_file_errors(self, s):
-        with pytest.raises(SystemExit):
-            s.parse_args(["--obs_ids", "/no/such/file.txt"])
-
-    def test_obs_ids_required(self, s):
-        with pytest.raises(SystemExit):
-            s.parse_args([])
+            s.parse_args(argv)
 
     @pytest.mark.parametrize(
         "argv",
@@ -108,16 +88,14 @@ class TestParseArgs:
     def test_config_defaults_to_none(self, s):
         assert s.parse_args(["--obs_ids", _OID1]).config is None
 
-    def test_recipe_defaults_to_none(self, s):
-        assert s.parse_args(["--obs_ids", _OID1]).recipe is None
-
-    def test_recipe_override_parses(self, s):
-        ns = s.parse_args(["--obs_ids", _OID1, "-r", "/x.py"])
-        assert ns.recipe == "/x.py"
+    def test_rejects_recipe_override(self, s):
+        # The orchestrator runs its fixed recipe; -r is not accepted.
+        with pytest.raises(SystemExit):
+            s.parse_args(["--obs_ids", _OID1, "-r", "/x.py"])
 
     def test_jobs_unset_resolves_to_cores_default(self, s):
         ns = s.parse_args(["--obs_ids", _OID1])
-        assert ns.jobs == s._default_science_jobs()
+        assert ns.jobs == s._default_frame_jobs()
 
     def test_jobs_override(self, s):
         assert s.parse_args(["--obs_ids", _OID1, "--jobs", "3"]).jobs == 3
@@ -148,27 +126,13 @@ class TestParseArgs:
 
 class TestCliTask:
     def test_builds_science_argv_with_defaults(self, s):
-        # No -r/-c override: the science default recipe/config are passed explicitly.
+        # No -c override: the science recipe and default config are passed explicitly.
         tag, argv = s._cli_task(_OID1, ["--log_level", "DEBUG"])
         assert tag == _OID1
         assert argv == [
             sys.executable, "-m", "scripts.process.reduce",
             "-r", s.DEFAULT_SCIENCE_RECIPE, "-c", s.DEFAULT_SCIENCE_CONFIG,
             "-o", _OID1, "--log_level", "DEBUG",
-        ]  # fmt: skip
-
-    def test_recipe_and_config_overrides(self, s):
-        _, argv = s._cli_task(_OID1, [], config="/c.toml", recipe="/x.py")
-        assert argv == [
-            sys.executable, "-m", "scripts.process.reduce",
-            "-r", "/x.py", "-c", "/c.toml", "-o", _OID1,
-        ]  # fmt: skip
-
-    def test_recipe_override_keeps_default_config(self, s):
-        _, argv = s._cli_task(_OID1, [], recipe="/x.py")
-        assert argv == [
-            sys.executable, "-m", "scripts.process.reduce",
-            "-r", "/x.py", "-c", s.DEFAULT_SCIENCE_CONFIG, "-o", _OID1,
         ]  # fmt: skip
 
     def test_config_override_keeps_default_recipe(self, s):
@@ -186,10 +150,13 @@ class TestCliTask:
 
 def _fake_file_handler(rows=()):
     """A FileHandler stand-in whose mini database holds `rows`, each an
-    ``(obs_id, isjunk, green, red)`` tuple."""
+    ``(obs_id, isjunk, green, red[, obstype])`` tuple (obstype default Target)."""
     mini_db = pd.DataFrame(
-        [(f"/in/L0/20240405/{o}.fits", j, g, r) for o, j, g, r in rows],
-        columns=["FILENAME", "ISJUNK", "GREEN", "RED"],
+        [
+            (f"/in/L0/20240405/{o}.fits", j, g, r, *(t or ["Target"]))
+            for o, j, g, r, *t in rows
+        ],
+        columns=["FILENAME", "ISJUNK", "GREEN", "RED", "DRP_OBSTYPE"],
     )
 
     class _FakeFileHandler:
@@ -345,6 +312,61 @@ class TestMainExitCode:
         # Both halves of the run directory, so the child joins the same one.
         assert fwd["--log_dir"] == "/out/logs"
         assert fwd["--run_id"] == "science_x"
+
+    def test_dates_reduce_only_a_nights_target_frames(self, s, monkeypatch, caplog):
+        # A night expands to its frames; calibrations drop silently, junk is still
+        # gated and counted as skipped.
+        calls, seen = [], {}
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        oid3 = "KP.20240405.40300.00"
+
+        def fake_nights(data_input, nights):
+            seen.update(data_input=data_input, nights=nights)
+            return [_OID1, _OID2, oid3]
+
+        monkeypatch.setattr(s, "obs_ids_in_nights", fake_nights)
+        monkeypatch.setattr(
+            s,
+            "FileHandler",
+            _fake_file_handler(
+                [
+                    (_OID1, False, True, True),
+                    (_OID2, False, True, True, "Bias"),
+                    (oid3, True, True, True),
+                ]
+            ),
+        )
+        with caplog.at_level(logging.INFO, logger=s.logger.name):
+            s.main(["--dates", "20240405"])
+        assert seen == {"data_input": "/in", "nights": ["20240405"]}
+        assert [tag for tag, _ in calls[0][0][1]] == [_OID1]
+        assert "done: reduced 1/1 frame(s), 1 skipped" in caplog.text
+
+    def test_date_range_expands_to_the_nights_on_disk(self, s, monkeypatch):
+        calls, seen = [], {}
+        self._patch(s, monkeypatch, failed=[], calls=calls)
+        monkeypatch.setattr(
+            s, "datecodes_in_range", lambda di, a, b: seen.update(r=(a, b)) or [a]
+        )
+        monkeypatch.setattr(s, "obs_ids_in_nights", lambda di, nights: [_OID1])
+        monkeypatch.setattr(
+            s, "FileHandler", _fake_file_handler([(_OID1, False, True, True)])
+        )
+        s.main(["--date_range", "20240405", "20240406"])
+        assert seen["r"] == ("20240405", "20240406")
+        assert [tag for tag, _ in calls[0][0][1]] == [_OID1]
+
+    def test_dates_without_target_frames_warn_and_exit(self, s, monkeypatch, caplog):
+        self._patch(s, monkeypatch, failed=[])
+        monkeypatch.setattr(s, "obs_ids_in_nights", lambda di, nights: [_OID1])
+        monkeypatch.setattr(
+            s, "FileHandler", _fake_file_handler([(_OID1, False, True, True, "Dark")])
+        )
+        with caplog.at_level(logging.WARNING, logger=s.logger.name):
+            with pytest.raises(SystemExit) as exc:
+                s.main(["--dates", "20240405"])
+        assert "no Target frames" in str(exc.value.code)
+        assert "skipping 20240405: no Target frames" in caplog.text
 
     def test_errors_when_log_dir_unset(self, s, monkeypatch):
         # A missing log_dir is fatal before any fan-out.

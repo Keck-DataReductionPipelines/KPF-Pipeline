@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Reduce a set of science frames end-to-end, L0 -> L4 (``kpfpipe science``).
 
-A lightweight, fail-loud orchestrator: it dispatches each frame as a separate
-``python -m scripts.process.reduce --science -o <obs_id>`` subprocess (the
+A lightweight orchestrator: it dispatches each frame as a separate
+``python -m scripts.process.reduce -r <science recipe> -o <obs_id>`` subprocess (the
 ``kpfpipe run`` leaf), so every frame gets its own log file, clean process state,
 and independent exit code. It reimplements no pipeline logic; the caller supplies
 which frames to reduce (discovering a target's frames from the L0 tree lives in
-the timeseries wrapper, not here), via the input form:
+the timeseries wrapper, not here), via one of the input forms:
 
     kpfpipe science --obs_ids KP.20240405.40113.57 KP.20240405.40237.36
     kpfpipe science --obs_ids frames.txt        # a file of obs_ids
+    kpfpipe science --dates 20240405 20240712   # every Target frame of these nights
+    kpfpipe science --date_range 20240401 20240430
 
 Reductions run in a bounded process pool. The L0 mini-database caches for the
 nights the frames span are warmed up front by a parallel per-datecode pre-scan
@@ -17,9 +19,8 @@ nights the frames span are warmed up front by a parallel per-datecode pre-scan
 read-only); the first frame then runs alone as a canary to warm the *other* shared
 caches, then the rest fan out (paced apart, since the per-frame L0 pointing QC
 queries SIMBAD/Gaia). ``--stages`` is forwarded to every frame, overriding the
-config's [STAGES]. The run is fail-soft (a frame that fails to reduce is
-reported and
-the others continue) but exits nonzero if any frame failed.
+config's [STAGES]. The run is fail-soft (a frame that fails to reduce is reported
+and the others continue) but exits nonzero if any frame failed.
 """
 
 import argparse
@@ -29,26 +30,29 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.io import FileHandler, read_token_file
-from kpfpipe.utils.kpf import get_datecode, get_obs_id, is_obs_id
+from kpfpipe.utils.io import FileHandler
+from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
-from recipes.kpf_drp_science import STAGES
+from recipes.kpf_drp_science import RECIPE_STAGES
 from scripts._argparse import (
     cache_parser,
+    config_parser,
     data_dirs_parser,
+    dates_parser,
     logging_parser,
+    obs_ids_parser,
     pool_parser,
-    recipe_and_config_parser,
     resolve_dir_shortcuts,
+    resolve_frame_selection,
     resolve_log_settings,
     stages_parser,
 )
 from scripts._dispatch import (
-    _default_science_jobs,
+    _default_frame_jobs,
     configure_runtime,
     run_stage,
 )
-from scripts._scan import warm_mini_db_caches
+from scripts._scan import datecodes_in_range, obs_ids_in_nights, warm_mini_db_caches
 from scripts.process import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
 
 logger = logging.getLogger(__name__)
@@ -73,60 +77,33 @@ def parse_args(argv=None):
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
-            recipe_and_config_parser(),
+            config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
             pool_parser(jobs_help=_JOBS_HELP),
             cache_parser(default="rw"),
-            stages_parser(STAGES),
+            dates_parser("reduces the Target frames of every L0 night in it"),
+            obs_ids_parser(),
+            stages_parser(RECIPE_STAGES),
         ],
     )
-    ap.add_argument(
-        "--obs_ids",
-        nargs="+",
-        required=True,
-        metavar="OBS_ID_OR_FILE",
-        help="one or more obs_ids to reduce, or a text file listing one obs_id per "
-        "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
-        "--obs_ids frames.txt",
-    )
-    args = ap.parse_args(argv)
-
-    # Each --obs_ids value is an obs_id (reduced as-is) or a text file of obs_ids;
-    # expand file entries in place. A valid obs_id is always read as such, even if
-    # a like-named file exists.
-    obs_ids = []
-    for entry in args.obs_ids:
-        if is_obs_id(entry):
-            obs_ids.append(entry)
-        elif os.path.isfile(entry):
-            for oid in read_token_file(entry):
-                if not is_obs_id(oid):
-                    ap.error(f"not a valid obs_id in {entry}: {oid!r}")
-                obs_ids.append(oid)
-        else:
-            ap.error(
-                f"--obs_ids entry is neither an obs_id nor a readable file: {entry!r}"
-            )
-    if not obs_ids:
-        ap.error(f"--obs_ids produced no obs_ids (empty file?): {args.obs_ids}")
-    args.obs_ids = sorted(set(obs_ids))
+    args = resolve_frame_selection(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
     if args.jobs is None:
-        args.jobs = _default_science_jobs()
+        args.jobs = _default_frame_jobs()
     elif args.jobs < 1:
         ap.error("--jobs must be >= 1")
     return resolve_dir_shortcuts(args)
 
 
-def _cli_task(obs_id, forward, config=None, recipe=None):
+def _cli_task(obs_id, forward, config=None):
     """Build a (tag, argv) task reducing one frame via the ``kpfpipe run`` leaf.
 
-    Passes recipe/config to the leaf explicitly (the science defaults unless
-    `recipe`/`config` override) rather than leaning on its ``--science`` shortcut,
-    so the orchestrator is the single owner of what it runs. `forward` is the
+    Passes the science recipe and config (the default unless `config` overrides) to
+    the leaf explicitly rather than leaning on its ``--science`` shortcut, so the
+    orchestrator is the single owner of what it runs. `forward` is the
     resolved dir/log overrides appended to every invocation; the tag (obs_id)
     keys the sentinel/log paths.
     """
@@ -135,7 +112,7 @@ def _cli_task(obs_id, forward, config=None, recipe=None):
         "-m",
         "scripts.process.reduce",
         "-r",
-        recipe or DEFAULT_SCIENCE_RECIPE,
+        DEFAULT_SCIENCE_RECIPE,
         "-c",
         config or DEFAULT_SCIENCE_CONFIG,
         "-o",
@@ -177,7 +154,13 @@ def main(argv=None):
     if args.stages:
         forward += ["--stages", *args.stages]
 
-    obs_ids = args.obs_ids
+    # Nights expand to every frame in them; the gate below keeps only Targets.
+    by_night = args.obs_ids is None
+    if by_night:
+        nights = args.dates or datecodes_in_range(data_input, *args.date_range)
+        obs_ids = obs_ids_in_nights(data_input, nights)
+    else:
+        obs_ids = args.obs_ids
 
     # Batch banner: the start of this invocation's decision trail.
     logger.info("kpfpipe %s science batch starting", kpfpipe.__version__)
@@ -185,40 +168,54 @@ def main(argv=None):
     logger.info("config: %s", args.config or DEFAULT_SCIENCE_CONFIG)
     logger.info("jobs: %s", args.jobs)
     logger.info("batch log: %s", log_path)
-    logger.info("reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids))
+    if by_night:
+        logger.info("reducing the Target frames of night(s): %s", ", ".join(nights))
+    else:
+        logger.info(
+            "reducing %d science frame(s): %s", len(obs_ids), ", ".join(obs_ids)
+        )
 
     # Warm the L0 mini-db caches up front, one thread per night (--cache, rw
     # default; --cache r skips the pre-scan and leaves reduces to read-only).
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
-    # Gate junk and single-CCD frames out of the science recipe.
-    status = {}
+    # Gate junk and single-CCD frames out of the science recipe, and, for a night,
+    # every frame that is not a Target.
+    # A frame absent from the mini-db (rejected by the scan) is in none of the sets:
+    # not a known Target, but not gated either.
+    junk, single_ccd, targets = set(), set(), set()
     for dc in datecodes:
         mini_db = FileHandler({"KPF_DATA_INPUT": data_input}).build_mini_database(
             dc, cache="r"
         )
-        both_ccds = mini_db[["GREEN", "RED"]].eq(True).all(axis=1)
-        for fn, junk, both in zip(
-            mini_db["FILENAME"], mini_db["ISJUNK"].astype(bool), both_ccds, strict=True
-        ):
-            status[get_obs_id(fn)] = (junk, both)
+        ids = mini_db["FILENAME"].map(get_obs_id)
+        junk |= set(ids[mini_db["ISJUNK"].astype(bool)])
+        single_ccd |= set(ids[~mini_db[["GREEN", "RED"]].eq(True).all(axis=1)])
+        night_targets = set(ids[mini_db["DRP_OBSTYPE"] == "Target"])
+        targets |= night_targets
+        if by_night:
+            logger.info("%s: %d Target frame(s)", dc, len(night_targets))
+            if not night_targets:
+                logger.warning("skipping %s: no Target frames", dc)
+    if by_night:
+        obs_ids = [o for o in obs_ids if o in targets]
+    requested = len(obs_ids)
     kept = []
     for o in obs_ids:
-        junk, both = status.get(o, (False, True))
-        if junk:
+        if o in junk:
             logger.info("skipping %s: junk frame", o)
-        elif not both:
+        elif o in single_ccd:
             logger.warning(
                 "skipping %s: DRP does not yet support single-CCD exposures", o
             )
         else:
             kept.append(o)
     obs_ids = kept
+    if by_night and not obs_ids:
+        sys.exit("error: no Target frames to reduce in the requested night(s)")
 
-    tasks = [
-        _cli_task(o, forward, config=args.config, recipe=args.recipe) for o in obs_ids
-    ]
+    tasks = [_cli_task(o, forward, config=args.config) for o in obs_ids]
     failed = run_stage(
         "science",
         tasks,
@@ -234,7 +231,7 @@ def main(argv=None):
         "done: reduced %d/%d frame(s), %d skipped",
         reduced,
         len(obs_ids),
-        len(args.obs_ids) - len(obs_ids),
+        requested - len(obs_ids),
     )
     if failed:
         sys.exit(1)

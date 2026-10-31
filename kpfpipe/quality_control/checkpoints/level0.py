@@ -14,6 +14,10 @@ class CheckpointL0(Checkpoint):
     """Checkpoints for KPF Level 0 raw data products."""
 
     LEVEL = "L0"
-    RAISE_FLAGS = ("DATAPRL0", "DATTIMOK", "TARGETOK", "READOK")
+    RAISE_FLAGS = {
+        "none": (),
+        "default": ("DATAPRL0", "DATTIMOK", "TARGETOK", "READOK"),
+        "engineering": ("DATAPRL0",),
+    }
     DIAGNOSTICS = (DiagL0, Guider, ExposureMeter, Telemetry)
     QC = QCL0

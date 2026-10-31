@@ -13,6 +13,9 @@ import tempfile
 
 import pytest
 
+import recipes.kpf_drp_engineering as engineering_recipe
+import recipes.kpf_drp_masters as masters_recipe
+import recipes.kpf_drp_science as science_recipe
 from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.io import load_junk_obs_ids
 from scripts.process import reduce as red
@@ -24,6 +27,16 @@ pytestmark = pytest.mark.cli
 
 # A well-formed obs_id with no L0 on disk (see _pass_frame_gate).
 _OID = "KP.20240405.40113.57"
+
+# Stub recipes declare a science type with no stages.
+_SCIENCE_DECL = "RECIPE_TYPE = 'science'\nRECIPE_STAGES = ()\n"
+
+
+@pytest.fixture
+def _stub_is_standard(monkeypatch, tmp_path):
+    # A type is honored only for its standard recipe: stand the stub tmp/rec.py in
+    # for the science one.
+    monkeypatch.setitem(red._STANDARD_RECIPES, "science", str(tmp_path / "rec.py"))
 
 
 class _BothCcdsHeader:
@@ -43,7 +56,7 @@ def _stub_recipe(tmp_path, sentinel):
     """A recipe file whose main() records the resolved KPF_DATA_INPUT."""
     recipe = tmp_path / "rec.py"
     recipe.write_text(
-        "def main(config, args):\n"
+        _SCIENCE_DECL + "def main(config, args):\n"
         f"    with open({str(sentinel)!r}, 'w') as fh:\n"
         "        fh.write(config.get_params(['DATA_DIRS'])['KPF_DATA_INPUT'])\n"
     )
@@ -73,7 +86,7 @@ def _dirs_stub_recipe(tmp_path, sentinel):
     """A recipe whose main() records the resolved DATA_DIRS + [LOGGER] log_dir."""
     recipe = tmp_path / "rec.py"
     recipe.write_text(
-        "def main(config, args):\n"
+        _SCIENCE_DECL + "def main(config, args):\n"
         "    d = config.get_params(['DATA_DIRS'])\n"
         "    lg = config.get_params(['LOGGER'])\n"
         f"    with open({str(sentinel)!r}, 'w') as fh:\n"
@@ -96,6 +109,7 @@ def _base_cfg(tmp_path):
     return cfg
 
 
+@pytest.mark.usefixtures("_stub_is_standard")
 class TestDirShortcuts:
     def test_input_dir_overrides_data_input(self, monkeypatch, tmp_path):
         cfg = _base_cfg(tmp_path)
@@ -104,7 +118,6 @@ class TestDirShortcuts:
         _run(
             monkeypatch,
             [
-                "--science",
                 "-r",
                 str(recipe),
                 "-c",
@@ -125,7 +138,6 @@ class TestDirShortcuts:
         _run(
             monkeypatch,
             [
-                "--science",
                 "-r",
                 str(recipe),
                 "-c",
@@ -141,6 +153,7 @@ class TestDirShortcuts:
         assert masters == "/out" and science == "/out" and log_dir == "/out/logs"
 
 
+@pytest.mark.usefixtures("_stub_is_standard")
 class TestRunLogDir:
     """One run, one log directory -- created here, or joined from a parent script."""
 
@@ -156,7 +169,6 @@ class TestRunLogDir:
         recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
         red.main(
             [
-                "--science",
                 "-r",
                 str(recipe),
                 "-c",
@@ -190,24 +202,26 @@ class TestRunLogDir:
 
 
 class TestShortcutOverride:
-    def test_c_and_r_override_are_accepted(self, monkeypatch, tmp_path):
-        # --science supplies the kind; -r/-c override its defaults rather than erroring.
-        cfg = tmp_path / "custom.toml"
-        cfg.write_text(
-            "[DATA_DIRS]\n"
-            'KPF_DATA_INPUT = "/custom/in"\n'
-            'KPF_MASTERS_OUTPUT = "/m"\n'
-            'KPF_SCIENCE_OUTPUT = "/s"\n'
-            "[LOGGER]\n"
-            'log_dir = "/l"\n'
-        )
-        sentinel = tmp_path / "seen.txt"
-        recipe = _stub_recipe(tmp_path, sentinel)
-        _run(
-            monkeypatch,
-            ["--science", "-r", str(recipe), "-c", str(cfg), "-o", _OID],
-        )
-        assert sentinel.read_text() == "/custom/in"
+    def test_c_overrides_shortcut_config(self, monkeypatch, tmp_path):
+        # --science supplies the recipe; -c overrides its default config.
+        seen = {}
+
+        def _capture(path, overrides=None):
+            seen["config"] = path
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _capture)
+        with pytest.raises(SystemExit):
+            red.main(["--science", "-c", "/custom.toml", "-o", _OID])
+        assert seen["config"] == "/custom.toml"
+
+    @pytest.mark.parametrize("shortcut", ["--science", "--masters"])
+    def test_shortcut_and_r_are_mutually_exclusive(self, shortcut, capsys):
+        # A shortcut already names the recipe; a conflicting -r is a usage error.
+        with pytest.raises(SystemExit) as exc:
+            red.main([shortcut, "-r", "/x.py", "-c", "/c.toml", "-o", _OID])
+        assert exc.value.code == 2
+        assert "not allowed with argument" in capsys.readouterr().err
 
 
 class TestGuards:
@@ -220,13 +234,69 @@ class TestGuards:
         with pytest.raises(SystemExit) as exc:
             red.main(["--masters", "-o", _OID])
         assert exc.value.code == 2
-        assert "masters recipe takes -d/--datecode" in capsys.readouterr().err
+        assert "kpfpipe run builds one masters night" in capsys.readouterr().err
 
     def test_science_rejects_datecode(self, capsys):
         with pytest.raises(SystemExit) as exc:
             red.main(["--science", "-d", "20240405"])
         assert exc.value.code == 2
-        assert "science recipe takes -o/--obs_id" in capsys.readouterr().err
+        assert "kpfpipe run reduces one science frame" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        "recipe, selector, message",
+        [
+            (
+                science_recipe.__file__,
+                ["-d", "20240405"],
+                "kpfpipe run reduces one science frame",
+            ),
+            (
+                masters_recipe.__file__,
+                ["-o", _OID],
+                "kpfpipe run builds one masters night",
+            ),
+        ],
+    )
+    def test_relative_r_gets_the_declared_types_guard(
+        self, recipe, selector, message, tmp_path, monkeypatch, capsys
+    ):
+        # The standard-recipe match is on the resolved path, so a relative -r
+        # spelling of a default recipe keeps its type and is rejected before clearing.
+        cleared = []
+        monkeypatch.setattr(red, "clear_stale_outputs", lambda *a: cleared.append(a))
+        rel = os.path.relpath(recipe)
+        with pytest.raises(SystemExit) as exc:
+            red.main(["-r", rel, "-c", str(_base_cfg(tmp_path)), *selector])
+        assert exc.value.code == 2
+        assert message in capsys.readouterr().err
+        assert not cleared
+
+    def test_engineering_rejects_datecode(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(["--engineering", "-d", "20240405"])
+        assert exc.value.code == 2
+        assert "kpfpipe run reduces one engineering frame" in capsys.readouterr().err
+
+    def test_undeclared_recipe_rejects_stages(self, tmp_path, capsys):
+        recipe = tmp_path / "undeclared.py"
+        recipe.write_text("def main(config, args):\n    pass\n")
+        cfg = str(_base_cfg(tmp_path))
+        with pytest.raises(SystemExit) as exc:
+            red.main(["-r", str(recipe), "-c", cfg, "--stages", "bias"])
+        assert exc.value.code == 2
+        assert "not in this recipe's stages" in capsys.readouterr().err
+
+    def test_engineering_output_override_reaches_data_dirs(self, monkeypatch):
+        seen = {}
+
+        def _capture(path, overrides=None):
+            seen.update(overrides or {})
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _capture)
+        with pytest.raises(SystemExit):
+            red.main(["--engineering", "-o", _OID, "--kpf_engineering_output", "/e"])
+        assert seen["DATA_DIRS"] == {"KPF_ENGINEERING_OUTPUT": "/e"}
 
     def test_science_stages_override_config(self, monkeypatch):
         seen = {}
@@ -239,7 +309,7 @@ class TestGuards:
         with pytest.raises(SystemExit):
             red.main(["--science", "-o", _OID, "--stages", "image_assembly"])
         assert seen["STAGES"] == {
-            st: st == "image_assembly" for st in red.SCIENCE_STAGES
+            st: st == "image_assembly" for st in science_recipe.RECIPE_STAGES
         }
 
     @pytest.mark.parametrize(
@@ -278,14 +348,20 @@ class TestGuards:
         with pytest.raises(SystemExit) as exc:
             red.main(["--masters", "-d", "20240405", "--stages", "biass"])
         assert exc.value.code == 2
-        assert "invalid choice: 'biass'" in capsys.readouterr().err
+        assert "not in this recipe's stages" in capsys.readouterr().err
 
-    def test_missing_recipe_and_config_errors(self, capsys):
-        # No --masters/--science and no explicit -r/-c pair.
+    def test_missing_recipe_errors(self, capsys):
+        # No --masters/--science/-r.
         with pytest.raises(SystemExit) as exc:
             red.main(["-o", _OID])
         assert exc.value.code == 2
-        assert "must specify --masters, --science" in capsys.readouterr().err
+        assert "one of the arguments" in capsys.readouterr().err
+
+    def test_r_requires_c(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            red.main(["-r", "/x.py", "-o", _OID])
+        assert exc.value.code == 2
+        assert "-r/--recipe requires -c/--config" in capsys.readouterr().err
 
     def test_masters_and_science_are_mutually_exclusive(self, capsys):
         with pytest.raises(SystemExit) as exc:
@@ -301,6 +377,151 @@ class TestGuards:
         assert "not allowed with argument" in capsys.readouterr().err
 
 
+class TestUndeclaredRecipe:
+    """A custom recipe without RECIPE_TYPE runs as-is: any or no selector, a warning,
+    and no clearing of any output type's products."""
+
+    @pytest.mark.parametrize(
+        "selector",
+        [["-o", _OID], ["-d", "20240405"], []],
+        ids=["obs_id", "date", "none"],
+    )
+    def test_runs_warns_and_clears_nothing(
+        self, selector, monkeypatch, tmp_path, caplog
+    ):
+        science_root = tmp_path / "sci"
+        cfg = tmp_path / "custom.toml"
+        cfg.write_text(
+            "[DATA_DIRS]\n"
+            'KPF_DATA_INPUT = "/cfg/in"\n'
+            'KPF_MASTERS_OUTPUT = "/cfg/m"\n'
+            f'KPF_SCIENCE_OUTPUT = "{science_root}"\n'
+            "[LOGGER]\n"
+            'log_dir = "/cfg/l"\n'
+        )
+        product = red.kpf_filepath(_OID, "L2", data_root=str(science_root))
+        os.makedirs(os.path.dirname(product))
+        open(product, "w").close()
+        sentinel = tmp_path / "ran.txt"
+        recipe = tmp_path / "custom.py"
+        recipe.write_text(
+            f"def main(config, args):\n    open({str(sentinel)!r}, 'w').close()\n"
+        )
+
+        argv = ["-r", str(recipe), "-c", str(cfg), *selector, "--force_run"]
+        with caplog.at_level(logging.WARNING, logger=red.logger.name):
+            _run(monkeypatch, argv)
+
+        assert sentinel.exists()
+        assert os.path.exists(product)
+        assert "custom/undeclared recipe" in caplog.text
+
+
+class TestCustomRecipeGuard:
+    """Any recipe but a type's standard one runs as custom: confirmed at a [y/n]
+    prompt (or --force_run), and never handed the declared type's clearing."""
+
+    def _setup(self, tmp_path, decl=_SCIENCE_DECL):
+        science_root = tmp_path / "sci"
+        cfg = tmp_path / "custom.toml"
+        cfg.write_text(
+            "[DATA_DIRS]\n"
+            'KPF_DATA_INPUT = "/cfg/in"\n'
+            'KPF_MASTERS_OUTPUT = "/cfg/m"\n'
+            f'KPF_SCIENCE_OUTPUT = "{science_root}"\n'
+            "[LOGGER]\n"
+            'log_dir = "/cfg/l"\n'
+        )
+        product = red.kpf_filepath(_OID, "L2", data_root=str(science_root))
+        os.makedirs(os.path.dirname(product))
+        open(product, "w").close()
+        sentinel = tmp_path / "ran.txt"
+        recipe = tmp_path / "spoof.py"  # a custom path
+        recipe.write_text(
+            decl + "def main(config, args):\n"
+            f"    open({str(sentinel)!r}, 'w').close()\n"
+        )
+        return ["-r", str(recipe), "-c", str(cfg), "-o", _OID], product, sentinel
+
+    def _tty(self, monkeypatch, answer):
+        monkeypatch.setattr(red.sys.stdin, "isatty", lambda: True, raising=False)
+        monkeypatch.setattr("builtins.input", lambda prompt: answer)
+
+    @pytest.mark.parametrize("decl", [_SCIENCE_DECL, "RECIPE_TYPE = 'sceince'\n"])
+    def test_declared_type_is_ignored_and_nothing_cleared(
+        self, decl, monkeypatch, tmp_path
+    ):
+        # A custom recipe claiming a known (or mistyped) type gets the custom path.
+        argv, product, sentinel = self._setup(tmp_path, decl)
+        self._tty(monkeypatch, "y")
+        _run(monkeypatch, argv)
+        assert sentinel.exists()
+        assert os.path.exists(product)
+
+    def test_non_tty_aborts_without_running(self, monkeypatch, tmp_path):
+        argv, product, sentinel = self._setup(tmp_path)
+        monkeypatch.setattr(red.sys.stdin, "isatty", lambda: False, raising=False)
+        with pytest.raises(SystemExit) as exc:
+            _run(monkeypatch, argv)
+        assert "Run aborted" in str(exc.value.code)
+        assert "--force_run" in str(exc.value.code)
+        assert not sentinel.exists()
+
+    def test_yes_runs_and_points_at_force_run(self, monkeypatch, tmp_path, capsys):
+        argv, _, sentinel = self._setup(tmp_path)
+        self._tty(monkeypatch, " Yes\n")
+        _run(monkeypatch, argv)
+        assert sentinel.exists()
+        out = capsys.readouterr().out
+        assert "Executing" in out and "--force_run" in out
+
+    @pytest.mark.parametrize("answer", ["n", "", "maybe"])
+    def test_anything_but_yes_aborts(self, answer, monkeypatch, tmp_path):
+        argv, product, sentinel = self._setup(tmp_path)
+        self._tty(monkeypatch, answer)
+        with pytest.raises(SystemExit) as exc:
+            _run(monkeypatch, argv)
+        assert exc.value.code == "Run aborted"
+        assert not sentinel.exists()
+        assert os.path.exists(product)
+
+    def test_force_run_skips_the_prompt(self, monkeypatch, tmp_path):
+        argv, _, sentinel = self._setup(tmp_path)
+        monkeypatch.setattr("builtins.input", pytest.fail)
+        _run(monkeypatch, [*argv, "--force_run"])
+        assert sentinel.exists()
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--science", "-o", _OID],
+            ["--masters", "-d", "20240405"],
+            ["--engineering", "-o", _OID],
+        ],
+    )
+    def test_standard_recipes_do_not_prompt(self, argv, monkeypatch):
+        monkeypatch.setattr("builtins.input", pytest.fail)
+
+        def _stop(path, overrides=None):
+            raise SystemExit(0)
+
+        monkeypatch.setattr(red, "ConfigHandler", _stop)
+        with pytest.raises(SystemExit) as exc:
+            red.main(argv)
+        assert exc.value.code == 0
+
+    def test_symlink_to_standard_recipe_is_standard(self, tmp_path, capsys):
+        # Its type is honored: the engineering selector check fires, no prompt.
+        link = tmp_path / "link.py"
+        link.symlink_to(red.DEFAULT_ENGINEERING_RECIPE)
+        cfg = str(_base_cfg(tmp_path))
+        with pytest.raises(SystemExit) as exc:
+            red.main(["-r", str(link), "-c", cfg, "-d", "20240405"])
+        assert exc.value.code == 2
+        assert "kpfpipe run reduces one engineering frame" in capsys.readouterr().err
+
+
+@pytest.mark.usefixtures("_stub_is_standard")
 class TestRecipeLoading:
     """reduce.py's recipe-loading failure branches. All in-process via main(),
     no subprocess."""
@@ -326,8 +547,10 @@ class TestRecipeLoading:
         # traceback is guaranteed to reach the log before the nonzero exit
         # (DRP-RUN-08). A bare `raise` here would lose the logged traceback.
         cfg = _base_cfg(tmp_path)
-        recipe = tmp_path / "boom.py"
-        recipe.write_text("def main(config, args):\n    raise RuntimeError('boom')\n")
+        recipe = tmp_path / "rec.py"
+        recipe.write_text(
+            _SCIENCE_DECL + "def main(config, args):\n    raise RuntimeError('boom')\n"
+        )
         _stub_logging(monkeypatch)
         caplog.set_level(logging.CRITICAL)
 
@@ -384,7 +607,8 @@ class _Config:
     def __init__(self, data_dirs, stages=None):
         self._data_dirs = data_dirs
         self._stages = {
-            st: st in (stages or red.MASTERS_STAGES) for st in red.MASTERS_STAGES
+            st: st in (stages or masters_recipe.RECIPE_STAGES)
+            for st in masters_recipe.RECIPE_STAGES
         }
 
     def get_params(self, keys):
@@ -410,7 +634,10 @@ class TestClearStaleOutputs:
         open(stray, "w").close()
 
         red.clear_stale_outputs(
-            _Config({"KPF_SCIENCE_OUTPUT": science_root}), _args(obs_id=self._OID)
+            _Config({"KPF_SCIENCE_OUTPUT": science_root}),
+            _args(obs_id=self._OID),
+            "science",
+            science_recipe.RECIPE_STAGES,
         )
 
         assert not any(os.path.exists(p) for p in targets)
@@ -419,18 +646,31 @@ class TestClearStaleOutputs:
     def test_science_raises_when_output_root_unset(self):
         # No KPF_SCIENCE_OUTPUT -> can't know what to clear; fail loud.
         with pytest.raises(KeyError, match="KPF_SCIENCE_OUTPUT"):
-            red.clear_stale_outputs(_Config({}), _args(obs_id=self._OID))
+            red.clear_stale_outputs(
+                _Config({}),
+                _args(obs_id=self._OID),
+                "science",
+                science_recipe.RECIPE_STAGES,
+            )
 
     def test_masters_raises_when_output_root_unset(self):
         # Same for the masters branch.
         with pytest.raises(KeyError, match="KPF_MASTERS_OUTPUT"):
-            red.clear_stale_outputs(_Config({}), _args(datecode="20240405"))
+            red.clear_stale_outputs(
+                _Config({}),
+                _args(datecode="20240405"),
+                "masters",
+                masters_recipe.RECIPE_STAGES,
+            )
 
     def test_science_noop_for_invalid_obs_id(self, tmp_path):
         # A malformed obs_id can't build a path; skip rather than raise -- the
         # recipe reports the real error.
         red.clear_stale_outputs(
-            _Config({"KPF_SCIENCE_OUTPUT": str(tmp_path)}), _args(obs_id="KP.x")
+            _Config({"KPF_SCIENCE_OUTPUT": str(tmp_path)}),
+            _args(obs_id="KP.x"),
+            "science",
+            science_recipe.RECIPE_STAGES,
         )
 
     def test_masters_removes_night_products_and_stack_subdir(self, tmp_path):
@@ -463,7 +703,10 @@ class TestClearStaleOutputs:
             open(os.path.join(stack_subdir, name), "w").close()
 
         red.clear_stale_outputs(
-            _Config({"KPF_MASTERS_OUTPUT": masters_root}), _args(datecode="20240405")
+            _Config({"KPF_MASTERS_OUTPUT": masters_root}),
+            _args(datecode="20240405"),
+            "masters",
+            masters_recipe.RECIPE_STAGES,
         )
 
         for name in removed:
@@ -503,6 +746,8 @@ class TestClearStaleOutputs:
         red.clear_stale_outputs(
             _Config({"KPF_MASTERS_OUTPUT": masters_root}, stages=stages),
             _args(datecode="20240405"),
+            "masters",
+            masters_recipe.RECIPE_STAGES,
         )
 
         assert sorted(os.listdir(night)) == sorted(products[st] for st in kept)
@@ -510,8 +755,30 @@ class TestClearStaleOutputs:
     def test_masters_noop_when_dir_absent(self, tmp_path):
         # A never-built night has no masters dir; glob matches nothing, no error.
         red.clear_stale_outputs(
-            _Config({"KPF_MASTERS_OUTPUT": str(tmp_path)}), _args(datecode="20240405")
+            _Config({"KPF_MASTERS_OUTPUT": str(tmp_path)}),
+            _args(datecode="20240405"),
+            "masters",
+            masters_recipe.RECIPE_STAGES,
         )
+
+    def test_engineering_removes_only_its_own_l2(self, tmp_path):
+        # Same root for both: the engineering clear must leave the science L2 alone.
+        root = str(tmp_path)
+        eng = red.kpf_filepath(self._OID, "L2", data_root=root, engineering=True)
+        sci = red.kpf_filepath(self._OID, "L2", data_root=root)
+        for p in (eng, sci):
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p, "w").close()
+
+        red.clear_stale_outputs(
+            _Config({"KPF_ENGINEERING_OUTPUT": root, "KPF_SCIENCE_OUTPUT": root}),
+            _args(obs_id=self._OID),
+            "engineering",
+            engineering_recipe.RECIPE_STAGES,
+        )
+
+        assert not os.path.exists(eng)
+        assert os.path.exists(sci)
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +800,7 @@ def _record_cfg(tmp_path):
     return cfg
 
 
+@pytest.mark.usefixtures("_stub_is_standard")
 class TestFrameGate:
     """Junk and single-CCD frames return before the recipe runs."""
 

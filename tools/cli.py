@@ -8,6 +8,7 @@ its own argument parsing:
     kpfpipe run         -- reduce one recipe on one unit, in-process (the leaf)
     kpfpipe masters     -- build nightly master calibrations for a set of datecodes
     kpfpipe science     -- reduce a set of science frames end-to-end (L0 -> L4)
+    kpfpipe engineering -- reduce a set of frames for engineering (L0 -> L2)
     kpfpipe timeseries  -- reduce a star's RV timeseries over a datecode range
     kpfpipe analyze     -- track instrument/calibrator behavior over a date range
     kpfpipe fetch       -- copy KPF data from the remote archive host to a local tree
@@ -25,6 +26,7 @@ Examples:
     kpfpipe run --masters -d 20240405                 # one night, in-process
     kpfpipe masters --dates 20240405 20240712         # batch (fans out `run`)
     kpfpipe science --obs_ids KP.20240405.40113.57
+    kpfpipe engineering --obs_ids KP.20240405.40113.57
     kpfpipe timeseries --target 10700 --date_range 20240101 20240131
     kpfpipe analyze thar --date_range 20240727 20241022
     kpfpipe analyze order_trace --date_range 20221109 20250829
@@ -44,7 +46,14 @@ from scripts.fetch import L0 as fetch_l0
 from scripts.fetch import L2 as fetch_l2
 from scripts.fetch import L4 as fetch_l4
 from scripts.fetch import masters as fetch_masters
-from scripts.process import masters, realtime, reduce, science, timeseries
+from scripts.process import (
+    engineering,
+    masters,
+    realtime,
+    reduce,
+    science,
+    timeseries,
+)
 
 # The `analyze` subcommands, keyed by subject. Kept here rather than in
 # scripts/analyze so the scripts stay ignorant of the dispatcher above them, as
@@ -109,6 +118,7 @@ _COMMANDS = {
     "run": reduce.main,
     "masters": masters.main,
     "science": science.main,
+    "engineering": engineering.main,
     "timeseries": timeseries.main,
     "analyze": _analyze,
     "fetch": _fetch,
@@ -124,6 +134,7 @@ def _usage():
         "  run         reduce one recipe on one unit, in-process (the leaf)\n"
         "  masters     build nightly master calibrations for a set of datecodes\n"
         "  science     reduce a set of science frames end-to-end (L0 -> L4)\n"
+        "  engineering reduce a set of frames for engineering (L0 -> L2)\n"
         "  timeseries  reduce a star's RV timeseries over a datecode range\n"
         "  analyze     track instrument/calibrator behavior over a date range\n"
         "  fetch       copy KPF data from the remote archive host to a local tree\n"

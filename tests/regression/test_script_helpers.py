@@ -51,24 +51,22 @@ def _parse(parents, argv):
     return argparse.ArgumentParser(parents=parents).parse_args(argv)
 
 
-class TestRecipeParser:
-    def test_adds_recipe_and_config(self):
-        ns = _parse(
-            [_argparse.recipe_and_config_parser()], ["-r", "/x.py", "-c", "/y.toml"]
+class TestConfigParser:
+    def test_adds_config(self):
+        assert _parse([_argparse.config_parser()], ["-c", "/y.toml"]).config == (
+            "/y.toml"
         )
-        assert ns.recipe == "/x.py"
+
+    def test_long_option(self):
+        ns = _parse([_argparse.config_parser()], ["--config", "/y.toml"])
         assert ns.config == "/y.toml"
 
-    def test_long_options(self):
-        ns = _parse(
-            [_argparse.recipe_and_config_parser()],
-            ["--recipe", "/x.py", "--config", "/y.toml"],
-        )
-        assert (ns.recipe, ns.config) == ("/x.py", "/y.toml")
-
     def test_default_none(self):
-        ns = _parse([_argparse.recipe_and_config_parser()], [])
-        assert ns.recipe is None and ns.config is None
+        assert _parse([_argparse.config_parser()], []).config is None
+
+    def test_no_recipe_option(self):
+        with pytest.raises(SystemExit):
+            _parse([_argparse.config_parser()], ["-r", "/x.py"])
 
 
 class TestDataDirsParser:
@@ -91,6 +89,16 @@ class TestDataDirsParser:
         assert not hasattr(ns, "kpf_science_output")
         with pytest.raises(SystemExit):
             parser.parse_args(["--kpf_science_output", "/s"])
+
+    def test_engineering_output_only_when_enabled(self):
+        ns = _parse(
+            [_argparse.data_dirs_parser(engineering_output=True)],
+            ["--kpf_engineering_output", "/e"],
+        )
+        assert ns.kpf_engineering_output == "/e"
+        assert not hasattr(
+            _parse([_argparse.data_dirs_parser()], []), ("kpf_engineering_output")
+        )
 
     def test_input_dir_aliases_data_input(self):
         ns = _parse([_argparse.data_dirs_parser()], ["--input_dir", "/in"])
@@ -149,6 +157,18 @@ class TestResolveDirShortcuts:
             self._parser(science_output=False).parse_args(["--output_dir", "/out"])
         )
         assert ns.kpf_masters_output == "/out" and ns.log_dir == "/out/logs"
+        assert not hasattr(ns, "kpf_science_output")
+
+    def test_fans_out_to_engineering_output(self):
+        p = argparse.ArgumentParser(
+            parents=[
+                _argparse.data_dirs_parser(
+                    science_output=False, engineering_output=True
+                )
+            ]
+        )
+        ns = _argparse.resolve_dir_shortcuts(p.parse_args(["--output_dir", "/out"]))
+        assert ns.kpf_engineering_output == "/out"
         assert not hasattr(ns, "kpf_science_output")
 
     def test_noop_without_output_dir(self):
@@ -373,6 +393,101 @@ class TestResolveDates:
         assert args.date_range == ["20240101", "20240131"]
 
 
+_OID1 = "KP.20240405.40113.57"
+_OID2 = "KP.20240405.40237.36"
+
+
+def _resolve_obs_ids(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--obs_ids", nargs="+")
+    return _argparse.resolve_obs_ids(ap, ap.parse_args(argv))
+
+
+class TestResolveObsIds:
+    """The --obs_ids expansion the science and engineering drivers share."""
+
+    def test_obs_ids_pass_through_sorted_and_deduped(self):
+        assert _resolve_obs_ids(["--obs_ids", _OID2, _OID1, _OID1]).obs_ids == [
+            _OID1,
+            _OID2,
+        ]
+
+    def test_a_file_of_obs_ids_expands_in_place(self, tmp_path):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID2}\n\n{_OID1}\n")  # blank line skipped
+        assert _resolve_obs_ids(["--obs_ids", str(f)]).obs_ids == [_OID1, _OID2]
+
+    def test_inline_and_file_entries_merge(self, tmp_path):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID2}\n{_OID1}\n")  # _OID1 also given inline
+        args = _resolve_obs_ids(["--obs_ids", _OID1, str(f)])
+        assert args.obs_ids == [_OID1, _OID2]
+
+    def test_a_bad_obs_id_in_a_file_is_an_error(self, tmp_path, capsys):
+        f = tmp_path / "frames.txt"
+        f.write_text(f"{_OID1}\nnot-an-obs-id\n")
+        with pytest.raises(SystemExit):
+            _resolve_obs_ids(["--obs_ids", str(f)])
+        assert "not a valid obs_id in" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("entry", ["/no/such/file.txt", "20240405"])
+    def test_an_entry_neither_obs_id_nor_file_is_an_error(self, entry, capsys):
+        with pytest.raises(SystemExit):
+            _resolve_obs_ids(["--obs_ids", entry])
+        assert "neither an obs_id nor a readable file" in capsys.readouterr().err
+
+    def test_an_empty_file_is_an_error(self, tmp_path, capsys):
+        f = tmp_path / "empty.txt"
+        f.write_text("\n  \n")
+        with pytest.raises(SystemExit):
+            _resolve_obs_ids(["--obs_ids", str(f)])
+        assert "produced no obs_ids" in capsys.readouterr().err
+
+
+def _resolve_frames(argv):
+    ap = argparse.ArgumentParser(
+        parents=[_argparse.dates_parser("reduces it"), _argparse.obs_ids_parser()]
+    )
+    return _argparse.resolve_frame_selection(ap, ap.parse_args(argv))
+
+
+class TestResolveFrameSelection:
+    """Exactly one of --obs_ids, --dates, --date_range, each resolved as usual."""
+
+    @pytest.mark.parametrize(
+        "argv, attr, expected",
+        [
+            (["--obs_ids", _OID2, _OID1], "obs_ids", [_OID1, _OID2]),
+            (["--dates", "20240712", "20240405"], "dates", ["20240405", "20240712"]),
+            (
+                ["--date_range", "20240401", "20240430"],
+                "date_range",
+                ["20240401", "20240430"],
+            ),
+        ],
+        ids=["obs_ids", "dates", "date_range"],
+    )
+    def test_each_form_resolves(self, argv, attr, expected):
+        assert getattr(_resolve_frames(argv), attr) == expected
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            [],
+            ["--obs_ids", _OID1, "--dates", "20240405"],
+            ["--obs_ids", _OID1, "--date_range", "20240401", "20240430"],
+            ["--dates", "20240405", "--date_range", "20240401", "20240430"],
+        ],
+        ids=["none", "obs_ids+dates", "obs_ids+range", "dates+range"],
+    )
+    def test_not_exactly_one_is_an_error(self, argv, capsys):
+        with pytest.raises(SystemExit):
+            _resolve_frames(argv)
+        assert "exactly one of --obs_ids, --dates, or --date_range" in (
+            capsys.readouterr().err
+        )
+
+
 # ===========================================================================
 # _dispatch.py -- shared subprocess fan-out engine
 # ===========================================================================
@@ -389,7 +504,7 @@ class TestDefaultScienceJobs:
     )
     def test_cap(self, monkeypatch, cpus, expected):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: cpus)
-        assert _dispatch._default_science_jobs() == expected
+        assert _dispatch._default_frame_jobs() == expected
 
 
 class TestDefaultMastersJobs:
@@ -413,9 +528,7 @@ class TestDefaultMastersJobs:
     def test_cores_floor_below_fixed_cap(self, monkeypatch):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 8)
         monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(256))
-        assert (
-            _dispatch._default_masters_jobs() == _dispatch._default_science_jobs() == 8
-        )
+        assert _dispatch._default_masters_jobs() == _dispatch._default_frame_jobs() == 8
 
     def test_unknown_ram_uses_cores_floor_only(self, monkeypatch):
         # 8 cores, not 256: at 256 the cores floor is 64 and never binds, so the
@@ -731,6 +844,39 @@ class TestDatecodesInRange:
             nights = _scan.datecodes_in_range(str(tmp_path), "20240101", "20240131")
         assert nights == ["20240101"]
         assert "scratch" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# obs_ids_in_nights: the night -> frames expansion behind science/engineering --dates
+# ---------------------------------------------------------------------------
+
+
+class TestObsIdsInNights:
+    def _touch(self, root, datecode, *names):
+        night = root / "L0" / datecode
+        night.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (night / name).touch()
+
+    def test_collects_frames_sorted_ignoring_strays(self, tmp_path):
+        self._touch(tmp_path, "20240405", f"{_OID2}.fits", f"{_OID1}.fits")
+        self._touch(tmp_path, "20240405", "KP.notes.fits", f"{_OID1}.txt")
+        self._touch(tmp_path, "20240406", "KP.20240406.00100.00.fits")
+        obs_ids = _scan.obs_ids_in_nights(str(tmp_path), ["20240405", "20240406"])
+        assert obs_ids == [_OID1, _OID2, "KP.20240406.00100.00"]
+
+    def test_empty_night_is_warned_and_skipped(self, tmp_path, caplog):
+        self._touch(tmp_path, "20240405", f"{_OID1}.fits")
+        self._touch(tmp_path, "20240406")
+        with caplog.at_level(logging.WARNING, logger="scripts._scan"):
+            obs_ids = _scan.obs_ids_in_nights(str(tmp_path), ["20240405", "20240406"])
+        assert obs_ids == [_OID1]
+        assert "skipping 20240406: no L0 frames" in caplog.text
+
+    def test_no_frames_in_any_night_exits(self, tmp_path):
+        self._touch(tmp_path, "20240405")
+        with pytest.raises(SystemExit, match="no L0 frames"):
+            _scan.obs_ids_in_nights(str(tmp_path), ["20240405", "20240406"])
 
 
 # ---------------------------------------------------------------------------

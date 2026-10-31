@@ -10,6 +10,10 @@ class CheckpointL4(Checkpoint):
 
     LEVEL = "L4"
     # Missing science CCF/RV or a required PRIMARY keyword is fatal; others warn.
-    RAISE_FLAGS = ("DATAPRL4",)
+    RAISE_FLAGS = {
+        "none": (),
+        "default": ("DATAPRL4",),
+        "engineering": (),
+    }
     DIAGNOSTICS = (DiagL4,)
     QC = QCL4

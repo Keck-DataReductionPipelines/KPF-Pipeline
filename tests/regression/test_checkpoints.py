@@ -7,7 +7,8 @@ headers, then warn or raise (never write). This pins:
     extension (including a raw WMKO native leaked onto an EPRV PRIMARY); skips the
     raw WMKO L0 PRIMARY; passes a clean product.
   - ``raise_on_fatal_qc_flag`` -- a failed (0) flag named in the level's
-    ``RAISE_FLAGS`` raises; any other failed flag warns; all-pass is silent.
+    ``RAISE_FLAGS`` for the configured qc_level raises; any other failed flag
+    warns; all-pass is silent.
 
 ``run()`` additionally folds in the paired Diagnostics + QC stages before the
 checkpoint methods; that orchestration is pinned in ``TestRunFoldsDiagnosticsAndQC``.
@@ -90,7 +91,7 @@ class TestUnregisteredKeywords:
 @pytest.mark.usefixtures("mini_detector")
 class TestQCFlags:
     def test_raise_flag_zero_raises(self):
-        # DATAPRL2 is in CheckpointL2.RAISE_FLAGS, so a 0 is fatal.
+        # DATAPRL2 is in CheckpointL2.RAISE_FLAGS["default"], so a 0 is fatal.
         l2 = KPF2()
         l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (0, "data present")
         with pytest.raises(ValueError, match="DATAPRL2 = 0"):
@@ -149,6 +150,40 @@ class TestQCFlags:
 
 
 @pytest.mark.usefixtures("mini_detector")
+class TestQCLevels:
+    """``qc_level`` selects the level's ``RAISE_FLAGS`` entry."""
+
+    def test_none_does_not_raise_on_failed_flag(self, caplog):
+        l2 = KPF2()
+        l2.headers["QUALITY_CONTROL"]["DATAPRL2"] = (0, "data present")
+        with caplog.at_level(logging.WARNING):
+            CheckpointL2(l2, qc_level="none").raise_on_fatal_qc_flag()
+        assert "DATAPRL2" in caplog.text
+
+    def test_engineering_l0_raises_only_on_dataprl0(self):
+        l0 = KPF0()
+        l0.headers["QUALITY_CONTROL"]["TARGETOK"] = (0, "target resolved")
+        chk = CheckpointL0(l0, qc_level="engineering")
+        chk.raise_on_fatal_qc_flag()  # TARGETOK is not fatal here
+        l0.headers["QUALITY_CONTROL"]["DATAPRL0"] = (0, "data present")
+        with pytest.raises(ValueError, match="DATAPRL0 = 0"):
+            chk.raise_on_fatal_qc_flag()
+
+    def test_default_when_unset(self):
+        chk = CheckpointL2(KPF2())
+        assert chk.qc_level == "default"
+        assert chk.raise_flags == ("DATAPRL2",)
+
+    def test_strict_not_implemented(self):
+        with pytest.raises(NotImplementedError, match="strict"):
+            CheckpointL2(KPF2(), qc_level="strict")
+
+    def test_unknown_level_raises(self):
+        with pytest.raises(ValueError, match="unrecognized qc_level 'lax'"):
+            CheckpointL2(KPF2(), qc_level="lax")
+
+
+@pytest.mark.usefixtures("mini_detector")
 class TestRunFoldsDiagnosticsAndQC:
     """``run()`` runs the paired Diagnostics, then QC, then the checkpoint methods."""
 
@@ -176,6 +211,7 @@ class TestRunFoldsDiagnosticsAndQC:
 
         class FakeCheckpoint(Checkpoint):
             LEVEL = "L2"
+            RAISE_FLAGS = {"default": ()}
             DIAGNOSTICS = (fake_diagnostics("diag"), fake_diagnostics("diag2"))
             QC = FakeQC
 
@@ -200,6 +236,7 @@ class TestRunFoldsDiagnosticsAndQC:
         # silent default.)
         class NoStageCheckpoint(Checkpoint):
             LEVEL = "L2"
+            RAISE_FLAGS = {"default": ()}
 
         chk = NoStageCheckpoint(KPF2())  # clean, empty -> checkpoint methods silent
         with caplog.at_level(logging.WARNING):

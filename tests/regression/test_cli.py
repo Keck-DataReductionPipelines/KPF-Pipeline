@@ -3,7 +3,7 @@
 tools/cli.py is a thin, git-style router: it maps the first argument to a
 subcommand under ``scripts/process/`` and forwards the remaining argv verbatim.
 Only the routing, usage banner, and unknown-command error are covered here; the
-subcommands' own parsing lives in test_{reduce,masters,science}_script.py.
+subcommands' own parsing lives in test_{reduce,masters,science,engineering}_script.py.
 """
 
 import pytest
@@ -19,7 +19,9 @@ pytestmark = pytest.mark.cli
 
 
 class TestDispatch:
-    @pytest.mark.parametrize("command", ["run", "masters", "science", "timeseries"])
+    @pytest.mark.parametrize(
+        "command", ["run", "masters", "science", "engineering", "timeseries"]
+    )
     def test_routes_to_command_with_forwarded_argv(self, command, monkeypatch):
         seen = []
         monkeypatch.setitem(cli._COMMANDS, command, lambda rest: seen.append(rest))

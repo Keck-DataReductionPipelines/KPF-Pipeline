@@ -26,16 +26,18 @@ Running the DRP
 
 The easiest way to run the pipeline is via the command line interface (CLI).
 
-The ``kpfpipe`` command has two main entry points: ``masters`` builds nightly
-calibration products (bias, dark, flat, wavelength solution), and ``science``
-reduces science exposures into RVs. Each takes input/output data directories
-and a datecode (masters) or obs_id (science) to act on.
+The ``kpfpipe`` command has three main entry points: ``masters`` builds nightly
+calibration products (bias, dark, flat, wavelength solution), ``science``
+reduces science exposures into RVs, and ``engineering`` reduces exposures to L2
+for engineering use. Each takes input/output data directories and the nights
+(datecodes) or, for science and engineering, the frames (obs_ids) to act on.
 
 Input/output directories specify the root directory for the data files:
 
 * Input L0 data files should be placed in {input_dir}/L0/
 * Reduced L1/L2/L4 science files will output to {output_dir}/L{n}/
 * Masters files will output to {output_dir}/masters/
+* Engineering files will output to {output_dir}/engineering/
 * Logs will output to {output_dir}/logs/
 * Quicklook plots will output to {output_dir}/QLP
 
@@ -50,7 +52,7 @@ datecode) directly in the CLI:
 
    kpfpipe masters \
        --input_dir /path/to/input/ \
-       --ouput_dir /path/to/output/ \
+       --output_dir /path/to/output/ \
        --dates 20240405 20250912 20250111
 
 Or by passing a plain text file which lists a single datecode per line:
@@ -59,7 +61,7 @@ Or by passing a plain text file which lists a single datecode per line:
 
    kpfpipe masters \
        --input_dir /path/to/input/ \
-       --ouput_dir /path/to/output \
+       --output_dir /path/to/output \
        --dates /path/to/datecodes.txt
 
 You can also generate masters over a range of nights:
@@ -68,7 +70,7 @@ You can also generate masters over a range of nights:
 
    kpfpipe masters \
        --input_dir /path/to/input/ \
-       --ouput_dir /path/to/output/ \
+       --output_dir /path/to/output/ \
        --date_range 20240405 20240418
 
 
@@ -81,7 +83,7 @@ Reduce one or more science frames (identified by their obs_ids):
 
    kpfpipe science \
        --input_dir /path/to/input/ \
-       --ouput_dir /path/to/output/ \
+       --output_dir /path/to/output/ \
        --obs_ids KP.20240405.40113.57 KP.20240912.84491.73
 
 Or by passing a plain text file which lists a single obs_id per line:
@@ -90,12 +92,36 @@ Or by passing a plain text file which lists a single obs_id per line:
 
    kpfpipe science \
        --input_dir /path/to/input/ \
-       --ouput_dir /path/to/output/ \
+       --output_dir /path/to/output/ \
        --obs_ids /path/to/obs_ids.txt
+
+Or reduce every science frame from one or more nights (``--dates`` or
+``--date_range``, as for masters):
+
+.. code-block:: bash
+
+   kpfpipe science \
+       --input_dir /path/to/input/ \
+       --output_dir /path/to/output/ \
+       --dates 20240405
 
 Make sure that ``--output_dir`` specifies the same directory you used
 to run the masters pipeline so the science pipeline knows where to look for
 masters calibrations.
+
+
+Engineering
+-----------
+
+Reduce frames to L2 for engineering use; takes the same frame selection as
+science (``--obs_ids``, ``--dates``, or ``--date_range``):
+
+.. code-block:: bash
+
+   kpfpipe engineering \
+       --input_dir /path/to/input/ \
+       --output_dir /path/to/output/ \
+       --dates 20240405
 
 
 Timeseries
@@ -109,5 +135,5 @@ given date range, use the timeseries command:
    kpfpipe timeseries \
        --target 10700 \
        --input_dir /path/to/input/ \
-       --ouput_dir /path/to/output/ \
+       --output_dir /path/to/output/ \
        --date_range 20240405 20240418

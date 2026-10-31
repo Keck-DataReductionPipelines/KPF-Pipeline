@@ -20,10 +20,13 @@ from recipes._logging import masters_run_summary
 # would not identify this module in the log.
 logger = logging.getLogger("kpfpipe.recipe.masters")
 
+# What this recipe produces; the scripts layer gates selector checks and clearing on it.
+RECIPE_TYPE = "masters"
+
 # Recipe stages in run order. Config [STAGES] switches each on or off, and --stages
 # overrides it (the batch runs one stage across every night before the next, so
 # cross-night masters exist when needed).
-STAGES = ("bias", "dark", "flat", "order_trace", "thar")
+RECIPE_STAGES = ("bias", "dark", "flat", "order_trace", "thar")
 
 
 def main(config, args):
@@ -36,8 +39,7 @@ def main(config, args):
         )
 
     datecode = args.datecode
-    switches = config.get_params(["STAGES"])
-    stages = [s for s in STAGES if switches[s]]
+    stages = [s for s in RECIPE_STAGES if config.get_params(["STAGES"])[s]]
     logger.info("building masters for %s (stages: %s)", datecode, ", ".join(stages))
 
     data_dirs = config.get_params(["DATA_DIRS"])
@@ -188,4 +190,4 @@ def main(config, args):
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit("recipes run only via kpfpipe (see kpfpipe --help), not python")

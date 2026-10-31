@@ -362,7 +362,7 @@ class TestMastersRecipeStageSelection:
             monkeypatch,
             {cal_type: [files] for cal_type, files in STACK_FILES.items()},
         )
-        config.config["STAGES"] = {st: st in stages for st in recipe.STAGES}
+        config.config["STAGES"] = {st: st in stages for st in recipe.RECIPE_STAGES}
         return recipe, config, args, record
 
     def test_runs_only_the_selected_stage(self, tmp_path, monkeypatch):
