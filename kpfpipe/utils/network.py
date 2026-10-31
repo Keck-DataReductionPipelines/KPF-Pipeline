@@ -8,7 +8,7 @@ import time
 import requests
 from astroquery.exceptions import RemoteServiceError
 from astroquery.exceptions import TimeoutError as AstroqueryTimeoutError
-from pyvo.dal import DALServiceError
+from pyvo.dal import DALProtocolError
 from requests.adapters import HTTPAdapter
 
 logger = logging.getLogger(__name__)
@@ -19,10 +19,11 @@ _RETRY_WAITS = (1.0, 2.0, 5.0, 10.0)
 
 # Transient failures worth another attempt. OSError covers the builtin
 # ConnectionError/TimeoutError and every requests exception (RequestException
-# subclasses OSError); DALServiceError is a pyvo service/transport failure. Its
-# sibling DALQueryError -- a malformed query -- is deliberately absent, so a bad ADQL
-# query or an unknown object fails at once instead of burning the full backoff.
-_RETRYABLE = (OSError, AstroqueryTimeoutError, RemoteServiceError, DALServiceError)
+# subclasses OSError); DALProtocolError covers pyvo's service/transport failures
+# (DALServiceError) and unreadable responses (DALFormatError, which is also how pyvo
+# wraps a timeout mid-read). DALQueryError -- a malformed query -- is outside it and
+# deliberately absent, so a bad ADQL query fails at once instead of failing over.
+_RETRYABLE = (OSError, AstroqueryTimeoutError, RemoteServiceError, DALProtocolError)
 
 
 def retry_request(func, description, timeout=None):
@@ -34,13 +35,11 @@ def retry_request(func, description, timeout=None):
 
     ``timeout`` bounds each HTTP request, not the call as a whole: one attempt makes
     several round trips, so the ceiling is ``timeout`` per round trip over 5 attempts
-    plus the backoff -- minutes at the 30 s default, but finite.
+    plus the backoff -- minutes at a 30 s timeout, but finite.
 
-    It covers only Gaia. Gaia's TAP transport is ``http.client``, which honours the
-    process-wide socket default set here; SIMBAD's is ``requests`` via pyvo, which
-    passes an explicit ``timeout=None`` down to ``sock.settimeout`` and so *overrides*
-    that default. SIMBAD is bounded instead by the adapter ``simbad_client`` installs.
-    Do not collapse the two -- dropping that adapter leaves SIMBAD unbounded.
+    The catalog lookups do not use this: they go through ``query_mirrors``, bounded by
+    the session adapter their clients install (pyvo passes an explicit
+    ``timeout=None`` to ``requests``, which would override the socket default set here).
 
     ``socket.setdefaulttimeout`` is process-global and not thread-safe; the
     ``try/finally`` and the tight window around ``func()`` are what make it acceptable.
@@ -110,30 +109,92 @@ class _TimeoutAdapter(HTTPAdapter):
         return super().send(request, stream=stream, timeout=timeout, **kwargs)
 
 
-def gaia_client():
-    """Return a Gaia TAP client that does not fetch server status messages.
+def _bound(session, timeout):
+    """Mount a ``_TimeoutAdapter`` on ``session``: 5 s to connect, ``timeout`` to read.
 
-    ``astroquery.gaia`` reaches ESA twice: once building its module-level
-    ``Gaia = GaiaClass()``, whose constructor fetches status messages, and again per
-    query. ``show_server_messages=False`` kills the second. The first is not gone, only
-    moved out of the pipeline's import graph -- importing the module still triggers
-    it -- so call this inside the callable handed to ``retry_request``, where it is
-    bounded.
+    A short connect bound lets a refused or unrouted mirror fail over quickly; the read
+    bound covers a mirror that accepts the connection and then hangs.
     """
-    # Deferred: this import *is* the connection to ESA, so it must not run until a
-    # caller has decided to query Gaia.
-    from astroquery.gaia import GaiaClass
-
-    return GaiaClass(show_server_messages=False)
+    adapter = _TimeoutAdapter((5.0, timeout))
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
 
 
-def simbad_client(fields, timeout=None):
-    """Return a SIMBAD client requesting ``fields``, bounded by ``timeout``.
+def query_mirrors(func, mirrors, description, budget=60.0):
+    """Return ``func(mirror)`` from the first of ``mirrors`` that answers.
 
-    A session-level default rather than a socket one, because SIMBAD is reached through
-    pyvo over ``requests`` -- see ``retry_request``. It goes on before
-    ``add_votable_fields``, which validates the names server-side and is itself a
-    network call.
+    Mirrors are tried in order, in two passes 2 s apart, so a blip that hits every
+    mirror at once still recovers. Only transient failures (``_RETRYABLE``) fail over;
+    anything else -- a malformed query, an unknown table -- propagates at once. No new
+    attempt starts once ``budget`` seconds have passed, so the stall is bounded by
+    ``budget`` plus one in-flight attempt however many mirrors are listed.
+
+    Parameters
+    ----------
+    func : callable
+        One-argument callable performing the request against the mirror it is given.
+        Build the service client inside it, so its construction is bounded too.
+    mirrors : sequence
+        Mirrors in priority order; each is passed to ``func`` as is.
+    description : str
+        Service name used in the log messages.
+    budget : float
+        Seconds after which no new attempt starts.
+
+    Returns
+    -------
+    object
+        Whatever ``func`` returns.
+
+    Raises
+    ------
+    Exception
+        The last transient failure once mirrors or budget are exhausted, or a
+        non-transient one immediately.
+    """
+    deadline = time.monotonic() + budget
+    error = None
+    for wait in (0.0, 2.0):
+        time.sleep(wait)
+        for mirror in mirrors:
+            if time.monotonic() >= deadline:
+                break
+            try:
+                result = func(mirror)
+            except _RETRYABLE as e:
+                logger.warning(
+                    "%s mirror %s failed (%s: %s)",
+                    description,
+                    mirror,
+                    type(e).__name__,
+                    e,
+                )
+                error = e
+                continue
+            logger.info("%s answered by %s", description, mirror)
+            return result
+    raise error
+
+
+def gaia_client(url, timeout):
+    """Return a TAP client for the Gaia mirror at ``url``, bounded by ``timeout``.
+
+    pyvo's generic client rather than ``astroquery.gaia``, whose ``GaiaClass`` is tied
+    to ESA and whose import alone contacts ESA.
+    """
+    # Deferred: import cost, and to keep pyvo off the paths that never query a catalog.
+    import pyvo
+
+    session = requests.Session()
+    _bound(session, timeout)
+    return pyvo.dal.TAPService(url, session=session)
+
+
+def simbad_client(server, fields, timeout):
+    """Return a client for the SIMBAD mirror ``server`` requesting ``fields``.
+
+    The timeout goes on before ``add_votable_fields``, which validates the names
+    server-side and is itself a network call.
 
     ``SimbadClass()`` is constructed explicitly because astroquery's ``Simbad`` is an
     instance, not a class; calling it works only via ``BaseQuery.__call__``.
@@ -143,10 +204,8 @@ def simbad_client(fields, timeout=None):
     from astroquery.simbad import SimbadClass
 
     client = SimbadClass()
-    if timeout is not None:
-        adapter = _TimeoutAdapter(timeout)
-        client._session.mount("https://", adapter)
-        client._session.mount("http://", adapter)
+    client.server = server
+    _bound(client._session, timeout)
     client.add_votable_fields(*fields)
     return client
 
