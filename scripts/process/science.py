@@ -12,6 +12,7 @@ the timeseries wrapper, not here), via one of the input forms:
     kpfpipe science --obs_ids frames.txt        # a file of obs_ids
     kpfpipe science --dates 20240405 20240712   # every Target frame of these nights
     kpfpipe science --date_range 20240401 20240430
+    kpfpipe science --dates 20240405 --no-socal    # skip the night's SoCal frames
 
 Reductions run in a bounded process pool. The L0 mini-database caches for the
 nights the frames span are warmed up front by a parallel per-datecode pre-scan
@@ -87,7 +88,20 @@ def parse_args(argv=None):
             stages_parser(RECIPE_STAGES),
         ],
     )
+    ap.add_argument(
+        "--socal",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="reduce the SoCal frames of the requested night(s) (default: on; pass "
+        "--no-socal to skip); --dates/--date_range only",
+    )
     args = resolve_frame_selection(ap, ap.parse_args(argv))
+
+    # Default None so an explicit flag alongside --obs_ids can be rejected.
+    if args.socal is not None and args.obs_ids is not None:
+        ap.error("--socal/--no-socal applies only to --dates/--date_range")
+    if args.socal is None:
+        args.socal = True
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
@@ -192,7 +206,10 @@ def main(argv=None):
         ids = mini_db["FILENAME"].map(get_obs_id)
         junk |= set(ids[mini_db["ISJUNK"].astype(bool)])
         single_ccd |= set(ids[~mini_db[["GREEN", "RED"]].eq(True).all(axis=1)])
-        night_targets = set(ids[mini_db["DRP_OBSTYPE"] == "Target"])
+        is_target = mini_db["DRP_OBSTYPE"] == "Target"
+        if not args.socal:
+            is_target &= mini_db["DRP_OBJECT"] != "SoCal"
+        night_targets = set(ids[is_target])
         targets |= night_targets
         if by_night:
             logger.info("%s: %d Target frame(s)", dc, len(night_targets))
