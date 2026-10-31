@@ -67,6 +67,15 @@ class TestParseArgs:
         with pytest.raises(SystemExit):
             s.parse_args(argv)
 
+    def test_socal_defaults_on_and_negates(self, s):
+        assert s.parse_args(["--dates", "20240405"]).socal is True
+        assert s.parse_args(["--dates", "20240405", "--no-socal"]).socal is False
+
+    @pytest.mark.parametrize("flag", ["--socal", "--no-socal"])
+    def test_socal_rejected_with_obs_ids(self, s, flag):
+        with pytest.raises(SystemExit):
+            s.parse_args(["--obs_ids", _OID1, flag])
+
     def test_config_defaults_to_none(self, s):
         assert s.parse_args(["--obs_ids", _OID1]).config is None
 
@@ -132,13 +141,14 @@ class TestCliTask:
 
 def _fake_file_handler(rows=()):
     """A FileHandler stand-in whose mini database holds `rows`, each an
-    ``(obs_id, isjunk, green, red[, obstype])`` tuple (obstype default Target)."""
+    ``(obs_id, isjunk, green, red[, obstype[, object]])`` tuple (obstype default
+    Target, object default 10700)."""
     mini_db = pd.DataFrame(
         [
-            (f"/in/L0/20240405/{o}.fits", j, g, r, *(t or ["Target"]))
+            (f"/in/L0/20240405/{o}.fits", j, g, r, *t, *["Target", "10700"][len(t) :])
             for o, j, g, r, *t in rows
         ],
-        columns=["FILENAME", "ISJUNK", "GREEN", "RED", "DRP_OBSTYPE"],
+        columns=["FILENAME", "ISJUNK", "GREEN", "RED", "DRP_OBSTYPE", "DRP_OBJECT"],
     )
 
     class _FakeFileHandler:
@@ -343,6 +353,30 @@ class TestMainExitCode:
         s.main(["--date_range", "20240405", "20240406"])
         assert seen["r"] == ("20240405", "20240406")
         assert [tag for tag, _ in calls[0][0][1]] == [_OID1]
+
+    @pytest.mark.parametrize(
+        "flags, expected",
+        [([], [_OID1, _OID2]), (["--no-socal"], [_OID1])],
+        ids=["default", "no-socal"],
+    )
+    def test_no_socal_skips_solar_targets(
+        self, s, monkeypatch, tmp_path, flags, expected
+    ):
+        calls = []
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
+        monkeypatch.setattr(s, "obs_ids_in_nights", lambda di, nights: [_OID1, _OID2])
+        monkeypatch.setattr(
+            s,
+            "FileHandler",
+            _fake_file_handler(
+                [
+                    (_OID1, False, True, True),
+                    (_OID2, False, True, True, "Target", "SoCal"),
+                ]
+            ),
+        )
+        s.main(["--dates", "20240405", *flags])
+        assert [tag for tag, _ in calls[0][0][1]] == expected
 
     def test_dates_without_target_frames_warn_and_exit(
         self, s, monkeypatch, tmp_path, caplog
