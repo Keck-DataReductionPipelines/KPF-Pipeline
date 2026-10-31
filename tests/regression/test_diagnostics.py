@@ -51,20 +51,9 @@ _ZERO_KEYS = ("ZEROSCI1", "ZEROSCI2", "ZEROSCI3", "ZEROSKY", "ZEROCAL")
 _EM_CLEAN_FLUX = np.full((4, 25), 1000.0)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Diagnostics base class
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def ungated(monkeypatch):
-    """Declare every metric applicable, for tests of a stub Diagnostics subclass.
-
-    A stub class has no ``config/*-applicability.csv``; the gate itself is
-    covered by ``TestDiagnosticsApplicability``.
-    """
-    monkeypatch.setattr(applicability, "applies", lambda *_: True)
-    monkeypatch.setattr(applicability, "frame_type", lambda _: "Target")
+# ------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("ungated")
@@ -198,9 +187,9 @@ class TestDiagnosticsBase:
         assert results == {}
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # DiagL0 -- pointing offsets from CATALOG_RECORD (GAIAOFF, TCSOFF, OBJOFF)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 _PT_RA, _PT_DEC = "01:44:01.30", "-15:55:54.0"
 
@@ -457,14 +446,6 @@ class TestDiagL0PixelFractions:
         with pytest.raises(ValueError):
             DiagL0(l0).dead_pixel_fractions()
 
-    def test_diag_names_correct(self):
-        assert DiagL0.__dict__["dead_pixel_fractions"]._diag_name == (
-            "dead_pixel_fractions"
-        )
-        assert DiagL0.__dict__["saturated_pixel_fractions"]._diag_name == (
-            "saturated_pixel_fractions"
-        )
-
 
 class TestDiagL0AmpPercentiles:
     """Per-amplifier raw D.N. percentiles: 2 chips x 3 percentiles x 4 amps."""
@@ -512,9 +493,6 @@ class TestDiagL0AmpPercentiles:
         results = DiagL0(self._make_amp_l0(tmp_path, namps=2)).amp_percentiles()
         assert "P50GAMP1" in results
         assert "P50GAMP3" not in results
-
-    def test_diag_name_correct(self):
-        assert DiagL0.__dict__["amp_percentiles"]._diag_name == "amp_percentiles"
 
 
 class TestGuider:
@@ -642,10 +620,6 @@ class TestGuider:
         for key in ("GDRXRMS", "GDRRRMS", "GDRYBIAS", "GDRNSAT", "GDRFRSAT", "GDRFWMD"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
-    def test_diag_names_correct(self):
-        for name in ("guider_errors", "guider_saturation", "guider_image_stats"):
-            assert Guider.__dict__[name]._diag_name == name
-
 
 class TestGuiderSeeing:
     """J+Z-band and V-band seeing from the Moffat fit to the co-added guider image."""
@@ -702,9 +676,6 @@ class TestGuiderSeeing:
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
         # SEEING is the same measurement under its EPRV name, so it goes to PRIMARY.
         assert l0.headers["PRIMARY"]["SEEING"] == results["GDRSEEV"][0]
-
-    def test_diag_name_correct(self):
-        assert Guider.__dict__["guider_seeing"]._diag_name == "guider_seeing"
 
 
 class TestExposureMeterChannels:
@@ -824,11 +795,6 @@ class TestExposureMeterChannels:
         )
         assert "EMSCISAT" not in ExposureMeter(standardized_l0(fn)).run()
 
-    def test_diag_name_correct(self):
-        assert ExposureMeter.__dict__["expmeter_channel_metrics"]._diag_name == (
-            "expmeter_channel_metrics"
-        )
-
 
 class TestExposureMeterCounts:
     """Cumulative EM counts per wavelength band, and the SKY/SCI ratio.
@@ -903,13 +869,6 @@ class TestExposureMeterCounts:
         results = ExposureMeter(l0).run()
         for key in ("SKYSCIMS", "EMSCCT48", "EMSKCT78"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
-
-    def test_diag_names_correct(self):
-        assert ExposureMeter.__dict__["expmeter_counts"]._diag_name == "expmeter_counts"
-        assert (
-            ExposureMeter.__dict__["sky_sci_flux_ratio"]._diag_name
-            == "sky_sci_flux_ratio"
-        )
 
 
 class TestTelemetrySolarLunarGeometry:
@@ -987,10 +946,6 @@ class TestTelemetrySolarLunarGeometry:
         with pytest.raises(KeyError, match="DATE-MID"):
             Telemetry(_make_l0_pointing()).solar_lunar_geometry()
 
-    def test_diag_name_correct(self):
-        name = Telemetry.__dict__["solar_lunar_geometry"]._diag_name
-        assert name == "solar_lunar_geometry"
-
 
 class TestTelemetryCcdTemperatures:
     """GREEN/RED CCD offsets from the -100 C setpoint, read off TELEMETRY."""
@@ -1027,10 +982,6 @@ class TestTelemetryCcdTemperatures:
         for key in ("GTEMPOFF", "RTEMPOFF"):
             assert l0.headers["QUALITY_CONTROL"][key] == results[key][0]
 
-    def test_diag_name_correct(self):
-        name = Telemetry.__dict__["ccd_temperature_offsets"]._diag_name
-        assert name == "ccd_temperature_offsets"
-
 
 class TestTelemetryEtalonTemperature:
     """Etalon chamber offset from setpoint, off the PRIMARY temperature cards."""
@@ -1066,10 +1017,6 @@ class TestTelemetryEtalonTemperature:
         l0 = stamp_frame_type(self._make_l0_with_etalon(ETAV1C3T=23.6004), "Etalon")
         results = Telemetry(l0).run()
         assert l0.headers["QUALITY_CONTROL"]["ETATOFF"] == results["ETATOFF"][0]
-
-    def test_diag_name_correct(self):
-        name = Telemetry.__dict__["etalon_temperature_offset"]._diag_name
-        assert name == "etalon_temperature_offset"
 
 
 class TestTelemetryTharLamp:
@@ -1155,10 +1102,6 @@ class TestTelemetryMoonRadialVelocity:
         results = Telemetry(l0).run()
         assert l0.headers["PRIMARY"]["MOONRV"] == results["MOONRV"][0]
 
-    def test_diag_name_correct(self):
-        name = Telemetry.__dict__["moon_radial_velocity"]._diag_name
-        assert name == "moon_radial_velocity"
-
 
 class TestTelemetrySiteConditions:
     """In-dome cards off the native header, outside weather off the CFHT archive."""
@@ -1198,9 +1141,6 @@ class TestTelemetrySiteConditions:
         l0 = self._make_l0()
         del l0.headers["INSTRUMENT_HEADER"]["RELH"]
         assert Telemetry(l0).run().keys().isdisjoint({"INHUM", "OUTPRES", "OUTTMP"})
-
-    def test_diag_name_correct(self):
-        assert Telemetry.__dict__["site_conditions"]._diag_name == "site_conditions"
 
 
 class TestTelemetryCfhtWeather:
@@ -1330,12 +1270,6 @@ class TestTelemetryMirrorTemperatures:
         for key in ("M1TMP", "M2TMP"):
             assert l0.headers["PRIMARY"][key] == results[key][0]
 
-    def test_diag_name_correct(self):
-        assert (
-            Telemetry.__dict__["mirror_temperatures"]._diag_name
-            == "mirror_temperatures"
-        )
-
 
 class TestGuiderAirmass:
     """The airmass card, copied from the native header."""
@@ -1353,9 +1287,6 @@ class TestGuiderAirmass:
         l0 = self._make_l0_with_airmass()
         results = Guider(l0).run()
         assert l0.headers["PRIMARY"]["AIRMASS"] == results["AIRMASS"][0]
-
-    def test_diag_name_correct(self):
-        assert Guider.__dict__["airmass"]._diag_name == "airmass"
 
 
 def _make_kpf1(date_obs="2024-04-05T11:08:33"):
@@ -1405,9 +1336,9 @@ class TestDiagL1FluxPercentiles:
             DiagL1(l1).flux_percentiles()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # DiagL2 -- NaN counts + non-positive counts
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _make_kpf2_nan_pixels(nan_frac=0.0, zero_frac=0.0, populate=True, var=0.25):
@@ -1484,9 +1415,9 @@ class TestDiagL2ZeroCounts:
             assert kpf2.headers["QUALITY_CONTROL"].get(key) == 0
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # DiagL2 -- per-wavelength SNR
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestDiagL2BandSnr:
@@ -1530,7 +1461,7 @@ class TestDiagL2BandSnr:
             assert primary.get(f"EXSNR{index}") == qc.get(f"SNRSC{wavelength}")
             assert primary.get(f"EXSNRW{index}") == wavelength * 10.0
 
-    def test_raises_without_var(self):
+    def test_without_var_raises(self):
         kpf2 = _make_kpf2_nan_pixels(var=None)
         with pytest.raises(IndexError):
             DiagL2(kpf2).band_snr()
@@ -1611,9 +1542,9 @@ class TestDiagL2BandContinuum:
         assert out["CFXSK652"] == pytest.approx(1.0)  # RED untouched
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # DiagL2 -- orderlet flux ratios
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestDiagL2OrderFluxRatios:
@@ -1640,7 +1571,7 @@ class TestDiagL2OrderFluxRatios:
         assert qc.get("FR548652") == pytest.approx(2.0)
         assert qc.get("FR747652") == pytest.approx(1.0)
 
-    def test_raises_when_wavelength_uncovered(self):
+    def test_wavelength_uncovered_raises(self):
         # The WAVE arrays are the order map; without one no order can be found.
         kpf2 = _make_kpf2_nan_pixels()
         set_fiber_arrays(kpf2, "WAVE", 1.0, ncol=_NCOL_TEST, dtype=np.float64)
@@ -1707,9 +1638,9 @@ class TestDiagL2FiberFluxRatios:
         assert out["FR32U652"] == pytest.approx(0.25)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # DiagL4 -- per-order BJD / barycentric-RV dispersion (ported from v2.12)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _l4_with_sci2_rv(bjd, berv, weight):
@@ -1730,19 +1661,24 @@ def _l4_with_sci2_rv(bjd, berv, weight):
 
 
 class TestDiagL4:
-    # Two equal-weight orders with toy values give exact, hand-checkable stats:
-    #   BJD  [10, 20] -> mean 15, std 5 d (=432000 s), range 10 d (=864000 s)
-    #   BERV [0.1, 0.3] -> mean 0.2, std 0.1 km/s (=100 m/s), range 0.2 (=200 m/s)
+    # Two orders weighted 1:3 give exact, hand-checkable stats. Unequal weights
+    # separate the weighted mean/std from the plain ones:
+    #   BJD  [10, 20] -> mean 17.5, std 5*sqrt(3)/2 d (=374122.9744 s),
+    #                    range 10 d (=864000 s)
+    #   BERV [0.1, 0.3] -> mean 0.25, std 0.1*sqrt(3)/2 km/s (=86.6025 m/s),
+    #                      range 0.2 km/s (=200 m/s)
+    # The module rounds means to 6 decimals and spreads to 4, so the
+    # tolerances are half a unit in the last kept place.
     def test_bjd_berv_dispersion_values(self):
-        l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [1.0, 1.0])
+        l4 = _l4_with_sci2_rv([10.0, 20.0], [0.1, 0.3], [1.0, 3.0])
         DiagL4(l4).run()
         qc = l4.headers["QUALITY_CONTROL"]
-        assert qc["BJDMEAN"] == pytest.approx(15.0)
-        assert qc["BJDSTD"] == pytest.approx(432000.0)
-        assert qc["BJDRNG"] == pytest.approx(864000.0)
-        assert qc["BERVMEAN"] == pytest.approx(0.2)
-        assert qc["BERVSTD"] == pytest.approx(100.0)
-        assert qc["BERVRNG"] == pytest.approx(200.0)
+        assert qc["BJDMEAN"] == pytest.approx(17.5, abs=5e-7)
+        assert qc["BJDSTD"] == pytest.approx(374122.9744348775, abs=5e-5)
+        assert qc["BJDRNG"] == pytest.approx(864000.0, abs=5e-5)
+        assert qc["BERVMEAN"] == pytest.approx(0.25, abs=5e-7)
+        assert qc["BERVSTD"] == pytest.approx(86.60254037844385, abs=5e-5)
+        assert qc["BERVRNG"] == pytest.approx(200.0, abs=5e-5)
 
     def test_zero_weight_orders_excluded(self):
         # Third order has zero weight: excluded from the weighted mean and the
@@ -1767,14 +1703,14 @@ class TestDiagL4:
         DiagL4(l4).run()
         assert l4.headers["QUALITY_CONTROL"]["BJDMEAN"] == pytest.approx(10.0)
 
-    def test_raises_on_empty_sci2_rv_table(self):
+    def test_empty_sci2_rv_table_raises(self):
         # A bare KPF4 carries every RV# table with its 12-column skeleton and no
         # rows, so the columns resolve and the weighted mean is undefined for
         # want of samples -- not for want of a column.
         with pytest.raises(RuntimeWarning, match="invalid value"):
             DiagL4(KPF4()).bjd_dispersion()
 
-    def test_raises_without_weight_column(self):
+    def test_without_weight_column_raises(self):
         # WEIGHT column absent (pre-weights L4) -> fail loud rather than guess.
         l4 = KPF4()
         l4.set_data(
@@ -1785,9 +1721,9 @@ class TestDiagL4:
             DiagL4(l4).bjd_dispersion()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Applicability tables
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestDiagnosticsApplicability:
@@ -1808,6 +1744,14 @@ class TestDiagnosticsApplicability:
             f"config/{diag_cls.__name__}-applicability.csv and the tagged methods "
             f"on {diag_cls.__name__} have drifted apart"
         )
+
+    @pytest.mark.parametrize("diag_cls", _CLASSES, ids=_IDS)
+    def test_every_public_method_is_tagged_with_its_own_name(self, diag_cls):
+        # _diag_name is hand-written beside each metric; a typo or a missing tag
+        # would silently rename or drop the metric from run().
+        for name, attr in vars(diag_cls).items():
+            if callable(attr) and not name.startswith("_"):
+                assert getattr(attr, "_diag_name", None) == name, name
 
     @pytest.mark.parametrize("diag_cls", _CLASSES, ids=_IDS)
     def test_table_shape(self, diag_cls):

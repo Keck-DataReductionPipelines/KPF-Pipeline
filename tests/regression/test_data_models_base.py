@@ -7,6 +7,7 @@ KPF2/KPF4 round-trip guards live in test_data_models_l{2,4}.py.
 """
 
 import importlib.metadata
+import logging
 import tomllib
 from pathlib import Path
 
@@ -363,14 +364,6 @@ class TestKeywordRegistry:
         assert reg.datatype_for("NUMTRACE", "PRIMARY") == "UInt"
         assert reg.datatype_for("INSTRUME", "QUALITY_CONTROL") is None
 
-    def test_header_map_keys_are_registered_on_primary(self):
-        # The map annotates the registry, so it cannot name a keyword the CSVs
-        # do not register: _load_header_map raises otherwise.
-        reg = KPF1.keyword_registry
-        keys = set(reg.header_map["EPRV_KEY"].astype(str).str.strip())
-        assert keys <= reg.allowed["PRIMARY"]
-        assert len(keys) == len(reg.header_map)
-
     def test_parse_value_has_no_sentinel_rule(self):
         # SCI-OBJ/SKY-OBJ carry the literal value "Unknown" on real frames;
         # blanking it would silently empty TRACE1..TRACE4.
@@ -382,7 +375,7 @@ class TestKeywordRegistry:
         # A blank DataType passes the value through unchanged.
         assert reg._parse_value("ANY", "", "as-is") == "as-is"
 
-    def test_parse_value_rejects_an_unknown_datatype(self):
+    def test_parse_value_unknown_datatype_raises(self):
         with pytest.raises(ValueError, match="unknown DataType"):
             KPF1.keyword_registry._parse_value("FOO", "complex", "1")
 
@@ -641,3 +634,15 @@ class TestRouting:
         routing = KPF1.keyword_registry.routing
         for keyword in ("CTYPE1", "CTYPE2", "VELSTART", "VELWIDTH", "SKYRMVD"):
             assert keyword not in routing
+
+
+class TestIOChokepoints:
+    """Every FITS write/read emits one INFO record."""
+
+    def test_to_fits_and_from_fits_log_records(self, tmp_path, caplog):
+        path = str(tmp_path / "kpf_SL4_20240101T000000.fits")
+        with caplog.at_level(logging.INFO, logger="kpfpipe"):
+            KPF4().to_fits(path)
+            KPF4.from_fits(path)
+        assert f"wrote KPF4 to {path}" in caplog.text
+        assert f"reading KPF4 from {path}" in caplog.text

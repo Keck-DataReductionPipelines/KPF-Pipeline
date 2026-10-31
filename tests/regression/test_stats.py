@@ -188,7 +188,7 @@ class TestRobustPolyfit:
         assert not good[[3, 9]].any()
         assert np.allclose(coeffs, truth)
 
-    def test_raises_when_too_few_samples_are_finite(self):
+    def test_too_few_finite_samples_raises(self):
         x, y = self._quadratic(n=10)
         y[4:] = np.nan
         with pytest.raises(ValueError, match="only 4 of 10 samples are valid"):

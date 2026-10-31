@@ -37,7 +37,7 @@ def _load_masters_recipe():
     return module
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Stage wiring: the real main() runs with every collaborator replaced.
 #
 # This is the canonical recipe-wiring harness; test_science_recipe.py mirrors it.
@@ -46,7 +46,7 @@ def _load_masters_recipe():
 # what is asserted is the recipe's own wiring; record every stage into one list
 # whose order is itself the assertion; and model "nothing to stack" the way
 # production does -- by raising, never by returning an empty list.
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 # Three frames per stack: above no gate, below every max, and enough that a
 # dropped stack is visible in the run summary's frame counts.
@@ -380,9 +380,7 @@ class TestMastersRecipeStageSelection:
         recipe.main(config, args)
         assert [call[:2] for call in record["calls"]] == [("order_trace", (flat,))]
 
-    def test_fails_naming_only_selected_stages_that_built_nothing(
-        self, tmp_path, monkeypatch
-    ):
+    def test_selected_stages_that_built_nothing_raises(self, tmp_path, monkeypatch):
         recipe, config, args, record = self._wired(
             tmp_path, monkeypatch, ["order_trace"]
         )
@@ -390,9 +388,9 @@ class TestMastersRecipeStageSelection:
             recipe.main(config, args)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Masters recipe error paths
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestMastersRecipeErrors:

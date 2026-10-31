@@ -11,9 +11,9 @@ from kpfpipe.data_models.base import KPFDataModel
 from kpfpipe.modules.calibration_association import CalibrationAssociation
 from kpfpipe.utils.kpf import instrument_era
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Helpers / fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class MockL1:
@@ -73,9 +73,9 @@ def _stub_master(directory, obs_id, cal_type):
     return path
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestFindMasterFiles
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestFindMasterFiles:
@@ -202,7 +202,7 @@ class TestEraBoundary:
 
         assert [ts for _, ts in result] == ["20240224.36000.00"]
 
-    def test_raises_when_only_another_eras_master_exists(self, tmp_path):
+    def test_only_another_eras_master_raises(self, tmp_path):
         d = tmp_path / "masters" / "20240223"
         d.mkdir(parents=True)
         _stub_master(d, "KP.20240223.39600.00", "bias")  # era 1.5
@@ -212,9 +212,9 @@ class TestEraBoundary:
             mod.perform(["bias"])
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestSelectNearest
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestSelectNearest:
@@ -297,10 +297,31 @@ class TestSelectNearest:
         )
         assert "KP.20240405.01800.00" in result
 
+    @pytest.mark.parametrize("creation_order", [(0, 1), (1, 0)])
+    def test_equidistant_tie_resolves_to_the_earlier_master(
+        self, tmp_path, creation_order
+    ):
+        # Science at 40113 s; masters exactly 1 h before (36513 s) and after
+        # (43713 s). The tie must resolve the same way on every run regardless
+        # of how the files landed on disk -- a run-to-run calibration flip is an
+        # RV discontinuity. Contract (oracle): the earlier master wins, via the
+        # timestamp sort in _find_master_files and the first-minimum of min().
+        d = tmp_path / "masters" / "20240405"
+        d.mkdir(parents=True)
+        obs_ids = ["KP.20240405.36513.00", "KP.20240405.43713.00"]
+        for i in creation_order:
+            _stub_master(d, obs_ids[i], "bias")
 
-# ---------------------------------------------------------------------------
+        mod = _make_module(tmp_path)
+        date_obs = "2024-04-05T11:08:33"
+        candidates = mod._find_master_files("bias", date_obs)
+        result = mod._select_nearest(date_obs, candidates)
+        assert "KP.20240405.36513.00" in result
+
+
+# ------------------------------------------------------------------
 # TestPerform
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPerform:
@@ -383,17 +404,17 @@ class TestPerform:
             -0.422176, abs=1e-5
         )
 
-    def test_raises_on_unknown_cal_type(self, masters_dir):
+    def test_unknown_cal_type_raises(self, masters_dir):
         mod = _make_module(masters_dir)
         with pytest.raises(ValueError, match="bogus"):
             mod.perform(["bogus"])
 
-    def test_raises_when_no_master_found(self, tmp_path):
+    def test_no_master_found_raises(self, tmp_path):
         mod = _make_module(tmp_path)
         with pytest.raises(FileNotFoundError, match="bias"):
             mod.perform(["bias"])
 
-    def test_raises_on_first_missing_cal_type(self, masters_dir):
+    def test_first_missing_cal_type_raises(self, masters_dir):
         # dark is removed, so it is the type that fails.
         d = masters_dir / "masters" / "20240405"
         for f in d.glob("*_master_dark_L1.fits"):
@@ -419,9 +440,9 @@ class TestPerform:
         assert entry["biasfile"] is not None
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Fail-loudly paths (construction + cal_type validation)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestErrorPaths:

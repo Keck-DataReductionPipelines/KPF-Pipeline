@@ -709,6 +709,42 @@ class TestDatacubeClipping:
         )
 
 
+class TestStackDeterminism:
+    """Re-stacking the same inputs must reproduce the master bit for bit, on both
+    the datacube and the streaming path, outlier rejection included."""
+
+    @staticmethod
+    def _stack(nstream):
+        nrow, ncol, nframe = 4, 4, 7
+        rng = np.random.default_rng(7)
+        frames = []
+        for _ in range(nframe):
+            frame = _stack_frame(10.0, 0.0, 0.0, shape=(nrow, ncol))
+            ccd = rng.normal(100.0, 5.0, (nrow, ncol)).astype(np.float32)
+            frame.data["GREEN_CCD"] = ccd
+            frame.data["GREEN_VAR"] = np.abs(ccd) + np.float32(25.0)
+            frames.append(frame)
+        frames[3].data["GREEN_CCD"][1, 2] = 1e5  # a cosmic-ray hit to reject
+
+        dark = Dark(sorted(f"f{i}.fits" for i in range(nframe)))
+        dark.chips = ["GREEN"]
+        dark.stack_sigma = 5.0
+        by_fn = dict(zip(dark.l0_file_list, frames, strict=True))
+        with (
+            patch.multiple(dark, nrow=nrow, ncol=ncol),
+            patch.object(dark, "_load_frame", lambda fn, **k: by_fn[fn]),
+            patch.object(dark, "_process_frame", lambda l1: l1),
+        ):
+            return dark.stack_frames(nstream=nstream)
+
+    @pytest.mark.parametrize("nstream", [3, 10], ids=["streaming", "datacube"])
+    def test_restack_is_bit_identical(self, nstream):
+        first, second = self._stack(nstream), self._stack(nstream)
+        assert first.keys() == second.keys()
+        for key in first:
+            np.testing.assert_array_equal(first[key], second[key], err_msg=key)
+
+
 class TestSurvivorGate:
     """The last gate before a pixel enters a master: it must have survived in a
     majority of the requested frames, and carry non-zero variance and exposure.
@@ -1070,10 +1106,6 @@ class TestDtypeProvenance:
 class TestSaveMaster:
     """The shared write path, exercised through Bias (the simplest master)."""
 
-    def test_output_dir_writes_the_standard_name(self, tmp_path):
-        make_mocked_master(Bias, output_dir=str(tmp_path))
-        assert (tmp_path / MASTER_NAME).exists()
-
     def test_output_dir_creates_parent_dir(self, tmp_path):
         output_dir = tmp_path / "nested" / "subdir"
         make_mocked_master(Bias, output_dir=str(output_dir))
@@ -1090,7 +1122,7 @@ class TestSaveMaster:
         with pytest.raises(RuntimeError, match="run make_master_l1"):
             bias.save_master("L1", str(tmp_path / "should_not_be_created.fits"))
 
-    def test_save_master_refuses_overwrite_by_default(self, tmp_path):
+    def test_save_master_overwrite_by_default_raises(self, tmp_path):
         bias = Bias(FILE_LIST)
         master_path = tmp_path / MASTER_NAME
         master_path.touch()
@@ -1113,7 +1145,7 @@ class TestWriteFrame:
         Bias(FILE_LIST)._write_frame(self._frame(), output_dir=str(tmp_path))
         assert (tmp_path / "KP.20240101.00000.00_bias_L2.fits").exists()
 
-    def test_refuses_overwrite_by_default(self, tmp_path):
+    def test_overwrite_by_default_raises(self, tmp_path):
         (tmp_path / "KP.20240101.00000.00_bias_L2.fits").touch()
         with pytest.raises(FileExistsError, match="overwrite=True"):
             Bias(FILE_LIST)._write_frame(self._frame(), output_dir=str(tmp_path))

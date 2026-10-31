@@ -35,9 +35,9 @@ _CHIPS = ("GREEN", "RED")
 NCOL = 32
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Helpers / fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _make_master_l2(seed=42):
@@ -89,9 +89,9 @@ def master_wls_path(tmp_path_factory):
     return path
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Constructor / config plumbing
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestConstructor:
@@ -114,7 +114,7 @@ class TestConstructor:
         assert mod.chips == _CHIPS
         assert mod.fibers == _FIBERS
 
-    def test_invalid_config_type(self):
+    def test_invalid_config_type_raises(self):
         with pytest.raises(TypeError, match="config must be"):
             WavelengthCalibration(_make_science_l2(), config="not a dict")
 
@@ -123,18 +123,18 @@ class TestConstructor:
         assert mod._wls_path is None
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # load_wls()
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestLoadWLS:
-    def test_raises_when_wlsfile_missing(self):
+    def test_wlsfile_missing_raises(self):
         mod = WavelengthCalibration(_make_science_l2())
         with pytest.raises(KeyError, match="wlsfile"):
             mod.load_wls()
 
-    def test_raises_when_file_does_not_exist(self, tmp_path):
+    def test_missing_file_raises(self, tmp_path):
         bogus = str(tmp_path / "does_not_exist.fits")
         mod = WavelengthCalibration(_make_science_l2(wls_path=bogus))
         with pytest.raises(FileNotFoundError, match="Master WLS file not found"):
@@ -154,9 +154,9 @@ class TestLoadWLS:
         assert mod._wls_path == master_wls_path
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # perform()
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPerform:
@@ -188,19 +188,6 @@ class TestPerform:
                 key = f"{chip}_{fiber}_WAVE"
                 np.testing.assert_array_equal(l2.data[key], master.data[key])
 
-    def test_wave_arrays_are_float64(self, master_wls_path):
-        # WAVE is born-64 everywhere, so both the master and the science arrays
-        # it is copied onto must be float64.
-        master = KPFMasterL2.from_fits(master_wls_path)
-        # from_fits yields big-endian (>f8); compare precision, not byte order.
-        assert_dtype(master.data["GREEN_SCI2_WAVE"], WAVE, "master GREEN_SCI2_WAVE")
-        l2 = _make_science_l2(wls_path=master_wls_path)
-        WavelengthCalibration(l2).perform()
-        for chip in _CHIPS:
-            for fiber in _FIBERS:
-                ext = f"{chip}_{fiber}_WAVE"
-                assert_dtype(l2.data[ext], WAVE, ext)
-
     def test_explicit_path_bypasses_header(self, master_wls_path):
         # The receipt wlsfile is bogus; the valid wls_path override wins.
         l2 = _make_science_l2(wls_path="/tmp/bogus.fits")
@@ -209,15 +196,6 @@ class TestPerform:
         master = KPFMasterL2.from_fits(master_wls_path)
         np.testing.assert_array_equal(
             l2.data["GREEN_SCI2_WAVE"], master.data["GREEN_SCI2_WAVE"]
-        )
-
-    def test_l2_wave_float64_survives_roundtrip(self, master_wls_path, tmp_path):
-        # Born-64 is strict: WAVE must still be float64 (BITPIX -64) on disk.
-        l2 = _make_science_l2(wls_path=master_wls_path)
-        WavelengthCalibration(l2).perform()
-        assert_dtype(l2.data["TRACE3_WAVE"], WAVE, "L2 TRACE3_WAVE")
-        assert_roundtrip_dtype(
-            KPF2, l2, "TRACE3_WAVE", WAVE, tmp_path, name="kpf_SL2_20240101T000000.fits"
         )
 
     def test_subset_chips_and_fibers(self, master_wls_path):
@@ -238,7 +216,7 @@ class TestPerform:
         with pytest.raises(KeyError, match="wlsfile"):
             WavelengthCalibration(l2).perform()
 
-    def test_raises_when_master_missing_requested_fiber(self, tmp_path):
+    def test_master_missing_requested_fiber_raises(self, tmp_path):
         # The master only has SCI2, but all 5 fibers are requested.
         master = KPFMasterL2(kind="wls")
         master.headers["PRIMARY"]["INSTRUME"] = "KPF"
@@ -258,9 +236,9 @@ class TestPerform:
             WavelengthCalibration(l2).perform()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Spectrum orientation discriminator (real truth-frame integration)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 #
 # Once WavelengthCalibration assigns the master WLS, the extracted flux must be
 # co-oriented with that wavelength axis: a strong stellar absorption line has to
@@ -435,4 +413,71 @@ class TestSpectrumOrientation:
                     deepest = max(deepest, d)
         assert deepest > 0.7, (
             f"deepest native Na D trough only {deepest:.3f}; expected a deep line"
+        )
+
+
+# ------------------------------------------------------------------
+# Reference-file wavelength frame (fast, no testdata)
+# ------------------------------------------------------------------
+
+
+class TestReferenceMaskIsVacuum:
+    """The stellar CCF masks are vacuum, matching the vacuum WLS (EPRV §2).
+
+    An air-wavelength mask against a vacuum WLS shifts every RV by ~-83 km/s
+    (the ~1.44 A air-vacuum offset at 5200 A) -- outside the CCF window, so the
+    run fails late and confusingly. Strong solar lines anchor the check; their
+    vacuum wavelengths are oracles (Edlen 1953 from the NIST air values).
+    """
+
+    # line: (air, vacuum) [Angstrom]
+    _ANCHORS = {"Mg I b1": (5183.604, 5185.048), "Fe I": (5328.039, 5329.521)}
+
+    @pytest.fixture(scope="class")
+    def g2_mask(self):
+        path = Path(__file__).parents[2] / "reference/line_masks/stellar_masks"
+        return np.loadtxt(path / "G2_espresso.txt")
+
+    @pytest.mark.parametrize("line", sorted(_ANCHORS))
+    def test_strong_line_at_vacuum_wavelength(self, g2_mask, line):
+        # 0.02 A (~1.2 km/s) admits the mask's blend-weighted line centroids
+        # while sitting ~70x below the air-vacuum offset.
+        air, vac = self._ANCHORS[line]
+        center, weight = g2_mask[:, 0], g2_mask[:, 1]
+        near_vac = np.abs(center - vac) < 0.02
+        assert np.any(near_vac & (weight > 0.5)), f"{line}: no strong line at {vac}"
+        near_air = np.abs(center - air) < 0.02
+        assert not np.any(near_air & (weight > 0.1)), (
+            f"{line}: strong line at air {air}"
+        )
+
+
+# ------------------------------------------------------------------
+# Dtype provenance
+# ------------------------------------------------------------------
+
+
+class TestDtypeProvenance:
+    """WAVE is born-64: float64 in memory, on the master and science L2, and on disk."""
+
+    def test_wave_arrays_are_float64(self, master_wls_path):
+        # WAVE is born-64 everywhere, so both the master and the science arrays
+        # it is copied onto must be float64.
+        master = KPFMasterL2.from_fits(master_wls_path)
+        # from_fits yields big-endian (>f8); compare precision, not byte order.
+        assert_dtype(master.data["GREEN_SCI2_WAVE"], WAVE, "master GREEN_SCI2_WAVE")
+        l2 = _make_science_l2(wls_path=master_wls_path)
+        WavelengthCalibration(l2).perform()
+        for chip in _CHIPS:
+            for fiber in _FIBERS:
+                ext = f"{chip}_{fiber}_WAVE"
+                assert_dtype(l2.data[ext], WAVE, ext)
+
+    def test_l2_wave_float64_survives_roundtrip(self, master_wls_path, tmp_path):
+        # Born-64 is strict: WAVE must still be float64 (BITPIX -64) on disk.
+        l2 = _make_science_l2(wls_path=master_wls_path)
+        WavelengthCalibration(l2).perform()
+        assert_dtype(l2.data["TRACE3_WAVE"], WAVE, "L2 TRACE3_WAVE")
+        assert_roundtrip_dtype(
+            KPF2, l2, "TRACE3_WAVE", WAVE, tmp_path, name="kpf_SL2_20240101T000000.fits"
         )

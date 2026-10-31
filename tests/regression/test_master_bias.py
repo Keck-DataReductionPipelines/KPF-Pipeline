@@ -16,7 +16,7 @@ from kpfpipe.modules.masters.bias import Bias
 from kpfpipe.utils.io import kpf_filepath
 from kpfpipe.utils.kpf import get_obs_id
 
-from ._dtype_policy import L1_IMAGE, assert_dtype
+from ._dtype_policy import L1_IMAGE, MASK_MEM, assert_dtype
 from ._masters import (
     FILE_LIST,
     MASTER_NAME,
@@ -43,9 +43,6 @@ class TestMasterBiasUnit:
     def master_bias(self):
         return make_mocked_master(Bias)
 
-    def test_returns_kpf_master_l1(self, master_bias):
-        assert isinstance(master_bias, KPFMasterL1)
-
     @pytest.mark.parametrize(
         "ext",
         ["GREEN_IMG", "RED_IMG", "GREEN_SNR", "RED_SNR", "GREEN_MASK", "RED_MASK"],
@@ -59,6 +56,13 @@ class TestMasterBiasUnit:
     def test_bunit_is_electrons(self, master_bias):
         for chip in CHIPS:
             assert master_bias.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
+
+    def test_roundtrip_datalvl(self, master_bias, tmp_path):
+        # The IMG round trip and the mask/BITPIX dtypes are covered in
+        # test_data_models_l1.py and test_master_base.py.
+        fn = str(tmp_path / MASTER_NAME)
+        master_bias.to_fits(fn)
+        assert KPFMasterL1.from_fits(fn).headers["PRIMARY"].get("DATALVL") == "ML1"
 
 
 class TestMasterBiasInfo:
@@ -81,32 +85,9 @@ class TestMasterBiasInfo:
             assert chip in out
 
 
-class TestMasterBiasRoundTrip:
-    """The mask/BITPIX dtype round-trip lives in test_master_base.py, which
-    exercises the same shared write path and also checks the on-disk BITPIX."""
-
-    @pytest.fixture
-    def reread(self, tmp_path):
-        ml1 = make_mocked_master(Bias)
-        fn = str(tmp_path / MASTER_NAME)
-        ml1.to_fits(fn)
-        return ml1, KPFMasterL1.from_fits(fn)
-
-    def test_roundtrip_arrays(self, reread):
-        ml1, ml1_read = reread
-        for chip in CHIPS:
-            np.testing.assert_array_almost_equal(
-                ml1_read.data[f"{chip}_IMG"], ml1.data[f"{chip}_IMG"], decimal=4
-            )
-
-    def test_roundtrip_datalvl(self, reread):
-        _, ml1_read = reread
-        assert ml1_read.headers["PRIMARY"].get("DATALVL") == "ML1"
-
-
 class TestMasterBiasSignature:
     @pytest.mark.parametrize("kwarg", ["bias", "dark", "flat"])
-    def test_calibration_kwargs_rejected(self, kwarg):
+    def test_calibration_kwargs_raises(self, kwarg):
         module = Bias(FILE_LIST)
         with pytest.raises(TypeError, match="unexpected keyword argument"):
             module.make_master_l1(**{kwarg: True})
@@ -119,26 +100,46 @@ class TestMasterBiasRegression:
     def master_bias(self):
         return Bias(TESTDATA_BIAS_FILES).make_master_l1()
 
-    def test_returns_kpf_master_l1(self, master_bias):
-        assert isinstance(master_bias, KPFMasterL1)
-
     def test_img_near_zero(self, master_bias):
         assert abs(np.nanmedian(master_bias.data["GREEN_IMG"])) < 5.0
         assert abs(np.nanmedian(master_bias.data["RED_IMG"])) < 5.0
 
-    def test_snr_positive(self, master_bias):
-        good = master_bias.data["GREEN_MASK"]
-        assert np.all(master_bias.data["GREEN_SNR"][good] > 0)
-
-    def test_snr_never_negative(self, master_bias):
+    def test_snr_positive_on_good_pixels_never_negative(self, master_bias):
         # SNR is non-negative by construction (|counts| / sqrt(var)); bad pixels
-        # are exactly zero, never negative.
+        # are exactly zero, never negative, and good pixels strictly positive.
         for chip in CHIPS:
-            assert np.all(master_bias.data[f"{chip}_SNR"] >= 0)
+            snr = master_bias.data[f"{chip}_SNR"]
+            assert np.all(snr >= 0)
+            assert np.all(snr[master_bias.data[f"{chip}_MASK"]] > 0)
 
-    def test_mask_has_good_pixels(self, master_bias):
-        assert np.sum(master_bias.data["GREEN_MASK"]) > 0
-        assert np.sum(master_bias.data["RED_MASK"]) > 0
+    def test_mask_mostly_good(self, master_bias):
+        # A clean detector stack keeps the large majority of pixels.
+        for chip in CHIPS:
+            mask = master_bias.data[f"{chip}_MASK"]
+            assert_dtype(mask, MASK_MEM, f"{chip}_MASK")
+            assert np.mean(mask) > 0.9
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="prod bug: image_assembly.py:403-426 -- stitch_ffi adds read "
+        "noise as a std, not rn**2; the master SNR (masters/base.py:817) sums "
+        "that VAR, so the master variance is ~3x low",
+    )
+    @pytest.mark.parametrize("chip, rn_min", [("GREEN", 4.41), ("RED", 6.02)])
+    def test_master_variance_floor_is_read_noise_over_n(
+        self, master_bias, chip, rn_min
+    ):
+        # The variance of an N-frame mean bias is at least rn**2 / N, and
+        # (IMG/SNR)**2 is exactly that variance. rn_min is an oracle: the weakest
+        # amp's read noise measured on KP.20240405.03637.74 (GREEN 4.41, RED
+        # 6.02 e-); the 0.9 factor absorbs frame-to-frame read-noise drift. Not a
+        # two-sided rn**2/N check: the |data| Poisson term of a zero-signal frame
+        # legitimately adds ~0.8 rn on top.
+        img = master_bias.data[f"{chip}_IMG"]
+        snr = master_bias.data[f"{chip}_SNR"]
+        use = master_bias.data[f"{chip}_MASK"] & (snr > 0)
+        var_mean = np.median((img[use] / snr[use]) ** 2)
+        assert var_mean * len(TESTDATA_BIAS_FILES) >= 0.9 * rn_min**2
 
     def test_img_snr_dtype_is_float32(self, master_bias):
         for chip in CHIPS:
@@ -176,10 +177,6 @@ class TestMasterBiasRegression:
             np.testing.assert_array_equal(
                 read_back.data[f"{chip}_IMG"], master_bias.data[f"{chip}_IMG"]
             )
-
-    def test_input_files_extension_present(self, master_bias_on_disk):
-        _, read_back = master_bias_on_disk
-        assert "INPUT_FILES" in read_back.extensions
 
     def test_input_files_records_the_stacked_frames(self, master_bias_on_disk):
         # INPUT_FILES records the frames that survived stacking, which is also

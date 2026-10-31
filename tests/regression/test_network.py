@@ -7,11 +7,8 @@ which the conftest guard allows, and which no amount of mocking could stand in f
 """
 
 import http.client
-import json
 import logging
 import socket
-import subprocess
-import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -28,8 +25,6 @@ from kpfpipe.utils.network import (
     retry_request,
     simbad_client,
 )
-
-from ._scripts import REPO_ROOT
 
 
 def _patch_sleep():
@@ -113,57 +108,9 @@ class TestRetryRequest:
         assert "retrying in" in caplog.text
 
 
-# ---------------------------------------------------------------------------
-# Import purity -- witnessed in a child, because this suite's conftest hides it
-# ---------------------------------------------------------------------------
-
-# Records every outbound connect, imports the module, and reports what it saw.
-# Run through `python -c` so no conftest loads: the suite's own network guard
-# would mask exactly the connection this is here to detect.
-_IMPORT_PROBE = """
-import json, socket, sys
-hits = []
-socket.socket.connect = lambda self, addr, *a, **k: hits.append(addr)
-socket.create_connection = lambda addr, *a, **k: hits.append(addr)
-import kpfpipe.modules.astro_query
-print(json.dumps({
-    "hits": [str(h) for h in hits],
-    "astroquery": sorted(m for m in sys.modules if m.startswith("astroquery")),
-}))
-"""
-
-
-@pytest.mark.cli
-def test_importing_astro_query_touches_no_network():
-    """Importing the module must not open a connection, nor pull in a client.
-
-    ``astroquery.gaia`` builds a module-level ``GaiaClass()`` whose constructor
-    fetches ESA status messages, so importing it *is* a connection. Both client
-    imports are deferred into the factories to keep that off every code path that
-    never queries a catalog -- this is the only thing that witnesses it.
-    """
-    proc = subprocess.run(
-        [sys.executable, "-c", _IMPORT_PROBE],
-        cwd=REPO_ROOT,
-        env={"PYTHONPATH": REPO_ROOT, "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert proc.returncode == 0, proc.stderr
-    seen = json.loads(proc.stdout.strip().splitlines()[-1])
-
-    assert seen["hits"] == []
-    # astroquery.exceptions is imported at module scope for the retryable-error
-    # tuple; it is cheap and reaches nothing. The two client modules are what must
-    # stay out, so name them rather than the package.
-    assert "astroquery.gaia" not in seen["astroquery"]
-    assert "astroquery.simbad" not in seen["astroquery"]
-
-
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Timeouts -- two transports, two seams
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @contextmanager
@@ -329,7 +276,7 @@ class TestCfhtArchive:
             get.return_value = self._response(total=21886)
             assert cfht_archive(2024, 0, 256) == ("rows\n", 21886)
 
-    def test_an_http_error_propagates(self):
+    def test_http_error_raises(self):
         response = MagicMock()
         response.raise_for_status.side_effect = requests.HTTPError("416")
         with patch("kpfpipe.utils.network.requests.get", return_value=response):

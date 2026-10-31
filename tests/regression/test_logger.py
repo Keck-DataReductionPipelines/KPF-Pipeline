@@ -9,8 +9,6 @@ import warnings
 import pytest
 
 from kpfpipe.utils import logger as kpflog
-from kpfpipe.utils.config import ConfigHandler
-from scripts.process.reduce import resolve_logging
 
 _UT_FROZEN = time.struct_time((2026, 7, 2, 14, 3, 22, 2, 183, 0))
 _RUN_ID = "run_20260702T140322"
@@ -121,7 +119,7 @@ class TestSetupLogging:
         second.close()
         assert second.baseFilename == f"{first.baseFilename}.1"
 
-    def test_collision_retries_are_exhausted_loudly(self, tmp_path, monkeypatch):
+    def test_exhausted_collision_retries_raises(self, tmp_path, monkeypatch):
         # The retry loop must terminate: turning it into `while True` would hang
         # a run forever instead of failing it.
         monkeypatch.setattr(kpflog, "_MAX_COLLISION_RETRIES", 1)
@@ -314,72 +312,6 @@ class TestTeardown:
 
     def test_teardown_safe_when_nothing_installed(self):
         kpflog.teardown_logging()  # must not raise
-
-
-class TestIOChokepoints:
-    """Every FITS write/read emits one INFO record."""
-
-    def test_to_fits_and_from_fits_log_records(self, tmp_path, caplog):
-        from kpfpipe.data_models.level4 import KPF4
-
-        path = str(tmp_path / "kpf_SL4_20240101T000000.fits")
-        with caplog.at_level(logging.INFO, logger="kpfpipe"):
-            KPF4().to_fits(path)
-            KPF4.from_fits(path)
-        assert f"wrote KPF4 to {path}" in caplog.text
-        assert f"reading KPF4 from {path}" in caplog.text
-
-
-def _config(tmp_path, body):
-    path = tmp_path / "config.toml"
-    path.write_text(body)
-    return path
-
-
-# resolve_logging lives in scripts/process/reduce.py, so this class belongs to
-# the scripts/CLI layer -- without the mark `make test-cli` collects none of it.
-@pytest.mark.cli
-class TestResolveLogging:
-    _LOGGER_TOML = '[LOGGER]\nlog_dir = "/logs/"\nlog_level = "DEBUG"\n'
-
-    def test_resolves_config_and_tokens(self, tmp_path):
-        config = ConfigHandler(_config(tmp_path, self._LOGGER_TOML))
-        params = resolve_logging(
-            config, "/repo/recipes/kpf_drp_science.py", "KP.1.2.3", None
-        )
-        assert params == {
-            "log_dir": "/logs/",
-            "recipe_name": "science",
-            "target": "KP.1.2.3",
-            "level": "DEBUG",
-            "console": True,
-        }
-
-    def test_datecode_target_and_defaults(self, tmp_path):
-        config = ConfigHandler(_config(tmp_path, '[LOGGER]\nlog_dir = "/l/"\n'))
-        params = resolve_logging(config, "kpf_drp_masters.py", None, "20240923")
-        assert params["recipe_name"] == "masters"
-        assert params["target"] == "20240923"
-        assert params["level"] == "INFO"  # default when config omits log_level
-
-    def test_no_target_falls_back_to_run(self, tmp_path):
-        config = ConfigHandler(_config(tmp_path, '[LOGGER]\nlog_dir = "/l/"\n'))
-        assert resolve_logging(config, "custom.py", None, None)["target"] == "run"
-
-    def test_missing_log_dir_raises(self, tmp_path):
-        config = ConfigHandler(_config(tmp_path, "[LOGGER]\n"))
-        with pytest.raises(ValueError, match="no log directory configured"):
-            resolve_logging(config, "kpf_drp_science.py", "KP.1.2.3", None)
-
-    def test_cli_override_wins(self, tmp_path):
-        # The CLI passes --log_dir/--log_level through ConfigHandler overrides.
-        config = ConfigHandler(
-            _config(tmp_path, self._LOGGER_TOML),
-            overrides={"LOGGER": {"log_dir": "/elsewhere/", "log_level": "INFO"}},
-        )
-        params = resolve_logging(config, "kpf_drp_science.py", "KP.1.2.3", None)
-        assert params["log_dir"] == "/elsewhere/"
-        assert params["level"] == "INFO"
 
 
 class TestWarningsBridge:

@@ -214,7 +214,7 @@ class TestKPF4:
         )
         assert "GREEN_SCI2_RV" in kpf4.data
 
-    def test_rv_chip_prefix_is_read_only(self):
+    def test_rv_chip_prefix_write_raises(self):
         # RV tables are written whole; a chip-prefixed write must fail loud.
         kpf4 = KPF4()
         with pytest.raises(KeyError, match="read-only"):
@@ -234,7 +234,7 @@ class TestKPF4:
 
 
 class TestKPFMasterStubs:
-    def test_master_l4_not_implemented(self):
+    def test_master_l4_raises(self):
         with pytest.raises(NotImplementedError, match="not yet implemented"):
             KPFMasterL4()
 

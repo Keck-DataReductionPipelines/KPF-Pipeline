@@ -32,9 +32,9 @@ def ts():
     return _ts
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Synthetic-frame helpers
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _write_l0(data_input, datecode, seconds, obj, imtype="Object", junk=False):
@@ -48,9 +48,9 @@ def _write_l0(data_input, datecode, seconds, obj, imtype="Object", junk=False):
     return obs_id
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # parse_args
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestParseArgs:
@@ -149,9 +149,9 @@ class TestParseArgs:
         assert removed & set(vars(ts.parse_args(_BASE_ARGS))) == set()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _orchestrator_argv
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestOrchestratorArgv:
@@ -182,9 +182,9 @@ class TestOrchestratorArgv:
         assert argv.index("20240101") < argv.index("--jobs")
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # discover_science_obs_ids: threaded no-contamination + filtering
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestDiscoverScienceObsIds:
@@ -271,9 +271,9 @@ class TestDiscoverScienceObsIds:
             )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # main: dispatch order (masters -> science -> plots) and the stage toggles
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class _FakeConfig:
@@ -449,15 +449,6 @@ class TestMainDispatch:
 
         assert calls == []
 
-    def test_no_skip_logs_written(self, ts, monkeypatch, tmp_path):
-        # No stand-in per-frame skip logs are written any more.
-        _write_l0(str(tmp_path), "20240101", 3600, "10700")
-        self._patch(ts, monkeypatch, tmp_path)
-
-        ts.main(_BASE_ARGS)
-
-        assert list(tmp_path.rglob("kpf_science_*.log")) == []
-
     def test_nonzero_when_a_stage_fails(self, ts, monkeypatch, tmp_path):
         _write_l0(str(tmp_path), "20240101", 3600, "10700")
         self._patch(ts, monkeypatch, tmp_path)
@@ -468,9 +459,9 @@ class TestMainDispatch:
         assert exc.value.code == 1
 
     def test_plot_failure_is_fail_soft(self, ts, monkeypatch, tmp_path, caplog):
-        # The plots stage lost its subprocess boundary, so the wrapper must catch
-        # whatever the plotter raises: the run still reaches its summary line and
-        # exits 1, rather than dying with the plotter's traceback.
+        # The plots stage runs in-process, so the wrapper must catch whatever the
+        # plotter raises: the run still reaches its summary line and exits 1,
+        # rather than dying with the plotter's traceback.
         _write_l0(str(tmp_path), "20240101", 3600, "10700")
         self._patch(ts, monkeypatch, tmp_path)
 

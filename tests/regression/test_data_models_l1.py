@@ -19,6 +19,7 @@ from kpfpipe.utils.astro import compute_redshift
 
 from ._catalog import SOURCES, catalog_record_table
 from ._data_models import CLOSED_SHUTTERS
+from ._dtype_policy import L1_IMAGE, assert_dtype, assert_roundtrip_dtype
 from ._eprv import kpf_table
 
 # synthetic_l0_file, synthetic_l0_minimal, synthetic_l1_file fixtures live in
@@ -127,7 +128,7 @@ class TestKPF1:
         with fits.open(out_fn) as hdul:
             assert hdul["PRIMARY"].header["DATALVL"] == "L1"
 
-    def test_raises_on_unknown_extension(self, tmp_path):
+    def test_unknown_extension_raises(self, tmp_path):
         fn = str(tmp_path / "unknown_ext.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"
@@ -168,7 +169,7 @@ class TestToKpf1:
         l0.standardize_headers()
         return l0
 
-    def test_raw_l0_is_rejected(self, synthetic_l0_file):
+    def test_raw_l0_raises(self, synthetic_l0_file):
         # The fail-loud gate: forwarding a raw WMKO PRIMARY onto an EPRV L1
         # PRIMARY would be silent corruption, so a mis-ordered call raises.
         l0 = KPF0.from_fits(synthetic_l0_file)
@@ -428,6 +429,28 @@ class TestDrpStatus:
         assert status == "Radial Velocity module complete"
 
 
+class TestDtypeProvenance:
+    """Storage preserves the L1 image dtype (no coercion) and the FITS round-trip
+    preserves its precision (float32 -> BITPIX -32)."""
+
+    def _populated(self):
+        l1 = KPF1()
+        l1.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
+        for ext in ("GREEN_CCD", "GREEN_VAR"):
+            l1.set_data(ext, np.ones((8, 8), dtype=L1_IMAGE))
+        return l1
+
+    def test_set_data_preserves_dtype(self):
+        l1 = self._populated()
+        for ext in ("GREEN_CCD", "GREEN_VAR"):
+            assert_dtype(l1.data[ext], L1_IMAGE, f"{ext} in-mem")
+
+    def test_roundtrip_preserves_precision(self, tmp_path):
+        l1 = self._populated()
+        for ext in ("GREEN_CCD", "GREEN_VAR"):
+            assert_roundtrip_dtype(KPF1, l1, ext, L1_IMAGE, tmp_path)
+
+
 class TestKPFMasterL1:
     def test_the_master_builds_its_whole_manifest(self):
         master = KPFMasterL1()
@@ -531,14 +554,14 @@ class TestKPFMasterL1:
             m.generate_standard_filename() == "KP.20240113.23249.10_master_bias_L1.fits"
         )
 
-    def test_generate_filename_requires_mastype(self):
+    def test_generate_filename_without_mastype_raises(self):
         # A master can never produce a non-compliant name: with no recorded
         # inputs / type, generate_standard_filename raises rather than falling
         # back to a KOAID-less name. MASTYPE is checked first.
         with pytest.raises(ValueError, match="MASTYPE"):
             KPFMasterL1().generate_standard_filename()
 
-    def test_generate_filename_requires_inputs(self):
+    def test_generate_filename_without_inputs_raises(self):
         # The second guard, reachable only once MASTYPE is set -- what a
         # partially-failed stack leaves behind.
         m = KPFMasterL1()
