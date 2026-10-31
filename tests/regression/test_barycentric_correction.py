@@ -1033,6 +1033,7 @@ class TestPerform:
 
     @pytest.mark.xfail(
         strict=True,
+        raises=AssertionError,
         reason="prod bug: barycentric_correction.py:737 — BARYCORR_Z uses the "
         "relativistic Doppler formula on barycorrpy's BC, which is already c*z_B "
         "(error c*b**2/2, 1.5 m/s at 30 km/s)",

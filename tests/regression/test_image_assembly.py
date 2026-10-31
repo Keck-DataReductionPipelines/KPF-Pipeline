@@ -134,6 +134,7 @@ class TestImageAssemblyBias:
 
     @pytest.mark.xfail(
         strict=True,
+        raises=AssertionError,
         reason="prod bug: image_assembly.py:403-426 -- stitch_ffi adds read "
         "noise as a std, not rn**2, so VAR is ~3x low in read-noise pixels",
     )
@@ -270,6 +271,7 @@ class TestVarianceModel:
 
     @pytest.mark.xfail(
         strict=True,
+        raises=AssertionError,
         reason="prod bug: image_assembly.py:403-426 -- stitch_ffi adds read "
         "noise as a std, not rn**2, so VAR is ~3x low in read-noise pixels",
     )

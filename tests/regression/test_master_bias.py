@@ -121,6 +121,7 @@ class TestMasterBiasRegression:
 
     @pytest.mark.xfail(
         strict=True,
+        raises=AssertionError,
         reason="prod bug: image_assembly.py:403-426 -- stitch_ffi adds read "
         "noise as a std, not rn**2; the master SNR (masters/base.py:817) sums "
         "that VAR, so the master variance is ~3x low",
