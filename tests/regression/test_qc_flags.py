@@ -1,7 +1,6 @@
 """Tests for the KPF QC framework (quality_control/qc_flags).
 
-All tests use synthetic in-memory data -- no real KPF files required. The qc.py
-CLI smoke tests live in test_qc_script.py.
+All tests use synthetic in-memory data -- no real KPF files required.
 """
 
 import logging
@@ -44,9 +43,9 @@ _NCOLS = 20  # small column count for fast tests; matches the mini_detector ncol
 # which the DATAPRL2 shape check reads
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Helpers: build minimal synthetic KPF objects in memory
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _make_kpf0(
@@ -192,20 +191,9 @@ def _make_kpf2_nan_headers(*, nan_frac=0.0, zero_frac=0.1):
     return kpf2
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # QC base class runner
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def ungated(monkeypatch):
-    """Declare every check applicable, for tests of a stub QC subclass.
-
-    A stub class has no ``config/*-applicability.csv``; the gate itself is
-    covered by ``TestQCApplicability``.
-    """
-    monkeypatch.setattr(applicability, "applies", lambda *_: True)
-    monkeypatch.setattr(applicability, "frame_type", lambda _: "Target")
+# ------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("ungated")
@@ -357,9 +345,9 @@ class TestQCBase:
         assert not any("CHKOK" in r.getMessage() for r in warnings)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # QCL0 checks
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestReadoutReference:
@@ -388,6 +376,19 @@ class TestQCL0:
     def test_data_l0_red_green_fail_missing(self, tmp_path):
         l0 = _make_kpf0(tmp_path, with_amps=False)
         assert QCL0(l0).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_one_ccd_absent(self, tmp_path):
+        # GREEN not read out (a camera fault): RED alone is not a full frame.
+        fn = write_amp_l0(
+            tmp_path / "KP.20240405.00005.00.fits", chips=("RED",), shape=(10, 10)
+        )
+        assert QCL0(standardized_l0(fn)).data_l0_red_green() is False
+
+    def test_data_l0_red_green_fail_short_readout_on_disk(self, tmp_path):
+        # A short readout as written to disk: every amp's header and data agree
+        # at (9, 10), a shape no readout setting names.
+        fn = write_amp_l0(tmp_path / "KP.20240405.00006.00.fits", shape=(9, 10))
+        assert QCL0(standardized_l0(fn)).data_l0_red_green() is False
 
     def test_data_l0_red_green_fail_empty(self, tmp_path):
         # data=None: KPF0 stores array(None, dtype=object), treated as absent.
@@ -512,9 +513,6 @@ class TestQCL0:
     def test_telemetry_absent_fails(self, tmp_path):
         assert QCL0(_make_kpf0(tmp_path)).telemetry_present() is False
 
-    def test_teleprl0_key_present(self):
-        assert QCL0.__dict__["telemetry_present"]._qc_key == "TELEPR"
-
     def _make_kpf0_with_cahk(self, tmp_path, shape):
         fn = write_amp_l0(
             tmp_path / "KP.20240405.00004.00.fits",
@@ -540,9 +538,6 @@ class TestQCL0:
         l0 = self._make_kpf0_with_cahk(tmp_path, (16, 16))
         l0.data["CA_HK"][:] = np.nan
         assert QCL0(l0).cahk_present() is False
-
-    def test_cahkprl0_key_present(self):
-        assert QCL0.__dict__["cahk_present"]._qc_key == "CAHKPR"
 
     def _make_kpf0_with_em_table(self, tmp_path, columns, ext="EXPMETER_SCI"):
         other = "EXPMETER_SKY" if ext == "EXPMETER_SCI" else "EXPMETER_SCI"
@@ -658,9 +653,6 @@ class TestQCL0:
         near = dict(GOOD_DATES, **{"GRDATE-B": "2024-09-23T09:12:09.534"})  # +50 ms
         assert QCL0(_make_kpf0(tmp_path, dates=near)).times_consistent() is True
 
-    def test_timechk_key_present(self):
-        assert QCL0.__dict__["times_consistent"]._qc_key == "DATTIMOK"
-
     def test_ntp_timing_pass(self, tmp_path):
         assert QCL0(_make_kpf0(tmp_path)).ntp_timing() is True
 
@@ -683,21 +675,20 @@ class TestQCL0:
         with pytest.raises(KeyError, match="TIMEERR"):
             QCL0(l0).ntp_timing()
 
-    def test_ntp_key_present(self):
-        assert QCL0.__dict__["ntp_timing"]._qc_key == "NTPOK"
-
-    def test_exptime_sane_pass_positive(self, tmp_path):
-        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 300.0})
-        assert QCL0(l0).exptime_sane() is True
-
-    def test_exptime_sane_pass_zero(self, tmp_path):
-        # Bias frames legitimately have EXPTIME=0.
-        l0 = _make_kpf0(tmp_path, exptime=0.0, dates={"ELAPSED": 0.0})
-        assert QCL0(l0).exptime_sane() is True
-
-    def test_exptime_sane_fail_negative(self, tmp_path):
-        l0 = _make_kpf0(tmp_path, exptime=-1.0, dates={"ELAPSED": -1.0})
-        assert QCL0(l0).exptime_sane() is False
+    @pytest.mark.parametrize(
+        "exptime, elapsed, expected",
+        [
+            (300.0, 300.0, True),
+            (0.0, 0.0, True),  # bias frames legitimately have EXPTIME=0
+            (-1.0, -1.0, False),
+            (300.0, 300.05, True),  # ELAPSED over EXPTIME within the tolerance
+            (300.0, 299.0, False),  # premature readout
+            (300.0, 301.0, False),  # ELAPSED over EXPTIME beyond the tolerance
+        ],
+    )
+    def test_exptime_sane(self, tmp_path, exptime, elapsed, expected):
+        l0 = _make_kpf0(tmp_path, exptime=exptime, dates={"ELAPSED": elapsed})
+        assert QCL0(l0).exptime_sane() is expected
 
     def test_exptime_sane_missing_raises(self, tmp_path):
         l0 = _make_kpf0(tmp_path, dates={"ELAPSED": 60.0})
@@ -705,26 +696,11 @@ class TestQCL0:
         with pytest.raises(KeyError, match="EXPTIME"):
             QCL0(l0).exptime_sane()
 
-    def test_exptime_sane_pass_elapsed_within_tol(self, tmp_path):
-        # ELAPSED may exceed the requested EXPTIME by up to the timing tolerance.
-        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 300.05})
-        assert QCL0(l0).exptime_sane() is True
-
     def test_exptime_sane_elapsed_absent_raises(self, tmp_path):
         # ELAPSED is the readout evidence; without it there is nothing to compare.
         l0 = _make_kpf0(tmp_path, exptime=300.0)
         with pytest.raises(KeyError, match="ELAPSED"):
             QCL0(l0).exptime_sane()
-
-    def test_exptime_sane_fail_premature_readout(self, tmp_path):
-        # ELAPSED shorter than the requested EXPTIME (premature readout).
-        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 299.0})
-        assert QCL0(l0).exptime_sane() is False
-
-    def test_exptime_sane_fail_elapsed_exceeds_tol(self, tmp_path):
-        # ELAPSED over the requested EXPTIME by more than the tolerance.
-        l0 = _make_kpf0(tmp_path, exptime=300.0, dates={"ELAPSED": 301.0})
-        assert QCL0(l0).exptime_sane() is False
 
     @pytest.mark.parametrize("elapsed", [5.9, 6.8, 300.0])
     def test_good_readout_pass(self, tmp_path, elapsed):
@@ -745,9 +721,6 @@ class TestQCL0:
         l0 = _make_kpf0(tmp_path, exptime=300.0)
         with pytest.raises(KeyError, match="ELAPSED"):
             QCL0(l0).good_readout()
-
-    def test_goodread_key_present(self):
-        assert QCL0.__dict__["good_readout"]._qc_key == "READOK"
 
     # not_junk delegates all file I/O to load_junk_obs_ids, so these tests
     # monkeypatch it (no junk file is ever written to a data tree) and cover only
@@ -816,10 +789,6 @@ class TestQCL0:
         with pytest.raises(TypeError, match="NoneType"):
             QCL0(l0).not_junk()
 
-    def test_not_junk_key_present(self):
-        qc = QCL0.__dict__["not_junk"]
-        assert qc._qc_key == "NOTJUNK"
-
     def test_radec_consistent_pass(self, tmp_path):
         l0 = _make_kpf0(tmp_path)
         for k, v in (("TCSOFF", 0.02), ("OBJOFF", 2.3), ("GAIAOFF", 2.3)):
@@ -856,9 +825,6 @@ class TestQCL0:
         l0 = _make_kpf0(tmp_path)
         l0.set_keyword("TCSOFF", 0.02)
         assert QCL0(l0).radec_consistent() is True
-
-    def test_radecok_key_present(self):
-        assert QCL0.__dict__["radec_consistent"]._qc_key == "TARGETOK"
 
     # --- catalog_astrometry_sane (ASTROMOK): physical range of the canonical
     # CATALOG_RECORD astrometry.
@@ -971,9 +937,6 @@ class TestQCL0:
         l0 = self._make_kpf0_with_canonical(tmp_path, pmdec=-30.0)
         assert QCL0(l0).catalog_astrometry_sane() is False
 
-    def test_astromok_key_present(self):
-        assert QCL0.__dict__["catalog_astrometry_sane"]._qc_key == "ASTROMOK"
-
     # --- catalog_color_sane (COLOROK): the canonical color must be present,
     # labeled, and on the dwarf sequence for CrossCorrelation to turn it into a
     # line-mask Teff.
@@ -1024,8 +987,25 @@ class TestQCL0:
             l0 = self._make_kpf0_with_canonical(tmp_path, color=color, color_name="B-V")
             assert QCL0(l0).catalog_color_sane() is True
 
-    def test_colorok_key_present(self):
-        assert QCL0.__dict__["catalog_color_sane"]._qc_key == "COLOROK"
+    def test_qc_keys_correct(self):
+        expected = {
+            "telemetry_present": "TELEPR",
+            "cahk_present": "CAHKPR",
+            "times_consistent": "DATTIMOK",
+            "ntp_timing": "NTPOK",
+            "good_readout": "READOK",
+            "not_junk": "NOTJUNK",
+            "radec_consistent": "TARGETOK",
+            "catalog_astrometry_sane": "ASTROMOK",
+            "catalog_color_sane": "COLOROK",
+            "expmeter_times_consistent": "EMTIMEOK",
+            "expmeter_flux_sane": "EMFLUXOK",
+        }
+        for method_name, key in expected.items():
+            fn = QCL0.__dict__[method_name]
+            assert fn._qc_key == key, (
+                f"{method_name}: expected {key!r}, got {fn._qc_key!r}"
+            )
 
     def test_dataprl0_key_and_comment(self):
         fn = QCL0.__dict__["data_l0_red_green"]
@@ -1124,9 +1104,6 @@ class TestQCL0:
         with pytest.raises(KeyError, match="DATE-BEG"):
             QCL0(l0).expmeter_times_consistent()
 
-    def test_emtimeok_key_present(self):
-        assert QCL0.__dict__["expmeter_times_consistent"]._qc_key == "EMTIMEOK"
-
     # expmeter_flux_sane reads the DiagL0 channel metrics, so these seed them
     # directly; the measurement itself is covered in test_diagnostics.py.
     def _make_kpf0_with_em_metrics(self, tmp_path, **metrics):
@@ -1174,9 +1151,6 @@ class TestQCL0:
         # v2.12 fails on either fiber, so a bad SKY fails an otherwise clean frame.
         l0 = self._make_kpf0_with_em_metrics(tmp_path, EMSKYNEG=20)
         assert QCL0(l0).expmeter_flux_sane() is False
-
-    def test_emfluxok_key_present(self):
-        assert QCL0.__dict__["expmeter_flux_sane"]._qc_key == "EMFLUXOK"
 
 
 class TestQCL0PixelQuality:
@@ -1439,9 +1413,9 @@ class TestQCL0Telemetry:
             )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # QCL1 checks
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("mini_detector")
@@ -1545,9 +1519,36 @@ class TestQCL1:
             del l1.headers["QUALITY_CONTROL"][f"RNNGRD{i}"]
         assert QCL1(l1).read_noise_nongauss_ok() is True
 
-    def test_bias_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=True, agebias=3.0)
-        assert QCL1(l1).bias_ok() is True
+    _CAL_CHECKS = [
+        # (check, applied-step receipt arg, age kwarg, QC age keyword)
+        ("bias_ok", "biassub", "agebias", "BIASAGE"),
+        ("dark_ok", "darksub", "agedark", "DARKAGE"),
+        ("flat_ok", "flatdiv", "ageflat", "FLATAGE"),
+    ]
+
+    @pytest.mark.parametrize("check, applied, age, age_key", _CAL_CHECKS)
+    @pytest.mark.parametrize(
+        "is_applied, age_days, expected",
+        [
+            (True, 3.0, True),
+            (False, 3.0, False),  # not subtracted / divided
+            (True, 10.0, False),  # master too old
+        ],
+    )
+    def test_calibration_ok(
+        self, tmp_path, check, applied, age, age_key, is_applied, age_days, expected
+    ):
+        l1 = _make_kpf1(tmp_path, **{applied: is_applied, age: age_days})
+        assert getattr(QCL1(l1), check)() is expected
+
+    @pytest.mark.parametrize("check, applied, age, age_key", _CAL_CHECKS)
+    def test_calibration_age_missing_raises(
+        self, tmp_path, check, applied, age, age_key
+    ):
+        l1 = _make_kpf1(tmp_path, **{applied: True})
+        del l1.headers["QUALITY_CONTROL"][age_key]
+        with pytest.raises(KeyError, match=age_key):
+            getattr(QCL1(l1), check)()
 
     def test_bias_ok_pass_future_dated_master(self, tmp_path):
         # CalibrationAssociation writes a SIGNED age (master_dt - obs_dt), and the
@@ -1562,10 +1563,6 @@ class TestQCL1:
         assert QCL1(_make_kpf1(tmp_path, agebias=5.0)).bias_ok() is True
         assert QCL1(_make_kpf1(tmp_path, agebias=5.5)).bias_ok() is False
 
-    def test_bias_ok_fail_not_subtracted(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=False, agebias=3.0)
-        assert QCL1(l1).bias_ok() is False
-
     def test_bias_ok_subtract_flag_missing_raises(self, tmp_path):
         # ImageProcessing writes biassub on every run, 0 or 1; an absent argument
         # is a broken upstream invariant, not a not-subtracted frame.
@@ -1573,52 +1570,6 @@ class TestQCL1:
         l1.receipt = l1.receipt[l1.receipt["FUNCTION"] != "image_processing"]
         with pytest.raises(KeyError, match="biassub"):
             QCL1(l1).bias_ok()
-
-    def test_bias_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=True, agebias=10.0)
-        assert QCL1(l1).bias_ok() is False
-
-    def test_bias_ok_age_missing_raises(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, biassub=True)
-        del l1.headers["QUALITY_CONTROL"]["BIASAGE"]
-        with pytest.raises(KeyError, match="BIASAGE"):
-            QCL1(l1).bias_ok()
-
-    def test_dark_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=True, agedark=3.0)
-        assert QCL1(l1).dark_ok() is True
-
-    def test_dark_ok_fail_not_subtracted(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=False, agedark=3.0)
-        assert QCL1(l1).dark_ok() is False
-
-    def test_dark_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=True, agedark=10.0)
-        assert QCL1(l1).dark_ok() is False
-
-    def test_dark_ok_age_missing_raises(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, darksub=True)
-        del l1.headers["QUALITY_CONTROL"]["DARKAGE"]
-        with pytest.raises(KeyError, match="DARKAGE"):
-            QCL1(l1).dark_ok()
-
-    def test_flat_ok_pass(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=3.0)
-        assert QCL1(l1).flat_ok() is True
-
-    def test_flat_ok_fail_not_divided(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=False, ageflat=3.0)
-        assert QCL1(l1).flat_ok() is False
-
-    def test_flat_ok_fail_too_old(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=True, ageflat=10.0)
-        assert QCL1(l1).flat_ok() is False
-
-    def test_flat_ok_age_missing_raises(self, tmp_path):
-        l1 = _make_kpf1(tmp_path, flatdiv=True)
-        del l1.headers["QUALITY_CONTROL"]["FLATAGE"]
-        with pytest.raises(KeyError, match="FLATAGE"):
-            QCL1(l1).flat_ok()
 
     def test_ffi_finite_pass(self, tmp_path):
         l1 = _make_kpf1(tmp_path, finite_ccd=True)
@@ -1659,30 +1610,20 @@ class TestQCL1:
         l1.data["GREEN_VAR"][0, 0] = -1.0
         assert QCL1(l1).variance_positive() is True
 
-    def test_negative_snr_fraction_pass(self, tmp_path):
-        assert QCL1(_make_kpf1(tmp_path)).negative_snr_fraction() is True
-
-    def test_negative_snr_fraction_pass_at_limit(self, tmp_path):
-        # 4 of 400 pixels is exactly 1%; the fraction must exceed it to fail.
+    @pytest.mark.parametrize(
+        "chip, npix, value, expected",
+        [
+            ("GREEN", 0, -10.0, True),
+            ("GREEN", 4, -10.0, True),  # 4 of 400 is exactly 1%; must exceed it
+            ("GREEN", 5, -10.0, False),
+            ("RED", 5, -10.0, False),
+            ("GREEN", 10, -5.0, True),  # strictly below -5 sigma; -5 itself passes
+        ],
+    )
+    def test_negative_snr_fraction(self, tmp_path, chip, npix, value, expected):
         l1 = _make_kpf1(tmp_path)
-        l1.data["GREEN_CCD"].flat[:4] = -10.0
-        assert QCL1(l1).negative_snr_fraction() is True
-
-    def test_negative_snr_fraction_fail_past_limit(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        l1.data["GREEN_CCD"].flat[:5] = -10.0
-        assert QCL1(l1).negative_snr_fraction() is False
-
-    def test_negative_snr_fraction_fail_red_chip(self, tmp_path):
-        l1 = _make_kpf1(tmp_path)
-        l1.data["RED_CCD"].flat[:5] = -10.0
-        assert QCL1(l1).negative_snr_fraction() is False
-
-    def test_negative_snr_fraction_pass_at_five_sigma(self, tmp_path):
-        # Strictly below -5 counts; a pixel exactly at -5 sigma does not.
-        l1 = _make_kpf1(tmp_path)
-        l1.data["GREEN_CCD"].flat[:10] = -5.0
-        assert QCL1(l1).negative_snr_fraction() is True
+        l1.data[f"{chip}_CCD"].flat[:npix] = value
+        assert QCL1(l1).negative_snr_fraction() is expected
 
     def test_zero_variance_writes_snr_flag_zero(self, tmp_path, caplog):
         # No errstate: a degenerate variance surfaces rather than being silenced,
@@ -1714,9 +1655,9 @@ class TestQCL1:
             )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Full QCL1 run on an all-good synthetic L1
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("mini_detector")
@@ -1752,9 +1693,9 @@ class TestQCL1Run:
         assert l1.headers["QUALITY_CONTROL"].get("BIASOK") == 0
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # QCL2 checks
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("mini_detector")
@@ -1854,24 +1795,19 @@ class TestQCL2:
         with pytest.raises(ZeroDivisionError):
             QCL2(kpf2).flux_finite_fraction()
 
-    def test_nonzero_flux_pass(self):
-        kpf2 = _make_kpf2_nan_headers(zero_frac=0.1)
-        assert QCL2(kpf2).nonzero_flux() is True
-
-    def test_nonzero_flux_fail_high_frac(self):
-        kpf2 = _make_kpf2_nan_headers(zero_frac=0.75)
-        assert QCL2(kpf2).nonzero_flux() is False
+    @pytest.mark.parametrize(
+        "zero_frac, expected",
+        [(0.1, True), (0.75, False), (0.5, False)],  # strictly < 0.5 passes
+    )
+    def test_nonzero_flux(self, zero_frac, expected):
+        kpf2 = _make_kpf2_nan_headers(zero_frac=zero_frac)
+        assert QCL2(kpf2).nonzero_flux() is expected
 
     def test_nonzero_flux_missing_raises(self):
         kpf2 = _make_kpf2_nan_headers()
         del kpf2.headers["QUALITY_CONTROL"]["ZEROSCI1"]
         with pytest.raises(KeyError, match="ZEROSCI1"):
             QCL2(kpf2).nonzero_flux()
-
-    def test_nonzero_flux_exactly_half(self):
-        # The check is strictly < 0.5.
-        kpf2 = _make_kpf2_nan_headers(zero_frac=0.5)
-        assert QCL2(kpf2).nonzero_flux() is False
 
     def test_nonzero_flux_no_extensions_raises(self):
         kpf2 = KPF2()
@@ -1953,9 +1889,9 @@ class TestQCL2:
             )
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # QCL4 -- CCF/RV presence and per-order BERV/BJD dispersion
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestQCL4:
@@ -2054,9 +1990,9 @@ class TestQCL4:
         assert qc["DATAPRL4"] == 0 and qc["BERVOK"] == 0 and qc["BJDOK"] == 0
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Every check's _qc_key must be a registered keyword
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestQCKeyRegistration:

@@ -445,14 +445,14 @@ class TestDtypeProvenance:
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_FLUX", FLUX, tmp_path, name=name)
         assert_roundtrip_dtype(KPF2, kpf2, "TRACE3_WAVE", WAVE, tmp_path, name=name)
 
-    def test_set_data_rejects_the_wrong_bit_depth(self):
+    def test_set_data_wrong_bit_depth_raises(self):
         # The manifest declares an exact width, so a float32 WAVE is a producer
         # bug and is refused rather than quietly widened.
         kpf2 = KPF2()
         with pytest.raises(TypeError, match="TRACE1_WAVE: manifest declares 64-bit"):
             kpf2.set_data("TRACE1_WAVE", np.ones((NORDER, 8), dtype=np.float32))
 
-    def test_chip_prefix_write_rejects_the_wrong_bit_depth(self):
+    def test_chip_prefix_write_wrong_bit_depth_raises(self):
         # A chip-prefix write bypasses rvdata's base set_data, so check the KPF
         # path enforces the born-64 WAVE policy too.
         kpf2 = KPF2()
@@ -554,7 +554,7 @@ class TestKPFMasterL2:
         assert "read" not in vars(KPFMasterL2)
         assert "_read" not in vars(KPFMasterL2)
 
-    def test_kind_required_and_validated(self):
+    def test_missing_or_invalid_kind_raises(self):
         with pytest.raises(TypeError):
             KPFMasterL2()  # kind is required, no default
         with pytest.raises(ValueError, match="kind must be one of"):
@@ -600,7 +600,7 @@ class TestKPFMasterL2:
         m = KPFMasterL2.from_fits(synthetic_masters_l2_file)
         assert "from_fits" in m.receipt["FUNCTION"].values
 
-    def test_from_fits_rejects_unreadable_input(self, tmp_path):
+    def test_from_fits_unreadable_input_raises(self, tmp_path):
         with pytest.raises(OSError, match="does not exist"):
             KPFMasterL2.from_fits(str(tmp_path / "absent.fits"))
         not_fits = tmp_path / "master.txt"
@@ -608,7 +608,7 @@ class TestKPFMasterL2:
         with pytest.raises(OSError, match="must be FITS files"):
             KPFMasterL2.from_fits(str(not_fits))
 
-    def test_from_fits_requires_a_known_mastype(self, tmp_path):
+    def test_from_fits_unknown_mastype_raises(self, tmp_path):
         # MASTYPE picks the extension manifest, so an unmappable one must not
         # fall back to a default kind -- a flat read under the WLS schema would
         # land extracted spectra in TRACE*_WAVE.
@@ -672,7 +672,7 @@ class TestKPFMasterL2:
         for key in ("ROUGHWLS", "LINELIST", "POLYDEGX"):
             assert back.headers["PRIMARY"][key] is None, key
 
-    def test_raises_on_unknown_extension(self, tmp_path):
+    def test_unknown_extension_raises(self, tmp_path):
         fn = str(tmp_path / "unknown_ext_ml2.fits")
         primary = fits.PrimaryHDU()
         primary.header["DATE-OBS"] = "2024-01-13T00:00:00"

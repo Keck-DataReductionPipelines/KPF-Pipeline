@@ -30,7 +30,7 @@ qc_level = "default"    # "none", "default", "strict", or "engineering"
 do_gaia_query = true
 do_simbad_query = true
 astrometry_priority = ["gaia", "simbad"]  # can include gaia/simbad/wmko
-query_timeout = 30  # seconds per HTTP round trip; retried up to 5 times
+query_timeout = 15  # read timeout [s] per request; mirrors tried in 2 passes, 60 s cap per lookup
 
 [MODULE_IMAGE_ASSEMBLY]
 overscan_method = "rowmedian"

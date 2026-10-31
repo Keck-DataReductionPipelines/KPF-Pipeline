@@ -3,19 +3,19 @@
 Covers the shortcut/`-r`/`-c` resolution, the recipe-kind guards, and
 clear_stale_outputs. Each test drives ``main(argv)`` against a tiny stub recipe
 (which records the resolved config) with logging stubbed out, so no real
-reduction runs. (``resolve_logging`` itself is unit-tested in test_logger.py.)
+reduction runs. ``resolve_logging`` is unit-tested directly (TestResolveLogging).
 """
 
 import argparse
 import logging
 import os
-import tempfile
 
 import pytest
 
 import recipes.kpf_drp_engineering as engineering_recipe
 import recipes.kpf_drp_masters as masters_recipe
 import recipes.kpf_drp_science as science_recipe
+from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.header import HeaderParser
 from kpfpipe.utils.io import load_junk_obs_ids
 from scripts.process import reduce as red
@@ -63,22 +63,19 @@ def _stub_recipe(tmp_path, sentinel):
     return recipe
 
 
-def _stub_logging(monkeypatch):
-    """Stub setup_logging: no real handlers, but a real-looking .log path.
+def _stub_logging(monkeypatch, tmp_path):
+    """Stub setup_logging: no real handlers, a .log path in tmp_path.
 
-    The run.json sidecar is written beside the log, so the stub must return a
-    path ending in .log inside a writable temp dir (never /dev/null).
+    The driver only reports the path, so nothing is created there. Returns it.
     """
-    base = tempfile.mkdtemp()
-    fake_log = os.path.join(base, "logs", "20240405", "kpf_rec_x_20240405T000000.log")
-    os.makedirs(os.path.dirname(fake_log), exist_ok=True)
+    fake_log = str(tmp_path / "kpf_rec_x_20240405T000000.log")
     monkeypatch.setattr(red, "setup_logging", lambda **kw: fake_log)
     return fake_log
 
 
-def _run(monkeypatch, argv):
+def _run(monkeypatch, tmp_path, argv):
     # Only config resolution is asserted; keep the real logging stack untouched.
-    _stub_logging(monkeypatch)
+    _stub_logging(monkeypatch, tmp_path)
     red.main(argv)
 
 
@@ -117,6 +114,7 @@ class TestDirShortcuts:
         recipe = _dirs_stub_recipe(tmp_path, sentinel)
         _run(
             monkeypatch,
+            tmp_path,
             [
                 "-r",
                 str(recipe),
@@ -137,6 +135,7 @@ class TestDirShortcuts:
         recipe = _dirs_stub_recipe(tmp_path, sentinel)
         _run(
             monkeypatch,
+            tmp_path,
             [
                 "-r",
                 str(recipe),
@@ -159,12 +158,9 @@ class TestRunLogDir:
 
     def _setup_kwargs(self, monkeypatch, tmp_path, extra):
         seen = {}
-        # The run.json sidecar is written beside the log, so the stub must hand
-        # back a writable .log path (never /dev/null).
-        fake_log = tmp_path / "logs" / "kpf_rec_x_20240405T000000.log"
-        fake_log.parent.mkdir(parents=True, exist_ok=True)
+        fake_log = str(tmp_path / "kpf_rec_x_20240405T000000.log")
         monkeypatch.setattr(
-            red, "setup_logging", lambda **kw: seen.update(kw) or str(fake_log)
+            red, "setup_logging", lambda **kw: seen.update(kw) or fake_log
         )
         recipe = _stub_recipe(tmp_path, tmp_path / "seen.txt")
         red.main(
@@ -410,7 +406,7 @@ class TestUndeclaredRecipe:
 
         argv = ["-r", str(recipe), "-c", str(cfg), *selector, "--force_run"]
         with caplog.at_level(logging.WARNING, logger=red.logger.name):
-            _run(monkeypatch, argv)
+            _run(monkeypatch, tmp_path, argv)
 
         assert sentinel.exists()
         assert os.path.exists(product)
@@ -454,7 +450,7 @@ class TestCustomRecipeGuard:
         # A custom recipe claiming a known (or mistyped) type gets the custom path.
         argv, product, sentinel = self._setup(tmp_path, decl)
         self._tty(monkeypatch, "y")
-        _run(monkeypatch, argv)
+        _run(monkeypatch, tmp_path, argv)
         assert sentinel.exists()
         assert os.path.exists(product)
 
@@ -462,7 +458,7 @@ class TestCustomRecipeGuard:
         argv, product, sentinel = self._setup(tmp_path)
         monkeypatch.setattr(red.sys.stdin, "isatty", lambda: False, raising=False)
         with pytest.raises(SystemExit) as exc:
-            _run(monkeypatch, argv)
+            _run(monkeypatch, tmp_path, argv)
         assert "Run aborted" in str(exc.value.code)
         assert "--force_run" in str(exc.value.code)
         assert not sentinel.exists()
@@ -470,7 +466,7 @@ class TestCustomRecipeGuard:
     def test_yes_runs_and_points_at_force_run(self, monkeypatch, tmp_path, capsys):
         argv, _, sentinel = self._setup(tmp_path)
         self._tty(monkeypatch, " Yes\n")
-        _run(monkeypatch, argv)
+        _run(monkeypatch, tmp_path, argv)
         assert sentinel.exists()
         out = capsys.readouterr().out
         assert "Executing" in out and "--force_run" in out
@@ -480,7 +476,7 @@ class TestCustomRecipeGuard:
         argv, product, sentinel = self._setup(tmp_path)
         self._tty(monkeypatch, answer)
         with pytest.raises(SystemExit) as exc:
-            _run(monkeypatch, argv)
+            _run(monkeypatch, tmp_path, argv)
         assert exc.value.code == "Run aborted"
         assert not sentinel.exists()
         assert os.path.exists(product)
@@ -488,7 +484,7 @@ class TestCustomRecipeGuard:
     def test_force_run_skips_the_prompt(self, monkeypatch, tmp_path):
         argv, _, sentinel = self._setup(tmp_path)
         monkeypatch.setattr("builtins.input", pytest.fail)
-        _run(monkeypatch, [*argv, "--force_run"])
+        _run(monkeypatch, tmp_path, [*argv, "--force_run"])
         assert sentinel.exists()
 
     @pytest.mark.parametrize(
@@ -528,7 +524,7 @@ class TestRecipeLoading:
 
     def test_missing_recipe_file_exits(self, monkeypatch, tmp_path):
         cfg = _base_cfg(tmp_path)
-        _stub_logging(monkeypatch)
+        _stub_logging(monkeypatch, tmp_path)
         with pytest.raises(SystemExit, match="Recipe file not found"):
             red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", _OID])
 
@@ -536,7 +532,7 @@ class TestRecipeLoading:
         cfg = _base_cfg(tmp_path)
         recipe = tmp_path / "nomain.py"
         recipe.write_text("VALUE = 1\n")
-        _stub_logging(monkeypatch)
+        _stub_logging(monkeypatch, tmp_path)
         with pytest.raises(SystemExit, match="has no main"):
             red.main(["-r", str(recipe), "-c", str(cfg), "-o", _OID])
 
@@ -551,7 +547,7 @@ class TestRecipeLoading:
         recipe.write_text(
             _SCIENCE_DECL + "def main(config, args):\n    raise RuntimeError('boom')\n"
         )
-        _stub_logging(monkeypatch)
+        _stub_logging(monkeypatch, tmp_path)
         caplog.set_level(logging.CRITICAL)
 
         with pytest.raises(RuntimeError, match="boom"):
@@ -577,7 +573,7 @@ class TestRecipeLoading:
         os.makedirs(os.path.dirname(product), exist_ok=True)
         open(product, "w").close()
 
-        _stub_logging(monkeypatch)
+        _stub_logging(monkeypatch, tmp_path)
         with pytest.raises(SystemExit, match="Recipe file not found"):
             red.main(["-r", str(tmp_path / "absent.py"), "-c", str(cfg), "-o", oid])
 
@@ -781,25 +777,6 @@ class TestClearStaleOutputs:
         assert os.path.exists(sci)
 
 
-# ---------------------------------------------------------------------------
-# run.json sidecar
-# ---------------------------------------------------------------------------
-
-
-def _record_cfg(tmp_path):
-    cfg = tmp_path / "rec.toml"
-    cfg.write_text(
-        "[DATA_DIRS]\n"
-        f'KPF_DATA_INPUT = "{tmp_path / "in"}"\n'
-        f'KPF_MASTERS_OUTPUT = "{tmp_path / "m"}"\n'
-        f'KPF_SCIENCE_OUTPUT = "{tmp_path / "s"}"\n'
-        "[LOGGER]\n"
-        f'log_dir = "{tmp_path / "logs"}"\n'
-        "console = false\n"
-    )
-    return cfg
-
-
 @pytest.mark.usefixtures("_stub_is_standard")
 class TestFrameGate:
     """Junk and single-CCD frames return before the recipe runs."""
@@ -811,7 +788,7 @@ class TestFrameGate:
         recipe = _stub_recipe(tmp_path, sentinel)
         cfg = _base_cfg(tmp_path)
         argv = ["-r", str(recipe), "-c", str(cfg), "-o", obs_id]
-        _run(monkeypatch, [*argv, "--kpf_data_input", str(tmp_path)])
+        _run(monkeypatch, tmp_path, [*argv, "--kpf_data_input", str(tmp_path)])
         return sentinel.exists()
 
     def test_junk_frame_is_skipped(self, monkeypatch, tmp_path, caplog):
@@ -830,3 +807,52 @@ class TestFrameGate:
     def test_both_ccds_frame_runs(self, monkeypatch, tmp_path):
         obs_id = write_l0_tree(tmp_path, "20240405", 100)
         assert self._main(monkeypatch, tmp_path, obs_id)
+
+
+def _config_file(tmp_path, body):
+    path = tmp_path / "config.toml"
+    path.write_text(body)
+    return path
+
+
+class TestResolveLogging:
+    _LOGGER_TOML = '[LOGGER]\nlog_dir = "/logs/"\nlog_level = "DEBUG"\n'
+
+    def test_resolves_config_and_tokens(self, tmp_path):
+        config = ConfigHandler(_config_file(tmp_path, self._LOGGER_TOML))
+        params = red.resolve_logging(
+            config, "/repo/recipes/kpf_drp_science.py", "KP.1.2.3", None
+        )
+        assert params == {
+            "log_dir": "/logs/",
+            "recipe_name": "science",
+            "target": "KP.1.2.3",
+            "level": "DEBUG",
+            "console": True,
+        }
+
+    def test_datecode_target_and_defaults(self, tmp_path):
+        config = ConfigHandler(_config_file(tmp_path, '[LOGGER]\nlog_dir = "/l/"\n'))
+        params = red.resolve_logging(config, "kpf_drp_masters.py", None, "20240923")
+        assert params["recipe_name"] == "masters"
+        assert params["target"] == "20240923"
+        assert params["level"] == "INFO"  # default when config omits log_level
+
+    def test_no_target_falls_back_to_run(self, tmp_path):
+        config = ConfigHandler(_config_file(tmp_path, '[LOGGER]\nlog_dir = "/l/"\n'))
+        assert red.resolve_logging(config, "custom.py", None, None)["target"] == "run"
+
+    def test_missing_log_dir_raises(self, tmp_path):
+        config = ConfigHandler(_config_file(tmp_path, "[LOGGER]\n"))
+        with pytest.raises(ValueError, match="no log directory configured"):
+            red.resolve_logging(config, "kpf_drp_science.py", "KP.1.2.3", None)
+
+    def test_cli_override_wins(self, tmp_path):
+        # The CLI passes --log_dir/--log_level through ConfigHandler overrides.
+        config = ConfigHandler(
+            _config_file(tmp_path, self._LOGGER_TOML),
+            overrides={"LOGGER": {"log_dir": "/elsewhere/", "log_level": "INFO"}},
+        )
+        params = red.resolve_logging(config, "kpf_drp_science.py", "KP.1.2.3", None)
+        assert params["log_dir"] == "/elsewhere/"
+        assert params["level"] == "INFO"

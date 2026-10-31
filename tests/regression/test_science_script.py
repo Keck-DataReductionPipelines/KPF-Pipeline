@@ -7,16 +7,14 @@ is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
 import logging
-import os
 import sys
-import tempfile
 
 import pandas as pd
 import pytest
 
 from scripts.process import science as _science
 
-from ._scripts import _FakeConfig, _NoLogDirConfig
+from ._scripts import _FakeConfig, _NoLogDirConfig, _stub_batch_log
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
 pytestmark = pytest.mark.cli
@@ -30,25 +28,9 @@ def s():
     return _science
 
 
-def _stub_batch_log(monkeypatch, mod):
-    """Stub setup_batch_logging with a real-looking .log path in a temp dir.
-
-    The batch run.json sidecar is written beside the log, so the stub must return
-    a writable path ending in .log (never a placeholder like /l/x.log).
-    """
-    base = tempfile.mkdtemp()
-    fake_log = os.path.join(base, "logs", "20240405", "kpf_batch_x_20240405T000000.log")
-    os.makedirs(os.path.dirname(fake_log), exist_ok=True)
-    label = mod.__name__.rsplit(".", 1)[-1]
-    monkeypatch.setattr(
-        mod, "setup_batch_logging", lambda *a, **k: (f"{label}_x", fake_log)
-    )
-    return fake_log
-
-
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # parse_args
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestParseArgs:
@@ -128,9 +110,9 @@ class TestParseArgs:
         assert ns.log_dir == "/out/logs"
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # _cli_task
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestCliTask:
@@ -152,9 +134,9 @@ class TestCliTask:
         ]  # fmt: skip
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # main exit-code contract
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _fake_file_handler(rows=()):
@@ -180,14 +162,14 @@ def _fake_file_handler(rows=()):
 
 
 class TestMainExitCode:
-    def _patch(self, s, monkeypatch, failed, calls=None):
+    def _patch(self, s, monkeypatch, tmp_path, failed, calls=None):
         # Skip the runtime setup, config resolution and subprocess fan-out (and
         # any real batch log file). ``calls`` collects run_stage's arguments for
         # the fan-out contract tests below; the rest assert only its failure set
         # -> exit code.
         monkeypatch.setattr(s, "configure_runtime", lambda: None)
         monkeypatch.setattr(s, "ConfigHandler", _FakeConfig)
-        _stub_batch_log(monkeypatch, s)
+        _stub_batch_log(monkeypatch, s, tmp_path)
         monkeypatch.setattr(s, "warm_mini_db_caches", lambda *a, **k: (0, 0))
         monkeypatch.setattr(s, "FileHandler", _fake_file_handler())
 
@@ -198,11 +180,11 @@ class TestMainExitCode:
 
         monkeypatch.setattr(s, "run_stage", fake_run_stage)
 
-    def test_derives_datecodes_for_prescan(self, s, monkeypatch):
+    def test_derives_datecodes_for_prescan(self, s, monkeypatch, tmp_path):
         # The pre-scan gets the unique-sorted nights the frames span, not the raw
         # obs_ids: two 20240405 frames collapse to one datecode.
         warm_args = {}
-        self._patch(s, monkeypatch, failed=[])
+        self._patch(s, monkeypatch, tmp_path, failed=[])
         monkeypatch.setattr(
             s,
             "warm_mini_db_caches",
@@ -215,11 +197,13 @@ class TestMainExitCode:
         assert warm_args["datecodes"] == ["20240405"]
         assert warm_args["cache"] == "rw"
 
-    def test_junk_and_single_ccd_frames_are_skipped(self, s, monkeypatch, caplog):
+    def test_junk_and_single_ccd_frames_are_skipped(
+        self, s, monkeypatch, tmp_path, caplog
+    ):
         # Junk (INFO) and single-CCD (WARNING) frames never reach the fan-out; a
         # GREEN or RED of None counts as not read out.
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         oid3, oid4 = "KP.20240405.40300.00", "KP.20240405.40400.00"
         monkeypatch.setattr(
             s,
@@ -244,64 +228,66 @@ class TestMainExitCode:
         assert levels[f"skipping {oid3}: {single}"] == logging.WARNING
         assert "done: reduced 1/1 frame(s), 3 skipped" in levels
 
-    def test_exits_zero_when_all_reduced(self, s, monkeypatch):
-        self._patch(s, monkeypatch, failed=[])
+    def test_exits_zero_when_all_reduced(self, s, monkeypatch, tmp_path):
+        self._patch(s, monkeypatch, tmp_path, failed=[])
         s.main(["--obs_ids", _OID1])  # no SystemExit
 
-    def test_exits_nonzero_when_any_failed(self, s, monkeypatch):
-        self._patch(s, monkeypatch, failed=[_OID1])
+    def test_exits_nonzero_when_any_failed(self, s, monkeypatch, tmp_path):
+        self._patch(s, monkeypatch, tmp_path, failed=[_OID1])
         with pytest.raises(SystemExit) as exc:
             s.main(["--obs_ids", _OID1])
         assert exc.value.code == 1
 
-    def test_fan_out_is_fail_soft(self, s, monkeypatch):
+    def test_fan_out_is_fail_soft(self, s, monkeypatch, tmp_path):
         # This driver reduces a whole night: one bad frame must not abort the
         # rest. Its sibling drivers assert the same contract for themselves.
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         s.main(["--obs_ids", _OID1, _OID2])
         assert calls[0][1]["abort_on_failure"] is False
 
-    def test_fan_out_paces_launches(self, s, monkeypatch):
+    def test_fan_out_paces_launches(self, s, monkeypatch, tmp_path):
         # Every reduction resolves catalog astrometry, so the launches are spaced
         # to stay inside the SIMBAD/Gaia rate limits.
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         s.main(["--obs_ids", _OID1, "--job_timeout", "42"])
         assert calls[0][1]["launch_interval"] == s._LAUNCH_INTERVAL > 0
         assert calls[0][1]["job_timeout"] == 42
 
-    def test_output_dir_reaches_the_per_frame_argv(self, s, monkeypatch):
+    def test_output_dir_reaches_the_per_frame_argv(self, s, monkeypatch, tmp_path):
         # Parsing --kpf_science_output is not enough: dropping it from `forward`
         # sends every product to the config's data root with a green suite.
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         s.main(["--obs_ids", _OID1, "--kpf_science_output", "/out"])
         tasks = calls[0][0][1]
         _, argv = tasks[0]
         assert "--kpf_science_output" in argv
         assert argv[argv.index("--kpf_science_output") + 1] == "/out"
 
-    def test_stages_reach_every_child(self, s, monkeypatch):
+    def test_stages_reach_every_child(self, s, monkeypatch, tmp_path):
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         s.main(["--obs_ids", _OID1, "--stages", "astro_query", "image_assembly"])
         for _, argv in calls[0][0][1]:
             assert argv[-3:] == ["--stages", "astro_query", "image_assembly"]
 
-    def test_no_stages_forwarded_by_default(self, s, monkeypatch):
+    def test_no_stages_forwarded_by_default(self, s, monkeypatch, tmp_path):
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         s.main(["--obs_ids", _OID1])
         _, argv = calls[0][0][1][0]
         assert "--stages" not in argv
 
-    def test_forwards_dir_and_log_overrides_to_each_child(self, s, monkeypatch):
+    def test_forwards_dir_and_log_overrides_to_each_child(
+        self, s, monkeypatch, tmp_path
+    ):
         # The sibling of masters' forwarding test: every override the orchestrator
         # resolved must reach each fanned-out reduce, or a child silently falls
         # back to its own config.
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         s.main(
             [
                 "--obs_ids",
@@ -323,11 +309,13 @@ class TestMainExitCode:
         assert fwd["--log_dir"] == "/out/logs"
         assert fwd["--run_id"] == "science_x"
 
-    def test_dates_reduce_only_a_nights_target_frames(self, s, monkeypatch, caplog):
+    def test_dates_reduce_only_a_nights_target_frames(
+        self, s, monkeypatch, tmp_path, caplog
+    ):
         # A night expands to its frames; calibrations drop silently, junk is still
         # gated and counted as skipped.
         calls, seen = [], {}
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         oid3 = "KP.20240405.40300.00"
 
         def fake_nights(data_input, nights):
@@ -352,9 +340,9 @@ class TestMainExitCode:
         assert [tag for tag, _ in calls[0][0][1]] == [_OID1]
         assert "done: reduced 1/1 frame(s), 1 skipped" in caplog.text
 
-    def test_date_range_expands_to_the_nights_on_disk(self, s, monkeypatch):
+    def test_date_range_expands_to_the_nights_on_disk(self, s, monkeypatch, tmp_path):
         calls, seen = [], {}
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         monkeypatch.setattr(
             s, "datecodes_in_range", lambda di, a, b: seen.update(r=(a, b)) or [a]
         )
@@ -371,9 +359,11 @@ class TestMainExitCode:
         [([], [_OID1, _OID2]), (["--no-socal"], [_OID1])],
         ids=["default", "no-socal"],
     )
-    def test_no_socal_skips_solar_targets(self, s, monkeypatch, flags, expected):
+    def test_no_socal_skips_solar_targets(
+        self, s, monkeypatch, tmp_path, flags, expected
+    ):
         calls = []
-        self._patch(s, monkeypatch, failed=[], calls=calls)
+        self._patch(s, monkeypatch, tmp_path, failed=[], calls=calls)
         monkeypatch.setattr(s, "obs_ids_in_nights", lambda di, nights: [_OID1, _OID2])
         monkeypatch.setattr(
             s,
@@ -388,8 +378,10 @@ class TestMainExitCode:
         s.main(["--dates", "20240405", *flags])
         assert [tag for tag, _ in calls[0][0][1]] == expected
 
-    def test_dates_without_target_frames_warn_and_exit(self, s, monkeypatch, caplog):
-        self._patch(s, monkeypatch, failed=[])
+    def test_dates_without_target_frames_warn_and_exit(
+        self, s, monkeypatch, tmp_path, caplog
+    ):
+        self._patch(s, monkeypatch, tmp_path, failed=[])
         monkeypatch.setattr(s, "obs_ids_in_nights", lambda di, nights: [_OID1])
         monkeypatch.setattr(
             s, "FileHandler", _fake_file_handler([(_OID1, False, True, True, "Dark")])

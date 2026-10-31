@@ -25,7 +25,7 @@ from astropy.time import Time
 from kpfpipe import DEFAULT_CFG, DETECTOR, SCI_FIBERS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.network import gaia_client, retry_request, simbad_client
+from kpfpipe.utils.network import gaia_client, query_mirrors, simbad_client
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ _DEFAULT_CFG = {
     "do_gaia_query": True,
     "do_simbad_query": True,
     "astrometry_priority": ("gaia", "simbad"),
-    "query_timeout": 30,
+    "query_timeout": 15,
 }
 
 
@@ -131,10 +131,37 @@ class AstroQuery:
 
     # Queryable Gaia release -> its gaia_source table, newest last. DR1 and EDR3
     # are excluded. A release absent here is neither probed nor accepted.
-    _GAIA_TABLES = {
-        "DR2": "gaiadr2.gaia_source",
-        "DR3": "gaiadr3.gaia_source",
+    # Gaia release -> ((TAP endpoint, gaia_source table), ...), in failover order:
+    # ESA, then the GAVO and MAST mirrors. Each was checked to return values and units
+    # identical to ESA's; IRSA (truncated values) and NOIRLab/AIP (units astropy cannot
+    # parse) were not. MAST holds no DR2.
+    _GAIA_MIRRORS = {
+        "DR2": (
+            ("https://gea.esac.esa.int/tap-server/tap", "gaiadr2.gaia_source"),
+            ("https://gaia.ari.uni-heidelberg.de/tap", "gaiadr2.gaia_source"),
+        ),
+        "DR3": (
+            ("https://gea.esac.esa.int/tap-server/tap", "gaiadr3.gaia_source"),
+            ("https://gaia.ari.uni-heidelberg.de/tap", "gaiadr3.gaia_source"),
+            ("https://mast.stsci.edu/vo-tap/api/v0.1/gaiadr3", "dbo.gaia_source"),
+        ),
     }
+
+    # SIMBAD servers in failover order: CDS, then its Harvard (CfA) mirror.
+    _SIMBAD_MIRRORS = ("simbad.cds.unistra.fr", "simbad.harvard.edu")
+
+    def _query_gaia_mirrors(self, release, query):
+        """Run ``query`` on ``release``'s mirrors in turn, its ``{table}`` filled per
+        mirror; see ``query_mirrors``."""
+        return query_mirrors(
+            lambda m: (
+                gaia_client(m[0], self.query_timeout)
+                .run_sync(query.format(table=m[1]))
+                .to_table()
+            ),
+            self._GAIA_MIRRORS[release],
+            f"Gaia {release}",
+        )
 
     def _gaia_source(self):
         """``(release, source_id)`` from L0 GAIAID, or None if absent/unusable.
@@ -143,7 +170,7 @@ class AstroQuery:
         the queried table -- a source_id denotes different stars across releases, so the
         prefix is honored rather than discarded. ``release`` is None for a bare id, left
         for ``_resolve_gaia_release``. None when GAIAID is absent or blank, the trailing
-        token is not all digits, or the release is not in ``_GAIA_TABLES``.
+        token is not all digits, or the release is not in ``_GAIA_MIRRORS``.
         """
         raw = self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID")
         if raw is None:
@@ -155,14 +182,14 @@ class AstroQuery:
         if len(tokens) == 1:
             return None, source_id
         release = tokens[-2].upper()
-        return (release, source_id) if release in self._GAIA_TABLES else None
+        return (release, source_id) if release in self._GAIA_MIRRORS else None
 
     def _resolve_gaia_release(self, source_id):
         """The newest Gaia release whose gaia_source contains ``source_id``.
 
         For a bare GAIAID only: rather than assume a release, probe the archive and take
         the newest one holding the id, since the same source_id denotes different stars
-        in different releases. Every release in ``_GAIA_TABLES`` is published, so a
+        in different releases. Every release in ``_GAIA_MIRRORS`` is published, so a
         failed probe means something is genuinely wrong: it warns and falls through to
         an older release, which may hold a different star under that id. An id no
         release holds raises rather than being mistaken for a resolved one.
@@ -175,23 +202,18 @@ class AstroQuery:
         Returns
         -------
         str
-            The release key into ``_GAIA_TABLES``.
+            The release key into ``_GAIA_MIRRORS``.
 
         Raises
         ------
         ValueError
             No queryable release contains ``source_id``.
         """
-        for release in sorted(self._GAIA_TABLES, reverse=True):
-            query = (
-                f"SELECT source_id FROM {self._GAIA_TABLES[release]} "
-                f"WHERE source_id = {source_id}"
-            )
+        for release in sorted(self._GAIA_MIRRORS, reverse=True):
             try:
-                found = retry_request(
-                    lambda q=query: gaia_client().launch_job(q).get_results(),
-                    f"Gaia {release}",
-                    timeout=self.query_timeout,
+                found = self._query_gaia_mirrors(
+                    release,
+                    f"SELECT source_id FROM {{table}} WHERE source_id = {source_id}",
                 )
             except Exception as e:
                 logger.warning(
@@ -208,7 +230,7 @@ class AstroQuery:
                 return release
         raise ValueError(
             f"GAIAID {source_id} carries no data release and no queryable Gaia "
-            f"release ({', '.join(sorted(self._GAIA_TABLES))}) contains that "
+            f"release ({', '.join(sorted(self._GAIA_MIRRORS))}) contains that "
             "source_id; refusing to guess which release it belongs to."
         )
 
@@ -418,11 +440,11 @@ class AstroQuery:
     def query_gaia(self):
         """Query Gaia for the target's ICRS astrometry, or None (fail-soft).
 
-        The release named in GAIAID selects the queried table (``_GAIA_TABLES``), so a
+        The release named in GAIAID selects the queried tables (``_GAIA_MIRRORS``), so a
         DR2 id is never looked up among DR3 source_ids; a bare id is identified against
         the archive by ``_resolve_gaia_release``. Returns None (warned) when GAIAID
-        yields no usable release/source_id, when the lookup fails after the
-        ``retry_request`` retries, or when the source is not found. Raises ValueError
+        yields no usable release/source_id, when the lookup fails on every mirror
+        (``query_mirrors``), or when the source is not found. Raises ValueError
         if a bare id matches no queryable release, or if the result's column units
         differ from the schema shared by the supported releases (deg, mas/yr, mas,
         km/s, Julian yr, mag; ICRS). Gated in perform by ``do_gaia_query``.
@@ -433,7 +455,7 @@ class AstroQuery:
                 "no usable GAIAID on L0 PRIMARY (%r); Gaia astrometry unavailable "
                 "(queryable releases: %s)",
                 self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID"),
-                ", ".join(sorted(self._GAIA_TABLES)),
+                ", ".join(sorted(self._GAIA_MIRRORS)),
             )
             return None
         release, gaia_id = source
@@ -446,16 +468,12 @@ class AstroQuery:
         query = f"""
         SELECT ra, dec, pmra, pmdec, parallax, radial_velocity, ref_epoch,
                phot_bp_mean_mag, phot_rp_mean_mag
-        FROM {self._GAIA_TABLES[release]}
+        FROM {{table}}
         WHERE source_id = {gaia_id}
         """
         logger.info("querying Gaia %s for source_id %s", release, gaia_id)
         try:
-            results = retry_request(
-                lambda: gaia_client().launch_job(query).get_results(),
-                f"Gaia {release}",
-                timeout=self.query_timeout,
-            )
+            results = self._query_gaia_mirrors(release, query)
         except Exception as e:
             logger.warning(
                 "Gaia query failed (%s: %s); Gaia astrometry unavailable",
@@ -563,7 +581,7 @@ class AstroQuery:
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
         Returns None (warned, not raised) when L0 has no usable OBJECT name, or when the
-        lookup fails after the ``retry_request`` retries or resolves nothing. Raises
+        lookup fails on every mirror (``query_mirrors``) or resolves nothing. Raises
         ValueError if the result's column units differ from the assumed schema: the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value mas,
         rvz_radvel km/s), where the Johnson B/V magnitudes come back unlabeled (unit
@@ -582,10 +600,12 @@ class AstroQuery:
             f for f in self._SIMBAD_UNITS if f not in ("ra", "dec", "main_id")
         )
         try:
-            result = retry_request(
-                lambda: simbad_client(fields, self.query_timeout).query_object(name),
+            result = query_mirrors(
+                lambda m: simbad_client(m, fields, self.query_timeout).query_object(
+                    name
+                ),
+                self._SIMBAD_MIRRORS,
                 "SIMBAD",
-                timeout=self.query_timeout,
             )
         except Exception as e:
             logger.warning(

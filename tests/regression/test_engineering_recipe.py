@@ -100,15 +100,16 @@ class TestEngineeringRecipe:
 
 @pytest.mark.slow
 @pytest.mark.requires_testdata
-def test_completes_without_thar_master(tmp_path):
-    # An empty masters root: association finds no ThAr, WLS is skipped, and the
-    # L2 is still written.
-    masters_root = tmp_path / "no_masters"
-    masters_root.mkdir()
-    out_path = _run_recipe(tmp_path / "out", masters_root)
+class TestEngineeringRecipeWithoutMasters:
+    def test_completes_without_thar_master(self, tmp_path):
+        # An empty masters root: association finds no ThAr, WLS is skipped, and
+        # the L2 is still written.
+        masters_root = tmp_path / "no_masters"
+        masters_root.mkdir()
+        out_path = _run_recipe(tmp_path / "out", masters_root)
 
-    assert os.path.isfile(out_path)
-    l2 = KPF2.from_fits(out_path)
-    modules = l2.receipt["FUNCTION"].values
-    assert "spectral_extraction" in modules
-    assert "wavelength_calibration" not in modules
+        assert os.path.isfile(out_path)
+        l2 = KPF2.from_fits(out_path)
+        modules = l2.receipt["FUNCTION"].values
+        assert "spectral_extraction" in modules
+        assert "wavelength_calibration" not in modules

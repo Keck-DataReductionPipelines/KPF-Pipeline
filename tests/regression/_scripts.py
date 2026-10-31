@@ -1,60 +1,16 @@
 """Shared helpers for the scripts/CLI-layer tests (not a test module).
 
-Everything here serves ``@pytest.mark.cli`` modules: launching a script in a child
-process under the suite's warning policy, standing in for ConfigHandler, and
-staging a synthetic night tree on disk. Builders only -- no assertions.
+Everything here serves ``@pytest.mark.cli`` modules: standing in for
+ConfigHandler and the batch logger, and staging a synthetic night tree on disk.
+Builders only -- no assertions.
 """
 
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 from astropy.io import fits
 
 # Repo root: tests/regression/_scripts.py -> tests/regression -> tests -> repo.
 REPO_ROOT = str(Path(__file__).resolve().parents[2])
-
-# pytest's filterwarnings does not reach a child process, so mirror the pyproject
-# rules in: a child warning then becomes the non-zero exit the tests check for.
-# PYTHONWARNINGS resolves categories at interpreter startup, before astropy is
-# importable, so the astropy rule is carried by its message prefix alone.
-# TestChildWarningParity in test_qc_script.py asserts this stays in sync.
-CHILD_WARNINGS = ",".join(
-    (
-        "error",
-        "ignore:Card is too long",
-    )
-)
-
-# AstroQuery is bounded now (kpfpipe.utils.network's per-request timeouts) and
-# stdin=DEVNULL below rules out a tty stop, but astropy's and barycorrpy's
-# reference-data downloads still have no bound we control. Cap every run anyway:
-# a hang becomes a loud TimeoutExpired instead of a stalled suite, which is how
-# both of the bugs above were found. Generous enough for a slow-but-working run.
-CHILD_TIMEOUT = 120
-
-
-def run_script(script, *argv, timeout=CHILD_TIMEOUT):
-    """Run ``script`` (a repo-relative path) in a child process with ``argv``.
-
-    Takes arbitrary argv rather than named flags so the no-args and bad-config
-    cases use the same launcher as the happy path. Returns the CompletedProcess;
-    the caller asserts on returncode/stdout/stderr.
-    """
-    env = {**os.environ, "PYTHONPATH": REPO_ROOT, "PYTHONWARNINGS": CHILD_WARNINGS}
-    return subprocess.run(
-        [sys.executable, script, *map(str, argv)],
-        cwd=REPO_ROOT,
-        env=env,
-        # Without this the child inherits the terminal's stdin, and a read from a
-        # background process group raises SIGTTIN -- which *stops* the process at
-        # 0% CPU, indistinguishable from a hang.
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
 
 
 class _FakeConfig:
@@ -78,12 +34,17 @@ class _NoLogDirConfig(_FakeConfig):
         return {"KPF_DATA_INPUT": "/in"}
 
 
-def write_config(path, data_dirs):
-    """Write a minimal ``[DATA_DIRS]`` TOML config at ``path``."""
-    lines = ["[DATA_DIRS]"]
-    lines += [f'{key} = "{value}"' for key, value in data_dirs.items()]
-    path.write_text("\n".join(lines) + "\n")
-    return path
+def _stub_batch_log(monkeypatch, mod, tmp_path):
+    """Stub ``mod.setup_batch_logging``: no real handlers, a .log path in tmp_path.
+
+    The driver only reports the path, so nothing is created there. Returns it.
+    """
+    fake_log = str(tmp_path / "kpf_batch_x_20240405T000000.log")
+    label = mod.__name__.rsplit(".", 1)[-1]
+    monkeypatch.setattr(
+        mod, "setup_batch_logging", lambda *a, **k: (f"{label}_x", fake_log)
+    )
+    return fake_log
 
 
 def write_l0_tree(

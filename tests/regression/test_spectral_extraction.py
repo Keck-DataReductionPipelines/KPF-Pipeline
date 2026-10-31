@@ -17,7 +17,6 @@ import kpfpipe.modules.spectral_extraction as se_module
 from kpfpipe import CHIPS, DETECTOR, FIBERS
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.data_models.level1 import KPF1
-from kpfpipe.data_models.level2 import KPF2
 from kpfpipe.modules.image_assembly import ImageAssembly
 from kpfpipe.modules.spectral_extraction import SpectralExtraction
 
@@ -31,9 +30,9 @@ TESTDATA_L0_DIR = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 L0_FILE = str(TESTDATA_L0_DIR / "KP.20240405.00020.86.fits")
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Shared fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -55,9 +54,9 @@ def minimal_l1(tmp_path):
     return KPF1.from_fits(fn)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Box extraction (unit tests -- no data or fixtures required)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestBoxExtraction:
@@ -70,14 +69,16 @@ class TestBoxExtraction:
         np.testing.assert_allclose(flux, 5.0)
 
     def test_with_weights(self):
-        D = np.ones((5, 10), dtype=np.float32)
+        # Rows hold 1..5 so each row's weight shows up in the sum:
+        # flux = 0.5*1 + 2 + 3 + 4 + 0.5*5 = 12, var = 0.25 + 1 + 1 + 1 + 0.25.
+        D = np.repeat(np.arange(1.0, 6.0, dtype=np.float32)[:, None], 10, axis=1)
         V = np.ones((5, 10), dtype=np.float32)
         W = np.ones((5, 10), dtype=np.float32)
         W[0, :] = 0.5
         W[-1, :] = 0.5
-        flux_full, _ = SpectralExtraction._box_extraction(D, V)
-        flux_w, _ = SpectralExtraction._box_extraction(D, V, W=W)
-        assert np.all(flux_w < flux_full)
+        flux_w, var_w = SpectralExtraction._box_extraction(D, V, W=W)
+        np.testing.assert_allclose(flux_w, 12.0, rtol=1e-6)
+        np.testing.assert_allclose(var_w, 3.5, rtol=1e-6)
 
     def test_with_sky_subtraction(self):
         D = np.full((5, 10), 10.0, dtype=np.float32)
@@ -87,13 +88,18 @@ class TestBoxExtraction:
         np.testing.assert_allclose(flux, 5 * (10.0 - 3.0))
 
     def test_with_mask(self):
-        D = np.ones((5, 10), dtype=np.float32)
+        # Row 2 holds a hot value (10). M is renormalised to nrow, so the four
+        # good rows are scaled by 5/4: flux = (1 + 2 + 4 + 5) * 1.25 = 15 and
+        # var = 4 * 1.25**2 = 6.25. If the mask were ignored, flux would be 22.
+        D = np.repeat(
+            np.array([1.0, 2.0, 10.0, 4.0, 5.0], dtype=np.float32)[:, None], 10, axis=1
+        )
         V = np.ones((5, 10), dtype=np.float32)
         M = np.ones((5, 10), dtype=np.float32)
         M[2, :] = 0
-        flux, _ = SpectralExtraction._box_extraction(D, V, M=M)
-        # M is renormalised to nrow, so masking a row redistributes its weight.
-        np.testing.assert_allclose(flux, 5.0)
+        flux, var = SpectralExtraction._box_extraction(D, V, M=M)
+        np.testing.assert_allclose(flux, 15.0, rtol=1e-6)
+        np.testing.assert_allclose(var, 6.25, rtol=1e-6)
 
     def test_fully_masked_column_raises(self):
         D = np.ones((5, 10), dtype=np.float32)
@@ -110,9 +116,9 @@ class TestBoxExtraction:
         np.testing.assert_allclose(var, 5 * 4.0)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Dtype provenance
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestDtypeProvenance:
@@ -145,9 +151,9 @@ class TestDtypeProvenance:
         assert_dtype(l2.data["SCI2_VAR"], FLUX, "L2 SCI2_VAR")
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Unimplemented extraction stubs
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestUnimplementedExtraction:
@@ -162,9 +168,9 @@ class TestUnimplementedExtraction:
             SpectralExtraction._flat_relative_extraction(D, V)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # perform() shape tests (monkeypatched -- no real data or trace files needed)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPerformShapes:
@@ -273,9 +279,9 @@ class TestPerformShapes:
         assert "spectral_extraction" in modules
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Regression tests (real L0 data -> assemble L1 -> extract)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -289,10 +295,6 @@ class TestSpectralExtractionRealData:
         l1 = ia.perform()
         se = SpectralExtraction(l1)
         return se.perform(), se
-
-    def test_returns_kpf2(self, l2_from_flat):
-        l2, _ = l2_from_flat
-        assert isinstance(l2, KPF2)
 
     @pytest.mark.parametrize(
         "key, expected_rows",
@@ -327,9 +329,9 @@ class TestSpectralExtractionRealData:
         assert "spectral_extraction" in modules
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestPolynomialOrderTrace
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPolynomialOrderTrace:
@@ -371,9 +373,9 @@ class TestPolynomialOrderTrace:
         assert row_max == int(np.ceil((center + 5.0).max()))
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestOrderTraceErrors
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestOrderTraceErrors:
@@ -443,9 +445,9 @@ class TestOrderTraceErrors:
             se.extract_orderlet("GREEN", "SCI1", 1)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestValidColumnSpan
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestValidColumnSpan:
@@ -530,9 +532,9 @@ class TestValidColumnSpan:
         assert not W[:, 40:].any()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # extract_ffi's missing-trace tolerance, and the extraction-method guard
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestExtractFfiFailureTolerance:
@@ -612,7 +614,7 @@ class TestExtractFfiFailureTolerance:
 
 
 class TestExtractionMethodGuard:
-    def test_unsupported_method_names_itself(self):
+    def test_unsupported_method_raises(self):
         # Dispatch is getattr(self, f"_{extraction_method}_extraction"), so a
         # config typo must not surface as a bare AttributeError mid-loop.
         se = TestValidColumnSpan()._make_se(50.0, x1=0.0, x2=99.0)
@@ -620,9 +622,9 @@ class TestExtractionMethodGuard:
             se.extract_orderlet("GREEN", "SCI1", 0, extraction_method="boxx")
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # TestOrderTraceSelection
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 _STUB_ERAS = """INSTERA,UT_start_date,UT_end_date,Comments
@@ -695,7 +697,7 @@ class TestOrderTraceSelection:
 
         assert se._order_trace_path == str(traces / "order_trace_20240301.csv")
 
-    def test_does_not_reach_into_a_neighbouring_era(self, tmp_path, monkeypatch):
+    def test_era_without_traces_raises(self, tmp_path, monkeypatch):
         # The frame is in era 2.5, whose traces are all in eras 1.0 and 2.0.
         _stub_reference_tree(tmp_path, monkeypatch)
         se = SpectralExtraction(_StubL1("2024-12-01T11:08:33", "2.5"))
@@ -703,16 +705,14 @@ class TestOrderTraceSelection:
         with pytest.raises(FileNotFoundError, match="instrument era 2.5"):
             se._read_order_trace_reference()
 
-    def test_an_unregistered_instera_fails_loudly(self, tmp_path, monkeypatch):
+    def test_unregistered_instera_raises(self, tmp_path, monkeypatch):
         _stub_reference_tree(tmp_path, monkeypatch)
         se = SpectralExtraction(_StubL1("2024-06-01T11:08:33", "UNKNOWN"))
 
         with pytest.raises(ValueError, match="no instrument era 'UNKNOWN'"):
             se._read_order_trace_reference()
 
-    def test_an_unregistered_instera_is_not_swallowed_as_a_missing_orderlet(
-        self, tmp_path, monkeypatch
-    ):
+    def test_unregistered_instera_in_extract_ffi_raises(self, tmp_path, monkeypatch):
         # extract_ffi catches LookupError to NaN-fill an absent orderlet. An era
         # the table does not carry must not arrive disguised as one -- it must
         # abort on the first orderlet rather than be retried for every order.

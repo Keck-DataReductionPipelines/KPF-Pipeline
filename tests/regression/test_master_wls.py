@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from astropy.io import fits
+from scipy.special import erf
 
 import kpfpipe.modules.masters.base as base_module
 import kpfpipe.modules.masters.wls as wls_module
@@ -319,7 +320,7 @@ class TestProcessIndividualFrames:
         result = wls._process_stack_l0_to_l2(FILE_LIST[:3])
         assert len(result) == 3
 
-    def test_raises_when_failures_exceed_threshold(self, monkeypatch):
+    def test_failures_exceeding_threshold_raises(self, monkeypatch):
         wls = WLS(FILE_LIST)
         attempted = []
 
@@ -488,11 +489,6 @@ def mock_make_master_l2(monkeypatch):
 
 
 class TestMakeMasterL2:
-    def test_returns_kpf_master_l2(self, mock_make_master_l2):
-        wls = WLS(FILE_LIST)
-        result = wls.make_master_l2()
-        assert isinstance(result, KPFMasterL2)
-
     def test_wave_routing_uses_physical_position_not_fiber_order(self, monkeypatch):
         # W's planes are ordered by fiber_positions (SKY=0..CAL=4), so the write
         # loop must sort by that, not trust self.fibers' config-overridable
@@ -542,30 +538,6 @@ class TestMakeMasterL2:
                     f"{chip}_{fiber}_WAVE routed to the wrong W plane"
                 )
 
-    def test_wave_is_float64_and_survives_roundtrip(
-        self, mock_make_master_l2, tmp_path
-    ):
-        # Master WLS wavelengths are born-64 (EPRV); must not downcast on disk.
-        wls = WLS(FILE_LIST)
-        ml2 = wls.make_master_l2()
-        assert_dtype(ml2.data["TRACE3_WAVE"], WAVE, "master TRACE3_WAVE")
-        ml2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
-        assert_roundtrip_dtype(
-            KPFMasterL2,
-            ml2,
-            "TRACE3_WAVE",
-            WAVE,
-            tmp_path,
-            name="KP.20240113.23249.10_master_thar_L2.fits",
-        )
-
-    def test_coeffs_extensions_exist_before_any_fit(self):
-        # The manifest builds both chips' coefficient extensions at
-        # construction; make_master_l2 only fills them.
-        bare = KPFMasterL2(kind="wls")
-        assert "GREEN_WLS_COEFFS" in bare.extensions
-        assert "RED_WLS_COEFFS" in bare.extensions
-
     def test_coeffs_extensions_populated(self, mock_make_master_l2):
         wls = WLS(FILE_LIST)
         ml2 = wls.make_master_l2()
@@ -580,20 +552,6 @@ class TestMakeMasterL2:
                 wls.poly_degree_m + 1,
                 wls.poly_degree_f + 1,
             )
-
-    def test_primary_header_keywords(self, mock_make_master_l2):
-        wls = WLS(FILE_LIST)
-        ml2 = wls.make_master_l2()
-        primary = ml2.headers["PRIMARY"]
-        for key in [
-            "ROUGHWLS",
-            "LINELIST",
-            "LINEPROF",
-            "POLYDEGX",
-            "POLYDEGM",
-            "POLYDEGF",
-        ]:
-            assert key in primary
 
     def test_primary_header_keyword_comments_from_registry(self, mock_make_master_l2):
         # WLS metadata routes through set_keyword, so the FITS comments come from
@@ -691,13 +649,6 @@ class TestMakeMasterL2:
             wls.save_diagnostics(str(tmp_path / "thar_L2"))
         assert not (tmp_path / "thar_L2").exists()
 
-    def test_output_dir_writes_diagnostics_hdf5(self, mock_make_master_l2, tmp_path):
-        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
-        night, _, thar_dir = _master_and_stack(tmp_path)
-        wls.make_master_l2(output_dir=str(night))
-        h5_path = thar_dir / "KP.20240101.00000.00_thar_l2_diagnostics.h5"
-        assert h5_path.exists()
-
     def test_save_diagnostics_post_hoc(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         wls.make_master_l2()  # no output_dir; diagnostics stashed on self
@@ -706,7 +657,7 @@ class TestMakeMasterL2:
         h5_path = thar_dir / "KP.20240101.00000.00_thar_l2_diagnostics.h5"
         assert h5_path.exists()
 
-    def test_save_master_rejects_unknown_level(self, mock_make_master_l2, tmp_path):
+    def test_save_master_unknown_level_raises(self, mock_make_master_l2, tmp_path):
         wls = WLS(FILE_LIST)
         wls.make_master_l2()
         with pytest.raises(ValueError, match="level"):
@@ -745,9 +696,10 @@ class TestMakeMasterL2:
     def test_no_output_dir_writes_no_per_frame_thar_l2(
         self, mock_make_master_l2, tmp_path
     ):
-        wls = WLS(FILE_LIST)
+        # KPF_MASTERS_OUTPUT points at tmp_path, so a write would land under it.
+        wls = WLS(FILE_LIST, config={"KPF_MASTERS_OUTPUT": str(tmp_path)})
         wls.make_master_l2()  # no output_dir
-        assert not (tmp_path / "thar_L2").exists()
+        assert not list(tmp_path.rglob("*_thar_L2.fits"))
 
     def test_per_frame_thar_l2_written_before_line_fitting(
         self, mock_make_master_l2, monkeypatch, tmp_path
@@ -929,14 +881,22 @@ class TestCalculateWlsCoeffs:
         }
 
     def _roundtrip(self, wls):
-        """A known low-degree m*lambda surface and lines sampled from it."""
+        """A known grating-like solution and lines sampled from it.
+
+        The truth is an independent oracle, written without Legendre or any WLS
+        method: the grating equation keeps m*lambda nearly order-independent, so
+        m*lambda = 6.11e5 A + 2.4 A/px * x + 5e-5 A/px**2 * x**2 + 3 A * (m - 120)
+        (GREEN: ~4460 A at m=137 to ~5930 A at m=103, ~0.02 A/px). A quadratic in
+        x and linear in m lies inside the degree-(6, 6) Legendre span, so the fit
+        must reproduce it to rounding.
+        """
         orders = wls._echelle_orders["GREEN"]
         ncol = DETECTOR["ccd"]["ncol"]
 
-        coeffs_true = np.zeros((wls.poly_degree_x + 1, wls.poly_degree_m + 1))
-        coeffs_true[0, 0], coeffs_true[1, 0] = 8.0e5, 300.0  # mean, pixel slope
-        coeffs_true[0, 1], coeffs_true[1, 1] = 5.0e4, 5.0  # order slope, cross term
-        wave_true = wls._evaluate_wls_coeffs(coeffs_true, orders, nfiber=1)
+        pix = np.arange(ncol, dtype=float)
+        m = np.asarray(orders, dtype=float)[:, None]
+        mlambda = 6.11e5 + 2.4 * pix + 5e-5 * pix**2 + 3.0 * (m - 120.0)
+        wave_true = mlambda / m
 
         cols = np.linspace(0, ncol - 1, 60).astype(int)
         lines = {
@@ -972,8 +932,8 @@ class TestCalculateWlsCoeffs:
         assert coeffs.shape == (wls.poly_degree_x + 1, wls.poly_degree_m + 1)
 
     def test_mlambda_roundtrip_recovers_wavelength(self):
-        # The fit models m*lambda as a Legendre surface, so a surface built from
-        # known low-degree coefficients must be recovered exactly.
+        # Lines sampled from the analytic oracle must reproduce it at every
+        # pixel. rtol 1e-9 is 5e-6 A at 5000 A, i.e. 0.3 m/s.
         wls = WLS(FILE_LIST)
         orders, wave_true, lines = self._roundtrip(wls)
         coeffs_fit = wls._calculate_wls_coeffs(lines, orders)
@@ -1187,25 +1147,6 @@ class TestFitLinePositions:
         assert not result["FINITE"][0]
         assert np.isnan(result["SNR"][0])
 
-    def test_fit_returns_float64_from_float32_inputs(self):
-        # float32 inputs must not drag the line fit down to float32.
-        wls = WLS(FILE_LIST)
-        ncol = 100
-        x = np.arange(ncol)
-        wave = np.linspace(5000.0, 5100.0, ncol).astype(np.float32)
-        flux = (1.0 + 50.0 * np.exp(-0.5 * ((x - 50) / 2.0) ** 2)).astype(np.float32)
-        var = np.ones(ncol, dtype=np.float32)
-        line_waves = np.array([wave[50]], dtype=float)
-
-        result = wls._fit_line_positions_1d(
-            flux, var, wave, line_waves, lineprofile="gaussian"
-        )
-        assert len(result["WAVE"]) == 1
-        assert result["FINITE"][0] and result["CONVERGED"][0]
-        assert abs(result["FIT_MEAN"][0] - 50.0) < 0.01
-        for key in ["WAVE", "FIT_MEAN", "FIT_STD", "FIT_AMP", "FIT_MEAN_ERR", "SNR"]:
-            assert_dtype(result[key], WAVE, f"_fit_line_positions_1d {key}")
-
     def test_all_nan_fiber_emits_fiber_level_warning(self, caplog):
         wls = WLS(FILE_LIST)
         ncol = DETECTOR["ccd"]["ncol"]
@@ -1219,6 +1160,54 @@ class TestFitLinePositions:
         assert "RED SCI1: no lines fit" in caplog.text
         assert len(result["WAVE"]) == 2 * norder
         assert not result["FINITE"].any()
+
+
+class TestLineCentroidAccuracy:
+    """ThAr line centroids, the WLS's raw input, at sub-pixel accuracy.
+
+    1e-3 px is ~1 m/s at KPF's ~0.9 km/s per pixel. Lines are pixel-integrated
+    Gaussians (what a CCD records), not the point-sampled model the fit uses.
+    """
+
+    NCOL = 100
+    SIGMA_PX = 1.5  # ThAr line width, ~1.5 px
+
+    def _line(self, x0, amp=1000.0, baseline=10.0):
+        """Pixel-integrated Gaussian line [e-] centred at ``x0`` [px]."""
+        x = np.arange(self.NCOL)
+        s = np.sqrt(2.0) * self.SIGMA_PX
+        integral = 0.5 * (erf((x + 0.5 - x0) / s) - erf((x - 0.5 - x0) / s))
+        return baseline + amp * np.sqrt(2.0 * np.pi) * self.SIGMA_PX * integral
+
+    def _fit(self, flux, x0, var):
+        wls = WLS(FILE_LIST)
+        wave = 5000.0 + np.arange(self.NCOL, dtype=float)  # 1 A/px
+        return wls._fit_line_positions_1d(flux, var, wave, np.array([5000.0 + x0]))
+
+    @pytest.mark.parametrize("x0", np.round(np.arange(50.0, 51.01, 0.1), 1))
+    def test_noiseless_centroid_across_pixel_phase(self, x0):
+        # The sweep covers every sub-pixel phase, including the flip of the
+        # +/-5 px fit window at x0 = 50.5.
+        result = self._fit(self._line(x0), x0, np.ones(self.NCOL))
+        assert result["CONVERGED"][0]
+        assert result["FIT_MEAN"][0] == pytest.approx(x0, abs=1e-3)
+
+    def test_fit_mean_err_matches_monte_carlo_scatter(self):
+        # 200 seeded realizations with homoscedastic noise (the fit is
+        # unweighted, so its residual-scaled error assumes it). The RMS of the
+        # reported error must match the centroid scatter within 15% (a 200-sample
+        # std is uncertain by 5%).
+        rng = np.random.default_rng(1190)
+        x0, noise = 50.3, 10.0
+        clean = self._line(x0)
+        var = np.full(self.NCOL, noise**2)
+        means, errs = [], []
+        for _ in range(200):
+            result = self._fit(clean + rng.normal(0.0, noise, self.NCOL), x0, var)
+            means.append(result["FIT_MEAN"][0])
+            errs.append(result["FIT_MEAN_ERR"][0])
+        ratio = np.std(means) / np.sqrt(np.mean(np.square(errs)))
+        assert 0.85 <= ratio <= 1.15
 
 
 class TestRoughWlsLoading:
@@ -1235,3 +1224,48 @@ class TestRoughWlsLoading:
         assert set(wls.rough_wls) == set(cached_rough_wls)
         for channel_ext, grid in wls.rough_wls.items():
             np.testing.assert_array_equal(grid, cached_rough_wls[channel_ext])
+
+
+class TestDtypeProvenance:
+    """Master WAVE is born-64 on disk; float32 inputs do not downcast the line fit."""
+
+    def test_wave_is_float64_and_survives_roundtrip(
+        self, mock_make_master_l2, tmp_path
+    ):
+        # Master WLS wavelengths are born-64 (EPRV); must not downcast on disk.
+        wls = WLS(FILE_LIST)
+        ml2 = wls.make_master_l2()
+        assert_dtype(ml2.data["TRACE3_WAVE"], WAVE, "master TRACE3_WAVE")
+        ml2.headers["PRIMARY"]["DATE-OBS"] = "2024-01-13T10:26:56"
+        assert_roundtrip_dtype(
+            KPFMasterL2,
+            ml2,
+            "TRACE3_WAVE",
+            WAVE,
+            tmp_path,
+            name="KP.20240113.23249.10_master_thar_L2.fits",
+        )
+
+    def test_fit_returns_float64_from_float32_inputs(self):
+        # float32 inputs must not drag the line fit down to float32.
+        wls = WLS(FILE_LIST)
+        ncol = 100
+        x = np.arange(ncol)
+        wave = np.linspace(5000.0, 5100.0, ncol).astype(np.float32)
+        # A non-integer centre: on an integer centre a float32-truncated fit
+        # still lands exactly by symmetry, hiding the precision loss.
+        x0 = 50.37
+        flux = (1.0 + 50.0 * np.exp(-0.5 * ((x - x0) / 2.0) ** 2)).astype(np.float32)
+        var = np.ones(ncol, dtype=np.float32)
+        line_waves = np.array([wave[50]], dtype=float)
+
+        result = wls._fit_line_positions_1d(
+            flux, var, wave, line_waves, lineprofile="gaussian"
+        )
+        assert len(result["WAVE"]) == 1
+        assert result["FINITE"][0] and result["CONVERGED"][0]
+        # 1e-3 px (~1 m/s at KPF's ~0.9 km/s/px); the float32 flux quantization
+        # (~3e-6 relative) moves the centroid far less.
+        assert result["FIT_MEAN"][0] == pytest.approx(x0, abs=1e-3)
+        for key in ["WAVE", "FIT_MEAN", "FIT_STD", "FIT_AMP", "FIT_MEAN_ERR", "SNR"]:
+            assert_dtype(result[key], WAVE, f"_fit_line_positions_1d {key}")

@@ -22,9 +22,9 @@ from ._masters import FILE_LIST, make_mocked_master
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Unit tests (mocked stack_frames)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestMasterFlatUnit:
@@ -41,14 +41,14 @@ class TestMasterFlatUnit:
             assert master_flat.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Signature: a flat is bias- and dark-subtracted, so make_master_l1 takes bias
 # and dark but not flat.
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestMasterFlatSignature:
-    def test_flat_kwarg_rejected(self):
+    def test_flat_kwarg_raises(self):
         module = Flat(FILE_LIST)
         with pytest.raises(TypeError, match="unexpected keyword argument"):
             module.make_master_l1(flat=True)
@@ -59,10 +59,10 @@ class TestMasterFlatSignature:
         assert isinstance(ml1, KPFMasterL1)
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Regression: a real master flat from the bundled L0 flats (bias- and dark-
 # subtracted, real flag_outliers rejection, real bad-pixel cleaning)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @pytest.mark.slow
@@ -81,18 +81,11 @@ class TestMasterFlatRegression:
         config = {"KPF_MASTERS_OUTPUT": str(TESTDATA_DIR)}
         return Flat(files[0], config=config).make_master_l1()
 
-    def test_returns_kpf_master_l1(self, master_flat):
-        assert isinstance(master_flat, KPFMasterL1)
-
     def test_flat_is_illuminated(self, master_flat):
         # A flat is an illuminated exposure, so the stack carries positive signal.
         for chip in CHIPS:
             median = np.nanmedian(master_flat.data[f"{chip}_IMG"])
             assert median > 0
-
-    def test_bunit_is_electrons(self, master_flat):
-        for chip in CHIPS:
-            assert master_flat.headers[f"{chip}_IMG"].get("BUNIT") == "electrons"
 
     def test_snr_never_negative(self, master_flat):
         for chip in CHIPS:

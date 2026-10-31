@@ -78,7 +78,7 @@ class TestUnregisteredKeywords:
         l2.set_keyword("NANSCI1", 3)  # registered -> QUALITY_CONTROL
         CheckpointL2(l2).raise_on_unregistered_keyword()  # no raise
 
-    def test_l0_primary_is_validated_too(self):
+    def test_unregistered_l0_primary_keyword_raises(self):
         # standardize_headers runs at load, so the PRIMARY a checkpoint sees is
         # the EPRV one at every level -- a native leaked onto it raises at L0
         # exactly as it does at L2.
@@ -174,7 +174,7 @@ class TestQCLevels:
         assert chk.qc_level == "default"
         assert chk.raise_flags == ("DATAPRL2",)
 
-    def test_strict_not_implemented(self):
+    def test_strict_qc_level_raises(self):
         with pytest.raises(NotImplementedError, match="strict"):
             CheckpointL2(KPF2(), qc_level="strict")
 
@@ -226,7 +226,7 @@ class TestRunFoldsDiagnosticsAndQC:
         # Every Diagnostics class in order, then QC, then the checkpoint method(s).
         assert calls[:3] == ["diag", "diag2", "qc"]
         assert "checkpoint" in calls[3:]
-        # QC's result dict is captured for callers (e.g. scripts/quality_control/qc.py).
+        # QC's result dict is captured on the checkpoint.
         assert chk.qc_results == {"DATAPRL2": (True, "")}
 
     def test_missing_paired_classes_skip_those_stages(self, caplog):
@@ -245,9 +245,9 @@ class TestRunFoldsDiagnosticsAndQC:
         assert not caplog.records
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # CheckpointL0 / CheckpointL2 -- the two run() seams the recipe drives
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 #
 # recipes/kpf_drp_science.py calls CheckpointL0(l0).run() and CheckpointL2(l2).run()
 # on the production path, but neither was exercised in process anywhere, so
@@ -331,9 +331,9 @@ class TestCheckpointL0:
             CheckpointL0(l0).run()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # CheckpointL1 -- folds DiagL1 + QCL1, then validates the assembled FFI product
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _make_l1(*, ccd=True, shape=(20, 20)):
@@ -397,9 +397,9 @@ class TestCheckpointL1:
         assert "RNOK" in caplog.text
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # CheckpointL4 -- folds DiagL4 + QCL4, then validates the RV/CCF product
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _make_l4(*, sci=True):

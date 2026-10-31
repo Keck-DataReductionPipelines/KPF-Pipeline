@@ -15,9 +15,9 @@ from kpfpipe.data_models.level1 import KPF1
 pytestmark = pytest.mark.quicklook
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 # Large enough to exercise the 100-pixel border strip in image()'s percentile
 # scaling, without paying for full 4080x4080 arrays.
@@ -87,9 +87,9 @@ def synthetic_l1_no_rn(tmp_path):
     return l1
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Constructor
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 class TestPlotL1Constructor:
@@ -233,7 +233,7 @@ class TestRun:
         with pytest.raises(ValueError, match="unknown plot"):
             qlp.run("bogus")
 
-    def test_run_requires_which(self, synthetic_l1):
+    def test_run_without_which_raises(self, synthetic_l1):
         from kpfpipe.quality_control.quicklook.level1 import PlotL1
 
         qlp = PlotL1(synthetic_l1)

@@ -1,17 +1,16 @@
 """Tests for the network helpers in kpfpipe.utils.network.
 
-No external host is contacted. The retry tests drive ``retry_request`` with a mock
-callable and patch ``time.sleep``, so the backoff is inspected, not waited out. The
+No external host is contacted. The retry and failover tests drive ``retry_request``
+and ``query_mirrors`` with mock callables and patch ``time.sleep``, so the waits are
+inspected, not waited out. The
 timeout tests need a real socket that stalls, so they use a loopback listener --
 which the conftest guard allows, and which no amount of mocking could stand in for.
 """
 
 import http.client
-import json
+import itertools
 import logging
 import socket
-import subprocess
-import sys
 import threading
 import time
 from contextlib import contextmanager
@@ -19,17 +18,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from pyvo.dal import DALQueryError, DALServiceError
+from pyvo.dal import DALFormatError, DALQueryError, DALServiceError
 
 from kpfpipe.utils.network import (
     _RETRY_WAITS,
     _RETRYABLE,
     cfht_archive,
+    gaia_client,
+    query_mirrors,
     retry_request,
     simbad_client,
 )
-
-from ._scripts import REPO_ROOT
 
 
 def _patch_sleep():
@@ -83,7 +82,13 @@ class TestRetryRequest:
         assert sleep.call_count == 0
 
     @pytest.mark.parametrize(
-        "exc", [TimeoutError("timed out"), OSError("reset"), DALServiceError("503")]
+        "exc",
+        [
+            TimeoutError("timed out"),
+            OSError("reset"),
+            DALServiceError("503"),
+            DALFormatError("read timed out mid-response"),
+        ],
     )
     def test_transient_exception_types_are_retried(self, exc):
         func = MagicMock(side_effect=[exc, "ok"])
@@ -113,57 +118,53 @@ class TestRetryRequest:
         assert "retrying in" in caplog.text
 
 
-# ---------------------------------------------------------------------------
-# Import purity -- witnessed in a child, because this suite's conftest hides it
-# ---------------------------------------------------------------------------
+class TestQueryMirrors:
+    """Ordered failover: the first mirror to answer wins; two passes, capped."""
 
-# Records every outbound connect, imports the module, and reports what it saw.
-# Run through `python -c` so no conftest loads: the suite's own network guard
-# would mask exactly the connection this is here to detect.
-_IMPORT_PROBE = """
-import json, socket, sys
-hits = []
-socket.socket.connect = lambda self, addr, *a, **k: hits.append(addr)
-socket.create_connection = lambda addr, *a, **k: hits.append(addr)
-import kpfpipe.modules.astro_query
-print(json.dumps({
-    "hits": [str(h) for h in hits],
-    "astroquery": sorted(m for m in sys.modules if m.startswith("astroquery")),
-}))
-"""
+    def test_first_mirror_answers_and_the_rest_are_untouched(self):
+        func = MagicMock(return_value="ok")
+        assert query_mirrors(func, ("a", "b"), "Service") == "ok"
+        assert [c.args[0] for c in func.call_args_list] == ["a"]
 
+    def test_transient_failure_fails_over_to_next_mirror(self, caplog):
+        func = MagicMock(side_effect=[ConnectionError("a down"), "ok"])
+        with caplog.at_level(logging.INFO):
+            assert query_mirrors(func, ("a", "b"), "Service") == "ok"
+        assert [c.args[0] for c in func.call_args_list] == ["a", "b"]
+        assert "Service mirror a failed (ConnectionError: a down)" in caplog.text
+        assert "Service answered by b" in caplog.text
 
-@pytest.mark.cli
-def test_importing_astro_query_touches_no_network():
-    """Importing the module must not open a connection, nor pull in a client.
+    def test_non_transient_error_does_not_fail_over(self):
+        # A malformed query is wrong on every mirror; trying the next would hide it.
+        func = MagicMock(side_effect=DALQueryError("bad ADQL"))
+        with pytest.raises(DALQueryError):
+            query_mirrors(func, ("a", "b"), "Service")
+        assert func.call_count == 1
 
-    ``astroquery.gaia`` builds a module-level ``GaiaClass()`` whose constructor
-    fetches ESA status messages, so importing it *is* a connection. Both client
-    imports are deferred into the factories to keep that off every code path that
-    never queries a catalog -- this is the only thing that witnesses it.
-    """
-    proc = subprocess.run(
-        [sys.executable, "-c", _IMPORT_PROBE],
-        cwd=REPO_ROOT,
-        env={"PYTHONPATH": REPO_ROOT, "PATH": "/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert proc.returncode == 0, proc.stderr
-    seen = json.loads(proc.stdout.strip().splitlines()[-1])
+    def test_all_mirrors_down_tries_two_passes_then_raises_last(self):
+        errors = [ConnectionError(f"down {i}") for i in range(4)]
+        func = MagicMock(side_effect=errors)
+        with _patch_sleep() as sleep, pytest.raises(ConnectionError, match="down 3"):
+            query_mirrors(func, ("a", "b"), "Service")
+        assert [c.args[0] for c in func.call_args_list] == ["a", "b", "a", "b"]
+        assert _slept(sleep) == [0.0, 2.0]
 
-    assert seen["hits"] == []
-    # astroquery.exceptions is imported at module scope for the retryable-error
-    # tuple; it is cheap and reaches nothing. The two client modules are what must
-    # stay out, so name them rather than the package.
-    assert "astroquery.gaia" not in seen["astroquery"]
-    assert "astroquery.simbad" not in seen["astroquery"]
+    def test_no_attempt_starts_past_the_budget(self):
+        # The clock reads 0 for the deadline and the first check, then 61 -- past 60 s.
+        clock = itertools.chain([0.0, 0.0], itertools.repeat(61.0))
+        func = MagicMock(side_effect=ConnectionError("down"))
+        with (
+            _patch_sleep(),
+            patch("kpfpipe.utils.network.time.monotonic", lambda: next(clock)),
+            pytest.raises(ConnectionError),
+        ):
+            query_mirrors(func, ("a", "b", "c"), "Service", budget=60.0)
+        assert func.call_count == 1
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Timeouts -- two transports, two seams
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 @contextmanager
@@ -221,6 +222,7 @@ class _FakeSimbadClass:
 
     def __init__(self):
         self._session = requests.Session()
+        self.server = None
 
     def add_votable_fields(self, *fields):
         pass
@@ -229,10 +231,10 @@ class _FakeSimbadClass:
 class TestTimeoutBounds:
     """The two transports are bounded by two different seams -- assert both.
 
-    ``socket.setdefaulttimeout`` bounds Gaia's ``http.client`` transport but not
-    SIMBAD's, which goes through pyvo over ``requests`` and passes an explicit
-    ``timeout=None`` down to ``sock.settimeout``. Covering only the Gaia path would
-    let the SIMBAD half regress in silence.
+    ``retry_request``'s ``socket.setdefaulttimeout`` bounds an ``http.client``
+    transport but not the catalog clients, which go through pyvo over ``requests`` and
+    pass an explicit ``timeout=None`` down to ``sock.settimeout``. Those are bounded by
+    the session adapter their factories mount, so each factory is asserted directly.
     """
 
     def test_timeout_bounds_the_http_client_transport(self):
@@ -259,7 +261,8 @@ class TestTimeoutBounds:
     def test_simbad_timeout_bounds_a_requests_call(self):
         with _stalled_listener() as (host, port):
             with patch("astroquery.simbad.SimbadClass", _FakeSimbadClass):
-                client = simbad_client(("B",), timeout=0.5)
+                client = simbad_client("simbad.harvard.edu", ("B",), timeout=0.5)
+            assert client.server == "simbad.harvard.edu"
 
             # The point of the separate seam: nothing here is holding a socket
             # default, so only the mounted adapter can end this call.
@@ -269,6 +272,15 @@ class TestTimeoutBounds:
             )
 
         assert isinstance(raised, requests.exceptions.Timeout)
+
+    def test_gaia_timeout_bounds_a_tap_query(self):
+        with _stalled_listener() as (host, port):
+            client = gaia_client(f"http://{host}:{port}/tap", timeout=0.5)
+            assert socket.getdefaulttimeout() is None
+            raised = _raises_within(10, lambda: client.run_sync("SELECT 1"))
+
+        # pyvo wraps the timeout; it must still be one query_mirrors fails over on.
+        assert isinstance(raised, _RETRYABLE)
 
     def test_socket_default_restored_after_success(self):
         socket.setdefaulttimeout(7.0)
@@ -329,7 +341,7 @@ class TestCfhtArchive:
             get.return_value = self._response(total=21886)
             assert cfht_archive(2024, 0, 256) == ("rows\n", 21886)
 
-    def test_an_http_error_propagates(self):
+    def test_http_error_raises(self):
         response = MagicMock()
         response.raise_for_status.side_effect = requests.HTTPError("416")
         with patch("kpfpipe.utils.network.requests.get", return_value=response):

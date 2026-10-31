@@ -9,8 +9,11 @@ That is enforced, not just intended -- tests/conftest.py blocks connects to the
 catalog hosts for the whole suite.
 """
 
+import json
 import logging
 import re
+import subprocess
+import sys
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
@@ -24,7 +27,8 @@ from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.network import _RETRY_WAITS
+
+from ._scripts import REPO_ROOT
 
 
 def _ra_str(deg):
@@ -241,7 +245,7 @@ class TestAstrometryPriority:
         aq = AstroQuery(_l0_for_query())
         assert "wmko" not in aq.astrometry_priority
 
-    def test_source_outside_priority_cannot_anchor(self):
+    def test_source_outside_priority_anchoring_raises(self):
         with pytest.raises(ValueError, match="astrometry_priority"):
             _merge({"wmko": _record("W")}, priority=("gaia", "simbad"))
 
@@ -447,9 +451,9 @@ class TestReadWmkoHeader:
         assert "wmko" in [str(s) for s in table["source"]]
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # External Gaia / SIMBAD queries -- mocked (no network)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 # Default one-row result values, keyed to each catalog's column schema. pmra/pmdec
 # are 500 / -250 mas/yr so the mas -> arcsec/yr conversion is visible (0.5 / -0.25).
@@ -506,9 +510,9 @@ def _simbad_table(values=None, units=None):
 
 
 def _gaia_job(table):
-    """Stand-in for Gaia.launch_job(query): an object whose get_results() -> table."""
+    """Stand-in for TAPService.run_sync(query): an object whose to_table() -> table."""
     job = MagicMock()
-    job.get_results.return_value = table
+    job.to_table.return_value = table
     return job
 
 
@@ -531,18 +535,36 @@ def _l0_for_query(**primary):
 
 @contextmanager
 def _patch_gaia(job_or_exc):
-    """Patch the Gaia client factory, yielding the ``launch_job`` mock to assert on.
+    """Patch the Gaia client factory, yielding the ``run_sync`` mock to assert on.
 
-    Production builds a client per attempt (``gaia_client().launch_job(...)``); one
-    mock client answers every call, so call_count accumulates across retries.
+    Production builds a client per attempt (``gaia_client(url, ...).run_sync(...)``);
+    one mock client answers every mirror, so call_count accumulates across attempts.
     """
     client = MagicMock()
     if isinstance(job_or_exc, Exception):
-        client.launch_job.side_effect = job_or_exc
+        client.run_sync.side_effect = job_or_exc
     else:
-        client.launch_job.return_value = job_or_exc
+        client.run_sync.return_value = job_or_exc
     with patch("kpfpipe.modules.astro_query.gaia_client", return_value=client):
-        yield client.launch_job
+        yield client.run_sync
+
+
+def _gaia_mirror_client(down=()):
+    """gaia_client stand-in: a mirror whose URL is in ``down`` refuses the connection.
+
+    The client built for each URL is kept on ``.clients`` to assert its query on.
+    """
+
+    def client(url, timeout):
+        mock = client.clients[url] = MagicMock()
+        if url in down:
+            mock.run_sync.side_effect = ConnectionError(f"{url} down")
+        else:
+            mock.run_sync.return_value = _gaia_job(_gaia_table())
+        return mock
+
+    client.clients = {}
+    return client
 
 
 def _patch_simbad(instance):
@@ -694,16 +716,16 @@ class TestExternalQueries:
         assert "no usable GAIAID" in caplog.text
 
     def test_query_gaia_lookup_failure_returns_none(self, caplog):
-        # A dropped connection is transient, so the lookup is retried before being
-        # given up on; sleep is patched so the backoff is not waited out.
+        # A dropped connection is transient, so every mirror is tried twice before
+        # the lookup is given up on; sleep is patched so the pause is not waited out.
         aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
         with (
-            _patch_gaia(ConnectionError("gaia down")) as launch_job,
+            _patch_gaia(ConnectionError("gaia down")) as run_sync,
             patch("kpfpipe.utils.network.time.sleep"),
             caplog.at_level(logging.WARNING),
         ):
             assert aq.query_gaia() is None
-            assert launch_job.call_count == len(_RETRY_WAITS) + 1
+            assert run_sync.call_count == 2 * len(AstroQuery._GAIA_MIRRORS["DR3"])
         assert "Gaia query failed" in caplog.text
 
     def test_query_gaia_no_match_returns_none(self, caplog):
@@ -775,7 +797,7 @@ class TestExternalQueries:
         assert "no usable OBJECT name" in caplog.text
 
     def test_query_simbad_lookup_failure_returns_none(self, caplog):
-        # Retried like the Gaia failure above; sleep is patched for the same reason.
+        # Failed over like the Gaia failure above; sleep is patched for the same reason.
         aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
         inst = MagicMock()
         inst.query_object.side_effect = ConnectionError("simbad down")
@@ -785,8 +807,58 @@ class TestExternalQueries:
             caplog.at_level(logging.WARNING),
         ):
             assert aq.query_simbad() is None
-            assert inst.query_object.call_count == len(_RETRY_WAITS) + 1
+            assert inst.query_object.call_count == 2 * len(AstroQuery._SIMBAD_MIRRORS)
         assert "SIMBAD query failed" in caplog.text
+
+    def test_query_gaia_fails_over_to_the_next_mirror(self):
+        # ESA and GAVO down: MAST answers, queried under its own table name, with a
+        # record identical to the one ESA would have given.
+        (esa, _), (gavo, _), (mast, _) = AstroQuery._GAIA_MIRRORS["DR3"]
+        with patch(
+            "kpfpipe.modules.astro_query.gaia_client", side_effect=_gaia_mirror_client()
+        ):
+            expected = AstroQuery(_l0_for_query(GAIAID="DR3 12345")).query_gaia()
+        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+        stand_in = _gaia_mirror_client(down={esa, gavo})
+        with patch(
+            "kpfpipe.modules.astro_query.gaia_client", side_effect=stand_in
+        ) as factory:
+            assert aq.query_gaia() == expected
+        assert [c.args[0] for c in factory.call_args_list] == [esa, gavo, mast]
+        assert (
+            "FROM dbo.gaia_source" in stand_in.clients[mast].run_sync.call_args.args[0]
+        )
+
+    def test_query_gaia_dr2_never_asks_a_mirror_without_dr2(self):
+        aq = AstroQuery(_l0_for_query(GAIAID="DR2 12345"))
+        everything = {
+            url for mirrors in AstroQuery._GAIA_MIRRORS.values() for url, _ in mirrors
+        }
+        with (
+            patch(
+                "kpfpipe.modules.astro_query.gaia_client",
+                side_effect=_gaia_mirror_client(down=everything),
+            ) as factory,
+            patch("kpfpipe.utils.network.time.sleep"),
+        ):
+            assert aq.query_gaia() is None
+        asked = {c.args[0] for c in factory.call_args_list}
+        assert asked == {url for url, _ in AstroQuery._GAIA_MIRRORS["DR2"]}
+
+    def test_query_simbad_fails_over_to_the_next_mirror(self):
+        cds, cfa = AstroQuery._SIMBAD_MIRRORS
+
+        def client(server, fields, timeout):
+            if server == cds:
+                raise ConnectionError("cds down")
+            return _simbad_instance(_simbad_table())
+
+        aq = AstroQuery(_l0_for_query(OBJECT="tau Cet"))
+        with patch(
+            "kpfpipe.modules.astro_query.simbad_client", side_effect=client
+        ) as factory:
+            assert aq.query_simbad() is not None
+        assert [c.args[0] for c in factory.call_args_list] == [cds, cfa]
 
     def test_query_simbad_no_match_returns_none(self, caplog):
         aq = AstroQuery(_l0_for_query(OBJECT="NotARealStar"))
@@ -806,9 +878,9 @@ class TestExternalQueries:
                 aq.query_simbad()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # Request vs parse -- the fields asked for are the fields read back
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _adql_select_columns(query):
@@ -827,9 +899,9 @@ class TestRequestMatchesParse:
 
     def test_gaia_select_list_matches_parsed_columns(self):
         aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
-        with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
+        with _patch_gaia(_gaia_job(_gaia_table())) as run_sync:
             aq.query_gaia()
-        assert _adql_select_columns(launch_job.call_args.args[0]) == set(
+        assert _adql_select_columns(run_sync.call_args.args[0]) == set(
             AstroQuery._GAIA_UNITS
         )
 
@@ -846,12 +918,12 @@ class TestRequestMatchesParse:
         # A source_id denotes different stars in different releases, so the table
         # GAIAID names is what keeps the astrometry on the right star.
         aq = AstroQuery(_l0_for_query(GAIAID=gaiaid))
-        with _patch_gaia(_gaia_job(_gaia_table())) as launch_job:
+        with _patch_gaia(_gaia_job(_gaia_table())) as run_sync:
             rec = aq.query_gaia()
-        assert f"FROM {table}" in launch_job.call_args.args[0]
+        assert f"FROM {table}" in run_sync.call_args.args[0]
         assert rec["object"] == designation
         # A named release is taken at its word -- no probe queries.
-        assert launch_job.call_count == 1
+        assert run_sync.call_count == 1
 
     def test_simbad_votable_fields_match_parsed_columns(self):
         # ra/dec/main_id arrive in SIMBAD's default basic set, so are not requested.
@@ -861,7 +933,7 @@ class TestRequestMatchesParse:
         # Spelled out rather than derived from _SIMBAD_UNITS, which is what the
         # module builds the request from: a derived expectation would follow a
         # renamed field instead of catching it.
-        requested = set(simbad_client.call_args.args[0])
+        requested = set(simbad_client.call_args.args[1])
         assert requested == {
             "pmra",
             "pmdec",
@@ -874,8 +946,8 @@ class TestRequestMatchesParse:
         }
 
 
-def _release_aware_launch_job(present=(), failing=()):
-    """Gaia.launch_job stand-in keyed on the release its query names.
+def _release_aware_run_sync(present=(), failing=()):
+    """TAPService.run_sync stand-in keyed on the release its query names.
 
     A release probe (``SELECT source_id ...``) answers one row for a release in
     ``present`` and none otherwise; one in ``failing`` errors the way an archive
@@ -883,7 +955,7 @@ def _release_aware_launch_job(present=(), failing=()):
     resolved release shows up in its FROM clause.
     """
 
-    def launch_job(query):
+    def run_sync(query):
         release = re.search(r"FROM gaia(dr\d)\.gaia_source", query).group(1).upper()
         if release in failing:
             raise ValueError(f"gaia{release.lower()}.gaia_source unreachable")
@@ -892,7 +964,7 @@ def _release_aware_launch_job(present=(), failing=()):
             return _gaia_job(Table({"source_id": ids}))
         return _gaia_job(_gaia_table())
 
-    return launch_job
+    return run_sync
 
 
 class TestBareGaiaIdResolution:
@@ -906,7 +978,7 @@ class TestBareGaiaIdResolution:
     def _query(**kwargs):
         aq = AstroQuery(_l0_for_query(GAIAID="12345"))  # bare: no release prefix
         client = MagicMock()
-        client.launch_job.side_effect = _release_aware_launch_job(**kwargs)
+        client.run_sync.side_effect = _release_aware_run_sync(**kwargs)
         with patch("kpfpipe.modules.astro_query.gaia_client", return_value=client):
             return aq.query_gaia()
 
@@ -941,9 +1013,9 @@ class TestBareGaiaIdResolution:
             self._query()
 
 
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 # perform() -- the real entry point, with both catalogs mocked (no network)
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------
 
 
 def _perform(**config):
@@ -1032,20 +1104,20 @@ class TestConstructor:
         return l0
 
     @pytest.mark.parametrize("obstype", ["Bias", "Flat", None])
-    def test_rejects_non_object_frames(self, obstype):
+    def test_non_object_frame_raises(self, obstype):
         # The class docstring's headline promise. Without it, AstroQuery would
         # fire SIMBAD lookups on OBJECT='bias' and write a bogus CATALOG_RECORD
         # that to_kpf1 copies onto the EPRV C*# cards.
         with pytest.raises(ValueError, match="science frames"):
             AstroQuery(self._l0(obstype))
 
-    def test_rejects_socal_frames(self):
+    def test_socal_frame_raises(self):
         l0 = self._l0("Target")
         l0.headers["PRIMARY"]["ISSOLAR"] = True
         with pytest.raises(ValueError, match="SoCal"):
             AstroQuery(l0)
 
-    def test_rejects_unsupported_config_type(self):
+    def test_unsupported_config_type_raises(self):
         with pytest.raises(TypeError, match="must be None, dict, or ConfigHandler"):
             AstroQuery(self._l0("Target"), config=["gaia"])
 
@@ -1059,3 +1131,51 @@ class TestConstructor:
         )
         aq = AstroQuery(self._l0("Target"), config=ConfigHandler(str(cfg)))
         assert aq.do_gaia_query is False
+
+
+# ------------------------------------------------------------------
+# Import purity -- witnessed in a child, because this suite's conftest hides it
+# ------------------------------------------------------------------
+
+# Records every outbound connect, imports the module, and reports what it saw.
+# Run through `python -c` so no conftest loads: the suite's own network guard
+# would mask exactly the connection this is here to detect.
+_IMPORT_PROBE = """
+import json, socket, sys
+hits = []
+socket.socket.connect = lambda self, addr, *a, **k: hits.append(addr)
+socket.create_connection = lambda addr, *a, **k: hits.append(addr)
+import kpfpipe.modules.astro_query
+print(json.dumps({
+    "hits": [str(h) for h in hits],
+    "astroquery": sorted(m for m in sys.modules if m.startswith("astroquery")),
+}))
+"""
+
+
+class TestImportPurity:
+    def test_importing_astro_query_touches_no_network(self):
+        """Importing the module must not open a connection, nor pull in a client.
+
+        ``astroquery.gaia`` builds a module-level ``GaiaClass()`` whose constructor
+        fetches ESA status messages, so importing it *is* a connection. Both client
+        imports are deferred into the factories to keep that off every code path
+        that never queries a catalog -- this is the only thing that witnesses it.
+        """
+        proc = subprocess.run(
+            [sys.executable, "-c", _IMPORT_PROBE],
+            cwd=REPO_ROOT,
+            env={"PYTHONPATH": REPO_ROOT, "PATH": "/usr/bin:/bin"},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert proc.returncode == 0, proc.stderr
+        seen = json.loads(proc.stdout.strip().splitlines()[-1])
+
+        assert seen["hits"] == []
+        # astroquery.exceptions is imported at module scope for the retryable-error
+        # tuple; it is cheap and reaches nothing. The two client modules are what
+        # must stay out, so name them rather than the package.
+        assert "astroquery.gaia" not in seen["astroquery"]
+        assert "astroquery.simbad" not in seen["astroquery"]
