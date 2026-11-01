@@ -40,6 +40,7 @@ class TestParseArgs:
         assert ns.once is False
         assert ns.jobs == 3
         assert ns.job_timeout == 1200
+        assert ns.launch_interval == rt._LAUNCH_INTERVAL
         assert ns.status_file is None and ns.ledger is None
 
     @pytest.mark.parametrize(
@@ -50,6 +51,7 @@ class TestParseArgs:
             ["--nights", "0"],
             ["--jobs", "0"],
             ["--job_timeout", "0"],
+            ["--launch_interval", "-1"],
         ],
     )
     def test_invalid_values_exit_two(self, argv):
@@ -210,10 +212,12 @@ class _FakeRunOne:
 
     def __init__(self, rc_for=None):
         self.calls = []
+        self.intervals = []
         self.rc_for = rc_for or {}
 
     def __call__(self, argv, timeout=None, launch_interval=0.0):
         self.calls.append(argv)
+        self.intervals.append(launch_interval)
         obs_id = argv[argv.index("-o") + 1]
         return self.rc_for.get(obs_id, 0), ""
 
@@ -266,6 +270,12 @@ def _once(monkeypatch, tmp_path, data, fake, extra=(), now=_NOW):
 
 
 class TestOnce:
+    def test_launch_interval_reaches_run_one(self, monkeypatch, tmp_path):
+        data, *_ = _setup_tree(tmp_path)
+        fake = _FakeRunOne()
+        _once(monkeypatch, tmp_path, data, fake, extra=["--launch_interval", "2.5"])
+        assert fake.intervals and set(fake.intervals) == {2.5}
+
     def test_dispatches_science_skips_cal_writes_status_and_record(
         self, monkeypatch, tmp_path
     ):

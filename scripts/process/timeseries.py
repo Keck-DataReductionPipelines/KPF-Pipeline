@@ -60,13 +60,12 @@ from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_SCIENCE_CONFIG
 
 logger = logging.getLogger(__name__)
 
-# --jobs help is timeseries-specific: it is forwarded to both stages (each of
-# which otherwise picks its own default) and also sizes the discovery scan pool.
+# --jobs help is timeseries-specific: it is forwarded to the science stage (masters
+# is sized by --masters_jobs) and also sizes the discovery scan pool.
 _JOBS_HELP = (
-    "max concurrent recipe subprocesses, forwarded to both the masters and "
-    "science stages; left unset, each stage uses its own default (masters its "
-    "fixed cap, science a cores-based value) and the discovery scan uses a "
-    "cores-based worker count"
+    "max concurrent science reductions, forwarded to the science stage, and the "
+    "discovery scan's worker count; left unset, each uses a cores-based default. "
+    "Size the masters stage with --masters_jobs"
 )
 
 
@@ -82,6 +81,21 @@ def parse_args(argv=None):
             cache_parser(default="rw"),
             dates_parser("reduces every L0 night in it", dates=False),
         ],
+    )
+    # Default None: unset, each stage keeps its own default.
+    ap.add_argument(
+        "--masters_jobs",
+        type=int,
+        default=None,
+        help="max concurrent masters builds, forwarded to the masters stage as "
+        "--jobs (default: the masters stage's own cap)",
+    )
+    ap.add_argument(
+        "--launch_interval",
+        type=float,
+        default=None,
+        help="minimum seconds between fanned-out job launches, forwarded to both "
+        "stages (default: each stage's own interval)",
     )
     ap.add_argument(
         "--target",
@@ -133,6 +147,8 @@ def parse_args(argv=None):
     args = resolve_dates(ap, ap.parse_args(argv))
     # --jobs stays None when unset so each stage picks its own default.
     args = resolve_pool(ap, args)
+    if args.masters_jobs is not None and args.masters_jobs < 1:
+        ap.error("--masters_jobs must be >= 1")
     return resolve_dir_shortcuts(args)
 
 
@@ -252,7 +268,8 @@ def main(argv=None):
     )
 
     # Overrides forwarded to the orchestrators. Both parsers accept the common set;
-    # --jobs and --kpf_science_output ride science_forward only (see below).
+    # --jobs and --kpf_science_output ride science_forward only, --masters_jobs
+    # masters_forward only (see below).
     common_forward = []
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
@@ -265,13 +282,18 @@ def main(argv=None):
         if value:
             common_forward += [flag, value]
     common_forward += ["--job_timeout", str(args.job_timeout)]
+    if args.launch_interval is not None:
+        common_forward += ["--launch_interval", str(args.launch_interval)]
     # Discovery is the sole mini-db writer; force both launched stages read-only
     # so they don't redundantly re-warm the caches it will have just written.
     common_forward += ["--cache", "r"]
 
     # --jobs sizes only the science fan-out: forwarding a large --jobs to masters
-    # would defeat its fixed _MASTERS_JOBS safety cap (see _dispatch.py), so --jobs
-    # rides science_forward and masters keeps its own default sizing.
+    # would defeat its fixed _MASTERS_JOBS safety cap (see _dispatch.py), so masters
+    # is sized separately by --masters_jobs (unset: its own default).
+    masters_forward = list(common_forward)
+    if args.masters_jobs is not None:
+        masters_forward += ["--jobs", str(args.masters_jobs)]
     science_forward = list(common_forward)
     if args.jobs is not None:
         science_forward += ["--jobs", str(args.jobs)]
@@ -312,7 +334,7 @@ def main(argv=None):
             "masters",
             "--dates",
             datecodes,
-            common_forward,
+            masters_forward,
             config=masters_config,
         )
         logger.info("dispatching masters for %d night(s)", len(datecodes))

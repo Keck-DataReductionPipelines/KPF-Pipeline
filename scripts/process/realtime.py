@@ -86,7 +86,7 @@ STATUS_SCHEMA = 1
 LEDGER_SCHEMA = 1
 
 # Launch spacing for the pool (same reason as science.py: the per-frame L0 pointing
-# QC queries SIMBAD/Gaia at startup).
+# QC queries SIMBAD/Gaia at startup). Default for --launch_interval.
 _LAUNCH_INTERVAL = 1.0
 
 # Seconds to wait for in-flight reductions after a stop request before killing them.
@@ -107,7 +107,7 @@ def parse_args(argv=None):
             config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
-            pool_parser(jobs_help=_JOBS_HELP),
+            pool_parser(jobs_help=_JOBS_HELP, launch_interval=_LAUNCH_INTERVAL),
         ],
     )
     ap.add_argument(
@@ -409,7 +409,7 @@ class Realtime:
         )
         self.last_dispatch_utc = _utc_now()
         future = self.pool.submit(
-            _run_one, argv, self.args.job_timeout, _LAUNCH_INTERVAL
+            _run_one, argv, self.args.job_timeout, self.args.launch_interval
         )
         self.futures[future] = key
 

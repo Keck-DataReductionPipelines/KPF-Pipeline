@@ -717,6 +717,21 @@ class TestRunStageTimeout:
         )
         assert failed == set()  # the 0.5s canary survived a 0.2s job_timeout
 
+    def test_canary_timeout_rises_with_job_timeout(self, tmp_path):
+        # A --job_timeout above canary_timeout raises the canary's limit too, so
+        # the first unit is never held to a shorter limit than the rest.
+        slow_canary = [sys.executable, "-c", "import time; time.sleep(0.5)"]
+        failed = _dispatch.run_stage(
+            "job",
+            [("canary", slow_canary), ("b", _OK)],
+            2,
+            str(tmp_path),
+            job_timeout=30,
+            canary_timeout=0.2,
+            abort_on_failure=False,
+        )
+        assert failed == set()  # the 0.5s canary got the 30s job_timeout
+
 
 # ------------------------------------------------------------------
 # _report_failures + _run_one guard

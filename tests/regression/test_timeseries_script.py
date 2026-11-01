@@ -115,6 +115,8 @@ class TestParseArgs:
             ["--date_range", "20240201", "20240101"],  # start > end
             ["--jobs", "0"],  # below 1
             ["--job_timeout", "0"],  # below 1
+            ["--masters_jobs", "0"],  # below 1
+            ["--launch_interval", "-1"],  # negative
         ],
     )
     def test_invalid_args_exit(self, ts, capsys, extra):
@@ -408,6 +410,34 @@ class TestMainDispatch:
         assert "--jobs" not in calls[0]  # masters keeps its own capped sizing
         assert "scripts.process.science" in calls[1]
         assert "--jobs" in calls[1] and "8" in calls[1]  # science gets it
+
+    def test_masters_jobs_rides_masters_not_science(self, ts, monkeypatch, tmp_path):
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--masters_jobs", "32"])
+
+        masters, science = calls[0], calls[1]
+        assert masters[masters.index("--jobs") + 1] == "32"
+        assert "--jobs" not in science
+
+    def test_launch_interval_forwarded_to_both_stages(self, ts, monkeypatch, tmp_path):
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--launch_interval", "2.5"])
+
+        for argv in calls[:2]:
+            assert argv[argv.index("--launch_interval") + 1] == "2.5"
+
+    def test_unset_pool_flags_leave_stage_defaults(self, ts, monkeypatch, tmp_path):
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS)
+
+        for argv in calls[:2]:
+            assert "--launch_interval" not in argv and "--jobs" not in argv
 
     def test_no_masters_skips_masters_stage(self, ts, monkeypatch, tmp_path):
         a = _write_l0(str(tmp_path), "20240101", 3600, "10700")

@@ -224,12 +224,13 @@ def run_stage(
     """Run `tasks` (a list of (tag, argv)): the first serially as a canary, then
     the rest in a pool of `jobs` workers. Returns the set of failed tags.
 
-    The canary runs alone (bounded by `canary_timeout`) before any fan-out, warming
+    The canary runs alone (bounded by the longer of `canary_timeout` and
+    `job_timeout`, so raising --job_timeout raises it too) before any fan-out, warming
     the shared on-disk caches the jobs lazily build so they don't stampede a cold
     one. How much that is depends on the stage: the science recipe pulls in
     barycorrpy leap-seconds, astropy IERS and matplotlib fonts; the masters recipe
     imports none of them, so there it warms bytecode alone.
-    Each fanned-out job is bounded by the shorter `job_timeout`; on
+    Each fanned-out job is bounded by `job_timeout`; on
     overrun (a stalled NFS read, a runaway recipe) its process group is killed and
     it returns 124, counted as a failure, so one stuck unit can't hang the batch.
 
@@ -242,11 +243,11 @@ def run_stage(
       unit is attempted (a failed canary still fans out), failures are warned but do not
       exit, and the caller inspects the returned failure set for its exit code.
 
-    `launch_interval` (seconds) spaces the fan-out launches apart (science passes
-    1.0 to rate-limit the SIMBAD/Gaia queries; masters passes a larger value to
-    desynchronize the lockstep disk-read phase); the canary, running first, is
-    unaffected. On SIGINT/SIGTERM, cancel the queue and terminate every running
-    child before exiting 130, so an interrupt leaves no orphaned subprocesses.
+    `launch_interval` (seconds) spaces the fan-out launches apart (science paces
+    its SIMBAD/Gaia queries; masters staggers its stack-read phase); the canary,
+    running first, is unaffected. On SIGINT/SIGTERM, cancel the queue and terminate
+    every running child before exiting 130, so an interrupt leaves no orphaned
+    subprocesses.
 
     The module-level state is reset on entry: a leftover `_interrupted` would make
     every `_run_one` return (130, "") without launching, so a second call in this
@@ -272,7 +273,7 @@ def run_stage(
         logger.info(
             "  [%s] canary %s (serial; warms shared caches)...", label, canary_tag
         )
-        rc, stderr = _run_one(canary_argv, timeout=canary_timeout)
+        rc, stderr = _run_one(canary_argv, timeout=max(canary_timeout, job_timeout))
         if rc != 0:
             failures.append((label, canary_tag, rc, stderr))
             if abort_on_failure:

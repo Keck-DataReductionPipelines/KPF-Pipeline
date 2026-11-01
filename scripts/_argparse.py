@@ -368,7 +368,7 @@ def resolve_pool(ap, args, default_jobs=None):
     caller resolves it later). Returns `args`."""
     if getattr(args, "job_timeout", 1) < 1:
         ap.error("--job_timeout must be >= 1")
-    if getattr(args, "launch_interval", 0) < 0:
+    if (getattr(args, "launch_interval", None) or 0) < 0:
         ap.error("--launch_interval must be >= 0")
     if args.jobs is None:
         if default_jobs is not None:
