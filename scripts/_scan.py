@@ -109,18 +109,25 @@ def scan_datecodes(datecodes, jobs, worker, *, label="scanning"):
     A generic parallel dispatcher for the per-night header scans (I/O bound, so a
     thread pool overlaps the NFS latency). `worker(dc)` returns ``(result, note)``:
     `result` is appended to the returned list, `note` is an optional string
-    appended to that night's heartbeat, logged in completion order.
+    appended to that night's heartbeat, logged in completion order. On an
+    interrupt or a worker error the queued nights are cancelled, not scanned
+    first; only those already in flight finish.
     """
     n = len(datecodes)
     logger.info("%s %d night(s) (%d workers)...", label, n, min(jobs, n) if n else 0)
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs))
+    try:
         futures = {pool.submit(worker, dc): dc for dc in datecodes}
         for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
             dc = futures[future]
             result, note = future.result()
             results.append(result)
             logger.info("  [%d/%d] %s%s", i, n, dc, note)
+    except BaseException:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    pool.shutdown()
     return results
 
 

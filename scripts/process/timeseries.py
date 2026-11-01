@@ -53,7 +53,11 @@ from scripts._argparse import (
     resolve_log_settings,
     resolve_pool,
 )
-from scripts._dispatch import _default_single_frame_jobs, configure_runtime
+from scripts._dispatch import (
+    _default_single_frame_jobs,
+    _signals_ignored,
+    configure_runtime,
+)
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 from scripts.plot.timeseries import PlotTimeseries
 from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_SCIENCE_CONFIG
@@ -230,19 +234,29 @@ def _run_stage(argv):
     orchestrator's own teardown (``_terminate_all_children`` waits 5 s before
     escalating), so we don't kill a stage mid-cleanup and orphan the very fan-out
     it was reaping.
+
+    The stage runs in its own session, so a terminal Ctrl+C reaches only us and
+    the stage gets exactly one signal (our SIGTERM); a second would cut its
+    teardown short. Our own teardown ignores repeat signals for the same reason.
     """
-    proc = subprocess.Popen(argv, cwd=kpfpipe.REPO_ROOT, stdin=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        argv,
+        cwd=kpfpipe.REPO_ROOT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
     try:
         return proc.wait()
     except KeyboardInterrupt:
-        logger.warning("interrupted; terminating the running stage")
-        proc.terminate()
-        try:
-            proc.wait(timeout=10.0)
-        except subprocess.TimeoutExpired:
-            logger.warning("stage did not exit in 10s; killing it")
-            proc.kill()
-            proc.wait()
+        with _signals_ignored():
+            logger.warning("interrupted; terminating the running stage")
+            proc.terminate()
+            try:
+                proc.wait(timeout=10.0)
+            except subprocess.TimeoutExpired:
+                logger.warning("stage did not exit in 10s; killing it")
+                proc.kill()
+                proc.wait()
         sys.exit(130)
 
 

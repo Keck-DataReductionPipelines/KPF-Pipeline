@@ -8,6 +8,7 @@ interrupt teardown, and fail-fast/fail-soft failure handling. Shared by
 """
 
 import concurrent.futures
+import contextlib
 import logging
 import os
 import signal
@@ -86,21 +87,24 @@ _last_launch = [0.0]
 
 
 def _handle_termination_signal(signum, frame):
-    """Turn SIGTERM into a KeyboardInterrupt so `kill` cleans up like Ctrl+C.
+    """Turn SIGTERM/SIGHUP into a KeyboardInterrupt so `kill` or a terminal
+    hangup (ssh disconnect) cleans up like Ctrl+C.
 
     SIGINT already raises KeyboardInterrupt in the main thread; routing SIGTERM
-    through the same path lets `run_stage` catch both and terminate children.
+    and SIGHUP through the same path lets `run_stage` catch all three and
+    terminate children.
     """
     raise KeyboardInterrupt
 
 
 def configure_runtime():
-    """Install the SIGTERM handler, pin BLAS/OpenMP to one thread, select Agg,
+    """Install the SIGTERM/SIGHUP handler, pin BLAS/OpenMP to one thread, select Agg,
     disable numpy hugepages.
 
     Call once at the start of an orchestrator's main(), not at import, so importing
-    never mutates signal handlers or the environment. Routes SIGTERM through the
-    KeyboardInterrupt path so `kill` tears down children like Ctrl+C. Caps the
+    never mutates signal handlers or the environment. Routes SIGTERM and SIGHUP
+    through the KeyboardInterrupt path so `kill` or a hangup tears down children
+    like Ctrl+C. Caps the
     BLAS/OpenMP pools at 1 (via setdefault, so an explicit caller wins): we already
     run one process per job, so an inner OpenBLAS pool would be jobs x cores threads
     and thrash. Pins matplotlib to Agg the same way: children run headless, and an
@@ -110,6 +114,7 @@ def configure_runtime():
     page cache. No numerical effect.
     """
     signal.signal(signal.SIGTERM, _handle_termination_signal)
+    signal.signal(signal.SIGHUP, _handle_termination_signal)
     os.environ.setdefault("MPLBACKEND", "Agg")
     os.environ.setdefault("NUMPY_MADVISE_HUGEPAGE", "0")
     for var in (
@@ -120,6 +125,24 @@ def configure_runtime():
         "VECLIB_MAXIMUM_THREADS",
     ):
         os.environ.setdefault(var, "1")
+
+
+@contextlib.contextmanager
+def _signals_ignored():
+    """Ignore SIGINT/SIGTERM/SIGHUP for the block, restoring the handlers after.
+
+    Shields a teardown from a repeat Ctrl+C, a parent's forwarded SIGTERM, or a
+    hangup, any of which
+    would otherwise raise KeyboardInterrupt mid-teardown and skip the SIGKILL step.
+    Main thread only (``signal.signal``).
+    """
+    sigs = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+    prev = {s: signal.signal(s, signal.SIG_IGN) for s in sigs}
+    try:
+        yield
+    finally:
+        for s, handler in prev.items():
+            signal.signal(s, handler)
 
 
 def _kill_group(proc, sig=signal.SIGKILL):
@@ -160,8 +183,9 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
     `launch_interval` (seconds, >0 for every driver) throttles the launch,
     holding the lock across the sleep so pool workers launch one interval apart
     (science paces the SIMBAD/Gaia queries; masters desynchronizes the disk-read
-    phase; engineering paces as a precaution). The canary launches first, so it
-    never waits.
+    phase; engineering paces as a precaution). The sleep waits on `_interrupted`,
+    so teardown wakes every waiting worker at once. The canary launches first, so
+    it never waits.
     """
     if _interrupted.is_set():
         return 130, ""
@@ -169,7 +193,7 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
         with _launch_lock:
             wait = launch_interval - (time.monotonic() - _last_launch[0])
             if wait > 0:
-                time.sleep(wait)
+                _interrupted.wait(wait)
             _last_launch[0] = time.monotonic()
         if _interrupted.is_set():
             return 130, ""
@@ -245,9 +269,9 @@ def run_stage(
 
     `launch_interval` (seconds) spaces the fan-out launches apart (science paces
     its SIMBAD/Gaia queries; masters staggers its stack-read phase); the canary,
-    running first, is unaffected. On SIGINT/SIGTERM, cancel the queue and terminate
-    every running child before exiting 130, so an interrupt leaves no orphaned
-    subprocesses.
+    running first, is unaffected. On SIGINT/SIGTERM/SIGHUP, cancel the queue and
+    terminate every running child before exiting 130, so an interrupt leaves no
+    orphaned subprocesses.
 
     The module-level state is reset on entry: a leftover `_interrupted` would make
     every `_run_one` return (130, "") without launching, so a second call in this
@@ -327,15 +351,16 @@ def run_stage(
                     )
     except KeyboardInterrupt:
         _interrupted.set()
-        logger.warning(
-            "[%s] interrupted -- cancelling queued jobs and terminating running "
-            "ones...",
-            label,
-        )
-        if pool is not None:
-            pool.shutdown(wait=False, cancel_futures=True)
-        _terminate_all_children()
-        logger.warning("[%s] all child processes stopped; exiting", label)
+        with _signals_ignored():
+            logger.warning(
+                "[%s] interrupted -- cancelling queued jobs and terminating "
+                "running ones...",
+                label,
+            )
+            if pool is not None:
+                pool.shutdown(wait=False, cancel_futures=True)
+            _terminate_all_children()
+            logger.warning("[%s] all child processes stopped; exiting", label)
         sys.exit(130)
     finally:
         if pool is not None:

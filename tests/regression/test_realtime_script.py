@@ -372,13 +372,16 @@ class TestOnce:
         code, *_ = _once(monkeypatch, tmp_path, data, _FakeRunOne())
         assert code == 0  # o2's earlier failure stays in the ledger only
 
-    def test_stop_interrupts_and_launches_nothing_more(self, monkeypatch, tmp_path):
+    @pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGHUP])
+    def test_stop_interrupts_and_launches_nothing_more(
+        self, sig, monkeypatch, tmp_path
+    ):
         data, o1, o2, _b1 = _setup_tree(tmp_path)
 
         def stop_on_first(argv, timeout=None, launch_interval=0.0):
             if rt._interrupted.is_set():  # as _run_one: no launch after a stop
                 return 130, ""
-            os.kill(os.getpid(), signal.SIGTERM)
+            os.kill(os.getpid(), sig)
             assert rt._interrupted.wait(5)
             return -signal.SIGTERM, ""  # killed by the teardown
 

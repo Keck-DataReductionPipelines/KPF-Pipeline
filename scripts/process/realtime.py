@@ -577,10 +577,11 @@ def main(argv=None):
     def _request_stop(signum, frame):
         rt.stop = True
 
-    # configure_runtime routed SIGTERM to KeyboardInterrupt (the batch drivers'
-    # teardown path); the watcher instead stops gracefully on both signals.
+    # configure_runtime routed SIGTERM/SIGHUP to KeyboardInterrupt (the batch
+    # drivers' teardown path); the watcher instead stops gracefully on all three.
     signal.signal(signal.SIGTERM, _request_stop)
     signal.signal(signal.SIGINT, _request_stop)
+    signal.signal(signal.SIGHUP, _request_stop)
 
     exit_status = rt.run()
     if exit_status:

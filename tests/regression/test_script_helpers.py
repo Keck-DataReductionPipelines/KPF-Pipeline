@@ -13,6 +13,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -830,6 +831,15 @@ class TestRunOneInterrupt:
         assert rc == 130
         assert launched and launched[0].poll() is not None  # child killed + reaped
 
+    def test_interrupt_wakes_throttled_worker(self):
+        # A worker waiting out the launch stagger returns at once on teardown,
+        # not after its full interval (jobs x interval for a whole first wave).
+        _dispatch._last_launch[0] = time.monotonic()
+        threading.Timer(0.1, _dispatch._interrupted.set).start()
+        t0 = time.monotonic()
+        assert _dispatch._run_one(_OK, launch_interval=30.0) == (130, "")
+        assert time.monotonic() - t0 < 5.0
+
 
 # ------------------------------------------------------------------
 # run_stage -- interrupt teardown
@@ -859,6 +869,32 @@ class TestRunStageInterrupt:
         assert exc.value.code == 130
         assert _dispatch._interrupted.is_set()  # stops the pool launching anything more
         assert torn_down == [1]
+
+    def test_repeat_signal_does_not_cut_teardown_short(self, monkeypatch, tmp_path):
+        # A second Ctrl+C (or a parent's SIGTERM) mid-teardown is ignored, so the
+        # teardown completes; the handlers are restored afterwards.
+        torn_down = []
+
+        def _interrupt(*_a, **_k):
+            raise KeyboardInterrupt
+
+        def _teardown():
+            os.kill(os.getpid(), signal.SIGINT)
+            os.kill(os.getpid(), signal.SIGTERM)
+            os.kill(os.getpid(), signal.SIGHUP)
+            torn_down.append(1)
+
+        monkeypatch.setattr(_dispatch, "_run_one", _interrupt)
+        monkeypatch.setattr(_dispatch, "_terminate_all_children", _teardown)
+        before = signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)
+
+        with pytest.raises(SystemExit) as exc:
+            _dispatch.run_stage("job", [("a", _OK)], 2, str(tmp_path))
+
+        assert exc.value.code == 130 and torn_down == [1]
+        assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == (
+            before
+        )
 
     def test_stale_interrupt_flag_is_cleared_on_entry(self, tmp_path):
         # `_interrupted` is module state that outlives a run, so without the reset
@@ -908,7 +944,7 @@ class TestRunStageInterrupt:
 
 
 class TestConfigureRuntime:
-    def test_installs_sigterm_handler_and_pins_blas_threads(self, monkeypatch):
+    def test_installs_sigterm_sighup_handler_and_pins_blas_threads(self, monkeypatch):
         # `_dispatch.signal` IS the singleton signal module, so this patch is
         # process-wide for the test's duration -- containment comes from
         # monkeypatch's TEARDOWN, not from any lexical scoping. Do not simplify
@@ -932,7 +968,10 @@ class TestConfigureRuntime:
 
         _dispatch.configure_runtime()
 
-        assert installed == [(signal.SIGTERM, _dispatch._handle_termination_signal)]
+        assert installed == [
+            (signal.SIGTERM, _dispatch._handle_termination_signal),
+            (signal.SIGHUP, _dispatch._handle_termination_signal),
+        ]
         assert os.environ["OMP_NUM_THREADS"] == "8"  # setdefault: the caller wins
         assert os.environ["MKL_NUM_THREADS"] == "1"
         assert os.environ["VECLIB_MAXIMUM_THREADS"] == "1"
@@ -1077,6 +1116,22 @@ class TestScanDatecodes:
 
     def test_empty_datecodes(self, tmp_path):
         assert _scan.scan_datecodes([], jobs=4, worker=lambda dc: (dc, "")) == []
+
+    def test_interrupt_cancels_queued_nights(self):
+        # Ctrl+C unwinds after the in-flight nights, not after scanning the queue.
+        nights = [f"2024{d:04d}" for d in range(101, 151)]
+        scanned = []
+
+        def _worker(dc):
+            scanned.append(dc)
+            if dc == nights[0]:
+                raise KeyboardInterrupt
+            time.sleep(0.05)
+            return dc, ""
+
+        with pytest.raises(KeyboardInterrupt):
+            _scan.scan_datecodes(nights, jobs=1, worker=_worker)
+        assert len(scanned) < 10
 
     def test_threaded_scan_no_contamination(self, tmp_path):
         # Each night gets its own FileHandler inside scan_night_to_cache, so a pooled

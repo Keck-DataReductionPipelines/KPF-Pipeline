@@ -10,6 +10,8 @@ Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 """
 
 import logging
+import os
+import signal
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -505,3 +507,32 @@ class TestMainDispatch:
         assert exc.value.code == 1
         assert "plots stage failed" in caplog.text
         assert "plots exit 1" in caplog.text
+
+
+class TestRunStageInterrupt:
+    def test_stage_gets_own_session_and_one_shielded_teardown(self, ts, monkeypatch):
+        # The stage is out of the terminal's process group (Ctrl+C reaches only
+        # timeseries, which forwards one SIGTERM), and a repeat signal during our
+        # teardown neither interrupts it nor skips the wait.
+        popen_kwargs, events = {}, []
+
+        class _FakeProc:
+            def __init__(self, argv, **kwargs):
+                popen_kwargs.update(kwargs)
+
+            def wait(self, timeout=None):
+                if timeout is None:
+                    raise KeyboardInterrupt  # Ctrl+C while the stage runs
+                events.append("waited")
+                return -signal.SIGTERM
+
+            def terminate(self):
+                os.kill(os.getpid(), signal.SIGINT)  # impatient second Ctrl+C
+                events.append("terminated")
+
+        monkeypatch.setattr(ts.subprocess, "Popen", _FakeProc)
+        with pytest.raises(SystemExit) as exc:
+            ts._run_stage(["stage"])
+        assert exc.value.code == 130
+        assert popen_kwargs["start_new_session"] is True
+        assert events == ["terminated", "waited"]
