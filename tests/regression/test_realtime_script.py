@@ -10,6 +10,7 @@ tree dispatches nothing. Synthetic L0 trees only -- no real reduction runs.
 import json
 import logging
 import os
+import signal
 
 import pytest
 
@@ -189,8 +190,18 @@ class TestLedger:
             "running": 0,
             "succeeded": 1,
             "failed": 0,
+            "interrupted": 0,
             "dispatched": 1,
         }
+
+    def test_stale_running_reloads_interrupted_and_unseen(self, tmp_path):
+        led = rt.Ledger(str(tmp_path / "ledger.json")).load()
+        k = rt.Ledger.key("/a", 1.5, 10)
+        led.mark(k, state="running")
+        assert led.seen(k)  # in-process: dispatched, not to be re-dispatched
+        again = rt.Ledger(str(tmp_path / "ledger.json")).load()
+        assert again.entries[k]["state"] == "interrupted"
+        assert not again.seen(k)
 
     def test_changed_mtime_is_a_new_key(self):
         assert rt.Ledger.key("/a", 1.0, 10) != rt.Ledger.key("/a", 2.0, 10)
@@ -302,6 +313,7 @@ class TestOnce:
         assert status["rejected"] == 0
         assert status["succeeded"] == 2
         assert status["failed"] == 0
+        assert status["interrupted"] == 0
         assert status["running"] == 0 and status["queued"] == 0
         assert status["watched_dirs"][0].endswith(os.path.join("L0", _NIGHT))
         assert status["last_dispatch_utc"] is not None
@@ -339,3 +351,52 @@ class TestOnce:
         fake2 = _FakeRunOne()
         _once(monkeypatch, tmp_path, data, fake2, now=_NOW + 300)
         assert [a[a.index("-o") + 1] for a in fake2.calls] == [o2]
+
+    def test_restart_retries_frame_left_running(self, monkeypatch, tmp_path):
+        data, o1, _o2, _b1 = _setup_tree(tmp_path)
+        _code, log_dir, _ = _once(monkeypatch, tmp_path, data, _FakeRunOne())
+        path = log_dir / "realtime_ledger.json"
+        ledger = json.loads(path.read_text())
+        for e in ledger["entries"].values():
+            if e.get("obs_id") == o1:
+                e["state"] = "running"  # the watcher died mid-reduction
+        path.write_text(json.dumps(ledger))
+        fake = _FakeRunOne()
+        _once(monkeypatch, tmp_path, data, fake)
+        assert [a[a.index("-o") + 1] for a in fake.calls] == [o1]
+
+    def test_exit_status_counts_this_run_only(self, monkeypatch, tmp_path):
+        data, _o1, o2, _b1 = _setup_tree(tmp_path)
+        code, *_ = _once(monkeypatch, tmp_path, data, _FakeRunOne(rc_for={o2: 1}))
+        assert code == 1
+        code, *_ = _once(monkeypatch, tmp_path, data, _FakeRunOne())
+        assert code == 0  # o2's earlier failure stays in the ledger only
+
+    def test_stop_interrupts_and_launches_nothing_more(self, monkeypatch, tmp_path):
+        data, o1, o2, _b1 = _setup_tree(tmp_path)
+
+        def stop_on_first(argv, timeout=None, launch_interval=0.0):
+            if rt._interrupted.is_set():  # as _run_one: no launch after a stop
+                return 130, ""
+            os.kill(os.getpid(), signal.SIGTERM)
+            assert rt._interrupted.wait(5)
+            return -signal.SIGTERM, ""  # killed by the teardown
+
+        code, log_dir, _ = _once(
+            monkeypatch, tmp_path, data, stop_on_first, extra=["--jobs", "1"]
+        )
+        assert code == 130  # incomplete is not success
+        with open(log_dir / "realtime_status.json") as fh:
+            status = json.load(fh)
+        assert status["interrupted"] >= 1
+        assert status["dispatched"] == status["interrupted"]
+        ledger = rt.Ledger(str(log_dir / "realtime_ledger.json"))
+        ledger.load()
+        states = {e["obs_id"]: e["state"] for e in ledger.entries.values()}
+        assert states[o1] == "interrupted"
+        # o2 was cancelled in the queue or, stop arriving first, never admitted.
+        assert states.get(o2, "interrupted") == "interrupted"
+        # The next start retries both.
+        fake = _FakeRunOne()
+        _once(monkeypatch, tmp_path, data, fake)
+        assert sorted(a[a.index("-o") + 1] for a in fake.calls) == sorted([o1, o2])

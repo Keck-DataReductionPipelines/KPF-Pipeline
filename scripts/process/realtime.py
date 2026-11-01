@@ -59,6 +59,7 @@ from scripts._argparse import (
 )
 from scripts._dispatch import (
     _default_single_frame_jobs,
+    _interrupted,
     _run_one,
     _terminate_all_children,
     configure_runtime,
@@ -134,8 +135,8 @@ def parse_args(argv=None):
     ap.add_argument(
         "--once",
         action="store_true",
-        help="scan once, reduce whatever is new, wait for it, and exit (nonzero if "
-        "any frame failed); for cron-style use and tests",
+        help="scan once, reduce whatever is new, wait for it, and exit (1 if any "
+        "frame failed, else 130 if stopped first); for cron-style use and tests",
     )
     ap.add_argument(
         "--status_file",
@@ -250,8 +251,10 @@ class Ledger:
     """The exactly-once ledger: one entry per ``(path, mtime, size)`` ever seen.
 
     States: ``calibration``, ``junk``, ``rejected`` (see ``classify_frame``),
-    ``running`` (dispatched, not yet reaped), ``succeeded``, ``failed``. Persisted
-    atomically after every change so a restart resumes where it left off.
+    ``running`` (dispatched, not yet reaped), ``succeeded``, ``failed``,
+    ``interrupted`` (dispatched but cut short by a stop, or left ``running`` by a
+    watcher that died; not seen, so retried). Persisted atomically after every
+    change so a restart resumes where it left off.
     """
 
     def __init__(self, path):
@@ -269,6 +272,10 @@ class Ledger:
                 f"expected {LEDGER_SCHEMA}"
             )
         self.entries = data.get("entries", {})
+        # No reduction outlives the watcher that dispatched it.
+        for e in self.entries.values():
+            if e.get("state") == "running":
+                e["state"] = "interrupted"
         return self
 
     def save(self):
@@ -281,7 +288,7 @@ class Ledger:
         return f"{path}|{mtime:.6f}|{size}"
 
     def seen(self, key):
-        return key in self.entries
+        return self.entries.get(key, {}).get("state", "interrupted") != "interrupted"
 
     def mark(self, key, **fields):
         entry = self.entries.setdefault(key, {})
@@ -297,12 +304,15 @@ class Ledger:
             "running": 0,
             "succeeded": 0,
             "failed": 0,
+            "interrupted": 0,
         }
         for e in self.entries.values():
             state = e.get("state")
             if state in out:
                 out[state] += 1
-        out["dispatched"] = out["running"] + out["succeeded"] + out["failed"]
+        out["dispatched"] = (
+            out["running"] + out["succeeded"] + out["failed"] + out["interrupted"]
+        )
         return out
 
 
@@ -338,6 +348,7 @@ class Realtime:
         self.host = socket.gethostname()
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs)
         self.futures = {}  # future -> ledger key
+        self.reaped = {"succeeded": 0, "failed": 0, "interrupted": 0}  # this run
         self.stop = False
         self.started_utc = _utc_now()
         self.files_seen = 0
@@ -416,13 +427,17 @@ class Realtime:
     def _reap(self):
         for future in [f for f in self.futures if f.done()]:
             key = self.futures.pop(future)
-            rc, _stderr = future.result()
-            state = "succeeded" if rc == 0 else "failed"
+            rc = None if future.cancelled() else future.result()[0]
+            if rc is None or (self.stop and (rc == 130 or rc < 0)):
+                state = "interrupted"  # never launched, or killed by the stop
+            else:
+                state = "succeeded" if rc == 0 else "failed"
+            self.reaped[state] += 1
             entry = self.ledger.mark(
                 key, state=state, exit_status=rc, ended_utc=_utc_now()
             )
             log = logger.info if rc == 0 else logger.warning
-            log("%s %s (exit %d)", state, entry.get("obs_id"), rc)
+            log("%s %s (exit %s)", state, entry.get("obs_id"), rc)
 
     def write_status(self, dirs):
         c = self.ledger.counts()
@@ -449,6 +464,7 @@ class Realtime:
                 "queued": sum(1 for f in self.futures if not f.running()),
                 "succeeded": c["succeeded"],
                 "failed": c["failed"],
+                "interrupted": c["interrupted"],
                 "ledger": self.ledger.path,
                 "log_path": self.log_path,
             },
@@ -474,50 +490,65 @@ class Realtime:
         return True
 
     def finish(self):
-        """Reap, write the final status; return the exit status."""
+        """Reap, write the final status; return the exit status: 1 if a frame
+        failed in this run (earlier runs' failures stay in the ledger), else 130
+        if one was interrupted or a ``--once`` pass was stopped short."""
         self._reap()
         self.pool.shutdown(wait=False, cancel_futures=True)
-        c = self.ledger.counts()
         self.write_status(self.watched_dirs())
-        exit_status = 0 if c["failed"] == 0 else 1
+        r = self.reaped
         logger.info(
-            "done: %d succeeded, %d failed, %d calibration, %d junk, %d rejected",
-            c["succeeded"],
-            c["failed"],
-            c["calibration"],
-            c["junk"],
-            c["rejected"],
+            "done: %d succeeded, %d failed, %d interrupted",
+            r["succeeded"],
+            r["failed"],
+            r["interrupted"],
         )
-        return exit_status
+        if r["failed"]:
+            return 1
+        if r["interrupted"] or (self.args.once and self.stop):
+            return 130
+        return 0
 
-    def run(self):
-        """The main loop; returns the process exit status."""
-        if self.args.once:
-            self.tick()
-            self.wait_for_inflight()
-            return self.finish()
-        logger.info(
-            "watching %s every %.0fs (settle %.0fs, jobs %d); SIGINT/SIGTERM to stop",
-            self.l0_root,
-            self.args.poll_interval,
-            self.args.settle,
-            self.args.jobs,
-        )
-        while not self.stop:
-            self.tick()
-            # Sleep in short slices so a stop request is honoured promptly.
-            deadline = time.monotonic() + self.args.poll_interval
-            while not self.stop and time.monotonic() < deadline:
-                time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
+    def shutdown(self):
+        """Launch nothing more, give in-flight reductions a grace period, then kill
+        them; the unfinished are left ``interrupted`` for the next start."""
+        _interrupted.set()  # throttled pool workers return 130 instead of launching
+        for future in self.futures:
+            future.cancel()  # queued, never started
         logger.warning(
-            "stop requested; waiting up to %.0fs for %d in-flight reduction(s)",
+            "stop requested; waiting up to %.0fs for in-flight reduction(s)",
             _SHUTDOWN_GRACE,
-            len(self.futures),
         )
         if not self.wait_for_inflight(timeout=_SHUTDOWN_GRACE):
             logger.warning("grace period over; terminating remaining children")
             _terminate_all_children()
             self.wait_for_inflight(timeout=5.0)
+
+    def run(self):
+        """The main loop; returns the process exit status."""
+        _interrupted.clear()  # module state; a prior run in-process may have set it
+        if self.args.once:
+            self.tick()
+            # In slices, so a stop request is honoured as in the loop below.
+            while self.futures and not self.stop:
+                self.wait_for_inflight(timeout=0.5)
+        else:
+            logger.info(
+                "watching %s every %.0fs (settle %.0fs, jobs %d); "
+                "SIGINT/SIGTERM to stop",
+                self.l0_root,
+                self.args.poll_interval,
+                self.args.settle,
+                self.args.jobs,
+            )
+            while not self.stop:
+                self.tick()
+                # Sleep in short slices so a stop request is honoured promptly.
+                deadline = time.monotonic() + self.args.poll_interval
+                while not self.stop and time.monotonic() < deadline:
+                    time.sleep(min(0.5, max(0.0, deadline - time.monotonic())))
+        if self.stop:
+            self.shutdown()
         return self.finish()
 
 
