@@ -98,7 +98,7 @@ class TestParseArgs:
         assert thar.parse_args(_BASE_ARGS + ["--output_dir", "/out"]).cache == "rw"
 
     def test_jobs_unset_stays_none(self, thar):
-        # Left None so main() falls back to _default_frame_jobs().
+        # Left None so main() falls back to _default_single_frame_jobs().
         assert thar.parse_args(_BASE_ARGS + ["--output_dir", "/out"]).jobs is None
 
     @pytest.mark.parametrize(
@@ -107,6 +107,8 @@ class TestParseArgs:
             ["--date_range", "2024", "20240131"],  # malformed datecode
             ["--date_range", "20240201", "20240101"],  # start > end
             ["--jobs", "0"],  # below 1
+            ["--job_timeout", "60"],  # thread pool; no timeout flag
+            ["--kpf_data_input", "/b"],  # repeats the --input_dir alias
         ],
     )
     def test_invalid_args_exit(self, thar, capsys, extra):

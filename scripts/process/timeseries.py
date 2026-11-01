@@ -51,21 +51,25 @@ from scripts._argparse import (
     resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    resolve_pool,
 )
-from scripts._dispatch import _default_frame_jobs, configure_runtime
+from scripts._dispatch import (
+    _default_single_frame_jobs,
+    _signals_ignored,
+    configure_runtime,
+)
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 from scripts.plot.timeseries import PlotTimeseries
 from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_SCIENCE_CONFIG
 
 logger = logging.getLogger(__name__)
 
-# --jobs help is timeseries-specific: it is forwarded to both stages (each of
-# which otherwise picks its own default) and also sizes the discovery scan pool.
+# --jobs help is timeseries-specific: it is forwarded to the science stage (masters
+# is sized by --masters_jobs) and also sizes the discovery scan pool.
 _JOBS_HELP = (
-    "max concurrent recipe subprocesses, forwarded to both the masters and "
-    "science stages; left unset, each stage uses its own default (masters its "
-    "fixed cap, science a cores-based value) and the discovery scan uses a "
-    "cores-based worker count"
+    "max concurrent science reductions, forwarded to the science stage, and the "
+    "discovery scan's worker count; left unset, each uses a cores-based default. "
+    "Size the masters stage with --masters_jobs"
 )
 
 
@@ -81,6 +85,21 @@ def parse_args(argv=None):
             cache_parser(default="rw"),
             dates_parser("reduces every L0 night in it", dates=False),
         ],
+    )
+    # Default None: unset, each stage keeps its own default.
+    ap.add_argument(
+        "--masters_jobs",
+        type=int,
+        default=None,
+        help="max concurrent masters builds, forwarded to the masters stage as "
+        "--jobs (default: the masters stage's own cap)",
+    )
+    ap.add_argument(
+        "--launch_interval",
+        type=float,
+        default=None,
+        help="minimum seconds between fanned-out job launches, forwarded to both "
+        "stages (default: each stage's own interval)",
     )
     ap.add_argument(
         "--target",
@@ -130,16 +149,15 @@ def parse_args(argv=None):
         "science stage's own default config)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.jobs is not None and args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    # --jobs stays None when unset so each stage picks its own default.
+    args = resolve_pool(ap, args)
+    if args.masters_jobs is not None and args.masters_jobs < 1:
+        ap.error("--masters_jobs must be >= 1")
     return resolve_dir_shortcuts(args)
 
 
 def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
-    """Raw science obs_ids for `target` over [start, end], from the L0 tree.
+    """``(obs_ids, junk_obs_ids)`` for `target` over [start, end], from the L0 tree.
 
     Scans each night (datecode dir) under {data_input}/L0 via the shared
     ``scan_night_to_cache`` under the given `cache` mode (``"rw"`` by default: reuse
@@ -147,7 +165,8 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     DRP_OBSTYPE is 'Target' and DRP_OBJECT matches `target`. This discovery scan is
     the sole mini-db writer in the timeseries flow -- the masters/science stages it
     launches are told ``--cache r`` (see ``main``). Non-datecode entries are skipped
-    with a note; observer-flagged junk frames (the ISJUNK column) are dropped. Target
+    with a note; observer-flagged junk frames (the ISJUNK column) are returned
+    apart, so the science stage can clear their earlier products. Target
     frames with an Unknown OBJECT cannot be matched and are counted with a warning.
     Exits loudly when the tree is missing or nothing matches.
     """
@@ -156,13 +175,14 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     def _scan_night(dc):
         df = scan_night_to_cache(data_input, dc, cache=cache)
         if df is None:  # empty/absent night -- already warned, skip it
-            return [], ""
+            return ([], []), ""
         is_object = df["DRP_OBSTYPE"] == "Target"
         is_target = df["DRP_OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
-        good = matched.loc[~matched["ISJUNK"].astype(bool)]
-        n_junk = len(matched) - len(good)
-        hits = [get_obs_id(fn) for fn in good["FILENAME"]]
+        is_junk = matched["ISJUNK"].astype(bool)
+        hits = [get_obs_id(fn) for fn in matched.loc[~is_junk, "FILENAME"]]
+        junk = [get_obs_id(fn) for fn in matched.loc[is_junk, "FILENAME"]]
+        n_junk = len(junk)
         note = f", {n_junk} junk skipped" if n_junk else ""
         # A Target whose OBJECT HeaderParser could not trust may be this target.
         n_unknown = int((is_object & (df["DRP_OBJECT"] == "Unknown")).sum())
@@ -173,20 +193,19 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
                 n_unknown,
             )
             note += f", {n_unknown} Target frame(s) with Unknown OBJECT"
-        return hits, f": {len(hits)} matching frame(s){note}"
+        return (hits, junk), f": {len(hits)} matching frame(s){note}"
 
     results = scan_datecodes(
         nights, jobs, _scan_night, label=f"scanning for target {target},"
     )
-    obs_ids = [oid for hits in results for oid in hits]
-
-    obs_ids = sorted(set(obs_ids))
+    obs_ids = sorted({oid for hits, _ in results for oid in hits})
+    junk_obs_ids = sorted({oid for _, junk in results for oid in junk})
     if not obs_ids:
         sys.exit(
             f"error: no science frames for target {target!r} in range "
             f"{start}..{end} under {data_input}"
         )
-    return obs_ids
+    return obs_ids, junk_obs_ids
 
 
 def _orchestrator_argv(module, unit_flag, units, forward, config=None):
@@ -216,19 +235,29 @@ def _run_stage(argv):
     orchestrator's own teardown (``_terminate_all_children`` waits 5 s before
     escalating), so we don't kill a stage mid-cleanup and orphan the very fan-out
     it was reaping.
+
+    The stage runs in its own session, so a terminal Ctrl+C reaches only us and
+    the stage gets one signal (our SIGTERM); a second would cut its teardown
+    short, so our own teardown ignores repeats too.
     """
-    proc = subprocess.Popen(argv, cwd=kpfpipe.REPO_ROOT, stdin=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        argv,
+        cwd=kpfpipe.REPO_ROOT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
     try:
         return proc.wait()
     except KeyboardInterrupt:
-        logger.warning("interrupted; terminating the running stage")
-        proc.terminate()
-        try:
-            proc.wait(timeout=10.0)
-        except subprocess.TimeoutExpired:
-            logger.warning("stage did not exit in 10s; killing it")
-            proc.kill()
-            proc.wait()
+        with _signals_ignored():
+            logger.warning("interrupted; terminating the running stage")
+            proc.terminate()
+            try:
+                proc.wait(timeout=10.0)
+            except subprocess.TimeoutExpired:
+                logger.warning("stage did not exit in 10s; killing it")
+                proc.kill()
+                proc.wait()
         sys.exit(130)
 
 
@@ -254,7 +283,8 @@ def main(argv=None):
     )
 
     # Overrides forwarded to the orchestrators. Both parsers accept the common set;
-    # --jobs and --kpf_science_output ride science_forward only (see below).
+    # --jobs and --kpf_science_output ride science_forward only, --masters_jobs
+    # masters_forward only (see below).
     common_forward = []
     for value, flag in (
         (args.kpf_data_input, "--kpf_data_input"),
@@ -267,13 +297,18 @@ def main(argv=None):
         if value:
             common_forward += [flag, value]
     common_forward += ["--job_timeout", str(args.job_timeout)]
+    if args.launch_interval is not None:
+        common_forward += ["--launch_interval", str(args.launch_interval)]
     # Discovery is the sole mini-db writer; force both launched stages read-only
     # so they don't redundantly re-warm the caches it will have just written.
     common_forward += ["--cache", "r"]
 
     # --jobs sizes only the science fan-out: forwarding a large --jobs to masters
-    # would defeat its fixed _MASTERS_JOBS safety cap (see _dispatch.py), so --jobs
-    # rides science_forward and masters keeps its own default sizing.
+    # would defeat its fixed _MASTERS_JOBS safety cap (see _dispatch.py), so masters
+    # is sized separately by --masters_jobs (unset: its own default).
+    masters_forward = list(common_forward)
+    if args.masters_jobs is not None:
+        masters_forward += ["--jobs", str(args.masters_jobs)]
     science_forward = list(common_forward)
     if args.jobs is not None:
         science_forward += ["--jobs", str(args.jobs)]
@@ -291,8 +326,8 @@ def main(argv=None):
     logger.info("batch log: %s", log_path)
 
     # Steps 1-2: discover the target's science frames -> the nights they span.
-    scan_workers = args.jobs or _default_frame_jobs()
-    obs_ids = discover_science_obs_ids(
+    scan_workers = args.jobs or _default_single_frame_jobs()
+    obs_ids, junk_obs_ids = discover_science_obs_ids(
         data_input, args.target, start, end, scan_workers, cache=args.cache
     )
     datecodes = sorted({get_datecode(o) for o in obs_ids})
@@ -314,7 +349,7 @@ def main(argv=None):
             "masters",
             "--dates",
             datecodes,
-            common_forward,
+            masters_forward,
             config=masters_config,
         )
         logger.info("dispatching masters for %d night(s)", len(datecodes))
@@ -324,13 +359,14 @@ def main(argv=None):
 
     # Step 4: reduce every discovered science frame, unless --no-science. Every
     # frame is handed over regardless of the masters result -- a frame whose masters
-    # failed simply fails here, reported per-frame; no gating happens.
+    # failed simply fails here, reported per-frame; no gating happens. The junk
+    # frames ride along so science clears their earlier products (it reduces none).
     science_rc = None
     if args.science:
         science_argv = _orchestrator_argv(
             "science",
             "--obs_ids",
-            obs_ids,
+            obs_ids + junk_obs_ids,
             science_forward,
             config=science_config,
         )

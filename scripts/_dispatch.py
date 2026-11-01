@@ -8,6 +8,7 @@ interrupt teardown, and fail-fast/fail-soft failure handling. Shared by
 """
 
 import concurrent.futures
+import contextlib
 import logging
 import os
 import signal
@@ -24,13 +25,12 @@ import kpfpipe
 logger = logging.getLogger(__name__)
 
 # Fixed cap on concurrent masters (stacking) jobs -- deliberately NOT cores/RAM
-# derived. The stacking stage bottlenecks on the OS's own memory bookkeeping
-# (page-fault / mapping churn coordinated across all cores), a cost that grows
-# with the number of concurrent jobs, not the work each does: measured on shrek
-# (256 cores, 2 TiB), a wide fan-out left CPUs ~75% idle with 1.4 TiB free and
-# never swapped, yet every job crawled to --job_timeout. 16 is a ~2x margin below
-# the ~32 where degradation appears. Override per machine with --jobs.
-_MASTERS_JOBS = 16
+# derived. On shrek (256 cores, 2 TiB) a wide fan-out once left CPUs ~75% idle with
+# 1.4 TiB free and never swapped, yet every job crawled to --job_timeout: numpy's
+# MADV_HUGEPAGE on large arrays forced synchronous memory compaction against the
+# page cache. With that disabled (configure_runtime), 64-wide runs are acceptable
+# on shrek. Override per machine with --jobs.
+_MASTERS_JOBS = 64
 
 # Approximate peak resident RAM (GiB) of one masters job with the L1 cache on
 # (~4.8 GiB cache-off + ~1.3 GiB retained frames). Only a small-machine *floor* on
@@ -39,7 +39,7 @@ _MASTERS_JOBS = 16
 _MASTERS_JOB_GIB = 6
 
 
-def _default_frame_jobs():
+def _default_single_frame_jobs():
     """Cores-based per-frame job count (science, engineering, scans): at most 25%
     of the CPUs, but always allow up to 16 (and never more than the CPU count).
 
@@ -54,9 +54,9 @@ def _default_masters_jobs():
     """Masters default job count: the fixed _MASTERS_JOBS cap, floored for small
     machines.
 
-    _MASTERS_JOBS (16) is the real limit (see its definition). Two floors keep it
+    _MASTERS_JOBS (64) is the real limit (see its definition). Two floors keep it
     sane on a small machine: never exceed the cores-based count (the same formula
-    _default_frame_jobs uses, inlined so the two defaults stay independent), and
+    _default_single_frame_jobs uses, inlined so the two defaults stay independent), and
     never let the cache-on footprint (~_MASTERS_JOB_GIB each) overcommit RAM. On a
     big host neither binds. Falls back to the cores floor when physical RAM can't
     be determined.
@@ -79,35 +79,42 @@ _interrupted = threading.Event()
 
 # Launch throttle: serializes fan-out launches >= _launch_interval apart. Two
 # callers, two reasons -- science paces the SIMBAD/Gaia catalog queries AstroQuery
-# fires per frame; masters desynchronizes the I/O-heavy stack read/assemble
-# phase so a lockstep wave doesn't saturate the disk. `_last_launch` is the monotonic
+# fires per frame; masters staggers the stack read/assemble phase so the pool
+# doesn't start in lockstep. `_last_launch` is the monotonic
 # time of the last launch.
 _launch_lock = threading.Lock()
 _last_launch = [0.0]
 
 
 def _handle_termination_signal(signum, frame):
-    """Turn SIGTERM into a KeyboardInterrupt so `kill` cleans up like Ctrl+C.
+    """Turn SIGTERM/SIGHUP into KeyboardInterrupt so `kill` or a hangup cleans up.
 
     SIGINT already raises KeyboardInterrupt in the main thread; routing SIGTERM
-    through the same path lets `run_stage` catch both and terminate children.
+    and SIGHUP through the same path lets `run_stage` catch all three and
+    terminate children.
     """
     raise KeyboardInterrupt
 
 
 def configure_runtime():
-    """Install the SIGTERM handler, pin BLAS/OpenMP to one thread, select Agg.
+    """Install the SIGTERM/SIGHUP handler, pin BLAS/OpenMP to one thread, select
+    Agg, disable numpy hugepages.
 
     Call once at the start of an orchestrator's main(), not at import, so importing
-    never mutates signal handlers or the environment. Routes SIGTERM through the
-    KeyboardInterrupt path so `kill` tears down children like Ctrl+C. Caps the
-    BLAS/OpenMP pools at 1 (via setdefault, so an explicit caller wins): we already
-    run one process per job, so an inner OpenBLAS pool would be jobs x cores threads
-    and thrash. Pins matplotlib to Agg the same way: children run headless, and an
-    unset backend resolves to macosx.
+    never mutates signal handlers or the environment. Routes SIGTERM and SIGHUP
+    through the KeyboardInterrupt path so `kill` or a hangup tears down children
+    like Ctrl+C. Caps the BLAS/OpenMP pools at 1 (via setdefault, so an explicit
+    caller wins): we already run one process per job, so an inner OpenBLAS pool
+    would be jobs x cores threads and thrash. Pins matplotlib to Agg the same way:
+    children run headless, and an unset backend resolves to macosx. Disables numpy's
+    MADV_HUGEPAGE (read at numpy import, so it reaches each child): on Linux it
+    forces synchronous memory compaction on large allocations, stalling concurrent
+    jobs when RAM is full of page cache. No numerical effect.
     """
     signal.signal(signal.SIGTERM, _handle_termination_signal)
+    signal.signal(signal.SIGHUP, _handle_termination_signal)
     os.environ.setdefault("MPLBACKEND", "Agg")
+    os.environ.setdefault("NUMPY_MADVISE_HUGEPAGE", "0")
     for var in (
         "OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
@@ -116,6 +123,23 @@ def configure_runtime():
         "VECLIB_MAXIMUM_THREADS",
     ):
         os.environ.setdefault(var, "1")
+
+
+@contextlib.contextmanager
+def _signals_ignored():
+    """Ignore SIGINT/SIGTERM/SIGHUP for the block, restoring the handlers after.
+
+    Shields a teardown from a repeat Ctrl+C, a forwarded SIGTERM, or a hangup,
+    which would otherwise raise KeyboardInterrupt mid-teardown and skip SIGKILL.
+    Main thread only (``signal.signal``).
+    """
+    sigs = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+    prev = {s: signal.signal(s, signal.SIG_IGN) for s in sigs}
+    try:
+        yield
+    finally:
+        for s, handler in prev.items():
+            signal.signal(s, handler)
 
 
 def _kill_group(proc, sig=signal.SIGKILL):
@@ -156,8 +180,9 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
     `launch_interval` (seconds, >0 for every driver) throttles the launch,
     holding the lock across the sleep so pool workers launch one interval apart
     (science paces the SIMBAD/Gaia queries; masters desynchronizes the disk-read
-    phase; engineering paces as a precaution). The canary launches first, so it
-    never waits.
+    phase; engineering paces as a precaution). The sleep waits on `_interrupted`,
+    so teardown wakes every waiting worker at once. The canary launches first, so
+    it never waits.
     """
     if _interrupted.is_set():
         return 130, ""
@@ -165,7 +190,7 @@ def _run_one(argv, timeout=None, launch_interval=0.0):
         with _launch_lock:
             wait = launch_interval - (time.monotonic() - _last_launch[0])
             if wait > 0:
-                time.sleep(wait)
+                _interrupted.wait(wait)
             _last_launch[0] = time.monotonic()
         if _interrupted.is_set():
             return 130, ""
@@ -220,12 +245,13 @@ def run_stage(
     """Run `tasks` (a list of (tag, argv)): the first serially as a canary, then
     the rest in a pool of `jobs` workers. Returns the set of failed tags.
 
-    The canary runs alone (bounded by `canary_timeout`) before any fan-out, warming
+    The canary runs alone (bounded by the longer of `canary_timeout` and
+    `job_timeout`, so raising --job_timeout raises it too) before any fan-out, warming
     the shared on-disk caches the jobs lazily build so they don't stampede a cold
     one. How much that is depends on the stage: the science recipe pulls in
     barycorrpy leap-seconds, astropy IERS and matplotlib fonts; the masters recipe
     imports none of them, so there it warms bytecode alone.
-    Each fanned-out job is bounded by the shorter `job_timeout`; on
+    Each fanned-out job is bounded by `job_timeout`; on
     overrun (a stalled NFS read, a runaway recipe) its process group is killed and
     it returns 124, counted as a failure, so one stuck unit can't hang the batch.
 
@@ -238,11 +264,11 @@ def run_stage(
       unit is attempted (a failed canary still fans out), failures are warned but do not
       exit, and the caller inspects the returned failure set for its exit code.
 
-    `launch_interval` (seconds) spaces the fan-out launches apart (science passes
-    1.0 to rate-limit the SIMBAD/Gaia queries; masters passes a larger value to
-    desynchronize the lockstep disk-read phase); the canary, running first, is
-    unaffected. On SIGINT/SIGTERM, cancel the queue and terminate every running
-    child before exiting 130, so an interrupt leaves no orphaned subprocesses.
+    `launch_interval` (seconds) spaces the fan-out launches apart (science paces
+    its SIMBAD/Gaia queries; masters staggers its stack-read phase); the canary,
+    running first, is unaffected. On SIGINT/SIGTERM/SIGHUP, cancel the queue and
+    terminate every running child before exiting 130, so an interrupt leaves no
+    orphaned subprocesses.
 
     The module-level state is reset on entry: a leftover `_interrupted` would make
     every `_run_one` return (130, "") without launching, so a second call in this
@@ -268,7 +294,7 @@ def run_stage(
         logger.info(
             "  [%s] canary %s (serial; warms shared caches)...", label, canary_tag
         )
-        rc, stderr = _run_one(canary_argv, timeout=canary_timeout)
+        rc, stderr = _run_one(canary_argv, timeout=max(canary_timeout, job_timeout))
         if rc != 0:
             failures.append((label, canary_tag, rc, stderr))
             if abort_on_failure:
@@ -322,15 +348,16 @@ def run_stage(
                     )
     except KeyboardInterrupt:
         _interrupted.set()
-        logger.warning(
-            "[%s] interrupted -- cancelling queued jobs and terminating running "
-            "ones...",
-            label,
-        )
-        if pool is not None:
-            pool.shutdown(wait=False, cancel_futures=True)
-        _terminate_all_children()
-        logger.warning("[%s] all child processes stopped; exiting", label)
+        with _signals_ignored():
+            logger.warning(
+                "[%s] interrupted -- cancelling queued jobs and terminating "
+                "running ones...",
+                label,
+            )
+            if pool is not None:
+                pool.shutdown(wait=False, cancel_futures=True)
+            _terminate_all_children()
+            logger.warning("[%s] all child processes stopped; exiting", label)
         sys.exit(130)
     finally:
         if pool is not None:

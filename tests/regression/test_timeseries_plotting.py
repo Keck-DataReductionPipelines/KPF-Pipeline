@@ -364,6 +364,20 @@ class TestPlot:
         # the nightly panels, and the two survivors are single-obs -> no nightly PNG.
         assert not (plot_dir / "10700_rv_nightly.png").exists()
 
+    def test_earlier_runs_plots_are_deleted(self, pt, tmp_path):
+        # A plot this run does not write (an old high-cadence night, a nightly panel)
+        # must not survive beside its output; another target's plots are untouched.
+        plot_dir = tmp_path / "plots"
+        plot_dir.mkdir()
+        stale = ["10700_rv_nightly.png", "10700_rv_timeseries_20230101.png"]
+        other = ["107000_rv_timeseries.png", "HD 10700_rv_nightly.png"]
+        for name in stale + other:
+            (plot_dir / name).touch()
+        self._run(tmp_path, [("20240101", 100, 2.4e6), ("20240102", 100, 2.4e6 + 1)])
+        assert (plot_dir / "10700_rv_timeseries.png").exists()
+        assert not any((plot_dir / n).exists() for n in stale)
+        assert all((plot_dir / n).exists() for n in other)
+
     def test_all_high_cadence_writes_only_per_night_plots(self, pt, tmp_path):
         # Every night high-cadence, so there is nothing left for a main plot.
         spec = [("20240926", 100 + i, 2.4e6 + i * _MIN) for i in range(12)]

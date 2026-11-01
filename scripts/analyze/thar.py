@@ -37,13 +37,15 @@ import kpfpipe
 from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
+    StoreOnce,
     analysis_parser,
     cache_parser,
     pool_parser,
     resolve_dates,
     resolve_dir_shortcuts,
+    resolve_pool,
 )
-from scripts._dispatch import _default_frame_jobs
+from scripts._dispatch import _default_single_frame_jobs
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
@@ -86,7 +88,9 @@ def parse_args(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             analysis_parser("analyzes every L0 night in it"),
-            pool_parser(jobs_help="max concurrent per-night header scans"),
+            pool_parser(
+                jobs_help="max concurrent per-night header scans", timeout=False
+            ),
             cache_parser(default="rw"),
         ],
     )
@@ -94,14 +98,12 @@ def parse_args(argv=None):
         "--kpf_data_input",
         "--input_dir",
         dest="kpf_data_input",
+        action=StoreOnce,
         required=True,
         help="root of the raw L0 input tree to read (--input_dir is an alias)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-
-    if args.jobs is not None and args.jobs < 1:
-        ap.error("--jobs must be >= 1")
-
+    args = resolve_pool(ap, args)
     args = resolve_dir_shortcuts(args)
     if not args.analysis_dir or not args.log_dir:
         ap.error("pass --output_dir, or both --analysis_dir and --log_dir")
@@ -218,7 +220,7 @@ def main(argv=None):
     logger.info("date_range: %s..%s", start, end)
     logger.info("analysis log: %s", log_path)
 
-    jobs = args.jobs or _default_frame_jobs()
+    jobs = args.jobs or _default_single_frame_jobs()
     rows = scan_lamp_serial_numbers(
         args.kpf_data_input, start, end, jobs, cache=args.cache
     )

@@ -24,6 +24,19 @@ from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf import is_datecode, is_obs_id
 
 
+class StoreOnce(argparse.Action):
+    """``store``, but a usage error if the flag (or any alias) is given twice:
+    argparse otherwise keeps the last value and silently drops the rest, e.g.
+    ``--dates A --dates B`` -> ``[B]``."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # argparse seeds the namespace with this action's own default object, so
+        # anything else means an earlier occurrence already stored a value.
+        if getattr(namespace, self.dest, self.default) is not self.default:
+            parser.error(f"{'/'.join(self.option_strings)} given more than once")
+        setattr(namespace, self.dest, values)
+
+
 def config_parser():
     """Config selection (``-c``), shared by every recipe-running command.
 
@@ -58,6 +71,7 @@ def dates_parser(range_action, *, dates=True, default_date_range=None):
         p.add_argument(
             "--dates",
             nargs="*",
+            action=StoreOnce,
             default=None,
             metavar="DATECODE_OR_FILE",
             help="one or more datecodes, or a text file listing one datecode per "
@@ -74,6 +88,7 @@ def dates_parser(range_action, *, dates=True, default_date_range=None):
     p.add_argument(
         "--date_range",
         nargs=2,
+        action=StoreOnce,
         metavar=("START", "END"),
         required=not dates and default_date_range is None,
         default=list(default_date_range) if default_date_range else None,
@@ -95,7 +110,10 @@ def resolve_dates(ap, args):
     Takes the command's own `ap` so a bad value reports as its usage error. Returns
     `args`.
     """
-    if hasattr(args, "dates") and bool(args.dates) == bool(args.date_range):
+    # `is not None`, not truthiness: a bare `--dates` (an empty list) still counts
+    # as given, so `--dates --date_range A B` is rejected as both, as it is by
+    # `resolve_frame_selection`.
+    if hasattr(args, "dates") and (args.dates is None) == (args.date_range is None):
         ap.error("give either --dates or --date_range, not both or neither")
 
     if args.date_range:
@@ -133,6 +151,7 @@ def obs_ids_parser():
     p.add_argument(
         "--obs_ids",
         nargs="+",
+        action=StoreOnce,
         metavar="OBS_ID_OR_FILE",
         help="one or more obs_ids to reduce, or a text file listing one obs_id per "
         "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
@@ -193,6 +212,7 @@ def data_dirs_parser(science_output=True, engineering_output=False):
         "--kpf_data_input",
         "--input_dir",
         dest="kpf_data_input",
+        action=StoreOnce,
         help="override [DATA_DIRS] KPF_DATA_INPUT (--input_dir is an alias)",
     )
     p.add_argument(
@@ -296,8 +316,9 @@ def cache_parser(default="r"):
         "--cache",
         choices=["r", "w", "rw", "wr"],
         default=default,
-        help="L0 mini-db cache mode: 'r' read-only (skip the pre-scan), 'w' rescan "
-        "and write, 'rw' reuse a current cache else write (default: %(default)s)",
+        help="L0 mini-db cache mode: 'r' reuse a current cache else scan without "
+        "writing, 'w' rescan and write, 'rw' reuse a current cache else write "
+        "(default: %(default)s)",
     )
     return p
 
@@ -328,27 +349,54 @@ def stages_override(args, stages):
     return {"STAGES": {stage: stage in args.stages for stage in stages}}
 
 
-def pool_parser(jobs_help):
-    """Fan-out pool controls (``--jobs``/``--job_timeout``) for the orchestrators.
+def pool_parser(jobs_help, timeout=True, launch_interval=None):
+    """Fan-out pool controls (``--jobs``/``--job_timeout``/``--launch_interval``).
 
     ``--jobs`` help differs per command (masters cites its fixed cap, science its
     cores-based default), so the caller passes it in; ``--job_timeout`` is
-    identical across the orchestrators and lives here so it is written once. Both
-    default to ``None``/``1200`` and are validated + resolved post-parse by each
-    command's ``parse_args``.
+    identical across the orchestrators and lives here so it is written once.
+    ``timeout=False`` omits ``--job_timeout`` for a command whose pool runs
+    in-process threads, with no subprocess to time out. ``--launch_interval`` is
+    added only when the caller passes its default (its ``_LAUNCH_INTERVAL``).
+    Validated + resolved post-parse by `resolve_pool`.
     """
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--jobs", type=int, default=None, help=jobs_help)
-    p.add_argument(
-        "--job_timeout",
-        type=int,
-        default=1200,
-        help="per-job wall-clock limit (seconds) for each fanned-out recipe "
-        "subprocess (default: %(default)s). A job exceeding this is treated as "
-        "wedged: its process group is killed and the job counts as a failure "
-        "rather than hanging the whole batch",
-    )
+    if timeout:
+        p.add_argument(
+            "--job_timeout",
+            type=int,
+            default=1200,
+            help="per-job wall-clock limit (seconds) for each fanned-out recipe "
+            "subprocess (default: %(default)s). A job exceeding this is treated as "
+            "wedged: its process group is killed and the job counts as a failure "
+            "rather than hanging the whole batch",
+        )
+    if launch_interval is not None:
+        p.add_argument(
+            "--launch_interval",
+            type=float,
+            default=launch_interval,
+            help="minimum seconds between fanned-out job launches "
+            "(default: %(default)s)",
+        )
     return p
+
+
+def resolve_pool(ap, args, default_jobs=None):
+    """Validate the `pool_parser` flags present on `args`; fill an unset ``--jobs``
+    from ``default_jobs()``, or leave it ``None`` when no callable is given (the
+    caller resolves it later). Returns `args`."""
+    if getattr(args, "job_timeout", 1) < 1:
+        ap.error("--job_timeout must be >= 1")
+    if (getattr(args, "launch_interval", None) or 0) < 0:
+        ap.error("--launch_interval must be >= 0")
+    if args.jobs is None:
+        if default_jobs is not None:
+            args.jobs = default_jobs()
+    elif args.jobs < 1:
+        ap.error("--jobs must be >= 1")
+    return args
 
 
 def default_date_range():

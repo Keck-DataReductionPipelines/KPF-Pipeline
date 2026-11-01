@@ -46,22 +46,24 @@ from scripts._argparse import (
     resolve_dir_shortcuts,
     resolve_frame_selection,
     resolve_log_settings,
+    resolve_pool,
     stages_parser,
 )
 from scripts._dispatch import (
-    _default_frame_jobs,
+    _default_single_frame_jobs,
     configure_runtime,
     run_stage,
 )
 from scripts._scan import datecodes_in_range, obs_ids_in_nights, warm_mini_db_caches
 from scripts.process import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
+from scripts.process.reduce import remove_outputs, science_output_paths
 
 logger = logging.getLogger(__name__)
 
 # Minimum spacing (seconds) between fanned-out subprocess launches. The per-frame
 # L0 pointing QC fires rapid SIMBAD/Gaia catalog queries at startup, so a burst of
 # pool workers launching at once would hammer those services; pacing the launches
-# rate-limits them. Passed to run_stage as its launch_interval.
+# rate-limits them. Default for --launch_interval.
 _LAUNCH_INTERVAL = 1.0
 
 # --jobs help is command-specific (the cores-based default, not the masters cap),
@@ -81,7 +83,7 @@ def parse_args(argv=None):
             config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
-            pool_parser(jobs_help=_JOBS_HELP),
+            pool_parser(jobs_help=_JOBS_HELP, launch_interval=_LAUNCH_INTERVAL),
             cache_parser(default="rw"),
             dates_parser("reduces the Target frames of every L0 night in it"),
             obs_ids_parser(),
@@ -103,12 +105,7 @@ def parse_args(argv=None):
     if args.socal is None:
         args.socal = True
 
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.jobs is None:
-        args.jobs = _default_frame_jobs()
-    elif args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    args = resolve_pool(ap, args, _default_single_frame_jobs)
     return resolve_dir_shortcuts(args)
 
 
@@ -194,10 +191,14 @@ def main(argv=None):
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
-    # Gate junk and single-CCD frames out of the science recipe, and, for a night,
-    # every frame that is not a Target.
+    # Gate junk and single-CCD frames out of the science recipe (deleting a junk
+    # frame's earlier products), and, for a night, every frame that is not a Target.
     # A frame absent from the mini-db (rejected by the scan) is in none of the sets:
     # not a known Target, but not gated either.
+    science_output = (
+        args.kpf_science_output
+        or config.get_params(["DATA_DIRS"])["KPF_SCIENCE_OUTPUT"]
+    )
     junk, single_ccd, targets = set(), set(), set()
     for dc in datecodes:
         mini_db = FileHandler({"KPF_DATA_INPUT": data_input}).build_mini_database(
@@ -221,7 +222,8 @@ def main(argv=None):
     kept = []
     for o in obs_ids:
         if o in junk:
-            logger.info("skipping %s: junk frame", o)
+            logger.info("skipping %s: junk frame; clearing its products", o)
+            remove_outputs(science_output_paths(o, science_output))
         elif o in single_ccd:
             logger.warning(
                 "skipping %s: DRP does not yet support single-CCD exposures", o
@@ -240,7 +242,7 @@ def main(argv=None):
         run_dir,
         job_timeout=args.job_timeout,
         abort_on_failure=False,
-        launch_interval=_LAUNCH_INTERVAL,
+        launch_interval=args.launch_interval,
     )
 
     reduced = len(obs_ids) - len(failed)

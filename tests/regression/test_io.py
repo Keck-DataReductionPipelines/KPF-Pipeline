@@ -35,7 +35,7 @@ from kpfpipe.utils.io import (
 )
 from kpfpipe.utils.kpf import get_timestamp, utc_to_hst
 
-from ._scripts import write_l0_tree
+from ._scripts import add_junk_obs_id, write_l0_tree
 
 TESTDATA_DIR = Path(__file__).parent.parent / "testdata"
 
@@ -1200,11 +1200,30 @@ class TestMiniDatabaseCache:
         # A current cache is loaded verbatim, not rescanned: the seeded sentinel
         # FILENAME is one no real scan could produce, so its survival proves it.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        cache = _seed_cache(
+            tmp_path, "20240405", ["/sentinel/KP.20000101.00000.00.fits"]
+        )
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
         db = fh.build_mini_database("20240405", cache="rw")
-        assert db["FILENAME"].tolist() == ["/sentinel.fits"]
+        assert db["FILENAME"].tolist() == ["/sentinel/KP.20000101.00000.00.fits"]
+
+    @pytest.mark.parametrize("junked", [True, False], ids=["junked", "unjunked"])
+    def test_cached_isjunk_follows_live_junk_list(self, junked, tmp_path):
+        # A junk-list edit touches no L0 file, so the cache stays current; its
+        # ISJUNK must still come from the live list.
+        obs_id = "KP.20240405.01000.00"
+        fh = _write_l0_frame(tmp_path, "20240405", obs_id)
+        if not junked:
+            add_junk_obs_id(tmp_path, obs_id)
+        fh.build_mini_database("20240405", cache="rw")
+        if junked:
+            add_junk_obs_id(tmp_path, obs_id)
+        else:
+            (tmp_path / "vNext" / "reference" / "junk_obs.csv").unlink()
+
+        db = fh.build_mini_database("20240405", cache="r")
+        assert db["ISJUNK"].tolist() == [junked]
 
     def test_cache_read_only_does_not_write(self, tmp_path, caplog):
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
@@ -1218,42 +1237,69 @@ class TestMiniDatabaseCache:
     def test_cache_write_only_does_not_read(self, tmp_path):
         # "w" writes the scan result but ignores an existing cache on read.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        cache = _seed_cache(
+            tmp_path, "20240405", ["/sentinel/KP.20000101.00000.00.fits"]
+        )
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
         db = fh.build_mini_database("20240405", cache="w")
-        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert "/sentinel/KP.20000101.00000.00.fits" not in db["FILENAME"].tolist()
         assert pd.read_csv(cache)["FILENAME"].tolist() == db["FILENAME"].tolist()
 
     def test_cache_stale_row_count_rescans(self, tmp_path):
         # One frame in the cache, two on disk -> the count guardrail rejects it.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
         _write_l0_frame(tmp_path, "20240405", "KP.20240405.02000.00")
-        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        cache = _seed_cache(
+            tmp_path, "20240405", ["/sentinel/KP.20000101.00000.00.fits"]
+        )
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
         db = fh.build_mini_database("20240405", cache="rw")
         assert len(db) == 2
-        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert "/sentinel/KP.20000101.00000.00.fits" not in db["FILENAME"].tolist()
 
     def test_cache_outdated_schema_rescans(self, tmp_path):
         # A cache written before a column was added (here DRP_OBSMODE) is rejected.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        cache = _seed_cache(
+            tmp_path, "20240405", ["/sentinel/KP.20000101.00000.00.fits"]
+        )
         pd.read_csv(cache).drop(columns="DRP_OBSMODE").to_csv(cache, index=False)
         _touch_newer(cache, tmp_path / "L0" / "20240405")
 
         db = fh.build_mini_database("20240405", cache="rw")
-        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert "/sentinel/KP.20000101.00000.00.fits" not in db["FILENAME"].tolist()
+
+    @pytest.mark.parametrize(
+        "content",
+        [b"", b'"unterminated\n', b"\xff\xfe\x00garbage"],
+        ids=["empty", "unparsable", "undecodable"],
+    )
+    def test_corrupt_cache_rescans_and_rewrites(self, content, tmp_path):
+        # A truncated or garbled CSV is a cache miss, not an error: rw rescans
+        # and replaces it.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(
+            tmp_path, "20240405", ["/sentinel/KP.20000101.00000.00.fits"]
+        )
+        cache.write_bytes(content)
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache="rw")
+        assert len(db) == 1
+        assert len(pd.read_csv(cache)) == 1  # rewritten, readable
 
     def test_cache_out_of_date_rescans(self, tmp_path):
         # Cache older than an L0 input -> freshness guardrail rejects it.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        cache = _seed_cache(
+            tmp_path, "20240405", ["/sentinel/KP.20000101.00000.00.fits"]
+        )
         os.utime(cache, (1_000_000, 1_000_000))  # far in the past
 
         db = fh.build_mini_database("20240405", cache="rw")
-        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert "/sentinel/KP.20000101.00000.00.fits" not in db["FILENAME"].tolist()
         expected = os.path.join(
             str(tmp_path), "L0", "20240405", "KP.20240405.01000.00.fits"
         )
@@ -1263,14 +1309,16 @@ class TestMiniDatabaseCache:
         # A cache passing every other guardrail is still rescanned once it is more
         # than 7 days old. File ctimes cannot be backdated, so advance the clock.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
-        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        cache = _seed_cache(
+            tmp_path, "20240405", ["/sentinel/KP.20000101.00000.00.fits"]
+        )
         _touch_newer(cache, tmp_path / "L0" / "20240405")
         now = os.stat(cache).st_mtime
         monkeypatch.setattr("kpfpipe.utils.io.time.time", lambda: now + 7 * 86400 + 1)
 
         with caplog.at_level(logging.WARNING, logger="kpfpipe.utils.io"):
             db = fh.build_mini_database("20240405", cache="rw")
-        assert "/sentinel.fits" not in db["FILENAME"].tolist()
+        assert "/sentinel/KP.20000101.00000.00.fits" not in db["FILENAME"].tolist()
         assert "more than 7 days old" in caplog.text
 
     def test_cache_false_leaves_no_cache(self, tmp_path):

@@ -781,15 +781,28 @@ class TestClearStaleOutputs:
 class TestFrameGate:
     """Junk and single-CCD frames return before the recipe runs."""
 
-    def _main(self, monkeypatch, tmp_path, obs_id):
+    def _main(self, monkeypatch, tmp_path, obs_id, extra=()):
         monkeypatch.setattr(red, "HeaderParser", HeaderParser)
         monkeypatch.setattr(red, "load_junk_obs_ids", load_junk_obs_ids)
         sentinel = tmp_path / "ran.txt"
         recipe = _stub_recipe(tmp_path, sentinel)
         cfg = _base_cfg(tmp_path)
-        argv = ["-r", str(recipe), "-c", str(cfg), "-o", obs_id]
+        argv = ["-r", str(recipe), "-c", str(cfg), "-o", obs_id, *extra]
         _run(monkeypatch, tmp_path, [*argv, "--kpf_data_input", str(tmp_path)])
         return sentinel.exists()
+
+    def test_junk_frame_products_are_deleted(self, monkeypatch, tmp_path):
+        # A frame junked after it was reduced keeps no L1/L2/L4.
+        obs_id = write_l0_tree(tmp_path, "20240405", 100)
+        add_junk_obs_id(tmp_path, obs_id)
+        out = str(tmp_path / "s")
+        products = red.science_output_paths(obs_id, out)
+        for path in products:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            open(path, "w").close()
+        extra = ["--kpf_science_output", out]
+        assert not self._main(monkeypatch, tmp_path, obs_id, extra=extra)
+        assert not any(os.path.exists(p) for p in products)
 
     def test_junk_frame_is_skipped(self, monkeypatch, tmp_path, caplog):
         obs_id = write_l0_tree(tmp_path, "20240405", 100)

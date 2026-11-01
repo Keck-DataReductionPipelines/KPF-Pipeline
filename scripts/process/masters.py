@@ -51,6 +51,7 @@ from scripts._argparse import (
     resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    resolve_pool,
     stages_override,
     stages_parser,
 )
@@ -66,25 +67,20 @@ from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_MASTERS_RECIPE
 logger = logging.getLogger(__name__)
 
 # Minimum spacing (seconds) between fanned-out subprocess launches. A masters build
-# opens with an I/O-heavy stack phase -- reading and assembling the night's bias,
-# dark and ThAr L0 frames (~100 s solo) before any WLS fitting. Launched in lockstep,
-# a full pool marches through that read phase together, so the disk sees `jobs`-deep
-# read bursts and the shared phase balloons ~4-5x (measured ~465 s at 16-wide on
-# shrek), pushing the slowest nights past --job_timeout. Spacing the launches apart
-# desynchronizes the read bursts -- staggered 16-wide jobs held that phase near the
-# ~100 s solo cost -- without lowering steady-state concurrency: at 5 s the 16-job
-# first wave spreads over ~75 s (most of the read window) while staying well under
-# the throughput ceiling (~job_duration/jobs), so the pool still fills. (Tuned from
-# the 2026-07-09 shrek logs; confirm against a real run before trusting the exact
-# value.) Passed to run_stage as its launch_interval.
-_LAUNCH_INTERVAL = 5.0
+# opens with a stack phase -- reading and assembling the night's bias, dark and
+# ThAr L0 frames (~100 s solo) before any WLS fitting. A light stagger keeps a full
+# pool from starting that phase in lockstep; at 1 s a 64-job first wave spreads over
+# ~64 s. The earlier ~4-5x slowdown of this phase at 16-wide was numpy hugepage
+# compaction, not disk (see configure_runtime), so a long stagger is no longer
+# needed. Default for --launch_interval.
+_LAUNCH_INTERVAL = 1.0
 
 # --jobs help is command-specific (the fixed masters cap, not the cores default),
 # so it is passed into the shared pool_parser rather than baked into it.
 _JOBS_HELP = (
     "max concurrent masters builds; left unset, defaults to the "
-    f"{_MASTERS_JOBS}-job cap (stacking degrades from OS memory contention when too "
-    "many run at once), floored by cores and RAM on small machines"
+    f"{_MASTERS_JOBS}-job cap (too many concurrent builds contend for memory), "
+    "floored by cores and RAM on small machines"
 )
 
 
@@ -97,20 +93,14 @@ def parse_args(argv=None):
             config_parser(),
             data_dirs_parser(science_output=False),
             logging_parser(),
-            pool_parser(jobs_help=_JOBS_HELP),
+            pool_parser(jobs_help=_JOBS_HELP, launch_interval=_LAUNCH_INTERVAL),
             cache_parser(default="rw"),
             dates_parser("builds every L0 night in it"),
             stages_parser(RECIPE_STAGES),
         ],
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.jobs is None:
-        args.jobs = _default_masters_jobs()
-    elif args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    args = resolve_pool(ap, args, _default_masters_jobs)
     return resolve_dir_shortcuts(args)
 
 
@@ -220,7 +210,7 @@ def main(argv=None):
             run_dir,
             job_timeout=args.job_timeout,
             abort_on_failure=False,
-            launch_interval=_LAUNCH_INTERVAL,
+            launch_interval=args.launch_interval,
         )
 
     built = len(datecodes) - len(failed)

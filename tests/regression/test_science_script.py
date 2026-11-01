@@ -7,6 +7,7 @@ is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
 import logging
+import os
 import sys
 
 import pandas as pd
@@ -61,6 +62,7 @@ class TestParseArgs:
             ["--obs_ids", "20240405"],  # a datecode is not an obs_id
             ["--obs_ids", _OID1, "--jobs", "0"],  # jobs below 1
             ["--obs_ids", _OID1, "--job_timeout", "0"],  # timeout below 1
+            ["--obs_ids", _OID1, "--launch_interval", "-1"],  # negative
         ],
     )
     def test_invalid_args_exit(self, s, argv):
@@ -86,7 +88,7 @@ class TestParseArgs:
 
     def test_jobs_unset_resolves_to_cores_default(self, s):
         ns = s.parse_args(["--obs_ids", _OID1])
-        assert ns.jobs == s._default_frame_jobs()
+        assert ns.jobs == s._default_single_frame_jobs()
 
     def test_jobs_override(self, s):
         assert s.parse_args(["--obs_ids", _OID1, "--jobs", "3"]).jobs == 3
@@ -97,6 +99,11 @@ class TestParseArgs:
             s.parse_args(["--obs_ids", _OID1, "--job_timeout", "120"]).job_timeout
             == 120
         )
+
+    def test_launch_interval_default_and_override(self, s):
+        assert s.parse_args(["--obs_ids", _OID1]).launch_interval == 1.0
+        ns = s.parse_args(["--obs_ids", _OID1, "--launch_interval", "2.5"])
+        assert ns.launch_interval == 2.5
 
     def test_input_dir_aliases_data_input(self, s):
         ns = s.parse_args(["--obs_ids", _OID1, "--input_dir", "/in"])
@@ -222,11 +229,31 @@ class TestMainExitCode:
         tasks = calls[0][0][1]
         assert [tag for tag, _ in tasks] == [oid4]
         levels = {r.getMessage(): r.levelno for r in caplog.records}
-        assert levels[f"skipping {_OID1}: junk frame"] == logging.INFO
+        assert levels[f"skipping {_OID1}: junk frame; clearing its products"] == (
+            logging.INFO
+        )
         single = "DRP does not yet support single-CCD exposures"
         assert levels[f"skipping {_OID2}: {single}"] == logging.WARNING
         assert levels[f"skipping {oid3}: {single}"] == logging.WARNING
         assert "done: reduced 1/1 frame(s), 3 skipped" in levels
+
+    def test_junk_frame_products_are_deleted(self, s, monkeypatch, tmp_path):
+        # A frame junked after it was reduced keeps no L1/L2/L4; a kept frame's
+        # products are left to its own reduction.
+        self._patch(s, monkeypatch, tmp_path, failed=[])
+        monkeypatch.setattr(
+            s,
+            "FileHandler",
+            _fake_file_handler([(_OID1, True, True, True), (_OID2, False, True, True)]),
+        )
+        out = str(tmp_path / "s")
+        products = {o: s.science_output_paths(o, out) for o in (_OID1, _OID2)}
+        for path in products[_OID1] + products[_OID2]:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            open(path, "w").close()
+        s.main(["--obs_ids", _OID1, _OID2, "--kpf_science_output", out])
+        assert not any(os.path.exists(p) for p in products[_OID1])
+        assert all(os.path.exists(p) for p in products[_OID2])
 
     def test_exits_zero_when_all_reduced(self, s, monkeypatch, tmp_path):
         self._patch(s, monkeypatch, tmp_path, failed=[])
@@ -254,6 +281,9 @@ class TestMainExitCode:
         s.main(["--obs_ids", _OID1, "--job_timeout", "42"])
         assert calls[0][1]["launch_interval"] == s._LAUNCH_INTERVAL > 0
         assert calls[0][1]["job_timeout"] == 42
+        calls.clear()
+        s.main(["--obs_ids", _OID1, "--launch_interval", "2.5"])
+        assert calls[0][1]["launch_interval"] == 2.5
 
     def test_output_dir_reaches_the_per_frame_argv(self, s, monkeypatch, tmp_path):
         # Parsing --kpf_science_output is not enough: dropping it from `forward`

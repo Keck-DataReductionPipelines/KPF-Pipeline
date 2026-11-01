@@ -7,10 +7,12 @@ Bursts of rapid-succession frames collapse to one RVERR-weighted point over a fa
 underlay of the individual frames; observer-junk frames (``NOTJUNK == 0``) are
 dropped. Writes ``{target}_rv_timeseries.png``, ``{target}_rv_nightly.png`` for
 nights with several observations, and ``{target}_rv_timeseries_{datecode}.png`` for
-each high-cadence night, which is held out of the main plot.
+each high-cadence night, which is held out of the main plot. The target's plots
+from an earlier run are deleted first.
 """
 
 import functools
+import glob
 import logging
 import os
 import subprocess
@@ -226,7 +228,9 @@ class PlotTimeseries:
         """Read the L4 RVs and render this target's plots by observing mode.
 
         Each high-cadence night is drawn alone and held out of the rest; the
-        remaining nights go to the main plot plus its per-night panels.
+        remaining nights go to the main plot plus its per-night panels. The
+        target's existing plots are deleted first, since which plots a run writes
+        depends on its frames.
 
         Raises
         ------
@@ -234,6 +238,7 @@ class PlotTimeseries:
             No frame carried a finite RV -- without this guard the plotter emits a
             blank PNG that looks like a successful run.
         """
+        self._clear_stale_plots()
         self._load()
         if self.times.size == 0:
             raise ValueError(f"no finite RV points to plot for target {self.target!r}")
@@ -266,6 +271,19 @@ class PlotTimeseries:
                 return
 
         self._multi_night(times, rvs, errs, nights)
+
+    def _clear_stale_plots(self):
+        """Delete this target's PNGs in ``plot_dir``, and only this target's: the
+        directory is shared across targets."""
+        t = glob.escape(self.target)
+        for pattern in (
+            f"{t}_rv_timeseries.png",
+            f"{t}_rv_nightly.png",
+            f"{t}_rv_timeseries_{'[0-9]' * 8}.png",
+        ):
+            for path in glob.glob(os.path.join(glob.escape(self.plot_dir), pattern)):
+                os.remove(path)
+                logger.info("removed stale plot: %s", path)
 
     def _load(self):
         """Populate ``times``/``rvs``/``errs``/``nights`` from the L4 products.

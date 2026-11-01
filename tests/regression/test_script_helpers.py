@@ -13,6 +13,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -252,11 +253,61 @@ class TestPoolParser:
         ns = _parse([_argparse.pool_parser(jobs_help="how many")], [])
         assert ns.jobs is None and ns.job_timeout == 1200
 
+    def test_timeout_false_omits_job_timeout(self):
+        p = _argparse.pool_parser(jobs_help="how many", timeout=False)
+        assert not hasattr(_parse([p], []), "job_timeout")
+        with pytest.raises(SystemExit):
+            _parse([p], ["--job_timeout", "60"])
+
     def test_jobs_help_is_passed_through(self):
         parser = argparse.ArgumentParser(
             parents=[_argparse.pool_parser(jobs_help="SENTINEL help text")]
         )
         assert "SENTINEL help text" in parser.format_help()
+
+    def test_launch_interval_omitted_by_default(self):
+        p = _argparse.pool_parser(jobs_help="how many")
+        assert not hasattr(_parse([p], []), "launch_interval")
+
+    def test_launch_interval_default_and_override(self):
+        p = _argparse.pool_parser(jobs_help="how many", launch_interval=3.0)
+        assert _parse([p], []).launch_interval == 3.0
+        assert _parse([p], ["--launch_interval", "0.5"]).launch_interval == 0.5
+
+
+class TestResolvePool:
+    @staticmethod
+    def _resolve(argv, default_jobs=None, **pool_kwargs):
+        ap = argparse.ArgumentParser(
+            parents=[_argparse.pool_parser(jobs_help="how many", **pool_kwargs)]
+        )
+        return _argparse.resolve_pool(ap, ap.parse_args(argv), default_jobs)
+
+    def test_unset_jobs_filled_from_default(self):
+        assert self._resolve([], default_jobs=lambda: 7).jobs == 7
+
+    def test_unset_jobs_stays_none_without_default(self):
+        assert self._resolve([]).jobs is None
+
+    def test_explicit_jobs_wins(self):
+        assert self._resolve(["--jobs", "3"], default_jobs=lambda: 7).jobs == 3
+
+    def test_absent_flags_are_skipped(self):
+        # timeout=False and no launch_interval: nothing to validate but --jobs.
+        assert self._resolve(["--jobs", "2"], timeout=False).jobs == 2
+
+    @pytest.mark.parametrize(
+        "argv, flag",
+        [
+            (["--jobs", "0"], "--jobs"),
+            (["--job_timeout", "0"], "--job_timeout"),
+            (["--launch_interval", "-1"], "--launch_interval"),
+        ],
+    )
+    def test_out_of_range_rejected(self, capsys, argv, flag):
+        with pytest.raises(SystemExit):
+            self._resolve(argv, launch_interval=1.0)
+        assert flag in capsys.readouterr().err
 
 
 class TestCacheParser:
@@ -358,6 +409,61 @@ class TestResolveDates:
         with pytest.raises(SystemExit):
             _resolve([])
         assert "not both or neither" in capsys.readouterr().err
+
+    def test_bare_dates_with_range_is_both(self, capsys):
+        # An empty --dates still counts as given, matching resolve_frame_selection.
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", "--date_range", "20240101", "20240131"])
+        assert "not both or neither" in capsys.readouterr().err
+
+
+class TestStoreOnce:
+    """A repeated selection or input flag is a usage error, not last-wins."""
+
+    @pytest.mark.parametrize(
+        "parents, argv",
+        [
+            (
+                [_argparse.dates_parser("x")],
+                ["--dates", "20240405", "--dates", "20240406"],
+            ),
+            (
+                [_argparse.dates_parser("x")],
+                ["--date_range", "20240101", "20240102"] * 2,
+            ),
+            (
+                [_argparse.obs_ids_parser()],
+                [
+                    "--obs_ids",
+                    "KP.20240405.40113.57",
+                    "--obs_ids",
+                    "KP.20240405.40237.36",
+                ],
+            ),
+            (
+                [_argparse.data_dirs_parser()],
+                ["--input_dir", "/a", "--kpf_data_input", "/b"],
+            ),
+        ],
+        ids=["dates", "date_range", "obs_ids", "input_dir_alias"],
+    )
+    def test_repeat_is_rejected(self, capsys, parents, argv):
+        with pytest.raises(SystemExit):
+            _parse(parents, argv)
+        assert "given more than once" in capsys.readouterr().err
+
+    def test_single_use_still_stores(self):
+        ns = _parse([_argparse.data_dirs_parser()], ["--input_dir", "/a"])
+        assert ns.kpf_data_input == "/a"
+
+    def test_range_only_default_can_be_overridden_once(self):
+        p = _argparse.dates_parser(
+            "x", dates=False, default_date_range=("20240101", "20240102")
+        )
+        assert _parse([p], ["--date_range", "20240301", "20240302"]).date_range == [
+            "20240301",
+            "20240302",
+        ]
 
     def test_range_endpoint_must_be_a_datecode(self, capsys):
         with pytest.raises(SystemExit):
@@ -504,7 +610,7 @@ class TestDefaultScienceJobs:
     )
     def test_cap(self, monkeypatch, cpus, expected):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: cpus)
-        assert _dispatch._default_frame_jobs() == expected
+        assert _dispatch._default_single_frame_jobs() == expected
 
 
 class TestDefaultMastersJobs:
@@ -519,6 +625,13 @@ class TestDefaultMastersJobs:
         monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(2048))
         assert _dispatch._default_masters_jobs() == _dispatch._MASTERS_JOBS
 
+    def test_shrek_default_is_64(self, monkeypatch):
+        # shrek (256 cores, 2 TiB): the 64-job cap, cores floor (256 // 4) and
+        # RAM floor (2048 // 6) all admit 64, the validated concurrency.
+        monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 256)
+        monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(2048))
+        assert _dispatch._default_masters_jobs() == 64
+
     def test_ram_floors_below_fixed_cap(self, monkeypatch):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 256)
         monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(24))
@@ -528,7 +641,11 @@ class TestDefaultMastersJobs:
     def test_cores_floor_below_fixed_cap(self, monkeypatch):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 8)
         monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(256))
-        assert _dispatch._default_masters_jobs() == _dispatch._default_frame_jobs() == 8
+        assert (
+            _dispatch._default_masters_jobs()
+            == _dispatch._default_single_frame_jobs()
+            == 8
+        )
 
     def test_unknown_ram_uses_cores_floor_only(self, monkeypatch):
         # 8 cores, not 256: at 256 the cores floor is 64 and never binds, so the
@@ -656,6 +773,21 @@ class TestRunStageTimeout:
         )
         assert failed == set()  # the 0.5s canary survived a 0.2s job_timeout
 
+    def test_canary_timeout_rises_with_job_timeout(self, tmp_path):
+        # A --job_timeout above canary_timeout raises the canary's limit too, so
+        # the first unit is never held to a shorter limit than the rest.
+        slow_canary = [sys.executable, "-c", "import time; time.sleep(0.5)"]
+        failed = _dispatch.run_stage(
+            "job",
+            [("canary", slow_canary), ("b", _OK)],
+            2,
+            str(tmp_path),
+            job_timeout=30,
+            canary_timeout=0.2,
+            abort_on_failure=False,
+        )
+        assert failed == set()  # the 0.5s canary got the 30s job_timeout
+
 
 # ------------------------------------------------------------------
 # _report_failures + _run_one guard
@@ -699,6 +831,15 @@ class TestRunOneInterrupt:
         assert rc == 130
         assert launched and launched[0].poll() is not None  # child killed + reaped
 
+    def test_interrupt_wakes_throttled_worker(self):
+        # A worker waiting out the launch stagger returns at once on teardown,
+        # not after its full interval (jobs x interval for a whole first wave).
+        _dispatch._last_launch[0] = time.monotonic()
+        threading.Timer(0.1, _dispatch._interrupted.set).start()
+        t0 = time.monotonic()
+        assert _dispatch._run_one(_OK, launch_interval=30.0) == (130, "")
+        assert time.monotonic() - t0 < 5.0
+
 
 # ------------------------------------------------------------------
 # run_stage -- interrupt teardown
@@ -728,6 +869,32 @@ class TestRunStageInterrupt:
         assert exc.value.code == 130
         assert _dispatch._interrupted.is_set()  # stops the pool launching anything more
         assert torn_down == [1]
+
+    def test_repeat_signal_does_not_cut_teardown_short(self, monkeypatch, tmp_path):
+        # A second Ctrl+C (or a parent's SIGTERM) mid-teardown is ignored, so the
+        # teardown completes; the handlers are restored afterwards.
+        torn_down = []
+
+        def _interrupt(*_a, **_k):
+            raise KeyboardInterrupt
+
+        def _teardown():
+            os.kill(os.getpid(), signal.SIGINT)
+            os.kill(os.getpid(), signal.SIGTERM)
+            os.kill(os.getpid(), signal.SIGHUP)
+            torn_down.append(1)
+
+        monkeypatch.setattr(_dispatch, "_run_one", _interrupt)
+        monkeypatch.setattr(_dispatch, "_terminate_all_children", _teardown)
+        before = signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)
+
+        with pytest.raises(SystemExit) as exc:
+            _dispatch.run_stage("job", [("a", _OK)], 2, str(tmp_path))
+
+        assert exc.value.code == 130 and torn_down == [1]
+        assert (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM)) == (
+            before
+        )
 
     def test_stale_interrupt_flag_is_cleared_on_entry(self, tmp_path):
         # `_interrupted` is module state that outlives a run, so without the reset
@@ -777,7 +944,7 @@ class TestRunStageInterrupt:
 
 
 class TestConfigureRuntime:
-    def test_installs_sigterm_handler_and_pins_blas_threads(self, monkeypatch):
+    def test_installs_sigterm_sighup_handler_and_pins_blas_threads(self, monkeypatch):
         # `_dispatch.signal` IS the singleton signal module, so this patch is
         # process-wide for the test's duration -- containment comes from
         # monkeypatch's TEARDOWN, not from any lexical scoping. Do not simplify
@@ -801,10 +968,27 @@ class TestConfigureRuntime:
 
         _dispatch.configure_runtime()
 
-        assert installed == [(signal.SIGTERM, _dispatch._handle_termination_signal)]
+        assert installed == [
+            (signal.SIGTERM, _dispatch._handle_termination_signal),
+            (signal.SIGHUP, _dispatch._handle_termination_signal),
+        ]
         assert os.environ["OMP_NUM_THREADS"] == "8"  # setdefault: the caller wins
         assert os.environ["MKL_NUM_THREADS"] == "1"
         assert os.environ["VECLIB_MAXIMUM_THREADS"] == "1"
+
+    @pytest.mark.parametrize("preset, expected", [(None, "0"), ("1", "1")])
+    def test_disables_numpy_hugepages_unless_set(self, monkeypatch, preset, expected):
+        # Children inherit this before importing numpy; setdefault lets the
+        # caller win. Stub signal.signal as above -- never install a real handler.
+        monkeypatch.setattr(_dispatch.signal, "signal", lambda sig, handler: None)
+        if preset is None:
+            monkeypatch.delenv("NUMPY_MADVISE_HUGEPAGE", raising=False)
+        else:
+            monkeypatch.setenv("NUMPY_MADVISE_HUGEPAGE", preset)
+
+        _dispatch.configure_runtime()
+
+        assert os.environ["NUMPY_MADVISE_HUGEPAGE"] == expected
 
 
 # ------------------------------------------------------------------
@@ -905,14 +1089,36 @@ class TestScanNightToCache:
         assert not _cache_path(str(tmp_path), "20240101").exists()
 
     def test_empty_night_returns_none(self, tmp_path):
-        # An empty datecode dir raises ValueError inside build_mini_database; _scan
-        # swallows it and returns None rather than aborting the batch.
+        # An empty datecode dir is skipped with None rather than aborting the batch.
         (Path(tmp_path) / "L0" / "20240101").mkdir(parents=True)
         assert _scan.scan_night_to_cache(str(tmp_path), "20240101") is None
         assert not _cache_path(str(tmp_path), "20240101").exists()
 
     def test_absent_night_returns_none(self, tmp_path):
         assert _scan.scan_night_to_cache(str(tmp_path), "20240101") is None
+
+    def test_corrupt_cache_is_rewritten_not_skipped(self, tmp_path):
+        write_l0_tree(str(tmp_path), "20240101", 3600)
+        cache = _cache_path(str(tmp_path), "20240101")
+        cache.parent.mkdir(parents=True)
+        cache.write_text('"unterminated\n')
+
+        df = _scan.scan_night_to_cache(str(tmp_path), "20240101")
+
+        assert df is not None and len(df) == 1
+        assert '"unterminated' not in cache.read_text()
+
+    def test_other_value_error_propagates(self, tmp_path, monkeypatch):
+        # Only a night with no FITS files is an empty night; any other ValueError
+        # surfaces instead of silently dropping the night.
+        write_l0_tree(str(tmp_path), "20240101", 3600)
+
+        def _boom(self, datecode, cache=False):
+            raise ValueError("boom")
+
+        monkeypatch.setattr(_scan.FileHandler, "build_mini_database", _boom)
+        with pytest.raises(ValueError, match="boom"):
+            _scan.scan_night_to_cache(str(tmp_path), "20240101")
 
 
 # ------------------------------------------------------------------
@@ -932,6 +1138,22 @@ class TestScanDatecodes:
 
     def test_empty_datecodes(self, tmp_path):
         assert _scan.scan_datecodes([], jobs=4, worker=lambda dc: (dc, "")) == []
+
+    def test_interrupt_cancels_queued_nights(self):
+        # Ctrl+C unwinds after the in-flight nights, not after scanning the queue.
+        nights = [f"2024{d:04d}" for d in range(101, 151)]
+        scanned = []
+
+        def _worker(dc):
+            scanned.append(dc)
+            if dc == nights[0]:
+                raise KeyboardInterrupt
+            time.sleep(0.05)
+            return dc, ""
+
+        with pytest.raises(KeyboardInterrupt):
+            _scan.scan_datecodes(nights, jobs=1, worker=_worker)
+        assert len(scanned) < 10
 
     def test_threaded_scan_no_contamination(self, tmp_path):
         # Each night gets its own FileHandler inside scan_night_to_cache, so a pooled

@@ -39,9 +39,10 @@ from scripts._argparse import (
     resolve_dir_shortcuts,
     resolve_frame_selection,
     resolve_log_settings,
+    resolve_pool,
     stages_parser,
 )
-from scripts._dispatch import _default_frame_jobs, configure_runtime, run_stage
+from scripts._dispatch import _default_single_frame_jobs, configure_runtime, run_stage
 from scripts._scan import datecodes_in_range, obs_ids_in_nights
 from scripts.process import DEFAULT_ENGINEERING_CONFIG, DEFAULT_ENGINEERING_RECIPE
 
@@ -50,7 +51,7 @@ logger = logging.getLogger(__name__)
 # Minimum spacing (seconds) between fanned-out subprocess launches. The engineering
 # recipe makes no catalog queries today, so this is precautionary: it keeps the
 # fan-out paced like science's should a future per-frame step hit a shared service.
-# Passed to run_stage as its launch_interval.
+# Default for --launch_interval.
 _LAUNCH_INTERVAL = 1.0
 
 _JOBS_HELP = (
@@ -68,20 +69,14 @@ def parse_args(argv=None):
             config_parser(),
             data_dirs_parser(science_output=False, engineering_output=True),
             logging_parser(),
-            pool_parser(jobs_help=_JOBS_HELP),
+            pool_parser(jobs_help=_JOBS_HELP, launch_interval=_LAUNCH_INTERVAL),
             dates_parser("reduces every L0 frame of every night in it"),
             obs_ids_parser(),
             stages_parser(RECIPE_STAGES),
         ],
     )
     args = resolve_frame_selection(ap, ap.parse_args(argv))
-
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.jobs is None:
-        args.jobs = _default_frame_jobs()
-    elif args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    args = resolve_pool(ap, args, _default_single_frame_jobs)
     return resolve_dir_shortcuts(args)
 
 
@@ -165,7 +160,7 @@ def main(argv=None):
         run_dir,
         job_timeout=args.job_timeout,
         abort_on_failure=False,
-        launch_interval=_LAUNCH_INTERVAL,
+        launch_interval=args.launch_interval,
     )
 
     logger.info(

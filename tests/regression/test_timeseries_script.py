@@ -10,6 +10,8 @@ Unit tests use synthetic FITS frames in temp trees -- no real testdata needed.
 """
 
 import logging
+import os
+import signal
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -101,7 +103,7 @@ class TestParseArgs:
 
     def test_jobs_unset_stays_none(self, ts):
         # Unset --jobs stays None so each stage picks its own default; the
-        # discovery scan falls back to _default_frame_jobs() in main().
+        # discovery scan falls back to _default_single_frame_jobs() in main().
         assert ts.parse_args(_BASE_ARGS).jobs is None
 
     def test_job_timeout_default_and_override(self, ts):
@@ -115,6 +117,8 @@ class TestParseArgs:
             ["--date_range", "20240201", "20240101"],  # start > end
             ["--jobs", "0"],  # below 1
             ["--job_timeout", "0"],  # below 1
+            ["--masters_jobs", "0"],  # below 1
+            ["--launch_interval", "-1"],  # negative
         ],
     )
     def test_invalid_args_exit(self, ts, capsys, extra):
@@ -204,7 +208,7 @@ class TestDiscoverScienceObsIds:
             "20240101", "20240102", "20240103", "20240104", "20240105", "20240106",
         ]  # fmt: skip
         expected = self._build_tree(str(tmp_path), nights, per_night=4)
-        got = ts.discover_science_obs_ids(
+        got, _ = ts.discover_science_obs_ids(
             str(tmp_path), "10700", "20240101", "20240131", jobs=8
         )
         assert got == sorted(expected)
@@ -227,13 +231,21 @@ class TestDiscoverScienceObsIds:
         parallel = ts.discover_science_obs_ids(str(tmp_path), jobs=8, **common)
         assert serial == parallel
 
-    def test_excludes_junk(self, ts, tmp_path):
+    def test_returns_junk_apart(self, ts, tmp_path):
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         junk = _write_l0(str(tmp_path), "20240101", 3700, "10700", junk=True)
-        got = ts.discover_science_obs_ids(
+        got, junk_ids = ts.discover_science_obs_ids(
             str(tmp_path), "10700", "20240101", "20240131", jobs=2
         )
-        assert got == [good] and junk not in got
+        assert got == [good] and junk_ids == [junk]  # junk returned apart
+
+    def test_empty_night_is_skipped(self, ts, tmp_path):
+        good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        (tmp_path / "L0" / "20240102").mkdir()  # not yet synced
+        got, junk_ids = ts.discover_science_obs_ids(
+            str(tmp_path), "10700", "20240101", "20240131", jobs=2
+        )
+        assert got == [good] and junk_ids == []
 
     def test_unknown_object_targets_counted_with_warning(self, ts, tmp_path, caplog):
         # OBJECT != TARGNAME: HeaderParser can't trust the name, so the frame
@@ -241,7 +253,7 @@ class TestDiscoverScienceObsIds:
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         write_l0_tree(str(tmp_path), "20240101", 3700, obj="10700", targname="HD 10700")
         with caplog.at_level(logging.WARNING):
-            got = ts.discover_science_obs_ids(
+            got, _ = ts.discover_science_obs_ids(
                 str(tmp_path), "10700", "20240101", "20240131", jobs=1
             )
         assert got == [good]
@@ -250,7 +262,7 @@ class TestDiscoverScienceObsIds:
     def test_excludes_non_object_imtype(self, ts, tmp_path):
         obj = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         _write_l0(str(tmp_path), "20240101", 3700, "10700", imtype="Bias")
-        got = ts.discover_science_obs_ids(
+        got, _ = ts.discover_science_obs_ids(
             str(tmp_path), "10700", "20240101", "20240131", jobs=2
         )
         assert got == [obj]
@@ -358,6 +370,20 @@ class TestMainDispatch:
             assert argv[argv.index("--log_dir") + 1] == str(tmp_path)
             assert argv[argv.index("--run_id") + 1] == "timeseries_20240405T010203"
 
+    def test_junk_frames_go_to_science_only(self, ts, monkeypatch, tmp_path):
+        # Junk target frames ride along to science (which clears their products)
+        # but build no masters and are not plotted.
+        good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        junk = _write_l0(str(tmp_path), "20240102", 3600, "10700", junk=True)
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS)
+
+        masters, science, plots = calls
+        assert "20240101" in masters and "20240102" not in masters
+        assert good in science and junk in science
+        assert good in plots and junk not in plots
+
     def test_masters_science_plots_dispatch(self, ts, monkeypatch, tmp_path):
         # Stages run in order: masters, then science over every discovered frame,
         # then plots handed the same frames (no rescan).
@@ -408,6 +434,34 @@ class TestMainDispatch:
         assert "--jobs" not in calls[0]  # masters keeps its own capped sizing
         assert "scripts.process.science" in calls[1]
         assert "--jobs" in calls[1] and "8" in calls[1]  # science gets it
+
+    def test_masters_jobs_rides_masters_not_science(self, ts, monkeypatch, tmp_path):
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--masters_jobs", "32"])
+
+        masters, science = calls[0], calls[1]
+        assert masters[masters.index("--jobs") + 1] == "32"
+        assert "--jobs" not in science
+
+    def test_launch_interval_forwarded_to_both_stages(self, ts, monkeypatch, tmp_path):
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS + ["--launch_interval", "2.5"])
+
+        for argv in calls[:2]:
+            assert argv[argv.index("--launch_interval") + 1] == "2.5"
+
+    def test_unset_pool_flags_leave_stage_defaults(self, ts, monkeypatch, tmp_path):
+        _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS)
+
+        for argv in calls[:2]:
+            assert "--launch_interval" not in argv and "--jobs" not in argv
 
     def test_no_masters_skips_masters_stage(self, ts, monkeypatch, tmp_path):
         a = _write_l0(str(tmp_path), "20240101", 3600, "10700")
@@ -475,3 +529,32 @@ class TestMainDispatch:
         assert exc.value.code == 1
         assert "plots stage failed" in caplog.text
         assert "plots exit 1" in caplog.text
+
+
+class TestRunStageInterrupt:
+    def test_stage_gets_own_session_and_one_shielded_teardown(self, ts, monkeypatch):
+        # The stage is out of the terminal's process group (Ctrl+C reaches only
+        # timeseries, which forwards one SIGTERM), and a repeat signal during our
+        # teardown neither interrupts it nor skips the wait.
+        popen_kwargs, events = {}, []
+
+        class _FakeProc:
+            def __init__(self, argv, **kwargs):
+                popen_kwargs.update(kwargs)
+
+            def wait(self, timeout=None):
+                if timeout is None:
+                    raise KeyboardInterrupt  # Ctrl+C while the stage runs
+                events.append("waited")
+                return -signal.SIGTERM
+
+            def terminate(self):
+                os.kill(os.getpid(), signal.SIGINT)  # impatient second Ctrl+C
+                events.append("terminated")
+
+        monkeypatch.setattr(ts.subprocess, "Popen", _FakeProc)
+        with pytest.raises(SystemExit) as exc:
+            ts._run_stage(["stage"])
+        assert exc.value.code == 130
+        assert popen_kwargs["start_new_session"] is True
+        assert events == ["terminated", "waited"]
