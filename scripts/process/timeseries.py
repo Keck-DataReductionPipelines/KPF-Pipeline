@@ -157,7 +157,8 @@ def parse_args(argv=None):
 
 
 def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
-    """Raw science obs_ids for `target` over [start, end], from the L0 tree.
+    """Raw science obs_ids for `target` over [start, end], from the L0 tree, and the
+    target's junk obs_ids, as ``(obs_ids, junk_obs_ids)``.
 
     Scans each night (datecode dir) under {data_input}/L0 via the shared
     ``scan_night_to_cache`` under the given `cache` mode (``"rw"`` by default: reuse
@@ -165,7 +166,8 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     DRP_OBSTYPE is 'Target' and DRP_OBJECT matches `target`. This discovery scan is
     the sole mini-db writer in the timeseries flow -- the masters/science stages it
     launches are told ``--cache r`` (see ``main``). Non-datecode entries are skipped
-    with a note; observer-flagged junk frames (the ISJUNK column) are dropped. Target
+    with a note; observer-flagged junk frames (the ISJUNK column) are returned
+    apart, so the science stage can clear their earlier products. Target
     frames with an Unknown OBJECT cannot be matched and are counted with a warning.
     Exits loudly when the tree is missing or nothing matches.
     """
@@ -178,9 +180,10 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
         is_object = df["DRP_OBSTYPE"] == "Target"
         is_target = df["DRP_OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
-        good = matched.loc[~matched["ISJUNK"].astype(bool)]
-        n_junk = len(matched) - len(good)
-        hits = [get_obs_id(fn) for fn in good["FILENAME"]]
+        is_junk = matched["ISJUNK"].astype(bool)
+        hits = [get_obs_id(fn) for fn in matched.loc[~is_junk, "FILENAME"]]
+        junk = [get_obs_id(fn) for fn in matched.loc[is_junk, "FILENAME"]]
+        n_junk = len(junk)
         note = f", {n_junk} junk skipped" if n_junk else ""
         # A Target whose OBJECT HeaderParser could not trust may be this target.
         n_unknown = int((is_object & (df["DRP_OBJECT"] == "Unknown")).sum())
@@ -191,20 +194,19 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
                 n_unknown,
             )
             note += f", {n_unknown} Target frame(s) with Unknown OBJECT"
-        return hits, f": {len(hits)} matching frame(s){note}"
+        return (hits, junk), f": {len(hits)} matching frame(s){note}"
 
     results = scan_datecodes(
         nights, jobs, _scan_night, label=f"scanning for target {target},"
     )
-    obs_ids = [oid for hits in results for oid in hits]
-
-    obs_ids = sorted(set(obs_ids))
+    obs_ids = sorted({oid for hits, _ in results for oid in hits})
+    junk_obs_ids = sorted({oid for _, junk in results for oid in junk})
     if not obs_ids:
         sys.exit(
             f"error: no science frames for target {target!r} in range "
             f"{start}..{end} under {data_input}"
         )
-    return obs_ids
+    return obs_ids, junk_obs_ids
 
 
 def _orchestrator_argv(module, unit_flag, units, forward, config=None):
@@ -326,7 +328,7 @@ def main(argv=None):
 
     # Steps 1-2: discover the target's science frames -> the nights they span.
     scan_workers = args.jobs or _default_single_frame_jobs()
-    obs_ids = discover_science_obs_ids(
+    obs_ids, junk_obs_ids = discover_science_obs_ids(
         data_input, args.target, start, end, scan_workers, cache=args.cache
     )
     datecodes = sorted({get_datecode(o) for o in obs_ids})
@@ -358,13 +360,14 @@ def main(argv=None):
 
     # Step 4: reduce every discovered science frame, unless --no-science. Every
     # frame is handed over regardless of the masters result -- a frame whose masters
-    # failed simply fails here, reported per-frame; no gating happens.
+    # failed simply fails here, reported per-frame; no gating happens. The junk
+    # frames ride along so science clears their earlier products (it reduces none).
     science_rc = None
     if args.science:
         science_argv = _orchestrator_argv(
             "science",
             "--obs_ids",
-            obs_ids,
+            obs_ids + junk_obs_ids,
             science_forward,
             config=science_config,
         )

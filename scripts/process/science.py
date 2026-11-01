@@ -56,6 +56,7 @@ from scripts._dispatch import (
 )
 from scripts._scan import datecodes_in_range, obs_ids_in_nights, warm_mini_db_caches
 from scripts.process import DEFAULT_SCIENCE_CONFIG, DEFAULT_SCIENCE_RECIPE
+from scripts.process.reduce import remove_outputs, science_output_paths
 
 logger = logging.getLogger(__name__)
 
@@ -190,10 +191,14 @@ def main(argv=None):
     datecodes = sorted({get_datecode(o) for o in obs_ids})
     warm_mini_db_caches(data_input, datecodes, args.jobs, cache=args.cache)
 
-    # Gate junk and single-CCD frames out of the science recipe, and, for a night,
-    # every frame that is not a Target.
+    # Gate junk and single-CCD frames out of the science recipe (deleting a junk
+    # frame's earlier products), and, for a night, every frame that is not a Target.
     # A frame absent from the mini-db (rejected by the scan) is in none of the sets:
     # not a known Target, but not gated either.
+    science_output = (
+        args.kpf_science_output
+        or config.get_params(["DATA_DIRS"])["KPF_SCIENCE_OUTPUT"]
+    )
     junk, single_ccd, targets = set(), set(), set()
     for dc in datecodes:
         mini_db = FileHandler({"KPF_DATA_INPUT": data_input}).build_mini_database(
@@ -217,7 +222,8 @@ def main(argv=None):
     kept = []
     for o in obs_ids:
         if o in junk:
-            logger.info("skipping %s: junk frame", o)
+            logger.info("skipping %s: junk frame; clearing its products", o)
+            remove_outputs(science_output_paths(o, science_output))
         elif o in single_ccd:
             logger.warning(
                 "skipping %s: DRP does not yet support single-CCD exposures", o

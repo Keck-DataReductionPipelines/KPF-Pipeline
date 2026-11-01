@@ -208,7 +208,7 @@ class TestDiscoverScienceObsIds:
             "20240101", "20240102", "20240103", "20240104", "20240105", "20240106",
         ]  # fmt: skip
         expected = self._build_tree(str(tmp_path), nights, per_night=4)
-        got = ts.discover_science_obs_ids(
+        got, _ = ts.discover_science_obs_ids(
             str(tmp_path), "10700", "20240101", "20240131", jobs=8
         )
         assert got == sorted(expected)
@@ -231,13 +231,13 @@ class TestDiscoverScienceObsIds:
         parallel = ts.discover_science_obs_ids(str(tmp_path), jobs=8, **common)
         assert serial == parallel
 
-    def test_excludes_junk(self, ts, tmp_path):
+    def test_returns_junk_apart(self, ts, tmp_path):
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         junk = _write_l0(str(tmp_path), "20240101", 3700, "10700", junk=True)
-        got = ts.discover_science_obs_ids(
+        got, junk_ids = ts.discover_science_obs_ids(
             str(tmp_path), "10700", "20240101", "20240131", jobs=2
         )
-        assert got == [good] and junk not in got
+        assert got == [good] and junk_ids == [junk]  # junk returned apart
 
     def test_unknown_object_targets_counted_with_warning(self, ts, tmp_path, caplog):
         # OBJECT != TARGNAME: HeaderParser can't trust the name, so the frame
@@ -245,7 +245,7 @@ class TestDiscoverScienceObsIds:
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         write_l0_tree(str(tmp_path), "20240101", 3700, obj="10700", targname="HD 10700")
         with caplog.at_level(logging.WARNING):
-            got = ts.discover_science_obs_ids(
+            got, _ = ts.discover_science_obs_ids(
                 str(tmp_path), "10700", "20240101", "20240131", jobs=1
             )
         assert got == [good]
@@ -254,7 +254,7 @@ class TestDiscoverScienceObsIds:
     def test_excludes_non_object_imtype(self, ts, tmp_path):
         obj = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         _write_l0(str(tmp_path), "20240101", 3700, "10700", imtype="Bias")
-        got = ts.discover_science_obs_ids(
+        got, _ = ts.discover_science_obs_ids(
             str(tmp_path), "10700", "20240101", "20240131", jobs=2
         )
         assert got == [obj]
@@ -361,6 +361,20 @@ class TestMainDispatch:
         for argv in calls[:2]:  # masters, science
             assert argv[argv.index("--log_dir") + 1] == str(tmp_path)
             assert argv[argv.index("--run_id") + 1] == "timeseries_20240405T010203"
+
+    def test_junk_frames_go_to_science_only(self, ts, monkeypatch, tmp_path):
+        # Junk target frames ride along to science (which clears their products)
+        # but build no masters and are not plotted.
+        good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        junk = _write_l0(str(tmp_path), "20240102", 3600, "10700", junk=True)
+        calls = self._patch(ts, monkeypatch, tmp_path)
+
+        ts.main(_BASE_ARGS)
+
+        masters, science, plots = calls
+        assert "20240101" in masters and "20240102" not in masters
+        assert good in science and junk in science
+        assert good in plots and junk not in plots
 
     def test_masters_science_plots_dispatch(self, ts, monkeypatch, tmp_path):
         # Stages run in order: masters, then science over every discovered frame,

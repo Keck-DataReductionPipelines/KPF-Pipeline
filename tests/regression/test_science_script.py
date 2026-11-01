@@ -7,6 +7,7 @@ is tested in test_script_helpers.py. Stubs only -- no real testdata needed.
 """
 
 import logging
+import os
 import sys
 
 import pandas as pd
@@ -228,11 +229,31 @@ class TestMainExitCode:
         tasks = calls[0][0][1]
         assert [tag for tag, _ in tasks] == [oid4]
         levels = {r.getMessage(): r.levelno for r in caplog.records}
-        assert levels[f"skipping {_OID1}: junk frame"] == logging.INFO
+        assert levels[f"skipping {_OID1}: junk frame; clearing its products"] == (
+            logging.INFO
+        )
         single = "DRP does not yet support single-CCD exposures"
         assert levels[f"skipping {_OID2}: {single}"] == logging.WARNING
         assert levels[f"skipping {oid3}: {single}"] == logging.WARNING
         assert "done: reduced 1/1 frame(s), 3 skipped" in levels
+
+    def test_junk_frame_products_are_deleted(self, s, monkeypatch, tmp_path):
+        # A frame junked after it was reduced keeps no L1/L2/L4; a kept frame's
+        # products are left to its own reduction.
+        self._patch(s, monkeypatch, tmp_path, failed=[])
+        monkeypatch.setattr(
+            s,
+            "FileHandler",
+            _fake_file_handler([(_OID1, True, True, True), (_OID2, False, True, True)]),
+        )
+        out = str(tmp_path / "s")
+        products = {o: s.science_output_paths(o, out) for o in (_OID1, _OID2)}
+        for path in products[_OID1] + products[_OID2]:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            open(path, "w").close()
+        s.main(["--obs_ids", _OID1, _OID2, "--kpf_science_output", out])
+        assert not any(os.path.exists(p) for p in products[_OID1])
+        assert all(os.path.exists(p) for p in products[_OID2])
 
     def test_exits_zero_when_all_reduced(self, s, monkeypatch, tmp_path):
         self._patch(s, monkeypatch, tmp_path, failed=[])

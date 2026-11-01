@@ -24,7 +24,7 @@ class _FakeConfig:
     def get_params(self, keys):
         if keys == ["STAGES"]:
             return self.stages
-        return {"KPF_DATA_INPUT": "/in", "log_dir": "/l"}
+        return {"KPF_DATA_INPUT": "/in", "KPF_SCIENCE_OUTPUT": "/s", "log_dir": "/l"}
 
 
 class _NoLogDirConfig(_FakeConfig):

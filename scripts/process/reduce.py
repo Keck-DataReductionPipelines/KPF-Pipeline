@@ -245,11 +245,13 @@ def main(argv=None):
             "stale-output clearing are applied"
         )
 
-    # Junk and single-CCD frames never enter the science recipe.
+    # Junk and single-CCD frames never enter the science recipe; a junk frame's
+    # products from before it was junked are deleted.
     if recipe_type == "science":
         data_input = config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
         if args.obs_id in load_junk_obs_ids(data_input):
-            logger.info("skipping %s: junk frame", args.obs_id)
+            logger.info("skipping %s: junk frame; clearing its products", args.obs_id)
+            clear_stale_outputs(config, args, recipe_type, stages)
             return
         drp = HeaderParser(kpf_filepath(args.obs_id, "L0", data_root=data_input))
         if not (drp.DRP_KEYWORDS.get("GREEN") and drp.DRP_KEYWORDS.get("RED")):
@@ -349,11 +351,7 @@ def clear_stale_outputs(config, args, recipe_type, stages):
     data_dirs = config.get_params(["DATA_DIRS"])
     paths = []
     if recipe_type == "science" and is_obs_id(args.obs_id):
-        data_root = data_dirs["KPF_SCIENCE_OUTPUT"]
-        paths = [
-            kpf_filepath(args.obs_id, level, data_root=data_root)
-            for level in ("L1", "L2", "L4")
-        ]
+        paths = science_output_paths(args.obs_id, data_dirs["KPF_SCIENCE_OUTPUT"])
     elif recipe_type == "engineering" and is_obs_id(args.obs_id):
         data_root = data_dirs["KPF_ENGINEERING_OUTPUT"]
         paths = [kpf_filepath(args.obs_id, "L2", data_root=data_root, engineering=True)]
@@ -381,6 +379,18 @@ def clear_stale_outputs(config, args, recipe_type, stages):
                 shutil.rmtree(stack_subdir)
                 logger.info("removed stale output dir: %s", stack_subdir)
 
+    remove_outputs(paths)
+
+
+def science_output_paths(obs_id, data_root):
+    """The obs_id's science products (L1/L2/L4) under `data_root`."""
+    return [
+        kpf_filepath(obs_id, level, data_root=data_root) for level in ("L1", "L2", "L4")
+    ]
+
+
+def remove_outputs(paths):
+    """Delete each existing file in `paths`, logging it; absent ones are skipped."""
     for path in paths:
         if os.path.isfile(path):
             os.remove(path)
