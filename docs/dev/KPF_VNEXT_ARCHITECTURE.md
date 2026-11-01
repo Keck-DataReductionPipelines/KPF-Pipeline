@@ -309,11 +309,13 @@ The default recipe/config path constants live in `scripts/process/__init__.py`
 shortcuts resolve against.
 
 **Fan-out concurrency differs by orchestrator.** Science and engineering size their pools from cores (`--jobs`); the
-`masters` orchestrator instead caps at a **fixed** `_MASTERS_JOBS` (16, in `_dispatch.py`),
-independent of `--jobs`, cores, or RAM, because masters stacking degrades with the *number* of
-concurrent jobs (OS memory-mapping contention) rather than with compute or memory pressure — so do
-**not** swap in a cores- or RAM-derived cap. All three orchestrators also **stagger** their subprocess
-launches (`_LAUNCH_INTERVAL`): masters by 5.0 s to desync the I/O-heavy read phase each build opens,
+`masters` orchestrator instead defaults to a **fixed** `_MASTERS_JOBS` cap (64, in `_dispatch.py`;
+`--jobs` overrides; floored by cores and RAM only on small machines), because masters stacking
+degrades with the *number* of concurrent jobs rather than with compute or memory pressure — so do
+**not** swap in a cores- or RAM-derived cap. `configure_runtime` sets `NUMPY_MADVISE_HUGEPAGE=0`: numpy's hugepage requests
+force synchronous memory compaction against the page cache, which stalled wide masters runs. All
+three orchestrators also **stagger** their subprocess launches (`_LAUNCH_INTERVAL`): masters by
+1.0 s so a full pool doesn't start its stack-read phase in lockstep,
 science by 1.0 s to rate-limit the SIMBAD/Gaia catalog queries `AstroQuery` fires per frame at startup,
 engineering by 1.0 s as a precaution
 (rationale in each module's comment). These caps and intervals were tuned empirically on

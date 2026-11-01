@@ -24,13 +24,12 @@ import kpfpipe
 logger = logging.getLogger(__name__)
 
 # Fixed cap on concurrent masters (stacking) jobs -- deliberately NOT cores/RAM
-# derived. The stacking stage bottlenecks on the OS's own memory bookkeeping
-# (page-fault / mapping churn coordinated across all cores), a cost that grows
-# with the number of concurrent jobs, not the work each does: measured on shrek
-# (256 cores, 2 TiB), a wide fan-out left CPUs ~75% idle with 1.4 TiB free and
-# never swapped, yet every job crawled to --job_timeout. 16 is a ~2x margin below
-# the ~32 where degradation appears. Override per machine with --jobs.
-_MASTERS_JOBS = 16
+# derived. On shrek (256 cores, 2 TiB) a wide fan-out once left CPUs ~75% idle with
+# 1.4 TiB free and never swapped, yet every job crawled to --job_timeout: numpy's
+# MADV_HUGEPAGE on large arrays forced synchronous memory compaction against the
+# page cache. With that disabled (configure_runtime), 64-wide runs are acceptable
+# on shrek. Override per machine with --jobs.
+_MASTERS_JOBS = 64
 
 # Approximate peak resident RAM (GiB) of one masters job with the L1 cache on
 # (~4.8 GiB cache-off + ~1.3 GiB retained frames). Only a small-machine *floor* on
@@ -54,7 +53,7 @@ def _default_masters_jobs():
     """Masters default job count: the fixed _MASTERS_JOBS cap, floored for small
     machines.
 
-    _MASTERS_JOBS (16) is the real limit (see its definition). Two floors keep it
+    _MASTERS_JOBS (64) is the real limit (see its definition). Two floors keep it
     sane on a small machine: never exceed the cores-based count (the same formula
     _default_frame_jobs uses, inlined so the two defaults stay independent), and
     never let the cache-on footprint (~_MASTERS_JOB_GIB each) overcommit RAM. On a
@@ -79,8 +78,8 @@ _interrupted = threading.Event()
 
 # Launch throttle: serializes fan-out launches >= _launch_interval apart. Two
 # callers, two reasons -- science paces the SIMBAD/Gaia catalog queries AstroQuery
-# fires per frame; masters desynchronizes the I/O-heavy stack read/assemble
-# phase so a lockstep wave doesn't saturate the disk. `_last_launch` is the monotonic
+# fires per frame; masters staggers the stack read/assemble phase so the pool
+# doesn't start in lockstep. `_last_launch` is the monotonic
 # time of the last launch.
 _launch_lock = threading.Lock()
 _last_launch = [0.0]
@@ -96,7 +95,8 @@ def _handle_termination_signal(signum, frame):
 
 
 def configure_runtime():
-    """Install the SIGTERM handler, pin BLAS/OpenMP to one thread, select Agg.
+    """Install the SIGTERM handler, pin BLAS/OpenMP to one thread, select Agg,
+    disable numpy hugepages.
 
     Call once at the start of an orchestrator's main(), not at import, so importing
     never mutates signal handlers or the environment. Routes SIGTERM through the
@@ -104,10 +104,14 @@ def configure_runtime():
     BLAS/OpenMP pools at 1 (via setdefault, so an explicit caller wins): we already
     run one process per job, so an inner OpenBLAS pool would be jobs x cores threads
     and thrash. Pins matplotlib to Agg the same way: children run headless, and an
-    unset backend resolves to macosx.
+    unset backend resolves to macosx. Disables numpy's MADV_HUGEPAGE (read at
+    numpy import, so it reaches each child): on Linux it forces synchronous memory
+    compaction on large allocations, stalling concurrent jobs when RAM is full of
+    page cache. No numerical effect.
     """
     signal.signal(signal.SIGTERM, _handle_termination_signal)
     os.environ.setdefault("MPLBACKEND", "Agg")
+    os.environ.setdefault("NUMPY_MADVISE_HUGEPAGE", "0")
     for var in (
         "OMP_NUM_THREADS",
         "OPENBLAS_NUM_THREADS",
