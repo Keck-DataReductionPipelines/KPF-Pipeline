@@ -343,17 +343,20 @@ def stages_override(args, stages):
     return {"STAGES": {stage: stage in args.stages for stage in stages}}
 
 
-def pool_parser(jobs_help):
+def pool_parser(jobs_help, timeout=True):
     """Fan-out pool controls (``--jobs``/``--job_timeout``) for the orchestrators.
 
     ``--jobs`` help differs per command (masters cites its fixed cap, science its
     cores-based default), so the caller passes it in; ``--job_timeout`` is
     identical across the orchestrators and lives here so it is written once. Both
     default to ``None``/``1200`` and are validated + resolved post-parse by each
-    command's ``parse_args``.
+    command's ``parse_args``. ``timeout=False`` omits ``--job_timeout`` for a
+    command whose pool runs in-process threads, with no subprocess to time out.
     """
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--jobs", type=int, default=None, help=jobs_help)
+    if not timeout:
+        return p
     p.add_argument(
         "--job_timeout",
         type=int,

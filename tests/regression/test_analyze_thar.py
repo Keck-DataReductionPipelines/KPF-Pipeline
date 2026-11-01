@@ -107,6 +107,7 @@ class TestParseArgs:
             ["--date_range", "2024", "20240131"],  # malformed datecode
             ["--date_range", "20240201", "20240101"],  # start > end
             ["--jobs", "0"],  # below 1
+            ["--job_timeout", "60"],  # thread pool; no timeout flag
         ],
     )
     def test_invalid_args_exit(self, thar, capsys, extra):

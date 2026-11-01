@@ -86,7 +86,9 @@ def parse_args(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             analysis_parser("analyzes every L0 night in it"),
-            pool_parser(jobs_help="max concurrent per-night header scans"),
+            pool_parser(
+                jobs_help="max concurrent per-night header scans", timeout=False
+            ),
             cache_parser(default="rw"),
         ],
     )

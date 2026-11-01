@@ -252,6 +252,12 @@ class TestPoolParser:
         ns = _parse([_argparse.pool_parser(jobs_help="how many")], [])
         assert ns.jobs is None and ns.job_timeout == 1200
 
+    def test_timeout_false_omits_job_timeout(self):
+        p = _argparse.pool_parser(jobs_help="how many", timeout=False)
+        assert not hasattr(_parse([p], []), "job_timeout")
+        with pytest.raises(SystemExit):
+            _parse([p], ["--job_timeout", "60"])
+
     def test_jobs_help_is_passed_through(self):
         parser = argparse.ArgumentParser(
             parents=[_argparse.pool_parser(jobs_help="SENTINEL help text")]
