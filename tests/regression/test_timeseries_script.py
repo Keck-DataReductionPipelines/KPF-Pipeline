@@ -239,6 +239,14 @@ class TestDiscoverScienceObsIds:
         )
         assert got == [good] and junk_ids == [junk]  # junk returned apart
 
+    def test_empty_night_is_skipped(self, ts, tmp_path):
+        good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
+        (tmp_path / "L0" / "20240102").mkdir()  # not yet synced
+        got, junk_ids = ts.discover_science_obs_ids(
+            str(tmp_path), "10700", "20240101", "20240131", jobs=2
+        )
+        assert got == [good] and junk_ids == []
+
     def test_unknown_object_targets_counted_with_warning(self, ts, tmp_path, caplog):
         # OBJECT != TARGNAME: HeaderParser can't trust the name, so the frame
         # can't be matched, but discovery must say so rather than drop it quietly.

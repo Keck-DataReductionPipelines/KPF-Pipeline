@@ -109,8 +109,7 @@ def scan_datecodes(datecodes, jobs, worker, *, label="scanning"):
     thread pool overlaps the NFS latency). `worker(dc)` returns ``(result, note)``:
     `result` is appended to the returned list, `note` is an optional string
     appended to that night's heartbeat, logged in completion order. On an
-    interrupt or a worker error the queued nights are cancelled, not scanned
-    first; only those already in flight finish.
+    interrupt or worker error, queued nights are cancelled; in-flight ones finish.
     """
     n = len(datecodes)
     logger.info("%s %d night(s) (%d workers)...", label, n, min(jobs, n) if n else 0)

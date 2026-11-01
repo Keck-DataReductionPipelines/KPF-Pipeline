@@ -179,11 +179,11 @@ class FileHandler:
 
     def _read_mini_db_cache(self, datecode):
         """The cached mini database for ``datecode`` if trustworthy, else None
-        (caller rescans). Rejects an unreadable (corrupt) cache, or a stale one when
-        the row count differs from the
-        FITS files on disk, the cache is older than any input or the directory
-        (by ``st_mtime``/``st_ctime``, so a same-count swap is still caught), or the
-        cache is more than 7 days old, whatever the inputs."""
+        (caller rescans). Rejects an unreadable cache, or a stale one when the row
+        count differs from the FITS files on disk, the cache is older than any input
+        or the directory (by ``st_mtime``/``st_ctime``, so a same-count swap is
+        still caught), or the cache is more than 7 days old, whatever the inputs.
+        ISJUNK is recomputed from the live junk list."""
         cache_path = self._mini_db_cache_path(datecode)
         data_dir = os.path.join(self._data_input, "L0", datecode)
         file_list = sorted(glob.glob(os.path.join(data_dir, "*.fits")))
@@ -243,6 +243,9 @@ class FileHandler:
             )
             return None
 
+        # ISJUNK follows the live junk list, which can change without touching L0.
+        junk = load_junk_obs_ids(self._data_input)
+        cached["ISJUNK"] = [get_obs_id(fn) in junk for fn in cached["FILENAME"]]
         return cached
 
     def _write_mini_db_cache(self, datecode):

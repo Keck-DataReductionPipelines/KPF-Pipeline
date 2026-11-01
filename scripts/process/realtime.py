@@ -252,9 +252,8 @@ class Ledger:
 
     States: ``calibration``, ``junk``, ``rejected`` (see ``classify_frame``),
     ``running`` (dispatched, not yet reaped), ``succeeded``, ``failed``,
-    ``interrupted`` (dispatched but cut short by a stop, or left ``running`` by a
-    watcher that died; not seen, so retried). Persisted atomically after every
-    change so a restart resumes where it left off.
+    ``interrupted`` (cut short by a stop or a dead watcher; retried). Persisted
+    atomically after every change so a restart resumes where it left off.
     """
 
     def __init__(self, path):
@@ -490,9 +489,11 @@ class Realtime:
         return True
 
     def finish(self):
-        """Reap, write the final status; return the exit status: 1 if a frame
-        failed in this run (earlier runs' failures stay in the ledger), else 130
-        if one was interrupted or a ``--once`` pass was stopped short."""
+        """Reap, write the final status; return the exit status.
+
+        1 if a frame failed this run (not earlier runs), else 130 if one was
+        interrupted or a ``--once`` pass stopped short, else 0.
+        """
         self._reap()
         self.pool.shutdown(wait=False, cancel_futures=True)
         self.write_status(self.watched_dirs())

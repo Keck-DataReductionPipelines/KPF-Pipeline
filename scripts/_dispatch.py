@@ -87,8 +87,7 @@ _last_launch = [0.0]
 
 
 def _handle_termination_signal(signum, frame):
-    """Turn SIGTERM/SIGHUP into a KeyboardInterrupt so `kill` or a terminal
-    hangup (ssh disconnect) cleans up like Ctrl+C.
+    """Turn SIGTERM/SIGHUP into KeyboardInterrupt so `kill` or a hangup cleans up.
 
     SIGINT already raises KeyboardInterrupt in the main thread; routing SIGTERM
     and SIGHUP through the same path lets `run_stage` catch all three and
@@ -98,20 +97,19 @@ def _handle_termination_signal(signum, frame):
 
 
 def configure_runtime():
-    """Install the SIGTERM/SIGHUP handler, pin BLAS/OpenMP to one thread, select Agg,
-    disable numpy hugepages.
+    """Install the SIGTERM/SIGHUP handler, pin BLAS/OpenMP to one thread, select
+    Agg, disable numpy hugepages.
 
     Call once at the start of an orchestrator's main(), not at import, so importing
     never mutates signal handlers or the environment. Routes SIGTERM and SIGHUP
     through the KeyboardInterrupt path so `kill` or a hangup tears down children
-    like Ctrl+C. Caps the
-    BLAS/OpenMP pools at 1 (via setdefault, so an explicit caller wins): we already
-    run one process per job, so an inner OpenBLAS pool would be jobs x cores threads
-    and thrash. Pins matplotlib to Agg the same way: children run headless, and an
-    unset backend resolves to macosx. Disables numpy's MADV_HUGEPAGE (read at
-    numpy import, so it reaches each child): on Linux it forces synchronous memory
-    compaction on large allocations, stalling concurrent jobs when RAM is full of
-    page cache. No numerical effect.
+    like Ctrl+C. Caps the BLAS/OpenMP pools at 1 (via setdefault, so an explicit
+    caller wins): we already run one process per job, so an inner OpenBLAS pool
+    would be jobs x cores threads and thrash. Pins matplotlib to Agg the same way:
+    children run headless, and an unset backend resolves to macosx. Disables numpy's
+    MADV_HUGEPAGE (read at numpy import, so it reaches each child): on Linux it
+    forces synchronous memory compaction on large allocations, stalling concurrent
+    jobs when RAM is full of page cache. No numerical effect.
     """
     signal.signal(signal.SIGTERM, _handle_termination_signal)
     signal.signal(signal.SIGHUP, _handle_termination_signal)
@@ -131,9 +129,8 @@ def configure_runtime():
 def _signals_ignored():
     """Ignore SIGINT/SIGTERM/SIGHUP for the block, restoring the handlers after.
 
-    Shields a teardown from a repeat Ctrl+C, a parent's forwarded SIGTERM, or a
-    hangup, any of which
-    would otherwise raise KeyboardInterrupt mid-teardown and skip the SIGKILL step.
+    Shields a teardown from a repeat Ctrl+C, a forwarded SIGTERM, or a hangup,
+    which would otherwise raise KeyboardInterrupt mid-teardown and skip SIGKILL.
     Main thread only (``signal.signal``).
     """
     sigs = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)

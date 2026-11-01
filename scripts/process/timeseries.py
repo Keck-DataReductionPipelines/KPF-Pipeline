@@ -157,8 +157,7 @@ def parse_args(argv=None):
 
 
 def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
-    """Raw science obs_ids for `target` over [start, end], from the L0 tree, and the
-    target's junk obs_ids, as ``(obs_ids, junk_obs_ids)``.
+    """``(obs_ids, junk_obs_ids)`` for `target` over [start, end], from the L0 tree.
 
     Scans each night (datecode dir) under {data_input}/L0 via the shared
     ``scan_night_to_cache`` under the given `cache` mode (``"rw"`` by default: reuse
@@ -176,7 +175,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
     def _scan_night(dc):
         df = scan_night_to_cache(data_input, dc, cache=cache)
         if df is None:  # empty/absent night -- already warned, skip it
-            return [], ""
+            return ([], []), ""
         is_object = df["DRP_OBSTYPE"] == "Target"
         is_target = df["DRP_OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
@@ -238,8 +237,8 @@ def _run_stage(argv):
     it was reaping.
 
     The stage runs in its own session, so a terminal Ctrl+C reaches only us and
-    the stage gets exactly one signal (our SIGTERM); a second would cut its
-    teardown short. Our own teardown ignores repeat signals for the same reason.
+    the stage gets one signal (our SIGTERM); a second would cut its teardown
+    short, so our own teardown ignores repeats too.
     """
     proc = subprocess.Popen(
         argv,

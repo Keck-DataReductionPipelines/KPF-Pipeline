@@ -8,7 +8,7 @@ underlay of the individual frames; observer-junk frames (``NOTJUNK == 0``) are
 dropped. Writes ``{target}_rv_timeseries.png``, ``{target}_rv_nightly.png`` for
 nights with several observations, and ``{target}_rv_timeseries_{datecode}.png`` for
 each high-cadence night, which is held out of the main plot. The target's plots
-from an earlier run are deleted first, so the set on disk is this run's alone.
+from an earlier run are deleted first.
 """
 
 import functools
@@ -229,9 +229,8 @@ class PlotTimeseries:
 
         Each high-cadence night is drawn alone and held out of the rest; the
         remaining nights go to the main plot plus its per-night panels. The
-        target's existing plots are deleted first: which plots a run writes depends
-        on its frames, so an earlier run's (a night no longer high-cadence, a
-        nightly panel no longer warranted) would otherwise sit beside this one's.
+        target's existing plots are deleted first, since which plots a run writes
+        depends on its frames.
 
         Raises
         ------
