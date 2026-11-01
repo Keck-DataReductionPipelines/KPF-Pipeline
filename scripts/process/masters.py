@@ -46,6 +46,7 @@ from scripts._argparse import (
     config_parser,
     data_dirs_parser,
     dates_parser,
+    launch_parser,
     logging_parser,
     pool_parser,
     resolve_dates,
@@ -71,7 +72,7 @@ logger = logging.getLogger(__name__)
 # pool from starting that phase in lockstep; at 1 s a 64-job first wave spreads over
 # ~64 s. The earlier ~4-5x slowdown of this phase at 16-wide was numpy hugepage
 # compaction, not disk (see configure_runtime), so a long stagger is no longer
-# needed. Passed to run_stage as its launch_interval.
+# needed. Default for --launch_interval.
 _LAUNCH_INTERVAL = 1.0
 
 # --jobs help is command-specific (the fixed masters cap, not the cores default),
@@ -96,12 +97,15 @@ def parse_args(argv=None):
             cache_parser(default="rw"),
             dates_parser("builds every L0 night in it"),
             stages_parser(RECIPE_STAGES),
+            launch_parser(_LAUNCH_INTERVAL),
         ],
     )
     args = resolve_dates(ap, ap.parse_args(argv))
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
+    if args.launch_interval < 0:
+        ap.error("--launch_interval must be >= 0")
     if args.jobs is None:
         args.jobs = _default_masters_jobs()
     elif args.jobs < 1:
@@ -215,7 +219,7 @@ def main(argv=None):
             run_dir,
             job_timeout=args.job_timeout,
             abort_on_failure=False,
-            launch_interval=_LAUNCH_INTERVAL,
+            launch_interval=args.launch_interval,
         )
 
     built = len(datecodes) - len(failed)

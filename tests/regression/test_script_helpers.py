@@ -259,6 +259,15 @@ class TestPoolParser:
         assert "SENTINEL help text" in parser.format_help()
 
 
+class TestLaunchParser:
+    def test_orchestrator_default_is_honoured(self):
+        assert _parse([_argparse.launch_parser(3.0)], []).launch_interval == 3.0
+
+    def test_override_parses_as_float(self):
+        ns = _parse([_argparse.launch_parser(1.0)], ["--launch_interval", "0.5"])
+        assert ns.launch_interval == 0.5
+
+
 class TestCacheParser:
     """The --cache mode flag. Its parameterised default is what makes the leaf
     `reduce` read-only while the orchestrators own cache writing -- the
@@ -518,6 +527,13 @@ class TestDefaultMastersJobs:
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 256)
         monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(2048))
         assert _dispatch._default_masters_jobs() == _dispatch._MASTERS_JOBS
+
+    def test_shrek_default_is_64(self, monkeypatch):
+        # shrek (256 cores, 2 TiB): the 64-job cap, cores floor (256 // 4) and
+        # RAM floor (2048 // 6) all admit 64, the validated concurrency.
+        monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 256)
+        monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(2048))
+        assert _dispatch._default_masters_jobs() == 64
 
     def test_ram_floors_below_fixed_cap(self, monkeypatch):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 256)
@@ -805,6 +821,20 @@ class TestConfigureRuntime:
         assert os.environ["OMP_NUM_THREADS"] == "8"  # setdefault: the caller wins
         assert os.environ["MKL_NUM_THREADS"] == "1"
         assert os.environ["VECLIB_MAXIMUM_THREADS"] == "1"
+
+    @pytest.mark.parametrize("preset, expected", [(None, "0"), ("1", "1")])
+    def test_disables_numpy_hugepages_unless_set(self, monkeypatch, preset, expected):
+        # Children inherit this before importing numpy; setdefault lets the
+        # caller win. Stub signal.signal as above -- never install a real handler.
+        monkeypatch.setattr(_dispatch.signal, "signal", lambda sig, handler: None)
+        if preset is None:
+            monkeypatch.delenv("NUMPY_MADVISE_HUGEPAGE", raising=False)
+        else:
+            monkeypatch.setenv("NUMPY_MADVISE_HUGEPAGE", preset)
+
+        _dispatch.configure_runtime()
+
+        assert os.environ["NUMPY_MADVISE_HUGEPAGE"] == expected
 
 
 # ------------------------------------------------------------------

@@ -43,6 +43,7 @@ class TestParseArgs:
             ["--obs_ids", "not-an-obs-id"],
             ["--obs_ids", _OID1, "--jobs", "0"],
             ["--obs_ids", _OID1, "--job_timeout", "0"],
+            ["--obs_ids", _OID1, "--launch_interval", "-1"],
             ["--obs_ids", _OID1, "-r", "/x.py"],  # fixed recipe; no -r
             ["--obs_ids", _OID1, "--stages", "astro_query"],  # a science stage
             ["--obs_ids", _OID1, "--kpf_science_output", "/s"],  # no science output
@@ -133,6 +134,12 @@ class TestMain:
         assert kwargs["abort_on_failure"] is False
         assert kwargs["job_timeout"] == 42
         assert kwargs["launch_interval"] == e._LAUNCH_INTERVAL > 0
+
+    def test_launch_interval_override_reaches_run_stage(self, e, monkeypatch, tmp_path):
+        calls = []
+        self._patch(e, monkeypatch, tmp_path, failed=[], calls=calls)
+        e.main(["--obs_ids", _OID1, "--launch_interval", "2.5"])
+        assert calls[0][1]["launch_interval"] == 2.5
 
     def test_forwards_dir_log_and_stage_overrides_to_each_child(
         self, e, monkeypatch, tmp_path

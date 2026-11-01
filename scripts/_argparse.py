@@ -302,6 +302,21 @@ def cache_parser(default="r"):
     return p
 
 
+def launch_parser(default):
+    """``--launch_interval`` launch-stagger flag for the orchestrators that pace
+    their fan-out (masters, science, engineering). Each passes its own
+    ``_LAUNCH_INTERVAL`` default; validated post-parse by each ``parse_args``.
+    """
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument(
+        "--launch_interval",
+        type=float,
+        default=default,
+        help="minimum seconds between fanned-out job launches (default: %(default)s)",
+    )
+    return p
+
+
 def stages_parser(stages=None):
     """``--stages``, which overrides the config's [STAGES] switches.
 

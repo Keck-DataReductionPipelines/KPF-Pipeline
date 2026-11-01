@@ -61,6 +61,7 @@ class TestParseArgs:
             ["--obs_ids", "20240405"],  # a datecode is not an obs_id
             ["--obs_ids", _OID1, "--jobs", "0"],  # jobs below 1
             ["--obs_ids", _OID1, "--job_timeout", "0"],  # timeout below 1
+            ["--obs_ids", _OID1, "--launch_interval", "-1"],  # negative
         ],
     )
     def test_invalid_args_exit(self, s, argv):
@@ -97,6 +98,11 @@ class TestParseArgs:
             s.parse_args(["--obs_ids", _OID1, "--job_timeout", "120"]).job_timeout
             == 120
         )
+
+    def test_launch_interval_default_and_override(self, s):
+        assert s.parse_args(["--obs_ids", _OID1]).launch_interval == 1.0
+        ns = s.parse_args(["--obs_ids", _OID1, "--launch_interval", "2.5"])
+        assert ns.launch_interval == 2.5
 
     def test_input_dir_aliases_data_input(self, s):
         ns = s.parse_args(["--obs_ids", _OID1, "--input_dir", "/in"])
@@ -254,6 +260,9 @@ class TestMainExitCode:
         s.main(["--obs_ids", _OID1, "--job_timeout", "42"])
         assert calls[0][1]["launch_interval"] == s._LAUNCH_INTERVAL > 0
         assert calls[0][1]["job_timeout"] == 42
+        calls.clear()
+        s.main(["--obs_ids", _OID1, "--launch_interval", "2.5"])
+        assert calls[0][1]["launch_interval"] == 2.5
 
     def test_output_dir_reaches_the_per_frame_argv(self, s, monkeypatch, tmp_path):
         # Parsing --kpf_science_output is not enough: dropping it from `forward`

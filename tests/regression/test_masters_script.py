@@ -98,6 +98,10 @@ class TestParseArgs:
                 ["--dates", "20240405", "--job_timeout", "0"],  # timeout below 1
                 "job_timeout",
             ),
+            (
+                ["--dates", "20240405", "--launch_interval", "-1"],  # negative
+                "launch_interval",
+            ),
         ],
     )
     def test_invalid_args_exit(self, m, argv, expected, capsys):
@@ -126,6 +130,11 @@ class TestParseArgs:
             m.parse_args(["--dates", "20240405", "--job_timeout", "120"]).job_timeout
             == 120
         )
+
+    def test_launch_interval_default_and_override(self, m):
+        assert m.parse_args(["--dates", "20240405"]).launch_interval == 1.0
+        ns = m.parse_args(["--dates", "20240405", "--launch_interval", "2.5"])
+        assert ns.launch_interval == 2.5
 
     def test_input_dir_aliases_data_input(self, m):
         ns = m.parse_args(["--dates", "20240405", "--input_dir", "/in"])
@@ -213,13 +222,16 @@ class TestMainExitCode:
         assert all([t[0] for t in c["args"][1]] == ["20240405"] for c in calls)
 
     def test_fan_out_is_staggered(self, m, monkeypatch, tmp_path):
-        # Masters passes its stagger interval to run_stage so the lockstep
-        # disk-read wave is desynchronized.
+        # Masters passes its stagger interval to run_stage so a full pool doesn't
+        # start the stack-read phase in lockstep; --launch_interval overrides it.
         calls = []
         self._patch(m, monkeypatch, tmp_path, failed=[], calls=calls)
         m.main(["--dates", "20240405"])
         assert calls[0]["launch_interval"] == m._LAUNCH_INTERVAL
         assert m._LAUNCH_INTERVAL > 0
+        calls.clear()
+        m.main(["--dates", "20240405", "--launch_interval", "2.5"])
+        assert calls[0]["launch_interval"] == 2.5
 
     def test_prescans_before_fan_out(self, m, monkeypatch, tmp_path):
         # The mini-db caches are warmed up front, before the reduces fan out.

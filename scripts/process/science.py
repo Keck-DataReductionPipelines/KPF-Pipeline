@@ -40,6 +40,7 @@ from scripts._argparse import (
     config_parser,
     data_dirs_parser,
     dates_parser,
+    launch_parser,
     logging_parser,
     obs_ids_parser,
     pool_parser,
@@ -61,7 +62,7 @@ logger = logging.getLogger(__name__)
 # Minimum spacing (seconds) between fanned-out subprocess launches. The per-frame
 # L0 pointing QC fires rapid SIMBAD/Gaia catalog queries at startup, so a burst of
 # pool workers launching at once would hammer those services; pacing the launches
-# rate-limits them. Passed to run_stage as its launch_interval.
+# rate-limits them. Default for --launch_interval.
 _LAUNCH_INTERVAL = 1.0
 
 # --jobs help is command-specific (the cores-based default, not the masters cap),
@@ -86,6 +87,7 @@ def parse_args(argv=None):
             dates_parser("reduces the Target frames of every L0 night in it"),
             obs_ids_parser(),
             stages_parser(RECIPE_STAGES),
+            launch_parser(_LAUNCH_INTERVAL),
         ],
     )
     ap.add_argument(
@@ -105,6 +107,8 @@ def parse_args(argv=None):
 
     if args.job_timeout < 1:
         ap.error("--job_timeout must be >= 1")
+    if args.launch_interval < 0:
+        ap.error("--launch_interval must be >= 0")
     if args.jobs is None:
         args.jobs = _default_frame_jobs()
     elif args.jobs < 1:
@@ -240,7 +244,7 @@ def main(argv=None):
         run_dir,
         job_timeout=args.job_timeout,
         abort_on_failure=False,
-        launch_interval=_LAUNCH_INTERVAL,
+        launch_interval=args.launch_interval,
     )
 
     reduced = len(obs_ids) - len(failed)
