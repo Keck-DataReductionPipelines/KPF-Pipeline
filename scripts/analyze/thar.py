@@ -42,8 +42,9 @@ from scripts._argparse import (
     pool_parser,
     resolve_dates,
     resolve_dir_shortcuts,
+    resolve_pool,
 )
-from scripts._dispatch import _default_frame_jobs
+from scripts._dispatch import _default_single_frame_jobs
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 
 logger = logging.getLogger(__name__)
@@ -100,10 +101,7 @@ def parse_args(argv=None):
         help="root of the raw L0 input tree to read (--input_dir is an alias)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-
-    if args.jobs is not None and args.jobs < 1:
-        ap.error("--jobs must be >= 1")
-
+    args = resolve_pool(ap, args)
     args = resolve_dir_shortcuts(args)
     if not args.analysis_dir or not args.log_dir:
         ap.error("pass --output_dir, or both --analysis_dir and --log_dir")
@@ -220,7 +218,7 @@ def main(argv=None):
     logger.info("date_range: %s..%s", start, end)
     logger.info("analysis log: %s", log_path)
 
-    jobs = args.jobs or _default_frame_jobs()
+    jobs = args.jobs or _default_single_frame_jobs()
     rows = scan_lamp_serial_numbers(
         args.kpf_data_input, start, end, jobs, cache=args.cache
     )

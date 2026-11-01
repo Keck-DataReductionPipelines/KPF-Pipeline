@@ -38,7 +38,7 @@ _MASTERS_JOBS = 64
 _MASTERS_JOB_GIB = 6
 
 
-def _default_frame_jobs():
+def _default_single_frame_jobs():
     """Cores-based per-frame job count (science, engineering, scans): at most 25%
     of the CPUs, but always allow up to 16 (and never more than the CPU count).
 
@@ -55,7 +55,7 @@ def _default_masters_jobs():
 
     _MASTERS_JOBS (64) is the real limit (see its definition). Two floors keep it
     sane on a small machine: never exceed the cores-based count (the same formula
-    _default_frame_jobs uses, inlined so the two defaults stay independent), and
+    _default_single_frame_jobs uses, inlined so the two defaults stay independent), and
     never let the cache-on footprint (~_MASTERS_JOB_GIB each) overcommit RAM. On a
     big host neither binds. Falls back to the cores floor when physical RAM can't
     be determined.

@@ -55,9 +55,10 @@ from scripts._argparse import (
     pool_parser,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    resolve_pool,
 )
 from scripts._dispatch import (
-    _default_frame_jobs,
+    _default_single_frame_jobs,
     _run_one,
     _terminate_all_children,
     configure_runtime,
@@ -153,12 +154,7 @@ def parse_args(argv=None):
         ap.error("--settle must be >= 0")
     if args.nights < 1:
         ap.error("--nights must be >= 1")
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.jobs is None:
-        args.jobs = _default_frame_jobs()
-    elif args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    args = resolve_pool(ap, args, _default_single_frame_jobs)
     return resolve_dir_shortcuts(args)
 
 

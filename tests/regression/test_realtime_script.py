@@ -32,7 +32,7 @@ _NOW = 1712277000.0
 
 class TestParseArgs:
     def test_defaults(self, monkeypatch):
-        monkeypatch.setattr(rt, "_default_frame_jobs", lambda: 3)
+        monkeypatch.setattr(rt, "_default_single_frame_jobs", lambda: 3)
         ns = rt.parse_args([])
         assert ns.poll_interval == 15.0
         assert ns.settle == 60.0

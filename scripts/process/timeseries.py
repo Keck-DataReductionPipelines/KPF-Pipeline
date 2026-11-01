@@ -51,8 +51,9 @@ from scripts._argparse import (
     resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    resolve_pool,
 )
-from scripts._dispatch import _default_frame_jobs, configure_runtime
+from scripts._dispatch import _default_single_frame_jobs, configure_runtime
 from scripts._scan import datecodes_in_range, scan_datecodes, scan_night_to_cache
 from scripts.plot.timeseries import PlotTimeseries
 from scripts.process import DEFAULT_MASTERS_CONFIG, DEFAULT_SCIENCE_CONFIG
@@ -130,11 +131,8 @@ def parse_args(argv=None):
         "science stage's own default config)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.jobs is not None and args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    # --jobs stays None when unset so each stage picks its own default.
+    args = resolve_pool(ap, args)
     return resolve_dir_shortcuts(args)
 
 
@@ -291,7 +289,7 @@ def main(argv=None):
     logger.info("batch log: %s", log_path)
 
     # Steps 1-2: discover the target's science frames -> the nights they span.
-    scan_workers = args.jobs or _default_frame_jobs()
+    scan_workers = args.jobs or _default_single_frame_jobs()
     obs_ids = discover_science_obs_ids(
         data_input, args.target, start, end, scan_workers, cache=args.cache
     )

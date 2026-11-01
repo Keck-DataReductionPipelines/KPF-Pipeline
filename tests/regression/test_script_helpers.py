@@ -264,14 +264,49 @@ class TestPoolParser:
         )
         assert "SENTINEL help text" in parser.format_help()
 
+    def test_launch_interval_omitted_by_default(self):
+        p = _argparse.pool_parser(jobs_help="how many")
+        assert not hasattr(_parse([p], []), "launch_interval")
 
-class TestLaunchParser:
-    def test_orchestrator_default_is_honoured(self):
-        assert _parse([_argparse.launch_parser(3.0)], []).launch_interval == 3.0
+    def test_launch_interval_default_and_override(self):
+        p = _argparse.pool_parser(jobs_help="how many", launch_interval=3.0)
+        assert _parse([p], []).launch_interval == 3.0
+        assert _parse([p], ["--launch_interval", "0.5"]).launch_interval == 0.5
 
-    def test_override_parses_as_float(self):
-        ns = _parse([_argparse.launch_parser(1.0)], ["--launch_interval", "0.5"])
-        assert ns.launch_interval == 0.5
+
+class TestResolvePool:
+    @staticmethod
+    def _resolve(argv, default_jobs=None, **pool_kwargs):
+        ap = argparse.ArgumentParser(
+            parents=[_argparse.pool_parser(jobs_help="how many", **pool_kwargs)]
+        )
+        return _argparse.resolve_pool(ap, ap.parse_args(argv), default_jobs)
+
+    def test_unset_jobs_filled_from_default(self):
+        assert self._resolve([], default_jobs=lambda: 7).jobs == 7
+
+    def test_unset_jobs_stays_none_without_default(self):
+        assert self._resolve([]).jobs is None
+
+    def test_explicit_jobs_wins(self):
+        assert self._resolve(["--jobs", "3"], default_jobs=lambda: 7).jobs == 3
+
+    def test_absent_flags_are_skipped(self):
+        # timeout=False and no launch_interval: nothing to validate but --jobs.
+        assert self._resolve(["--jobs", "2"], timeout=False).jobs == 2
+
+    @pytest.mark.parametrize(
+        "argv, flag",
+        [
+            (["--jobs", "0"], "--jobs"),
+            (["--job_timeout", "0"], "--job_timeout"),
+            (["--launch_interval", "-1"], "--launch_interval"),
+        ],
+    )
+    def test_out_of_range_rejected(self, capsys, argv, flag):
+        with pytest.raises(SystemExit):
+            self._resolve(argv, launch_interval=1.0)
+        assert flag in capsys.readouterr().err
 
 
 class TestCacheParser:
@@ -519,7 +554,7 @@ class TestDefaultScienceJobs:
     )
     def test_cap(self, monkeypatch, cpus, expected):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: cpus)
-        assert _dispatch._default_frame_jobs() == expected
+        assert _dispatch._default_single_frame_jobs() == expected
 
 
 class TestDefaultMastersJobs:
@@ -550,7 +585,11 @@ class TestDefaultMastersJobs:
     def test_cores_floor_below_fixed_cap(self, monkeypatch):
         monkeypatch.setattr(_dispatch.os, "cpu_count", lambda: 8)
         monkeypatch.setattr(_dispatch.os, "sysconf", self._fake_sysconf(256))
-        assert _dispatch._default_masters_jobs() == _dispatch._default_frame_jobs() == 8
+        assert (
+            _dispatch._default_masters_jobs()
+            == _dispatch._default_single_frame_jobs()
+            == 8
+        )
 
     def test_unknown_ram_uses_cores_floor_only(self, monkeypatch):
         # 8 cores, not 256: at 256 the cores floor is 64 and never binds, so the

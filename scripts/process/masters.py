@@ -46,12 +46,12 @@ from scripts._argparse import (
     config_parser,
     data_dirs_parser,
     dates_parser,
-    launch_parser,
     logging_parser,
     pool_parser,
     resolve_dates,
     resolve_dir_shortcuts,
     resolve_log_settings,
+    resolve_pool,
     stages_override,
     stages_parser,
 )
@@ -93,23 +93,14 @@ def parse_args(argv=None):
             config_parser(),
             data_dirs_parser(science_output=False),
             logging_parser(),
-            pool_parser(jobs_help=_JOBS_HELP),
+            pool_parser(jobs_help=_JOBS_HELP, launch_interval=_LAUNCH_INTERVAL),
             cache_parser(default="rw"),
             dates_parser("builds every L0 night in it"),
             stages_parser(RECIPE_STAGES),
-            launch_parser(_LAUNCH_INTERVAL),
         ],
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.launch_interval < 0:
-        ap.error("--launch_interval must be >= 0")
-    if args.jobs is None:
-        args.jobs = _default_masters_jobs()
-    elif args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    args = resolve_pool(ap, args, _default_masters_jobs)
     return resolve_dir_shortcuts(args)
 
 

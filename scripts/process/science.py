@@ -40,17 +40,17 @@ from scripts._argparse import (
     config_parser,
     data_dirs_parser,
     dates_parser,
-    launch_parser,
     logging_parser,
     obs_ids_parser,
     pool_parser,
     resolve_dir_shortcuts,
     resolve_frame_selection,
     resolve_log_settings,
+    resolve_pool,
     stages_parser,
 )
 from scripts._dispatch import (
-    _default_frame_jobs,
+    _default_single_frame_jobs,
     configure_runtime,
     run_stage,
 )
@@ -82,12 +82,11 @@ def parse_args(argv=None):
             config_parser(),
             data_dirs_parser(science_output=True),
             logging_parser(),
-            pool_parser(jobs_help=_JOBS_HELP),
+            pool_parser(jobs_help=_JOBS_HELP, launch_interval=_LAUNCH_INTERVAL),
             cache_parser(default="rw"),
             dates_parser("reduces the Target frames of every L0 night in it"),
             obs_ids_parser(),
             stages_parser(RECIPE_STAGES),
-            launch_parser(_LAUNCH_INTERVAL),
         ],
     )
     ap.add_argument(
@@ -105,14 +104,7 @@ def parse_args(argv=None):
     if args.socal is None:
         args.socal = True
 
-    if args.job_timeout < 1:
-        ap.error("--job_timeout must be >= 1")
-    if args.launch_interval < 0:
-        ap.error("--launch_interval must be >= 0")
-    if args.jobs is None:
-        args.jobs = _default_frame_jobs()
-    elif args.jobs < 1:
-        ap.error("--jobs must be >= 1")
+    args = resolve_pool(ap, args, _default_single_frame_jobs)
     return resolve_dir_shortcuts(args)
 
 

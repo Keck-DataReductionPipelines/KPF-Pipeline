@@ -98,7 +98,7 @@ class TestParseArgs:
         assert thar.parse_args(_BASE_ARGS + ["--output_dir", "/out"]).cache == "rw"
 
     def test_jobs_unset_stays_none(self, thar):
-        # Left None so main() falls back to _default_frame_jobs().
+        # Left None so main() falls back to _default_single_frame_jobs().
         assert thar.parse_args(_BASE_ARGS + ["--output_dir", "/out"]).jobs is None
 
     @pytest.mark.parametrize(

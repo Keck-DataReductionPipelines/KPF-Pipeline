@@ -302,21 +302,6 @@ def cache_parser(default="r"):
     return p
 
 
-def launch_parser(default):
-    """``--launch_interval`` launch-stagger flag for the orchestrators that pace
-    their fan-out (masters, science, engineering). Each passes its own
-    ``_LAUNCH_INTERVAL`` default; validated post-parse by each ``parse_args``.
-    """
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument(
-        "--launch_interval",
-        type=float,
-        default=default,
-        help="minimum seconds between fanned-out job launches (default: %(default)s)",
-    )
-    return p
-
-
 def stages_parser(stages=None):
     """``--stages``, which overrides the config's [STAGES] switches.
 
@@ -343,30 +328,54 @@ def stages_override(args, stages):
     return {"STAGES": {stage: stage in args.stages for stage in stages}}
 
 
-def pool_parser(jobs_help, timeout=True):
-    """Fan-out pool controls (``--jobs``/``--job_timeout``) for the orchestrators.
+def pool_parser(jobs_help, timeout=True, launch_interval=None):
+    """Fan-out pool controls (``--jobs``/``--job_timeout``/``--launch_interval``).
 
     ``--jobs`` help differs per command (masters cites its fixed cap, science its
     cores-based default), so the caller passes it in; ``--job_timeout`` is
-    identical across the orchestrators and lives here so it is written once. Both
-    default to ``None``/``1200`` and are validated + resolved post-parse by each
-    command's ``parse_args``. ``timeout=False`` omits ``--job_timeout`` for a
-    command whose pool runs in-process threads, with no subprocess to time out.
+    identical across the orchestrators and lives here so it is written once.
+    ``timeout=False`` omits ``--job_timeout`` for a command whose pool runs
+    in-process threads, with no subprocess to time out. ``--launch_interval`` is
+    added only when the caller passes its default (its ``_LAUNCH_INTERVAL``).
+    Validated + resolved post-parse by `resolve_pool`.
     """
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--jobs", type=int, default=None, help=jobs_help)
-    if not timeout:
-        return p
-    p.add_argument(
-        "--job_timeout",
-        type=int,
-        default=1200,
-        help="per-job wall-clock limit (seconds) for each fanned-out recipe "
-        "subprocess (default: %(default)s). A job exceeding this is treated as "
-        "wedged: its process group is killed and the job counts as a failure "
-        "rather than hanging the whole batch",
-    )
+    if timeout:
+        p.add_argument(
+            "--job_timeout",
+            type=int,
+            default=1200,
+            help="per-job wall-clock limit (seconds) for each fanned-out recipe "
+            "subprocess (default: %(default)s). A job exceeding this is treated as "
+            "wedged: its process group is killed and the job counts as a failure "
+            "rather than hanging the whole batch",
+        )
+    if launch_interval is not None:
+        p.add_argument(
+            "--launch_interval",
+            type=float,
+            default=launch_interval,
+            help="minimum seconds between fanned-out job launches "
+            "(default: %(default)s)",
+        )
     return p
+
+
+def resolve_pool(ap, args, default_jobs=None):
+    """Validate the `pool_parser` flags present on `args`; fill an unset ``--jobs``
+    from ``default_jobs()``, or leave it ``None`` when no callable is given (the
+    caller resolves it later). Returns `args`."""
+    if getattr(args, "job_timeout", 1) < 1:
+        ap.error("--job_timeout must be >= 1")
+    if getattr(args, "launch_interval", 0) < 0:
+        ap.error("--launch_interval must be >= 0")
+    if args.jobs is None:
+        if default_jobs is not None:
+            args.jobs = default_jobs()
+    elif args.jobs < 1:
+        ap.error("--jobs must be >= 1")
+    return args
 
 
 def default_date_range():
