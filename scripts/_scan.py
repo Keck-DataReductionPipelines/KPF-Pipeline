@@ -91,16 +91,15 @@ def scan_night_to_cache(data_input, datecode, cache="rw"):
     Builds a fresh ``FileHandler`` for `datecode` and calls
     ``build_mini_database(datecode, cache=cache)`` -- with the default ``"rw"``,
     reuse a current cache else rescan and write. Returns the scanned ``DataFrame``,
-    or ``None`` for an empty/absent night (which ``build_mini_database`` signals
-    with ``ValueError`` -- warned and skipped, not fatal); any other error
-    propagates.
+    or ``None`` for a night with no L0 FITS files (warned and skipped, not fatal);
+    any other error propagates rather than passing as an empty night.
     """
-    file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
-    try:
-        return file_handler.build_mini_database(datecode, cache=cache)
-    except ValueError as e:
-        logger.warning("  skipping night %s: %s", datecode, e)
+    data_dir = os.path.join(data_input, "L0", str(datecode))
+    if not glob.glob(os.path.join(data_dir, "*.fits")):
+        logger.warning("  skipping night %s: no FITS files in %s", datecode, data_dir)
         return None
+    file_handler = FileHandler({"KPF_DATA_INPUT": data_input})
+    return file_handler.build_mini_database(datecode, cache=cache)
 
 
 def scan_datecodes(datecodes, jobs, worker, *, label="scanning"):

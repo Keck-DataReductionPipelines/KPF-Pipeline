@@ -1089,14 +1089,36 @@ class TestScanNightToCache:
         assert not _cache_path(str(tmp_path), "20240101").exists()
 
     def test_empty_night_returns_none(self, tmp_path):
-        # An empty datecode dir raises ValueError inside build_mini_database; _scan
-        # swallows it and returns None rather than aborting the batch.
+        # An empty datecode dir is skipped with None rather than aborting the batch.
         (Path(tmp_path) / "L0" / "20240101").mkdir(parents=True)
         assert _scan.scan_night_to_cache(str(tmp_path), "20240101") is None
         assert not _cache_path(str(tmp_path), "20240101").exists()
 
     def test_absent_night_returns_none(self, tmp_path):
         assert _scan.scan_night_to_cache(str(tmp_path), "20240101") is None
+
+    def test_corrupt_cache_is_rewritten_not_skipped(self, tmp_path):
+        write_l0_tree(str(tmp_path), "20240101", 3600)
+        cache = _cache_path(str(tmp_path), "20240101")
+        cache.parent.mkdir(parents=True)
+        cache.write_text('"unterminated\n')
+
+        df = _scan.scan_night_to_cache(str(tmp_path), "20240101")
+
+        assert df is not None and len(df) == 1
+        assert '"unterminated' not in cache.read_text()
+
+    def test_other_value_error_propagates(self, tmp_path, monkeypatch):
+        # Only a night with no FITS files is an empty night; any other ValueError
+        # surfaces instead of silently dropping the night.
+        write_l0_tree(str(tmp_path), "20240101", 3600)
+
+        def _boom(self, datecode, cache=False):
+            raise ValueError("boom")
+
+        monkeypatch.setattr(_scan.FileHandler, "build_mini_database", _boom)
+        with pytest.raises(ValueError, match="boom"):
+            _scan.scan_night_to_cache(str(tmp_path), "20240101")
 
 
 # ------------------------------------------------------------------

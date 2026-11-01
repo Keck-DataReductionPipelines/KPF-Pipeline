@@ -179,7 +179,8 @@ class FileHandler:
 
     def _read_mini_db_cache(self, datecode):
         """The cached mini database for ``datecode`` if trustworthy, else None
-        (caller rescans). Rejects a stale cache when the row count differs from the
+        (caller rescans). Rejects an unreadable (corrupt) cache, or a stale one when
+        the row count differs from the
         FITS files on disk, the cache is older than any input or the directory
         (by ``st_mtime``/``st_ctime``, so a same-count swap is still caught), or the
         cache is more than 7 days old, whatever the inputs."""
@@ -198,7 +199,13 @@ class FileHandler:
             return None
 
         # "None" (an unlit fiber) and "N/A" are vocabulary, not missing values.
-        cached = pd.read_csv(cache_path, keep_default_na=False, na_values=[""])
+        try:
+            cached = pd.read_csv(cache_path, keep_default_na=False, na_values=[""])
+        except ValueError as e:  # ParserError, EmptyDataError, UnicodeDecodeError
+            logger.warning(
+                "mini database cache %s is unreadable (%s); rescanning", cache_path, e
+            )
+            return None
         if list(cached.columns) != _MINI_DB_KEYS:
             logger.warning(
                 "mini database cache %s has an outdated schema; rescanning", cache_path

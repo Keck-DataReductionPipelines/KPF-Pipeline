@@ -316,8 +316,9 @@ def cache_parser(default="r"):
         "--cache",
         choices=["r", "w", "rw", "wr"],
         default=default,
-        help="L0 mini-db cache mode: 'r' read-only (skip the pre-scan), 'w' rescan "
-        "and write, 'rw' reuse a current cache else write (default: %(default)s)",
+        help="L0 mini-db cache mode: 'r' reuse a current cache else scan without "
+        "writing, 'w' rescan and write, 'rw' reuse a current cache else write "
+        "(default: %(default)s)",
     )
     return p
 

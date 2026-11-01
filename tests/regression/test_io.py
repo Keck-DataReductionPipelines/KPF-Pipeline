@@ -1246,6 +1246,23 @@ class TestMiniDatabaseCache:
         db = fh.build_mini_database("20240405", cache="rw")
         assert "/sentinel.fits" not in db["FILENAME"].tolist()
 
+    @pytest.mark.parametrize(
+        "content",
+        [b"", b'"unterminated\n', b"\xff\xfe\x00garbage"],
+        ids=["empty", "unparsable", "undecodable"],
+    )
+    def test_corrupt_cache_rescans_and_rewrites(self, content, tmp_path):
+        # A truncated or garbled CSV is a cache miss, not an error: rw rescans
+        # and replaces it.
+        fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
+        cache = _seed_cache(tmp_path, "20240405", ["/sentinel.fits"])
+        cache.write_bytes(content)
+        _touch_newer(cache, tmp_path / "L0" / "20240405")
+
+        db = fh.build_mini_database("20240405", cache="rw")
+        assert len(db) == 1
+        assert len(pd.read_csv(cache)) == 1  # rewritten, readable
+
     def test_cache_out_of_date_rescans(self, tmp_path):
         # Cache older than an L0 input -> freshness guardrail rejects it.
         fh = _write_l0_frame(tmp_path, "20240405", "KP.20240405.01000.00")
