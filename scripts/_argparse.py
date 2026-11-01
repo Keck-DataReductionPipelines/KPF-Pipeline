@@ -24,6 +24,19 @@ from kpfpipe.utils.io import read_token_file
 from kpfpipe.utils.kpf import is_datecode, is_obs_id
 
 
+class StoreOnce(argparse.Action):
+    """``store``, but a usage error if the flag (or any alias) is given twice:
+    argparse otherwise keeps the last value and silently drops the rest, e.g.
+    ``--dates A --dates B`` -> ``[B]``."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # argparse seeds the namespace with this action's own default object, so
+        # anything else means an earlier occurrence already stored a value.
+        if getattr(namespace, self.dest, self.default) is not self.default:
+            parser.error(f"{'/'.join(self.option_strings)} given more than once")
+        setattr(namespace, self.dest, values)
+
+
 def config_parser():
     """Config selection (``-c``), shared by every recipe-running command.
 
@@ -58,6 +71,7 @@ def dates_parser(range_action, *, dates=True, default_date_range=None):
         p.add_argument(
             "--dates",
             nargs="*",
+            action=StoreOnce,
             default=None,
             metavar="DATECODE_OR_FILE",
             help="one or more datecodes, or a text file listing one datecode per "
@@ -74,6 +88,7 @@ def dates_parser(range_action, *, dates=True, default_date_range=None):
     p.add_argument(
         "--date_range",
         nargs=2,
+        action=StoreOnce,
         metavar=("START", "END"),
         required=not dates and default_date_range is None,
         default=list(default_date_range) if default_date_range else None,
@@ -95,7 +110,10 @@ def resolve_dates(ap, args):
     Takes the command's own `ap` so a bad value reports as its usage error. Returns
     `args`.
     """
-    if hasattr(args, "dates") and bool(args.dates) == bool(args.date_range):
+    # `is not None`, not truthiness: a bare `--dates` (an empty list) still counts
+    # as given, so `--dates --date_range A B` is rejected as both, as it is by
+    # `resolve_frame_selection`.
+    if hasattr(args, "dates") and (args.dates is None) == (args.date_range is None):
         ap.error("give either --dates or --date_range, not both or neither")
 
     if args.date_range:
@@ -133,6 +151,7 @@ def obs_ids_parser():
     p.add_argument(
         "--obs_ids",
         nargs="+",
+        action=StoreOnce,
         metavar="OBS_ID_OR_FILE",
         help="one or more obs_ids to reduce, or a text file listing one obs_id per "
         "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
@@ -193,6 +212,7 @@ def data_dirs_parser(science_output=True, engineering_output=False):
         "--kpf_data_input",
         "--input_dir",
         dest="kpf_data_input",
+        action=StoreOnce,
         help="override [DATA_DIRS] KPF_DATA_INPUT (--input_dir is an alias)",
     )
     p.add_argument(

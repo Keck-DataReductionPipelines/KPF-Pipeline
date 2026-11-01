@@ -108,6 +108,7 @@ class TestParseArgs:
             ["--date_range", "20240201", "20240101"],  # start > end
             ["--jobs", "0"],  # below 1
             ["--job_timeout", "60"],  # thread pool; no timeout flag
+            ["--kpf_data_input", "/b"],  # repeats the --input_dir alias
         ],
     )
     def test_invalid_args_exit(self, thar, capsys, extra):

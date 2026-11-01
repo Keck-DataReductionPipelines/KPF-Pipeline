@@ -37,6 +37,7 @@ import kpfpipe
 from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
+    StoreOnce,
     analysis_parser,
     cache_parser,
     pool_parser,
@@ -97,6 +98,7 @@ def parse_args(argv=None):
         "--kpf_data_input",
         "--input_dir",
         dest="kpf_data_input",
+        action=StoreOnce,
         required=True,
         help="root of the raw L0 input tree to read (--input_dir is an alias)",
     )

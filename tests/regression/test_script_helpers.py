@@ -409,6 +409,61 @@ class TestResolveDates:
             _resolve([])
         assert "not both or neither" in capsys.readouterr().err
 
+    def test_bare_dates_with_range_is_both(self, capsys):
+        # An empty --dates still counts as given, matching resolve_frame_selection.
+        with pytest.raises(SystemExit):
+            _resolve(["--dates", "--date_range", "20240101", "20240131"])
+        assert "not both or neither" in capsys.readouterr().err
+
+
+class TestStoreOnce:
+    """A repeated selection or input flag is a usage error, not last-wins."""
+
+    @pytest.mark.parametrize(
+        "parents, argv",
+        [
+            (
+                [_argparse.dates_parser("x")],
+                ["--dates", "20240405", "--dates", "20240406"],
+            ),
+            (
+                [_argparse.dates_parser("x")],
+                ["--date_range", "20240101", "20240102"] * 2,
+            ),
+            (
+                [_argparse.obs_ids_parser()],
+                [
+                    "--obs_ids",
+                    "KP.20240405.40113.57",
+                    "--obs_ids",
+                    "KP.20240405.40237.36",
+                ],
+            ),
+            (
+                [_argparse.data_dirs_parser()],
+                ["--input_dir", "/a", "--kpf_data_input", "/b"],
+            ),
+        ],
+        ids=["dates", "date_range", "obs_ids", "input_dir_alias"],
+    )
+    def test_repeat_is_rejected(self, capsys, parents, argv):
+        with pytest.raises(SystemExit):
+            _parse(parents, argv)
+        assert "given more than once" in capsys.readouterr().err
+
+    def test_single_use_still_stores(self):
+        ns = _parse([_argparse.data_dirs_parser()], ["--input_dir", "/a"])
+        assert ns.kpf_data_input == "/a"
+
+    def test_range_only_default_can_be_overridden_once(self):
+        p = _argparse.dates_parser(
+            "x", dates=False, default_date_range=("20240101", "20240102")
+        )
+        assert _parse([p], ["--date_range", "20240301", "20240302"]).date_range == [
+            "20240301",
+            "20240302",
+        ]
+
     def test_range_endpoint_must_be_a_datecode(self, capsys):
         with pytest.raises(SystemExit):
             _resolve(["--date_range", "2024-01-01", "20240131"])
