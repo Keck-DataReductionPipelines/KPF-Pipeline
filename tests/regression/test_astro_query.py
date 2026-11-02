@@ -1136,6 +1136,12 @@ class TestConstructor:
         with pytest.raises(ValueError, match="SoCal"):
             AstroQuery(l0)
 
+    def test_solar_system_target_raises(self):
+        l0 = self._l0("Target")
+        l0.headers["PRIMARY"]["OBJECT"] = "Uranus"
+        with pytest.raises(ValueError, match="solar-system target 'Uranus'"):
+            AstroQuery(l0)
+
     def test_unsupported_config_type_raises(self):
         with pytest.raises(TypeError, match="must be None, dict, or ConfigHandler"):
             AstroQuery(self._l0("Target"), config=["gaia"])

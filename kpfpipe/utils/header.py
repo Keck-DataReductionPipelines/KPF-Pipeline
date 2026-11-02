@@ -14,11 +14,15 @@ logger = logging.getLogger(__name__)
 
 # Known target-name aliases: (catalog, compiled pattern, canonical format), in file
 # order; the first full, case-insensitive match names the target.
-with open(REPO_ROOT / "reference/target_name_aliases.csv", newline="") as _f:
-    _TARGET_ALIASES = [
+with open(REPO_ROOT / "reference/star_catalog_aliases.csv", newline="") as _f:
+    _STAR_CATALOG_ALIASES = [
         (row["catalog"], re.compile(row["pattern"], re.IGNORECASE), row["canonical"])
         for row in csv.DictReader(_f)
     ]
+
+# Planets, dwarf planets and major moons, one name per line.
+with open(REPO_ROOT / "reference/solar_system_objects.txt") as _f:
+    _SOLAR_SYSTEM_OBJECTS = [line.strip() for line in _f if line.strip()]
 
 # OCTAGON position -> the source it feeds the fibers, in OBJECT vocabulary.
 _SOURCES = {
@@ -62,12 +66,22 @@ def _norm(value):
 def _canonical_name(name):
     """``(catalog, canonical name)`` of the first known alias `name` matches, else
     ``(None, name)``. E.g. 'HD57555', 'HD 57555' and '57555' -> ('HD', 'HD 57555');
-    'T001824' -> ('TOI', 'TOI-1824'). Aliases: reference/target_name_aliases.csv."""
-    for catalog, pattern, canonical in _TARGET_ALIASES:
+    'T001824' -> ('TOI', 'TOI-1824'). Aliases: reference/star_catalog_aliases.csv."""
+    for catalog, pattern, canonical in _STAR_CATALOG_ALIASES:
         match = pattern.fullmatch(name)
         if match:
             return catalog, canonical.format(*(g.upper() for g in match.groups()))
     return None, name
+
+
+def _solar_system_bodies(name):
+    """The set of _SOLAR_SYSTEM_OBJECTS named in `name` as whole words, any case:
+    'Ganymede Penumbra' -> {'Ganymede'}; 'Ganymed' and 'Dione' (for Io) match none."""
+    return {
+        body
+        for body in _SOLAR_SYSTEM_OBJECTS
+        if re.search(rf"\b{body}\b", name, re.IGNORECASE)
+    }
 
 
 class HeaderParser:
@@ -263,7 +277,8 @@ class HeaderParser:
 
     def _gaiaid(self):
         """The sanitized GAIAID: ``Gaia DR3 <id>``, ``Gaia DR2 <id>`` or, with no
-        release, ``Gaia <id>``; None (blank card) off a non-solar Target frame.
+        release, ``Gaia <id>``; None (blank card) off a non-solar Target frame
+        or on a solar-system OBJECT (a native id there is warned).
 
         The native card may carry a ``Gaia`` prefix and a DR2/DR3/EDR3 release
         (EDR3 is DR3: they share source_ids), separated by spaces, underscores or
@@ -275,6 +290,13 @@ class HeaderParser:
         if self.DRP_KEYWORDS["OBSTYPE"] != "Target" or self.DRP_KEYWORDS["ISSOLAR"]:
             return None
         raw = str(self.WMKO_HEADER.get("GAIAID") or "").strip()
+        obj = self.DRP_KEYWORDS["OBJECT"]
+        if obj in _SOLAR_SYSTEM_OBJECTS:
+            if raw and raw.lower() != "none":
+                self._warn(
+                    f"GAIAID {raw!r} on solar-system target {obj!r}; GAIAID blank"
+                )
+            return None
         match = re.fullmatch(
             r"(?:Gaia[\s_]*)?(?:(DR2|E?DR3)[\s_]*)?(\d{17,19})", raw, re.IGNORECASE
         )
@@ -285,7 +307,6 @@ class HeaderParser:
         elif raw:
             self._warn(f"GAIAID {raw!r} is not a Gaia DR2/DR3 source_id; GAIAID blank")
 
-        obj = self.DRP_KEYWORDS["OBJECT"]
         if not obj.startswith("Gaia "):
             return gaiaid
         if gaiaid is None:
@@ -316,7 +337,10 @@ class HeaderParser:
         WMKO uses OBJECT as free-form metadata; the DRP uses it to name what
         was observed. A solar Target frame (native OBJECT ``SoCal`` and TARGNAME
         ``Sun``) is ``SoCal``; any other Target frame's OBJECT is its target
-        identifier in canonical form (e.g. ``HD 10700``; see ``_canonical_name``).
+        identifier in canonical form (e.g. ``HD 10700``; see ``_canonical_name``),
+        or the solar-system body (reference/solar_system_objects.txt) that both
+        cards name as a whole word (``Io`` with ``Io Eclipse`` -> ``Io``); a card
+        naming two bodies is ``Unknown``.
         The native OBJECT and TARGNAME must name the same target once canonicalized,
         or one must be the bare catalog prefix of the other (``TOI`` with
         ``TOI-969``), or add only a component letter (``WASP-173`` with
@@ -342,10 +366,24 @@ class HeaderParser:
         if obstype == "Target":
             if (obj, targname) == ("SoCal", "Sun"):
                 return "SoCal"
+            bodies = [_solar_system_bodies(s) for s in (obj, targname) if s]
+            if any(len(b) > 1 for b in bodies):
+                self._warn(
+                    f"OBJECT {obj!r} / TARGNAME {targname!r} names more than one "
+                    "solar-system body; OBJECT is Unknown"
+                )
+                return "Unknown"
             obj_cat, obj_c = _canonical_name(obj)
             targ_cat, targ_c = _canonical_name(targname)
             short, long = sorted((obj_c, targ_c), key=len)
-            if obj and targname and obj_c == targ_c:
+            if bodies and bodies[0] and all(b == bodies[0] for b in bodies):
+                (result,) = bodies[0]
+                if not (obj and targname):
+                    self._warn(
+                        f"OBJECT {obj!r} / TARGNAME {targname!r} has a blank card; "
+                        f"OBJECT is {result!r}"
+                    )
+            elif obj and targname and obj_c == targ_c:
                 result = obj_c
             elif (
                 obj_cat

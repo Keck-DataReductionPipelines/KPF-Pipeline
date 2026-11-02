@@ -24,12 +24,16 @@ from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
-from kpfpipe import DEFAULT_CFG, DETECTOR, SCI_FIBERS
+from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT, SCI_FIBERS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.network import gaia_client, query_mirrors, simbad_client
 
 logger = logging.getLogger(__name__)
+
+# Planets, dwarf planets and major moons: no catalog astrometry.
+with open(REPO_ROOT / "reference/solar_system_objects.txt") as _f:
+    _SOLAR_SYSTEM_OBJECTS = {line.strip() for line in _f if line.strip()}
 
 _DEFAULT_CFG = {
     **DEFAULT_CFG,
@@ -48,8 +52,8 @@ class AstroQuery:
     the native ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry, and writes all
     three rows to the L0 ``CATALOG_RECORD`` extension for downstream use (EPRV ``C*#``
     catalog keywords, DiagL0 pointing offsets, BarycentricCorrection). Only science
-    frames are supported: the constructor raises on a non-``Target`` OBSTYPE or a
-    SoCal (ISSOLAR) frame. Fail-soft
+    frames are supported: the constructor raises on a non-``Target`` OBSTYPE, a
+    SoCal (ISSOLAR) frame or a solar-system OBJECT. Fail-soft
     otherwise -- a missing GAIAID/OBJECT or a failed lookup yields a ``None`` record.
 
     Parameters
@@ -76,6 +80,11 @@ class AstroQuery:
             raise ValueError(
                 "AstroQuery does not run on SoCal frames (ISSOLAR): the Sun has no "
                 "catalog entry"
+            )
+        obj = l0_obj.headers["PRIMARY"].get("OBJECT")
+        if obj in _SOLAR_SYSTEM_OBJECTS:
+            raise ValueError(
+                f"AstroQuery has no ephemeris source for solar-system target {obj!r}"
             )
 
         if config is None:

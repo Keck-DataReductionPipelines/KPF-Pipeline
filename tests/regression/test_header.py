@@ -173,7 +173,7 @@ class TestFrameIdentity:
         "obj, targname, expected",
         [
             ("10700", "HD 10700", "HD 10700"),
-            ("Callisto Transit Test", "Callisto Transit Test", "Callisto Transit Test"),
+            ("Callisto Transit Test", "Callisto Transit Test", "Callisto"),
             ("SoCal", "Sun", "SoCal"),
             ("test", "test", "test"),
         ],
@@ -228,12 +228,40 @@ class TestFrameIdentity:
             ("343600706696532", "Gaia 3436007066965322240", "Unknown"),
             ("343600706696532", "343600706696532", "Unknown"),
             ("Gaia 2077618037775709568", "Gaia DR3 2077618037775709568", "Unknown"),
-            ("Io", "Io Eclipse", "Unknown"),
         ],
     )
     def test_target_aliases(self, obj, targname, expected):
         header = _hdr("Object", OBJECT=obj, TARGNAME=targname)
         assert HeaderParser(header).DRP_KEYWORDS["OBJECT"] == expected
+
+    @pytest.mark.parametrize(
+        "obj, targname, expected",
+        [
+            # Both cards name one body as a whole word, any case.
+            ("URANUS", "uranus", "Uranus"),
+            ("Ganymede Umbra", "Ganymede", "Ganymede"),
+            ("Where It Was Europa 7:10", "Where It Was Europa 7:10", "Europa"),
+            ("Io", "Io Eclipse", "Io"),
+            ("Dione In Sunlight Test", "Dione", "Dione"),
+            ("Jupiter", "Jupiter Calibration", "Jupiter"),
+            # Two bodies on a card, or cards that don't agree.
+            ("Tethys & Enceladus", "Tethys & Enceladus", "Unknown"),
+            ("Europa Transiting Jupiter", "Europa", "Unknown"),
+            ("Io", "Where It Was 06:40", "Unknown"),
+            ("Ganymed Penumbra", "Ganymede Penumbra", "Unknown"),
+            # No body: the existing rules.
+            ("Where It Was 08:00", "Where It Was 08:00", "Where It Was 08:00"),
+            ("Titania", "Titania", "Titania"),
+        ],
+    )
+    def test_solar_system_bodies(self, obj, targname, expected):
+        header = _hdr("Object", OBJECT=obj, TARGNAME=targname)
+        assert HeaderParser(header).DRP_KEYWORDS["OBJECT"] == expected
+
+    def test_solar_system_blank_card_warned(self):
+        parser = HeaderParser(_hdr("Object", OBJECT="Ganymede Penumbra", TARGNAME=""))
+        assert parser.DRP_KEYWORDS["OBJECT"] == "Ganymede"
+        assert any("blank card" in w for w in parser.warnings)
 
     def test_reconciliation_logged_at_info(self, caplog):
         with caplog.at_level(logging.INFO, logger="kpfpipe.utils.header"):
@@ -326,6 +354,17 @@ class TestGaiaId:
         assert cal.DRP_KEYWORDS["GAIAID"] is None
         solar = self._parse(f"DR3 {_G19}", obj="SoCal", targname="Sun")
         assert solar.DRP_KEYWORDS["GAIAID"] is None
+
+    @pytest.mark.parametrize("native", [None, "", "None"])
+    def test_solar_system_absent_is_silent(self, native):
+        parser = self._parse(native, obj="Uranus")
+        assert parser.DRP_KEYWORDS["GAIAID"] is None
+        assert not self._gaia_warnings(parser)
+
+    def test_solar_system_id_is_blanked_and_warned(self):
+        parser = self._parse(f"DR3 {_G19}", obj="Io", targname="Io Eclipse")
+        assert parser.DRP_KEYWORDS["GAIAID"] is None
+        assert any("solar-system target 'Io'" in w for w in self._gaia_warnings(parser))
 
     @pytest.mark.parametrize(
         "obj, native, expected",
