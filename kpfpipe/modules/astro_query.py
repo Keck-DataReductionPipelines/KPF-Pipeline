@@ -171,10 +171,10 @@ class AstroQuery:
 
         For a bare GAIAID only: rather than assume a release, probe the archive and take
         the newest one holding the id, since the same source_id denotes different stars
-        in different releases. Every release in ``_GAIA_MIRRORS`` is published, so a
-        failed probe means something is genuinely wrong: it warns and falls through to
-        an older release, which may hold a different star under that id. An id no
-        release holds raises rather than being mistaken for a resolved one.
+        in different releases. Only a probe that answers with no match moves on to an
+        older release; a failed probe returns None (warned), since an older release may
+        hold a different star under that id. An id no release holds raises rather than
+        being mistaken for a resolved one.
 
         Parameters
         ----------
@@ -183,8 +183,8 @@ class AstroQuery:
 
         Returns
         -------
-        str
-            The release key into ``_GAIA_MIRRORS``.
+        str or None
+            The release key into ``_GAIA_MIRRORS``, or None if a probe failed.
 
         Raises
         ------
@@ -199,14 +199,14 @@ class AstroQuery:
                 )
             except Exception as e:
                 logger.warning(
-                    "could not probe Gaia %s for source_id %s (%s: %s); falling "
-                    "through to an older release, which may denote a different star",
+                    "could not probe Gaia %s for source_id %s (%s: %s); release "
+                    "unresolved",
                     release,
                     source_id,
                     type(e).__name__,
                     e,
                 )
-                continue
+                return None
             if len(found):
                 logger.warning("resolved bare GAIAID %s to Gaia %s", source_id, release)
                 return release
@@ -415,7 +415,7 @@ class AstroQuery:
         DR2 id is never looked up among DR3 source_ids; a bare id is identified against
         the archive by ``_resolve_gaia_release`` and, once found, recorded on GAIAID
         (and on an OBJECT naming the same bare id). Returns None (warned) when the
-        PRIMARY GAIAID is blank, when the lookup fails on every mirror
+        PRIMARY GAIAID is blank, when a lookup fails on every mirror
         (``query_mirrors``), or when the source is not found. Raises ValueError
         if a bare id matches no queryable release, or if the result's column units
         differ from the schema shared by the supported releases (deg, mas/yr, mas,
@@ -436,6 +436,9 @@ class AstroQuery:
                 gaiaid,
             )
             release = self._resolve_gaia_release(gaia_id)
+            if release is None:
+                logger.warning("Gaia astrometry unavailable")
+                return None
         query = f"""
         SELECT ra, dec, pmra, pmdec, parallax, radial_velocity, ref_epoch,
                phot_bp_mean_mag, phot_rp_mean_mag

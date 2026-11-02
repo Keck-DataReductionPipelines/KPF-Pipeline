@@ -1000,14 +1000,14 @@ class TestBareGaiaIdResolution:
             self._query(present={"DR3"})
         assert "carries no data release" in caplog.text
 
-    def test_failed_probe_warns_and_falls_through(self, caplog):
-        # Every probed release is published, so a failed probe is a real fault: the
-        # fall-through can attach a different star's astrometry and must be auditable.
+    def test_failed_probe_does_not_fall_through(self, caplog):
+        # Only a clean no-match moves on: an older release may hold a different star.
+        l0 = _l0_for_query(GAIAID="Gaia 12345")
         with caplog.at_level(logging.WARNING):
-            rec = self._query(present={"DR2"}, failing={"DR3"})
-        assert rec["object"] == "Gaia DR2 12345"
+            rec = self._query(l0, present={"DR2"}, failing={"DR3"})
+        assert rec is None
+        assert l0.headers["PRIMARY"]["GAIAID"] == "Gaia 12345"
         assert "could not probe Gaia DR3" in caplog.text
-        assert "may denote a different star" in caplog.text
 
     def test_no_matching_release_raises(self):
         # Fail loud: a bare id matching nothing must not fall back to a guess.
