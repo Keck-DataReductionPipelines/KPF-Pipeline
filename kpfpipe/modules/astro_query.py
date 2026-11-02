@@ -234,18 +234,6 @@ class AstroQuery:
             "source_id; refusing to guess which release it belongs to."
         )
 
-    def _simbad_resolvable_name(self):
-        """SIMBAD-resolvable name from the sanitized L0 PRIMARY OBJECT, or None if
-        absent or ``Unknown`` (HeaderParser could not trust the native OBJECT).
-
-        KPF OBJECT for standard stars is a bare HD number (e.g. '10700') that
-        SIMBAD resolves only with an 'HD ' prefix; named targets pass through.
-        """
-        obj = str(self.l0_obj.headers["PRIMARY"].get("OBJECT") or "").strip()
-        if obj in ("", "Unknown"):
-            return None
-        return f"HD {obj}" if obj.isdigit() else obj
-
     @staticmethod
     def _simbad_common_name(row):
         """The common name in a SIMBAD result row: its proper name ('NAME Vega' among
@@ -258,13 +246,14 @@ class AstroQuery:
         return " ".join(name.removeprefix("NAME ").removeprefix("*").split())
 
     def _aliases(self):
-        """The ALIASES value: the SIMBAD-resolvable name, the Gaia-resolvable
+        """The ALIASES value: the OBJECT (unless ``Unknown``), the Gaia-resolvable
         designation and the common name, '; ' separated, skipping any unavailable or
         already listed.
         """
+        obj = self.l0_obj.headers["PRIMARY"]["OBJECT"]
         aliases = []
         for name in (
-            self._simbad_resolvable_name(),
+            obj if obj != "Unknown" else None,
             self._gaia["object"] if self._gaia else None,
             self._common_name,
         ):
@@ -587,12 +576,10 @@ class AstroQuery:
         rvz_radvel km/s), where the Johnson B/V magnitudes come back unlabeled (unit
         None) and form the B-V color. Gated in perform by ``do_simbad_query``.
         """
-        name = self._simbad_resolvable_name()
-        if name is None:
+        name = self.l0_obj.headers["PRIMARY"]["OBJECT"]
+        if name == "Unknown" or name.startswith("Gaia "):
             logger.warning(
-                "no usable OBJECT name on L0 PRIMARY (%r); SIMBAD astrometry "
-                "unavailable",
-                self.l0_obj.headers["PRIMARY"].get("OBJECT"),
+                "OBJECT %r is not a SIMBAD name; SIMBAD astrometry unavailable", name
             )
             return None
         logger.info("querying SIMBAD for %r", name)

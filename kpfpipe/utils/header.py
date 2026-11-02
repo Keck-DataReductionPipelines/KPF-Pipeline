@@ -271,8 +271,9 @@ class HeaderParser:
         ``TOI-969``), or add only a component letter (``WASP-173`` with
         ``WASP-173B`` -> ``WASP-173B``; warned); a blank card yields the other
         (warned). Any reconciliation or
-        canonicalization is logged at INFO. A Target frame failing its check is
-        ``Unknown`` (any other solar pair never reaches here; ``_classify``).
+        canonicalization is logged at INFO. A Target frame failing its check, or
+        whose name is a bare number in no known catalog, is ``Unknown`` (any
+        other solar pair never reaches here; ``_classify``).
         A calibration frame's OBJECT is
         `cal_object`, derived from IMTYPE/OCTAGON alone (e.g. ``ThAr_daily``,
         ``WideFlat``); a native OBJECT that is no ``autocal-*`` label agreeing
@@ -319,6 +320,12 @@ class HeaderParser:
             if result is None:
                 self._warn(
                     f"OBJECT {obj!r} disagrees with TARGNAME {targname!r}; "
+                    "OBJECT is Unknown"
+                )
+                return "Unknown"
+            if result.isdigit():
+                self._warn(
+                    f"OBJECT {result!r} is a bare number in no known catalog; "
                     "OBJECT is Unknown"
                 )
                 return "Unknown"

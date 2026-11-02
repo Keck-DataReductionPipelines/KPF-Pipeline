@@ -609,23 +609,6 @@ class TestExternalQueries:
         primary = {} if gaiaid is None else {"GAIAID": gaiaid}
         assert AstroQuery(_l0_for_query(**primary))._gaia_source() == expected
 
-    def test_simbad_resolvable_name(self):
-        assert (
-            AstroQuery(_l0_for_query(OBJECT="10700"))._simbad_resolvable_name()
-            == "HD 10700"
-        )
-        assert (
-            AstroQuery(_l0_for_query(OBJECT="tau Cet"))._simbad_resolvable_name()
-            == "tau Cet"
-        )
-        assert AstroQuery(_l0_for_query())._simbad_resolvable_name() is None
-        assert AstroQuery(_l0_for_query(OBJECT=""))._simbad_resolvable_name() is None
-        # HeaderParser marks an untrusted native OBJECT Unknown; SIMBAD must not
-        # be queried with it, nor with the native card behind it.
-        l0 = _l0_for_query(OBJECT="Unknown")
-        l0.headers["INSTRUMENT_HEADER"]["OBJECT"] = "10700"
-        assert AstroQuery(l0)._simbad_resolvable_name() is None
-
     @pytest.mark.parametrize(
         ("main_id", "ids", "expected"),
         [
@@ -639,13 +622,13 @@ class TestExternalQueries:
         assert AstroQuery._simbad_common_name(row) == expected
 
     def test_aliases(self):
-        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
         aq._gaia = {"object": "Gaia DR3 12345"}
         aq._common_name = "tau Cet"
         assert aq._aliases() == "HD 10700; Gaia DR3 12345; tau Cet"
 
     def test_aliases_drops_unresolved_and_duplicate_names(self):
-        aq = AstroQuery(_l0_for_query(OBJECT="219134"))
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 219134"))
         aq._common_name = "HD 219134"  # main_id fallback, no Gaia row
         assert aq._aliases() == "HD 219134"
 
@@ -743,7 +726,7 @@ class TestExternalQueries:
     # -- SIMBAD ------------------------------------------------------------
 
     def test_query_simbad_parses_and_writes(self):
-        l0 = _l0_for_query(OBJECT="10700")
+        l0 = _l0_for_query(OBJECT="HD 10700")
         aq = AstroQuery(l0)
         with _patch_simbad(_simbad_instance(_simbad_table())):
             rec = aq.query_simbad()
@@ -767,14 +750,14 @@ class TestExternalQueries:
 
     def test_query_simbad_uncited_designation_keeps_name(self):
         # Hipparcos coordinates, but SIMBAD lists no HIP id: CID falls back to the name.
-        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
         table = _simbad_table({"coo_bibcode": "2007A&A...474..653V"})
         with _patch_simbad(_simbad_instance(table)):
             rec = aq.query_simbad()
         assert (rec["catalog"], rec["object"]) == ("Hipparcos (2007)", "HD 10700")
 
     def test_query_simbad_unknown_catalog_warns(self, caplog):
-        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
         table = _simbad_table({"coo_bibcode": "1999XYZ.....1....Q"})
         with _patch_simbad(_simbad_instance(table)), caplog.at_level(logging.WARNING):
             rec = aq.query_simbad()
@@ -784,17 +767,24 @@ class TestExternalQueries:
 
     def test_query_simbad_missing_photometry_leaves_color_none(self):
         # A color needs both magnitudes; one unmeasured -> no color.
-        l0 = _l0_for_query(OBJECT="10700")
+        l0 = _l0_for_query(OBJECT="HD 10700")
         aq = AstroQuery(l0)
         with _patch_simbad(_simbad_instance(_simbad_table({"V": float("nan")}))):
             rec = aq.query_simbad()
         assert rec["color"] is None and rec["color_name"] is None
 
-    def test_query_simbad_no_object_returns_none(self, caplog):
-        aq = AstroQuery(_l0_for_query())
-        with caplog.at_level(logging.WARNING):
-            assert aq.query_simbad() is None
-        assert "no usable OBJECT name" in caplog.text
+    @pytest.mark.parametrize("obj", ["Unknown", "Gaia DR3 12345"])
+    def test_query_simbad_skips_non_simbad_object(self, obj, caplog):
+        # HeaderParser marks an untrusted native OBJECT Unknown; a Gaia designation
+        # is GAIAID's to resolve. Neither, nor the native card behind it, is queried.
+        l0 = _l0_for_query(OBJECT=obj)
+        l0.headers["INSTRUMENT_HEADER"]["OBJECT"] = "10700"
+        aq = AstroQuery(l0)
+        with _patch_simbad(_simbad_instance(_simbad_table())) as simbad:
+            with caplog.at_level(logging.WARNING):
+                assert aq.query_simbad() is None
+        assert "is not a SIMBAD name" in caplog.text
+        simbad.assert_not_called()
 
     def test_query_simbad_lookup_failure_returns_none(self, caplog):
         # Failed over like the Gaia failure above; sleep is patched for the same reason.

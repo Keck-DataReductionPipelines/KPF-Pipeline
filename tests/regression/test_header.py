@@ -223,6 +223,7 @@ class TestFrameIdentity:
             ("HD", "TOI-969", "Unknown"),
             ("HD 10700", "HD 10701", "Unknown"),
             ("343600706696532", "Gaia 3436007066965322240", "Unknown"),
+            ("343600706696532", "343600706696532", "Unknown"),
             ("Gaia 2077618037775709568", "Gaia DR3 2077618037775709568", "Unknown"),
             ("Io", "Io Eclipse", "Unknown"),
         ],
@@ -242,6 +243,11 @@ class TestFrameIdentity:
         with caplog.at_level(logging.INFO, logger="kpfpipe.utils.header"):
             HeaderParser(_hdr("Object", OBJECT="HD 73344", TARGNAME="HD 73344"))
         assert "resolved to" not in caplog.text
+
+    def test_bare_number_in_no_catalog_warned(self):
+        header = _hdr("Object", OBJECT="343600706696532", TARGNAME="343600706696532")
+        parser = HeaderParser(header)
+        assert any("bare number in no known catalog" in w for w in parser.warnings)
 
     def test_component_reconciliation_warned(self):
         parser = HeaderParser(_hdr("Object", OBJECT="WASP-173", TARGNAME="WASP-173B"))
