@@ -235,6 +235,7 @@ def synthetic_l0_file(tmp_path_factory):
     primary.header["OBJECT"] = "10700"
     primary.header["TARGNAME"] = "10700"
     primary.header["IMTYPE"] = "Object"
+    primary.header["SCISEL"] = "open"
     primary.header["GROBSERV"] = "Smith"
     primary.header["PROGNAME"] = "K123"
     primary.header["OFNAME"] = "KP.20240113.23249.10.fits"

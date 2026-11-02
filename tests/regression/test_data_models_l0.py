@@ -54,7 +54,12 @@ _TRACE_FAMILIES = (
 )
 
 # Native cards that make write_minimal_l0's frame a science (Target) frame.
-_SCIENCE_CARDS = {"IMTYPE": "Object", "OBJECT": "10700", "TARGNAME": "10700"}
+_SCIENCE_CARDS = {
+    "IMTYPE": "Object",
+    "SCISEL": "open",
+    "OBJECT": "10700",
+    "TARGNAME": "10700",
+}
 
 
 class TestKPF0:
@@ -365,6 +370,7 @@ class TestCatalogRecordMissingValues:
         l0.headers["PRIMARY"]["OFNAME"] = "KP.20240405.00002.00.fits"
         l0.headers["PRIMARY"]["PROGNAME"] = "K123"
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["SCISEL"] = "open"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60405.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         l0.to_fits(fn)
@@ -539,6 +545,7 @@ class TestStandardizedPrimary:
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
         primary.header["IMTYPE"] = "Object"
+        primary.header["SCISEL"] = "open"
         primary.header["OFNAME"] = "KP.20240113.00009.00.fits"
         primary.header["PROGNAME"] = "K123"
         primary.header["MJD-OBS"] = 60322.0
@@ -693,7 +700,7 @@ class TestHeaderKeywords:
 
     def test_solar_frame_is_solar(self):
         prim = self._standardize(
-            "Object", OBJECT="SoCal", TARGNAME="Sun", SOLSCISH="open"
+            "Object", OBJECT="SoCal", TARGNAME="Sun", SCISEL="open", SOLSCISH="open"
         ).headers["PRIMARY"]
         assert prim["OBSMODE"] == "Science"
         assert prim["OBJECT"] == "SoCal"
@@ -705,6 +712,7 @@ class TestHeaderKeywords:
         prim = self._standardize(
             "Object",
             OCTAGON="Th_gold",
+            SCISEL="open",
             SIMCALSH="closed",
             **{"SKY-OBJ": "Sky", "SCI-OBJ": "Target", "CAL-OBJ": "Th_gold"},
         ).headers["PRIMARY"]
@@ -723,7 +731,9 @@ class TestHeaderKeywords:
         ],
     )
     def test_clsrc_vocabulary(self, octagon, source):
-        prim = self._standardize("Object", OCTAGON=octagon, SIMCALSH="open")
+        prim = self._standardize(
+            "Object", OCTAGON=octagon, SCISEL="open", SIMCALSH="open"
+        )
         assert prim.headers["PRIMARY"]["TRACE5"] == "CAL"
         assert prim.headers["PRIMARY"]["CLSRC5"] == source
 

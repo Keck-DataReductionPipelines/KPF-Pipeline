@@ -59,7 +59,7 @@ class TestFrameIdentity:
             (_hdr("Bias", shutters=SHUT), "Bias", "Calibration", "Bias"),
             (_hdr("Dark", shutters=SHUT), "Dark", "Calibration", "Dark"),
             (
-                _hdr("Object", "EtalonFiber", shutters=SKY),
+                _hdr("Object", "EtalonFiber", shutters=SCI),
                 "Target",
                 "Science",
                 "target",
@@ -140,6 +140,49 @@ class TestFrameIdentity:
     )
     def test_object(self, header, obj):
         assert HeaderParser(header).DRP_KEYWORDS["OBJECT"] == obj
+
+    @pytest.mark.parametrize(
+        "header, reason",
+        [
+            # A science frame needs the science shutter open.
+            (_hdr("Object", shutters=SKY), "SCISEL='closed'"),
+            (_hdr("Object", SCISEL=None), "SCISEL=None"),
+            # A calibration word in OBJECT contradicts IMTYPE Object.
+            (_hdr("Object", OBJECT="autocal-bias", TARGNAME="T004201"), "calibration"),
+            (_hdr("Object", OBJECT="manualcal-fast-bias", TARGNAME=""), "calibration"),
+            (_hdr("Object", OBJECT="acf_change_bias_flush", TARGNAME="x"), "label"),
+            # Solar only as exactly the (SoCal, Sun) pair.
+            (_hdr("Object", OBJECT="SoCalSimulEtalonOD0", TARGNAME="Sun"), "SoCal/Sun"),
+            (_hdr("Object", OBJECT="SoCal", TARGNAME="Sun1"), "SoCal/Sun"),
+        ],
+    )
+    def test_object_frame_contradicted(self, header, reason):
+        """An IMTYPE Object frame the rest of the header contradicts is Unknown,
+        with one fatal warning naming why."""
+        parsed = HeaderParser(header)
+        keywords = parsed.DRP_KEYWORDS
+        assert (keywords["OBSTYPE"], keywords["OBSMODE"], keywords["OBJECT"]) == (
+            "Unknown",
+            "Unknown",
+            "Unknown",
+        )
+        (fatal,) = [w for w in parsed.warnings if "cannot classify frame" in w]
+        assert "IMTYPE 'Object' but" in fatal and reason in fatal
+
+    @pytest.mark.parametrize(
+        "obj, targname, expected",
+        [
+            ("10700", "HD 10700", "HD 10700"),
+            ("Callisto Transit Test", "Callisto Transit Test", "Callisto Transit Test"),
+            ("SoCal", "Sun", "SoCal"),
+            ("test", "test", "test"),
+        ],
+    )
+    def test_object_frame_not_contradicted(self, obj, targname, expected):
+        keywords = HeaderParser(
+            _hdr("Object", OBJECT=obj, TARGNAME=targname)
+        ).DRP_KEYWORDS
+        assert (keywords["OBSMODE"], keywords["OBJECT"]) == ("Science", expected)
 
     @pytest.mark.parametrize(
         "obj, targname, expected",
@@ -369,7 +412,8 @@ class TestWarnings:
             (
                 _hdr("Dark", shutters=CAL),
                 "cannot classify frame (IMTYPE='Dark', OCTAGON='Home', "
-                "SCISEL='closed', SKYSEL='closed', SIMCALSH='open')",
+                "SCISEL='closed', SKYSEL='closed', SIMCALSH='open', "
+                "OBJECT='target', TARGNAME='unknown')",
             ),
             (_hdr("Bias", shutters=SHUT, OBJECT="  "), "OBJECT '' is no autocal label"),
             (

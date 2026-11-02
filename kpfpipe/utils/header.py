@@ -147,10 +147,33 @@ class HeaderParser:
     def _classify(self):
         """(OBSTYPE, calibration OBJECT) from IMTYPE and OCTAGON, and on a bias
         or dark the shutters; see ``_frame_identity``. The OBJECT is None on a
-        Target or Unknown frame."""
+        Target or Unknown frame.
+
+        An IMTYPE ``Object`` frame is a Target only if nothing else in the header
+        says otherwise: its SCISEL must be open, its native OBJECT must carry no
+        calibration word (``autocal``, ``bias``, ``thar``, ...), and an OBJECT or
+        TARGNAME naming SoCal or the Sun must be exactly the (``SoCal``, ``Sun``)
+        pair. An Unknown frame gets one "cannot classify frame" warning, saying
+        why when a specific check failed."""
         native = self.WMKO_HEADER
         imtype = _norm(native.get("IMTYPE"))
         source = _SOURCES.get(_norm(native.get("OCTAGON")))
+
+        def unknown(why=""):
+            cards = ", ".join(
+                f"{k}={native.get(k)!r}"
+                for k in (
+                    "IMTYPE",
+                    "OCTAGON",
+                    "SCISEL",
+                    "SKYSEL",
+                    "SIMCALSH",
+                    "OBJECT",
+                    "TARGNAME",
+                )
+            )
+            self._warn(f"cannot classify frame{why} ({cards})")
+            return "Unknown", None
 
         if imtype in ("bias", "dark"):
             # No fiber may be lit on a bias or dark: every shutter must record closed.
@@ -158,9 +181,37 @@ class HeaderParser:
                 _norm(native.get(k)) != "closed"
                 for k in ("SCISEL", "SKYSEL", "SIMCALSH")
             ):
-                return "Unknown", None
+                return unknown()
             return imtype.capitalize(), imtype.capitalize()
         if imtype == "object":
+            obj = str(native.get("OBJECT") or "").strip()
+            targname = str(native.get("TARGNAME") or "").strip()
+            calibration_words = {
+                "autocal",
+                "manualcal",
+                "bias",
+                "dark",
+                "flat",
+                "thar",
+                "une",
+                "fast",
+                "slow",
+            }
+            if _norm(native.get("SCISEL")) != "open":
+                return unknown(
+                    f": IMTYPE 'Object' but SCISEL={native.get('SCISEL')!r}; "
+                    "a science frame needs the science shutter open"
+                )
+            if set(re.split(r"[^a-z0-9]+", obj.lower())) & calibration_words:
+                return unknown(
+                    f": IMTYPE 'Object' but OBJECT {obj!r} is a calibration label"
+                )
+            solar = any(s.lower().startswith(("socal", "sun")) for s in (obj, targname))
+            if solar and (obj, targname) != ("SoCal", "Sun"):
+                return unknown(
+                    f": IMTYPE 'Object' but OBJECT {obj!r} / TARGNAME {targname!r} "
+                    "is not the SoCal/Sun pair"
+                )
             return "Target", None
         if imtype == "flatlamp" and _norm(native.get("OCTAGON")) == "home":
             return "Flat", "WideFlat"
@@ -170,14 +221,15 @@ class HeaderParser:
             return source, source
         if imtype == "arclamp" and source and source.startswith(("ThAr", "UNe")):
             return "Arclamp", source
-        return "Unknown", None
+        return unknown()
 
     def _frame_identity(self):
         """Stamp OBSTYPE, OBSMODE, OBJECT, ISSOLAR and EXPTIME.
 
         IMTYPE gives OBSTYPE (Bias, Dark, Flat, Arclamp, LFC, Etalon, Target)
         and, on a lamp frame, OCTAGON the lamp; anything else, including a
-        bias or dark with any shutter not recorded closed, is ``Unknown``.
+        bias or dark with any shutter not recorded closed or an Object frame
+        the rest of the header contradicts (see ``_classify``), is ``Unknown``.
         OBSMODE is ``Science`` for a Target, ``Calibration`` for any other
         known OBSTYPE, else ``Unknown``. OBJECT, set once OBSTYPE is known, is
         sanitized by ``_object``. EXPTIME is the EPRV exposure time: the native
@@ -187,11 +239,6 @@ class HeaderParser:
         obstype, cal_object = self._classify()
         self.DRP_KEYWORDS["OBSTYPE"] = obstype
         if obstype == "Unknown":
-            cards = ", ".join(
-                f"{k}={native.get(k)!r}"
-                for k in ("IMTYPE", "OCTAGON", "SCISEL", "SKYSEL", "SIMCALSH")
-            )
-            self._warn(f"cannot classify frame ({cards})")
             self.DRP_KEYWORDS["OBSMODE"] = "Unknown"
         else:
             self.DRP_KEYWORDS["OBSMODE"] = (
@@ -222,8 +269,8 @@ class HeaderParser:
         The native OBJECT and TARGNAME must name the same target once canonicalized,
         or one must be the bare catalog prefix of the other (``TOI`` with
         ``TOI-969``); a blank card yields the other (warned). Any reconciliation or
-        canonicalization is logged at INFO. A Target frame failing its check
-        (including only one of the two cards naming the Sun) is ``Unknown``.
+        canonicalization is logged at INFO. A Target frame failing its check is
+        ``Unknown`` (any other solar pair never reaches here; ``_classify``).
         A calibration frame's OBJECT is
         `cal_object`, derived from IMTYPE/OCTAGON alone (e.g. ``ThAr_daily``,
         ``WideFlat``); a native OBJECT that is no ``autocal-*`` label agreeing
@@ -240,12 +287,9 @@ class HeaderParser:
         if obstype == "Target":
             if (obj, targname) == ("SoCal", "Sun"):
                 return "SoCal"
-            solar = {obj.lower(), targname.lower()} & {"socal", "sun"}
             obj_cat, obj_c = _canonical_name(obj)
             targ_cat, targ_c = _canonical_name(targname)
-            if solar:
-                result = None
-            elif obj and targname and obj_c == targ_c:
+            if obj and targname and obj_c == targ_c:
                 result = obj_c
             elif targ_cat and obj.lower() == targ_cat.lower():
                 result = targ_c

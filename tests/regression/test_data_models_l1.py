@@ -219,6 +219,7 @@ class TestToKpf1:
 
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["SCISEL"] = "open"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.standardize_headers()
         astro_query = AstroQuery(l0)
@@ -374,6 +375,7 @@ class TestCatalogRecordPassthrough:
     def _l0_with_catalog_table(rv=10.0):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["SCISEL"] = "open"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         l0.standardize_headers()

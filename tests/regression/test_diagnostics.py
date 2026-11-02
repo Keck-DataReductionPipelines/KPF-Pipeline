@@ -230,6 +230,7 @@ def _make_l0_pointing():
     standardize_headers has run. IMTYPE 'Object' so AstroQuery accepts it."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+    l0.headers["PRIMARY"]["SCISEL"] = "open"
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6

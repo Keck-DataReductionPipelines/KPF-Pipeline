@@ -78,10 +78,13 @@ def write_l0_tree(
             "ELAPSED": elapsed,
             "GREEN": "YES",
             "RED": "YES",
-            # A bias/dark must record every shutter closed.
+            # A bias/dark must record every shutter closed; a science frame
+            # needs the science shutter open.
             **(
                 {k: "closed" for k in ("SCISEL", "SKYSEL", "SIMCALSH")}
                 if imtype in ("Bias", "Dark")
+                else {"SCISEL": "open"}
+                if imtype == "Object"
                 else {}
             ),
             **(extra_cards or {}),

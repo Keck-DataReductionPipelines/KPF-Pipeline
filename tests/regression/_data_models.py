@@ -124,6 +124,9 @@ def _primary_hdu(path, primary_cards):
     with contextlib.suppress(ValueError):
         start = kpf_timestamp_to_datetime(get_timestamp(str(path)))
         cards["MJD-OBS"] = Time(start).mjd
+    # A science frame needs the science shutter open, unlike the bias default.
+    if (primary_cards or {}).get("IMTYPE") == "Object":
+        cards["SCISEL"] = "open"
     cards.update(primary_cards or {})
     primary = fits.PrimaryHDU()
     for key, value in cards.items():
