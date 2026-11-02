@@ -17,8 +17,8 @@ INSTRUME,Instrument name,,String,KPF,KPF0.standardize_headers
 INSTERA,Tag tracking permanent instrument changes,,String,KPF-2,KPF0.standardize_headers
 
 OBJECT,Primary object name,,String,219134,KPF0.standardize_headers
+GAIAID,Gaia DR2/DR3 designation of the target,,String,Gaia DR3 2452378776434477184,KPF0.standardize_headers
 ALIASES,User-defined object names; ';' separated,,String,HD 219134; Gaia DR3 2870618101503062016,AstroQuery
-GAIAID,Gaia DR2/DR3 designation of the target (release blank until resolved),,String,Gaia DR3 2452378776434477184,KPF0.standardize_headers
 DATE-OBS,Date/time at start of exposure,UTC,String,2024-04-05T11:08:33,KPF0.standardize_headers
 JD_UTC,Julian date of DATE-OBS,day,Double,2460405.96426,KPF0.standardize_headers
 OBSTYPE,Observation type (e.g. Arclamp or Target),,String,Arclamp,KPF0.standardize_headers
