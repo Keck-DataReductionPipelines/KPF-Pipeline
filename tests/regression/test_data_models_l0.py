@@ -154,6 +154,17 @@ class TestKPF0ErrorPaths:
         with pytest.raises(ValueError, match=r"\(HDU \d+ has no EXTNAME\)"):
             KPF0.from_fits(fn)
 
+    def test_lowercase_extension_name_is_upper_cased(self, tmp_path, caplog):
+        # Some 2023 WMKO L0s wrote guider EXTNAMEs in lowercase.
+        guider = fits.ImageHDU(data=np.ones((4, 4), dtype=np.float32))
+        guider.header["EXTNAME"] = "guider_avg"
+        fn = self._minimal_l0(tmp_path, extra_hdus=[guider])
+        with caplog.at_level(logging.INFO, logger="kpfpipe.data_models.level0"):
+            l0 = KPF0.from_fits(fn)
+        assert np.array_equal(l0.data["GUIDER_AVG"], np.ones((4, 4)))
+        assert l0.headers["GUIDER_AVG"]["EXTNAME"] == "GUIDER_AVG"
+        assert "'guider_avg' to 'GUIDER_AVG'" in caplog.text
+
     def test_parses_receipt_with_entries(self, tmp_path):
         receipt = Table({"FUNCTION": ["init"], "STATUS": ["PASS"]})
         rec_hdu = fits.BinTableHDU(data=receipt, name="RECEIPT")

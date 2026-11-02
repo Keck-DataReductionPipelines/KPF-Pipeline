@@ -82,7 +82,17 @@ class KPF0(KPFDataModel):
 
         The obs_id must be known before ``standardize_headers``, which
         writes it as the ORIGID provenance card.
+
+        EXTNAMEs are upper-cased first: some 2023 WMKO L0s wrote the guider
+        extensions in lowercase (``guider_avg``, ``guider_cube_origins``). Only
+        raw L0 is normalized; pipeline products must match their manifests.
         """
+        for hdu in hdul[1:]:
+            if hdu.name != hdu.name.upper():
+                logger.info(
+                    "renaming L0 extension %r to %r", hdu.name, hdu.name.upper()
+                )
+                hdu.name = hdu.name.upper()
         super().read(hdul, instrument=instrument)
         self.obs_id = get_obs_id(self.filename)
 
