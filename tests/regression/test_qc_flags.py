@@ -5,6 +5,7 @@ All tests use synthetic in-memory data -- no real KPF files required.
 
 import logging
 import types
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -1000,6 +1001,7 @@ class TestQCL0:
             "catalog_color_sane": "COLOROK",
             "expmeter_times_consistent": "EMTIMEOK",
             "expmeter_flux_sane": "EMFLUXOK",
+            "guider_record_ok": "GDRRECOK",
         }
         for method_name, key in expected.items():
             fn = QCL0.__dict__[method_name]
@@ -1103,6 +1105,35 @@ class TestQCL0:
         del l0.headers["INSTRUMENT_HEADER"]["DATE-BEG"]
         with pytest.raises(KeyError, match="DATE-BEG"):
             QCL0(l0).expmeter_times_consistent()
+
+    # --- guider_record_ok (GDRRECOK): guider rows timestamped across GOOD_DATES.
+    _BEG_UNIX = datetime.fromisoformat(GOOD_DATES["DATE-BEG"] + "+00:00").timestamp()
+    _END_UNIX = datetime.fromisoformat(GOOD_DATES["DATE-END"] + "+00:00").timestamp()
+
+    def _make_kpf0_with_guider_record(self, tmp_path, timestamps=None, instru="KPF"):
+        l0 = _make_kpf0(tmp_path, dates={**GOOD_DATES, "GCINSTRU": instru})
+        if timestamps is None:
+            timestamps = np.linspace(self._BEG_UNIX, self._END_UNIX, 10)
+        l0.set_data("GUIDER_CUBE_ORIGINS", Table({"timestamp": timestamps}))
+        return l0
+
+    def test_guider_record_ok_pass(self, tmp_path):
+        assert QCL0(self._make_kpf0_with_guider_record(tmp_path)).guider_record_ok()
+
+    def test_guider_record_ignores_unwritten_rows(self, tmp_path):
+        ts = np.append(np.linspace(self._BEG_UNIX, self._END_UNIX, 10), [0.0, 0.0])
+        l0 = self._make_kpf0_with_guider_record(tmp_path, ts)
+        assert QCL0(l0).guider_record_ok() is True
+
+    def test_guider_record_previous_exposure_fails(self, tmp_path):
+        # The guider record of the exposure before, ~94 s earlier.
+        ts = np.linspace(self._BEG_UNIX, self._END_UNIX, 10) - 94.0
+        l0 = self._make_kpf0_with_guider_record(tmp_path, ts)
+        assert QCL0(l0).guider_record_ok() is False
+
+    def test_guider_record_other_instrument_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_guider_record(tmp_path, instru="MOSFIRE")
+        assert QCL0(l0).guider_record_ok() is False
 
     # expmeter_flux_sane reads the DiagL0 channel metrics, so these seed them
     # directly; the measurement itself is covered in test_diagnostics.py.
@@ -1263,22 +1294,22 @@ class TestQCL0Telemetry:
         assert QCL0(l0).ccd_temps_within_100mk() is False
         assert QCL0(l0).ccd_temps_within_1000mk() is True
 
-    def test_guiding_ok_pass(self, tmp_path):
-        assert QCL0(self._make_kpf0_with_guider(tmp_path)).guiding_ok() is True
+    def test_guiding_error_ok_pass(self, tmp_path):
+        assert QCL0(self._make_kpf0_with_guider(tmp_path)).guiding_error_ok() is True
 
     def test_guiding_rms_fail(self, tmp_path):
         l0 = self._make_kpf0_with_guider(tmp_path, GDRYRMS=51.0)
-        assert QCL0(l0).guiding_ok() is False
+        assert QCL0(l0).guiding_error_ok() is False
 
     def test_guiding_bias_judged_on_magnitude(self, tmp_path):
         # v2.12 compared the signed bias and let a large negative offset pass.
         l0 = self._make_kpf0_with_guider(tmp_path, GDRXBIAS=-60.0)
-        assert QCL0(l0).guiding_ok() is False
+        assert QCL0(l0).guiding_error_ok() is False
 
     def test_guiding_missing_metric_raises(self, tmp_path):
         # Guider emits no guiding error when the camera was not tracking.
         with pytest.raises(KeyError, match="GDRXRMS"):
-            QCL0(_make_kpf0(tmp_path)).guiding_ok()
+            QCL0(_make_kpf0(tmp_path)).guiding_error_ok()
 
     def test_guide_camera_ok_pass(self, tmp_path):
         assert QCL0(self._make_kpf0_with_guider(tmp_path)).guide_camera_ok() is True
@@ -1296,7 +1327,16 @@ class TestQCL0Telemetry:
     def test_saturation_does_not_fail_the_guiding_flag(self, tmp_path):
         # The two are judged apart: a saturated camera may still have tracked.
         l0 = self._make_kpf0_with_guider(tmp_path, GDRNSAT=4)
-        assert QCL0(l0).guiding_ok() is True
+        assert QCL0(l0).guiding_error_ok() is True
+
+    @pytest.mark.parametrize(
+        "failing", [None, "guiding_error_ok", "guide_camera_ok", "guider_record_ok"]
+    )
+    def test_guiding_ok_requires_all_three(self, tmp_path, monkeypatch, failing):
+        # GUIDEROK rolls up GDRERROK, GDRCAMOK and GDRRECOK.
+        for name in ("guiding_error_ok", "guide_camera_ok", "guider_record_ok"):
+            monkeypatch.setattr(QCL0, name, lambda self, ok=name != failing: ok)
+        assert QCL0(_make_kpf0(tmp_path)).guiding_ok() is (failing is None)
 
     def test_seeing_ok_pass(self, tmp_path):
         l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=1.499)
@@ -1399,6 +1439,7 @@ class TestQCL0Telemetry:
             "ccd_temps_within_10mk": "TEMP10",
             "ccd_temps_within_100mk": "TEMP100",
             "ccd_temps_within_1000mk": "TEMP1000",
+            "guiding_error_ok": "GDRERROK",
             "guiding_ok": "GUIDEROK",
             "guide_camera_ok": "GDRCAMOK",
             "seeing_ok": "SEEINGOK",

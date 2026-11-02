@@ -2,7 +2,7 @@
 
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -238,7 +238,7 @@ class QCL0(QC):
 
     ccd_temps_within_1000mk._qc_key = "TEMP1000"
 
-    def guiding_ok(self):
+    def guiding_error_ok(self):
         """Guiding tracked to spec: 50 mas in both X/Y RMS and bias.
 
         Guider measures all four; this applies the limit. Bias is judged on
@@ -249,7 +249,7 @@ class QCL0(QC):
             return False
         return all(abs(float(hdr[key])) <= 50.0 for key in ("GDRXBIAS", "GDRYBIAS"))
 
-    guiding_ok._qc_key = "GUIDEROK"
+    guiding_error_ok._qc_key = "GDRERROK"
 
     def guide_camera_ok(self):
         """Guide camera not saturated.
@@ -263,6 +263,38 @@ class QCL0(QC):
         return int(hdr["GDRNSAT"]) <= 3 and float(hdr["GDRFRSAT"]) <= 0.1
 
     guide_camera_ok._qc_key = "GDRCAMOK"
+
+    def guider_record_ok(self):
+        """The guider record was taken by KPF's guider during this exposure.
+
+        WMKO has written stale guider data into L0s: a record left over from
+        another instrument (GCINSTRU LRISADC/MOSFIRE) or from the previous
+        exposure. GCINSTRU must be KPF, and every written GUIDER_CUBE_ORIGINS
+        timestamp (unwritten rows carry 0) must fall within 1 s of the shutter
+        window DATE-BEG..DATE-END.
+        """
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
+        if hdr["GCINSTRU"] != "KPF":
+            return False
+        beg, end = (
+            datetime.fromisoformat(str(hdr[k])).replace(tzinfo=UTC).timestamp()
+            for k in ("DATE-BEG", "DATE-END")
+        )
+        ts = np.asarray(self.kpf_obj.data["GUIDER_CUBE_ORIGINS"]["timestamp"], float)
+        ts = ts[ts != 0.0]
+        return bool(np.all((ts >= beg - 1.0) & (ts <= end + 1.0)))
+
+    guider_record_ok._qc_key = "GDRRECOK"
+
+    def guiding_ok(self):
+        """Guider rollup: GDRERROK, GDRCAMOK and GDRRECOK all pass."""
+        return (
+            self.guiding_error_ok()
+            and self.guide_camera_ok()
+            and self.guider_record_ok()
+        )
+
+    guiding_ok._qc_key = "GUIDEROK"
 
     def seeing_ok(self):
         """V-band seeing under 1.5 arcsec.
