@@ -207,8 +207,17 @@ class TestFrameIdentity:
                 "Gaia DR3 2077618037775709568",
                 "Gaia DR3 2077618037775709568",
             ),
+            ("TIC436314778", "TIC 436314778", "TIC 436314778"),
+            ("KIC4736208", "KIC 4736208", "KIC 4736208"),
+            ("WASP127", "WASP-127", "WASP-127"),
+            ("WASP-173b", "WASP-173B", "WASP-173B"),
+            # A bare system name reconciles with one of its components.
+            ("WASP-173", "WASP-173B", "WASP-173B"),
+            ("WASP-173B", "WASP-173", "WASP-173B"),
+            ("WASP-173A", "WASP-173B", "Unknown"),
             # A bare catalog prefix reconciles with a full id in that catalog.
             ("TOI", "TOI-969", "TOI-969"),
+            ("TIC", "TIC 436314778", "TIC 436314778"),
             ("HIP 9618", "HIP", "HIP 9618"),
             # Unreconcilable: other catalogs, other ids, unknown lengths.
             ("HD", "TOI-969", "Unknown"),
@@ -233,6 +242,12 @@ class TestFrameIdentity:
         with caplog.at_level(logging.INFO, logger="kpfpipe.utils.header"):
             HeaderParser(_hdr("Object", OBJECT="HD 73344", TARGNAME="HD 73344"))
         assert "resolved to" not in caplog.text
+
+    def test_component_reconciliation_warned(self):
+        parser = HeaderParser(_hdr("Object", OBJECT="WASP-173", TARGNAME="WASP-173B"))
+        assert any("component letter" in w for w in parser.warnings)
+        exact = HeaderParser(_hdr("Object", OBJECT="WASP-173B", TARGNAME="WASP-173B"))
+        assert not any("component letter" in w for w in exact.warnings)
 
 
 def _traces(keywords, prefix):

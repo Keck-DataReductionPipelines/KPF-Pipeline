@@ -66,7 +66,7 @@ def _canonical_name(name):
     for catalog, pattern, canonical in _TARGET_ALIASES:
         match = pattern.fullmatch(name)
         if match:
-            return catalog, canonical.format(*match.groups())
+            return catalog, canonical.format(*(g.upper() for g in match.groups()))
     return None, name
 
 
@@ -268,7 +268,9 @@ class HeaderParser:
         identifier in canonical form (e.g. ``HD 10700``; see ``_canonical_name``).
         The native OBJECT and TARGNAME must name the same target once canonicalized,
         or one must be the bare catalog prefix of the other (``TOI`` with
-        ``TOI-969``); a blank card yields the other (warned). Any reconciliation or
+        ``TOI-969``), or add only a component letter (``WASP-173`` with
+        ``WASP-173B`` -> ``WASP-173B``; warned); a blank card yields the other
+        (warned). Any reconciliation or
         canonicalization is logged at INFO. A Target frame failing its check is
         ``Unknown`` (any other solar pair never reaches here; ``_classify``).
         A calibration frame's OBJECT is
@@ -289,8 +291,19 @@ class HeaderParser:
                 return "SoCal"
             obj_cat, obj_c = _canonical_name(obj)
             targ_cat, targ_c = _canonical_name(targname)
+            short, long = sorted((obj_c, targ_c), key=len)
             if obj and targname and obj_c == targ_c:
                 result = obj_c
+            elif (
+                obj_cat
+                and obj_cat == targ_cat
+                and re.fullmatch(re.escape(short) + "[A-Z]", long)
+            ):
+                result = long
+                self._warn(
+                    f"OBJECT {obj!r} / TARGNAME {targname!r} differ only by a "
+                    f"component letter; OBJECT is {result!r}"
+                )
             elif targ_cat and obj.lower() == targ_cat.lower():
                 result = targ_c
             elif obj_cat and targname.lower() == obj_cat.lower():

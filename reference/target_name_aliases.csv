@@ -7,3 +7,6 @@ TOI,(?:TOI[\s-]*|T0*)(\d+),TOI-{}
 Kepler,Kepler[\s-]*(\d+),Kepler-{}
 KOI,KOI[\s-]*(\d+),KOI-{}
 K2,K2[\s-]*(\d+),K2-{}
+TIC,TIC[\s-]*(\d+),TIC {}
+KIC,KIC[\s-]*(\d+),KIC {}
+WASP,WASP[\s-]*(\d+)([A-Z]?),WASP-{}{}
