@@ -66,11 +66,11 @@ class TestUnregisteredKeywords:
 
     def test_native_wmko_leak_on_primary_raises(self):
         l2 = KPF2()
-        # GAIAID is a raw WMKO native (kept in INSTRUMENT_HEADER, never on
+        # TARGNAME is a raw WMKO native (kept in INSTRUMENT_HEADER, never on
         # PRIMARY), so the general unregistered-keyword check catches it -- no
         # dedicated WMKO-leak branch needed.
-        l2.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
-        with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
+        l2.headers["PRIMARY"]["TARGNAME"] = ("HD 10700", "leaked native")
+        with pytest.raises(ValueError, match="unregistered keyword 'TARGNAME'"):
             CheckpointL2(l2).raise_on_unregistered_keyword()
 
     def test_registered_keyword_on_its_extension_passes(self):
@@ -83,8 +83,8 @@ class TestUnregisteredKeywords:
         # the EPRV one at every level -- a native leaked onto it raises at L0
         # exactly as it does at L2.
         l0 = KPF0()
-        l0.headers["PRIMARY"]["GAIAID"] = (12345, "leaked native")
-        with pytest.raises(ValueError, match="unregistered keyword 'GAIAID'"):
+        l0.headers["PRIMARY"]["TARGNAME"] = ("HD 10700", "leaked native")
+        with pytest.raises(ValueError, match="unregistered keyword 'TARGNAME'"):
             CheckpointL0(l0).raise_on_unregistered_keyword()
 
 

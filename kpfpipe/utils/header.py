@@ -232,7 +232,8 @@ class HeaderParser:
         the rest of the header contradicts (see ``_classify``), is ``Unknown``.
         OBSMODE is ``Science`` for a Target, ``Calibration`` for any other
         known OBSTYPE, else ``Unknown``. OBJECT, set once OBSTYPE is known, is
-        sanitized by ``_object``. EXPTIME is the EPRV exposure time: the native
+        sanitized by ``_object``, and GAIAID by ``_gaiaid``. EXPTIME is the EPRV
+        exposure time: the native
         ELAPSED, not the requested native EXPTIME.
         """
         native = self.WMKO_HEADER
@@ -247,6 +248,7 @@ class HeaderParser:
 
         self.DRP_KEYWORDS["OBJECT"] = self._object(cal_object)
         self.DRP_KEYWORDS["ISSOLAR"] = self.DRP_KEYWORDS["OBJECT"] == "SoCal"
+        self.DRP_KEYWORDS["GAIAID"] = self._gaiaid()
 
         elapsed = native.get("ELAPSED")
         if elapsed in (None, ""):
@@ -258,6 +260,55 @@ class HeaderParser:
                 raise HeaderError(
                     f"{self._label}: ELAPSED={elapsed!r} is not a number"
                 ) from None
+
+    def _gaiaid(self):
+        """The sanitized GAIAID: ``Gaia DR3 <id>``, ``Gaia DR2 <id>`` or, with no
+        release, ``Gaia <id>``; None (blank card) off a non-solar Target frame.
+
+        The native card may carry a ``Gaia`` prefix and a DR2/DR3/EDR3 release
+        (EDR3 is DR3: they share source_ids), separated by spaces, underscores or
+        nothing; the source_id must be 17-19 digits. Anything else is warned and
+        blank. A Gaia-named OBJECT must agree with it: a blank GAIAID takes the
+        OBJECT's, and whichever carries the release lends it to the other (each
+        warned); a different source_id or release raises HeaderError.
+        """
+        if self.DRP_KEYWORDS["OBSTYPE"] != "Target" or self.DRP_KEYWORDS["ISSOLAR"]:
+            return None
+        raw = str(self.WMKO_HEADER.get("GAIAID") or "").strip()
+        match = re.fullmatch(
+            r"(?:Gaia[\s_]*)?(?:(DR2|E?DR3)[\s_]*)?(\d{17,19})", raw, re.IGNORECASE
+        )
+        gaiaid = None
+        if match:
+            release = (match[1] or "").upper().replace("EDR3", "DR3")
+            gaiaid = " ".join(filter(None, ("Gaia", release, match[2])))
+        elif raw:
+            self._warn(f"GAIAID {raw!r} is not a Gaia DR2/DR3 source_id; GAIAID blank")
+
+        obj = self.DRP_KEYWORDS["OBJECT"]
+        if not obj.startswith("Gaia "):
+            return gaiaid
+        if gaiaid is None:
+            self._warn(f"GAIAID blank; GAIAID is OBJECT {obj!r}")
+            return obj
+        *obj_release, obj_id = obj.split()[1:]
+        *gaia_release, gaia_id = gaiaid.split()[1:]
+        if obj_id != gaia_id or (obj_release and gaia_release and obj != gaiaid):
+            raise HeaderError(
+                f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
+                "different Gaia sources"
+            )
+        resolved = max(obj, gaiaid, key=len)
+        if obj != resolved:
+            self._warn(
+                f"OBJECT {obj!r} takes the GAIAID release; OBJECT is {resolved!r}"
+            )
+            self.DRP_KEYWORDS["OBJECT"] = resolved
+        if gaiaid != resolved:
+            self._warn(
+                f"GAIAID {raw!r} takes the OBJECT release; GAIAID is {resolved!r}"
+            )
+        return resolved
 
     def _object(self, cal_object):
         """The sanitized OBJECT: the target on a Target frame, else `cal_object`.

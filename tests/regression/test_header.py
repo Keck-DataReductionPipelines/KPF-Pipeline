@@ -256,6 +256,108 @@ class TestFrameIdentity:
         assert not any("component letter" in w for w in exact.warnings)
 
 
+_G19 = "2452378776434477184"  # tau Cet, Gaia DR3
+_G18 = "806000816970521728"
+
+
+class TestGaiaId:
+    """GAIAID: parsed, validated and canonicalized, and reconciled with OBJECT."""
+
+    @staticmethod
+    def _parse(gaiaid, obj="HD 10700", targname=None):
+        return HeaderParser(
+            _hdr("Object", OBJECT=obj, TARGNAME=targname or obj, GAIAID=gaiaid)
+        )
+
+    @staticmethod
+    def _gaia_warnings(parser):
+        return [w for w in parser.warnings if "GAIAID" in w]
+
+    @pytest.mark.parametrize(
+        "native, expected",
+        [
+            (f"DR3 {_G19}", f"Gaia DR3 {_G19}"),  # the usual native form
+            (f"DR3_{_G19}", f"Gaia DR3 {_G19}"),  # failure mode 2
+            (f"DR3_{_G18}", f"Gaia DR3 {_G18}"),
+            (f"Gaia_DR3_{_G19}", f"Gaia DR3 {_G19}"),
+            (f"DR3{_G19}", f"Gaia DR3 {_G19}"),
+            (f"Gaia DR3 {_G19}", f"Gaia DR3 {_G19}"),
+            (f"dr2 {_G19}", f"Gaia DR2 {_G19}"),
+            (f"EDR3_{_G19}", f"Gaia DR3 {_G19}"),  # EDR3 shares DR3 source_ids
+            (_G19, f"Gaia {_G19}"),  # bare: AstroQuery resolves the release
+            (f"Gaia {_G19}", f"Gaia {_G19}"),
+        ],
+    )
+    def test_canonical(self, native, expected):
+        parser = self._parse(native)
+        assert parser.DRP_KEYWORDS["GAIAID"] == expected
+        assert not self._gaia_warnings(parser)
+
+    @pytest.mark.parametrize(
+        "native",
+        [
+            "0",
+            "2",
+            "123456789",
+            _G19[:14],
+            _G19 + "0",
+            "DR3",
+            f"DR1 {_G19}",
+            f"DR4 {_G19}",
+            f"Gaia DR3 {_G19[:15]}",
+        ],
+    )
+    def test_malformed_is_blank_and_warned(self, native):
+        parser = self._parse(native)
+        assert parser.DRP_KEYWORDS["GAIAID"] is None
+        assert any("is not a Gaia DR2/DR3 source_id" in w for w in parser.warnings)
+
+    @pytest.mark.parametrize("native", [None, ""])
+    def test_absent_is_blank_and_silent(self, native):
+        parser = self._parse(native)
+        assert parser.DRP_KEYWORDS["GAIAID"] is None
+        assert not self._gaia_warnings(parser)
+
+    def test_blank_off_a_science_target(self):
+        cal = HeaderParser(_hdr("Bias", GAIAID=f"DR3 {_G19}"))
+        assert cal.DRP_KEYWORDS["GAIAID"] is None
+        solar = self._parse(f"DR3 {_G19}", obj="SoCal", targname="Sun")
+        assert solar.DRP_KEYWORDS["GAIAID"] is None
+
+    @pytest.mark.parametrize(
+        "obj, native, expected",
+        [
+            # The release on either card is lent to the other.
+            (_G19, f"DR3 {_G19}", f"Gaia DR3 {_G19}"),
+            (f"Gaia DR3 {_G19}", _G19, f"Gaia DR3 {_G19}"),
+            # A blank or malformed GAIAID takes the OBJECT's.
+            (f"Gaia DR3 {_G19}", None, f"Gaia DR3 {_G19}"),
+            (_G19, "0", f"Gaia {_G19}"),
+        ],
+    )
+    def test_reconciled_with_gaia_object(self, obj, native, expected):
+        parser = self._parse(native, obj=obj)
+        assert parser.DRP_KEYWORDS["GAIAID"] == expected
+        assert parser.DRP_KEYWORDS["OBJECT"] == expected
+        assert self._gaia_warnings(parser)
+
+    def test_agreeing_gaia_object_is_silent(self):
+        parser = self._parse(f"DR3 {_G19}", obj=f"Gaia DR3 {_G19}")
+        assert parser.DRP_KEYWORDS["GAIAID"] == f"Gaia DR3 {_G19}"
+        assert not self._gaia_warnings(parser)
+
+    @pytest.mark.parametrize(
+        "obj, native",
+        [
+            (_G19, f"DR3 {_G18}0"),  # different source_id
+            (f"Gaia DR2 {_G19}", f"DR3 {_G19}"),  # different release
+        ],
+    )
+    def test_disagreement_with_gaia_object_raises(self, obj, native):
+        with pytest.raises(HeaderError, match="name different Gaia sources"):
+            self._parse(native, obj=obj)
+
+
 def _traces(keywords, prefix):
     return [keywords.get(f"{prefix}{i}") for i in range(1, 6)]
 

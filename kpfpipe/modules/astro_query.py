@@ -11,10 +11,12 @@ four rows to the L0 ``CATALOG_RECORD`` extension.
 All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_SCHEMA``), so
 the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards; the resolved names
 are joined into ``ALIASES``. Those two families are the only PRIMARY cards AstroQuery
-writes.
+writes, besides recording a resolution on GAIAID/OBJECT: the release Gaia resolves
+for a bare GAIAID, and SIMBAD's common name for a Gaia-named OBJECT.
 """
 
 import logging
+import re
 
 import astropy.units as u
 import numpy as np
@@ -54,7 +56,8 @@ class AstroQuery:
     ----------
     l0_obj : KPF0
         Standardized L0 science frame (OBSTYPE ``Target``). Its PRIMARY header
-        (OBSTYPE, GAIAID, OBJECT, TARG*) is read but never modified.
+        (OBSTYPE, GAIAID, OBJECT, TARG*) is read; GAIAID/OBJECT are updated only
+        on a resolution (see the module docstring).
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: do_gaia_query, do_simbad_query,
         astrometry_priority, query_timeout.
@@ -162,27 +165,6 @@ class AstroQuery:
             self._GAIA_MIRRORS[release],
             f"Gaia {release}",
         )
-
-    def _gaia_source(self):
-        """``(release, source_id)`` from L0 GAIAID, or None if absent/unusable.
-
-        GAIAID names the release its id belongs to (e.g. 'DR3 12345'), which selects
-        the queried table -- a source_id denotes different stars across releases, so the
-        prefix is honored rather than discarded. ``release`` is None for a bare id, left
-        for ``_resolve_gaia_release``. None when GAIAID is absent or blank, the trailing
-        token is not all digits, or the release is not in ``_GAIA_MIRRORS``.
-        """
-        raw = self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID")
-        if raw is None:
-            return None
-        tokens = str(raw).strip().split()
-        if not tokens or not tokens[-1].isdigit():
-            return None
-        source_id = tokens[-1]
-        if len(tokens) == 1:
-            return None, source_id
-        release = tokens[-2].upper()
-        return (release, source_id) if release in self._GAIA_MIRRORS else None
 
     def _resolve_gaia_release(self, source_id):
         """The newest Gaia release whose gaia_source contains ``source_id``.
@@ -431,27 +413,27 @@ class AstroQuery:
 
         The release named in GAIAID selects the queried tables (``_GAIA_MIRRORS``), so a
         DR2 id is never looked up among DR3 source_ids; a bare id is identified against
-        the archive by ``_resolve_gaia_release``. Returns None (warned) when GAIAID
-        yields no usable release/source_id, when the lookup fails on every mirror
+        the archive by ``_resolve_gaia_release`` and, once found, recorded on GAIAID
+        (and on an OBJECT naming the same bare id). Returns None (warned) when the
+        PRIMARY GAIAID is blank, when the lookup fails on every mirror
         (``query_mirrors``), or when the source is not found. Raises ValueError
         if a bare id matches no queryable release, or if the result's column units
         differ from the schema shared by the supported releases (deg, mas/yr, mas,
         km/s, Julian yr, mag; ICRS). Gated in perform by ``do_gaia_query``.
         """
-        source = self._gaia_source()
-        if source is None:
-            logger.warning(
-                "no usable GAIAID on L0 PRIMARY (%r); Gaia astrometry unavailable "
-                "(queryable releases: %s)",
-                self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID"),
-                ", ".join(sorted(self._GAIA_MIRRORS)),
-            )
+        primary = self.l0_obj.headers["PRIMARY"]
+        gaiaid = primary["GAIAID"]
+        if not gaiaid:
+            logger.warning("no GAIAID on L0 PRIMARY; Gaia astrometry unavailable")
             return None
-        release, gaia_id = source
-        if release is None:
+        # HeaderParser's canonical 'Gaia [DR2|DR3] <source_id>'.
+        *release, gaia_id = gaiaid.split()[1:]
+        release = release[0] if release else None
+        resolved = release is None
+        if resolved:
             logger.warning(
                 "GAIAID %r carries no data release; querying Gaia to identify it",
-                self.l0_obj.headers["INSTRUMENT_HEADER"].get("GAIAID"),
+                gaiaid,
             )
             release = self._resolve_gaia_release(gaia_id)
         query = f"""
@@ -479,6 +461,12 @@ class AstroQuery:
             )
             return None
         self._verify_units(results, self._GAIA_UNITS, f"Gaia {release}")
+        designation = f"Gaia {release} {gaia_id}"
+        if resolved:
+            for key in ("GAIAID", "OBJECT"):
+                if primary[key] == gaiaid:
+                    logger.warning("resolved %s %r to %r", key, gaiaid, designation)
+                    self.l0_obj.set_keyword(key, designation)
         row = results[0]
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
@@ -492,7 +480,7 @@ class AstroQuery:
             "Gaia BP-RP",
         )
         record = {
-            "object": f"Gaia {release} {gaia_id}",
+            "object": designation,
             "catalog": f"Gaia {release}",
             "ra": ra_str,
             "dec": dec_str,
@@ -569,7 +557,9 @@ class AstroQuery:
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
-        Returns None (warned, not raised) when L0 has no usable OBJECT name, or when the
+        A Gaia-named OBJECT (with its release) that SIMBAD resolves becomes SIMBAD's
+        common name. Returns None (warned, not raised) when OBJECT is ``Unknown`` or a
+        Gaia designation without a release, or when the
         lookup fails on every mirror (``query_mirrors``) or resolves nothing. Raises
         ValueError if the result's column units differ from the assumed schema: the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value mas,
@@ -577,7 +567,8 @@ class AstroQuery:
         None) and form the B-V color. Gated in perform by ``do_simbad_query``.
         """
         name = self.l0_obj.headers["PRIMARY"]["OBJECT"]
-        if name == "Unknown" or name.startswith("Gaia "):
+        # SIMBAD resolves a Gaia designation only with its release.
+        if name == "Unknown" or re.fullmatch(r"Gaia \d+", name):
             logger.warning(
                 "OBJECT %r is not a SIMBAD name; SIMBAD astrometry unavailable", name
             )
@@ -609,6 +600,9 @@ class AstroQuery:
         self._verify_units(result, self._SIMBAD_UNITS, "SIMBAD")
         row = result[0]
         self._common_name = self._simbad_common_name(row)
+        if name.startswith("Gaia "):
+            logger.warning("resolved OBJECT %r to %r", name, self._common_name)
+            self.l0_obj.set_keyword("OBJECT", self._common_name)
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
         # To the EPRV C*# format: deg -> sexagesimal; PM mas/yr -> arcsec/yr.
