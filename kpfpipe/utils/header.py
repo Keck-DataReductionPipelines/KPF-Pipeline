@@ -320,7 +320,8 @@ class HeaderParser:
         The native OBJECT and TARGNAME must name the same target once canonicalized,
         or one must be the bare catalog prefix of the other (``TOI`` with
         ``TOI-969``), or add only a component letter (``WASP-173`` with
-        ``WASP-173B`` -> ``WASP-173B``; warned); a blank card yields the other
+        ``WASP-173B`` -> ``WASP-173B``, ``21019`` with ``21019A`` -> ``HD 21019 A``;
+        warned); a blank card yields the other
         (warned). Any reconciliation or
         canonicalization is logged at INFO. A Target frame failing its check, or
         whose name is a bare number in no known catalog, is ``Unknown`` (any
@@ -349,7 +350,7 @@ class HeaderParser:
             elif (
                 obj_cat
                 and obj_cat == targ_cat
-                and re.fullmatch(re.escape(short) + "[A-Z]", long)
+                and re.fullmatch(re.escape(short) + " ?[A-Z]", long)
             ):
                 result = long
                 self._warn(

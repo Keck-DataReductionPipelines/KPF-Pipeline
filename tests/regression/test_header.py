@@ -215,6 +215,9 @@ class TestFrameIdentity:
             ("WASP-173", "WASP-173B", "WASP-173B"),
             ("WASP-173B", "WASP-173", "WASP-173B"),
             ("WASP-173A", "WASP-173B", "Unknown"),
+            ("115404A", "HD 115404 A", "HD 115404 A"),
+            ("hd21019a", "21019", "HD 21019 A"),
+            ("21019 A", "HD 21019B", "Unknown"),
             # A bare catalog prefix reconciles with a full id in that catalog.
             ("TOI", "TOI-969", "TOI-969"),
             ("TIC", "TIC 436314778", "TIC 436314778"),
