@@ -26,7 +26,7 @@ from ._scripts import add_junk_obs_id, write_l0_tree
 pytestmark = pytest.mark.cli
 
 _OID1 = "KP.20240101.03600.00"
-_BASE_ARGS = ["--target", "10700", "--date_range", "20240101", "20240131"]
+_BASE_ARGS = ["--target", "HD 10700", "--date_range", "20240101", "20240131"]
 
 
 @pytest.fixture(scope="module")
@@ -58,7 +58,7 @@ def _write_l0(data_input, datecode, seconds, obj, imtype="Object", junk=False):
 class TestParseArgs:
     def test_minimal_valid(self, ts):
         ns = ts.parse_args(_BASE_ARGS)
-        assert ns.target == "10700"
+        assert ns.target == "HD 10700"
         assert ns.date_range == ["20240101", "20240131"]
 
     def test_config_overrides_default_to_none(self, ts):
@@ -122,7 +122,7 @@ class TestParseArgs:
         ],
     )
     def test_invalid_args_exit(self, ts, capsys, extra):
-        argv = ["--target", "10700"]
+        argv = ["--target", "HD 10700"]
         if "--date_range" not in extra:
             argv += ["--date_range", "20240101", "20240131"]
         with pytest.raises(SystemExit) as exc:
@@ -209,7 +209,7 @@ class TestDiscoverScienceObsIds:
         ]  # fmt: skip
         expected = self._build_tree(str(tmp_path), nights, per_night=4)
         got, _ = ts.discover_science_obs_ids(
-            str(tmp_path), "10700", "20240101", "20240131", jobs=8
+            str(tmp_path), "HD 10700", "20240101", "20240131", jobs=8
         )
         assert got == sorted(expected)
         assert len(got) == len(set(got)) == 24  # no duplicates, none dropped
@@ -218,7 +218,7 @@ class TestDiscoverScienceObsIds:
         # Discovery scans with cache="rw", so each night's CSV is a side effect.
         self._build_tree(str(tmp_path), ["20240101"], per_night=2)
         ts.discover_science_obs_ids(
-            str(tmp_path), "10700", "20240101", "20240131", jobs=2
+            str(tmp_path), "HD 10700", "20240101", "20240131", jobs=2
         )
         cache = Path(tmp_path) / "vNext" / "mini_db" / "20240101_L0.csv"
         assert cache.is_file()
@@ -226,7 +226,7 @@ class TestDiscoverScienceObsIds:
     def test_matches_serial_result(self, ts, tmp_path):
         nights = ["20240101", "20240102", "20240103", "20240104"]
         self._build_tree(str(tmp_path), nights, per_night=3)
-        common = dict(target="10700", start="20240101", end="20240131")
+        common = dict(target="HD 10700", start="20240101", end="20240131")
         serial = ts.discover_science_obs_ids(str(tmp_path), jobs=1, **common)
         parallel = ts.discover_science_obs_ids(str(tmp_path), jobs=8, **common)
         assert serial == parallel
@@ -235,7 +235,7 @@ class TestDiscoverScienceObsIds:
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         junk = _write_l0(str(tmp_path), "20240101", 3700, "10700", junk=True)
         got, junk_ids = ts.discover_science_obs_ids(
-            str(tmp_path), "10700", "20240101", "20240131", jobs=2
+            str(tmp_path), "HD 10700", "20240101", "20240131", jobs=2
         )
         assert got == [good] and junk_ids == [junk]  # junk returned apart
 
@@ -243,7 +243,7 @@ class TestDiscoverScienceObsIds:
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         (tmp_path / "L0" / "20240102").mkdir()  # not yet synced
         got, junk_ids = ts.discover_science_obs_ids(
-            str(tmp_path), "10700", "20240101", "20240131", jobs=2
+            str(tmp_path), "HD 10700", "20240101", "20240131", jobs=2
         )
         assert got == [good] and junk_ids == []
 
@@ -251,10 +251,10 @@ class TestDiscoverScienceObsIds:
         # OBJECT != TARGNAME: HeaderParser can't trust the name, so the frame
         # can't be matched, but discovery must say so rather than drop it quietly.
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
-        write_l0_tree(str(tmp_path), "20240101", 3700, obj="10700", targname="HD 10700")
+        write_l0_tree(str(tmp_path), "20240101", 3700, obj="10700", targname="HD 10701")
         with caplog.at_level(logging.WARNING):
             got, _ = ts.discover_science_obs_ids(
-                str(tmp_path), "10700", "20240101", "20240131", jobs=1
+                str(tmp_path), "HD 10700", "20240101", "20240131", jobs=1
             )
         assert got == [good]
         assert "1 Target frame(s) with Unknown OBJECT" in caplog.text
@@ -263,7 +263,7 @@ class TestDiscoverScienceObsIds:
         obj = _write_l0(str(tmp_path), "20240101", 3600, "10700")
         _write_l0(str(tmp_path), "20240101", 3700, "10700", imtype="Bias")
         got, _ = ts.discover_science_obs_ids(
-            str(tmp_path), "10700", "20240101", "20240131", jobs=2
+            str(tmp_path), "HD 10700", "20240101", "20240131", jobs=2
         )
         assert got == [obj]
 
@@ -271,7 +271,7 @@ class TestDiscoverScienceObsIds:
         _write_l0(str(tmp_path), "20240101", 3600, "99999")  # no target frames
         with pytest.raises(SystemExit, match="no science frames for target"):
             ts.discover_science_obs_ids(
-                str(tmp_path), "10700", "20240101", "20240131", jobs=2
+                str(tmp_path), "HD 10700", "20240101", "20240131", jobs=2
             )
 
     def test_missing_l0_root_exits(self, ts, tmp_path):
@@ -279,7 +279,7 @@ class TestDiscoverScienceObsIds:
         # tree yields no frames either way and this duplicates its neighbour.
         with pytest.raises(SystemExit, match="L0 input directory not found"):
             ts.discover_science_obs_ids(
-                str(tmp_path), "10700", "20240101", "20240131", jobs=2
+                str(tmp_path), "HD 10700", "20240101", "20240131", jobs=2
             )
 
 

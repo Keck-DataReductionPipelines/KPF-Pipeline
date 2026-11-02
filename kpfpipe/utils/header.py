@@ -1,5 +1,6 @@
 """HeaderParser: read and sanitize a native (WMKO) L0 PRIMARY header."""
 
+import csv
 import logging
 import re
 from datetime import datetime
@@ -7,7 +8,17 @@ from pathlib import Path
 
 from astropy.io import fits
 
+from kpfpipe import REPO_ROOT
+
 logger = logging.getLogger(__name__)
+
+# Known target-name aliases: (catalog, compiled pattern, canonical format), in file
+# order; the first full, case-insensitive match names the target.
+with open(REPO_ROOT / "reference/target_name_aliases.csv", newline="") as _f:
+    _TARGET_ALIASES = [
+        (row["catalog"], re.compile(row["pattern"], re.IGNORECASE), row["canonical"])
+        for row in csv.DictReader(_f)
+    ]
 
 # OCTAGON position -> the source it feeds the fibers, in OBJECT vocabulary.
 _SOURCES = {
@@ -46,6 +57,17 @@ class HeaderError(ValueError):
 def _norm(value):
     """A header value as a stripped, lowercased string (None -> '')."""
     return "" if value is None else str(value).strip().lower()
+
+
+def _canonical_name(name):
+    """``(catalog, canonical name)`` of the first known alias `name` matches, else
+    ``(None, name)``. E.g. 'HD57555', 'HD 57555' and '57555' -> ('HD', 'HD 57555');
+    'T001824' -> ('TOI', 'TOI-1824'). Aliases: reference/target_name_aliases.csv."""
+    for catalog, pattern, canonical in _TARGET_ALIASES:
+        match = pattern.fullmatch(name)
+        if match:
+            return catalog, canonical.format(*match.groups())
+    return None, name
 
 
 class HeaderParser:
@@ -196,10 +218,13 @@ class HeaderParser:
         WMKO uses OBJECT as free-form metadata; the DRP uses it to name what
         was observed. A solar Target frame (native OBJECT ``SoCal`` and TARGNAME
         ``Sun``) is ``SoCal``; any other Target frame's OBJECT is its target
-        identifier (e.g. ``10700``): the native OBJECT, trusted only when it and
-        TARGNAME agree, or TARGNAME when the native OBJECT is blank (warned).
-        A Target frame failing its check (including only one
-        of the two cards naming the Sun) is ``Unknown``. A calibration frame's OBJECT is
+        identifier in canonical form (e.g. ``HD 10700``; see ``_canonical_name``).
+        The native OBJECT and TARGNAME must name the same target once canonicalized,
+        or one must be the bare catalog prefix of the other (``TOI`` with
+        ``TOI-969``); a blank card yields the other (warned). Any reconciliation or
+        canonicalization is logged at INFO. A Target frame failing its check
+        (including only one of the two cards naming the Sun) is ``Unknown``.
+        A calibration frame's OBJECT is
         `cal_object`, derived from IMTYPE/OCTAGON alone (e.g. ``ThAr_daily``,
         ``WideFlat``); a native OBJECT that is no ``autocal-*`` label agreeing
         with it and the lit fibers, or a TARGNAME naming a target, is only
@@ -216,16 +241,39 @@ class HeaderParser:
             if (obj, targname) == ("SoCal", "Sun"):
                 return "SoCal"
             solar = {obj.lower(), targname.lower()} & {"socal", "sun"}
-            if obj and obj == targname and not solar:
-                return obj
-            if not obj and targname and not solar:
+            obj_cat, obj_c = _canonical_name(obj)
+            targ_cat, targ_c = _canonical_name(targname)
+            if solar:
+                result = None
+            elif obj and targname and obj_c == targ_c:
+                result = obj_c
+            elif targ_cat and obj.lower() == targ_cat.lower():
+                result = targ_c
+            elif obj_cat and targname.lower() == obj_cat.lower():
+                result = obj_c
+            elif not obj and targname:
                 self._warn(f"OBJECT blank; OBJECT is TARGNAME {targname!r}")
-                return targname
-            self._warn(
-                f"OBJECT {obj!r} disagrees with TARGNAME {targname!r}; "
-                "OBJECT is Unknown"
-            )
-            return "Unknown"
+                result = targ_c
+            elif obj and not targname:
+                self._warn(f"TARGNAME blank; OBJECT is {obj!r}")
+                result = obj_c
+            else:
+                result = None
+            if result is None:
+                self._warn(
+                    f"OBJECT {obj!r} disagrees with TARGNAME {targname!r}; "
+                    "OBJECT is Unknown"
+                )
+                return "Unknown"
+            if result != obj or result != targname:
+                logger.info(
+                    "%s: OBJECT %r / TARGNAME %r resolved to %r",
+                    self._label,
+                    obj,
+                    targname,
+                    result,
+                )
+            return result
 
         family = cal_object.lower().replace("_daily", "")
         if family in ("bias", "dark", "wideflat"):

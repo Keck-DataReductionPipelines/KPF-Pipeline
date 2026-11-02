@@ -479,7 +479,7 @@ class TestStandardizedPrimary:
         assert prim["OBSTYPE"] == "Target"  # IMTYPE -> OBSTYPE
         assert prim["EXPTIME"] == 300.0  # ELAPSED -> EXPTIME
         assert prim["INSTRUME"] == "KPF"
-        assert prim["OBJECT"] == "10700"
+        assert prim["OBJECT"] == "HD 10700"
         # Raw native names must not remain on the EPRV PRIMARY.
         for native in ("IMTYPE", "ELAPSED", "GROBSERV", "OFNAME", "PROGNAME"):
             assert native not in prim
@@ -643,7 +643,7 @@ class TestHeaderKeywords:
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
         assert prim["OBSTYPE"] == "Target"
         assert prim["OBSMODE"] == "Science"
-        assert prim["OBJECT"] == "10700"
+        assert prim["OBJECT"] == "HD 10700"
         assert prim["ISSOLAR"] is False
 
     def test_every_header_parser_keyword_is_stamped(self):

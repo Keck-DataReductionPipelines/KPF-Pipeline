@@ -29,7 +29,7 @@ and plotting runs whatever L4 is on disk (``--no-science`` plots the existing L4
 writing to ``{KPF_SCIENCE_OUTPUT}/QLP/timeseries`` unless ``--plot_dir`` overrides
 it. The run exits nonzero if any stage that ran reported a failure.
 
-    kpfpipe timeseries --target 10700 --date_range 20240101 20240131
+    kpfpipe timeseries --target "HD 10700" --date_range 20240101 20240131
 """
 
 import argparse
@@ -104,7 +104,7 @@ def parse_args(argv=None):
     ap.add_argument(
         "--target",
         required=True,
-        help="star id as it appears in the L0 OBJECT header, e.g. 10700",
+        help="target as HeaderParser canonicalizes OBJECT, e.g. 'HD 10700'",
     )
     # Stage toggles (which *stage* to run) -- unrelated to reduce's
     # --masters/--science/--engineering recipe shortcuts, which live only on that

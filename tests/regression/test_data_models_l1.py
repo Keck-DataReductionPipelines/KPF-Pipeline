@@ -185,7 +185,7 @@ class TestToKpf1:
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:55.968"
-        assert l1.headers["PRIMARY"]["OBJECT"] == "10700"
+        assert l1.headers["PRIMARY"]["OBJECT"] == "HD 10700"
         assert l1.headers["PRIMARY"]["DATALVL"] == "L1"
 
     # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.

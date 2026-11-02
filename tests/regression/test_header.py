@@ -118,12 +118,12 @@ class TestFrameIdentity:
     @pytest.mark.parametrize(
         "header, obj",
         [
-            # Target: the target, when native OBJECT and TARGNAME agree.
-            (_hdr("Object", OBJECT=" 10700 ", TARGNAME="10700"), "10700"),
-            (_hdr("Object", OBJECT="10700", TARGNAME="HD 10700"), "Unknown"),
-            # A blank OBJECT takes TARGNAME; a blank TARGNAME leaves OBJECT untrusted.
+            # Target: the canonical target, when OBJECT and TARGNAME agree.
+            (_hdr("Object", OBJECT=" 10700 ", TARGNAME="10700"), "HD 10700"),
+            (_hdr("Object", OBJECT="WASP-85", TARGNAME="WASP-85"), "WASP-85"),
+            # A blank card takes the other.
             (_hdr("Object", OBJECT="", TARGNAME="K2-157"), "K2-157"),
-            (_hdr("Object", OBJECT="K2-157", TARGNAME=""), "Unknown"),
+            (_hdr("Object", OBJECT="KEPLER-65", TARGNAME=""), "Kepler-65"),
             (_hdr("Object", OBJECT="", TARGNAME="Sun"), "Unknown"),
             (_hdr("Object", OBJECT="", TARGNAME=""), "Unknown"),
             # Solar: exactly OBJECT SoCal with TARGNAME Sun; one alone is Unknown.
@@ -140,6 +140,56 @@ class TestFrameIdentity:
     )
     def test_object(self, header, obj):
         assert HeaderParser(header).DRP_KEYWORDS["OBJECT"] == obj
+
+    @pytest.mark.parametrize(
+        "obj, targname, expected",
+        [
+            # Known aliases reconcile to one canonical form.
+            ("HD57555", "HD 57555", "HD 57555"),
+            ("57555", "HD 57555", "HD 57555"),
+            ("hd 57555", "57555", "HD 57555"),
+            ("HIP9618", "HIP 9618", "HIP 9618"),
+            ("TOI 233", "TOI-233", "TOI-233"),
+            ("T001824", "TOI-1824", "TOI-1824"),
+            ("Kepler 86", "Kepler-86", "Kepler-86"),
+            ("KOI-270", "KOI 270", "KOI-270"),
+            ("K2 157", "K2-157", "K2-157"),
+            (
+                "Gaia 2077618037775709568",
+                "2077618037775709568",
+                "Gaia 2077618037775709568",
+            ),
+            (
+                "Gaia DR3 2077618037775709568",
+                "Gaia DR3 2077618037775709568",
+                "Gaia DR3 2077618037775709568",
+            ),
+            # A bare catalog prefix reconciles with a full id in that catalog.
+            ("TOI", "TOI-969", "TOI-969"),
+            ("HIP 9618", "HIP", "HIP 9618"),
+            # Unreconcilable: other catalogs, other ids, unknown lengths.
+            ("HD", "TOI-969", "Unknown"),
+            ("HD 10700", "HD 10701", "Unknown"),
+            ("343600706696532", "Gaia 3436007066965322240", "Unknown"),
+            ("Gaia 2077618037775709568", "Gaia DR3 2077618037775709568", "Unknown"),
+            ("Io", "Io Eclipse", "Unknown"),
+        ],
+    )
+    def test_target_aliases(self, obj, targname, expected):
+        header = _hdr("Object", OBJECT=obj, TARGNAME=targname)
+        assert HeaderParser(header).DRP_KEYWORDS["OBJECT"] == expected
+
+    def test_reconciliation_logged_at_info(self, caplog):
+        with caplog.at_level(logging.INFO, logger="kpfpipe.utils.header"):
+            HeaderParser(_hdr("Object", OBJECT="HD73344", TARGNAME="HD 73344"))
+        assert "OBJECT 'HD73344' / TARGNAME 'HD 73344' resolved to 'HD 73344'" in (
+            caplog.text
+        )
+
+    def test_canonical_pair_not_logged(self, caplog):
+        with caplog.at_level(logging.INFO, logger="kpfpipe.utils.header"):
+            HeaderParser(_hdr("Object", OBJECT="HD 73344", TARGNAME="HD 73344"))
+        assert "resolved to" not in caplog.text
 
 
 def _traces(keywords, prefix):
@@ -327,8 +377,12 @@ class TestWarnings:
                 "OBJECT 'LFCStability' is no autocal label",
             ),
             (
-                _hdr("Object", OBJECT="10700", TARGNAME="HD 10700"),
-                "OBJECT '10700' disagrees with TARGNAME 'HD 10700'",
+                _hdr("Object", OBJECT="10700", TARGNAME="HD 10701"),
+                "OBJECT '10700' disagrees with TARGNAME 'HD 10701'",
+            ),
+            (
+                _hdr("Object", OBJECT="K2-157", TARGNAME=""),
+                "TARGNAME blank; OBJECT is 'K2-157'",
             ),
             (
                 _hdr("Object", OBJECT="", TARGNAME="K2-157"),

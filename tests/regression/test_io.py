@@ -1002,7 +1002,7 @@ class TestBuildMiniDatabaseComments:
             **dict(SCISEL="open", SKYSEL="open", SIMCALSH="closed"),
             **{"SCI-OBJ": "Target", "SKY-OBJ": "Sky", "CAL-OBJ": "None"},
         }
-        for seconds, targname in ((1000, "10700"), (2000, "HD 10700")):
+        for seconds, targname in ((1000, "10700"), (2000, "HD 10701")):
             write_l0_tree(
                 tmp_path,
                 "20240405",
@@ -1024,12 +1024,12 @@ class TestBuildMiniDatabaseComments:
             mini_db = FileHandler(
                 {"KPF_DATA_INPUT": str(tmp_path)}
             ).build_mini_database("20240405")
-        assert list(mini_db["DRP_OBJECT"]) == ["10700", "Unknown", "Unknown"]
+        assert list(mini_db["DRP_OBJECT"]) == ["HD 10700", "Unknown", "Unknown"]
         assert pd.isna(mini_db["COMMENTS"][0])
         assert mini_db["COMMENTS"][1] == "WARNINGS: 0 fatal, 1 non-fatal"
         assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
         # The details are in the log, keyed by filename.
-        assert "OBJECT '10700' disagrees with TARGNAME 'HD 10700'" in caplog.text
+        assert "OBJECT '10700' disagrees with TARGNAME 'HD 10701'" in caplog.text
         assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home'" in caplog.text
 
 
