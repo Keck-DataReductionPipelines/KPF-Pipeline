@@ -165,6 +165,16 @@ class TestKPF0ErrorPaths:
         assert l0.headers["GUIDER_AVG"]["EXTNAME"] == "GUIDER_AVG"
         assert "'guider_avg' to 'GUIDER_AVG'" in caplog.text
 
+    def test_guider_cube_is_dropped_with_warning(self, tmp_path, caplog):
+        cube = fits.ImageHDU(
+            data=np.zeros((3, 4, 4), dtype=np.int16), name="GUIDER_CUBE"
+        )
+        fn = self._minimal_l0(tmp_path, extra_hdus=[cube])
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.data_models.level0"):
+            l0 = KPF0.from_fits(fn)
+        assert "GUIDER_CUBE" not in l0.data
+        assert "stale guider record" in caplog.text
+
     def test_parses_receipt_with_entries(self, tmp_path):
         receipt = Table({"FUNCTION": ["init"], "STATUS": ["PASS"]})
         rec_hdu = fits.BinTableHDU(data=receipt, name="RECEIPT")
