@@ -144,16 +144,16 @@ def resolve_dates(ap, args):
     return args
 
 
-def obs_ids_parser():
+def obs_ids_parser(verb="reduce"):
     """The ``--obs_ids`` flag of the frame commands; validated by `resolve_obs_ids`
-    (via `resolve_frame_selection`)."""
+    (via `resolve_frame_selection`). `verb` names what the command does with them."""
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument(
         "--obs_ids",
         nargs="+",
         action=StoreOnce,
         metavar="OBS_ID_OR_FILE",
-        help="one or more obs_ids to reduce, or a text file listing one obs_id per "
+        help=f"one or more obs_ids to {verb}, or a text file listing one obs_id per "
         "line, e.g. --obs_ids KP.20240405.40113.57 KP.20240405.40237.36 or "
         "--obs_ids frames.txt (mutually exclusive with --dates/--date_range)",
     )

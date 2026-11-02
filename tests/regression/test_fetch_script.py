@@ -14,7 +14,7 @@ is tested in test_script_helpers.py.
 
 import pytest
 
-from scripts._argparse import resolve_dates
+from scripts._argparse import resolve_dates, resolve_frame_selection
 from scripts.fetch import L0, L2, L4, _fetch, masters
 
 # scripts/CLI/tools-layer suite: excluded from `make test-fast`.
@@ -275,6 +275,55 @@ class TestConfirmVolume:
     def test_subjects_without_an_estimate_have_no_yes_flag(self):
         with pytest.raises(SystemExit):
             _parse([*_BASE, "--dates", "20240405", "--yes"])
+
+
+_OID1 = "KP.20240405.40113.57"
+_OID2 = "KP.20240712.00100.00"
+
+
+class TestObsIds:
+    """``--obs_ids`` on the per-frame subjects: the nights come from the obs_ids and
+    rsync is narrowed to the named frames' files."""
+
+    def _args(self, *extra, subject="L0", gb_per_night=70):
+        ap = _fetch.subject_parser(subject, "/data/kpf", "desc", gb_per_night, True)
+        return resolve_frame_selection(ap, ap.parse_args([*_BASE, *extra]))
+
+    def _run(self, monkeypatch, tmp_path, args):
+        seen = []
+        monkeypatch.setattr(_fetch, "fetch_night", lambda *a: seen.append(a) or True)
+        monkeypatch.setattr(_fetch, "close_ssh_connection", lambda *a: None)
+        monkeypatch.setattr("builtins.input", _boom)
+        args.local_dir = str(tmp_path)
+        assert _fetch.run(args) == 0
+        return seen
+
+    def test_obs_ids_from_cli_and_file(self, tmp_path):
+        listing = tmp_path / "frames.txt"
+        listing.write_text(f"{_OID2}\n")
+        assert self._args("--obs_ids", _OID1, str(listing)).obs_ids == [_OID1, _OID2]
+
+    def test_obs_ids_and_dates_are_exclusive(self):
+        with pytest.raises(SystemExit):
+            self._args("--obs_ids", _OID1, "--dates", "20240405")
+
+    def test_nights_and_l0_filters_come_from_the_obs_ids(self, monkeypatch, tmp_path):
+        seen = self._run(monkeypatch, tmp_path, self._args("--obs_ids", _OID2, _OID1))
+        assert [a[3] for a in seen] == ["20240405", "20240712"]
+        assert seen[0][5] == [
+            f"--include={_OID1}.fits",
+            f"--include={_OID2}.fits",
+            "--exclude=*",
+        ]
+
+    def test_l2_filters_use_the_product_filename(self, monkeypatch, tmp_path):
+        args = self._args("--obs_ids", _OID1, subject="L2", gb_per_night=None)
+        seen = self._run(monkeypatch, tmp_path, args)
+        assert seen[0][5] == ["--include=kpf_SL2_20240405T110833.fits", "--exclude=*"]
+
+    def test_masters_has_no_obs_ids_flag(self):
+        with pytest.raises(SystemExit):
+            masters.parse_args([*_BASE, "--all", "--obs_ids", _OID1])
 
 
 class TestSubjects:
