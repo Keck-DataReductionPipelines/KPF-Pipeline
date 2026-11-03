@@ -1,14 +1,14 @@
 catalog,pattern,canonical
 HD,"(?:HD\s*)?(\d{1,6})",HD {}
+HIP,HIP\s*(\d+),HIP {}
+WASP,WASP[\s-]*(\d+),WASP-{}
+KIC,KIC[\s-]*(\d+),KIC {}
+KOI,KOI[\s-]*(\d+),KOI-{}
+Kepler,Kepler[\s-]*(\d+),Kepler-{}
+K2,K2[\s-]*(\d+),K2-{}
+TOI,(?:TOI[\s-]*|T0*)(\d+),TOI-{}
+TIC,TIC[\s-]*(\d+),TIC {}
 Gaia,"Gaia[\s_]*(\d{10,19})",Gaia {}
 Gaia,"(\d{17,19})",Gaia {}
 Gaia,"(?:Gaia[\s_]*)?EDR3[\s_]*(\d{10,19})",Gaia DR3 {}
 Gaia,"(?:Gaia[\s_]*)?(DR[23])[\s_]*(\d{10,19})",Gaia {} {}
-HIP,HIP\s*(\d+),HIP {}
-TOI,(?:TOI[\s-]*|T0*)(\d+),TOI-{}
-Kepler,Kepler[\s-]*(\d+),Kepler-{}
-KOI,KOI[\s-]*(\d+),KOI-{}
-K2,K2[\s-]*(\d+),K2-{}
-TIC,TIC[\s-]*(\d+),TIC {}
-KIC,KIC[\s-]*(\d+),KIC {}
-WASP,WASP[\s-]*(\d+),WASP-{}

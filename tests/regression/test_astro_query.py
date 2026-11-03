@@ -9,12 +9,13 @@ That is enforced, not just intended -- tests/conftest.py blocks connects to the
 catalog hosts for the whole suite.
 """
 
+import csv
 import json
 import logging
 import re
 import subprocess
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -604,17 +605,6 @@ class TestExternalQueries:
         row = _simbad_table({"main_id": main_id, "ids": ids})[0]
         assert AstroQuery._simbad_common_name(row) == expected
 
-    def test_aliases(self):
-        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
-        aq._gaia = {"object": "Gaia DR3 12345"}
-        aq._common_name = "tau Cet"
-        assert aq._aliases() == "HD 10700; Gaia DR3 12345; tau Cet"
-
-    def test_aliases_drops_unresolved_and_duplicate_names(self):
-        aq = AstroQuery(_l0_for_query(OBJECT="HD 219134"))
-        aq._common_name = "HD 219134"  # main_id fallback, no Gaia row
-        assert aq._aliases() == "HD 219134"
-
     def test_verify_units_missing_and_mismatch_raises(self):
         units = AstroQuery._GAIA_UNITS
         AstroQuery._verify_units(_gaia_table(), units, "Gaia DR3")  # no raise
@@ -840,9 +830,7 @@ class TestExternalQueries:
         with _patch_simbad(inst), caplog.at_level(logging.WARNING):
             assert aq.query_simbad() is None
         assert inst.query_object.call_count == 1
-        assert "SIMBAD resolved OBJECT 'TOI-1338 B' to planet 'TOI-1338b'" in (
-            caplog.text
-        )
+        assert "SIMBAD resolved 'TOI-1338 B' to planet 'TOI-1338b'" in (caplog.text)
 
     def test_query_simbad_accepts_non_stellar_object(self):
         aq = AstroQuery(_l0_for_query(OBJECT="M 31"))
@@ -1105,10 +1093,14 @@ def _perform(**config):
     aq = AstroQuery(l0, config or None)
     with (
         _patch_gaia(_gaia_job(_gaia_table({"ra": 10.0}))),
-        _patch_simbad(_simbad_instance(_simbad_table({"ra": 20.0}))),
+        _patch_simbad(_simbad_instance(_simbad_table({"ra": 20.0, "ids": _IDS}))),
     ):
         aq.perform()
     return aq, aq.l0_obj.data["CATALOG_RECORD"]
+
+
+# SIMBAD identifiers agreeing with _perform's GAIAID.
+_IDS = "HD  10700|* tau Cet|Gaia DR3 12345"
 
 
 def _kpf_drp_row(record):
@@ -1124,31 +1116,30 @@ class TestPerform:
     wrong attribute -- which would invert the gaia > simbad precedence silently.
     """
 
-    def test_gaia_named_object_resolves_without_duplicate_aliases(self):
-        # A bare Gaia OBJECT/GAIAID: Gaia adds the release, SIMBAD then names the
-        # star (in ALIASES only), and ALIASES lists each name once.
+    def test_gaia_named_object_takes_high_tier_name(self):
+        # A bare Gaia OBJECT/GAIAID: Gaia adds the release, then the low-tier Gaia
+        # OBJECT takes SIMBAD's catalogued name; ALIASES lists each name once.
         l0 = _l0_for_query(
             GAIAID="Gaia 2452378776434477184", OBJECT="Gaia 2452378776434477184"
         )
         aq = AstroQuery(l0)
         client = MagicMock()
         client.run_sync.side_effect = _release_aware_run_sync(present={"DR3"})
-        table = _simbad_table({"main_id": "* tau Cet", "ids": "HD  10700|* tau Cet"})
         with (
             patch("kpfpipe.modules.astro_query.gaia_client", return_value=client),
-            _patch_simbad(_simbad_instance(table)),
+            _patch_simbad(_simbad_instance(_simbad_table())),
         ):
             aq.perform()
         primary = l0.headers["PRIMARY"]
         designation = "Gaia DR3 2452378776434477184"
-        assert (primary["GAIAID"], primary["OBJECT"]) == (designation, designation)
-        assert primary["ALIASES"] == f"{designation}; tau Cet"
+        assert (primary["GAIAID"], primary["OBJECT"]) == (designation, "HD 10700")
+        assert primary["ALIASES"] == f"HD 10700; {designation}; tau Cet"
 
     def test_each_query_lands_on_its_own_attribute(self):
         aq, _ = _perform()
         assert aq._gaia["object"] == "Gaia DR3 12345"  # from GAIAID, via query_gaia
         # Cited catalog's designation, via query_simbad
-        assert aq._simbad["object"] == "Gaia DR3 2452378776434477184"
+        assert aq._simbad["object"] == "Gaia DR3 12345"
         assert aq._gaia["ra"] == _ra_str(10.0)
         assert aq._simbad["ra"] == _ra_str(20.0)
 
@@ -1173,10 +1164,15 @@ class TestPerform:
         assert "simbad" in record["source"]
 
     def test_aliases_written_to_primary(self):
-        # The SIMBAD common name of the mocked table is 'tau Cet', already the
-        # resolvable name here, so it de-duplicates away.
+        # OBJECT 'tau Cet' is high tier and kept, listed first; the common name
+        # 'tau Cet' de-duplicates away. (Order is covered by TestResolveIdentity;
+        # the short fixture id is no catalogued Gaia id.)
         aq, _ = _perform()
-        assert aq.l0_obj.headers["PRIMARY"]["ALIASES"] == "tau Cet; Gaia DR3 12345"
+        primary = aq.l0_obj.headers["PRIMARY"]
+        assert primary["OBJECT"] == "tau Cet"
+        aliases = primary["ALIASES"].split("; ")
+        assert aliases[0] == "tau Cet"
+        assert sorted(aliases) == ["Gaia DR3 12345", "HD 10700", "tau Cet"]
 
     def test_gaia_off_falls_through_to_simbad(self):
         # The provenance must follow the merge down rather than stay "gaia".
@@ -1185,7 +1181,7 @@ class TestPerform:
         row = _kpf_drp_row(record)
         assert row["ra"] == _ra_str(20.0)
         assert row["radec_src"] == "simbad"
-        assert row["object"] == "Gaia DR3 2452378776434477184"
+        assert row["object"] == "Gaia DR3 12345"
 
     @staticmethod
     def _perform_simbad_gaiaid(gaiaid, gaia_table, caplog, **config):
@@ -1210,11 +1206,12 @@ class TestPerform:
         row = _kpf_drp_row(aq.l0_obj.data["CATALOG_RECORD"])
         assert (row["radec_src"], row["ra"]) == ("gaia", _ra_str(10.0))
 
-    def test_unmatched_header_gaiaid_not_replaced(self, caplog):
-        # A header id Gaia can't find is a disagreement, not a blank: kept as is.
-        aq, _ = self._perform_simbad_gaiaid("Gaia DR3 12345", Table(), caplog)
-        assert aq.l0_obj.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 12345"
-        assert aq._gaia is None
+    def test_header_gaiaid_contradicted_by_simbad_raises(self, caplog):
+        # SIMBAD's match for OBJECT lists another DR3 id: the cards name different
+        # stars. Never replaced, never accepted.
+        with pytest.raises(HeaderError, match="name different stars") as err:
+            self._perform_simbad_gaiaid("Gaia DR3 12345", Table(), caplog)
+        assert "L0 header must be fixed:" in str(err.value)
         assert "filled from SIMBAD" not in caplog.text
 
     @pytest.mark.parametrize(
@@ -1256,6 +1253,84 @@ class TestPerform:
         )
         assert aq.l0_obj.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 2452378776434477184"
         assert run_sync.call_count == 0
+
+
+def test_identity_tiers_cover_every_alias_catalog():
+    # The tiers, not the csv's row order, set the naming preference, so every
+    # catalog kpf_target_name can return must sit in exactly one tier.
+    with open(f"{REPO_ROOT}/reference/star_catalog_aliases.csv", newline="") as f:
+        catalogs = {row["catalog"] for row in csv.DictReader(f)}
+    tiers = AstroQuery._HIGH_TIER + AstroQuery._LOW_TIER
+    assert sorted(tiers) == sorted(catalogs)
+
+
+class TestResolveIdentity:
+    """perform() settles OBJECT/ALIASES by one rule: a high-tier header OBJECT is
+    kept; Unknown or a Gaia/TIC/KIC id takes the first catalogued high-tier alias
+    (catalog order, HD first); a contradicting SIMBAD match raises."""
+
+    # SIMBAD identifiers of TOI-2473 = HD 287319 (DR2 and DR3 source_ids differ).
+    _TOI_IDS = (
+        "TIC 399868187|Gaia DR3 3291551614399361152|BD+10   678|HD 287319|"
+        "Gaia DR2 3291551614397199360|TOI-2473"
+    )
+
+    @staticmethod
+    def _perform(obj, gaiaid, simbad_table, caplog=None):
+        aq = AstroQuery(_l0_for_query(OBJECT=obj, GAIAID=gaiaid))
+        inst = _simbad_instance(simbad_table)
+        with (
+            _patch_gaia(_gaia_job(_gaia_table())),
+            _patch_simbad(inst),
+            caplog.at_level(logging.INFO) if caplog else nullcontext(),
+        ):
+            aq.perform()
+        return aq.l0_obj.headers["PRIMARY"], inst
+
+    def test_unknown_resolved_via_gaiaid(self, caplog):
+        # Alias cards '201092'/'61 Cyg B': SIMBAD is asked for the GAIAID, and its
+        # identifiers name the star.
+        gaiaid = "Gaia DR3 1872046574983497216"
+        ids = (
+            "TIC 165602023|Gaia DR3 1872046574983497216|*  61 Cyg B|HD 201092|"
+            "HIP 104217|Gaia DR2 1872046574983497216"
+        )
+        table = _simbad_table({"main_id": "*  61 Cyg B", "ids": ids})
+        primary, inst = self._perform("Unknown", gaiaid, table, caplog)
+        assert inst.query_object.call_args.args[0] == gaiaid
+        assert primary["OBJECT"] == "HD 201092"
+        assert primary["ALIASES"] == (
+            "HD 201092; HIP 104217; Gaia DR3 1872046574983497216; "
+            "Gaia DR2 1872046574983497216; TIC 165602023; 61 Cyg B"
+        )
+        assert "OBJECT 'HD 201092' (resolved from 'Unknown'); ALIASES" in caplog.text
+
+    def test_high_tier_object_kept(self):
+        # TOI-2473 is not renamed HD 287319; the DR2 id differing from the DR3
+        # GAIAID is no conflict.
+        table = _simbad_table({"main_id": "HD 287319", "ids": self._TOI_IDS})
+        primary, _ = self._perform("TOI-2473", "Gaia DR3 3291551614399361152", table)
+        assert primary["OBJECT"] == "TOI-2473"
+        assert primary["ALIASES"].startswith("TOI-2473; HD 287319; Gaia DR3 ")
+
+    def test_low_tier_object_takes_high_tier_name(self):
+        table = _simbad_table({"main_id": "HD 287319", "ids": self._TOI_IDS})
+        primary, _ = self._perform(
+            "TIC 399868187", "Gaia DR3 3291551614399361152", table
+        )
+        assert primary["OBJECT"] == "HD 287319"
+
+    def test_object_missing_from_simbad_match_raises(self):
+        table = _simbad_table({"main_id": "HD 287319", "ids": self._TOI_IDS})
+        with pytest.raises(HeaderError, match="not an identifier") as err:
+            self._perform("HD 10700", "Gaia DR3 3291551614399361152", table)
+        assert "L0 header must be fixed:" in str(err.value)
+
+    def test_unknown_without_simbad_takes_gaia_designation(self, caplog):
+        gaiaid = "Gaia DR3 1872046574983497216"
+        primary, _ = self._perform("Unknown", gaiaid, Table(), caplog)
+        assert (primary["OBJECT"], primary["ALIASES"]) == (gaiaid, gaiaid)
+        assert "SIMBAD gave no identifiers" in caplog.text
 
 
 class TestConstructor:

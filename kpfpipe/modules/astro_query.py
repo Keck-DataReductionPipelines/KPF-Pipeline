@@ -9,11 +9,13 @@ astrometry (no query), merges them into a canonical ``kpf-drp`` row, and writes 
 four rows to the L0 ``CATALOG_RECORD`` extension.
 
 All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_SCHEMA``), so
-the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards; the resolved names
-are joined into ``ALIASES``. AstroQuery writes no other PRIMARY card except to
-complete GAIAID: the release Gaia resolves for a bare GAIAID (also on an OBJECT naming
-it), or SIMBAD's Gaia designation for a blank one. Target names sent to or received
-from SIMBAD go through ``kpf_target_name``.
+the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards. Every frame's
+identity is then settled the same way (``_resolve_identity``): the header OBJECT and
+GAIAID are checked against the catalog matches, and OBJECT and ``ALIASES`` are written
+from the catalog aliases. AstroQuery writes no other PRIMARY card except to complete
+GAIAID: the release Gaia resolves for a bare GAIAID (also on an OBJECT naming it), or
+SIMBAD's Gaia designation for a blank one. Target names sent to or received from
+SIMBAD go through ``kpf_target_name``.
 """
 
 import logging
@@ -63,8 +65,8 @@ class AstroQuery:
     ----------
     l0_obj : KPF0
         Standardized L0 science frame (OBSTYPE ``Target``). Its PRIMARY header
-        (OBSTYPE, ISSOLAR, GAIAID, OBJECT, TARG*) is read; GAIAID, and OBJECT if it
-        names the same bare Gaia id, are completed only as the module docstring says.
+        (OBSTYPE, ISSOLAR, GAIAID, OBJECT, TARG*) is read; OBJECT, ALIASES and GAIAID
+        are written only as the module docstring says.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: do_gaia_query, do_simbad_query,
         astrometry_priority, query_timeout.
@@ -116,6 +118,7 @@ class AstroQuery:
         self._gaia = None  # Gaia record; set by query_gaia()
         self._simbad = None  # SIMBAD record; set by query_simbad()
         self._common_name = None  # SIMBAD common name; set by query_simbad()
+        self._simbad_ids = []  # SIMBAD ids (_simbad_name); set by query_simbad()
         self._canonical = None  # merged kpf-drp record; set by merge_catalog_records()
         self._info = None
 
@@ -125,6 +128,13 @@ class AstroQuery:
 
     # Sources that can supply a CATALOG_RECORD row, highest catalog priority first.
     _SOURCES = ("gaia", "simbad", "wmko")
+
+    # Catalogs of the ids ``_resolve_identity`` names OBJECT from, most preferred
+    # first; together the tiers list every catalog in
+    # reference/star_catalog_aliases.csv. The low tier is the purely numeric ids,
+    # which name OBJECT only when no high-tier id names the star.
+    _HIGH_TIER = ("HD", "HIP", "TOI", "Kepler", "KOI", "K2", "WASP")
+    _LOW_TIER = ("Gaia", "TIC", "KIC")
 
     def _validate_priority(self):
         """Reject an astrometry_priority naming an unknown or no source.
@@ -232,34 +242,107 @@ class AstroQuery:
         )
 
     @staticmethod
-    def _simbad_common_name(row):
+    def _simbad_name(simbad_id):
+        """A SIMBAD identifier stripped of its marker ('NAME ', 'V*', '*') and
+        padding, and canonicalized (``kpf_target_name``): 'HD  21019A' ->
+        'HD 21019 A', '*  61 Cyg B' -> '61 Cyg B'."""
+        name = simbad_id.strip().removeprefix("NAME ").removeprefix("V*").lstrip("*")
+        return kpf_target_name(" ".join(name.split()))[1]
+
+    @classmethod
+    def _simbad_common_name(cls, row):
         """The common name in a SIMBAD result row: its proper name ('NAME Vega' among
         the ``ids``) else ``main_id``, SIMBAD's own preferred identifier ('* tau Cet'
-        for HD 10700), stripped of the marker and identifier padding and canonicalized
-        (``kpf_target_name``). For a star with neither, main_id is a catalog
-        designation that ``_aliases`` de-duplicates.
+        for HD 10700), via ``_simbad_name``. For a star with neither, main_id is a
+        catalog designation that ALIASES de-duplicates.
         """
         ids = str(row["ids"]).split("|")
-        name = next((i for i in ids if i.startswith("NAME ")), str(row["main_id"]))
-        return kpf_target_name(
-            " ".join(name.removeprefix("NAME ").removeprefix("*").split())
-        )[1]
+        return cls._simbad_name(
+            next((i for i in ids if i.startswith("NAME ")), str(row["main_id"]))
+        )
 
-    def _aliases(self):
-        """The ALIASES value: the OBJECT (unless ``Unknown``), the Gaia-resolvable
-        designation and the common name, '; ' separated, skipping any unavailable or
-        already listed.
+    def _resolve_identity(self):
+        """Check the header identity against the catalog matches, then write the
+        PRIMARY OBJECT and ALIASES -- the same rule for every frame.
+
+        Aliases are the header OBJECT (unless ``Unknown``), the Gaia designation and
+        every SIMBAD identifier in a known catalog (``kpf_target_name``), plus the
+        SIMBAD common name, which goes on ALIASES only. Identifiers fall in two
+        tiers (``_LOW_TIER``: purely numeric Gaia/TIC/KIC ids; all other names are
+        high). OBJECT is the header OBJECT if high tier, so a good name is never
+        renamed (TOI-2473 stays though SIMBAD lists HD 287319); else the most
+        preferred high-tier alias (``_HIGH_TIER``, HD first), e.g. Unknown ->
+        HD 201092 for alias cards '201092'/'61 Cyg B' located by GAIAID; else the
+        low-tier one. ALIASES lists OBJECT, then the other catalogued aliases by
+        preference (``_HIGH_TIER`` then ``_LOW_TIER``), then the common name.
+
+        Raises
+        ------
+        HeaderError
+            When SIMBAD's match contradicts the header: its identifiers omit the
+            header OBJECT, or list a Gaia id of GAIAID's release other than GAIAID.
+            The cards name different stars; the L0 header must be fixed.
         """
-        obj = self.l0_obj.headers["PRIMARY"]["OBJECT"]
-        aliases = []
-        for name in (
-            obj if obj != "Unknown" else None,
-            self._gaia["object"] if self._gaia else None,
-            self._common_name,
-        ):
-            if name and name not in aliases:
-                aliases.append(name)
-        return "; ".join(aliases)
+        primary = self.l0_obj.headers["PRIMARY"]
+        obj, gaiaid = primary["OBJECT"], primary["GAIAID"]
+        label = self.l0_obj.obs_id or "unknown"
+        simbad_ids = self._simbad_ids
+        if self._simbad:
+            listed = {i.casefold() for i in simbad_ids}
+            if obj != "Unknown" and obj.casefold() not in listed:
+                raise HeaderError(
+                    f"{label}: OBJECT {obj!r} is not an identifier of the star "
+                    f"SIMBAD matched ({self._common_name!r}); the cards name different "
+                    "stars. L0 header must be fixed: correct OBJECT/TARGNAME."
+                )
+            release = gaiaid.rsplit(" ", 1)[0] + " " if gaiaid else None
+            same_release = {
+                i.split()[-1]
+                for i in simbad_ids
+                if release and i.startswith(release) and kpf_target_name(i)[0] == "Gaia"
+            }
+            if same_release and gaiaid.split()[-1] not in same_release:
+                raise HeaderError(
+                    f"{label}: GAIAID {gaiaid!r} and OBJECT {obj!r} name different "
+                    f"stars: SIMBAD's match ({self._common_name!r}) has "
+                    f"{release.strip()} source_id {sorted(same_release)}. L0 header "
+                    "must be fixed: make OBJECT and GAIAID name the same source."
+                )
+        else:
+            logger.warning(
+                "SIMBAD gave no identifiers; OBJECT and ALIASES from the header "
+                "OBJECT and Gaia designation only"
+            )
+
+        def low(name):
+            return kpf_target_name(name)[0] in self._LOW_TIER
+
+        def order(name):  # catalog preference; an uncatalogued header OBJECT first
+            catalog = kpf_target_name(name)[0]
+            return (self._HIGH_TIER + self._LOW_TIER).index(catalog) if catalog else -1
+
+        names = [obj] if obj != "Unknown" else []
+        names += [self._gaia["object"]] if self._gaia else []
+        names += [i for i in simbad_ids if kpf_target_name(i)[0]]
+        # De-duplicated; the stable sort keeps the header's, then Gaia's, first.
+        names = sorted(dict.fromkeys(names), key=order)
+        high = [n for n in names if not low(n)]
+        if obj != "Unknown" and not low(obj):
+            new = obj
+        elif high:
+            new = high[0]
+        else:  # low tier only; Unknown stays only with both queries off
+            new = obj if obj != "Unknown" or not names else names[0]
+        aliases = "; ".join(
+            dict.fromkeys(
+                n for n in (new, *names, self._common_name) if n and n != "Unknown"
+            )
+        )
+        if new != obj:
+            self.l0_obj.set_keyword("OBJECT", new)
+        resolved = f" (resolved from {obj!r})" if new != obj else ""
+        logger.info("OBJECT %r%s; ALIASES %r", new, resolved, aliases)
+        self.l0_obj.set_keyword("ALIASES", aliases)
 
     @staticmethod
     def _scalar(value):
@@ -600,22 +683,27 @@ class AstroQuery:
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
-        OBJECT is sent canonical and never rewritten; a blank GAIAID is filled
-        (``_fill_gaiaid``). Returns None (warned) when OBJECT is ``Unknown`` or a
-        Gaia designation without a release, when the lookup fails on every mirror or
-        resolves nothing, or when it resolves to a planet (SIMBAD matches
-        case-insensitively, so a component letter can name one). Raises ValueError
-        if the result's column units differ from ``_SIMBAD_UNITS`` (astroquery
-        0.4.11's lowercase form, with the Johnson B/V magnitudes unitless).
+        OBJECT is sent canonical; an ``Unknown`` OBJECT (often alias cards; see
+        HeaderParser._target_object) sends GAIAID instead, which HeaderParser
+        guarantees is set, so SIMBAD's identifiers can name the star
+        (``_resolve_identity``). A blank GAIAID is filled (``_fill_gaiaid``). Returns
+        None (warned) when the name sent is ``Unknown`` or a Gaia designation without
+        a release, when the lookup fails on every mirror or resolves nothing, or when
+        it resolves to a planet (SIMBAD matches case-insensitively, so a component
+        letter can name one). Raises ValueError if the result's column units differ
+        from ``_SIMBAD_UNITS`` (astroquery 0.4.11's lowercase form, with the Johnson
+        B/V magnitudes unitless).
         """
-        obj = self.l0_obj.headers["PRIMARY"]["OBJECT"]
-        obj_catalog, query_name, _ = kpf_target_name(obj)
-        # SIMBAD resolves a Gaia designation only with its release. An Unknown
-        # OBJECT (often alias cards; see HeaderParser._target_object) always
-        # carries a GAIAID, else HeaderParser raised, so Gaia locates the star.
-        if obj == "Unknown" or (obj_catalog == "Gaia" and len(query_name.split()) == 2):
+        primary = self.l0_obj.headers["PRIMARY"]
+        obj = primary["OBJECT"]
+        name = primary["GAIAID"] if obj == "Unknown" and primary["GAIAID"] else obj
+        catalog, query_name, _ = kpf_target_name(name)
+        # SIMBAD resolves a Gaia designation only with its release.
+        if name == "Unknown" or (catalog == "Gaia" and len(query_name.split()) == 2):
             logger.warning(
-                "OBJECT %r is not a SIMBAD name; SIMBAD astrometry unavailable", obj
+                "%r is not a SIMBAD name (OBJECT %r); SIMBAD astrometry unavailable",
+                name,
+                obj,
             )
             return None
         fields = tuple(
@@ -647,12 +735,15 @@ class AstroQuery:
         row = result[0]
         if str(row["otype"]).strip() in ("Pl", "Pl?"):
             logger.warning(
-                "SIMBAD resolved OBJECT %r to planet %r; SIMBAD astrometry unavailable",
-                obj,
+                "SIMBAD resolved %r to planet %r; SIMBAD astrometry unavailable",
+                query_name,
                 str(row["main_id"]),
             )
             return None
         self._common_name = self._simbad_common_name(row)
+        self._simbad_ids = [
+            self._simbad_name(i) for i in str(row["ids"]).split("|") if i.strip()
+        ]
         self._fill_gaiaid(row)
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
@@ -663,7 +754,7 @@ class AstroQuery:
         color, color_name = self._color(
             self._scalar(row["B"]), self._scalar(row["V"]), "B-V"
         )
-        catalog, designation = self._simbad_catalog(row, obj)
+        catalog, designation = self._simbad_catalog(row, query_name)
         record = {
             "object": designation,
             "catalog": catalog,
@@ -981,7 +1072,8 @@ class AstroQuery:
         l0_obj : KPF0
             The input L0, with the ``wmko``/``gaia``/``simbad`` and merged ``kpf-drp``
             rows written to ``CATALOG_RECORD``, the canonical astrometry overlaid onto
-            the SCI-fiber ``C*#`` PRIMARY cards, the resolved names on ``ALIASES``, plus
+            the SCI-fiber ``C*#`` PRIMARY cards, OBJECT and ``ALIASES`` written by
+            ``_resolve_identity``, plus
             an 'astro_query' receipt entry. A blank GAIAID that SIMBAD fills is
             queried on Gaia after SIMBAD.
             Unusually for a pipeline module this returns an L0, not the next level --
@@ -990,7 +1082,8 @@ class AstroQuery:
         Raises
         ------
         HeaderError
-            A bare GAIAID that no Gaia release contains (the L0 header must fix it).
+            A bare GAIAID that no Gaia release contains, or a header OBJECT/GAIAID
+            that SIMBAD's match contradicts (the L0 header must fix it).
         ValueError
             No enabled catalog query resolved the target (identity unresolved), or
             no source named in ``astrometry_priority`` supplied a complete
@@ -1045,7 +1138,7 @@ class AstroQuery:
         # enrichment: a card with no catalog value stays present and blank.
         for keyword, value in self._catalog_primary_cards().items():
             self.l0_obj.set_keyword(keyword, value)
-        self.l0_obj.set_keyword("ALIASES", self._aliases())
+        self._resolve_identity()
 
         self._track_info()
         self.l0_obj.receipt_add_entry("astro_query", "", "PASS")

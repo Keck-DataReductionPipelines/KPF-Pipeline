@@ -416,9 +416,10 @@ class HeaderParser:
         test labels, or solar-system bodies (only one named body reaches
         AstroQuery's solar-system stop; a stale GAIAID on the others fails
         TARGETOK). In the 2026-11-01 campaign ~2,000 of ~34,000 Target frames
-        were ``Unknown``; ~97% had a GAIAID and reduce normally, labelled
-        ``Unknown``. With GAIAID blank nothing locates the target (SIMBAD needs
-        a name), so fail here rather than at the AstroQuery merge.
+        were ``Unknown``; ~97% had a GAIAID, from which AstroQuery resolves
+        OBJECT (``AstroQuery._resolve_identity``). With GAIAID blank nothing
+        locates the target (SIMBAD needs a name or GAIAID), so fail here rather
+        than in AstroQuery.
         """
         native = self.WMKO_HEADER
         context = (
@@ -435,8 +436,8 @@ class HeaderParser:
         catalog, gaiaid, _ = kpf_target_name(raw)
         if catalog == "Gaia":  # else _gaiaid raises on the malformed card
             self._warn(
-                f"{context}; astrometry from GAIAID {gaiaid!r}, products are "
-                "labelled OBJECT 'Unknown'"
+                f"{context}; AstroQuery resolves OBJECT and astrometry from GAIAID "
+                f"{gaiaid!r}"
             )
         return "Unknown"
 

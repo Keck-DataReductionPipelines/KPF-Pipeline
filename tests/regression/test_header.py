@@ -2,6 +2,7 @@
 native L0 PRIMARY header."""
 
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -864,3 +865,13 @@ class TestKpfTargetName:
     )
     def test_canonical(self, name, expected):
         assert kpf_target_name(name) == expected
+
+    def test_name_matching_several_rows_raises(self, monkeypatch):
+        # Row order never picks a winner: overlapping patterns are a csv bug.
+        rows = [
+            ("HD", re.compile(r"(\d+)"), "HD {}"),
+            ("HIP", re.compile(r"(\d+)"), "HIP {}"),
+        ]
+        monkeypatch.setattr("kpfpipe.utils.kpf._STAR_CATALOG_ALIASES", rows)
+        with pytest.raises(ValueError, match="matches several"):
+            kpf_target_name("10700")
