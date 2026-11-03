@@ -1,6 +1,7 @@
 """obs_id, datecode, and timestamp parsing, UTC/HST and KPF/EPRV conversions,
-and per-era reference selection."""
+per-era reference selection, and target-name canonicalization."""
 
+import csv
 import glob
 import os
 import re
@@ -8,7 +9,15 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from kpfpipe import INSTRUMENT_ERAS
+from kpfpipe import INSTRUMENT_ERAS, REPO_ROOT
+
+# Known target-name aliases: (catalog, compiled pattern, canonical format), in file
+# order; the first full, case-insensitive match names the target.
+with open(REPO_ROOT / "reference/star_catalog_aliases.csv", newline="") as _f:
+    _STAR_CATALOG_ALIASES = [
+        (row["catalog"], re.compile(row["pattern"], re.IGNORECASE), row["canonical"])
+        for row in csv.DictReader(_f)
+    ]
 
 # The obs_id/KOAID shape, as a string so utils/io.py can embed it in the larger
 # filename patterns it builds, and compiled here for matching.
@@ -236,3 +245,31 @@ def select_era_reference(pattern, kind, primary, obs_id, eras):
             f"No {kind} measured before {obs_time} within KPF instrument era {instera}"
         )
     return in_era[max(in_era)]
+
+
+def kpf_target_name(name):
+    """``(catalog, name, planet)`` of the first known alias `name` matches, else
+    ``(None, name, None)``: the one apparatus for target identifiers
+    (reference/star_catalog_aliases.csv).
+
+    The canonical name is what HeaderParser writes to OBJECT and what AstroQuery
+    sends to SIMBAD. E.g. 'HD57555', 'HD 57555' and '57555' -> ('HD', 'HD 57555', None);
+    'T001824' -> ('TOI', 'TOI-1824', None). A trailing letter on a known id is a
+    stellar component if uppercase or 'a' ('hd21019a' -> ('HD', 'HD 21019 A',
+    None)), else a planet, dropped and returned ('HD 189733b' -> ('HD',
+    'HD 189733', 'b')). Gaia, TIC and KIC ids are purely numeric and take no
+    letter.
+    """
+    for catalog, pattern, canonical in _STAR_CATALOG_ALIASES:
+        match = pattern.fullmatch(name)
+        if match:
+            return catalog, canonical.format(*(g.upper() for g in match.groups())), None
+    lettered = re.fullmatch(r"(.*\d)\s*([A-Za-z])", name)
+    if lettered:
+        catalog, host, _ = kpf_target_name(lettered[1])
+        letter = lettered[2]
+        if catalog and catalog not in ("Gaia", "TIC", "KIC"):
+            if letter.isupper() or letter == "a":
+                return catalog, f"{host} {letter.upper()}", None
+            return catalog, host, letter
+    return None, name, None

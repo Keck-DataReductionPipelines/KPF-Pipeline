@@ -12,12 +12,11 @@ All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_SCHEMA`
 the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards; the resolved names
 are joined into ``ALIASES``. Those two families are the only PRIMARY cards AstroQuery
 writes, besides recording a resolution on GAIAID/OBJECT: the release Gaia resolves
-for a bare GAIAID, SIMBAD's Gaia designation for a blank GAIAID, and SIMBAD's common
-name for a Gaia-named OBJECT.
+for a bare GAIAID, and SIMBAD's Gaia designation for a blank GAIAID. Every target
+identifier sent to or received from SIMBAD goes through ``kpf_target_name``.
 """
 
 import logging
-import re
 
 import astropy.units as u
 import numpy as np
@@ -28,6 +27,7 @@ from astropy.time import Time
 from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT, SCI_FIBERS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.kpf import kpf_target_name
 from kpfpipe.utils.network import gaia_client, query_mirrors, simbad_client
 
 logger = logging.getLogger(__name__)
@@ -230,12 +230,15 @@ class AstroQuery:
     def _simbad_common_name(row):
         """The common name in a SIMBAD result row: its proper name ('NAME Vega' among
         the ``ids``) else ``main_id``, SIMBAD's own preferred identifier ('* tau Cet'
-        for HD 10700), stripped of the marker and identifier padding. For a star with
-        neither, main_id is a catalog designation that ``_aliases`` de-duplicates.
+        for HD 10700), stripped of the marker and identifier padding and canonicalized
+        (``kpf_target_name``). For a star with neither, main_id is a catalog
+        designation that ``_aliases`` de-duplicates.
         """
         ids = str(row["ids"]).split("|")
         name = next((i for i in ids if i.startswith("NAME ")), str(row["main_id"]))
-        return " ".join(name.removeprefix("NAME ").removeprefix("*").split())
+        return kpf_target_name(
+            " ".join(name.removeprefix("NAME ").removeprefix("*").split())
+        )[1]
 
     def _aliases(self):
         """The ALIASES value: the OBJECT (unless ``Unknown``), the Gaia-resolvable
@@ -528,6 +531,7 @@ class AstroQuery:
         "main_id": None,
         "ids": None,
         "coo_bibcode": None,
+        "otype": None,
     }
 
     # SIMBAD coordinate reference (coo_bibcode) -> (catalog label for CSRC#, the
@@ -550,7 +554,8 @@ class AstroQuery:
 
     def _simbad_catalog(self, row, name):
         """``(catalog, designation)`` of a SIMBAD row's coordinates: the catalog its
-        coo_bibcode cites and the star's id in it (``name`` when SIMBAD lists none).
+        coo_bibcode cites and the star's id in it, canonicalized (``kpf_target_name``;
+        ``name`` when SIMBAD lists none).
         An unrecognized bibcode is warned and labelled 'Simbad Query (catalog
         unknown)'.
         """
@@ -565,32 +570,39 @@ class AstroQuery:
             return "Simbad Query (catalog unknown)", name
         catalog, prefix = self._SIMBAD_CATALOGS[bibcode]
         ids = (i.strip() for i in str(row["ids"]).split("|"))
-        return catalog, next((i for i in ids if i.startswith(prefix)), name)
+        designation = next((i for i in ids if i.startswith(prefix)), None)
+        return catalog, kpf_target_name(designation)[1] if designation else name
 
     def query_simbad(self):
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
-        A Gaia-named OBJECT (with its release) that SIMBAD resolves becomes SIMBAD's
-        common name; a blank GAIAID becomes SIMBAD's Gaia designation (DR3, else
-        DR2), warned. Returns None (warned, not raised) when OBJECT is ``Unknown`` or a
-        Gaia designation without a release, or when the
-        lookup fails on every mirror (``query_mirrors``) or resolves nothing. Raises
+        OBJECT is sent canonical (``kpf_target_name``);
+        the common name and designation SIMBAD returns are canonicalized and OBJECT
+        itself is never rewritten. A blank GAIAID becomes SIMBAD's Gaia designation
+        (DR3, else DR2), canonicalized and warned; one that is no Gaia id is warned
+        and not filled. Returns None (warned, not raised) when OBJECT is ``Unknown``
+        or a Gaia designation without a release, when the lookup fails on every
+        mirror (``query_mirrors``) or resolves nothing, or when it resolves to a
+        planet (otype 'Pl'/'Pl?'; SIMBAD matches case-insensitively, so a component
+        letter can name one). Any other otype (stars, galaxies, ...) is accepted.
+        Raises
         ValueError if the result's column units differ from the assumed schema: the
         astroquery 0.4.11 lowercase form (ra/dec deg, pmra/pmdec mas/yr, plx_value mas,
         rvz_radvel km/s), where the Johnson B/V magnitudes come back unlabeled (unit
         None) and form the B-V color. Gated in perform by ``do_simbad_query``.
         """
-        name = self.l0_obj.headers["PRIMARY"]["OBJECT"]
+        obj = self.l0_obj.headers["PRIMARY"]["OBJECT"]
+        catalog, name, _ = kpf_target_name(obj)
         # SIMBAD resolves a Gaia designation only with its release.
-        if name == "Unknown" or re.fullmatch(r"Gaia \d+", name):
+        if obj == "Unknown" or (catalog == "Gaia" and len(name.split()) == 2):
             logger.warning(
-                "OBJECT %r is not a SIMBAD name; SIMBAD astrometry unavailable", name
+                "OBJECT %r is not a SIMBAD name; SIMBAD astrometry unavailable", obj
             )
             return None
-        logger.info("querying SIMBAD for %r", name)
         fields = tuple(
             f for f in self._SIMBAD_UNITS if f not in ("ra", "dec", "main_id")
         )
+        logger.info("querying SIMBAD for %r", name)
         try:
             result = query_mirrors(
                 lambda m: simbad_client(m, fields, self.query_timeout).query_object(
@@ -613,20 +625,32 @@ class AstroQuery:
             return None
         self._verify_units(result, self._SIMBAD_UNITS, "SIMBAD")
         row = result[0]
+        if str(row["otype"]).strip() in ("Pl", "Pl?"):
+            logger.warning(
+                "SIMBAD resolved OBJECT %r to planet %r; SIMBAD astrometry unavailable",
+                obj,
+                str(row["main_id"]),
+            )
+            return None
         self._common_name = self._simbad_common_name(row)
         primary = self.l0_obj.headers["PRIMARY"]
         if not primary["GAIAID"]:
             ids = [i.strip() for i in str(row["ids"]).split("|")]
-            gaiaid = next(
+            simbad_id = next(
                 (i for p in ("Gaia DR3 ", "Gaia DR2 ") for i in ids if i.startswith(p)),
                 None,
             )
-            if gaiaid:
-                logger.warning("GAIAID blank; filled from SIMBAD as %r", gaiaid)
-                self.l0_obj.set_keyword("GAIAID", gaiaid)
-        if name.startswith("Gaia "):
-            logger.warning("resolved OBJECT %r to %r", name, self._common_name)
-            self.l0_obj.set_keyword("OBJECT", self._common_name)
+            if simbad_id:
+                gaia_catalog, gaiaid, _ = kpf_target_name(simbad_id)
+                if gaia_catalog == "Gaia":
+                    logger.warning("GAIAID blank; filled from SIMBAD as %r", gaiaid)
+                    self.l0_obj.set_keyword("GAIAID", gaiaid)
+                else:
+                    logger.warning(
+                        "SIMBAD Gaia id %r is not a Gaia DR2/DR3 source_id; GAIAID "
+                        "blank",
+                        simbad_id,
+                    )
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])
         pmra, pmdec = self._scalar(row["pmra"]), self._scalar(row["pmdec"])
         # To the EPRV C*# format: deg -> sexagesimal; PM mas/yr -> arcsec/yr.
@@ -636,7 +660,7 @@ class AstroQuery:
         color, color_name = self._color(
             self._scalar(row["B"]), self._scalar(row["V"]), "B-V"
         )
-        catalog, designation = self._simbad_catalog(row, name)
+        catalog, designation = self._simbad_catalog(row, obj)
         record = {
             "object": designation,
             "catalog": catalog,

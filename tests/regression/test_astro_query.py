@@ -480,6 +480,7 @@ _SIMBAD_VALUES = {
     "main_id": "* tau Cet",
     "ids": "HD  10700|* tau Cet|Gaia DR3 2452378776434477184",
     "coo_bibcode": "2020yCat.1350....0G",  # Gaia EDR3
+    "otype": "PM*",
 }
 
 
@@ -740,8 +741,11 @@ class TestExternalQueries:
     @pytest.mark.parametrize(
         "ids, expected",
         [
-            ("HD  10700|Gaia DR2 222|Gaia DR3 333", "Gaia DR3 333"),
-            ("HD  10700|Gaia DR2 222", "Gaia DR2 222"),
+            (
+                "HD  10700|Gaia DR2 2452378776434477184|Gaia DR3 2452378776434477184",
+                "Gaia DR3 2452378776434477184",
+            ),
+            ("HD  10700|Gaia DR2 2452378776434477184", "Gaia DR2 2452378776434477184"),
             ("HD  10700|* tau Cet", None),
         ],
     )
@@ -752,6 +756,14 @@ class TestExternalQueries:
         with _patch_simbad(_simbad_instance(table)):
             AstroQuery(l0).query_simbad()
         assert l0.headers["PRIMARY"]["GAIAID"] == expected
+
+    def test_query_simbad_malformed_gaia_id_not_filled(self, caplog):
+        l0 = _l0_for_query(OBJECT="HD 10700")
+        table = _simbad_table({"ids": "HD  10700|Gaia DR3 333"})
+        with _patch_simbad(_simbad_instance(table)), caplog.at_level(logging.WARNING):
+            AstroQuery(l0).query_simbad()
+        assert l0.headers["PRIMARY"]["GAIAID"] is None
+        assert "SIMBAD Gaia id 'Gaia DR3 333' is not a Gaia DR2/DR3" in caplog.text
 
     def test_query_simbad_keeps_header_gaiaid(self):
         l0 = _l0_for_query(OBJECT="HD 10700", GAIAID="Gaia DR3 12345")
@@ -776,7 +788,7 @@ class TestExternalQueries:
             rec = aq.query_simbad()
         assert rec["color"] is None and rec["color_name"] is None
 
-    @pytest.mark.parametrize("obj", ["Unknown", "Gaia 12345"])
+    @pytest.mark.parametrize("obj", ["Unknown", "Gaia 2452378776434477184"])
     def test_query_simbad_skips_non_simbad_object(self, obj, caplog):
         # HeaderParser marks an untrusted native OBJECT Unknown; SIMBAD resolves a
         # Gaia designation only with its release. Neither, nor the native card
@@ -790,16 +802,53 @@ class TestExternalQueries:
         assert "is not a SIMBAD name" in caplog.text
         simbad.assert_not_called()
 
-    def test_query_simbad_gaia_object_becomes_common_name(self, caplog):
-        l0 = _l0_for_query(OBJECT="Gaia DR3 12345")
+    def test_query_simbad_keeps_gaia_object(self):
+        # OBJECT is never rewritten; the common name goes only to ALIASES.
+        l0 = _l0_for_query(OBJECT="Gaia DR3 2452378776434477184")
         aq = AstroQuery(l0)
         table = _simbad_table({"main_id": "* tau Cet", "ids": "HD  10700|* tau Cet"})
         with _patch_simbad(_simbad_instance(table)) as simbad:
-            with caplog.at_level(logging.WARNING):
-                assert aq.query_simbad() is not None
-        assert simbad.return_value.query_object.call_args.args == ("Gaia DR3 12345",)
-        assert l0.headers["PRIMARY"]["OBJECT"] == "tau Cet"
-        assert "resolved OBJECT 'Gaia DR3 12345' to 'tau Cet'" in caplog.text
+            assert aq.query_simbad() is not None
+        assert simbad.return_value.query_object.call_args.args == (
+            "Gaia DR3 2452378776434477184",
+        )
+        assert l0.headers["PRIMARY"]["OBJECT"] == "Gaia DR3 2452378776434477184"
+        assert aq._common_name == "tau Cet"
+
+    @pytest.mark.parametrize(
+        "main_id, ids, expected",
+        [
+            ("HD  10700", "HD  10700|HIP  8102", "HD 10700"),
+            ("WASP-173B", "WASP-173B|HIP  8102", "WASP-173 B"),
+        ],
+    )
+    def test_query_simbad_canonicalizes_returned_names(self, main_id, ids, expected):
+        # Common name (main_id here) and the cited catalog's designation.
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
+        table = _simbad_table(
+            {"main_id": main_id, "ids": ids, "coo_bibcode": "2007A&A...474..653V"}
+        )
+        with _patch_simbad(_simbad_instance(table)):
+            rec = aq.query_simbad()
+        assert (aq._common_name, rec["object"]) == (expected, "HIP 8102")
+
+    def test_query_simbad_planet_returns_none(self, caplog):
+        # SIMBAD is case-insensitive: 'TOI-1338 B' can resolve to the planet.
+        aq = AstroQuery(_l0_for_query(OBJECT="TOI-1338 B"))
+        inst = _simbad_instance(_simbad_table({"main_id": "TOI-1338b", "otype": "Pl"}))
+        with _patch_simbad(inst), caplog.at_level(logging.WARNING):
+            assert aq.query_simbad() is None
+        assert inst.query_object.call_count == 1
+        assert "SIMBAD resolved OBJECT 'TOI-1338 B' to planet 'TOI-1338b'" in (
+            caplog.text
+        )
+
+    def test_query_simbad_accepts_non_stellar_object(self):
+        aq = AstroQuery(_l0_for_query(OBJECT="M 31"))
+        inst = _simbad_instance(_simbad_table({"main_id": "M  31", "otype": "AGN"}))
+        with _patch_simbad(inst):
+            assert aq.query_simbad() is not None
+        assert inst.query_object.call_count == 1
 
     def test_query_simbad_lookup_failure_returns_none(self, caplog):
         # Failed over like the Gaia failure above; sleep is patched for the same reason.
@@ -948,6 +997,7 @@ class TestRequestMatchesParse:
             "V",
             "ids",
             "coo_bibcode",
+            "otype",
         }
 
 
@@ -1073,8 +1123,10 @@ class TestPerform:
 
     def test_gaia_named_object_resolves_without_duplicate_aliases(self):
         # A bare Gaia OBJECT/GAIAID: Gaia adds the release, SIMBAD then names the
-        # star, and ALIASES lists each name once.
-        l0 = _l0_for_query(GAIAID="Gaia 12345", OBJECT="Gaia 12345")
+        # star (in ALIASES only), and ALIASES lists each name once.
+        l0 = _l0_for_query(
+            GAIAID="Gaia 2452378776434477184", OBJECT="Gaia 2452378776434477184"
+        )
         aq = AstroQuery(l0)
         client = MagicMock()
         client.run_sync.side_effect = _release_aware_run_sync(present={"DR3"})
@@ -1085,8 +1137,9 @@ class TestPerform:
         ):
             aq.perform()
         primary = l0.headers["PRIMARY"]
-        assert (primary["GAIAID"], primary["OBJECT"]) == ("Gaia DR3 12345", "tau Cet")
-        assert primary["ALIASES"] == "tau Cet; Gaia DR3 12345"
+        designation = "Gaia DR3 2452378776434477184"
+        assert (primary["GAIAID"], primary["OBJECT"]) == (designation, designation)
+        assert primary["ALIASES"] == f"{designation}; tau Cet"
 
     def test_each_query_lands_on_its_own_attribute(self):
         aq, _ = _perform()

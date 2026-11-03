@@ -1,6 +1,5 @@
 """HeaderParser: read and sanitize a native (WMKO) L0 PRIMARY header."""
 
-import csv
 import logging
 import re
 from datetime import datetime
@@ -9,16 +8,9 @@ from pathlib import Path
 from astropy.io import fits
 
 from kpfpipe import REPO_ROOT
+from kpfpipe.utils.kpf import kpf_target_name
 
 logger = logging.getLogger(__name__)
-
-# Known target-name aliases: (catalog, compiled pattern, canonical format), in file
-# order; the first full, case-insensitive match names the target.
-with open(REPO_ROOT / "reference/star_catalog_aliases.csv", newline="") as _f:
-    _STAR_CATALOG_ALIASES = [
-        (row["catalog"], re.compile(row["pattern"], re.IGNORECASE), row["canonical"])
-        for row in csv.DictReader(_f)
-    ]
 
 # Planets, dwarf planets and major moons, one name per line.
 with open(REPO_ROOT / "reference/solar_system_objects.txt") as _f:
@@ -61,17 +53,6 @@ class HeaderError(ValueError):
 def _norm(value):
     """A header value as a stripped, lowercased string (None -> '')."""
     return "" if value is None else str(value).strip().lower()
-
-
-def _canonical_name(name):
-    """``(catalog, canonical name)`` of the first known alias `name` matches, else
-    ``(None, name)``. E.g. 'HD57555', 'HD 57555' and '57555' -> ('HD', 'HD 57555');
-    'T001824' -> ('TOI', 'TOI-1824'). Aliases: reference/star_catalog_aliases.csv."""
-    for catalog, pattern, canonical in _STAR_CATALOG_ALIASES:
-        match = pattern.fullmatch(name)
-        if match:
-            return catalog, canonical.format(*(g.upper() for g in match.groups()))
-    return None, name
 
 
 def _solar_system_bodies(name):
@@ -282,7 +263,8 @@ class HeaderParser:
 
         The native card may carry a ``Gaia`` prefix and a DR2/DR3/EDR3 release
         (EDR3 is DR3: they share source_ids), separated by spaces, underscores or
-        nothing; the source_id must be 17-19 digits. Anything else raises
+        nothing; the source_id must be 17-19 digits (``kpf_target_name``, catalog
+        ``Gaia``). Anything else raises
         HeaderError; a blank or 'None' card is blank. A Gaia-named OBJECT must
         agree with it: a blank GAIAID takes the OBJECT's, and whichever carries
         the release lends it to the other (each warned); a different source_id
@@ -300,19 +282,15 @@ class HeaderParser:
                     f"GAIAID {raw!r} on solar-system target {obj!r}; GAIAID blank"
                 )
             return None
-        match = re.fullmatch(
-            r"(?:Gaia[\s_]*)?(?:(DR2|E?DR3)[\s_]*)?(\d{17,19})", raw, re.IGNORECASE
-        )
-        gaiaid = None
-        if match:
-            release = (match[1] or "").upper().replace("EDR3", "DR3")
-            gaiaid = " ".join(filter(None, ("Gaia", release, match[2])))
-        elif raw:
-            raise HeaderError(
-                f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 source_id"
-            )
+        catalog, gaiaid, _ = kpf_target_name(raw)
+        if catalog != "Gaia":
+            if raw:
+                raise HeaderError(
+                    f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 source_id"
+                )
+            gaiaid = None
 
-        if not obj.startswith("Gaia "):
+        if kpf_target_name(obj)[0] != "Gaia":
             return gaiaid
         if gaiaid is None:
             self._warn(f"GAIAID blank; GAIAID is OBJECT {obj!r}")
@@ -342,15 +320,17 @@ class HeaderParser:
         WMKO uses OBJECT as free-form metadata; the DRP uses it to name what
         was observed. A solar Target frame (native OBJECT ``SoCal`` and TARGNAME
         ``Sun``) is ``SoCal``; any other Target frame's OBJECT is its target
-        identifier in canonical form (e.g. ``HD 10700``; see ``_canonical_name``),
+        identifier in canonical form (e.g. ``HD 10700``; see ``kpf_target_name``;
+        a lowercase planet letter is dropped for the host star, warned),
         or the solar-system body (reference/solar_system_objects.txt) that both
         cards name as a whole word (``Io`` with ``Io Eclipse`` -> ``Io``); a card
         naming two bodies is ``Unknown``.
         The native OBJECT and TARGNAME must name the same target once canonicalized,
         or one must be the bare catalog prefix of the other (``TOI`` with
         ``TOI-969``), or add only a component letter (``WASP-173`` with
-        ``WASP-173B`` -> ``WASP-173B``, ``21019`` with ``21019A`` -> ``HD 21019 A``;
-        warned); a blank card yields the other
+        ``WASP-173B`` -> ``WASP-173 B``, ``21019`` with ``21019A`` -> ``HD 21019 A``;
+        warned; a planet letter on the other card raises HeaderError); a blank
+        card yields the other
         (warned). Any reconciliation or
         canonicalization is logged at INFO. A Target frame failing its check, or
         whose name is a bare number in no known catalog, is ``Unknown`` (any
@@ -378,8 +358,16 @@ class HeaderParser:
                     "solar-system body; OBJECT is Unknown"
                 )
                 return "Unknown"
-            obj_cat, obj_c = _canonical_name(obj)
-            targ_cat, targ_c = _canonical_name(targname)
+            obj_cat, obj_c, obj_p = kpf_target_name(obj)
+            targ_cat, targ_c, targ_p = kpf_target_name(targname)
+            for card, raw, planet, host in (
+                ("OBJECT", obj, obj_p, obj_c),
+                ("TARGNAME", targname, targ_p, targ_c),
+            ):
+                if planet:
+                    self._warn(
+                        f"{card} {raw!r} names planet {planet!r}; host star {host!r}"
+                    )
             short, long = sorted((obj_c, targ_c), key=len)
             if bodies and bodies[0] and all(b == bodies[0] for b in bodies):
                 (result,) = bodies[0]
@@ -395,6 +383,11 @@ class HeaderParser:
                 and obj_cat == targ_cat
                 and re.fullmatch(re.escape(short) + " ?[A-Z]", long)
             ):
+                if obj_p or targ_p:
+                    raise HeaderError(
+                        f"{self._label}: OBJECT {obj!r} / TARGNAME {targname!r} "
+                        "pair a planet letter with a component letter; ambiguous"
+                    )
                 result = long
                 self._warn(
                     f"OBJECT {obj!r} / TARGNAME {targname!r} differ only by a "

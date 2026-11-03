@@ -10,6 +10,7 @@ from astropy.io import fits
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.utils import header as header_module
 from kpfpipe.utils.header import HeaderError, HeaderParser
+from kpfpipe.utils.kpf import kpf_target_name
 
 TESTDATA_L0 = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 
@@ -210,13 +211,29 @@ class TestFrameIdentity:
             ("TIC436314778", "TIC 436314778", "TIC 436314778"),
             ("KIC4736208", "KIC 4736208", "KIC 4736208"),
             ("WASP127", "WASP-127", "WASP-127"),
-            ("WASP-173b", "WASP-173B", "WASP-173B"),
             # A bare system name reconciles with one of its components.
-            ("WASP-173", "WASP-173B", "WASP-173B"),
-            ("WASP-173B", "WASP-173", "WASP-173B"),
+            ("WASP-173", "WASP-173B", "WASP-173 B"),
+            ("WASP-173B", "WASP-173", "WASP-173 B"),
             ("WASP-173A", "WASP-173B", "Unknown"),
             ("115404A", "HD 115404 A", "HD 115404 A"),
+            ("hd21019A", "21019", "HD 21019 A"),
             ("hd21019a", "21019", "HD 21019 A"),
+            ("WASP-173a", "WASP-173", "WASP-173 A"),
+            ("Kepler-444a", "Kepler-444 A", "Kepler-444 A"),
+            ("TOI-1338B", "TOI-1338", "TOI-1338 B"),
+            # A lowercase planet letter (b-z) is dropped for the host star.
+            ("TOI-969b", "TOI-969", "TOI-969"),
+            # Purely numeric catalogs take no letter.
+            ("TIC 436314778b", "TIC 436314778", "Unknown"),
+            ("KIC4736208A", "KIC 4736208", "Unknown"),
+            (
+                "Gaia DR3 2077618037775709568 A",
+                "Gaia DR3 2077618037775709568",
+                "Unknown",
+            ),
+            ("HD 189733b", "HD 189733", "HD 189733"),
+            ("WASP-12b", "WASP-12", "WASP-12"),
+            ("Kepler-86 b", "Kepler-86", "Kepler-86"),
             ("21019 A", "HD 21019B", "Unknown"),
             # A bare catalog prefix reconciles with a full id in that catalog.
             ("TOI", "TOI-969", "TOI-969"),
@@ -280,6 +297,23 @@ class TestFrameIdentity:
         parser = HeaderParser(header)
         assert any("bare number in no known catalog" in w for w in parser.warnings)
 
+    def test_planet_letter_dropped_and_warned(self):
+        parser = HeaderParser(_hdr("Object", OBJECT="HD 189733b", TARGNAME="HD 189733"))
+        assert parser.DRP_KEYWORDS["OBJECT"] == "HD 189733"
+        assert any("names planet 'b'" in w for w in parser.warnings)
+
+    @pytest.mark.parametrize(
+        "obj, targname",
+        [
+            ("HD 189733b", "HD 189733B"),
+            ("WASP-173B", "WASP-173b"),
+            ("HD 189733b", "HD 189733 A"),
+        ],
+    )
+    def test_planet_and_component_letter_raises(self, obj, targname):
+        with pytest.raises(HeaderError, match="planet letter with a component"):
+            HeaderParser(_hdr("Object", OBJECT=obj, TARGNAME=targname))
+
     def test_component_reconciliation_warned(self):
         parser = HeaderParser(_hdr("Object", OBJECT="WASP-173", TARGNAME="WASP-173B"))
         assert any("component letter" in w for w in parser.warnings)
@@ -336,11 +370,18 @@ class TestGaiaId:
             f"DR1 {_G19}",
             f"DR4 {_G19}",
             f"Gaia DR3 {_G19[:15]}",
+            f"{_G19}b",  # Gaia ids take no trailing letter
+            f"Gaia DR3 {_G19} A",
         ],
     )
     def test_malformed_raises(self, native):
         with pytest.raises(HeaderError, match="is not a Gaia DR2/DR3 source_id"):
             self._parse(native)
+
+    @pytest.mark.parametrize("obj", ["Gaia 12 b", "Gaia DR1 123456789012345678"])
+    def test_gaia_like_object_not_copied(self, obj):
+        # Only an OBJECT kpf_target_name names a Gaia id lends it to GAIAID.
+        assert self._parse(None, obj=obj).DRP_KEYWORDS["GAIAID"] is None
 
     @pytest.mark.parametrize("native", [None, "", "None", "none"])
     def test_absent_is_blank_and_silent(self, native):
@@ -731,3 +772,23 @@ class TestRealData:
         for key, value in keywords.items():
             ext = "QUALITY_CONTROL" if key.startswith("READTIM") else "PRIMARY"
             assert l0.headers[ext].get(key) == value, key
+
+
+class TestKpfTargetName:
+    """kpf_target_name: the one apparatus for target identifiers."""
+
+    @pytest.mark.parametrize(
+        "name, expected",
+        [
+            ("57555", ("HD", "HD 57555", None)),
+            ("hd21019a", ("HD", "HD 21019 A", None)),
+            ("HD 189733b", ("HD", "HD 189733", "b")),
+            (
+                "Gaia_EDR3_2077618037775709568",
+                ("Gaia", "Gaia DR3 2077618037775709568", None),
+            ),
+            ("tau Cet", (None, "tau Cet", None)),
+        ],
+    )
+    def test_canonical(self, name, expected):
+        assert kpf_target_name(name) == expected

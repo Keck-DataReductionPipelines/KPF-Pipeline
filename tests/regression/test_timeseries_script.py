@@ -139,6 +139,26 @@ class TestParseArgs:
             capsys.readouterr().err
         )
 
+    @pytest.mark.parametrize(
+        "target, expected",
+        [
+            ("10700", "HD 10700"),
+            ("HD10700", "HD 10700"),
+            (" HD 10700 ", "HD 10700"),
+            ("WASP-173B", "WASP-173 B"),
+            ("tau Cet", "tau Cet"),
+        ],
+    )
+    def test_target_canonicalized(self, ts, target, expected):
+        args = ts.parse_args(["--target", target, *_BASE_ARGS[2:]])
+        assert args.target == expected
+
+    def test_planet_target_is_host_star_warned(self, ts, caplog):
+        with caplog.at_level(logging.WARNING):
+            args = ts.parse_args(["--target", "HD 189733b", *_BASE_ARGS[2:]])
+        assert args.target == "HD 189733"
+        assert "names planet 'b'; host star 'HD 189733'" in caplog.text
+
     def test_removed_flags_have_no_dest(self, ts):
         # The real contract is that the flags' *dests* are gone. Asserting only
         # that argparse exits tests argparse: "--nonsense x" passes identically,
