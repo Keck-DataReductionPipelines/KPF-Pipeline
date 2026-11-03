@@ -369,8 +369,7 @@ class TestCatalogRecordMissingValues:
         l0.headers["PRIMARY"]["INSTRUME"] = "KPF"
         l0.headers["PRIMARY"]["OFNAME"] = "KP.20240405.00002.00.fits"
         l0.headers["PRIMARY"]["PROGNAME"] = "K123"
-        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
-        l0.headers["PRIMARY"]["SCISEL"] = "open"
+        l0.headers["PRIMARY"].update(_SCIENCE_CARDS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60405.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         l0.to_fits(fn)
@@ -544,8 +543,7 @@ class TestStandardizedPrimary:
         fn = str(tmp_path / "KP.20240113.00009.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
-        primary.header["IMTYPE"] = "Object"
-        primary.header["SCISEL"] = "open"
+        primary.header.update(_SCIENCE_CARDS)
         primary.header["OFNAME"] = "KP.20240113.00009.00.fits"
         primary.header["PROGNAME"] = "K123"
         primary.header["MJD-OBS"] = 60322.0
@@ -642,6 +640,9 @@ class TestHeaderKeywords:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = imtype
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
+        if imtype == "Object":
+            # A Target needs an identity: OBJECT Unknown with GAIAID blank raises.
+            native = {"OBJECT": "10700", "TARGNAME": "10700", **native}
         for key, value in native.items():
             l0.headers["PRIMARY"][key] = value
         return l0.standardize_headers()
@@ -855,6 +856,8 @@ class TestFiveTraceShape:
             "BrdbandFiber" if imtype == "Flatlamp" else "Th_daily"
         )
         l0.headers["PRIMARY"].update(_ALL_FIBERS)
+        if imtype == "Object":
+            l0.headers["PRIMARY"].update(_SCIENCE_CARDS)
         if imtype in ("Bias", "Dark"):
             l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0

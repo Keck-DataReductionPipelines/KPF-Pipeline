@@ -27,6 +27,7 @@ from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.header import HeaderError
 
 from ._scripts import REPO_ROOT
 
@@ -1083,7 +1084,9 @@ class TestBareGaiaIdResolution:
 
     def test_no_matching_release_raises(self):
         # Fail loud: a bare id matching nothing must not fall back to a guess.
-        with pytest.raises(ValueError, match="no queryable Gaia release"):
+        with pytest.raises(
+            HeaderError, match="no queryable Gaia release.*L0 header must be fixed:"
+        ):
             self._query()
 
 
@@ -1214,6 +1217,39 @@ class TestPerform:
         assert aq._gaia is None
         assert "filled from SIMBAD" not in caplog.text
 
+    @pytest.mark.parametrize(
+        "gaiaid, config, expected",
+        [
+            # wmko may anchor the position, but never for an unidentified target.
+            (
+                "Gaia DR3 12345",
+                {"astrometry_priority": ("gaia", "simbad", "wmko")},
+                "Gaia and SIMBAD resolved no source for OBJECT 'tau Cet', "
+                "GAIAID 'Gaia DR3 12345'",
+            ),
+            (
+                None,
+                {},
+                "Gaia and SIMBAD resolved no source for OBJECT 'tau Cet', GAIAID blank",
+            ),
+            (
+                "Gaia DR3 12345",
+                {"do_gaia_query": False},
+                "SIMBAD resolved no source",
+            ),
+        ],
+    )
+    def test_unidentified_target_raises(self, gaiaid, config, expected):
+        aq = AstroQuery(_l0_for_query(GAIAID=gaiaid, OBJECT="tau Cet"), config or None)
+        with (
+            _patch_gaia(_gaia_job(Table())),
+            _patch_simbad(_simbad_instance(Table())),
+            pytest.raises(ValueError, match="target identity unresolved") as err,
+        ):
+            aq.perform()
+        assert expected in str(err.value)
+        assert "L0 header must be fixed:" in str(err.value)
+
     def test_gaia_off_fills_gaiaid_without_query(self, caplog):
         aq, run_sync = self._perform_simbad_gaiaid(
             None, _gaia_table(), caplog, do_gaia_query=False
@@ -1251,7 +1287,9 @@ class TestConstructor:
     def test_solar_system_target_raises(self):
         l0 = self._l0("Target")
         l0.headers["PRIMARY"]["OBJECT"] = "Uranus"
-        with pytest.raises(ValueError, match="solar-system target 'Uranus'"):
+        with pytest.raises(
+            ValueError, match="solar-system target 'Uranus'.*not an L0 header problem"
+        ):
             AstroQuery(l0)
 
     def test_unsupported_config_type_raises(self):

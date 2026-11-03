@@ -48,7 +48,12 @@ _TRACES = {
 
 
 class HeaderError(ValueError):
-    """A native header that was read but carries a nonsensical value."""
+    """A native header that was read but carries a nonsensical value.
+
+    A target-identity error (OBJECT, TARGNAME, GAIAID) is one the raw L0 header
+    must fix; its message says so with the greppable phrase ``L0 header must be
+    fixed:`` and the action needed. Other errors (e.g. ELAPSED, readout
+    timestamps) likely reflect an operations fault, not a card to edit."""
 
 
 def _lower(value):
@@ -93,7 +98,8 @@ class HeaderParser:
     HeaderError
         If the header was read but a value is nonsensical (a corrupt card, an
         unparseable ELAPSED or readout timestamp, a negative read time, a
-        malformed or conflicting GAIAID, or an ambiguous planet/component letter).
+        malformed or conflicting GAIAID, an ambiguous planet/component letter, or
+        a Target whose OBJECT is ``Unknown`` with GAIAID blank).
     """
 
     def __init__(self, source):
@@ -229,6 +235,11 @@ class HeaderParser:
                     f"{self._label}: ELAPSED={elapsed!r} is not a number"
                 ) from None
 
+    def _native_gaiaid(self):
+        """The native GAIAID card, stripped; '' for blank or 'None'."""
+        raw = str(self.WMKO_HEADER.get("GAIAID") or "").strip()
+        return "" if raw.lower() == "none" else raw
+
     def _gaiaid(self):
         """The sanitized GAIAID (``Gaia DR3 <id>``, ``Gaia DR2 <id>`` or
         ``Gaia <id>``); None for a blank card, a frame other than a non-solar
@@ -240,9 +251,7 @@ class HeaderParser:
         """
         if self.DRP_KEYWORDS["OBSTYPE"] != "Target" or self.DRP_KEYWORDS["ISSOLAR"]:
             return None
-        raw = str(self.WMKO_HEADER.get("GAIAID") or "").strip()
-        if raw.lower() == "none":
-            raw = ""
+        raw = self._native_gaiaid()
         obj = self.DRP_KEYWORDS["OBJECT"]
         if obj in _SOLAR_SYSTEM_OBJECTS:
             if raw:
@@ -254,7 +263,8 @@ class HeaderParser:
         if catalog != "Gaia":
             if raw:
                 raise HeaderError(
-                    f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 source_id"
+                    f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 "
+                    "source_id. L0 header must be fixed: correct GAIAID or blank it."
                 )
             gaiaid = None
 
@@ -268,7 +278,8 @@ class HeaderParser:
         if obj_id != gaia_id or (obj_release and gaia_release and obj != gaiaid):
             raise HeaderError(
                 f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
-                "different Gaia sources"
+                "different Gaia sources. L0 header must be fixed: make OBJECT and "
+                "GAIAID name the same source."
             )
         resolved = max(obj, gaiaid, key=len)
         if obj != resolved:
@@ -295,7 +306,8 @@ class HeaderParser:
           ``WASP-173B`` -> ``WASP-173 B``); a planet letter on the other card
           then raises HeaderError.
 
-        A blank card yields the other; anything else is ``Unknown``.
+        A blank card yields the other; anything else is ``Unknown``
+        (``_unknown_target``).
         """
         obj = str(self.WMKO_HEADER.get("OBJECT") or "").strip()
         targname = str(self.WMKO_HEADER.get("TARGNAME") or "").strip()
@@ -311,12 +323,11 @@ class HeaderParser:
             for s in (obj, targname)
             if s
         ]
+        named = sorted(set().union(*bodies))
         if any(len(b) > 1 for b in bodies):
-            self._warn(
-                f"OBJECT {obj!r} / TARGNAME {targname!r} names more than one "
-                "solar-system body; OBJECT is Unknown"
+            return self._unknown_target(
+                f"the cards name more than one solar-system body {named}"
             )
-            return "Unknown"
         obj_catalog, obj_name, obj_planet = kpf_target_name(obj)
         targ_catalog, targ_name, targ_planet = kpf_target_name(targname)
         for card, raw, planet, host in (
@@ -345,7 +356,8 @@ class HeaderParser:
             if obj_planet or targ_planet:
                 raise HeaderError(
                     f"{self._label}: OBJECT {obj!r} / TARGNAME {targname!r} "
-                    "pair a planet letter with a component letter; ambiguous"
+                    "pair a planet letter with a component letter; ambiguous. L0 "
+                    "header must be fixed: name the same star on both cards."
                 )
             result = longer
             self._warn(
@@ -362,18 +374,25 @@ class HeaderParser:
         elif obj and not targname:
             self._warn(f"TARGNAME blank; OBJECT is {obj!r}")
             result = obj_name
+        elif not (obj or targname):
+            return self._unknown_target("OBJECT and TARGNAME are both blank")
+        elif named:
+            return self._unknown_target(
+                f"the cards disagree and name solar-system body {named} "
+                f"(canonical {obj_name!r} vs {targ_name!r})"
+            )
         else:
-            self._warn(
-                f"OBJECT {obj!r} disagrees with TARGNAME {targname!r}; "
-                "OBJECT is Unknown"
+            return self._unknown_target(
+                f"the cards canonicalize to different names ({obj_name!r} vs "
+                f"{targ_name!r}): often legitimate aliases of one star (e.g. HD "
+                "number vs common name; kpf_target_name does not cross-identify "
+                "catalogs), else different stars or components, or a typo"
             )
-            return "Unknown"
         if result.isdigit():
-            self._warn(
-                f"OBJECT {result!r} is a bare number in no known catalog; "
-                "OBJECT is Unknown"
+            return self._unknown_target(
+                f"{result!r} is a bare number in no known catalog (e.g. a "
+                "truncated Gaia source_id)"
             )
-            return "Unknown"
         if result != obj or result != targname:
             logger.info(
                 "%s: OBJECT %r / TARGNAME %r resolved to %r",
@@ -383,6 +402,43 @@ class HeaderParser:
                 result,
             )
         return result
+
+    def _unknown_target(self, why):
+        """Return ``Unknown`` for a Target whose cards name no single target,
+        warning ``why`` with the native cards; raise HeaderError if GAIAID is
+        blank too.
+
+        ``Unknown`` is common and usually NOT bad data: the cards often carry
+        legitimate aliases of one star (OBJECT ``201092`` / TARGNAME ``61 Cyg B``,
+        ``165341`` / ``70 Oph b``, ``MASCARA-1`` / ``201585``), and
+        ``kpf_target_name`` canonicalizes spellings but does not cross-identify
+        catalogs. Other causes: a truncated Gaia id in OBJECT, both cards blank,
+        test labels, or solar-system bodies (only one named body reaches
+        AstroQuery's solar-system stop; a stale GAIAID on the others fails
+        TARGETOK). In the 2026-11-01 campaign ~2,000 of ~34,000 Target frames
+        were ``Unknown``; ~97% had a GAIAID and reduce normally, labelled
+        ``Unknown``. With GAIAID blank nothing locates the target (SIMBAD needs
+        a name), so fail here rather than at the AstroQuery merge.
+        """
+        native = self.WMKO_HEADER
+        context = (
+            f"OBJECT is Unknown: {why} [native OBJECT={native.get('OBJECT')!r}, "
+            f"TARGNAME={native.get('TARGNAME')!r}]"
+        )
+        raw = self._native_gaiaid()
+        if not raw:
+            raise HeaderError(
+                f"{self._label}: {context}; GAIAID is blank, so nothing "
+                "identifies the target for astrometry. L0 header must be fixed: "
+                "correct OBJECT/TARGNAME or set GAIAID."
+            )
+        catalog, gaiaid, _ = kpf_target_name(raw)
+        if catalog == "Gaia":  # else _gaiaid raises on the malformed card
+            self._warn(
+                f"{context}; astrometry from GAIAID {gaiaid!r}, products are "
+                "labelled OBJECT 'Unknown'"
+            )
+        return "Unknown"
 
     def _check_cal_object(self, cal_object):
         """Warn if the native OBJECT is no ``autocal-*`` label agreeing with

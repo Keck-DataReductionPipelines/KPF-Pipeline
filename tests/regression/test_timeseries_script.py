@@ -270,8 +270,16 @@ class TestDiscoverScienceObsIds:
     def test_unknown_object_targets_counted_with_warning(self, ts, tmp_path, caplog):
         # OBJECT != TARGNAME: HeaderParser can't trust the name, so the frame
         # can't be matched, but discovery must say so rather than drop it quietly.
+        # (GAIAID keeps it a valid Target; Unknown with GAIAID blank raises.)
         good = _write_l0(str(tmp_path), "20240101", 3600, "10700")
-        write_l0_tree(str(tmp_path), "20240101", 3700, obj="10700", targname="HD 10701")
+        write_l0_tree(
+            str(tmp_path),
+            "20240101",
+            3700,
+            obj="10700",
+            targname="HD 10701",
+            extra_cards={"GAIAID": "Gaia DR3 2452378776434477184"},
+        )
         with caplog.at_level(logging.WARNING):
             got, _ = ts.discover_science_obs_ids(
                 str(tmp_path), "HD 10700", "20240101", "20240131", jobs=1

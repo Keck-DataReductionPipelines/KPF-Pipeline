@@ -231,6 +231,8 @@ def _make_l0_pointing():
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "Object"
     l0.headers["PRIMARY"]["SCISEL"] = "open"
+    # A Target needs an identity: OBJECT Unknown with GAIAID blank raises.
+    l0.headers["PRIMARY"]["OBJECT"] = l0.headers["PRIMARY"]["TARGNAME"] = "10700"
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6

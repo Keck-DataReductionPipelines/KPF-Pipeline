@@ -27,6 +27,7 @@ from astropy.time import Time
 from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT, SCI_FIBERS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.header import HeaderError
 from kpfpipe.utils.kpf import kpf_target_name
 from kpfpipe.utils.network import gaia_client, query_mirrors, simbad_client
 
@@ -55,8 +56,8 @@ class AstroQuery:
     for downstream use (EPRV ``C*#`` catalog keywords, DiagL0 pointing offsets,
     BarycentricCorrection). Only science frames are supported: the constructor raises
     on a non-``Target`` OBSTYPE, a SoCal (ISSOLAR) frame or a solar-system OBJECT.
-    Fail-soft otherwise -- a missing GAIAID/OBJECT or a failed lookup yields a ``None``
-    record.
+    Each query is fail-soft -- a missing GAIAID/OBJECT or a failed lookup yields a
+    ``None`` record -- but ``perform`` raises if no query identifies the target.
 
     Parameters
     ----------
@@ -86,7 +87,9 @@ class AstroQuery:
         obj = l0_obj.headers["PRIMARY"].get("OBJECT")
         if obj in _SOLAR_SYSTEM_OBJECTS:
             raise ValueError(
-                f"AstroQuery has no ephemeris source for solar-system target {obj!r}"
+                f"{l0_obj.obs_id or 'unknown'}: AstroQuery has no ephemeris source "
+                f"for solar-system target {obj!r}. DRP limitation (pending JPL "
+                "Horizons support), not an L0 header problem."
             )
 
         if config is None:
@@ -198,8 +201,8 @@ class AstroQuery:
 
         Raises
         ------
-        ValueError
-            No queryable release contains ``source_id``.
+        HeaderError
+            No queryable release contains ``source_id`` (GAIAID must be fixed).
         """
         for release in sorted(self._GAIA_MIRRORS, reverse=True):
             try:
@@ -220,10 +223,12 @@ class AstroQuery:
             if len(found):
                 logger.warning("resolved bare GAIAID %s to Gaia %s", source_id, release)
                 return release
-        raise ValueError(
-            f"GAIAID {source_id} carries no data release and no queryable Gaia "
-            f"release ({', '.join(sorted(self._GAIA_MIRRORS))}) contains that "
-            "source_id; refusing to guess which release it belongs to."
+        raise HeaderError(
+            f"{self.l0_obj.obs_id or 'unknown'}: GAIAID {source_id} carries no "
+            "data release and no queryable Gaia release "
+            f"({', '.join(sorted(self._GAIA_MIRRORS))}) contains that source_id. "
+            "L0 header must be fixed: correct GAIAID (with its DR2/DR3 release) "
+            "or blank it."
         )
 
     @staticmethod
@@ -429,8 +434,8 @@ class AstroQuery:
         ``_resolve_gaia_release`` and, once its source is found, recorded on GAIAID (and
         on an OBJECT naming the same bare id). Returns None (warned) when GAIAID is
         blank, a lookup fails on every mirror, or the source is not found. Raises
-        ValueError if a bare id matches no queryable release, or if the result's column
-        units differ from ``_GAIA_UNITS``.
+        HeaderError if a bare id matches no queryable release, or ValueError if the
+        result's column units differ from ``_GAIA_UNITS``.
         """
         primary = self.l0_obj.headers["PRIMARY"]
         gaiaid = primary["GAIAID"]
@@ -605,7 +610,9 @@ class AstroQuery:
         """
         obj = self.l0_obj.headers["PRIMARY"]["OBJECT"]
         obj_catalog, query_name, _ = kpf_target_name(obj)
-        # SIMBAD resolves a Gaia designation only with its release.
+        # SIMBAD resolves a Gaia designation only with its release. An Unknown
+        # OBJECT (often alias cards; see HeaderParser._target_object) always
+        # carries a GAIAID, else HeaderParser raised, so Gaia locates the star.
         if obj == "Unknown" or (obj_catalog == "Gaia" and len(query_name.split()) == 2):
             logger.warning(
                 "OBJECT %r is not a SIMBAD name; SIMBAD astrometry unavailable", obj
@@ -982,9 +989,12 @@ class AstroQuery:
 
         Raises
         ------
+        HeaderError
+            A bare GAIAID that no Gaia release contains (the L0 header must fix it).
         ValueError
-            No source named in ``astrometry_priority`` supplied a complete astrometric
-            block.
+            No enabled catalog query resolved the target (identity unresolved), or
+            no source named in ``astrometry_priority`` supplied a complete
+            astrometric block.
         """
         if do_gaia_query is not None:
             self.do_gaia_query = do_gaia_query
@@ -1003,6 +1013,30 @@ class AstroQuery:
         # a blank GAIAID that SIMBAD filled is queried now.
         if gaiaid_blank and primary["GAIAID"]:
             self._gaia = self.query_gaia()
+
+        # HeaderParser passes a Target only with a name or a GAIAID to look up
+        # (else it raises); if no catalog resolves either, the target is
+        # unidentified. Raise that here, not as a merge failure, and never fall
+        # back to the telescope pointing (wmko) for an unidentified target.
+        queried = [
+            name
+            for name, enabled in (
+                ("Gaia", self.do_gaia_query),
+                ("SIMBAD", self.do_simbad_query),
+            )
+            if enabled
+        ]
+        if queried and self._gaia is None and self._simbad is None:
+            gaiaid = primary["GAIAID"]
+            raise ValueError(
+                f"{self.l0_obj.obs_id or 'unknown'}: target identity unresolved: "
+                f"{' and '.join(queried)} resolved no source for OBJECT "
+                f"{primary['OBJECT']!r}, "
+                f"{f'GAIAID {gaiaid!r}' if gaiaid else 'GAIAID blank'} "
+                "(reasons logged above). If a catalog query failed, rerun once the "
+                "service is up; if the catalogs returned no match, L0 header must "
+                "be fixed: correct OBJECT/TARGNAME or set GAIAID."
+            )
 
         self.merge_catalog_records()
 

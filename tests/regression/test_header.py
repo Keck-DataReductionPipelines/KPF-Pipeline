@@ -126,7 +126,6 @@ class TestFrameIdentity:
             (_hdr("Object", OBJECT="", TARGNAME="K2-157"), "K2-157"),
             (_hdr("Object", OBJECT="KEPLER-65", TARGNAME=""), "Kepler-65"),
             (_hdr("Object", OBJECT="", TARGNAME="Sun"), "Unknown"),
-            (_hdr("Object", OBJECT="", TARGNAME=""), "Unknown"),
             # Solar: exactly OBJECT SoCal with TARGNAME Sun; one alone is Unknown.
             (_hdr("Object", OBJECT="SoCal", TARGNAME="target"), "Unknown"),
             (_hdr("Object", OBJECT="x", TARGNAME="Sun"), "Unknown"),
@@ -248,7 +247,9 @@ class TestFrameIdentity:
         ],
     )
     def test_target_aliases(self, obj, targname, expected):
-        header = _hdr("Object", OBJECT=obj, TARGNAME=targname)
+        # An Unknown Target needs a GAIAID, else it raises (TestUnknownTarget).
+        gaiaid = f"Gaia DR3 {_G19}" if expected == "Unknown" else None
+        header = _hdr("Object", OBJECT=obj, TARGNAME=targname, GAIAID=gaiaid)
         assert HeaderParser(header).DRP_KEYWORDS["OBJECT"] == expected
 
     @pytest.mark.parametrize(
@@ -272,7 +273,8 @@ class TestFrameIdentity:
         ],
     )
     def test_solar_system_bodies(self, obj, targname, expected):
-        header = _hdr("Object", OBJECT=obj, TARGNAME=targname)
+        gaiaid = f"Gaia DR3 {_G19}" if expected == "Unknown" else None
+        header = _hdr("Object", OBJECT=obj, TARGNAME=targname, GAIAID=gaiaid)
         assert HeaderParser(header).DRP_KEYWORDS["OBJECT"] == expected
 
     def test_solar_system_blank_card_warned(self):
@@ -293,7 +295,12 @@ class TestFrameIdentity:
         assert "resolved to" not in caplog.text
 
     def test_bare_number_in_no_catalog_warned(self):
-        header = _hdr("Object", OBJECT="343600706696532", TARGNAME="343600706696532")
+        header = _hdr(
+            "Object",
+            OBJECT="343600706696532",
+            TARGNAME="343600706696532",
+            GAIAID=f"Gaia DR3 {_G19}",
+        )
         parser = HeaderParser(header)
         assert any("bare number in no known catalog" in w for w in parser.warnings)
 
@@ -601,6 +608,62 @@ def _consistent(imtype, octagon, shutters, sci, sky, cal, **cards):
     )
 
 
+class TestHeaderFixMessages:
+    """A target-identity defect (OBJECT, TARGNAME, GAIAID) says the raw L0 header
+    must be fixed, in one greppable phrase for batch triage."""
+
+    @pytest.mark.parametrize(
+        "header",
+        [
+            _hdr("Object", OBJECT="10700", TARGNAME="10700", GAIAID="NoGaiaName"),
+            _hdr(
+                "Object",
+                OBJECT=f"Gaia DR3 {_G19}",
+                TARGNAME=f"Gaia DR3 {_G19}",
+                GAIAID=f"Gaia DR2 {_G19}",
+            ),
+            _hdr("Object", OBJECT="WASP-173b", TARGNAME="WASP-173B"),
+            _hdr("Object", OBJECT="10700", TARGNAME="HD 10701"),
+        ],
+    )
+    def test_identity_error_names_the_fix(self, header):
+        with pytest.raises(HeaderError, match="L0 header must be fixed: "):
+            HeaderParser(header)
+
+
+class TestUnknownTarget:
+    """A Target whose OBJECT is Unknown: one warning naming the reason, the native
+    cards and the GAIAID that still locates the star; with GAIAID blank, a
+    HeaderError carrying the same diagnosis."""
+
+    _CASES = [
+        # Legitimate aliases of one star, which kpf_target_name doesn't cross-identify.
+        ("201092", "61 Cyg B", "canonicalize to different names ('HD 201092'"),
+        ("", "", "OBJECT and TARGNAME are both blank"),
+        ("343600706696532", "343600706696532", "bare number in no known catalog"),
+        ("Tethys & Enceladus", "Tethys", "more than one solar-system body"),
+        ("Io", "Where It Was 06:40", "name solar-system body ['Io']"),
+    ]
+
+    @pytest.mark.parametrize("obj, targname, reason", _CASES)
+    def test_gaiaid_locates_it(self, obj, targname, reason):
+        parser = HeaderParser(
+            _hdr("Object", OBJECT=obj, TARGNAME=targname, GAIAID=f"DR3 {_G19}")
+        )
+        assert parser.DRP_KEYWORDS["OBJECT"] == "Unknown"
+        assert parser.DRP_KEYWORDS["GAIAID"] == f"Gaia DR3 {_G19}"
+        (warning,) = [w for w in parser.warnings if "OBJECT is Unknown" in w]
+        assert reason in warning
+        assert f"[native OBJECT={obj!r}, TARGNAME={targname!r}]" in warning
+        assert f"astrometry from GAIAID 'Gaia DR3 {_G19}'" in warning
+
+    @pytest.mark.parametrize("obj, targname, reason", _CASES)
+    def test_blank_gaiaid_raises(self, obj, targname, reason):
+        with pytest.raises(HeaderError, match="GAIAID is blank") as err:
+            HeaderParser(_hdr("Object", OBJECT=obj, TARGNAME=targname))
+        assert reason in str(err.value)
+
+
 class TestWarnings:
     """Each unreliable-metadata case is recorded and logged."""
 
@@ -632,8 +695,14 @@ class TestWarnings:
                 "OBJECT 'LFCStability' is no autocal label",
             ),
             (
-                _hdr("Object", OBJECT="10700", TARGNAME="HD 10701"),
-                "OBJECT '10700' disagrees with TARGNAME 'HD 10701'",
+                _hdr(
+                    "Object",
+                    OBJECT="10700",
+                    TARGNAME="HD 10701",
+                    GAIAID="Gaia DR3 2452378776434477184",
+                ),
+                "OBJECT is Unknown: the cards canonicalize to different names "
+                "('HD 10700' vs 'HD 10701')",
             ),
             (
                 _hdr("Object", OBJECT="K2-157", TARGNAME=""),
