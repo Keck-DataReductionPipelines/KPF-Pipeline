@@ -326,6 +326,9 @@ class PlotTimeseries:
                     "%s is an observer-junk frame (NOTJUNK=0); skipping", obs_id
                 )
                 continue
+            # Expected for a frame AstroQuery renamed (e.g. TIC n -> HD n): the
+            # discovery in scripts/process/timeseries.py matches HeaderParser's
+            # OBJECT. An accepted convenience-script gap, not a pipeline defect.
             if str(primary.get("OBJECT")).strip() != str(self.target):
                 logger.warning(
                     "L4 for %s has OBJECT %r, not target %r; plotting anyway",

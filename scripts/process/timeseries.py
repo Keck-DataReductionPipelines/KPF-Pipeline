@@ -29,6 +29,11 @@ and plotting runs whatever L4 is on disk (``--no-science`` plots the existing L4
 writing to ``{KPF_SCIENCE_OUTPUT}/QLP/timeseries`` unless ``--plot_dir`` overrides
 it. The run exits nonzero if any stage that ran reported a failure.
 
+A convenience helper, not part of the primary reduction pipeline or development
+flow: a shortcoming confined to this script (e.g. the discovery limits in
+``discover_science_obs_ids``) is low priority and must not drive changes to the
+pipeline, the mini-db, or its modules.
+
     kpfpipe timeseries --target "HD 10700" --date_range 20240101 20240131
 """
 
@@ -184,6 +189,10 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
         if df is None:  # empty/absent night -- already warned, skip it
             return ([], []), ""
         is_object = df["DRP_OBSTYPE"] == "Target"
+        # Known, accepted limit: DRP_OBJECT is HeaderParser's OBJECT, not the one
+        # AstroQuery writes to the products, so an Unknown or low-tier (TIC/KIC/
+        # Gaia) frame AstroQuery renames is missed or found only by its old name.
+        # A convenience-script gap (see module docstring), not a pipeline defect.
         is_target = df["DRP_OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
         is_junk = matched["ISJUNK"].astype(bool)
