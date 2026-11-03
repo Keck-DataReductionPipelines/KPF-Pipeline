@@ -269,9 +269,9 @@ class QCL0(QC):
 
         WMKO has written stale guider data into L0s: a record left over from
         another instrument (GCINSTRU LRISADC/MOSFIRE) or from the previous
-        exposure. GCINSTRU must be KPF, and every written GUIDER_CUBE_ORIGINS
-        timestamp (unwritten rows carry 0) must fall within 1 s of the shutter
-        window DATE-BEG..DATE-END.
+        exposure. GCINSTRU must be KPF, at least one GUIDER_CUBE_ORIGINS timestamp
+        must be written (unwritten rows carry 0; none means no record), and every
+        written one must fall within 1 s of the shutter window DATE-BEG..DATE-END.
         """
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         if hdr["GCINSTRU"] != "KPF":
@@ -282,7 +282,7 @@ class QCL0(QC):
         )
         ts = np.asarray(self.kpf_obj.data["GUIDER_CUBE_ORIGINS"]["timestamp"], float)
         ts = ts[ts != 0.0]
-        return bool(np.all((ts >= beg - 1.0) & (ts <= end + 1.0)))
+        return ts.size > 0 and bool(np.all((ts >= beg - 1.0) & (ts <= end + 1.0)))
 
     guider_record_ok._qc_key = "GDRRECOK"
 

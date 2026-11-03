@@ -56,6 +56,21 @@ class TestFrameIdentity:
     """OBSTYPE/OBSMODE/OBJECT/EXPTIME from IMTYPE, OCTAGON and shutters."""
 
     @pytest.mark.parametrize(
+        "imtype, octagon",
+        [
+            ("Flatlamp", "BrdbandFiber"),
+            ("Arclamp", "LFCFiber"),
+            ("Arclamp", "EtalonFiber"),
+            ("Arclamp", "Th_daily"),
+            ("Arclamp", "U_daily"),
+        ],
+    )
+    def test_lamp_frame_with_shutters_closed_raises(self, imtype, octagon):
+        # No lamp light reaches the CCD; the wide flat (all closed) is exempt.
+        with pytest.raises(HeaderError, match="every fiber shutter closed"):
+            HeaderParser(_hdr(imtype, octagon, shutters=SHUT))
+
+    @pytest.mark.parametrize(
         "header, obstype, obsmode, obj",
         [
             (_hdr("Bias", shutters=SHUT), "Bias", "Calibration", "Bias"),
@@ -89,7 +104,7 @@ class TestFrameIdentity:
                 "UNe_gold",
             ),
             (_hdr("Arclamp", "EtalonFiber"), "Etalon", "Calibration", "Etalon"),
-            (_hdr("Arclamp", "LFCFiber", shutters=SHUT), "LFC", "Calibration", "LFC"),
+            (_hdr("Arclamp", "LFCFiber"), "LFC", "Calibration", "LFC"),
             (
                 _hdr("Arclamp", "Th_daily", shutters=HK, cameras=("NO", "NO", "YES")),
                 "Arclamp",
@@ -442,16 +457,21 @@ class TestGaiaId:
         assert parser.DRP_KEYWORDS["GAIAID"] == f"Gaia DR3 {_G19}"
         assert not self._gaia_warnings(parser)
 
+    def test_short_bare_id_message_names_the_fix(self):
+        with pytest.raises(HeaderError, match="shorter bare number is refused"):
+            self._parse("4295806720")
+
     @pytest.mark.parametrize(
-        "obj, native",
+        "obj, native, reason",
         [
-            (_G19, f"DR3 {_G18}0"),  # different source_id
-            (f"Gaia DR2 {_G19}", f"DR3 {_G19}"),  # different release
+            (_G19, f"DR3 {_G18}0", f"source_id {_G19} vs {_G18}0"),
+            (f"Gaia DR2 {_G19}", f"DR3 {_G19}", "releases DR2 and DR3"),
         ],
     )
-    def test_disagreement_with_gaia_object_raises(self, obj, native):
-        with pytest.raises(HeaderError, match="name different Gaia sources"):
+    def test_disagreement_with_gaia_object_raises(self, obj, native, reason):
+        with pytest.raises(HeaderError, match="name different Gaia sources") as err:
             self._parse(native, obj=obj)
+        assert reason in str(err.value)
 
 
 def _traces(keywords, prefix):
@@ -499,7 +519,6 @@ class TestIllumination:
             ),
             (_hdr("Bias", shutters=SHUT), ["None"] * 3),
             (_hdr("Flatlamp", shutters=ALL), ["None"] * 3),
-            (_hdr("Arclamp", "LFCFiber", shutters=SHUT), ["None"] * 3),
             (_hdr("Sky"), ["Unknown"] * 3),
             # A shutter the source depends on that is absent or garbled.
             (
@@ -732,6 +751,18 @@ class TestWarnings:
                 # A daily-lamp OBJECT on a gold-lamp frame: the lamps must not conflate.
                 _hdr("Arclamp", "Th_gold", OBJECT="autocal-thar-all-morn"),
                 "disagrees with derived autocal-thar_gold-all",
+            ),
+            (
+                # SCI+SKY lit: no autocal label names that fiber set.
+                _hdr(
+                    "Arclamp",
+                    "Th_daily",
+                    shutters=("open", "open", "closed"),
+                    OBJECT="autocal-thar-hk",
+                ),
+                "OBJECT 'autocal-thar-hk' disagrees with the shutters "
+                "(SCISEL='open', SKYSEL='open', SIMCALSH='closed'), which no "
+                "autocal label names",
             ),
             (
                 # The shutter-blind native pair: SKY-OBJ names the lamp on a shut fiber.

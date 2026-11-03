@@ -219,6 +219,19 @@ class HeaderParser:
         elif obstype == "Target":
             self.DRP_KEYWORDS["OBJECT"] = self._target_object()
         else:
+            # Lamp light reaches the CCD only through an open fiber shutter; the
+            # wide flat illuminates the CCD directly, so its shutters stay closed.
+            closed = all(_lower(self.WMKO_HEADER.get(k)) == "closed" for k in _SHUTTERS)
+            if (
+                obstype in ("Flat", "LFC", "Etalon", "Arclamp")
+                and cal_object != "WideFlat"
+                and closed
+            ):
+                raise HeaderError(
+                    f"{self._label}: {cal_object} frame with every fiber shutter "
+                    f"closed ({', '.join(_SHUTTERS)}): no lamp light reached the "
+                    "CCD, so the frame is no calibration"
+                )
             self._check_cal_object(cal_object)
             self.DRP_KEYWORDS["OBJECT"] = cal_object
         self.DRP_KEYWORDS["ISSOLAR"] = self.DRP_KEYWORDS["OBJECT"] == "SoCal"
@@ -264,7 +277,12 @@ class HeaderParser:
             if raw:
                 raise HeaderError(
                     f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 "
-                    "source_id. L0 header must be fixed: correct GAIAID or blank it."
+                    "source_id. Accepted: '[Gaia] DR3 <id>', '[Gaia] DR2 <id>' "
+                    "(EDR3 = DR3) or 'Gaia <id>' with a 10-19 digit source_id, or a "
+                    "bare 17-19 digit id; a shorter bare number is refused, as it "
+                    "could be another catalog's (e.g. an HD number). L0 header must "
+                    "be fixed: correct GAIAID (a short id needs its release, e.g. "
+                    "'Gaia DR3 4295806720') or blank it."
                 )
             gaiaid = None
 
@@ -275,11 +293,20 @@ class HeaderParser:
             return obj
         *obj_release, obj_id = obj.split()[1:]
         *gaia_release, gaia_id = gaiaid.split()[1:]
-        if obj_id != gaia_id or (obj_release and gaia_release and obj != gaiaid):
+        if obj_id != gaia_id:
             raise HeaderError(
                 f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
-                "different Gaia sources. L0 header must be fixed: make OBJECT and "
-                "GAIAID name the same source."
+                f"different Gaia sources (source_id {obj_id} vs {gaia_id}). L0 "
+                "header must be fixed: make OBJECT and GAIAID name the same source."
+            )
+        if obj_release and gaia_release and obj != gaiaid:
+            raise HeaderError(
+                f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
+                f"different Gaia sources: one source_id under releases "
+                f"{obj_release[0]} and {gaia_release[0]}. DR2 and DR3 source_ids are "
+                "separate catalogs (a DR2 id can name another source, or none, in "
+                "DR3), so the pair is not taken as one star. L0 header must be "
+                "fixed: give OBJECT and GAIAID the same release, or blank one."
             )
         resolved = max(obj, gaiaid, key=len)
         if obj != resolved:
@@ -458,7 +485,8 @@ class HeaderParser:
             expected = f"{family}-hk"
         else:
             shutters = tuple(_lower(native.get(k)) for k in _SHUTTERS)
-            expected = f"{family}-{_SHUTTER_SUFFIXES.get(shutters)}"
+            suffix = _SHUTTER_SUFFIXES.get(shutters)
+            expected = f"{family}-{suffix}" if suffix else None
         match = re.match(r"autocal-([a-z_]+)(?:-([a-z]+))?", obj.lower())
         if not match:
             self._warn(f"OBJECT {obj!r} is no autocal label")
@@ -469,7 +497,15 @@ class HeaderParser:
                 if lamp in ("bias", "dark", "wideflat")
                 else f"{lamp}-{fibers or 'all'}"
             )
-            if label != expected:
+            if expected is None:
+                states = ", ".join(
+                    f"{k}={v!r}" for k, v in zip(_SHUTTERS, shutters, strict=True)
+                )
+                self._warn(
+                    f"OBJECT {obj!r} disagrees with the shutters ({states}), which "
+                    "no autocal label names"
+                )
+            elif label != expected:
                 self._warn(f"OBJECT {obj!r} disagrees with derived autocal-{expected}")
         if targname.lower() not in ("", "unknown"):
             self._warn(f"TARGNAME {targname!r} names a target on a {cal_object} frame")

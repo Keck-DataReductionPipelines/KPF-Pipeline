@@ -282,7 +282,7 @@ class KPF0(KPFDataModel):
     def _observation_settings(self):
         """Stamp every value ``HeaderParser`` derives from the native header.
 
-        Frame identity (OBSTYPE, OBSMODE, OBJECT, ISSOLAR, EXPTIME), fiber
+        Frame identity (OBSTYPE, OBSMODE, OBJECT, GAIAID, ISSOLAR, EXPTIME), fiber
         illumination (SKYSRC, SCISRC, CALSRC, which downstream code consumes,
         and the SIMULCAL summary),
         the EPRV trace cards (TRACE#, CLSRC#, and CSRC#/CID# as ``None`` until

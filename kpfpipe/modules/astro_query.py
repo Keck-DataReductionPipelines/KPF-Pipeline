@@ -784,10 +784,11 @@ class AstroQuery:
         raw TARG* pointing sanitized to the EPRV C*# format and rotated from its native
         FK5 (J2000) to ICRS, so all three sources share one frame. KPF pointing is
         always FK5, so a non-FK5 or absent TARGFRAM raises rather than being coerced --
-        a wrong frame would corrupt the barycentric correction. Returns None (warned,
-        no row) when TARGRA is absent or the TARG* astrometry cannot be parsed. Always
-        run: TCSOFF needs this row even when ``astrometry_priority`` bars wmko from
-        anchoring the position.
+        a wrong frame would corrupt the barycentric correction. Returns None (no row)
+        when TARGRA is absent, or (warned) when the TARG* astrometry cannot be
+        parsed. Always run: TCSOFF needs this row even when ``astrometry_priority``
+        bars wmko from anchoring the position; without it the diagnostic reports
+        itself not computed.
         """
         native = self.l0_obj.headers["INSTRUMENT_HEADER"]
         if native.get("TARGRA") is None:
@@ -893,14 +894,17 @@ class AstroQuery:
         # First candidate in astrometry_priority order with a complete block wins;
         # an incomplete one ahead of it is demoted with a warning.
         base_source, base_record = None, None
+        gaps = {}  # source -> why it cannot be the base, for the error below
         for source in self.astrometry_priority:
             record = getattr(self, f"_{source}")
             if record is None:
+                gaps[source] = "no record"
                 continue
             missing = [field for field in astrometry if record[field] is None]
             if not missing:
                 base_source, base_record = source, record
                 break
+            gaps[source] = f"missing {', '.join(missing)}"
             logger.warning(
                 "%s astrometry incomplete (missing %s); skipping it as the "
                 "astrometric base",
@@ -908,12 +912,16 @@ class AstroQuery:
                 ", ".join(missing),
             )
         if base_record is None:
-            available = [source for source, _ in candidates]
+            reasons = "; ".join(f"{src}: {why}" for src, why in gaps.items())
             raise ValueError(
-                f"cannot build a canonical astrometry position for "
-                f"{self.l0_obj.obs_id or 'unknown'}: no source in astrometry_priority "
-                f"{list(self.astrometry_priority)} supplies a complete "
-                f"ra/dec/pmra/pmdec/parallax/epoch block (rows built: {available})"
+                f"{self.l0_obj.obs_id or 'unknown'}: target identified but no "
+                f"complete astrometric solution: no source in astrometry_priority "
+                f"{list(self.astrometry_priority)} supplies all of "
+                f"{'/'.join(astrometry)} ({reasons}). Barycentric correction needs "
+                "position, proper motion and parallax, so a target without them "
+                "-- a non-stellar object (galaxy, transient, nebula) or a Gaia "
+                "source with only a two-parameter solution -- is unsupported. DRP "
+                "limitation, not an L0 header problem."
             )
 
         # rv from the base source, else telescope TARGRADV off PRIMARY -- independent of
@@ -1100,11 +1108,13 @@ class AstroQuery:
         self._wmko = self.read_wmko_header()
         primary = self.l0_obj.headers["PRIMARY"]
         gaiaid_blank = self.do_gaia_query and not primary["GAIAID"]
-        self._gaia = self.query_gaia() if self.do_gaia_query else None
+        self._gaia = (
+            self.query_gaia() if self.do_gaia_query and primary["GAIAID"] else None
+        )
         self._simbad = self.query_simbad() if self.do_simbad_query else None
         # Gaia runs first so a bare GAIAID's resolution reaches OBJECT before SIMBAD;
-        # a blank GAIAID that SIMBAD filled is queried now.
-        if gaiaid_blank and primary["GAIAID"]:
+        # a blank GAIAID waits for SIMBAD's fill (query_gaia warns if none came).
+        if gaiaid_blank:
             self._gaia = self.query_gaia()
 
         # HeaderParser passes a Target only with a name or a GAIAID to look up

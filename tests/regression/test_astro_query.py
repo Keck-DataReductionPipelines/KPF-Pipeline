@@ -251,6 +251,15 @@ class TestAstrometryPriority:
         with pytest.raises(ValueError, match="astrometry_priority"):
             _merge({"wmko": _record("W")}, priority=("gaia", "simbad"))
 
+    def test_incomplete_astrometry_message_names_each_gap(self):
+        # A Gaia two-parameter solution, no SIMBAD record: a DRP limitation.
+        gaia = _record("G", pmra=None, pmdec=None, parallax=None)
+        with pytest.raises(ValueError, match="no complete astrometric solution") as e:
+            _merge({"gaia": gaia}, priority=("gaia", "simbad"))
+        message = str(e.value)
+        assert "gaia: missing pmra, pmdec, parallax; simbad: no record" in message
+        assert "not an L0 header problem" in message
+
     def test_priority_order_is_honored(self):
         records = {"gaia": _record("G", ra=10.0), "simbad": _record("S", ra=20.0)}
         assert _merge(records, priority=("gaia", "simbad"))["radec_src"] == "gaia"

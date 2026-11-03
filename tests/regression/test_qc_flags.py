@@ -1125,6 +1125,11 @@ class TestQCL0:
         l0 = self._make_kpf0_with_guider_record(tmp_path, ts)
         assert QCL0(l0).guider_record_ok() is True
 
+    def test_guider_record_absent_fails(self, tmp_path):
+        # Every row unwritten: no record was taken during this exposure.
+        l0 = self._make_kpf0_with_guider_record(tmp_path, np.zeros(5))
+        assert QCL0(l0).guider_record_ok() is False
+
     def test_guider_record_previous_exposure_fails(self, tmp_path):
         # The guider record of the exposure before, ~94 s earlier.
         ts = np.linspace(self._BEG_UNIX, self._END_UNIX, 10) - 94.0
