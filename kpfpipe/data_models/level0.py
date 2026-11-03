@@ -12,6 +12,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.coordinates import Angle
+from astropy.time import Time
 
 from kpfpipe import __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
@@ -257,7 +258,7 @@ class KPF0(KPFDataModel):
             jd = None
         if jd is None or jd <= 2400000.5:
             raise ValueError(f"{self.obs_id}: MJD-OBS={mjd!r} is not a valid MJD")
-        obs_time = pd.to_datetime(jd, unit="D", origin="julian")
+        obs_time = Time(jd, format="jd", scale="utc").datetime
         obs_date = obs_time.strftime("%Y%m%d")
         if self.obs_id and obs_date != get_datecode(self.obs_id):
             raise ValueError(
@@ -273,9 +274,9 @@ class KPF0(KPFDataModel):
         Runs after ``_timestamp``, which is what supplies JD_UTC. A frame no era
         covers raises (see ``instrument_era``).
         """
-        obs_time = pd.to_datetime(
-            self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
-        )
+        obs_time = Time(
+            self.headers["PRIMARY"]["JD_UTC"], format="jd", scale="utc"
+        ).datetime
         self.set_keyword("INSTERA", instrument_era(obs_time))
 
     def _observation_settings(self):

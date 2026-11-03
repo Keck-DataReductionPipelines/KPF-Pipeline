@@ -7,7 +7,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
-import pandas as pd
+from astropy.time import Time
 
 from kpfpipe import INSTRUMENT_ERAS, REPO_ROOT
 
@@ -219,7 +219,7 @@ def select_era_reference(pattern, kind, primary, obs_id, eras):
         If the era has no reference measured before the frame.
     """
     instera = str(primary["INSTERA"])
-    obs_time = pd.to_datetime(primary["JD_UTC"], unit="D", origin="julian")
+    obs_time = Time(primary["JD_UTC"], format="jd", scale="utc").datetime
 
     match = eras[eras["INSTERA"].astype(str) == instera]
     if match.empty:
@@ -237,7 +237,7 @@ def select_era_reference(pattern, kind, primary, obs_id, eras):
     for path in glob.glob(pattern):
         datecode = os.path.basename(path)[len(prefix) : -len(suffix)]
         # +2 s places a reference dated on an era's start day inside that era
-        measured = pd.Timestamp(datecode) + pd.Timedelta(seconds=2)
+        measured = datetime.strptime(datecode, "%Y%m%d") + timedelta(seconds=2)
         if era["UT_start_date"] <= measured <= latest:
             in_era[measured] = path
     if not in_era:
