@@ -737,6 +737,28 @@ class TestExternalQueries:
             rec = aq.query_simbad()
         assert (rec["catalog"], rec["object"]) == ("Hipparcos (2007)", "HD 10700")
 
+    @pytest.mark.parametrize(
+        "ids, expected",
+        [
+            ("HD  10700|Gaia DR2 222|Gaia DR3 333", "Gaia DR3 333"),
+            ("HD  10700|Gaia DR2 222", "Gaia DR2 222"),
+            ("HD  10700|* tau Cet", None),
+        ],
+    )
+    def test_query_simbad_fills_blank_gaiaid(self, ids, expected):
+        # DR3 preferred over DR2, whatever catalog the coordinates cite.
+        l0 = _l0_for_query(OBJECT="HD 10700")
+        table = _simbad_table({"ids": ids, "coo_bibcode": "2007A&A...474..653V"})
+        with _patch_simbad(_simbad_instance(table)):
+            AstroQuery(l0).query_simbad()
+        assert l0.headers["PRIMARY"]["GAIAID"] == expected
+
+    def test_query_simbad_keeps_header_gaiaid(self):
+        l0 = _l0_for_query(OBJECT="HD 10700", GAIAID="Gaia DR3 12345")
+        with _patch_simbad(_simbad_instance(_simbad_table())):
+            AstroQuery(l0).query_simbad()
+        assert l0.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 12345"
+
     def test_query_simbad_unknown_catalog_warns(self, caplog):
         aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
         table = _simbad_table({"coo_bibcode": "1999XYZ.....1....Q"})
@@ -1108,6 +1130,43 @@ class TestPerform:
         assert row["ra"] == _ra_str(20.0)
         assert row["radec_src"] == "simbad"
         assert row["object"] == "Gaia DR3 2452378776434477184"
+
+    @staticmethod
+    def _perform_simbad_gaiaid(gaiaid, gaia_table, caplog, **config):
+        """perform() on 'tau Cet' with the given PRIMARY GAIAID; SIMBAD lists Gaia DR3
+        2452378776434477184. Returns (AstroQuery, Gaia run_sync mock)."""
+        aq = AstroQuery(_l0_for_query(GAIAID=gaiaid, OBJECT="tau Cet"), config or None)
+        with (
+            _patch_gaia(_gaia_job(gaia_table)) as run_sync,
+            _patch_simbad(_simbad_instance(_simbad_table({"ra": 20.0}))),
+            caplog.at_level(logging.WARNING),
+        ):
+            aq.perform()
+        return aq, run_sync
+
+    def test_blank_gaiaid_filled_from_simbad(self, caplog):
+        aq, run_sync = self._perform_simbad_gaiaid(
+            None, _gaia_table({"ra": 10.0}), caplog
+        )
+        assert aq.l0_obj.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 2452378776434477184"
+        assert "filled from SIMBAD" in caplog.text
+        assert "2452378776434477184" in run_sync.call_args.args[0]
+        row = _kpf_drp_row(aq.l0_obj.data["CATALOG_RECORD"])
+        assert (row["radec_src"], row["ra"]) == ("gaia", _ra_str(10.0))
+
+    def test_unmatched_header_gaiaid_not_replaced(self, caplog):
+        # A header id Gaia can't find is a disagreement, not a blank: kept as is.
+        aq, _ = self._perform_simbad_gaiaid("Gaia DR3 12345", Table(), caplog)
+        assert aq.l0_obj.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 12345"
+        assert aq._gaia is None
+        assert "filled from SIMBAD" not in caplog.text
+
+    def test_gaia_off_fills_gaiaid_without_query(self, caplog):
+        aq, run_sync = self._perform_simbad_gaiaid(
+            None, _gaia_table(), caplog, do_gaia_query=False
+        )
+        assert aq.l0_obj.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 2452378776434477184"
+        assert run_sync.call_count == 0
 
 
 class TestConstructor:

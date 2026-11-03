@@ -12,7 +12,8 @@ All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_SCHEMA`
 the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards; the resolved names
 are joined into ``ALIASES``. Those two families are the only PRIMARY cards AstroQuery
 writes, besides recording a resolution on GAIAID/OBJECT: the release Gaia resolves
-for a bare GAIAID, and SIMBAD's common name for a Gaia-named OBJECT.
+for a bare GAIAID, SIMBAD's Gaia designation for a blank GAIAID, and SIMBAD's common
+name for a Gaia-named OBJECT.
 """
 
 import logging
@@ -570,7 +571,8 @@ class AstroQuery:
         """Query SIMBAD for the OBJECT's ICRS J2000 astrometry, or None (fail-soft).
 
         A Gaia-named OBJECT (with its release) that SIMBAD resolves becomes SIMBAD's
-        common name. Returns None (warned, not raised) when OBJECT is ``Unknown`` or a
+        common name; a blank GAIAID becomes SIMBAD's Gaia designation (DR3, else
+        DR2), warned. Returns None (warned, not raised) when OBJECT is ``Unknown`` or a
         Gaia designation without a release, or when the
         lookup fails on every mirror (``query_mirrors``) or resolves nothing. Raises
         ValueError if the result's column units differ from the assumed schema: the
@@ -612,6 +614,16 @@ class AstroQuery:
         self._verify_units(result, self._SIMBAD_UNITS, "SIMBAD")
         row = result[0]
         self._common_name = self._simbad_common_name(row)
+        primary = self.l0_obj.headers["PRIMARY"]
+        if not primary["GAIAID"]:
+            ids = [i.strip() for i in str(row["ids"]).split("|")]
+            gaiaid = next(
+                (i for p in ("Gaia DR3 ", "Gaia DR2 ") for i in ids if i.startswith(p)),
+                None,
+            )
+            if gaiaid:
+                logger.warning("GAIAID blank; filled from SIMBAD as %r", gaiaid)
+                self.l0_obj.set_keyword("GAIAID", gaiaid)
         if name.startswith("Gaia "):
             logger.warning("resolved OBJECT %r to %r", name, self._common_name)
             self.l0_obj.set_keyword("OBJECT", self._common_name)
@@ -944,7 +956,8 @@ class AstroQuery:
             The input L0, with the ``wmko``/``gaia``/``simbad`` and merged ``kpf-drp``
             rows written to ``CATALOG_RECORD``, the canonical astrometry overlaid onto
             the SCI-fiber ``C*#`` PRIMARY cards, the resolved names on ``ALIASES``, plus
-            an 'astro_query' receipt entry.
+            an 'astro_query' receipt entry. A blank GAIAID that SIMBAD fills is
+            queried on Gaia after SIMBAD.
             Unusually for a pipeline module this returns an L0, not the next level --
             AstroQuery runs before assembly.
 
@@ -963,8 +976,14 @@ class AstroQuery:
             self._validate_priority()
 
         self._wmko = self.read_wmko_header()
+        primary = self.l0_obj.headers["PRIMARY"]
+        gaiaid_blank = self.do_gaia_query and not primary["GAIAID"]
         self._gaia = self.query_gaia() if self.do_gaia_query else None
         self._simbad = self.query_simbad() if self.do_simbad_query else None
+        # Gaia runs first so a bare GAIAID's resolution reaches OBJECT before SIMBAD;
+        # a blank GAIAID that SIMBAD filled is queried now.
+        if gaiaid_blank and primary["GAIAID"]:
+            self._gaia = self.query_gaia()
 
         self.merge_catalog_records()
 
