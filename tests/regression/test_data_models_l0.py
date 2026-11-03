@@ -653,6 +653,16 @@ class TestHeaderKeywords:
         assert prim["OBJECT"] == "HD 10700"
         assert prim["ISSOLAR"] is False
 
+    def test_sanitized_gaiaid_is_stamped(self):
+        prim = self._standardize(
+            "Object",
+            OBJECT="10700",
+            GAIAID="DR3_2452378776434477184",
+            ELAPSED=60.0,
+            **_ALL_FIBERS,
+        ).headers["PRIMARY"]
+        assert prim["GAIAID"] == "Gaia DR3 2452378776434477184"
+
     def test_every_header_parser_keyword_is_stamped(self):
         l0 = self._standardize(
             "Arclamp",
