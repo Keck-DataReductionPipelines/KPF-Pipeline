@@ -7,14 +7,10 @@ from pathlib import Path
 
 from astropy.io import fits
 
-from kpfpipe import REPO_ROOT
+from kpfpipe import SOLAR_SYSTEM_OBJECTS
 from kpfpipe.utils.kpf import kpf_target_name
 
 logger = logging.getLogger(__name__)
-
-# Planets, dwarf planets and major moons, one name per line.
-with open(REPO_ROOT / "reference/solar_system_objects.txt") as _f:
-    _SOLAR_SYSTEM_OBJECTS = [line.strip() for line in _f if line.strip()]
 
 # OCTAGON position -> the source it feeds the fibers, in OBJECT vocabulary.
 _SOURCES = {
@@ -266,7 +262,7 @@ class HeaderParser:
             return None
         raw = self._native_gaiaid()
         obj = self.DRP_KEYWORDS["OBJECT"]
-        if obj in _SOLAR_SYSTEM_OBJECTS:
+        if obj in SOLAR_SYSTEM_OBJECTS:
             if raw:
                 self._warn(
                     f"GAIAID {raw!r} on solar-system target {obj!r}; GAIAID blank"
@@ -344,7 +340,7 @@ class HeaderParser:
         bodies = [
             {
                 body
-                for body in _SOLAR_SYSTEM_OBJECTS
+                for body in SOLAR_SYSTEM_OBJECTS
                 if re.search(rf"\b{body}\b", s, re.IGNORECASE)
             }
             for s in (obj, targname)
@@ -435,18 +431,12 @@ class HeaderParser:
         warning ``why`` with the native cards; raise HeaderError if GAIAID is
         blank too.
 
-        ``Unknown`` is common and usually NOT bad data: the cards often carry
-        legitimate aliases of one star (OBJECT ``201092`` / TARGNAME ``61 Cyg B``,
-        ``165341`` / ``70 Oph b``, ``MASCARA-1`` / ``201585``), and
-        ``kpf_target_name`` canonicalizes spellings but does not cross-identify
-        catalogs. Other causes: a truncated Gaia id in OBJECT, both cards blank,
-        test labels, or solar-system bodies (only one named body reaches
-        AstroQuery's solar-system stop; a stale GAIAID on the others fails
-        TARGETOK). In the 2026-11-01 campaign ~2,000 of ~34,000 Target frames
-        were ``Unknown``; ~97% had a GAIAID, from which AstroQuery resolves
-        OBJECT (``AstroQuery._resolve_identity``). With GAIAID blank nothing
-        locates the target (SIMBAD needs a name or GAIAID), so fail here rather
-        than in AstroQuery.
+        ``Unknown`` is common and usually not bad data: the cards often carry
+        legitimate aliases of one star (OBJECT ``201092`` / TARGNAME ``61 Cyg B``),
+        which ``kpf_target_name`` does not cross-identify. Most such frames carry
+        a GAIAID, from which AstroQuery resolves OBJECT
+        (``AstroQuery._resolve_identity``); with GAIAID blank nothing locates the
+        target, so fail here rather than in AstroQuery.
         """
         native = self.WMKO_HEADER
         context = (

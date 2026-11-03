@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 from kpfpipe.utils.io import kpf_filename
-from kpfpipe.utils.kpf import is_datecode
+from kpfpipe.utils.kpf import get_datecode, is_datecode
 from scripts._argparse import dates_parser, obs_ids_parser
 
 # ``{user}`` is filled in from --user.
@@ -202,7 +202,7 @@ def run(args, filters=()):
     ssh = ssh_command()
     try:
         if obs_ids:
-            datecodes = sorted({o[3:11] for o in obs_ids})
+            datecodes = sorted({get_datecode(o) for o in obs_ids})
         else:
             datecodes = args.dates or remote_datecodes(
                 ssh, remote, remote_dir, *args.date_range

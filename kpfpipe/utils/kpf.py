@@ -249,18 +249,18 @@ def select_era_reference(pattern, kind, primary, obs_id, eras):
 
 
 def kpf_target_name(name):
-    """``(catalog, name, planet)`` of the known alias `name` matches, else
-    ``(None, name, None)``: the one apparatus for target identifiers
-    (reference/star_catalog_aliases.csv, whose row order is irrelevant; raises
-    ValueError on a name matching several rows, a csv bug).
+    """``(catalog, canonical, planet)`` for a known alias, else ``(None, name, None)``.
 
-    The canonical name is what HeaderParser writes to OBJECT and what AstroQuery
-    sends to SIMBAD. E.g. 'HD57555', 'HD 57555' and '57555' -> ('HD', 'HD 57555', None);
-    'T001824' -> ('TOI', 'TOI-1824', None). A trailing letter on a known id is a
-    stellar component if uppercase or 'a' ('hd21019a' -> ('HD', 'HD 21019 A',
-    None)), else a planet, dropped and returned ('HD 189733b' -> ('HD',
-    'HD 189733', 'b')). Gaia, TIC and KIC ids are purely numeric and take no
-    letter.
+    The canonical name (per reference/star_catalog_aliases.csv) is what HeaderParser
+    writes to OBJECT and AstroQuery sends to SIMBAD: 'HD57555' and '57555' ->
+    ('HD', 'HD 57555', None). A trailing letter on a known non-numeric id is a
+    stellar component if uppercase or 'a' ('hd21019a' -> 'HD 21019 A'), else a
+    planet, split off ('HD 189733b' -> ('HD', 'HD 189733', 'b')).
+
+    Raises
+    ------
+    ValueError
+        If ``name`` matches several csv rows (the patterns must be disjoint).
     """
     matches = {
         (catalog, canonical.format(*(g.upper() for g in match.groups())))

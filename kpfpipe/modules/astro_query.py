@@ -26,7 +26,7 @@ from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
-from kpfpipe import DEFAULT_CFG, DETECTOR, REPO_ROOT, SCI_FIBERS
+from kpfpipe import DEFAULT_CFG, DETECTOR, SCI_FIBERS, SOLAR_SYSTEM_OBJECTS
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.header import HeaderError
@@ -34,10 +34,6 @@ from kpfpipe.utils.kpf import kpf_target_name
 from kpfpipe.utils.network import gaia_client, query_mirrors, simbad_client
 
 logger = logging.getLogger(__name__)
-
-# Planets, dwarf planets and major moons: no catalog astrometry.
-with open(REPO_ROOT / "reference/solar_system_objects.txt") as _f:
-    _SOLAR_SYSTEM_OBJECTS = {line.strip() for line in _f if line.strip()}
 
 _DEFAULT_CFG = {
     **DEFAULT_CFG,
@@ -87,7 +83,7 @@ class AstroQuery:
                 "catalog entry"
             )
         obj = l0_obj.headers["PRIMARY"].get("OBJECT")
-        if obj in _SOLAR_SYSTEM_OBJECTS:
+        if obj in SOLAR_SYSTEM_OBJECTS:
             raise ValueError(
                 f"{l0_obj.obs_id or 'unknown'}: AstroQuery has no ephemeris source "
                 f"for solar-system target {obj!r}. DRP limitation (pending JPL "
@@ -231,7 +227,7 @@ class AstroQuery:
                 )
                 return None
             if len(found):
-                logger.warning("resolved bare GAIAID %s to Gaia %s", source_id, release)
+                logger.info("resolved bare GAIAID %s to Gaia %s", source_id, release)
                 return release
         raise HeaderError(
             f"{self.l0_obj.obs_id or 'unknown'}: GAIAID {source_id} carries no "
@@ -266,15 +262,12 @@ class AstroQuery:
         PRIMARY OBJECT and ALIASES -- the same rule for every frame.
 
         Aliases are the header OBJECT (unless ``Unknown``), the Gaia designation and
-        every SIMBAD identifier in a known catalog (``kpf_target_name``), plus the
-        SIMBAD common name, which goes on ALIASES only. Identifiers fall in two
-        tiers (``_LOW_TIER``: purely numeric Gaia/TIC/KIC ids; all other names are
-        high). OBJECT is the header OBJECT if high tier, so a good name is never
-        renamed (TOI-2473 stays though SIMBAD lists HD 287319); else the most
-        preferred high-tier alias (``_HIGH_TIER``, HD first), e.g. Unknown ->
-        HD 201092 for alias cards '201092'/'61 Cyg B' located by GAIAID; else the
-        low-tier one. ALIASES lists OBJECT, then the other catalogued aliases by
-        preference (``_HIGH_TIER`` then ``_LOW_TIER``), then the common name.
+        every SIMBAD identifier in a known catalog (``kpf_target_name``); the SIMBAD
+        common name goes on ALIASES only. OBJECT is the header OBJECT if high tier,
+        so a good name is never renamed (TOI-2473 stays though SIMBAD lists
+        HD 287319); else the most preferred high-tier alias; else the low-tier one
+        (``_HIGH_TIER``/``_LOW_TIER``). ALIASES lists OBJECT, then the other
+        catalogued aliases by preference, then the common name.
 
         Raises
         ------
@@ -314,7 +307,7 @@ class AstroQuery:
                 "OBJECT and Gaia designation only"
             )
 
-        def low(name):
+        def is_low_tier(name):
             return kpf_target_name(name)[0] in self._LOW_TIER
 
         def order(name):  # catalog preference; an uncatalogued header OBJECT first
@@ -326,8 +319,8 @@ class AstroQuery:
         names += [i for i in simbad_ids if kpf_target_name(i)[0]]
         # De-duplicated; the stable sort keeps the header's, then Gaia's, first.
         names = sorted(dict.fromkeys(names), key=order)
-        high = [n for n in names if not low(n)]
-        if obj != "Unknown" and not low(obj):
+        high = [n for n in names if not is_low_tier(n)]
+        if obj != "Unknown" and not is_low_tier(obj):
             new = obj
         elif high:
             new = high[0]
@@ -567,7 +560,7 @@ class AstroQuery:
         if bare:
             for key in ("GAIAID", "OBJECT"):
                 if primary[key] == gaiaid:
-                    logger.warning("resolved %s %r to %r", key, gaiaid, designation)
+                    logger.info("resolved %s %r to %r", key, gaiaid, designation)
                     self.l0_obj.set_keyword(key, designation)
         row = results[0]
         ra, dec = self._scalar(row["ra"]), self._scalar(row["dec"])

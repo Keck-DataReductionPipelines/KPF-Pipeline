@@ -93,7 +93,7 @@ class KPF0(KPFDataModel):
         """
         for hdu in hdul[1:]:
             if hdu.name != hdu.name.upper():
-                logger.info(
+                logger.debug(
                     "renaming L0 extension %r to %r", hdu.name, hdu.name.upper()
                 )
                 hdu.name = hdu.name.upper()

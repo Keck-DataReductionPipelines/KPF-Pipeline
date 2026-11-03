@@ -78,12 +78,19 @@ def load_instrument_era_reference():
     return pd.read_csv(path, parse_dates=["UT_start_date", "UT_end_date"])
 
 
+def load_solar_system_objects():
+    """Planets, dwarf planets and major moons (no catalog astrometry), one per line."""
+    path = Path(REPO_ROOT) / "reference/solar_system_objects.txt"
+    return tuple(line.strip() for line in path.read_text().splitlines() if line.strip())
+
+
 CHIPS = ("GREEN", "RED")
 FIBERS = ("SKY", "SCI1", "SCI2", "SCI3", "CAL")
 SCI_FIBERS = ("SCI1", "SCI2", "SCI3")
 DETECTOR = load_detector_config()
 OBSERVATORY = load_observatory_config()
 INSTRUMENT_ERAS = load_instrument_era_reference()
+SOLAR_SYSTEM_OBJECTS = load_solar_system_objects()
 
 # By default use both CCDs and all five fibers
 DEFAULT_CFG = {

@@ -164,7 +164,7 @@ class TestKPF0ErrorPaths:
         guider = fits.ImageHDU(data=np.ones((4, 4), dtype=np.float32))
         guider.header["EXTNAME"] = "guider_avg"
         fn = self._minimal_l0(tmp_path, extra_hdus=[guider])
-        with caplog.at_level(logging.INFO, logger="kpfpipe.data_models.level0"):
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.data_models.level0"):
             l0 = KPF0.from_fits(fn)
         assert np.array_equal(l0.data["GUIDER_AVG"], np.ones((4, 4)))
         assert l0.headers["GUIDER_AVG"]["EXTNAME"] == "GUIDER_AVG"

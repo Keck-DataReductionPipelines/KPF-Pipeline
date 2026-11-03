@@ -1056,7 +1056,7 @@ class TestBareGaiaIdResolution:
 
     def test_newest_matching_release_wins(self, caplog):
         # Present in both -> DR3, the most recent.
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.INFO):
             rec = self._query(present={"DR2", "DR3"})
         assert rec["object"] == "Gaia DR3 12345"
         assert "resolved bare GAIAID 12345 to Gaia DR3" in caplog.text
