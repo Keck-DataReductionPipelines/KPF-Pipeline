@@ -263,8 +263,8 @@ class HeaderParser:
 
         The native card may carry a ``Gaia`` prefix and a DR2/DR3/EDR3 release
         (EDR3 is DR3: they share source_ids), separated by spaces, underscores or
-        nothing; the source_id must be 17-19 digits (``kpf_target_name``, catalog
-        ``Gaia``). Anything else raises
+        nothing; the source_id must be 10-19 digits, or 17-19 if bare
+        (``kpf_target_name``, catalog ``Gaia``). Anything else raises
         HeaderError; a blank or 'None' card is blank. A Gaia-named OBJECT must
         agree with it: a blank GAIAID takes the OBJECT's, and whichever carries
         the release lends it to the other (each warned); a different source_id

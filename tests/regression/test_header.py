@@ -351,6 +351,8 @@ class TestGaiaId:
             (f"EDR3_{_G19}", f"Gaia DR3 {_G19}"),  # EDR3 shares DR3 source_ids
             (_G19, f"Gaia {_G19}"),  # bare: AstroQuery resolves the release
             (f"Gaia {_G19}", f"Gaia {_G19}"),
+            ("DR3 4295806720", "Gaia DR3 4295806720"),  # low-HEALPix source_id
+            ("Gaia 4295806720", "Gaia 4295806720"),
         ],
     )
     def test_canonical(self, native, expected):
@@ -369,7 +371,8 @@ class TestGaiaId:
             "DR3",
             f"DR1 {_G19}",
             f"DR4 {_G19}",
-            f"Gaia DR3 {_G19[:15]}",
+            f"Gaia DR3 {_G19[:9]}",
+            "4295806720",  # a bare short number is not taken for Gaia
             f"{_G19}b",  # Gaia ids take no trailing letter
             f"Gaia DR3 {_G19} A",
         ],
