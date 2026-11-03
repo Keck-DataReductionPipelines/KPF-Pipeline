@@ -282,17 +282,20 @@ class HeaderParser:
 
         The native card may carry a ``Gaia`` prefix and a DR2/DR3/EDR3 release
         (EDR3 is DR3: they share source_ids), separated by spaces, underscores or
-        nothing; the source_id must be 17-19 digits. Anything else is warned and
-        blank. A Gaia-named OBJECT must agree with it: a blank GAIAID takes the
-        OBJECT's, and whichever carries the release lends it to the other (each
-        warned); a different source_id or release raises HeaderError.
+        nothing; the source_id must be 17-19 digits. Anything else raises
+        HeaderError; a blank or 'None' card is blank. A Gaia-named OBJECT must
+        agree with it: a blank GAIAID takes the OBJECT's, and whichever carries
+        the release lends it to the other (each warned); a different source_id
+        or release raises HeaderError.
         """
         if self.DRP_KEYWORDS["OBSTYPE"] != "Target" or self.DRP_KEYWORDS["ISSOLAR"]:
             return None
         raw = str(self.WMKO_HEADER.get("GAIAID") or "").strip()
+        if raw.lower() == "none":
+            raw = ""
         obj = self.DRP_KEYWORDS["OBJECT"]
         if obj in _SOLAR_SYSTEM_OBJECTS:
-            if raw and raw.lower() != "none":
+            if raw:
                 self._warn(
                     f"GAIAID {raw!r} on solar-system target {obj!r}; GAIAID blank"
                 )
@@ -305,7 +308,9 @@ class HeaderParser:
             release = (match[1] or "").upper().replace("EDR3", "DR3")
             gaiaid = " ".join(filter(None, ("Gaia", release, match[2])))
         elif raw:
-            self._warn(f"GAIAID {raw!r} is not a Gaia DR2/DR3 source_id; GAIAID blank")
+            raise HeaderError(
+                f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 source_id"
+            )
 
         if not obj.startswith("Gaia "):
             return gaiaid

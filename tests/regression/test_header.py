@@ -338,12 +338,11 @@ class TestGaiaId:
             f"Gaia DR3 {_G19[:15]}",
         ],
     )
-    def test_malformed_is_blank_and_warned(self, native):
-        parser = self._parse(native)
-        assert parser.DRP_KEYWORDS["GAIAID"] is None
-        assert any("is not a Gaia DR2/DR3 source_id" in w for w in parser.warnings)
+    def test_malformed_raises(self, native):
+        with pytest.raises(HeaderError, match="is not a Gaia DR2/DR3 source_id"):
+            self._parse(native)
 
-    @pytest.mark.parametrize("native", [None, ""])
+    @pytest.mark.parametrize("native", [None, "", "None", "none"])
     def test_absent_is_blank_and_silent(self, native):
         parser = self._parse(native)
         assert parser.DRP_KEYWORDS["GAIAID"] is None
@@ -352,6 +351,8 @@ class TestGaiaId:
     def test_blank_off_a_science_target(self):
         cal = HeaderParser(_hdr("Bias", GAIAID=f"DR3 {_G19}"))
         assert cal.DRP_KEYWORDS["GAIAID"] is None
+        # Malformed is irrelevant where no GAIAID is needed.
+        assert HeaderParser(_hdr("Bias", GAIAID="2")).DRP_KEYWORDS["GAIAID"] is None
         solar = self._parse(f"DR3 {_G19}", obj="SoCal", targname="Sun")
         assert solar.DRP_KEYWORDS["GAIAID"] is None
 
@@ -361,8 +362,10 @@ class TestGaiaId:
         assert parser.DRP_KEYWORDS["GAIAID"] is None
         assert not self._gaia_warnings(parser)
 
-    def test_solar_system_id_is_blanked_and_warned(self):
-        parser = self._parse(f"DR3 {_G19}", obj="Io", targname="Io Eclipse")
+    @pytest.mark.parametrize("native", [f"DR3 {_G19}", "2"])
+    def test_solar_system_id_is_blanked_and_warned(self, native):
+        # Well-formed or not: a solar-system target needs no GAIAID, so never raises.
+        parser = self._parse(native, obj="Io", targname="Io Eclipse")
         assert parser.DRP_KEYWORDS["GAIAID"] is None
         assert any("solar-system target 'Io'" in w for w in self._gaia_warnings(parser))
 
@@ -372,9 +375,8 @@ class TestGaiaId:
             # The release on either card is lent to the other.
             (_G19, f"DR3 {_G19}", f"Gaia DR3 {_G19}"),
             (f"Gaia DR3 {_G19}", _G19, f"Gaia DR3 {_G19}"),
-            # A blank or malformed GAIAID takes the OBJECT's.
+            # A blank GAIAID takes the OBJECT's.
             (f"Gaia DR3 {_G19}", None, f"Gaia DR3 {_G19}"),
-            (_G19, "0", f"Gaia {_G19}"),
         ],
     )
     def test_reconciled_with_gaia_object(self, obj, native, expected):
