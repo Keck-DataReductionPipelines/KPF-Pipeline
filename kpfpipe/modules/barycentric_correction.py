@@ -10,7 +10,8 @@ Target astrometry is read from the PRIMARY C*# catalog cards, not queried --
 AstroQuery is the pipeline's sole external-catalog client -- except for
 solar-system bodies, whose reflected-light correction (Wright & Kanodia 2020)
 barycorrpy computes from JPL Horizons: 3 requests per CCD time, each bounded by
-astroquery's 30 s timeout and served from its disk cache on a repeat. Rotation,
+astroquery's 30 s timeout and served from its disk cache on a repeat; a transient
+failure is retried with backoff. Rotation,
 phase effects and the finite source are not modeled.
 
 Follows the barycentric-correction approach of Wright & Eastman (2014,
@@ -34,6 +35,7 @@ from scipy.special import erfcinv
 from kpfpipe import DEFAULT_CFG, DETECTOR, SOLAR_SYSTEM_OBJECTS
 from kpfpipe.utils.astro import KECK_LOCATION, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.network import retry_request
 from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
@@ -543,8 +545,11 @@ class BarycentricCorrection:
             printed = io.StringIO()  # barycorrpy prints a failed Horizons call
             try:
                 with contextlib.redirect_stdout(printed):
-                    bc_vel, *_ = get_BC_vel(
-                        JDUTC=JDUTC, lat=lat, longi=lon, alt=alt, **target
+                    bc_vel, *_ = retry_request(
+                        lambda: get_BC_vel(
+                            JDUTC=JDUTC, lat=lat, longi=lon, alt=alt, **target
+                        ),
+                        "JPL Horizons (barycorrpy)",
                     )
             except Exception as e:  # network or Horizons failure: no fallback
                 raise RuntimeError(

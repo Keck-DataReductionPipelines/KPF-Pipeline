@@ -6,10 +6,12 @@ cards on PRIMARY; barycorrpy is stubbed except in TestComputeBarycorrReference.
 """
 
 import logging
+from unittest.mock import patch
 
 import astropy.units as u
 import numpy as np
 import pytest
+import requests
 from astropy.coordinates import Distance, SkyCoord, get_body_barycentric
 from astropy.table import Table
 from astropy.time import Time
@@ -1077,6 +1079,24 @@ class TestSolarSystem:
         with caplog.at_level(logging.WARNING):
             BarycentricCorrection(jupiter).perform()
         assert "CRV3" not in caplog.text
+
+    def test_transient_horizons_failure_is_retried(self, jupiter, monkeypatch, caplog):
+        # A 503 (requests.HTTPError, an OSError) retries; the next attempt answers.
+        attempts = []
+
+        def flaky(**kwargs):
+            attempts.append(kwargs)
+            if len(attempts) == 1:
+                raise requests.HTTPError("503 Server Error: Service Unavailable")
+            return np.resize(self.BC_MPS, len(kwargs["JDUTC"])), [], 0
+
+        monkeypatch.setattr("kpfpipe.modules.barycentric_correction.get_BC_vel", flaky)
+        with patch("kpfpipe.utils.network.time.sleep"):
+            with caplog.at_level(logging.WARNING):
+                kpf2 = BarycentricCorrection(jupiter).perform()
+        assert len(attempts) == 2
+        assert "retrying" in caplog.text
+        assert kpf2.headers["BARYCORR_KMS"]["BVGREEN"] == pytest.approx(1.0)
 
     def test_horizons_failure_raises_and_logs_barycorrpy_output(
         self, jupiter, monkeypatch, capsys, caplog
