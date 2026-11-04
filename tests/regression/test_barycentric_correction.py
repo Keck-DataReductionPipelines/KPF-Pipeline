@@ -989,6 +989,128 @@ def bc_monkeypatched(synthetic_kpf2, monkeypatch):
     return BarycentricCorrection(synthetic_kpf2)
 
 
+class TestSolarSystem:
+    """A solar-system OBJECT: barycorrpy's reflected-light mode at the per-CCD
+    times, each CCD's value repeated over its orders. barycorrpy's Horizons-backed
+    get_BC_vel is stubbed; BJD_TDB uses the real converter."""
+
+    BC_MPS = (1000.0, 2000.0)  # stub [GREEN, RED] velocities, by time index
+
+    @pytest.fixture
+    def jupiter(self, synthetic_kpf2):
+        primary = synthetic_kpf2.headers["PRIMARY"]
+        primary["OBJECT"] = "Jupiter"
+        primary["CSRC3"], primary["CID3"] = "JPL Horizons", "599"
+        primary["CPMR3"], primary["CPMD3"] = 175320.0, -70128.0  # Horizons rates
+        primary["CPLX3"] = 45836623.6  # 4.5 au
+        return synthetic_kpf2
+
+    @pytest.fixture
+    def calls(self, monkeypatch):
+        recorded = []
+
+        def stub(**kwargs):
+            recorded.append(kwargs)
+            return np.resize(self.BC_MPS, len(kwargs["JDUTC"])), [], 0
+
+        monkeypatch.setattr("kpfpipe.modules.barycentric_correction.get_BC_vel", stub)
+        return recorded
+
+    def test_astrometry_is_the_horizons_target(self, jupiter):
+        bc = BarycentricCorrection(jupiter)
+        assert bc._get_astrometry() == {
+            "SolSystemTarget": "599",
+            "HorizonsID_type": None,
+            "predictive": False,
+            "ra": pytest.approx(180.0),
+            "dec": pytest.approx(0.0),
+        }
+        assert bc._astrometry_source == "JPL Horizons (599)"
+
+    def test_one_call_at_the_per_ccd_times(self, jupiter, calls):
+        bc = BarycentricCorrection(jupiter)
+        _, t_ccds = bc.compute_flux_weighted_midpoint_times(output="ccds")
+        bc.perform()
+        assert len(calls) == 1
+        call = calls[0]
+        np.testing.assert_allclose(
+            _seconds(Time(call["JDUTC"], format="jd"), t_ccds[0]),
+            _seconds(t_ccds, t_ccds[0]),
+            atol=_ATOL_S,
+        )
+        assert call["SolSystemTarget"] == "599"
+        assert call["HorizonsID_type"] is None
+        assert not {"ra", "dec", "pmra", "pmdec", "px", "rv"} & call.keys()
+
+    def test_ccd_values_repeat_over_their_orders(self, jupiter, calls):
+        kpf2 = BarycentricCorrection(jupiter).perform()
+        kms = np.asarray(kpf2.data["BARYCORR_KMS"])
+        assert kms.shape == np.asarray(kpf2.data["BARYCORR_Z"]).shape == (NORDER,)
+        expected = np.repeat(np.array(self.BC_MPS) / 1e3, [NORDER_GREEN, NORDER_RED])
+        np.testing.assert_allclose(kms, expected)
+        assert kpf2.headers["BARYCORR_KMS"]["BVGREEN"] == pytest.approx(1.0)
+        assert kpf2.headers["BARYCORR_KMS"]["BVRED"] == pytest.approx(2.0)
+
+    def test_bjd_tdb_is_a_plane_wave_along_cra_cdec(self, jupiter, calls):
+        bc = BarycentricCorrection(jupiter)
+        _, t_ccds = bc.compute_flux_weighted_midpoint_times(output="ccds")
+        kpf2 = bc.perform()
+        loc = KECK_LOCATION
+        expected, *_ = utc_tdb.JDUTC_to_BJDTDB(
+            JDUTC=t_ccds.jd,
+            ra=180.0,
+            dec=0.0,
+            lat=loc.lat.deg,
+            longi=loc.lon.deg,
+            alt=loc.height.to_value(u.m),
+        )
+        bjd = np.asarray(kpf2.data["BJD_TDB"])
+        assert_dtype(bjd, BJD, "BJD_TDB")
+        np.testing.assert_allclose(
+            (bjd - np.repeat(expected, [NORDER_GREEN, NORDER_RED])) * 86400.0,
+            0.0,
+            atol=_ATOL_S,
+        )
+
+    def test_blank_crv3_does_not_warn(self, jupiter, calls, caplog):
+        jupiter.headers["PRIMARY"]["CRV3"] = ""
+        with caplog.at_level(logging.WARNING):
+            BarycentricCorrection(jupiter).perform()
+        assert "CRV3" not in caplog.text
+
+    def test_horizons_failure_raises_and_logs_barycorrpy_output(
+        self, jupiter, monkeypatch, capsys, caplog
+    ):
+        def failing(**kwargs):
+            print("Connection refused")
+            raise Exception("Error with Horizons call")
+
+        monkeypatch.setattr(
+            "kpfpipe.modules.barycentric_correction.get_BC_vel", failing
+        )
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(RuntimeError, match="failed for 599"):
+                BarycentricCorrection(jupiter).perform()
+        assert capsys.readouterr().out == ""
+        assert "barycorrpy: Connection refused" in caplog.text
+
+    @pytest.mark.parametrize("output", ["orders", "expmeter"])
+    def test_direct_call_corrects_at_the_requested_times(self, jupiter, calls, output):
+        # Only perform() restricts a solar-system body to the per-CCD times; a
+        # direct call pays 3 Horizons queries per requested time.
+        bc = BarycentricCorrection(jupiter)
+        _, t_fwm = bc.compute_flux_weighted_midpoint_times(output=output)
+        _, bary_kms, _ = bc.compute_barycentric_correction(output=output)
+        assert len(calls) == 1
+        np.testing.assert_allclose(
+            _seconds(Time(calls[0]["JDUTC"], format="jd"), t_fwm[0]),
+            _seconds(t_fwm, t_fwm[0]),
+            atol=_ATOL_S,
+        )
+        assert calls[0]["SolSystemTarget"] == "599"
+        np.testing.assert_allclose(bary_kms, np.resize(self.BC_MPS, len(t_fwm)) / 1e3)
+
+
 class TestPerform:
     DELTA_RV_MPS = 30000.0  # constant 30 km/s shift across all orders
 
