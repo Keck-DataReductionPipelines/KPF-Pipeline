@@ -245,6 +245,22 @@ class TestDispatch:
             "vel_grid_center": 0.0,
         }
 
+    def test_settings_solar_system_needs_no_catalog(self, header_kpf2, caplog):
+        header_kpf2.headers["PRIMARY"]["OBJECT"] = "Jupiter"  # SCISRC='Target'
+        for card in ("CCLR3", "CCLRN3", "CRV3"):
+            del header_kpf2.headers["PRIMARY"][card]
+        with caplog.at_level(logging.WARNING):
+            s = CrossCorrelation(header_kpf2)._resolve_illumination_source(
+                "GREEN", "SCI2"
+            )
+        assert s == {
+            "object": "Target",
+            "mask_name": "G2_espresso",
+            "apply_barycorr": True,
+            "vel_grid_center": 0.0,
+        }
+        assert not caplog.records
+
     def test_settings_thar(self, header_kpf2):
         header_kpf2.headers["PRIMARY"]["CALSRC"] = "ThAr_daily"
         s = CrossCorrelation(header_kpf2)._resolve_illumination_source("GREEN", "CAL")
