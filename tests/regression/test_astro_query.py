@@ -1486,6 +1486,19 @@ class TestHorizonsQuery:
         assert np.isnan(row["color"]) and not str(row["color_name"]).strip()
         assert "CCLR3" not in l0.headers["PRIMARY"]
 
+    def test_header_rv_not_borrowed(self, caplog):
+        # A planet needs no systemic rv: TARGRADV is not used, CRV3 stays blank,
+        # and the C*# cards are single-source (no mixed-sources warning).
+        l0 = _l0_solar_system(TARGRADV=0.0)
+        with _patch_horizons(_horizons_table()):
+            with caplog.at_level(logging.WARNING):
+                AstroQuery(l0).perform()
+        row = _kpf_drp_row(l0.data["CATALOG_RECORD"])
+        assert np.isnan(row["rv"]) and not str(row["rv_src"]).strip()
+        assert not str(l0.headers["PRIMARY"].get("CRV3", "")).strip()
+        assert "TARGRADV" not in caplog.text
+        assert "mixed sources" not in caplog.text
+
     def test_no_simbad_identifier_warning(self, caplog):
         l0 = _l0_solar_system()
         with _patch_horizons(_horizons_table()):

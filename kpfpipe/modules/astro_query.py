@@ -973,10 +973,12 @@ class AstroQuery:
         catalogs. Sources left out of the priority still get their row written and their
         offsets diagnosed; they simply cannot become the base. Its rv rides along; when
         that source has none (Gaia commonly lacks radial_velocity) rv falls back to the
-        telescope TARGRADV on PRIMARY, never to another catalog. ``color`` and
-        ``color_name`` also ride along, but a base source without a color borrows one
-        from any built row, with a mixed-catalog warning -- except for a solar-system
-        OBJECT, whose color stays missing. ``radec_src``/``plx_src`` name
+        telescope TARGRADV on PRIMARY, never to another catalog -- except for a
+        solar-system OBJECT, which needs no systemic rv and keeps it missing.
+        ``color`` and ``color_name`` also ride along, but a base source without a
+        color borrows one from any built row, with a mixed-catalog warning -- except
+        for a solar-system OBJECT, whose color stays missing. ``radec_src``/``plx_src``
+        name
         the astrometric source, ``rv_src`` the rv source ("wmko" for the TARGRADV
         fallback, "" when nothing supplied).
 
@@ -1031,11 +1033,14 @@ class AstroQuery:
                 "limitation, not an L0 header problem."
             )
 
+        is_ss = self.l0_obj.headers["PRIMARY"].get("OBJECT") in SOLAR_SYSTEM_OBJECTS
+
         # rv from the base source, else telescope TARGRADV off PRIMARY -- independent of
-        # astrometry_priority, which governs only the position.
+        # astrometry_priority, which governs only the position. A solar-system body has
+        # no systemic rv (Horizons supplies none), so it stays missing.
         rv_value = base_record["rv"]
-        rv_source = base_source
-        if rv_value is None:
+        rv_source = base_source if rv_value is not None else ""
+        if rv_value is None and not is_ss:
             rv_value = self._scalar(
                 self.l0_obj.headers["INSTRUMENT_HEADER"].get("TARGRADV")
             )
@@ -1052,9 +1057,7 @@ class AstroQuery:
         # Never for a solar-system body: a header G-J color is not its color.
         color = base_record["color"]
         color_name = base_record["color_name"]
-        if color is None and self.l0_obj.headers["PRIMARY"].get("OBJECT") not in (
-            SOLAR_SYSTEM_OBJECTS
-        ):
+        if color is None and not is_ss:
             for source, candidate in candidates:
                 if candidate["color"] is not None:
                     color, color_name = candidate["color"], candidate["color_name"]
