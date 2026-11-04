@@ -343,6 +343,21 @@ class TestFrameIdentity:
         exact = HeaderParser(_hdr("Object", OBJECT="WASP-173B", TARGNAME="WASP-173B"))
         assert not any("component letter" in w for w in exact.warnings)
 
+    @pytest.mark.parametrize(
+        "obj, warned",
+        [
+            ("HD 189733b", True),
+            ("HAT-P-4B", True),
+            ("hd21019a", True),
+            ("HD 21019", False),
+        ],
+    )
+    def test_trailing_letter_warns_of_ambiguity(self, obj, warned):
+        parser = HeaderParser(_hdr("Object", OBJECT=obj, TARGNAME=obj))
+        assert (
+            any("binary component or a planet" in w for w in parser.warnings) is warned
+        )
+
 
 _G19 = "2452378776434477184"  # tau Cet, Gaia DR3
 _G18 = "806000816970521728"
@@ -891,6 +906,11 @@ class TestKpfTargetName:
                 "Gaia_EDR3_2077618037775709568",
                 ("Gaia", "Gaia DR3 2077618037775709568", None),
             ),
+            ("hr3662", ("HR", "HR 3662", None)),
+            ("GJ12", ("GJ", "GJ 12", None)),
+            ("GJ 105.5", ("GJ", "GJ 105.5", None)),
+            ("HAT-P-4B", ("HAT-P", "HAT-P-4 B", None)),
+            ("HATP7b", ("HAT-P", "HAT-P-7", "b")),
             ("tau Cet", (None, "tau Cet", None)),
         ],
     )

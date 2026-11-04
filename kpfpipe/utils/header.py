@@ -353,13 +353,21 @@ class HeaderParser:
             )
         obj_catalog, obj_name, obj_planet = kpf_target_name(obj)
         targ_catalog, targ_name, targ_planet = kpf_target_name(targname)
-        for card, raw, planet, host in (
-            ("OBJECT", obj, obj_planet, obj_name),
-            ("TARGNAME", targname, targ_planet, targ_name),
+        for card, raw, catalog, planet, host in (
+            ("OBJECT", obj, obj_catalog, obj_planet, obj_name),
+            ("TARGNAME", targname, targ_catalog, targ_planet, targ_name),
         ):
+            # A trailing letter can name a stellar component or a planet
+            # (kpf_target_name decides by case), and the two are easily confused.
+            ambiguity = "a trailing letter can denote a binary component or a planet"
             if planet:
                 self._warn(
-                    f"{card} {raw!r} names planet {planet!r}; host star {host!r}"
+                    f"{card} {raw!r} names planet {planet!r}; host star {host!r} "
+                    f"({ambiguity})"
+                )
+            elif catalog and re.search(r"\d [A-Z]$", host):
+                self._warn(
+                    f"{card} {raw!r} names stellar component {host!r} ({ambiguity})"
                 )
         shorter, longer = sorted((obj_name, targ_name), key=len)
         if bodies and bodies[0] and all(b == bodies[0] for b in bodies):

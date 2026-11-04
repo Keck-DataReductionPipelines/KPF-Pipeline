@@ -129,7 +129,18 @@ class AstroQuery:
     # first; together the tiers list every catalog in
     # reference/star_catalog_aliases.csv. The low tier is the purely numeric ids,
     # which name OBJECT only when no high-tier id names the star.
-    _HIGH_TIER = ("HD", "HIP", "TOI", "Kepler", "KOI", "K2", "WASP")
+    _HIGH_TIER = (
+        "HD",
+        "HIP",
+        "TOI",
+        "Kepler",
+        "KOI",
+        "K2",
+        "WASP",
+        "HR",
+        "GJ",
+        "HAT-P",
+    )
     _LOW_TIER = ("Gaia", "TIC", "KIC")
 
     def _validate_priority(self):

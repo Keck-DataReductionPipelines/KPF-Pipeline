@@ -1,6 +1,9 @@
 catalog,pattern,canonical
 HD,"(?:HD\s*)?(\d{1,6})",HD {}
 HIP,HIP\s*(\d+),HIP {}
+HR,HR\s*(\d+),HR {}
+GJ,"GJ\s*(\d+(?:\.\d+)?)",GJ {}
+HAT-P,HAT[\s-]*P[\s-]*(\d+),HAT-P-{}
 WASP,WASP[\s-]*(\d+),WASP-{}
 KIC,KIC[\s-]*(\d+),KIC {}
 KOI,KOI[\s-]*(\d+),KOI-{}
