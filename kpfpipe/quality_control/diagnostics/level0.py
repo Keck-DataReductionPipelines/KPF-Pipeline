@@ -5,6 +5,7 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 
+from kpfpipe import SOLAR_SYSTEM_OBJECTS
 from kpfpipe.quality_control.diagnostics.base import Diagnostics
 
 
@@ -48,16 +49,22 @@ class DiagL0(Diagnostics):
             kwargs["distance"] = (1e3 / parallax) * u.pc
         return SkyCoord(**kwargs)
 
-    def _offset(self, source):
+    def _offset(self, source, remove_offsets=False):
         """Arcsec separation of the pointing from a catalog source at obs epoch.
 
         The catalog position is proper-motion propagated to the observation epoch
-        before the comparison.
+        before the comparison. ``remove_offsets`` subtracts the applied RAOFF/DECOFF
+        (RA arcsec without cos Dec, Dec arcsec) from the pointing first.
         """
         table = self.kpf_obj.data["CATALOG_RECORD"]
         rec = table[table["source"] == source][0]
         hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
         pointing = SkyCoord(hdr["RA"], hdr["DEC"], unit=(u.hourangle, u.deg))
+        if remove_offsets:
+            pointing = SkyCoord(
+                pointing.ra - float(hdr["RAOFF"]) * u.arcsec,
+                pointing.dec - float(hdr["DECOFF"]) * u.arcsec,
+            )
         obs_time = Time(float(hdr["MJD-OBS"]), format="mjd")
         coord = self._record_skycoord(rec).apply_space_motion(new_obstime=obs_time)
         return round(float(pointing.separation(coord).arcsec), 4)
@@ -74,8 +81,14 @@ class DiagL0(Diagnostics):
     gaia_ra_dec_offset._diag_name = "gaia_ra_dec_offset"
 
     def target_ra_dec_offset(self):
-        """TCSOFF: arcsec, RA/DEC pointing vs DCS target position at obs epoch."""
-        return {"TCSOFF": self._offset("wmko")}
+        """TCSOFF: arcsec, RA/DEC pointing vs DCS target position at obs epoch.
+
+        For solar-system objects the observer offsets from the loaded DCS target
+        (e.g. a planet) to the body observed (e.g. a moon), so RAOFF/DECOFF are
+        removed from the pointing before the comparison.
+        """
+        is_ss = self.kpf_obj.headers["PRIMARY"].get("OBJECT") in SOLAR_SYSTEM_OBJECTS
+        return {"TCSOFF": self._offset("wmko", remove_offsets=is_ss)}
 
     target_ra_dec_offset._diag_name = "target_ra_dec_offset"
 

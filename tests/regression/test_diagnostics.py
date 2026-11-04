@@ -224,17 +224,19 @@ def _set_catalog_record(l0, records):
         aq._write_catalog_record(source, record)
 
 
-def _make_l0_pointing():
-    """A KPF0 with just a native instrument pointing (RA/DEC/MJD-OBS), no catalog
-    yet. The cards go on INSTRUMENT_HEADER, where every L0 module reads them once
-    standardize_headers has run. IMTYPE 'Object' so AstroQuery accepts it."""
+def _make_l0_pointing(obj="10700", raoff=0.0, decoff=0.0):
+    """A KPF0 with just a native instrument pointing (RA/DEC/MJD-OBS, RAOFF/DECOFF),
+    no catalog yet. The cards go on INSTRUMENT_HEADER, where every L0 module reads
+    them once standardize_headers has run. IMTYPE 'Object' so AstroQuery accepts it."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["IMTYPE"] = "Object"
     l0.headers["PRIMARY"]["SCISEL"] = "open"
     # A Target needs an identity: OBJECT Unknown with GAIAID blank raises.
-    l0.headers["PRIMARY"]["OBJECT"] = l0.headers["PRIMARY"]["TARGNAME"] = "10700"
+    l0.headers["PRIMARY"]["OBJECT"] = l0.headers["PRIMARY"]["TARGNAME"] = obj
     l0.headers["PRIMARY"]["RA"] = _PT_RA
     l0.headers["PRIMARY"]["DEC"] = _PT_DEC
+    l0.headers["PRIMARY"]["RAOFF"] = raoff
+    l0.headers["PRIMARY"]["DECOFF"] = decoff
     l0.headers["PRIMARY"]["MJD-OBS"] = 60540.6
     l0.standardize_headers()
     return l0
@@ -274,6 +276,32 @@ class TestDiagL0Offsets:
         results = DiagL0(l0).run()
         assert results["GAIAOFF"][0] == pytest.approx(10.0, abs=0.1)
         assert results["TCSOFF"][0] < 0.1
+
+    # RAOFF is in RA arcsec (no cos Dec): a 100" RA + 50" Dec offset from the DCS
+    # target lands the pointing at _PT_RA/_PT_DEC.
+    _RAOFF, _DECOFF = 100.0, 50.0
+
+    def _l0_offset_from_target(self, obj):
+        l0 = _make_l0_pointing(obj, raoff=self._RAOFF, decoff=self._DECOFF)
+        pt = SkyCoord(_PT_RA, _PT_DEC, unit=(u.hourangle, u.deg))
+        target = SkyCoord(
+            pt.ra - self._RAOFF * u.arcsec, pt.dec - self._DECOFF * u.arcsec
+        )
+        _set_catalog_record(l0, {"wmko": _record_at(target)})
+        return l0, pt.separation(target).arcsec
+
+    def test_solar_system_tcsoff_removes_applied_offset(self):
+        # SS: the observer offsets from the DCS target (host planet) to the body
+        # observed; TCSOFF compares the pointing before that offset.
+        l0, _ = self._l0_offset_from_target("Io")
+        assert DiagL0(l0).target_ra_dec_offset()["TCSOFF"] < 0.1
+
+    def test_star_tcsoff_keeps_applied_offset(self):
+        # Stars: TCSOFF still measures the full pointing-vs-DCS-target separation.
+        l0, sep = self._l0_offset_from_target("10700")
+        assert DiagL0(l0).target_ra_dec_offset()["TCSOFF"] == pytest.approx(
+            sep, abs=0.1
+        )
 
 
 class TestDiagL0Contingency:
