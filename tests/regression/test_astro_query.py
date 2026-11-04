@@ -1369,8 +1369,8 @@ def _patch_horizons(table_or_exc):
     return patch("kpfpipe.modules.astro_query.horizons_client", return_value=client)
 
 
-def _l0_solar_system(obj="Jupiter", jd=2461000.5, exptime=600.0):
-    l0 = _l0_for_query(OBJECT=obj)
+def _l0_solar_system(obj="Jupiter", jd=2461000.5, exptime=600.0, **cards):
+    l0 = _l0_for_query(OBJECT=obj, **cards)
     l0.headers["PRIMARY"]["JD_UTC"] = jd
     l0.headers["PRIMARY"]["EXPTIME"] = exptime
     return l0
@@ -1435,6 +1435,43 @@ class TestHorizonsQuery:
             with pytest.raises(ValueError, match="no complete astrometric solution"):
                 aq.perform()
         assert factory.call_count == 0
+
+    def test_header_color_not_borrowed(self):
+        # A G-J color off the DCS cards is stellar; a planet's stays missing.
+        l0 = _l0_solar_system(
+            TARGRA="12:00:00.00",
+            TARGDEC="+10:00:00.0",
+            TARGFRAM="FK5",
+            TARGEPOC=2025.8,
+            GAIAMAG=5.0,
+            **{"2MASSMAG": 4.0},
+        )
+        with _patch_horizons(_horizons_table()):
+            AstroQuery(l0).perform()
+        table = l0.data["CATALOG_RECORD"]
+        assert table[table["source"] == "wmko"][0]["color"] == pytest.approx(1.0)
+        row = _kpf_drp_row(table)
+        assert np.isnan(row["color"]) and not str(row["color_name"]).strip()
+        assert "CCLR3" not in l0.headers["PRIMARY"]
+
+    def test_no_simbad_identifier_warning(self, caplog):
+        l0 = _l0_solar_system()
+        with _patch_horizons(_horizons_table()):
+            with caplog.at_level(logging.WARNING):
+                AstroQuery(l0).perform()
+        assert "SIMBAD gave no identifiers" not in caplog.text
+        assert l0.headers["PRIMARY"]["ALIASES"] == "Jupiter"
+
+    def test_l0_qc_flags(self):
+        # A Jupiter-like Horizons row passes ASTROMOK; COLOROK does not apply.
+        from kpfpipe.quality_control.qc_flags.level0 import QCL0
+
+        l0 = _l0_solar_system()
+        with _patch_horizons(_horizons_table({"RA_rate": 20.0, "DEC_rate": -8.0})):
+            AstroQuery(l0).perform()
+        results = QCL0(l0).run()
+        assert results["ASTROMOK"][0] is True
+        assert "COLOROK" not in results
 
 
 class TestConstructor:

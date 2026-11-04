@@ -318,7 +318,7 @@ class AstroQuery:
                     f"{release.strip()} source_id {sorted(same_release)}. L0 header "
                     "must be fixed: make OBJECT and GAIAID name the same source."
                 )
-        else:
+        elif obj not in SOLAR_SYSTEM_OBJECTS:  # SIMBAD is not queried for these
             logger.warning(
                 "SIMBAD gave no identifiers; OBJECT and ALIASES from the header "
                 "OBJECT and Gaia designation only"
@@ -963,7 +963,8 @@ class AstroQuery:
         that source has none (Gaia commonly lacks radial_velocity) rv falls back to the
         telescope TARGRADV on PRIMARY, never to another catalog. ``color`` and
         ``color_name`` also ride along, but a base source without a color borrows one
-        from any built row, with a mixed-catalog warning. ``radec_src``/``plx_src`` name
+        from any built row, with a mixed-catalog warning -- except for a solar-system
+        OBJECT, whose color stays missing. ``radec_src``/``plx_src`` name
         the astrometric source, ``rv_src`` the rv source ("wmko" for the TARGRADV
         fallback, "" when nothing supplied).
 
@@ -1036,9 +1037,12 @@ class AstroQuery:
 
         # A color index is independent of the astrometry, so borrowing one from another
         # catalog when the base source has none is acceptable, but flagged.
+        # Never for a solar-system body: a header G-J color is not its color.
         color = base_record["color"]
         color_name = base_record["color_name"]
-        if color is None:
+        if color is None and self.l0_obj.headers["PRIMARY"].get("OBJECT") not in (
+            SOLAR_SYSTEM_OBJECTS
+        ):
             for source, candidate in candidates:
                 if candidate["color"] is not None:
                     color, color_name = candidate["color"], candidate["color_name"]

@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import pytest
+from astropy import units as u
 from astropy.io import fits
 from astropy.table import Table
 
@@ -938,6 +939,47 @@ class TestQCL0:
         l0 = self._make_kpf0_with_canonical(tmp_path, pmdec=-30.0)
         assert QCL0(l0).catalog_astrometry_sane() is False
 
+    # Jupiter-like Horizons values: 4.5 au, ~20"/hr sky rates (in arcsec/yr).
+    _JUPITER = {
+        "parallax": (4.5 * u.au).to_value(u.mas, u.parallax()),
+        "pmra": 20.0 * 8766.0,
+        "pmdec": -8.0 * 8766.0,
+        "rv": None,
+        "color": None,
+        "color_name": None,
+    }
+
+    def _make_kpf0_solar_system(self, tmp_path, obj="Jupiter", **overrides):
+        l0 = self._make_kpf0_with_canonical(tmp_path, **{**self._JUPITER, **overrides})
+        l0.set_keyword("OBJECT", obj)
+        return l0
+
+    def test_catalog_astrometry_sane_solar_system_pass(self, tmp_path):
+        l0 = self._make_kpf0_solar_system(tmp_path)
+        assert QCL0(l0).catalog_astrometry_sane() is True
+
+    def test_catalog_astrometry_sane_star_with_solar_system_values_fails(
+        self, tmp_path
+    ):
+        # The stellar bounds are unchanged: only a solar-system OBJECT widens them.
+        l0 = self._make_kpf0_solar_system(tmp_path, obj="HD 10700")
+        assert QCL0(l0).catalog_astrometry_sane() is False
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"parallax": (0.05 * u.au).to_value(u.mas, u.parallax())},  # too near
+            {"parallax": (200 * u.au).to_value(u.mas, u.parallax())},  # too far
+            {"parallax": 100.0},  # a stellar parallax
+            {"pmra": 1500.0 * 8766.0},  # > 1000"/hr
+            {"pmdec": -1500.0 * 8766.0},
+            {"epoch": 2100.0},  # shared checks still apply
+        ],
+    )
+    def test_catalog_astrometry_sane_solar_system_fail(self, tmp_path, overrides):
+        l0 = self._make_kpf0_solar_system(tmp_path, **overrides)
+        assert QCL0(l0).catalog_astrometry_sane() is False
+
     # --- catalog_color_sane (COLOROK): the canonical color must be present,
     # labeled, and on the dwarf sequence for CrossCorrelation to turn it into a
     # line-mask Teff.
@@ -987,6 +1029,13 @@ class TestQCL0:
         for color in (-0.33, 2.17):
             l0 = self._make_kpf0_with_canonical(tmp_path, color=color, color_name="B-V")
             assert QCL0(l0).catalog_color_sane() is True
+
+    def test_catalog_color_sane_solar_system_does_not_apply(self, tmp_path):
+        # None -> no COLOROK flag written; a star with no color still fails.
+        l0 = self._make_kpf0_solar_system(tmp_path)
+        assert QCL0(l0).catalog_color_sane() is None
+        l0.set_keyword("OBJECT", "HD 10700")
+        assert QCL0(l0).catalog_color_sane() is False
 
     def test_qc_keys_correct(self):
         expected = {
