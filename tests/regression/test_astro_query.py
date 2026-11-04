@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from astropy import units as u
-from astropy.coordinates import Angle, SkyCoord
+from astropy.coordinates import FK5, Angle, SkyCoord
 from astropy.table import Column, Table
 from astropy.time import Time
 
@@ -435,15 +435,47 @@ class TestReadWmkoHeader:
         ).read_wmko_header()
         assert rec["parallax"] is None
 
-    def test_non_fk5_frame_raises(self):
-        # KPF pointing is always FK5; another TARGFRAM must not be coerced onto a
+    @staticmethod
+    def _sep_from_fk5_reading(rec):
+        # Arcsec from the record (ICRS) to _GOOD_TARG's coordinates read as FK5 J2000.
+        fk5 = SkyCoord(
+            "12:00:00.00",
+            "+40:00:00.0",
+            unit=(u.hourangle, u.deg),
+            frame=FK5(equinox="J2000"),
+        )
+        return (
+            SkyCoord(rec["ra"], rec["dec"], unit=(u.hourangle, u.deg))
+            .separation(fk5)
+            .arcsec
+        )
+
+    def test_fk4_frame_rotated_with_besselian_equinox(self):
+        # FK4 at equinox 2000 (Keck planet targets) is Besselian B2000: under 1" from
+        # the FK5 J2000 reading, but a distinct rotation, not a relabel.
+        rec = AstroQuery(
+            self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "FK4"})
+        ).read_wmko_header()
+        assert rec["frame"] == "icrs"
+        assert 0.1 < self._sep_from_fk5_reading(rec) < 1.5
+
+    def test_fk4_absent_equinox_defaults_to_b1950(self):
+        # FK4 with no TARGEQUI is B1950: precession puts it arcmin from J2000.
+        targ = {k: v for k, v in self._GOOD_TARG.items() if k != "TARGEQUI"}
+        rec = AstroQuery(
+            self._l0_targ(**{**targ, "TARGFRAM": "FK4"})
+        ).read_wmko_header()
+        assert self._sep_from_fk5_reading(rec) > 600
+
+    def test_unsupported_frame_raises(self):
+        # KPF pointing is FK5 or FK4; another TARGFRAM must not be coerced onto a
         # frame the data does not have.
         l0 = self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "galactic"})
         with pytest.raises(ValueError, match="TARGFRAM"):
             AstroQuery(l0).read_wmko_header()
 
     def test_absent_frame_raises(self):
-        # An absent TARGFRAM cannot be verified as FK5, and a frame is never guessed.
+        # An absent TARGFRAM cannot be verified, and a frame is never guessed.
         targ = {k: v for k, v in self._GOOD_TARG.items() if k != "TARGFRAM"}
         with pytest.raises(ValueError, match="TARGFRAM"):
             AstroQuery(self._l0_targ(**targ)).read_wmko_header()

@@ -23,7 +23,7 @@ import logging
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import FK5, ICRS, Angle, Distance, SkyCoord
+from astropy.coordinates import FK4, FK5, ICRS, Angle, Distance, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
@@ -876,9 +876,11 @@ class AstroQuery:
 
         The telescope-side counterpart to query_gaia/query_simbad: no query, just the
         raw TARG* pointing sanitized to the EPRV C*# format and rotated from its native
-        FK5 (J2000) to ICRS, so all three sources share one frame. KPF pointing is
-        always FK5, so a non-FK5 or absent TARGFRAM raises rather than being coerced --
-        a wrong frame would corrupt the barycentric correction. Returns None (no row)
+        frame to ICRS, so all three sources share one frame. KPF pointing is FK5
+        (Julian TARGEQUI, default J2000) or, for some planet targets, FK4 (Besselian
+        TARGEQUI, default B1950); any other or absent TARGFRAM raises rather than
+        being coerced -- a wrong frame would corrupt the barycentric correction.
+        Returns None (no row)
         when TARGRA is absent, or (warned) when the TARG* astrometry cannot be
         parsed. Always run: TCSOFF needs this row even when ``astrometry_priority``
         bars wmko from anchoring the position; without it the diagnostic reports
@@ -887,11 +889,11 @@ class AstroQuery:
         native = self.l0_obj.headers["INSTRUMENT_HEADER"]
         if native.get("TARGRA") is None:
             return None
-        targfram = str(native.get("TARGFRAM") or "").strip()
-        if targfram.upper() != "FK5":
+        targfram = str(native.get("TARGFRAM") or "").strip().upper()
+        if targfram not in ("FK5", "FK4"):
             raise ValueError(
                 f"unexpected TARGFRAM={native.get('TARGFRAM')!r}; KPF pointing must "
-                "be 'FK5' (J2000). Refusing to guess the frame, which would corrupt "
+                "be 'FK5' or 'FK4'. Refusing to guess the frame, which would corrupt "
                 "the barycentric correction."
             )
         try:
@@ -903,13 +905,23 @@ class AstroQuery:
             )
             equinox = self._scalar(native.get("TARGEQUI"))
 
-            # Rotate the native FK5 pointing to ICRS (no time propagation, so epoch is
+            # Rotate the native pointing to ICRS (no time propagation, so epoch is
             # unchanged); proper motion only when both components are present, since a
             # lone one is meaningless under rotation. TARGPMRA time-s/yr -> arcsec/yr.
-            fk5 = FK5(
-                equinox="J2000" if equinox is None else Time(equinox, format="jyear")
-            )
-            components = {"ra": ra, "dec": dec, "frame": fk5}
+            # FK5 equinoxes are Julian, FK4 Besselian.
+            if targfram == "FK5":
+                frame = FK5(
+                    equinox="J2000"
+                    if equinox is None
+                    else Time(equinox, format="jyear")
+                )
+            else:
+                frame = FK4(
+                    equinox="B1950"
+                    if equinox is None
+                    else Time(equinox, format="byear")
+                )
+            components = {"ra": ra, "dec": dec, "frame": frame}
             has_pm = pmra is not None and pmdec is not None
             if has_pm:
                 cosdec = np.cos(dec.radian)
