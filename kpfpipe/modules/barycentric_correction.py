@@ -9,10 +9,20 @@ barycentric extension headers. Wavelength arrays are not modified.
 Target astrometry is read from the PRIMARY C*# catalog cards, not queried --
 AstroQuery is the pipeline's sole external-catalog client -- except for
 solar-system bodies, whose reflected-light correction (Wright & Kanodia 2020)
-barycorrpy computes from JPL Horizons: 3 requests per CCD time, each bounded by
+barycorrpy computes from JPL Horizons: 3 requests per time, each bounded by
 astroquery's 30 s timeout and served from its disk cache on a repeat; a transient
-failure is retried with backoff. Rotation,
-phase effects and the finite source are not modeled.
+failure is retried with backoff.
+
+Solar-system limits. The reflected-light BC is that of the body's center:
+- Rotation, phase effects and the finite disk are not modeled.
+- Computed at each CCD's earliest and latest order time and
+  interpolated linearly to the orders; the curvature error is <0.03 m/s for
+  spans up to ~80 s (Io, the fastest moon).
+- The BC at the flux-weighted time, not the flux-weighted mean BC: curvature
+  biases fast moons over long exposures (~0.4 m/s, Io, 600 s).
+- BJD_TDB is a plane wave along CRA3/CDEC3 (curvature up to ~1 min, Jupiter);
+  this touches the timestamp only.
+- The body is taken from OBJECT; nothing checks that the telescope pointed at it.
 
 Follows the barycentric-correction approach of Wright & Eastman (2014,
 barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
@@ -69,8 +79,8 @@ class BarycentricCorrection:
         ``skycoord`` override or the frame is SoCal (ISSOLAR), which uses
         barycorrpy's solar mode (BJD_TDB is still a true BJD). A solar-system
         OBJECT uses barycorrpy's reflected-light mode (JPL Horizons, 3 requests per
-        time): perform() corrects it at the per-CCD times only, each CCD's value
-        repeated over its orders; compute_barycentric_correction() serves any
+        time): perform() corrects it at each CCD's earliest and latest order time
+        and interpolates linearly; compute_barycentric_correction() serves any
         ``output`` at that cost.
         INSTRUMENT_HEADER (the preserved L1 PRIMARY) must contain
         DATE-BEG/DATE-END when extrapolating.
@@ -837,6 +847,51 @@ class BarycentricCorrection:
         )
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
+    def _solar_system_barycorr(self, interpolate, extrapolate, fix_outliers):
+        """Per-order and per-CCD correction for a solar-system OBJECT.
+
+        Why interpolate: a fast moon's reflected-light BC changes quickly
+        (Io ~1 m/s per second, from its 17 km/s orbit), and order midpoints within
+        a CCD differ by seconds, so each order needs its own BC -- one value per
+        CCD would err by m/s. But every barycorrpy time costs 3 JPL Horizons
+        queries (~200 per frame for all orders). Over the seconds-long span of
+        order times the BC is linear to within curvature*span**2/8 (<0.03 m/s up
+        to ~80 s for Io), so barycorrpy is called only at each CCD's earliest and
+        latest order time (12 queries) and the orders and the CCD time (a weighted
+        mean of its orders, so inside that span) are linearly interpolated.
+
+        Returns ((bjd, kms, z) per order, (bjd, kms, z) [GREEN, RED]).
+        """
+        t_kw = dict(
+            interpolate=interpolate, extrapolate=extrapolate, fix_outliers=fix_outliers
+        )
+        _, t_orders = self.compute_flux_weighted_midpoint_times("orders", **t_kw)
+        _, t_ccds = self.compute_flux_weighted_midpoint_times("ccds", **t_kw)
+        n_green = self.norder["GREEN"]
+        ccds = (slice(0, n_green), slice(n_green, None))
+        jd = t_orders.jd
+        ends = np.array([(jd[s].min(), jd[s].max()) for s in ccds])
+        bc_mps, bjd = self._compute_barycorr(
+            self._get_astrometry(),
+            Time(ends.ravel(), format="jd", scale="utc"),
+            KECK_LOCATION,
+        )
+        bc_mps, bjd = np.reshape(bc_mps, (2, 2)), np.reshape(bjd, (2, 2))
+
+        def line(y, t, slices):  # per-CCD linear interpolation of y onto t
+            return np.concatenate(
+                [np.interp(t[s], ends[i], y[i]) for i, s in enumerate(slices)]
+            )
+
+        ccd_each = (slice(0, 1), slice(1, 2))
+        order_mps, order_bjd = line(bc_mps, jd, ccds), line(bjd, jd, ccds)
+        ccd_mps = line(bc_mps, t_ccds.jd, ccd_each)
+        ccd_bjd = line(bjd, t_ccds.jd, ccd_each)
+        return tuple(
+            (b, v / 1000.0, np.asarray(compute_redshift(v * u.m / u.s)))
+            for b, v in ((order_bjd, order_mps), (ccd_bjd, ccd_mps))
+        )
+
     def _set_headers(self, l2_obj):
         """Write the per-CCD summary keywords.
 
@@ -896,15 +951,19 @@ class BarycentricCorrection:
         )
         obj = self.l2_obj.headers["PRIMARY"].get("OBJECT")
         if not skycoord and obj in SOLAR_SYSTEM_OBJECTS:
-            # Each JPL Horizons-backed time costs 3 queries, so a solar-system body
-            # is corrected at the per-CCD times only, each repeated over its orders.
-            self._ccd_bjd, self._ccd_kms, self._ccd_z = (
-                self.compute_barycentric_correction(output="ccds", **kwargs)
-            )
-            counts = [self.norder["GREEN"], self.norder["RED"]]
-            bjd_tdb, bary_kms, bary_z = (
-                np.repeat(a, counts)
-                for a in (self._ccd_bjd, self._ccd_kms, self._ccd_z)
+            # Horizons-backed: per-CCD linear interpolation keeps per-order accuracy
+            # at 12 queries instead of ~200 (see _solar_system_barycorr).
+            (
+                (bjd_tdb, bary_kms, bary_z),
+                (
+                    self._ccd_bjd,
+                    self._ccd_kms,
+                    self._ccd_z,
+                ),
+            ) = self._solar_system_barycorr(
+                interpolate_expmeter_flux,
+                extrapolate_expmeter_flux,
+                fix_expmeter_outliers,
             )
         else:
             bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(

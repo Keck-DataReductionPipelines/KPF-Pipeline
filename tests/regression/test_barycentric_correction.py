@@ -992,11 +992,17 @@ def bc_monkeypatched(synthetic_kpf2, monkeypatch):
 
 
 class TestSolarSystem:
-    """A solar-system OBJECT: barycorrpy's reflected-light mode at the per-CCD
-    times, each CCD's value repeated over its orders. barycorrpy's Horizons-backed
-    get_BC_vel is stubbed; BJD_TDB uses the real converter."""
+    """A solar-system OBJECT: barycorrpy's reflected-light mode at each CCD's
+    earliest and latest order time, linearly interpolated to the orders and the CCD
+    time. barycorrpy's Horizons-backed get_BC_vel is stubbed with a velocity linear
+    in time (so interpolation is exact); BJD_TDB uses the real converter."""
 
-    BC_MPS = (1000.0, 2000.0)  # stub [GREEN, RED] velocities, by time index
+    JD0 = Time(f"{_T0}00:00:00.000").jd  # shutter open
+
+    @classmethod
+    def bc_mps(cls, jd):
+        """Stub velocity: 1000 m/s at shutter open, rising 1 m/s per second."""
+        return 1000.0 + (np.asarray(jd) - cls.JD0) * 86400.0
 
     @pytest.fixture
     def jupiter(self, synthetic_kpf2):
@@ -1013,10 +1019,17 @@ class TestSolarSystem:
 
         def stub(**kwargs):
             recorded.append(kwargs)
-            return np.resize(self.BC_MPS, len(kwargs["JDUTC"])), [], 0
+            return self.bc_mps(kwargs["JDUTC"]), [], 0
 
         monkeypatch.setattr("kpfpipe.modules.barycentric_correction.get_BC_vel", stub)
         return recorded
+
+    @staticmethod
+    def order_extremes(bc):
+        """[GREEN min, GREEN max, RED min, RED max] of the per-order times (JD)."""
+        _, t_orders = bc.compute_flux_weighted_midpoint_times(output="orders")
+        g, r = t_orders.jd[:NORDER_GREEN], t_orders.jd[NORDER_GREEN:]
+        return np.array([g.min(), g.max(), r.min(), r.max()])
 
     def test_astrometry_is_the_horizons_target(self, jupiter):
         bc = BarycentricCorrection(jupiter)
@@ -1029,37 +1042,60 @@ class TestSolarSystem:
         }
         assert bc._astrometry_source == "JPL Horizons (599)"
 
-    def test_one_call_at_the_per_ccd_times(self, jupiter, calls):
+    def test_one_call_at_each_ccds_order_time_extremes(self, jupiter, calls):
         bc = BarycentricCorrection(jupiter)
-        _, t_ccds = bc.compute_flux_weighted_midpoint_times(output="ccds")
+        ends = self.order_extremes(bc)
         bc.perform()
         assert len(calls) == 1
         call = calls[0]
         np.testing.assert_allclose(
-            _seconds(Time(call["JDUTC"], format="jd"), t_ccds[0]),
-            _seconds(t_ccds, t_ccds[0]),
+            (np.asarray(call["JDUTC"]) - ends[0]) * 86400.0,
+            (ends - ends[0]) * 86400.0,
             atol=_ATOL_S,
         )
         assert call["SolSystemTarget"] == "599"
         assert call["HorizonsID_type"] is None
         assert not {"ra", "dec", "pmra", "pmdec", "px", "rv"} & call.keys()
 
-    def test_ccd_values_repeat_over_their_orders(self, jupiter, calls):
-        kpf2 = BarycentricCorrection(jupiter).perform()
+    def test_orders_and_ccds_interpolated_per_ccd(self, jupiter, calls):
+        bc = BarycentricCorrection(jupiter)
+        _, t_orders = bc.compute_flux_weighted_midpoint_times(output="orders")
+        _, t_ccds = bc.compute_flux_weighted_midpoint_times(output="ccds")
+        kpf2 = bc.perform()
         kms = np.asarray(kpf2.data["BARYCORR_KMS"])
         assert kms.shape == np.asarray(kpf2.data["BARYCORR_Z"]).shape == (NORDER,)
-        expected = np.repeat(np.array(self.BC_MPS) / 1e3, [NORDER_GREEN, NORDER_RED])
+        np.testing.assert_allclose(kms * 1e3, self.bc_mps(t_orders.jd), atol=1e-6)
+        green, red = self.bc_mps(t_ccds.jd) / 1e3
+        assert kpf2.headers["BARYCORR_KMS"]["BVGREEN"] == pytest.approx(green)
+        assert kpf2.headers["BARYCORR_KMS"]["BVRED"] == pytest.approx(red)
+
+    def test_interpolation_is_separate_per_ccd(self, jupiter, monkeypatch):
+        # A velocity that jumps between the CCDs' spans: each CCD must use only
+        # its own two endpoints.
+        bc = BarycentricCorrection(jupiter)
+        ends = self.order_extremes(bc)
+
+        def stub(**kwargs):
+            return np.array([1.0, 2.0, 10.0, 20.0]), [], 0
+
+        monkeypatch.setattr("kpfpipe.modules.barycentric_correction.get_BC_vel", stub)
+        kms = np.asarray(bc.perform().data["BARYCORR_KMS"]) * 1e3
+        _, t_orders = bc.compute_flux_weighted_midpoint_times(output="orders")
+        expected = np.concatenate(
+            [
+                np.interp(t_orders.jd[:NORDER_GREEN], ends[:2], [1.0, 2.0]),
+                np.interp(t_orders.jd[NORDER_GREEN:], ends[2:], [10.0, 20.0]),
+            ]
+        )
         np.testing.assert_allclose(kms, expected)
-        assert kpf2.headers["BARYCORR_KMS"]["BVGREEN"] == pytest.approx(1.0)
-        assert kpf2.headers["BARYCORR_KMS"]["BVRED"] == pytest.approx(2.0)
 
     def test_bjd_tdb_is_a_plane_wave_along_cra_cdec(self, jupiter, calls):
         bc = BarycentricCorrection(jupiter)
-        _, t_ccds = bc.compute_flux_weighted_midpoint_times(output="ccds")
+        _, t_orders = bc.compute_flux_weighted_midpoint_times(output="orders")
         kpf2 = bc.perform()
         loc = KECK_LOCATION
         expected, *_ = utc_tdb.JDUTC_to_BJDTDB(
-            JDUTC=t_ccds.jd,
+            JDUTC=t_orders.jd,
             ra=180.0,
             dec=0.0,
             lat=loc.lat.deg,
@@ -1069,7 +1105,7 @@ class TestSolarSystem:
         bjd = np.asarray(kpf2.data["BJD_TDB"])
         assert_dtype(bjd, BJD, "BJD_TDB")
         np.testing.assert_allclose(
-            (bjd - np.repeat(expected, [NORDER_GREEN, NORDER_RED])) * 86400.0,
+            (bjd - expected) * 86400.0,
             0.0,
             atol=_ATOL_S,
         )
@@ -1088,7 +1124,7 @@ class TestSolarSystem:
             attempts.append(kwargs)
             if len(attempts) == 1:
                 raise requests.HTTPError("503 Server Error: Service Unavailable")
-            return np.resize(self.BC_MPS, len(kwargs["JDUTC"])), [], 0
+            return self.bc_mps(kwargs["JDUTC"]), [], 0
 
         monkeypatch.setattr("kpfpipe.modules.barycentric_correction.get_BC_vel", flaky)
         with patch("kpfpipe.utils.network.time.sleep"):
@@ -1096,7 +1132,7 @@ class TestSolarSystem:
                 kpf2 = BarycentricCorrection(jupiter).perform()
         assert len(attempts) == 2
         assert "retrying" in caplog.text
-        assert kpf2.headers["BARYCORR_KMS"]["BVGREEN"] == pytest.approx(1.0)
+        assert np.isfinite(kpf2.headers["BARYCORR_KMS"]["BVGREEN"])
 
     def test_horizons_failure_raises_and_logs_barycorrpy_output(
         self, jupiter, monkeypatch, capsys, caplog
@@ -1116,8 +1152,8 @@ class TestSolarSystem:
 
     @pytest.mark.parametrize("output", ["orders", "expmeter"])
     def test_direct_call_corrects_at_the_requested_times(self, jupiter, calls, output):
-        # Only perform() restricts a solar-system body to the per-CCD times; a
-        # direct call pays 3 Horizons queries per requested time.
+        # Only perform() restricts a solar-system body to the per-CCD order-time
+        # extremes; a direct call pays 3 Horizons queries per requested time.
         bc = BarycentricCorrection(jupiter)
         _, t_fwm = bc.compute_flux_weighted_midpoint_times(output=output)
         _, bary_kms, _ = bc.compute_barycentric_correction(output=output)
@@ -1128,7 +1164,7 @@ class TestSolarSystem:
             atol=_ATOL_S,
         )
         assert calls[0]["SolSystemTarget"] == "599"
-        np.testing.assert_allclose(bary_kms, np.resize(self.BC_MPS, len(t_fwm)) / 1e3)
+        np.testing.assert_allclose(bary_kms, self.bc_mps(t_fwm.jd) / 1e3)
 
 
 class TestPerform:
