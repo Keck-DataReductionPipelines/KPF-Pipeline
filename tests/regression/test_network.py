@@ -25,6 +25,7 @@ from kpfpipe.utils.network import (
     _RETRYABLE,
     cfht_archive,
     gaia_client,
+    horizons_client,
     query_mirrors,
     retry_request,
     simbad_client,
@@ -269,6 +270,21 @@ class TestTimeoutBounds:
             assert socket.getdefaulttimeout() is None
             raised = _raises_within(
                 10, lambda: client._session.get(f"http://{host}:{port}/")
+            )
+
+        assert isinstance(raised, requests.exceptions.Timeout)
+
+    def test_horizons_timeout_bounds_an_astroquery_request(self):
+        # Through astroquery's own _request with the client's TIMEOUT, as every
+        # Horizons query sends it: only the mounted adapter can end this call.
+        with _stalled_listener() as (host, port):
+            client = horizons_client("599", "568", 2461000.5, timeout=0.5)
+            assert client.TIMEOUT is None
+            raised = _raises_within(
+                10,
+                lambda: client._request(
+                    "GET", f"http://{host}:{port}/", timeout=client.TIMEOUT, cache=False
+                ),
             )
 
         assert isinstance(raised, requests.exceptions.Timeout)

@@ -23,6 +23,7 @@ import pytest
 from astropy import units as u
 from astropy.coordinates import Angle, SkyCoord
 from astropy.table import Column, Table
+from astropy.time import Time
 
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import AstroQuery
@@ -1342,8 +1343,102 @@ class TestResolveIdentity:
         assert "SIMBAD gave no identifiers" in caplog.text
 
 
+# One-row Horizons ephemeris; rates of 3600 / -1800 arcsec/hr make the arcsec/yr
+# conversion visible (x 8766 hr per Julian yr).
+_HORIZONS_VALUES = {
+    "RA": 180.0,
+    "DEC": 10.0,
+    "RA_rate": 3600.0,
+    "DEC_rate": -1800.0,
+    "delta": 5.0,
+}
+
+
+def _horizons_table(values=None, units=None):
+    vals = {**_HORIZONS_VALUES, **(values or {})}
+    return _units_table(AstroQuery._HORIZONS_UNITS, vals, units)
+
+
+def _patch_horizons(table_or_exc):
+    """Patch the Horizons client factory; its ephemerides() -> table (or raises)."""
+    client = MagicMock()
+    if isinstance(table_or_exc, Exception):
+        client.ephemerides.side_effect = table_or_exc
+    else:
+        client.ephemerides.return_value = table_or_exc
+    return patch("kpfpipe.modules.astro_query.horizons_client", return_value=client)
+
+
+def _l0_solar_system(obj="Jupiter", jd=2461000.5, exptime=600.0):
+    l0 = _l0_for_query(OBJECT=obj)
+    l0.headers["PRIMARY"]["JD_UTC"] = jd
+    l0.headers["PRIMARY"]["EXPTIME"] = exptime
+    return l0
+
+
+class TestHorizonsQuery:
+    """A solar-system OBJECT is resolved by JPL Horizons in place of Gaia/SIMBAD."""
+
+    def test_record_conversions(self):
+        aq = AstroQuery(_l0_solar_system())
+        with _patch_horizons(_horizons_table()) as factory:
+            record = aq.query_horizons()
+        # Looked up by Horizons ID from Mauna Kea at the exposure midpoint.
+        target_id, location, epoch, _ = factory.call_args.args
+        assert (target_id, location) == ("599", "568")
+        midpoint = Time(2461000.5, format="jd") + 300 * u.s
+        assert epoch == pytest.approx(midpoint.jd, abs=1e-9)
+        assert record["epoch"] == pytest.approx(midpoint.jyear)
+        assert (record["object"], record["catalog"]) == ("599", "JPL Horizons")
+        expected = AstroQuery._sexagesimal_radec(SkyCoord(180.0, 10.0, unit=u.deg))
+        assert (record["ra"], record["dec"]) == expected
+        assert record["pmra"] == pytest.approx(3600.0 * 8766.0)
+        assert record["pmdec"] == pytest.approx(-1800.0 * 8766.0)
+        # A 1 au baseline seen from 5 au: 206264.806 arcsec / 5, in mas.
+        assert record["parallax"] == pytest.approx(206264806.2 / 5.0)
+        assert record["rv"] is None and record["color"] is None
+
+    def test_perform_skips_gaia_and_simbad(self):
+        l0 = _l0_solar_system()
+        with (
+            _patch_horizons(_horizons_table()),
+            _patch_gaia(_gaia_job(_gaia_table())) as gaia,
+            _patch_simbad(_simbad_instance(_simbad_table())) as simbad,
+        ):
+            AstroQuery(l0).perform()
+        assert gaia.call_count == 0 and simbad.call_count == 0
+        row = _kpf_drp_row(l0.data["CATALOG_RECORD"])
+        assert row["radec_src"] == "horizons"
+        primary = l0.headers["PRIMARY"]
+        assert (primary["CID3"], primary["CSRC3"]) == ("599", "JPL Horizons")
+        assert primary["CRA3"] == _ra_str(180.0)
+        assert primary["OBJECT"] == "Jupiter"
+
+    def test_failed_query_is_fail_soft_then_unresolved(self, caplog):
+        aq = AstroQuery(_l0_solar_system())
+        with _patch_horizons(ValueError("Ambiguous target name")):
+            with caplog.at_level(logging.WARNING):
+                assert aq.query_horizons() is None
+            assert "JPL Horizons query failed" in caplog.text
+            with pytest.raises(ValueError, match="JPL Horizons resolved no source"):
+                aq.perform()
+
+    def test_unit_drift_raises(self):
+        aq = AstroQuery(_l0_solar_system())
+        with _patch_horizons(_horizons_table(units={"delta": u.km})):
+            with pytest.raises(ValueError, match="unexpected column units"):
+                aq.query_horizons()
+
+    def test_toggle_off_skips_query(self):
+        aq = AstroQuery(_l0_solar_system(), {"do_horizons_query": False})
+        with _patch_horizons(_horizons_table()) as factory:
+            with pytest.raises(ValueError, match="no complete astrometric solution"):
+                aq.perform()
+        assert factory.call_count == 0
+
+
 class TestConstructor:
-    """The constructor's three guards. Every other AstroQuery(...) in the suite
+    """The constructor's guards. Every other AstroQuery(...) in the suite
     passes OBSTYPE='Target' and either None or a plain dict, so none of these is
     otherwise exercised."""
 
@@ -1366,14 +1461,6 @@ class TestConstructor:
         l0 = self._l0("Target")
         l0.headers["PRIMARY"]["ISSOLAR"] = True
         with pytest.raises(ValueError, match="SoCal"):
-            AstroQuery(l0)
-
-    def test_solar_system_target_raises(self):
-        l0 = self._l0("Target")
-        l0.headers["PRIMARY"]["OBJECT"] = "Uranus"
-        with pytest.raises(
-            ValueError, match="solar-system target 'Uranus'.*not an L0 header problem"
-        ):
             AstroQuery(l0)
 
     def test_unsupported_config_type_raises(self):

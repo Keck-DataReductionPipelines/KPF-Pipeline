@@ -210,6 +210,23 @@ def simbad_client(server, fields, timeout):
     return client
 
 
+def horizons_client(target_id, location, epochs, timeout):
+    """Return a JPL Horizons client for ``target_id`` seen from ``location``.
+
+    astroquery passes its class-level ``TIMEOUT`` explicitly on every request, which
+    would override the session adapter; clearing it lets ``_bound`` apply the same
+    (connect, read) bound as the catalog clients.
+    """
+    # Deferred: import cost, and to keep astroquery off the paths that never query a
+    # catalog.
+    from astroquery.jplhorizons import HorizonsClass
+
+    client = HorizonsClass(id=target_id, location=location, epochs=epochs)
+    client.TIMEOUT = None
+    _bound(client._session, timeout)
+    return client
+
+
 def cfht_archive(year, start, length, timeout=30):
     """Return ``length`` bytes of the CFHT tower's weather archive for ``year``.
 

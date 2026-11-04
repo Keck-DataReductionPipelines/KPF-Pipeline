@@ -4,9 +4,10 @@ KPF AstroQuery module.
 Consolidates the pipeline's external astronomical-catalog lookups into a single
 L0-stage module. Given a raw L0 science frame, it resolves the target's astrometry
 from Gaia (by GAIAID, whose release prefix picks the data release queried) and SIMBAD
-(by OBJECT), builds the telescope-native ``wmko`` row from the L0 PRIMARY ``TARG*``
-astrometry (no query), merges them into a canonical ``kpf-drp`` row, and writes all
-four rows to the L0 ``CATALOG_RECORD`` extension.
+(by OBJECT) -- or, for a solar-system OBJECT, from JPL Horizons at the exposure
+midpoint instead -- builds the telescope-native ``wmko`` row from the L0 PRIMARY
+``TARG*`` astrometry (no query), merges them into a canonical ``kpf-drp`` row, and
+writes all rows to the L0 ``CATALOG_RECORD`` extension.
 
 All rows share one schema in the EPRV C*# PRIMARY format (see ``_CATALOG_SCHEMA``), so
 the merged row is copied straight onto the L0 PRIMARY ``C*#`` cards. Every frame's
@@ -22,7 +23,7 @@ import logging
 
 import astropy.units as u
 import numpy as np
-from astropy.coordinates import FK5, ICRS, Angle, SkyCoord
+from astropy.coordinates import FK5, ICRS, Angle, Distance, SkyCoord
 from astropy.table import Table
 from astropy.time import Time
 
@@ -31,7 +32,12 @@ from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.header import HeaderError
 from kpfpipe.utils.kpf import kpf_target_name
-from kpfpipe.utils.network import gaia_client, query_mirrors, simbad_client
+from kpfpipe.utils.network import (
+    gaia_client,
+    horizons_client,
+    query_mirrors,
+    simbad_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +45,8 @@ _DEFAULT_CFG = {
     **DEFAULT_CFG,
     "do_gaia_query": True,
     "do_simbad_query": True,
-    "astrometry_priority": ("gaia", "simbad"),
+    "do_horizons_query": True,
+    "astrometry_priority": ("gaia", "simbad", "horizons"),
     "query_timeout": 15,
 }
 
@@ -48,14 +55,15 @@ class AstroQuery:
     """
     Resolve target astrometry from external catalogs and write it to an L0.
 
-    Runs the two external catalog queries (Gaia by GAIAID, SIMBAD by OBJECT), builds
-    the native ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry, and writes these
-    three rows and the merged ``kpf-drp`` row to the L0 ``CATALOG_RECORD`` extension
-    for downstream use (EPRV ``C*#`` catalog keywords, DiagL0 pointing offsets,
+    Runs the two external catalog queries (Gaia by GAIAID, SIMBAD by OBJECT) -- or,
+    for a solar-system OBJECT, the JPL Horizons query in their place -- builds the
+    native ``wmko`` row from the L0 PRIMARY ``TARG*`` astrometry, and writes these
+    rows and the merged ``kpf-drp`` row to the L0 ``CATALOG_RECORD`` extension for
+    downstream use (EPRV ``C*#`` catalog keywords, DiagL0 pointing offsets,
     BarycentricCorrection). Only science frames are supported: the constructor raises
-    on a non-``Target`` OBSTYPE, a SoCal (ISSOLAR) frame or a solar-system OBJECT.
-    Each query is fail-soft -- a missing GAIAID/OBJECT or a failed lookup yields a
-    ``None`` record -- but ``perform`` raises if no query identifies the target.
+    on a non-``Target`` OBSTYPE or a SoCal (ISSOLAR) frame. Each query is fail-soft
+    -- a missing GAIAID/OBJECT or a failed lookup yields a ``None`` record -- but
+    ``perform`` raises if no query identifies the target.
 
     Parameters
     ----------
@@ -65,7 +73,7 @@ class AstroQuery:
         are written only as the module docstring says.
     config : None | dict | ConfigHandler
         Module configuration. Recognized keys: do_gaia_query, do_simbad_query,
-        astrometry_priority, query_timeout.
+        do_horizons_query, astrometry_priority, query_timeout.
     """
 
     def __init__(self, l0_obj, config=None):
@@ -81,13 +89,6 @@ class AstroQuery:
             raise ValueError(
                 "AstroQuery does not run on SoCal frames (ISSOLAR): the Sun has no "
                 "catalog entry"
-            )
-        obj = l0_obj.headers["PRIMARY"].get("OBJECT")
-        if obj in SOLAR_SYSTEM_OBJECTS:
-            raise ValueError(
-                f"{l0_obj.obs_id or 'unknown'}: AstroQuery has no ephemeris source "
-                f"for solar-system target {obj!r}. DRP limitation (pending JPL "
-                "Horizons support), not an L0 header problem."
             )
 
         if config is None:
@@ -113,6 +114,7 @@ class AstroQuery:
         self._wmko = None  # native WMKO record; set by read_wmko_header()
         self._gaia = None  # Gaia record; set by query_gaia()
         self._simbad = None  # SIMBAD record; set by query_simbad()
+        self._horizons = None  # JPL Horizons record; set by query_horizons()
         self._common_name = None  # SIMBAD common name; set by query_simbad()
         self._simbad_ids = []  # SIMBAD ids (_simbad_name); set by query_simbad()
         self._canonical = None  # merged kpf-drp record; set by merge_catalog_records()
@@ -123,7 +125,7 @@ class AstroQuery:
     # ------------------------------------------------------------------
 
     # Sources that can supply a CATALOG_RECORD row, highest catalog priority first.
-    _SOURCES = ("gaia", "simbad", "wmko")
+    _SOURCES = ("gaia", "simbad", "horizons", "wmko")
 
     # Catalogs of the ids ``_resolve_identity`` names OBJECT from, most preferred
     # first; together the tiers list every catalog in
@@ -182,6 +184,10 @@ class AstroQuery:
 
     # SIMBAD servers in failover order: CDS, then its Harvard (CfA) mirror.
     _SIMBAD_MIRRORS = ("simbad.cds.unistra.fr", "simbad.harvard.edu")
+
+    # JPL runs no Horizons mirror. astroquery reads this endpoint from its own config,
+    # so the entry only labels query_mirrors' attempts (two passes, bounded budget).
+    _HORIZONS_MIRRORS = ("https://ssd.jpl.nasa.gov/api/horizons.api",)
 
     def _query_gaia_mirrors(self, release, query):
         """Run ``query`` on ``release``'s mirrors in turn, its ``{table}`` filled per
@@ -781,6 +787,90 @@ class AstroQuery:
         self._write_catalog_record("simbad", record)
         return record
 
+    # Expected result units, verified by _verify_units: astrometric ICRS RA/Dec, their
+    # rates (RA incl. cos Dec) and the observer range -- Horizons quantities 1, 3, 20.
+    _HORIZONS_UNITS = {
+        "RA": u.deg,
+        "DEC": u.deg,
+        "RA_rate": u.arcsec / u.hour,
+        "DEC_rate": u.arcsec / u.hour,
+        "delta": u.au,
+    }
+
+    def query_horizons(self):
+        """Query JPL Horizons for a solar-system OBJECT's ICRS position, or None.
+
+        Fail-soft like the catalog queries. The body is looked up by its Horizons ID
+        (``SOLAR_SYSTEM_OBJECTS``) as seen from Mauna Kea (site 568) at the exposure
+        midpoint, which becomes the record epoch; the RA/Dec rates and the range stand
+        in for proper motion and parallax at that epoch. Returns None (warned) when
+        the lookup fails or returns nothing. Raises ValueError if the result's column
+        units differ from ``_HORIZONS_UNITS``.
+        """
+        primary = self.l0_obj.headers["PRIMARY"]
+        horizons_id = SOLAR_SYSTEM_OBJECTS[primary["OBJECT"]]
+        midpoint = Time(primary["JD_UTC"], format="jd", scale="utc") + (
+            float(primary["EXPTIME"]) / 2 * u.s
+        )
+        logger.info(
+            "querying JPL Horizons for %r (id %r)", primary["OBJECT"], horizons_id
+        )
+        try:
+            result = query_mirrors(
+                lambda _: horizons_client(
+                    horizons_id, "568", midpoint.jd, self.query_timeout
+                ).ephemerides(quantities="1,3,20", cache=False),
+                self._HORIZONS_MIRRORS,
+                "JPL Horizons",
+            )
+        except Exception as e:
+            logger.warning(
+                "JPL Horizons query failed (%s: %s); Horizons astrometry unavailable",
+                type(e).__name__,
+                e,
+            )
+            return None
+        if len(result) == 0:
+            logger.warning(
+                "JPL Horizons returned nothing for id %r; Horizons astrometry "
+                "unavailable",
+                horizons_id,
+            )
+            return None
+        self._verify_units(result, self._HORIZONS_UNITS, "JPL Horizons")
+        row = result[0]
+        ra, dec = self._scalar(row["RA"]), self._scalar(row["DEC"])
+        pmra, pmdec = self._scalar(row["RA_rate"]), self._scalar(row["DEC_rate"])
+        delta = self._scalar(row["delta"])
+        # To the EPRV C*# format: deg -> sexagesimal; rates arcsec/hr -> arcsec/yr;
+        # range -> parallax [mas].
+        ra_str, dec_str = self._sexagesimal_radec(
+            SkyCoord(ra, dec, unit=u.deg, frame="icrs")
+        )
+        per_yr = (u.arcsec / u.hour).to(u.arcsec / u.yr)
+        record = {
+            "object": horizons_id,
+            "catalog": "JPL Horizons",
+            "ra": ra_str,
+            "dec": dec_str,
+            "pmra": None if pmra is None else pmra * per_yr,
+            "pmdec": None if pmdec is None else pmdec * per_yr,
+            "parallax": (
+                None
+                if delta is None
+                else Distance(delta * u.au).parallax.to_value(u.mas)
+            ),
+            "rv": None,
+            "frame": "icrs",
+            "epoch": midpoint.jyear,
+            "equinox": 2000.0,
+            "color": None,
+            "color_name": None,
+        }
+        logger.info("successfully built record for horizons")
+        self._write_catalog_record("horizons", record)
+        return record
+
     def read_wmko_header(self):
         """Read the native WMKO/DCS astrometry from L0 PRIMARY TARG*, or None.
 
@@ -1052,12 +1142,14 @@ class AstroQuery:
         """Build and cache the info() summary text from instance attributes."""
         gaia = self._gaia["object"] if self._gaia else "n/a"
         simbad = self._simbad["object"] if self._simbad else "n/a"
+        horizons = self._horizons["object"] if self._horizons else "n/a"
         canonical = self._canonical["radec_src"] if self._canonical else "n/a"
         lines = [
             "AstroQuery",
             f"  obs_id:  {self.l0_obj.obs_id or 'unknown'}",
             f"  Gaia:      {gaia}",
             f"  SIMBAD:    {simbad}",
+            f"  Horizons:  {horizons}",
             f"  canonical position source:  {canonical}",
         ]
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
@@ -1067,14 +1159,19 @@ class AstroQuery:
     # ------------------------------------------------------------------
 
     def perform(
-        self, *, do_gaia_query=None, do_simbad_query=None, astrometry_priority=None
+        self,
+        *,
+        do_gaia_query=None,
+        do_simbad_query=None,
+        do_horizons_query=None,
+        astrometry_priority=None,
     ):
         """
         Resolve external catalog astrometry and write it to the L0.
 
         Parameters
         ----------
-        do_gaia_query, do_simbad_query : bool, optional
+        do_gaia_query, do_simbad_query, do_horizons_query : bool, optional
             Override the configured catalog-query toggles for this call.
         astrometry_priority : sequence of str, optional
             Override which sources may anchor the merged position, highest first.
@@ -1082,12 +1179,12 @@ class AstroQuery:
         Returns
         -------
         l0_obj : KPF0
-            The input L0, with the ``wmko``/``gaia``/``simbad`` and merged ``kpf-drp``
-            rows written to ``CATALOG_RECORD``, the canonical astrometry overlaid onto
-            the SCI-fiber ``C*#`` PRIMARY cards, OBJECT and ``ALIASES`` written by
-            ``_resolve_identity``, plus
-            an 'astro_query' receipt entry. A blank GAIAID that SIMBAD fills is
-            queried on Gaia after SIMBAD.
+            The input L0, with the ``wmko``/``gaia``/``simbad`` (``horizons`` for a
+            solar-system OBJECT) and merged ``kpf-drp`` rows written to
+            ``CATALOG_RECORD``, the canonical astrometry overlaid onto the
+            SCI-fiber ``C*#`` PRIMARY cards, OBJECT and ``ALIASES`` written by
+            ``_resolve_identity``, plus an 'astro_query' receipt entry. A blank
+            GAIAID that SIMBAD fills is queried on Gaia after SIMBAD.
             Unusually for a pipeline module this returns an L0, not the next level --
             AstroQuery runs before assembly.
 
@@ -1105,35 +1202,40 @@ class AstroQuery:
             self.do_gaia_query = do_gaia_query
         if do_simbad_query is not None:
             self.do_simbad_query = do_simbad_query
+        if do_horizons_query is not None:
+            self.do_horizons_query = do_horizons_query
         if astrometry_priority is not None:
             self.astrometry_priority = astrometry_priority
             self._validate_priority()
 
         self._wmko = self.read_wmko_header()
         primary = self.l0_obj.headers["PRIMARY"]
-        gaiaid_blank = self.do_gaia_query and not primary["GAIAID"]
-        self._gaia = (
-            self.query_gaia() if self.do_gaia_query and primary["GAIAID"] else None
-        )
-        self._simbad = self.query_simbad() if self.do_simbad_query else None
-        # Gaia runs first so a bare GAIAID's resolution reaches OBJECT before SIMBAD;
-        # a blank GAIAID waits for SIMBAD's fill (query_gaia warns if none came).
-        if gaiaid_blank:
-            self._gaia = self.query_gaia()
+        if primary["OBJECT"] in SOLAR_SYSTEM_OBJECTS:
+            # Gaia and SIMBAD hold no solar-system bodies; Horizons replaces both.
+            self._horizons = self.query_horizons() if self.do_horizons_query else None
+            queries = (("JPL Horizons", self.do_horizons_query, self._horizons),)
+        else:
+            gaiaid_blank = self.do_gaia_query and not primary["GAIAID"]
+            self._gaia = (
+                self.query_gaia() if self.do_gaia_query and primary["GAIAID"] else None
+            )
+            self._simbad = self.query_simbad() if self.do_simbad_query else None
+            # Gaia runs first so a bare GAIAID's resolution reaches OBJECT before
+            # SIMBAD; a blank GAIAID waits for SIMBAD's fill (query_gaia warns if
+            # none came).
+            if gaiaid_blank:
+                self._gaia = self.query_gaia()
+            queries = (
+                ("Gaia", self.do_gaia_query, self._gaia),
+                ("SIMBAD", self.do_simbad_query, self._simbad),
+            )
 
         # HeaderParser passes a Target only with a name or a GAIAID to look up
         # (else it raises); if no catalog resolves either, the target is
         # unidentified. Raise that here, not as a merge failure, and never fall
         # back to the telescope pointing (wmko) for an unidentified target.
-        queried = [
-            name
-            for name, enabled in (
-                ("Gaia", self.do_gaia_query),
-                ("SIMBAD", self.do_simbad_query),
-            )
-            if enabled
-        ]
-        if queried and self._gaia is None and self._simbad is None:
+        queried = [name for name, enabled, _ in queries if enabled]
+        if queried and all(record is None for _, _, record in queries):
             gaiaid = primary["GAIAID"]
             raise ValueError(
                 f"{self.l0_obj.obs_id or 'unknown'}: target identity unresolved: "

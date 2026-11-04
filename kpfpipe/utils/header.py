@@ -320,7 +320,7 @@ class HeaderParser:
         """A Target frame's OBJECT, from the native OBJECT and TARGNAME:
 
         - ``SoCal`` for the solar pair (OBJECT ``SoCal``, TARGNAME ``Sun``);
-        - the solar-system body (reference/solar_system_objects.txt) the cards
+        - the solar-system body (reference/solar_system_objects.csv) the cards
           name as a whole word (``Io`` with ``Io Eclipse`` -> ``Io``);
         - else the canonical target name (``kpf_target_name``, e.g. ``HD 10700``;
           a planet letter is dropped for the host star). The cards must agree,

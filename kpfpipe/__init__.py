@@ -79,9 +79,11 @@ def load_instrument_era_reference():
 
 
 def load_solar_system_objects():
-    """Planets, dwarf planets and major moons (no catalog astrometry), one per line."""
-    path = Path(REPO_ROOT) / "reference/solar_system_objects.txt"
-    return tuple(line.strip() for line in path.read_text().splitlines() if line.strip())
+    """Planets, dwarf planets and major moons (no catalog astrometry) -> their JPL
+    Horizons ID, each resolving under Horizons' default (``id_type=None``) lookup."""
+    path = Path(REPO_ROOT) / "reference/solar_system_objects.csv"
+    df = pd.read_csv(path, dtype=str)
+    return dict(zip(df["name"], df["horizons_id"], strict=True))
 
 
 CHIPS = ("GREEN", "RED")
