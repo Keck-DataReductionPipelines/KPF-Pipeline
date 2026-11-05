@@ -14,6 +14,9 @@ import signal
 
 import pytest
 
+from kpfpipe.data_models.level0 import KPF0
+from kpfpipe.utils.header import HeaderError
+from kpfpipe.utils.io import FileHandler
 from scripts.process import realtime as rt
 
 from ._scripts import write_l0_tree
@@ -149,6 +152,23 @@ class TestClassifyFrame:
         kind, reason = rt.classify_frame(str(tmp_path / "L0" / _NIGHT / f"{oid}.fits"))
         assert kind == "rejected"
         assert reason.startswith("invalid header: ") and "ELAPSED='N/A'" in reason
+
+    def test_malformed_gaiaid_rejected_on_every_path(self, tmp_path):
+        # The mini-db, realtime and L0 load reach the same verdict on one frame.
+        oid = write_l0_tree(
+            tmp_path,
+            _NIGHT,
+            100,
+            extra_cards={"GAIAID": "DR1 2452378776434477184", "MJD-OBS": 60405.0},
+        )
+        path = str(tmp_path / "L0" / _NIGHT / f"{oid}.fits")
+        kind, reason = rt.classify_frame(path)
+        assert kind == "rejected" and "GAIAID" in reason
+        fh = FileHandler({"KPF_DATA_INPUT": str(tmp_path)})
+        assert fh.build_mini_database(_NIGHT).empty
+        assert fh._full_scan_mini_db.iloc[0]["DRP_OBSMODE"] == "Unknown"
+        with pytest.raises(HeaderError, match="GAIAID"):
+            KPF0.from_fits(path, standardize=True)
 
     def test_unclassifiable_is_rejected_with_parser_warnings(self, tmp_path):
         oid = write_l0_tree(tmp_path, _NIGHT, 100, imtype="Sky")

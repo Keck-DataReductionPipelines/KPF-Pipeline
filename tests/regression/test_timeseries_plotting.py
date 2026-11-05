@@ -21,7 +21,7 @@ from scripts.plot import timeseries as _pt
 # Quicklook render suite: excluded from `make test-fast`, run by `make test-qlp`.
 pytestmark = pytest.mark.quicklook
 
-_TARGET = "10700"
+_TARGET = "HD 10700"
 _OID = "KP.20240101.03600.00"
 _MIN = 1.0 / 1440.0  # one minute in BJD days
 
@@ -341,16 +341,16 @@ class TestPlot:
         plot_dir = self._run(
             tmp_path, [("20240101", 100, 2.4e6), ("20240102", 100, 2.4e6 + 1)]
         )
-        assert (plot_dir / "10700_rv_timeseries.png").exists()
-        assert not (plot_dir / "10700_rv_nightly.png").exists()
+        assert (plot_dir / "HD_10700_rv_timeseries.png").exists()
+        assert not (plot_dir / "HD_10700_rv_nightly.png").exists()
 
     def test_nightly_png_only_for_multiobs_nights(self, pt, tmp_path):
         # One night with two frames (a burst) also gets the nightly panel.
         plot_dir = self._run(
             tmp_path, [("20240101", 100, 2.4e6), ("20240101", 160, 2.4e6 + _MIN)]
         )
-        assert (plot_dir / "10700_rv_timeseries.png").exists()
-        assert (plot_dir / "10700_rv_nightly.png").exists()
+        assert (plot_dir / "HD_10700_rv_timeseries.png").exists()
+        assert (plot_dir / "HD_10700_rv_nightly.png").exists()
 
     def test_high_cadence_night_gets_own_plot_and_is_held_out(self, pt, tmp_path):
         # The high-cadence night gets its own PNG and is excluded from the main plot,
@@ -358,23 +358,23 @@ class TestPlot:
         spec = [("20240926", 100 + i, 2.4e6 + i * _MIN) for i in range(12)]
         spec += [("20240101", 100, 2.45e6), ("20240102", 100, 2.45e6 + 1)]
         plot_dir = self._run(tmp_path, spec)
-        assert (plot_dir / "10700_rv_timeseries_20240926.png").exists()
-        assert (plot_dir / "10700_rv_timeseries.png").exists()
+        assert (plot_dir / "HD_10700_rv_timeseries_20240926.png").exists()
+        assert (plot_dir / "HD_10700_rv_timeseries.png").exists()
         # The high-cadence night is one datecode with >1 obs, but it is held out of
         # the nightly panels, and the two survivors are single-obs -> no nightly PNG.
-        assert not (plot_dir / "10700_rv_nightly.png").exists()
+        assert not (plot_dir / "HD_10700_rv_nightly.png").exists()
 
     def test_earlier_runs_plots_are_deleted(self, pt, tmp_path):
         # A plot this run does not write (an old high-cadence night, a nightly panel)
         # must not survive beside its output; another target's plots are untouched.
         plot_dir = tmp_path / "plots"
         plot_dir.mkdir()
-        stale = ["10700_rv_nightly.png", "10700_rv_timeseries_20230101.png"]
-        other = ["107000_rv_timeseries.png", "HD 10700_rv_nightly.png"]
+        stale = ["HD_10700_rv_nightly.png", "HD_10700_rv_timeseries_20230101.png"]
+        other = ["HD_107000_rv_timeseries.png", "10700_rv_nightly.png"]
         for name in stale + other:
             (plot_dir / name).touch()
         self._run(tmp_path, [("20240101", 100, 2.4e6), ("20240102", 100, 2.4e6 + 1)])
-        assert (plot_dir / "10700_rv_timeseries.png").exists()
+        assert (plot_dir / "HD_10700_rv_timeseries.png").exists()
         assert not any((plot_dir / n).exists() for n in stale)
         assert all((plot_dir / n).exists() for n in other)
 
@@ -383,7 +383,7 @@ class TestPlot:
         spec = [("20240926", 100 + i, 2.4e6 + i * _MIN) for i in range(12)]
         spec += [("20240927", 200 + i, 2.41e6 + i * _MIN) for i in range(12)]
         plot_dir = self._run(tmp_path, spec)
-        assert (plot_dir / "10700_rv_timeseries_20240926.png").exists()
-        assert (plot_dir / "10700_rv_timeseries_20240927.png").exists()
-        assert not (plot_dir / "10700_rv_timeseries.png").exists()
-        assert not (plot_dir / "10700_rv_nightly.png").exists()
+        assert (plot_dir / "HD_10700_rv_timeseries_20240926.png").exists()
+        assert (plot_dir / "HD_10700_rv_timeseries_20240927.png").exists()
+        assert not (plot_dir / "HD_10700_rv_timeseries.png").exists()
+        assert not (plot_dir / "HD_10700_rv_nightly.png").exists()

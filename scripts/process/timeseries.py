@@ -29,7 +29,12 @@ and plotting runs whatever L4 is on disk (``--no-science`` plots the existing L4
 writing to ``{KPF_SCIENCE_OUTPUT}/QLP/timeseries`` unless ``--plot_dir`` overrides
 it. The run exits nonzero if any stage that ran reported a failure.
 
-    kpfpipe timeseries --target 10700 --date_range 20240101 20240131
+A convenience helper, not part of the primary reduction pipeline or development
+flow: a shortcoming confined to this script (e.g. the discovery limits in
+``discover_science_obs_ids``) is low priority and must not drive changes to the
+pipeline, the mini-db, or its modules.
+
+    kpfpipe timeseries --target "HD 10700" --date_range 20240101 20240131
 """
 
 import argparse
@@ -40,7 +45,7 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.kpf import get_datecode, get_obs_id
+from kpfpipe.utils.kpf import get_datecode, get_obs_id, kpf_target_name
 from kpfpipe.utils.logger import setup_batch_logging
 from scripts._argparse import (
     cache_parser,
@@ -104,7 +109,8 @@ def parse_args(argv=None):
     ap.add_argument(
         "--target",
         required=True,
-        help="star id as it appears in the L0 OBJECT header, e.g. 10700",
+        help="target, canonicalized as HeaderParser does OBJECT (kpf_target_name): "
+        "'10700', 'HD10700' and 'HD 10700' all name 'HD 10700'",
     )
     # Stage toggles (which *stage* to run) -- unrelated to reduce's
     # --masters/--science/--engineering recipe shortcuts, which live only on that
@@ -149,6 +155,12 @@ def parse_args(argv=None):
         "science stage's own default config)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
+    _, target, planet = kpf_target_name(args.target.strip())
+    if planet:
+        logger.warning(
+            "--target %r names planet %r; host star %r", args.target, planet, target
+        )
+    args.target = target
     # --jobs stays None when unset so each stage picks its own default.
     args = resolve_pool(ap, args)
     if args.masters_jobs is not None and args.masters_jobs < 1:
@@ -177,6 +189,10 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
         if df is None:  # empty/absent night -- already warned, skip it
             return ([], []), ""
         is_object = df["DRP_OBSTYPE"] == "Target"
+        # Known, accepted limit: DRP_OBJECT is HeaderParser's OBJECT, not the one
+        # AstroQuery writes to the products, so an Unknown or low-tier (TIC/KIC/
+        # Gaia) frame AstroQuery renames is missed or found only by its old name.
+        # A convenience-script gap (see module docstring), not a pipeline defect.
         is_target = df["DRP_OBJECT"].astype(str).str.strip() == str(target)
         matched = df.loc[is_object & is_target]
         is_junk = matched["ISJUNK"].astype(bool)

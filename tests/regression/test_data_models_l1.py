@@ -185,7 +185,7 @@ class TestToKpf1:
         l1 = self._standardized(synthetic_l0_file).to_kpf1()
         assert l1.headers["PRIMARY"]["INSTRUME"] == "KPF"
         assert l1.headers["PRIMARY"]["DATE-OBS"] == "2024-01-13T10:26:55.968"
-        assert l1.headers["PRIMARY"]["OBJECT"] == "10700"
+        assert l1.headers["PRIMARY"]["OBJECT"] == "HD 10700"
         assert l1.headers["PRIMARY"]["DATALVL"] == "L1"
 
     # Canonical CATALOG_RECORD row (EPRV C*# format) overlaid onto the SCI cards.
@@ -219,6 +219,9 @@ class TestToKpf1:
 
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["SCISEL"] = "open"
+        # A Target needs an identity: OBJECT Unknown with GAIAID blank raises.
+        l0.headers["PRIMARY"]["OBJECT"] = l0.headers["PRIMARY"]["TARGNAME"] = "10700"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.standardize_headers()
         astro_query = AstroQuery(l0)
@@ -374,6 +377,9 @@ class TestCatalogRecordPassthrough:
     def _l0_with_catalog_table(rv=10.0):
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"]["SCISEL"] = "open"
+        # A Target needs an identity: OBJECT Unknown with GAIAID blank raises.
+        l0.headers["PRIMARY"]["OBJECT"] = l0.headers["PRIMARY"]["TARGNAME"] = "10700"
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         l0.standardize_headers()

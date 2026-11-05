@@ -5,10 +5,12 @@ All tests use synthetic in-memory data -- no real KPF files required.
 
 import logging
 import types
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import pytest
+from astropy import units as u
 from astropy.io import fits
 from astropy.table import Table
 
@@ -937,6 +939,47 @@ class TestQCL0:
         l0 = self._make_kpf0_with_canonical(tmp_path, pmdec=-30.0)
         assert QCL0(l0).catalog_astrometry_sane() is False
 
+    # Jupiter-like Horizons values: 4.5 au, ~20"/hr sky rates (in arcsec/yr).
+    _JUPITER = {
+        "parallax": (4.5 * u.au).to_value(u.mas, u.parallax()),
+        "pmra": 20.0 * 8766.0,
+        "pmdec": -8.0 * 8766.0,
+        "rv": None,
+        "color": None,
+        "color_name": None,
+    }
+
+    def _make_kpf0_solar_system(self, tmp_path, obj="Jupiter", **overrides):
+        l0 = self._make_kpf0_with_canonical(tmp_path, **{**self._JUPITER, **overrides})
+        l0.set_keyword("OBJECT", obj)
+        return l0
+
+    def test_catalog_astrometry_sane_solar_system_pass(self, tmp_path):
+        l0 = self._make_kpf0_solar_system(tmp_path)
+        assert QCL0(l0).catalog_astrometry_sane() is True
+
+    def test_catalog_astrometry_sane_star_with_solar_system_values_fails(
+        self, tmp_path
+    ):
+        # The stellar bounds are unchanged: only a solar-system OBJECT widens them.
+        l0 = self._make_kpf0_solar_system(tmp_path, obj="HD 10700")
+        assert QCL0(l0).catalog_astrometry_sane() is False
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"parallax": (0.05 * u.au).to_value(u.mas, u.parallax())},  # too near
+            {"parallax": (200 * u.au).to_value(u.mas, u.parallax())},  # too far
+            {"parallax": 100.0},  # a stellar parallax
+            {"pmra": 1500.0 * 8766.0},  # > 1000"/hr
+            {"pmdec": -1500.0 * 8766.0},
+            {"epoch": 2100.0},  # shared checks still apply
+        ],
+    )
+    def test_catalog_astrometry_sane_solar_system_fail(self, tmp_path, overrides):
+        l0 = self._make_kpf0_solar_system(tmp_path, **overrides)
+        assert QCL0(l0).catalog_astrometry_sane() is False
+
     # --- catalog_color_sane (COLOROK): the canonical color must be present,
     # labeled, and on the dwarf sequence for CrossCorrelation to turn it into a
     # line-mask Teff.
@@ -987,6 +1030,13 @@ class TestQCL0:
             l0 = self._make_kpf0_with_canonical(tmp_path, color=color, color_name="B-V")
             assert QCL0(l0).catalog_color_sane() is True
 
+    def test_catalog_color_sane_solar_system_does_not_apply(self, tmp_path):
+        # None -> no COLOROK flag written; a star with no color still fails.
+        l0 = self._make_kpf0_solar_system(tmp_path)
+        assert QCL0(l0).catalog_color_sane() is None
+        l0.set_keyword("OBJECT", "HD 10700")
+        assert QCL0(l0).catalog_color_sane() is False
+
     def test_qc_keys_correct(self):
         expected = {
             "telemetry_present": "TELEPR",
@@ -1000,6 +1050,7 @@ class TestQCL0:
             "catalog_color_sane": "COLOROK",
             "expmeter_times_consistent": "EMTIMEOK",
             "expmeter_flux_sane": "EMFLUXOK",
+            "guider_record_ok": "GDRRECOK",
         }
         for method_name, key in expected.items():
             fn = QCL0.__dict__[method_name]
@@ -1103,6 +1154,40 @@ class TestQCL0:
         del l0.headers["INSTRUMENT_HEADER"]["DATE-BEG"]
         with pytest.raises(KeyError, match="DATE-BEG"):
             QCL0(l0).expmeter_times_consistent()
+
+    # --- guider_record_ok (GDRRECOK): guider rows timestamped across GOOD_DATES.
+    _BEG_UNIX = datetime.fromisoformat(GOOD_DATES["DATE-BEG"] + "+00:00").timestamp()
+    _END_UNIX = datetime.fromisoformat(GOOD_DATES["DATE-END"] + "+00:00").timestamp()
+
+    def _make_kpf0_with_guider_record(self, tmp_path, timestamps=None, instru="KPF"):
+        l0 = _make_kpf0(tmp_path, dates={**GOOD_DATES, "GCINSTRU": instru})
+        if timestamps is None:
+            timestamps = np.linspace(self._BEG_UNIX, self._END_UNIX, 10)
+        l0.set_data("GUIDER_CUBE_ORIGINS", Table({"timestamp": timestamps}))
+        return l0
+
+    def test_guider_record_ok_pass(self, tmp_path):
+        assert QCL0(self._make_kpf0_with_guider_record(tmp_path)).guider_record_ok()
+
+    def test_guider_record_ignores_unwritten_rows(self, tmp_path):
+        ts = np.append(np.linspace(self._BEG_UNIX, self._END_UNIX, 10), [0.0, 0.0])
+        l0 = self._make_kpf0_with_guider_record(tmp_path, ts)
+        assert QCL0(l0).guider_record_ok() is True
+
+    def test_guider_record_absent_fails(self, tmp_path):
+        # Every row unwritten: no record was taken during this exposure.
+        l0 = self._make_kpf0_with_guider_record(tmp_path, np.zeros(5))
+        assert QCL0(l0).guider_record_ok() is False
+
+    def test_guider_record_previous_exposure_fails(self, tmp_path):
+        # The guider record of the exposure before, ~94 s earlier.
+        ts = np.linspace(self._BEG_UNIX, self._END_UNIX, 10) - 94.0
+        l0 = self._make_kpf0_with_guider_record(tmp_path, ts)
+        assert QCL0(l0).guider_record_ok() is False
+
+    def test_guider_record_other_instrument_fails(self, tmp_path):
+        l0 = self._make_kpf0_with_guider_record(tmp_path, instru="MOSFIRE")
+        assert QCL0(l0).guider_record_ok() is False
 
     # expmeter_flux_sane reads the DiagL0 channel metrics, so these seed them
     # directly; the measurement itself is covered in test_diagnostics.py.
@@ -1263,22 +1348,22 @@ class TestQCL0Telemetry:
         assert QCL0(l0).ccd_temps_within_100mk() is False
         assert QCL0(l0).ccd_temps_within_1000mk() is True
 
-    def test_guiding_ok_pass(self, tmp_path):
-        assert QCL0(self._make_kpf0_with_guider(tmp_path)).guiding_ok() is True
+    def test_guiding_error_ok_pass(self, tmp_path):
+        assert QCL0(self._make_kpf0_with_guider(tmp_path)).guiding_error_ok() is True
 
     def test_guiding_rms_fail(self, tmp_path):
         l0 = self._make_kpf0_with_guider(tmp_path, GDRYRMS=51.0)
-        assert QCL0(l0).guiding_ok() is False
+        assert QCL0(l0).guiding_error_ok() is False
 
     def test_guiding_bias_judged_on_magnitude(self, tmp_path):
         # v2.12 compared the signed bias and let a large negative offset pass.
         l0 = self._make_kpf0_with_guider(tmp_path, GDRXBIAS=-60.0)
-        assert QCL0(l0).guiding_ok() is False
+        assert QCL0(l0).guiding_error_ok() is False
 
     def test_guiding_missing_metric_raises(self, tmp_path):
         # Guider emits no guiding error when the camera was not tracking.
         with pytest.raises(KeyError, match="GDRXRMS"):
-            QCL0(_make_kpf0(tmp_path)).guiding_ok()
+            QCL0(_make_kpf0(tmp_path)).guiding_error_ok()
 
     def test_guide_camera_ok_pass(self, tmp_path):
         assert QCL0(self._make_kpf0_with_guider(tmp_path)).guide_camera_ok() is True
@@ -1296,7 +1381,16 @@ class TestQCL0Telemetry:
     def test_saturation_does_not_fail_the_guiding_flag(self, tmp_path):
         # The two are judged apart: a saturated camera may still have tracked.
         l0 = self._make_kpf0_with_guider(tmp_path, GDRNSAT=4)
-        assert QCL0(l0).guiding_ok() is True
+        assert QCL0(l0).guiding_error_ok() is True
+
+    @pytest.mark.parametrize(
+        "failing", [None, "guiding_error_ok", "guide_camera_ok", "guider_record_ok"]
+    )
+    def test_guiding_ok_requires_all_three(self, tmp_path, monkeypatch, failing):
+        # GUIDEROK rolls up GDRERROK, GDRCAMOK and GDRRECOK.
+        for name in ("guiding_error_ok", "guide_camera_ok", "guider_record_ok"):
+            monkeypatch.setattr(QCL0, name, lambda self, ok=name != failing: ok)
+        assert QCL0(_make_kpf0(tmp_path)).guiding_ok() is (failing is None)
 
     def test_seeing_ok_pass(self, tmp_path):
         l0 = self._make_kpf0_with_guider(tmp_path, GDRSEEV=1.499)
@@ -1399,6 +1493,7 @@ class TestQCL0Telemetry:
             "ccd_temps_within_10mk": "TEMP10",
             "ccd_temps_within_100mk": "TEMP100",
             "ccd_temps_within_1000mk": "TEMP1000",
+            "guiding_error_ok": "GDRERROK",
             "guiding_ok": "GUIDEROK",
             "guide_camera_ok": "GDRCAMOK",
             "seeing_ok": "SEEINGOK",

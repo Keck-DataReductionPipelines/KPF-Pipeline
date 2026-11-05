@@ -161,12 +161,14 @@ Traces store 67 orders concatenated (35 green + 32 red). Chip-prefix keys are co
 
 The WMKO-native → EPRV-standard PRIMARY conversion lives in **exactly one place** —
 `KPF0.standardize_headers`, which every raw-L0 load runs via `from_fits(standardize=True)` and
-which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`.
+which also snapshots the raw L0 PRIMARY verbatim into `INSTRUMENT_HEADER`. The one later rewrite of
+standardized identity cards is `AstroQuery`'s (see `CATALOG_RECORD` below).
 The mapping, validation, and routing all derive from the keyword registry (see *Keyword registry*).
 The architecture invariants:
 
-- **PRIMARY holds EPRV-registered keywords and the WMKO provenance cards** from
-  L0-after-standardization onward (EPRV keyword names + FITS structural cards — no raw natives).
+- **PRIMARY holds registered keywords** — EPRV keywords, KPF-registered keywords (e.g. `GREEN`,
+  `SCISRC`, `GAIAID`, the `C*#` cards) and the WMKO provenance cards — from
+  L0-after-standardization onward (registered names + FITS structural cards — no unregistered raw natives).
   `standardize_headers` seeds the whole registered PRIMARY skeleton for the level, then fills it from
   `header-map.csv`; every card is present, blank where nothing supplied a value. (The other
   keyword-homing exception is noted under *Keyword registry*.)
@@ -174,7 +176,7 @@ The architecture invariants:
   written once by `standardize_headers` and never again.
 - **Read from PRIMARY, fall back to `INSTRUMENT_HEADER`** — at L0 too, now that standardization runs
   at load. The map carries only some natives to PRIMARY, mostly under renamed EPRV keys — so read a
-  native from PRIMARY when it survives there under its own name (e.g. `DATE-OBS`, `OBJECT`), and from
+  native from PRIMARY when it survives there under its own name (e.g. `DATE-OBS`; not `OBJECT`, which `AstroQuery` may resolve to a catalog name), and from
   `INSTRUMENT_HEADER` when it never reaches PRIMARY or when a coherent block of related natives reads
   more clearly together (e.g. the raw `DATE-BEG`/`DATE-END` pair `barycentric_correction` extrapolates
   the exposure meter against; its *target astrometry*, by contrast, comes off the PRIMARY `C*#` cards,
@@ -189,7 +191,8 @@ The architecture invariants:
   as an **append-only history** — the RECEIPT table carrying the calibration provenance L1 and L2 add
   (`oscansub`, `biasfile`).
 - **`CATALOG_RECORD` (AstroQuery's resolved catalog rows) also passes through
-  L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards.
+  L0→L1→L2→L4**, and `AstroQuery` overlays its merged `kpf-drp` row onto the PRIMARY `C*#` cards and
+  resolves the PRIMARY identity cards `OBJECT`, `ALIASES` and `GAIAID` from the catalog aliases.
 - **Structural header validation lives in the checkpoints layer** (`Checkpoint.raise_on_unregistered_keyword`),
   not in QC or `to_kpfN`: every card on a registry-governed extension must be a registered keyword or a
   structural card, else it raises.
@@ -206,12 +209,12 @@ from a **single source-of-truth table** unioning the
 `config/{prefix}-{EXTENSION}-keywords.csv` registries, one file per extension per level.
 
 **Each registered keyword has one home extension** (the registry `Extension` column) that `set_keyword`
-routes to: **PRIMARY** (EPRV keywords, plus the KPF-owned master calibration paths),
+routes to: **PRIMARY** (EPRV and KPF-registered keywords, plus the KPF-owned master calibration paths),
 **QUALITY_CONTROL** (QC flags, read-noise, calibration ages, DiagL2 metrics),
 the **barycentric** L2 extensions, and **RV1–RV5** (L4 per-orderlet `RV{GREEN,RED}`/`ERV{GREEN,RED}`).
 RECEIPT is not a home: it registers no keyword, carrying DRP provenance and applied flags as
 table rows (`receipt_add_entry`) rather than header cards.
-The one exception to *PRIMARY holds EPRV keywords only* is those same four names, which are homed on
+The one exception to *one home extension* is those same four names, which are homed on
 PRIMARY **as well** — there they are the SCI-combined RVs, KPF-registered yet belonging beside the EPRV
 `RV`/`RVERR`. Routing prefers PRIMARY, so the bare `set_keyword` writes the combined value and the
 per-orderlet write names its table with `ext=`. Masters register their PRIMARY keywords in per-master-type registries and

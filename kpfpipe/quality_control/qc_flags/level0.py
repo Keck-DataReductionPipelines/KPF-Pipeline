@@ -2,12 +2,13 @@
 
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
+from astropy import units as u
 
-from kpfpipe import REPO_ROOT
+from kpfpipe import REPO_ROOT, SOLAR_SYSTEM_OBJECTS
 from kpfpipe.quality_control.qc_flags.base import QC
 from kpfpipe.utils.io import load_junk_obs_ids
 
@@ -238,7 +239,7 @@ class QCL0(QC):
 
     ccd_temps_within_1000mk._qc_key = "TEMP1000"
 
-    def guiding_ok(self):
+    def guiding_error_ok(self):
         """Guiding tracked to spec: 50 mas in both X/Y RMS and bias.
 
         Guider measures all four; this applies the limit. Bias is judged on
@@ -249,7 +250,7 @@ class QCL0(QC):
             return False
         return all(abs(float(hdr[key])) <= 50.0 for key in ("GDRXBIAS", "GDRYBIAS"))
 
-    guiding_ok._qc_key = "GUIDEROK"
+    guiding_error_ok._qc_key = "GDRERROK"
 
     def guide_camera_ok(self):
         """Guide camera not saturated.
@@ -263,6 +264,38 @@ class QCL0(QC):
         return int(hdr["GDRNSAT"]) <= 3 and float(hdr["GDRFRSAT"]) <= 0.1
 
     guide_camera_ok._qc_key = "GDRCAMOK"
+
+    def guider_record_ok(self):
+        """The guider record was taken by KPF's guider during this exposure.
+
+        WMKO has written stale guider data into L0s: a record left over from
+        another instrument (GCINSTRU LRISADC/MOSFIRE) or from the previous
+        exposure. GCINSTRU must be KPF, at least one GUIDER_CUBE_ORIGINS timestamp
+        must be written (unwritten rows carry 0; none means no record), and every
+        written one must fall within 1 s of the shutter window DATE-BEG..DATE-END.
+        """
+        hdr = self.kpf_obj.headers["INSTRUMENT_HEADER"]
+        if hdr["GCINSTRU"] != "KPF":
+            return False
+        beg, end = (
+            datetime.fromisoformat(str(hdr[k])).replace(tzinfo=UTC).timestamp()
+            for k in ("DATE-BEG", "DATE-END")
+        )
+        ts = np.asarray(self.kpf_obj.data["GUIDER_CUBE_ORIGINS"]["timestamp"], float)
+        ts = ts[ts != 0.0]
+        return ts.size > 0 and bool(np.all((ts >= beg - 1.0) & (ts <= end + 1.0)))
+
+    guider_record_ok._qc_key = "GDRRECOK"
+
+    def guiding_ok(self):
+        """Guider rollup: GDRERROK, GDRCAMOK and GDRRECOK all pass."""
+        return (
+            self.guiding_error_ok()
+            and self.guide_camera_ok()
+            and self.guider_record_ok()
+        )
+
+    guiding_ok._qc_key = "GUIDEROK"
 
     def seeing_ok(self):
         """V-band seeing under 1.5 arcsec.
@@ -364,8 +397,21 @@ class QCL0(QC):
         (1950, 2050] Julian years, |rv| <= 350 km/s, parallax in (0, 1000) mas,
         |pmra|/|pmdec| <= 15 arcsec/yr.
 
+        A solar-system OBJECT carries JPL Horizons' range and sky rates instead, so
+        its parallax must put it 0.1-150 au away (Venus at inferior conjunction is
+        ~0.26 au, Eris ~96 au) and |pmra|/|pmdec| must be <= 1000 arcsec/hr (fast
+        Mercury/Venus are <~350 arcsec/hr).
+
         AstroQuery must have resolved the frame: an absent ``kpf-drp`` row raises.
         """
+        if self.kpf_obj.headers["PRIMARY"]["OBJECT"] in SOLAR_SYSTEM_OBJECTS:
+            plax_bounds = (
+                (150 * u.au).to_value(u.mas, u.parallax()),
+                (0.1 * u.au).to_value(u.mas, u.parallax()),
+            )
+            pm_bound = (1000 * u.arcsec / u.hour).to_value(u.arcsec / u.yr)
+        else:
+            plax_bounds, pm_bound = (0.0, 1000.0), 15.0
         table = self.kpf_obj.data["CATALOG_RECORD"]
         row = table[table["source"] == "kpf-drp"][0]
         for field in ("epoch", "equinox"):
@@ -377,11 +423,11 @@ class QCL0(QC):
         if rv is not None and abs(rv) > 350.0:
             return False
         plax = self._row_float(row, "parallax")
-        if plax is not None and not (0.0 < plax < 1000.0):
+        if plax is not None and not (plax_bounds[0] < plax < plax_bounds[1]):
             return False
         for field in ("pmra", "pmdec"):
             pm = self._row_float(row, field)
-            if pm is not None and abs(pm) > 15.0:
+            if pm is not None and abs(pm) > pm_bound:
                 return False
         return True
 
@@ -398,8 +444,12 @@ class QCL0(QC):
         -- O3V through Y4V, so a color outside it is not a stellar color.
 
         AstroQuery must have resolved the frame, as ``catalog_astrometry_sane``
-        requires: an absent ``kpf-drp`` row raises.
+        requires: an absent ``kpf-drp`` row raises. Does not apply (None) to a
+        solar-system OBJECT: reflected sunlight has no stellar color, and its mask is
+        not chosen from one.
         """
+        if self.kpf_obj.headers["PRIMARY"]["OBJECT"] in SOLAR_SYSTEM_OBJECTS:
+            return None
         # (bluest, reddest) [mag] each index spans across the sequence, keyed by the
         # labels AstroQuery writes to color_name.
         limits = {

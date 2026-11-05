@@ -7,7 +7,8 @@ Bursts of rapid-succession frames collapse to one RVERR-weighted point over a fa
 underlay of the individual frames; observer-junk frames (``NOTJUNK == 0``) are
 dropped. Writes ``{target}_rv_timeseries.png``, ``{target}_rv_nightly.png`` for
 nights with several observations, and ``{target}_rv_timeseries_{datecode}.png`` for
-each high-cadence night, which is held out of the main plot. The target's plots
+each high-cadence night, which is held out of the main plot (``{target}`` with spaces
+as underscores, e.g. ``HD_10700``). The target's plots
 from an earlier run are deleted first.
 """
 
@@ -215,6 +216,8 @@ class PlotTimeseries:
 
     def __init__(self, target, obs_ids, data_dir, plot_dir):
         self.target = target
+        # The canonical OBJECT may hold a space ('HD 10700'); filenames don't.
+        self.file_stem = target.replace(" ", "_")
         self.obs_ids = obs_ids
         self.data_dir = data_dir
         self.plot_dir = plot_dir
@@ -275,7 +278,7 @@ class PlotTimeseries:
     def _clear_stale_plots(self):
         """Delete this target's PNGs in ``plot_dir``, and only this target's: the
         directory is shared across targets."""
-        t = glob.escape(self.target)
+        t = glob.escape(self.file_stem)
         for pattern in (
             f"{t}_rv_timeseries.png",
             f"{t}_rv_nightly.png",
@@ -323,6 +326,9 @@ class PlotTimeseries:
                     "%s is an observer-junk frame (NOTJUNK=0); skipping", obs_id
                 )
                 continue
+            # Expected for a frame AstroQuery renamed (e.g. TIC n -> HD n): the
+            # discovery in scripts/process/timeseries.py matches HeaderParser's
+            # OBJECT. An accepted convenience-script gap, not a pipeline defect.
             if str(primary.get("OBJECT")).strip() != str(self.target):
                 logger.warning(
                     "L4 for %s has OBJECT %r, not target %r; plotting anyway",
@@ -526,10 +532,10 @@ class PlotTimeseries:
         """Lay out, stamp, write and close one figure; returns its path.
 
         ``suffix`` names the plot within this target's set, e.g. 'nightly' gives
-        '10700_rv_nightly.png'.
+        'HD_10700_rv_nightly.png'.
         """
         plt = _pyplot()
-        out_path = os.path.join(self.plot_dir, f"{self.target}_rv_{suffix}.png")
+        out_path = os.path.join(self.plot_dir, f"{self.file_stem}_rv_{suffix}.png")
         fig.tight_layout()
         fig.text(
             0.99,

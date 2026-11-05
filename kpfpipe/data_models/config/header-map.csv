@@ -26,6 +26,7 @@ NUMTEL,,,1,True
 TELEID1,,,K1,True
 OBJECT,,,,True
 ALIASES,,,,False
+GAIAID,,,,False
 FILENAME,,,,True
 DATE,DATE,PRIMARY,,True
 DATE-OBS,,,,True

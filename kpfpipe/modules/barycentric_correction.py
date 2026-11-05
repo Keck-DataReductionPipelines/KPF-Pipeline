@@ -7,12 +7,29 @@ BARYCORR_Z (per spectral order), plus per-CCD scalar summaries in the
 barycentric extension headers. Wavelength arrays are not modified.
 
 Target astrometry is read from the PRIMARY C*# catalog cards, not queried --
-AstroQuery is the pipeline's sole external-catalog client.
+AstroQuery is the pipeline's sole external-catalog client -- except for
+solar-system bodies, whose reflected-light correction (Wright & Kanodia 2020)
+barycorrpy computes from JPL Horizons: 3 requests per time, each bounded by
+astroquery's 30 s timeout and served from its disk cache on a repeat; a transient
+failure is retried with backoff.
+
+Solar-system limits. The reflected-light BC is that of the body's center:
+- Rotation, phase effects and the finite disk are not modeled.
+- Computed at each CCD's earliest and latest order time and
+  interpolated linearly to the orders; the curvature error is <0.03 m/s for
+  spans up to ~80 s (Io, the fastest moon).
+- The BC at the flux-weighted time, not the flux-weighted mean BC: curvature
+  biases fast moons over long exposures (~0.4 m/s, Io, 600 s).
+- BJD_TDB is a plane wave along CRA3/CDEC3 (curvature up to ~1 min, Jupiter);
+  this touches the timestamp only.
+- The body is taken from OBJECT; nothing checks that the telescope pointed at it.
 
 Follows the barycentric-correction approach of Wright & Eastman (2014,
 barycorrpy) with the flux-weighted midpoint time of Butler et al. (1996).
 """
 
+import contextlib
+import io
 import logging
 
 import astropy.units as u
@@ -25,9 +42,10 @@ from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter, median_filter
 from scipy.special import erfcinv
 
-from kpfpipe import DEFAULT_CFG, DETECTOR
+from kpfpipe import DEFAULT_CFG, DETECTOR, SOLAR_SYSTEM_OBJECTS
 from kpfpipe.utils.astro import KECK_LOCATION, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.network import retry_request
 from kpfpipe.utils.stats import strictly_increasing
 
 logger = logging.getLogger(__name__)
@@ -59,7 +77,11 @@ class BarycentricCorrection:
         populated by WavelengthCalibration. PRIMARY must carry the SCI2 catalog
         cards (CRA3/CDEC3/CPMR3/CPMD3/CEPCH3) unless perform() is given a
         ``skycoord`` override or the frame is SoCal (ISSOLAR), which uses
-        barycorrpy's solar mode (BJD_TDB is still a true BJD).
+        barycorrpy's solar mode (BJD_TDB is still a true BJD). A solar-system
+        OBJECT uses barycorrpy's reflected-light mode (JPL Horizons, 3 requests per
+        time): perform() corrects it at each CCD's earliest and latest order time
+        and interpolates linearly; compute_barycentric_correction() serves any
+        ``output`` at that cost.
         INSTRUMENT_HEADER (the preserved L1 PRIMARY) must contain
         DATE-BEG/DATE-END when extrapolating.
     config : None | dict | ConfigHandler
@@ -409,6 +431,10 @@ class BarycentricCorrection:
         physical sanitation belongs here: a missing or non-positive parallax (routine
         for faint Gaia sources) becomes ``px=0``, barycorrpy's own no-parallax value.
 
+        A solar-system OBJECT gets barycorrpy's reflected-light arguments instead:
+        its Horizons ID (``SOLAR_SYSTEM_OBJECTS``), plus the CRA3/CDEC3 direction for
+        BJD_TDB.
+
         Raises
         ------
         ValueError
@@ -433,6 +459,21 @@ class BarycentricCorrection:
                     f"missing or blank; run AstroQuery on the L0 so the canonical "
                     f"catalog record reaches the C*# cards"
                 )
+
+            obj = primary.get("OBJECT")
+            if obj in SOLAR_SYSTEM_OBJECTS:
+                horizons_id = SOLAR_SYSTEM_OBJECTS[obj]
+                # HorizonsID_type=None: barycorrpy's default 'smallbody' would turn
+                # '599' (Jupiter) into asteroid 599.
+                self._astrometry = {
+                    "SolSystemTarget": horizons_id,
+                    "HorizonsID_type": None,
+                    "predictive": False,
+                    "ra": Angle(cards["CRA3"], unit=u.hourangle).deg,
+                    "dec": Angle(cards["CDEC3"], unit=u.deg).deg,
+                }
+                self._astrometry_source = f"JPL Horizons ({horizons_id})"
+                return self._astrometry
 
             # QC flags an unphysical parallax (ASTROMOK) but does not repair it.
             parallax = primary.get("CPLX3")
@@ -503,6 +544,46 @@ class BarycentricCorrection:
                 )[0][0]
                 for jd, ra, dec in zip(JDUTC, sun.ra.deg, sun.dec.deg, strict=True)
             ]
+            return np.asarray(bc_vel), np.asarray(bjd_tdb)
+
+        if "SolSystemTarget" in astrometry:
+            # Reflected light: barycorrpy queries JPL Horizons (3 requests per time).
+            target = {
+                k: astrometry[k]
+                for k in ("SolSystemTarget", "HorizonsID_type", "predictive")
+            }
+            printed = io.StringIO()  # barycorrpy prints a failed Horizons call
+            try:
+                with contextlib.redirect_stdout(printed):
+                    bc_vel, *_ = retry_request(
+                        lambda: get_BC_vel(
+                            JDUTC=JDUTC, lat=lat, longi=lon, alt=alt, **target
+                        ),
+                        "JPL Horizons (barycorrpy)",
+                    )
+            except Exception as e:  # network or Horizons failure: no fallback
+                raise RuntimeError(
+                    f"JPL Horizons barycentric correction failed for "
+                    f"{target['SolSystemTarget']} at JD_UTC {JDUTC.tolist()}: {e}"
+                ) from e
+            finally:
+                if printed.getvalue().strip():
+                    logger.warning("barycorrpy: %s", printed.getvalue().strip())
+            # BJD_TDB as a plane wave along the observed direction, as for SoCal:
+            # wavefront curvature is ignored (up to ~1 min for Jupiter), which
+            # touches only the timestamp, not BARYCORR_KMS.
+            bjd_tdb, *_ = utc_tdb.JDUTC_to_BJDTDB(
+                JDUTC=JDUTC,
+                ra=astrometry["ra"],
+                dec=astrometry["dec"],
+                pmra=0.0,
+                pmdec=0.0,
+                px=0.0,
+                rv=0.0,
+                lat=lat,
+                longi=lon,
+                alt=alt,
+            )
             return np.asarray(bc_vel), np.asarray(bjd_tdb)
 
         bc_vel, *_ = get_BC_vel(
@@ -766,6 +847,51 @@ class BarycentricCorrection:
         )
         self._info = "\n\n" + "\n".join(lines) + "\n\n"
 
+    def _solar_system_barycorr(self, interpolate, extrapolate, fix_outliers):
+        """Per-order and per-CCD correction for a solar-system OBJECT.
+
+        Why interpolate: a fast moon's reflected-light BC changes quickly
+        (Io ~1 m/s per second, from its 17 km/s orbit), and order midpoints within
+        a CCD differ by seconds, so each order needs its own BC -- one value per
+        CCD would err by m/s. But every barycorrpy time costs 3 JPL Horizons
+        queries (~200 per frame for all orders). Over the seconds-long span of
+        order times the BC is linear to within curvature*span**2/8 (<0.03 m/s up
+        to ~80 s for Io), so barycorrpy is called only at each CCD's earliest and
+        latest order time (12 queries) and the orders and the CCD time (a weighted
+        mean of its orders, so inside that span) are linearly interpolated.
+
+        Returns ((bjd, kms, z) per order, (bjd, kms, z) [GREEN, RED]).
+        """
+        t_kw = dict(
+            interpolate=interpolate, extrapolate=extrapolate, fix_outliers=fix_outliers
+        )
+        _, t_orders = self.compute_flux_weighted_midpoint_times("orders", **t_kw)
+        _, t_ccds = self.compute_flux_weighted_midpoint_times("ccds", **t_kw)
+        n_green = self.norder["GREEN"]
+        ccds = (slice(0, n_green), slice(n_green, None))
+        jd = t_orders.jd
+        ends = np.array([(jd[s].min(), jd[s].max()) for s in ccds])
+        bc_mps, bjd = self._compute_barycorr(
+            self._get_astrometry(),
+            Time(ends.ravel(), format="jd", scale="utc"),
+            KECK_LOCATION,
+        )
+        bc_mps, bjd = np.reshape(bc_mps, (2, 2)), np.reshape(bjd, (2, 2))
+
+        def line(y, t, slices):  # per-CCD linear interpolation of y onto t
+            return np.concatenate(
+                [np.interp(t[s], ends[i], y[i]) for i, s in enumerate(slices)]
+            )
+
+        ccd_each = (slice(0, 1), slice(1, 2))
+        order_mps, order_bjd = line(bc_mps, jd, ccds), line(bjd, jd, ccds)
+        ccd_mps = line(bc_mps, t_ccds.jd, ccd_each)
+        ccd_bjd = line(bjd, t_ccds.jd, ccd_each)
+        return tuple(
+            (b, v / 1000.0, np.asarray(compute_redshift(v * u.m / u.s)))
+            for b, v in ((order_bjd, order_mps), (ccd_bjd, ccd_mps))
+        )
+
     def _set_headers(self, l2_obj):
         """Write the per-CCD summary keywords.
 
@@ -823,13 +949,30 @@ class BarycentricCorrection:
             fix_expmeter_outliers=fix_expmeter_outliers,
             skycoord=skycoord,
         )
-        bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(
-            output="orders", **kwargs
-        )
-        # Per-CCD summaries [GREEN, RED], consumed by _set_headers.
-        self._ccd_bjd, self._ccd_kms, self._ccd_z = self.compute_barycentric_correction(
-            output="ccds", **kwargs
-        )
+        obj = self.l2_obj.headers["PRIMARY"].get("OBJECT")
+        if not skycoord and obj in SOLAR_SYSTEM_OBJECTS:
+            # Horizons-backed: per-CCD linear interpolation keeps per-order accuracy
+            # at 12 queries instead of ~200 (see _solar_system_barycorr).
+            (
+                (bjd_tdb, bary_kms, bary_z),
+                (
+                    self._ccd_bjd,
+                    self._ccd_kms,
+                    self._ccd_z,
+                ),
+            ) = self._solar_system_barycorr(
+                interpolate_expmeter_flux,
+                extrapolate_expmeter_flux,
+                fix_expmeter_outliers,
+            )
+        else:
+            bjd_tdb, bary_kms, bary_z = self.compute_barycentric_correction(
+                output="orders", **kwargs
+            )
+            # Per-CCD summaries [GREEN, RED], consumed by _set_headers.
+            self._ccd_bjd, self._ccd_kms, self._ccd_z = (
+                self.compute_barycentric_correction(output="ccds", **kwargs)
+            )
 
         # Per-order extensions; WAVE arrays are left untouched
         self.l2_obj.set_data("BJD_TDB", np.asarray(bjd_tdb, dtype=np.float64))

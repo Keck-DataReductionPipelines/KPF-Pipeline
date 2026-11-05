@@ -245,27 +245,26 @@ def main(argv=None):
             "stale-output clearing are applied"
         )
 
-    # Junk and single-CCD frames never enter the science recipe; a junk frame's
-    # products from before it was junked are deleted.
-    if recipe_type == "science":
-        data_input = config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
-        if args.obs_id in load_junk_obs_ids(data_input):
-            logger.info("skipping %s: junk frame; clearing its products", args.obs_id)
-            clear_stale_outputs(config, args, recipe_type, stages)
-            return
-        drp = HeaderParser(kpf_filepath(args.obs_id, "L0", data_root=data_input))
-        if not (drp.DRP_KEYWORDS.get("GREEN") and drp.DRP_KEYWORDS.get("RED")):
-            logger.warning(
-                "skipping %s: DRP does not yet support single-CCD exposures",
-                args.obs_id,
-            )
-            return
-
-    # Clear prior products so this run's outputs stand alone. After the load, never
-    # before: a mistyped -r must not destroy a night's products on its way out.
-    clear_stale_outputs(config, args, recipe_type, stages)
-
     try:
+        # Clear prior products so this run's outputs stand alone, and a skipped or
+        # rejected frame keeps none. After the load, never before: a mistyped -r
+        # must not destroy a night's products on its way out.
+        clear_stale_outputs(config, args, recipe_type, stages)
+
+        # Junk and single-CCD frames never enter the science recipe.
+        if recipe_type == "science":
+            data_input = config.get_params(["DATA_DIRS"])["KPF_DATA_INPUT"]
+            if args.obs_id in load_junk_obs_ids(data_input):
+                logger.info("skipping %s: junk frame", args.obs_id)
+                return
+            drp = HeaderParser(kpf_filepath(args.obs_id, "L0", data_root=data_input))
+            if not (drp.DRP_KEYWORDS.get("GREEN") and drp.DRP_KEYWORDS.get("RED")):
+                logger.warning(
+                    "skipping %s: DRP does not yet support single-CCD exposures",
+                    args.obs_id,
+                )
+                return
+
         recipe.main(config, args)
     except Exception:
         # The one sanctioned catch-log-reraise point:

@@ -12,6 +12,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 from astropy.coordinates import Angle
+from astropy.time import Time
 
 from kpfpipe import __githash__, __version__
 from kpfpipe.data_models.base import KPFDataModel
@@ -82,7 +83,27 @@ class KPF0(KPFDataModel):
 
         The obs_id must be known before ``standardize_headers``, which
         writes it as the ORIGID provenance card.
+
+        EXTNAMEs are upper-cased first: some 2023 WMKO L0s wrote the guider
+        extensions in lowercase (``guider_avg``, ``guider_cube_origins``). Only
+        raw L0 is normalized; pipeline products must match their manifests.
+
+        A GUIDER_CUBE extension, which WMKO sometimes embeds, is dropped with a
+        warning: it often accompanies a stale guider record (judged by GDRRECOK).
         """
+        for hdu in hdul[1:]:
+            if hdu.name != hdu.name.upper():
+                logger.debug(
+                    "renaming L0 extension %r to %r", hdu.name, hdu.name.upper()
+                )
+                hdu.name = hdu.name.upper()
+        if "GUIDER_CUBE" in hdul:
+            logger.warning(
+                "%s: dropping GUIDER_CUBE; a full guider cube in an L0 often "
+                "indicates a stale guider record (see GDRRECOK)",
+                self.filename,
+            )
+            del hdul["GUIDER_CUBE"]
         super().read(hdul, instrument=instrument)
         self.obs_id = get_obs_id(self.filename)
 
@@ -237,7 +258,7 @@ class KPF0(KPFDataModel):
             jd = None
         if jd is None or jd <= 2400000.5:
             raise ValueError(f"{self.obs_id}: MJD-OBS={mjd!r} is not a valid MJD")
-        obs_time = pd.to_datetime(jd, unit="D", origin="julian")
+        obs_time = Time(jd, format="jd", scale="utc").datetime
         obs_date = obs_time.strftime("%Y%m%d")
         if self.obs_id and obs_date != get_datecode(self.obs_id):
             raise ValueError(
@@ -253,15 +274,15 @@ class KPF0(KPFDataModel):
         Runs after ``_timestamp``, which is what supplies JD_UTC. A frame no era
         covers raises (see ``instrument_era``).
         """
-        obs_time = pd.to_datetime(
-            self.headers["PRIMARY"]["JD_UTC"], unit="D", origin="julian"
-        )
+        obs_time = Time(
+            self.headers["PRIMARY"]["JD_UTC"], format="jd", scale="utc"
+        ).datetime
         self.set_keyword("INSTERA", instrument_era(obs_time))
 
     def _observation_settings(self):
         """Stamp every value ``HeaderParser`` derives from the native header.
 
-        Frame identity (OBSTYPE, OBSMODE, OBJECT, ISSOLAR, EXPTIME), fiber
+        Frame identity (OBSTYPE, OBSMODE, OBJECT, GAIAID, ISSOLAR, EXPTIME), fiber
         illumination (SKYSRC, SCISRC, CALSRC, which downstream code consumes,
         and the SIMULCAL summary),
         the EPRV trace cards (TRACE#, CLSRC#, and CSRC#/CID# as ``None`` until

@@ -16,19 +16,24 @@ import shlex
 import subprocess
 import sys
 
-from kpfpipe.utils.kpf import is_datecode
-from scripts._argparse import dates_parser
+from kpfpipe.utils.io import kpf_filename
+from kpfpipe.utils.kpf import get_datecode, is_datecode
+from scripts._argparse import dates_parser, obs_ids_parser
 
 # ``{user}`` is filled in from --user.
 REMOTE_HOST = "{user}@shrek.caltech.edu"
 
 
-def subject_parser(subject, default_remote_dir, description, gb_per_night=None):
+def subject_parser(
+    subject, default_remote_dir, description, gb_per_night=None, obs_ids=False
+):
     """The argument parser for a fetch subject, complete but not yet parsed.
 
     A subject with a `gb_per_night` estimate also gets ``--yes``, which skips the
-    size confirmation `confirm_volume` would otherwise ask for. A subject needing
-    flags of its own adds them to this and parses for itself (see ``masters.py``).
+    size confirmation `confirm_volume` would otherwise ask for. A per-frame subject
+    passes `obs_ids` to also offer ``--obs_ids`` (validate with
+    `resolve_frame_selection`). A subject needing flags of its own adds them to this
+    and parses for itself (see ``masters.py``).
 
     The subject's name and estimate ride along on the parsed namespace, so `run`
     takes nothing the parser did not already know.
@@ -39,6 +44,7 @@ def subject_parser(subject, default_remote_dir, description, gb_per_night=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[
             dates_parser("fetches every night present on the remote in it"),
+            *([obs_ids_parser("fetch")] if obs_ids else []),
         ],
     )
     p.add_argument(
@@ -182,16 +188,26 @@ def run(args, filters=()):
     A subject carrying a ``gb_per_night`` estimate gates the transfer behind
     `confirm_volume` once the night count is known. `filters` are rsync rules
     narrowing what each night yields (see `fetch_night`).
+
+    With ``--obs_ids`` the nights are those the obs_ids fall on, and each yields only
+    the named frames' files; the per-night size gate does not apply.
     """
     remote = REMOTE_HOST.format(user=args.user)
     remote_dir = f"{args.remote_dir}/{args.subject}"
     local_dir = os.path.join(args.local_dir, args.subject)
+    obs_ids = getattr(args, "obs_ids", None)
+    if obs_ids:
+        filters = [f"--include={kpf_filename(o, args.subject)}" for o in obs_ids]
+        filters.append("--exclude=*")
     ssh = ssh_command()
     try:
-        datecodes = args.dates or remote_datecodes(
-            ssh, remote, remote_dir, *args.date_range
-        )
-        if args.gb_per_night and not args.yes:
+        if obs_ids:
+            datecodes = sorted({get_datecode(o) for o in obs_ids})
+        else:
+            datecodes = args.dates or remote_datecodes(
+                ssh, remote, remote_dir, *args.date_range
+            )
+        if args.gb_per_night and not args.yes and not obs_ids:
             confirm_volume(args.subject, datecodes, args.gb_per_night, local_dir)
         os.makedirs(local_dir, exist_ok=True)
         failed = []

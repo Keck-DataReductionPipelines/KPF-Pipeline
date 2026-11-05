@@ -15,9 +15,11 @@ its illumination source (the PRIMARY SKYSRC/SCISRC/CALSRC card for the fiber):
   +=================+=====================================+==========+=================+
   | Target          | CCLR3 colour-lookup                 | yes      | CRV3 (systemic) |
   +-----------------+-------------------------------------+----------+-----------------+
-  | SoCal           | G2_espresso                         | yes      | 0               |
+  | SoCal           | G2_espresso (sunlight)              | yes      | 0               |
   +-----------------+-------------------------------------+----------+-----------------+
-  | Sky             | G2_espresso (solar)                 | yes      | 0               |
+  | Target (SS body)| G2_espresso (reflected sunlight)    | yes      | 0               |
+  +-----------------+-------------------------------------+----------+-----------------+
+  | Sky             | G2_espresso (scattered sunlight)    | yes      | 0               |
   +-----------------+-------------------------------------+----------+-----------------+
   | ThAr_daily/gold | ThAr list (unit wt)                 | no       | 0               |
   +-----------------+-------------------------------------+----------+-----------------+
@@ -38,7 +40,7 @@ import astropy.units as u
 import numpy as np
 import pandas as pd
 
-from kpfpipe import CHIPS, DEFAULT_CFG, DETECTOR, REPO_ROOT
+from kpfpipe import CHIPS, DEFAULT_CFG, DETECTOR, REPO_ROOT, SOLAR_SYSTEM_OBJECTS
 from kpfpipe.utils.astro import color_to_teff, compute_redshift
 from kpfpipe.utils.config import ConfigHandler
 from kpfpipe.utils.stats import strictly_increasing
@@ -134,14 +136,15 @@ class CrossCorrelation:
         # systemic RV for a star, 0 for sky/cal). No mask -> no CCF for the fiber.
         source = {"object": src, "mask_name": None}
         source["apply_barycorr"] = source["vel_grid_center"] = None
-        if src == "Target":
-            source["mask_name"] = self._resolve_stellar_mask()
-            source["apply_barycorr"] = True
-            source["vel_grid_center"] = self._get_systemic_rv()
-        elif src in ("SoCal", "Sky"):
+        obj = self.l2_obj.headers["PRIMARY"].get("OBJECT")
+        if src in ("SoCal", "Sky") or (src == "Target" and obj in SOLAR_SYSTEM_OBJECTS):
             source["mask_name"] = "G2_espresso"
             source["apply_barycorr"] = True
             source["vel_grid_center"] = 0.0
+        elif src == "Target":
+            source["mask_name"] = self._resolve_stellar_mask()
+            source["apply_barycorr"] = True
+            source["vel_grid_center"] = self._get_systemic_rv()
         elif src in ("ThAr_daily", "ThAr_gold"):
             source["mask_name"] = "thar"
             source["apply_barycorr"] = False

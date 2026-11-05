@@ -54,7 +54,12 @@ _TRACE_FAMILIES = (
 )
 
 # Native cards that make write_minimal_l0's frame a science (Target) frame.
-_SCIENCE_CARDS = {"IMTYPE": "Object", "OBJECT": "10700", "TARGNAME": "10700"}
+_SCIENCE_CARDS = {
+    "IMTYPE": "Object",
+    "SCISEL": "open",
+    "OBJECT": "10700",
+    "TARGNAME": "10700",
+}
 
 
 class TestKPF0:
@@ -153,6 +158,27 @@ class TestKPF0ErrorPaths:
         fn = self._minimal_l0(tmp_path, extra_hdus=[unnamed])
         with pytest.raises(ValueError, match=r"\(HDU \d+ has no EXTNAME\)"):
             KPF0.from_fits(fn)
+
+    def test_lowercase_extension_name_is_upper_cased(self, tmp_path, caplog):
+        # Some 2023 WMKO L0s wrote guider EXTNAMEs in lowercase.
+        guider = fits.ImageHDU(data=np.ones((4, 4), dtype=np.float32))
+        guider.header["EXTNAME"] = "guider_avg"
+        fn = self._minimal_l0(tmp_path, extra_hdus=[guider])
+        with caplog.at_level(logging.DEBUG, logger="kpfpipe.data_models.level0"):
+            l0 = KPF0.from_fits(fn)
+        assert np.array_equal(l0.data["GUIDER_AVG"], np.ones((4, 4)))
+        assert l0.headers["GUIDER_AVG"]["EXTNAME"] == "GUIDER_AVG"
+        assert "'guider_avg' to 'GUIDER_AVG'" in caplog.text
+
+    def test_guider_cube_is_dropped_with_warning(self, tmp_path, caplog):
+        cube = fits.ImageHDU(
+            data=np.zeros((3, 4, 4), dtype=np.int16), name="GUIDER_CUBE"
+        )
+        fn = self._minimal_l0(tmp_path, extra_hdus=[cube])
+        with caplog.at_level(logging.WARNING, logger="kpfpipe.data_models.level0"):
+            l0 = KPF0.from_fits(fn)
+        assert "GUIDER_CUBE" not in l0.data
+        assert "stale guider record" in caplog.text
 
     def test_parses_receipt_with_entries(self, tmp_path):
         receipt = Table({"FUNCTION": ["init"], "STATUS": ["PASS"]})
@@ -343,7 +369,7 @@ class TestCatalogRecordMissingValues:
         l0.headers["PRIMARY"]["INSTRUME"] = "KPF"
         l0.headers["PRIMARY"]["OFNAME"] = "KP.20240405.00002.00.fits"
         l0.headers["PRIMARY"]["PROGNAME"] = "K123"
-        l0.headers["PRIMARY"]["IMTYPE"] = "Object"
+        l0.headers["PRIMARY"].update(_SCIENCE_CARDS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60405.0
         l0.set_data("CATALOG_RECORD", catalog_record_table(rv=rv))
         l0.to_fits(fn)
@@ -458,7 +484,7 @@ class TestStandardizedPrimary:
         assert prim["OBSTYPE"] == "Target"  # IMTYPE -> OBSTYPE
         assert prim["EXPTIME"] == 300.0  # ELAPSED -> EXPTIME
         assert prim["INSTRUME"] == "KPF"
-        assert prim["OBJECT"] == "10700"
+        assert prim["OBJECT"] == "HD 10700"
         # Raw native names must not remain on the EPRV PRIMARY.
         for native in ("IMTYPE", "ELAPSED", "GROBSERV", "OFNAME", "PROGNAME"):
             assert native not in prim
@@ -517,7 +543,7 @@ class TestStandardizedPrimary:
         fn = str(tmp_path / "KP.20240113.00009.00.fits")
         primary = fits.PrimaryHDU()
         primary.header["INSTRUME"] = "KPF"
-        primary.header["IMTYPE"] = "Object"
+        primary.header.update(_SCIENCE_CARDS)
         primary.header["OFNAME"] = "KP.20240113.00009.00.fits"
         primary.header["PROGNAME"] = "K123"
         primary.header["MJD-OBS"] = 60322.0
@@ -614,6 +640,9 @@ class TestHeaderKeywords:
         l0 = KPF0()
         l0.headers["PRIMARY"]["IMTYPE"] = imtype
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0
+        if imtype == "Object":
+            # A Target needs an identity: OBJECT Unknown with GAIAID blank raises.
+            native = {"OBJECT": "10700", "TARGNAME": "10700", **native}
         for key, value in native.items():
             l0.headers["PRIMARY"][key] = value
         return l0.standardize_headers()
@@ -622,8 +651,18 @@ class TestHeaderKeywords:
         prim = standardized_l0(synthetic_l0_file).headers["PRIMARY"]
         assert prim["OBSTYPE"] == "Target"
         assert prim["OBSMODE"] == "Science"
-        assert prim["OBJECT"] == "10700"
+        assert prim["OBJECT"] == "HD 10700"
         assert prim["ISSOLAR"] is False
+
+    def test_sanitized_gaiaid_is_stamped(self):
+        prim = self._standardize(
+            "Object",
+            OBJECT="10700",
+            GAIAID="DR3_2452378776434477184",
+            ELAPSED=60.0,
+            **_ALL_FIBERS,
+        ).headers["PRIMARY"]
+        assert prim["GAIAID"] == "Gaia DR3 2452378776434477184"
 
     def test_every_header_parser_keyword_is_stamped(self):
         l0 = self._standardize(
@@ -672,7 +711,7 @@ class TestHeaderKeywords:
 
     def test_solar_frame_is_solar(self):
         prim = self._standardize(
-            "Object", OBJECT="SoCal", TARGNAME="Sun", SOLSCISH="open"
+            "Object", OBJECT="SoCal", TARGNAME="Sun", SCISEL="open", SOLSCISH="open"
         ).headers["PRIMARY"]
         assert prim["OBSMODE"] == "Science"
         assert prim["OBJECT"] == "SoCal"
@@ -684,6 +723,7 @@ class TestHeaderKeywords:
         prim = self._standardize(
             "Object",
             OCTAGON="Th_gold",
+            SCISEL="open",
             SIMCALSH="closed",
             **{"SKY-OBJ": "Sky", "SCI-OBJ": "Target", "CAL-OBJ": "Th_gold"},
         ).headers["PRIMARY"]
@@ -702,7 +742,9 @@ class TestHeaderKeywords:
         ],
     )
     def test_clsrc_vocabulary(self, octagon, source):
-        prim = self._standardize("Object", OCTAGON=octagon, SIMCALSH="open")
+        prim = self._standardize(
+            "Object", OCTAGON=octagon, SCISEL="open", SIMCALSH="open"
+        )
         assert prim.headers["PRIMARY"]["TRACE5"] == "CAL"
         assert prim.headers["PRIMARY"]["CLSRC5"] == source
 
@@ -814,6 +856,8 @@ class TestFiveTraceShape:
             "BrdbandFiber" if imtype == "Flatlamp" else "Th_daily"
         )
         l0.headers["PRIMARY"].update(_ALL_FIBERS)
+        if imtype == "Object":
+            l0.headers["PRIMARY"].update(_SCIENCE_CARDS)
         if imtype in ("Bias", "Dark"):
             l0.headers["PRIMARY"].update(CLOSED_SHUTTERS)
         l0.headers["PRIMARY"]["MJD-OBS"] = 60310.0

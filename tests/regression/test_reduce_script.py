@@ -16,7 +16,7 @@ import recipes.kpf_drp_engineering as engineering_recipe
 import recipes.kpf_drp_masters as masters_recipe
 import recipes.kpf_drp_science as science_recipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.header import HeaderParser
+from kpfpipe.utils.header import HeaderError, HeaderParser
 from kpfpipe.utils.io import load_junk_obs_ids
 from scripts.process import reduce as red
 
@@ -816,6 +816,23 @@ class TestFrameGate:
         with caplog.at_level(logging.WARNING, logger=red.logger.name):
             assert not self._main(monkeypatch, tmp_path, obs_id)
         assert "DRP does not yet support single-CCD exposures" in caplog.text
+
+    def test_header_error_clears_products_and_logs(self, monkeypatch, tmp_path, caplog):
+        # A frame HeaderParser rejects keeps no L1/L2/L4, and the abort is logged.
+        obs_id = write_l0_tree(
+            tmp_path, "20240405", 100, extra_cards={"GAIAID": "DR1 2452378776434477184"}
+        )
+        out = str(tmp_path / "s")
+        products = red.science_output_paths(obs_id, out)
+        for path in products:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            open(path, "w").close()
+        extra = ["--kpf_science_output", out]
+        with caplog.at_level(logging.CRITICAL, logger=red.logger.name):
+            with pytest.raises(HeaderError, match="GAIAID"):
+                self._main(monkeypatch, tmp_path, obs_id, extra=extra)
+        assert not any(os.path.exists(p) for p in products)
+        assert "pipeline aborted" in caplog.text
 
     def test_both_ccds_frame_runs(self, monkeypatch, tmp_path):
         obs_id = write_l0_tree(tmp_path, "20240405", 100)

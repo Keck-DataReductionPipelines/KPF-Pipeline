@@ -9,6 +9,10 @@ progress output go straight to the terminal. Nights are selected exactly as
     kpfpipe fetch L0 -u <user> --dates 20240405 20240712 --local_dir ~/data
     kpfpipe fetch L0 -u <user> --dates nights.txt --local_dir ~/data
     kpfpipe fetch L0 -u <user> --date_range 20240101 20240131 --local_dir ~/data
+    kpfpipe fetch L0 -u <user> --obs_ids KP.20240405.40113.57 --local_dir ~/data
+
+``--obs_ids`` (obs_ids or a file of them, as ``kpfpipe science`` takes) fetches
+only those frames' files from the nights they fall on, without the size prompt.
 
 The range form enumerates the datecode dirs present under the *remote* L0 root
 within [START, END]. Unlike the reduced products, L0 is the shared raw archive
@@ -26,7 +30,7 @@ exits nonzero if any night failed.
 
 import sys
 
-from scripts._argparse import resolve_dates
+from scripts._argparse import resolve_frame_selection
 from scripts.fetch import _fetch
 
 SUBJECT = "L0"
@@ -38,8 +42,10 @@ GB_PER_NIGHT = 70
 
 
 def main(argv=None):
-    ap = _fetch.subject_parser(SUBJECT, DEFAULT_REMOTE_DIR, __doc__, GB_PER_NIGHT)
-    return _fetch.run(resolve_dates(ap, ap.parse_args(argv)))
+    ap = _fetch.subject_parser(
+        SUBJECT, DEFAULT_REMOTE_DIR, __doc__, GB_PER_NIGHT, obs_ids=True
+    )
+    return _fetch.run(resolve_frame_selection(ap, ap.parse_args(argv)))
 
 
 if __name__ == "__main__":

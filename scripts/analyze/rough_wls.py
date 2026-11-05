@@ -42,6 +42,7 @@ import os
 import re
 import sys
 from collections import Counter
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -144,7 +145,7 @@ def find_nights(input_dir, start, end, eras):
             logger.warning("skipping unrecognised filename %s", files[0])
             continue
         date, seconds = match.groups()
-        obs_time = pd.Timestamp(date) + pd.Timedelta(seconds=float(seconds))
+        obs_time = datetime.strptime(date, "%Y%m%d") + timedelta(seconds=float(seconds))
         era = era_of(obs_time, eras)
         if era is None:  # engineering / service-mission night
             continue

@@ -37,7 +37,7 @@ class Guider(Diagnostics):
         Per frame, the target position minus the measured centroid, scaled by
         the 0.056 arcsec CRED-2 pixel; R is the radial combination of the two
         axes. Fewer than 11 distinct centroid positions means the guide camera
-        was not tracking, so no keyword is emitted and GUIDEROK fails on their
+        was not tracking, so no keyword is emitted and GDRERROK fails on their
         absence.
         """
         table = self._guider_frames()

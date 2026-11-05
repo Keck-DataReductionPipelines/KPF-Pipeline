@@ -9,24 +9,27 @@ That is enforced, not just intended -- tests/conftest.py blocks connects to the
 catalog hosts for the whole suite.
 """
 
+import csv
 import json
 import logging
 import re
 import subprocess
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from astropy import units as u
-from astropy.coordinates import Angle, SkyCoord
+from astropy.coordinates import FK5, Angle, SkyCoord
 from astropy.table import Column, Table
+from astropy.time import Time
 
 from kpfpipe.data_models import KPF0
 from kpfpipe.modules.astro_query import AstroQuery
 from kpfpipe.utils.astro import compute_redshift
 from kpfpipe.utils.config import ConfigHandler
+from kpfpipe.utils.header import HeaderError
 
 from ._scripts import REPO_ROOT
 
@@ -249,6 +252,15 @@ class TestAstrometryPriority:
         with pytest.raises(ValueError, match="astrometry_priority"):
             _merge({"wmko": _record("W")}, priority=("gaia", "simbad"))
 
+    def test_incomplete_astrometry_message_names_each_gap(self):
+        # A Gaia two-parameter solution, no SIMBAD record: a DRP limitation.
+        gaia = _record("G", pmra=None, pmdec=None, parallax=None)
+        with pytest.raises(ValueError, match="no complete astrometric solution") as e:
+            _merge({"gaia": gaia}, priority=("gaia", "simbad"))
+        message = str(e.value)
+        assert "gaia: missing pmra, pmdec, parallax; simbad: no record" in message
+        assert "not an L0 header problem" in message
+
     def test_priority_order_is_honored(self):
         records = {"gaia": _record("G", ra=10.0), "simbad": _record("S", ra=20.0)}
         assert _merge(records, priority=("gaia", "simbad"))["radec_src"] == "gaia"
@@ -423,15 +435,47 @@ class TestReadWmkoHeader:
         ).read_wmko_header()
         assert rec["parallax"] is None
 
-    def test_non_fk5_frame_raises(self):
-        # KPF pointing is always FK5; another TARGFRAM must not be coerced onto a
+    @staticmethod
+    def _sep_from_fk5_reading(rec):
+        # Arcsec from the record (ICRS) to _GOOD_TARG's coordinates read as FK5 J2000.
+        fk5 = SkyCoord(
+            "12:00:00.00",
+            "+40:00:00.0",
+            unit=(u.hourangle, u.deg),
+            frame=FK5(equinox="J2000"),
+        )
+        return (
+            SkyCoord(rec["ra"], rec["dec"], unit=(u.hourangle, u.deg))
+            .separation(fk5)
+            .arcsec
+        )
+
+    def test_fk4_frame_rotated_with_besselian_equinox(self):
+        # FK4 at equinox 2000 (Keck planet targets) is Besselian B2000: under 1" from
+        # the FK5 J2000 reading, but a distinct rotation, not a relabel.
+        rec = AstroQuery(
+            self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "FK4"})
+        ).read_wmko_header()
+        assert rec["frame"] == "icrs"
+        assert 0.1 < self._sep_from_fk5_reading(rec) < 1.5
+
+    def test_fk4_absent_equinox_defaults_to_b1950(self):
+        # FK4 with no TARGEQUI is B1950: precession puts it arcmin from J2000.
+        targ = {k: v for k, v in self._GOOD_TARG.items() if k != "TARGEQUI"}
+        rec = AstroQuery(
+            self._l0_targ(**{**targ, "TARGFRAM": "FK4"})
+        ).read_wmko_header()
+        assert self._sep_from_fk5_reading(rec) > 600
+
+    def test_unsupported_frame_raises(self):
+        # KPF pointing is FK5 or FK4; another TARGFRAM must not be coerced onto a
         # frame the data does not have.
         l0 = self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "galactic"})
         with pytest.raises(ValueError, match="TARGFRAM"):
             AstroQuery(l0).read_wmko_header()
 
     def test_absent_frame_raises(self):
-        # An absent TARGFRAM cannot be verified as FK5, and a frame is never guessed.
+        # An absent TARGFRAM cannot be verified, and a frame is never guessed.
         targ = {k: v for k, v in self._GOOD_TARG.items() if k != "TARGFRAM"}
         with pytest.raises(ValueError, match="TARGFRAM"):
             AstroQuery(self._l0_targ(**targ)).read_wmko_header()
@@ -480,6 +524,7 @@ _SIMBAD_VALUES = {
     "main_id": "* tau Cet",
     "ids": "HD  10700|* tau Cet|Gaia DR3 2452378776434477184",
     "coo_bibcode": "2020yCat.1350....0G",  # Gaia EDR3
+    "otype": "PM*",
 }
 
 
@@ -524,11 +569,14 @@ def _simbad_instance(table):
 
 
 def _l0_for_query(**primary):
-    """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID)."""
+    """A fresh science L0 whose PRIMARY carries the given cards (e.g. GAIAID, in
+    HeaderParser's canonical form; OBJECT Unknown and GAIAID blank unless given)."""
     l0 = KPF0()
     l0.headers["PRIMARY"]["OBSTYPE"] = "Target"
+    l0.headers["PRIMARY"]["OBJECT"] = "Unknown"
+    l0.headers["PRIMARY"]["GAIAID"] = None
     for key, value in primary.items():
-        header = "PRIMARY" if key == "OBJECT" else "INSTRUMENT_HEADER"
+        header = "PRIMARY" if key in ("OBJECT", "GAIAID") else "INSTRUMENT_HEADER"
         l0.headers[header][key] = value
     return l0
 
@@ -588,45 +636,6 @@ class TestExternalQueries:
         assert AstroQuery._scalar("2.5") == 2.5
 
     @pytest.mark.parametrize(
-        ("gaiaid", "expected"),
-        [
-            ("Gaia DR3 12345", ("DR3", "12345")),
-            ("DR3 12345", ("DR3", "12345")),  # the form real L0 frames carry
-            ("DR2 12345", ("DR2", "12345")),
-            ("dr2 12345", ("DR2", "12345")),
-            ("12345", (None, "12345")),  # bare id -> release resolved against Gaia
-            (None, None),
-            ("", None),
-            ("Gaia DR3 abc", None),
-            # Real Gaia releases we cannot query: DR1 lacks RV/photometry, EDR3 is
-            # superseded by DR3, DR4 has not published yet.
-            ("DR1 12345", None),
-            ("EDR3 12345", None),
-            ("DR4 12345", None),
-        ],
-    )
-    def test_gaia_source(self, gaiaid, expected):
-        primary = {} if gaiaid is None else {"GAIAID": gaiaid}
-        assert AstroQuery(_l0_for_query(**primary))._gaia_source() == expected
-
-    def test_simbad_resolvable_name(self):
-        assert (
-            AstroQuery(_l0_for_query(OBJECT="10700"))._simbad_resolvable_name()
-            == "HD 10700"
-        )
-        assert (
-            AstroQuery(_l0_for_query(OBJECT="tau Cet"))._simbad_resolvable_name()
-            == "tau Cet"
-        )
-        assert AstroQuery(_l0_for_query())._simbad_resolvable_name() is None
-        assert AstroQuery(_l0_for_query(OBJECT=""))._simbad_resolvable_name() is None
-        # HeaderParser marks an untrusted native OBJECT Unknown; SIMBAD must not
-        # be queried with it, nor with the native card behind it.
-        l0 = _l0_for_query(OBJECT="Unknown")
-        l0.headers["INSTRUMENT_HEADER"]["OBJECT"] = "10700"
-        assert AstroQuery(l0)._simbad_resolvable_name() is None
-
-    @pytest.mark.parametrize(
         ("main_id", "ids", "expected"),
         [
             ("* tau Cet", "HD  10700|* tau Cet", "tau Cet"),  # Bayer, from main_id
@@ -637,17 +646,6 @@ class TestExternalQueries:
     def test_simbad_common_name(self, main_id, ids, expected):
         row = _simbad_table({"main_id": main_id, "ids": ids})[0]
         assert AstroQuery._simbad_common_name(row) == expected
-
-    def test_aliases(self):
-        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
-        aq._gaia = {"object": "Gaia DR3 12345"}
-        aq._common_name = "tau Cet"
-        assert aq._aliases() == "HD 10700; Gaia DR3 12345; tau Cet"
-
-    def test_aliases_drops_unresolved_and_duplicate_names(self):
-        aq = AstroQuery(_l0_for_query(OBJECT="219134"))
-        aq._common_name = "HD 219134"  # main_id fallback, no Gaia row
-        assert aq._aliases() == "HD 219134"
 
     def test_verify_units_missing_and_mismatch_raises(self):
         units = AstroQuery._GAIA_UNITS
@@ -685,14 +683,14 @@ class TestExternalQueries:
         assert "gaia" in [str(s) for s in l0.data["CATALOG_RECORD"]["source"]]
 
     def test_query_gaia_missing_rv_becomes_none(self):
-        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table({"radial_velocity": float("nan")}))):
             rec = aq.query_gaia()
         assert rec["rv"] is None
 
     def test_query_gaia_missing_photometry_leaves_color_none(self):
         # A color needs both magnitudes; one unmeasured (masked/NaN) -> no color.
-        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table({"phot_rp_mean_mag": float("nan")}))):
             rec = aq.query_gaia()
         assert rec["color"] is None and rec["color_name"] is None
@@ -713,12 +711,12 @@ class TestExternalQueries:
         aq = AstroQuery(_l0_for_query())  # no GAIAID
         with caplog.at_level(logging.WARNING):
             assert aq.query_gaia() is None
-        assert "no usable GAIAID" in caplog.text
+        assert "no GAIAID on L0 PRIMARY" in caplog.text
 
     def test_query_gaia_lookup_failure_returns_none(self, caplog):
         # A dropped connection is transient, so every mirror is tried twice before
         # the lookup is given up on; sleep is patched so the pause is not waited out.
-        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))
         with (
             _patch_gaia(ConnectionError("gaia down")) as run_sync,
             patch("kpfpipe.utils.network.time.sleep"),
@@ -729,13 +727,13 @@ class TestExternalQueries:
         assert "Gaia query failed" in caplog.text
 
     def test_query_gaia_no_match_returns_none(self, caplog):
-        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))
         with _patch_gaia(_gaia_job(Table())), caplog.at_level(logging.WARNING):
             assert aq.query_gaia() is None
         assert "no match" in caplog.text
 
     def test_query_gaia_unit_mismatch_raises(self):
-        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table(units={"parallax": u.arcsec}))):
             with pytest.raises(ValueError, match="unexpected column units"):
                 aq.query_gaia()
@@ -743,7 +741,7 @@ class TestExternalQueries:
     # -- SIMBAD ------------------------------------------------------------
 
     def test_query_simbad_parses_and_writes(self):
-        l0 = _l0_for_query(OBJECT="10700")
+        l0 = _l0_for_query(OBJECT="HD 10700")
         aq = AstroQuery(l0)
         with _patch_simbad(_simbad_instance(_simbad_table())):
             rec = aq.query_simbad()
@@ -767,14 +765,47 @@ class TestExternalQueries:
 
     def test_query_simbad_uncited_designation_keeps_name(self):
         # Hipparcos coordinates, but SIMBAD lists no HIP id: CID falls back to the name.
-        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
         table = _simbad_table({"coo_bibcode": "2007A&A...474..653V"})
         with _patch_simbad(_simbad_instance(table)):
             rec = aq.query_simbad()
         assert (rec["catalog"], rec["object"]) == ("Hipparcos (2007)", "HD 10700")
 
+    @pytest.mark.parametrize(
+        "ids, expected",
+        [
+            (
+                "HD  10700|Gaia DR2 2452378776434477184|Gaia DR3 2452378776434477184",
+                "Gaia DR3 2452378776434477184",
+            ),
+            ("HD  10700|Gaia DR2 2452378776434477184", "Gaia DR2 2452378776434477184"),
+            ("HD  10700|* tau Cet", None),
+        ],
+    )
+    def test_query_simbad_fills_blank_gaiaid(self, ids, expected):
+        # DR3 preferred over DR2, whatever catalog the coordinates cite.
+        l0 = _l0_for_query(OBJECT="HD 10700")
+        table = _simbad_table({"ids": ids, "coo_bibcode": "2007A&A...474..653V"})
+        with _patch_simbad(_simbad_instance(table)):
+            AstroQuery(l0).query_simbad()
+        assert l0.headers["PRIMARY"]["GAIAID"] == expected
+
+    def test_query_simbad_malformed_gaia_id_not_filled(self, caplog):
+        l0 = _l0_for_query(OBJECT="HD 10700")
+        table = _simbad_table({"ids": "HD  10700|Gaia DR3 333"})
+        with _patch_simbad(_simbad_instance(table)), caplog.at_level(logging.WARNING):
+            AstroQuery(l0).query_simbad()
+        assert l0.headers["PRIMARY"]["GAIAID"] is None
+        assert "SIMBAD Gaia id 'Gaia DR3 333' is not a Gaia DR2/DR3" in caplog.text
+
+    def test_query_simbad_keeps_header_gaiaid(self):
+        l0 = _l0_for_query(OBJECT="HD 10700", GAIAID="Gaia DR3 12345")
+        with _patch_simbad(_simbad_instance(_simbad_table())):
+            AstroQuery(l0).query_simbad()
+        assert l0.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 12345"
+
     def test_query_simbad_unknown_catalog_warns(self, caplog):
-        aq = AstroQuery(_l0_for_query(OBJECT="10700"))
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
         table = _simbad_table({"coo_bibcode": "1999XYZ.....1....Q"})
         with _patch_simbad(_simbad_instance(table)), caplog.at_level(logging.WARNING):
             rec = aq.query_simbad()
@@ -784,17 +815,71 @@ class TestExternalQueries:
 
     def test_query_simbad_missing_photometry_leaves_color_none(self):
         # A color needs both magnitudes; one unmeasured -> no color.
-        l0 = _l0_for_query(OBJECT="10700")
+        l0 = _l0_for_query(OBJECT="HD 10700")
         aq = AstroQuery(l0)
         with _patch_simbad(_simbad_instance(_simbad_table({"V": float("nan")}))):
             rec = aq.query_simbad()
         assert rec["color"] is None and rec["color_name"] is None
 
-    def test_query_simbad_no_object_returns_none(self, caplog):
-        aq = AstroQuery(_l0_for_query())
-        with caplog.at_level(logging.WARNING):
+    @pytest.mark.parametrize("obj", ["Unknown", "Gaia 2452378776434477184"])
+    def test_query_simbad_skips_non_simbad_object(self, obj, caplog):
+        # HeaderParser marks an untrusted native OBJECT Unknown; SIMBAD resolves a
+        # Gaia designation only with its release. Neither, nor the native card
+        # behind it, is queried.
+        l0 = _l0_for_query(OBJECT=obj)
+        l0.headers["INSTRUMENT_HEADER"]["OBJECT"] = "10700"
+        aq = AstroQuery(l0)
+        with _patch_simbad(_simbad_instance(_simbad_table())) as simbad:
+            with caplog.at_level(logging.WARNING):
+                assert aq.query_simbad() is None
+        assert "is not a SIMBAD name" in caplog.text
+        simbad.assert_not_called()
+
+    def test_query_simbad_keeps_gaia_object(self):
+        # OBJECT is never rewritten; the common name goes only to ALIASES.
+        l0 = _l0_for_query(OBJECT="Gaia DR3 2452378776434477184")
+        aq = AstroQuery(l0)
+        table = _simbad_table({"main_id": "* tau Cet", "ids": "HD  10700|* tau Cet"})
+        with _patch_simbad(_simbad_instance(table)) as simbad:
+            assert aq.query_simbad() is not None
+        assert simbad.return_value.query_object.call_args.args == (
+            "Gaia DR3 2452378776434477184",
+        )
+        assert l0.headers["PRIMARY"]["OBJECT"] == "Gaia DR3 2452378776434477184"
+        assert aq._common_name == "tau Cet"
+
+    @pytest.mark.parametrize(
+        "main_id, ids, expected",
+        [
+            ("HD  10700", "HD  10700|HIP  8102", "HD 10700"),
+            ("WASP-173B", "WASP-173B|HIP  8102", "WASP-173 B"),
+        ],
+    )
+    def test_query_simbad_canonicalizes_returned_names(self, main_id, ids, expected):
+        # Common name (main_id here) and the cited catalog's designation.
+        aq = AstroQuery(_l0_for_query(OBJECT="HD 10700"))
+        table = _simbad_table(
+            {"main_id": main_id, "ids": ids, "coo_bibcode": "2007A&A...474..653V"}
+        )
+        with _patch_simbad(_simbad_instance(table)):
+            rec = aq.query_simbad()
+        assert (aq._common_name, rec["object"]) == (expected, "HIP 8102")
+
+    def test_query_simbad_planet_returns_none(self, caplog):
+        # SIMBAD is case-insensitive: 'TOI-1338 B' can resolve to the planet.
+        aq = AstroQuery(_l0_for_query(OBJECT="TOI-1338 B"))
+        inst = _simbad_instance(_simbad_table({"main_id": "TOI-1338b", "otype": "Pl"}))
+        with _patch_simbad(inst), caplog.at_level(logging.WARNING):
             assert aq.query_simbad() is None
-        assert "no usable OBJECT name" in caplog.text
+        assert inst.query_object.call_count == 1
+        assert "SIMBAD resolved 'TOI-1338 B' to planet 'TOI-1338b'" in (caplog.text)
+
+    def test_query_simbad_accepts_non_stellar_object(self):
+        aq = AstroQuery(_l0_for_query(OBJECT="M 31"))
+        inst = _simbad_instance(_simbad_table({"main_id": "M  31", "otype": "AGN"}))
+        with _patch_simbad(inst):
+            assert aq.query_simbad() is not None
+        assert inst.query_object.call_count == 1
 
     def test_query_simbad_lookup_failure_returns_none(self, caplog):
         # Failed over like the Gaia failure above; sleep is patched for the same reason.
@@ -817,8 +902,8 @@ class TestExternalQueries:
         with patch(
             "kpfpipe.modules.astro_query.gaia_client", side_effect=_gaia_mirror_client()
         ):
-            expected = AstroQuery(_l0_for_query(GAIAID="DR3 12345")).query_gaia()
-        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+            expected = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345")).query_gaia()
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))
         stand_in = _gaia_mirror_client(down={esa, gavo})
         with patch(
             "kpfpipe.modules.astro_query.gaia_client", side_effect=stand_in
@@ -830,7 +915,7 @@ class TestExternalQueries:
         )
 
     def test_query_gaia_dr2_never_asks_a_mirror_without_dr2(self):
-        aq = AstroQuery(_l0_for_query(GAIAID="DR2 12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR2 12345"))
         everything = {
             url for mirrors in AstroQuery._GAIA_MIRRORS.values() for url, _ in mirrors
         }
@@ -898,7 +983,7 @@ class TestRequestMatchesParse:
     """
 
     def test_gaia_select_list_matches_parsed_columns(self):
-        aq = AstroQuery(_l0_for_query(GAIAID="DR3 12345"))
+        aq = AstroQuery(_l0_for_query(GAIAID="Gaia DR3 12345"))
         with _patch_gaia(_gaia_job(_gaia_table())) as run_sync:
             aq.query_gaia()
         assert _adql_select_columns(run_sync.call_args.args[0]) == set(
@@ -908,8 +993,8 @@ class TestRequestMatchesParse:
     @pytest.mark.parametrize(
         ("gaiaid", "table", "designation"),
         [
-            ("DR3 12345", "gaiadr3.gaia_source", "Gaia DR3 12345"),
-            ("DR2 12345", "gaiadr2.gaia_source", "Gaia DR2 12345"),
+            ("Gaia DR3 12345", "gaiadr3.gaia_source", "Gaia DR3 12345"),
+            ("Gaia DR2 12345", "gaiadr2.gaia_source", "Gaia DR2 12345"),
         ],
     )
     def test_gaia_release_selects_table_and_designation(
@@ -943,6 +1028,7 @@ class TestRequestMatchesParse:
             "V",
             "ids",
             "coo_bibcode",
+            "otype",
         }
 
 
@@ -975,16 +1061,35 @@ class TestBareGaiaIdResolution:
     """
 
     @staticmethod
-    def _query(**kwargs):
-        aq = AstroQuery(_l0_for_query(GAIAID="12345"))  # bare: no release prefix
+    def _query(l0=None, **kwargs):
+        # Bare: no release prefix.
+        aq = AstroQuery(l0 or _l0_for_query(GAIAID="Gaia 12345"))
         client = MagicMock()
         client.run_sync.side_effect = _release_aware_run_sync(**kwargs)
         with patch("kpfpipe.modules.astro_query.gaia_client", return_value=client):
             return aq.query_gaia()
 
+    @pytest.mark.parametrize(
+        ("obj", "expected_obj"),
+        [("Gaia 12345", "Gaia DR3 12345"), ("tau Cet", "tau Cet")],
+    )
+    def test_resolved_release_recorded_on_primary(self, obj, expected_obj):
+        # GAIAID takes the release; OBJECT only when it names the same bare id.
+        l0 = _l0_for_query(GAIAID="Gaia 12345", OBJECT=obj)
+        self._query(l0, present={"DR3"})
+        assert l0.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 12345"
+        assert l0.headers["PRIMARY"]["OBJECT"] == expected_obj
+
+    def test_unresolved_release_leaves_primary(self):
+        l0 = _l0_for_query(GAIAID="Gaia 12345", OBJECT="Gaia 12345")
+        with pytest.raises(ValueError):
+            self._query(l0)
+        assert l0.headers["PRIMARY"]["GAIAID"] == "Gaia 12345"
+        assert l0.headers["PRIMARY"]["OBJECT"] == "Gaia 12345"
+
     def test_newest_matching_release_wins(self, caplog):
         # Present in both -> DR3, the most recent.
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.INFO):
             rec = self._query(present={"DR2", "DR3"})
         assert rec["object"] == "Gaia DR3 12345"
         assert "resolved bare GAIAID 12345 to Gaia DR3" in caplog.text
@@ -998,18 +1103,20 @@ class TestBareGaiaIdResolution:
             self._query(present={"DR3"})
         assert "carries no data release" in caplog.text
 
-    def test_failed_probe_warns_and_falls_through(self, caplog):
-        # Every probed release is published, so a failed probe is a real fault: the
-        # fall-through can attach a different star's astrometry and must be auditable.
+    def test_failed_probe_does_not_fall_through(self, caplog):
+        # Only a clean no-match moves on: an older release may hold a different star.
+        l0 = _l0_for_query(GAIAID="Gaia 12345")
         with caplog.at_level(logging.WARNING):
-            rec = self._query(present={"DR2"}, failing={"DR3"})
-        assert rec["object"] == "Gaia DR2 12345"
+            rec = self._query(l0, present={"DR2"}, failing={"DR3"})
+        assert rec is None
+        assert l0.headers["PRIMARY"]["GAIAID"] == "Gaia 12345"
         assert "could not probe Gaia DR3" in caplog.text
-        assert "may denote a different star" in caplog.text
 
     def test_no_matching_release_raises(self):
         # Fail loud: a bare id matching nothing must not fall back to a guess.
-        with pytest.raises(ValueError, match="no queryable Gaia release"):
+        with pytest.raises(
+            HeaderError, match="no queryable Gaia release.*L0 header must be fixed:"
+        ):
             self._query()
 
 
@@ -1024,14 +1131,18 @@ def _perform(**config):
     Gaia answers at RA 10 deg, SIMBAD at 20 deg, so the merged row shows which query
     landed on which source attribute. Returns (AstroQuery, CATALOG_RECORD table).
     """
-    l0 = _l0_for_query(GAIAID="DR3 12345", OBJECT="tau Cet")
+    l0 = _l0_for_query(GAIAID="Gaia DR3 12345", OBJECT="tau Cet")
     aq = AstroQuery(l0, config or None)
     with (
         _patch_gaia(_gaia_job(_gaia_table({"ra": 10.0}))),
-        _patch_simbad(_simbad_instance(_simbad_table({"ra": 20.0}))),
+        _patch_simbad(_simbad_instance(_simbad_table({"ra": 20.0, "ids": _IDS}))),
     ):
         aq.perform()
     return aq, aq.l0_obj.data["CATALOG_RECORD"]
+
+
+# SIMBAD identifiers agreeing with _perform's GAIAID.
+_IDS = "HD  10700|* tau Cet|Gaia DR3 12345"
 
 
 def _kpf_drp_row(record):
@@ -1047,11 +1158,30 @@ class TestPerform:
     wrong attribute -- which would invert the gaia > simbad precedence silently.
     """
 
+    def test_gaia_named_object_takes_high_tier_name(self):
+        # A bare Gaia OBJECT/GAIAID: Gaia adds the release, then the low-tier Gaia
+        # OBJECT takes SIMBAD's catalogued name; ALIASES lists each name once.
+        l0 = _l0_for_query(
+            GAIAID="Gaia 2452378776434477184", OBJECT="Gaia 2452378776434477184"
+        )
+        aq = AstroQuery(l0)
+        client = MagicMock()
+        client.run_sync.side_effect = _release_aware_run_sync(present={"DR3"})
+        with (
+            patch("kpfpipe.modules.astro_query.gaia_client", return_value=client),
+            _patch_simbad(_simbad_instance(_simbad_table())),
+        ):
+            aq.perform()
+        primary = l0.headers["PRIMARY"]
+        designation = "Gaia DR3 2452378776434477184"
+        assert (primary["GAIAID"], primary["OBJECT"]) == (designation, "HD 10700")
+        assert primary["ALIASES"] == f"HD 10700; {designation}; tau Cet"
+
     def test_each_query_lands_on_its_own_attribute(self):
         aq, _ = _perform()
         assert aq._gaia["object"] == "Gaia DR3 12345"  # from GAIAID, via query_gaia
         # Cited catalog's designation, via query_simbad
-        assert aq._simbad["object"] == "Gaia DR3 2452378776434477184"
+        assert aq._simbad["object"] == "Gaia DR3 12345"
         assert aq._gaia["ra"] == _ra_str(10.0)
         assert aq._simbad["ra"] == _ra_str(20.0)
 
@@ -1076,10 +1206,15 @@ class TestPerform:
         assert "simbad" in record["source"]
 
     def test_aliases_written_to_primary(self):
-        # The SIMBAD common name of the mocked table is 'tau Cet', already the
-        # resolvable name here, so it de-duplicates away.
+        # OBJECT 'tau Cet' is high tier and kept, listed first; the common name
+        # 'tau Cet' de-duplicates away. (Order is covered by TestResolveIdentity;
+        # the short fixture id is no catalogued Gaia id.)
         aq, _ = _perform()
-        assert aq.l0_obj.headers["PRIMARY"]["ALIASES"] == "tau Cet; Gaia DR3 12345"
+        primary = aq.l0_obj.headers["PRIMARY"]
+        assert primary["OBJECT"] == "tau Cet"
+        aliases = primary["ALIASES"].split("; ")
+        assert aliases[0] == "tau Cet"
+        assert sorted(aliases) == ["Gaia DR3 12345", "HD 10700", "tau Cet"]
 
     def test_gaia_off_falls_through_to_simbad(self):
         # The provenance must follow the merge down rather than stay "gaia".
@@ -1088,11 +1223,304 @@ class TestPerform:
         row = _kpf_drp_row(record)
         assert row["ra"] == _ra_str(20.0)
         assert row["radec_src"] == "simbad"
-        assert row["object"] == "Gaia DR3 2452378776434477184"
+        assert row["object"] == "Gaia DR3 12345"
+
+    @staticmethod
+    def _perform_simbad_gaiaid(gaiaid, gaia_table, caplog, **config):
+        """perform() on 'tau Cet' with the given PRIMARY GAIAID; SIMBAD lists Gaia DR3
+        2452378776434477184. Returns (AstroQuery, Gaia run_sync mock)."""
+        aq = AstroQuery(_l0_for_query(GAIAID=gaiaid, OBJECT="tau Cet"), config or None)
+        with (
+            _patch_gaia(_gaia_job(gaia_table)) as run_sync,
+            _patch_simbad(_simbad_instance(_simbad_table({"ra": 20.0}))),
+            caplog.at_level(logging.WARNING),
+        ):
+            aq.perform()
+        return aq, run_sync
+
+    def test_blank_gaiaid_filled_from_simbad(self, caplog):
+        aq, run_sync = self._perform_simbad_gaiaid(
+            None, _gaia_table({"ra": 10.0}), caplog
+        )
+        assert aq.l0_obj.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 2452378776434477184"
+        assert "filled from SIMBAD" in caplog.text
+        assert "2452378776434477184" in run_sync.call_args.args[0]
+        row = _kpf_drp_row(aq.l0_obj.data["CATALOG_RECORD"])
+        assert (row["radec_src"], row["ra"]) == ("gaia", _ra_str(10.0))
+
+    def test_header_gaiaid_contradicted_by_simbad_raises(self, caplog):
+        # SIMBAD's match for OBJECT lists another DR3 id: the cards name different
+        # stars. Never replaced, never accepted.
+        with pytest.raises(HeaderError, match="name different stars") as err:
+            self._perform_simbad_gaiaid("Gaia DR3 12345", Table(), caplog)
+        assert "L0 header must be fixed:" in str(err.value)
+        assert "filled from SIMBAD" not in caplog.text
+
+    @pytest.mark.parametrize(
+        "gaiaid, config, expected",
+        [
+            # wmko may anchor the position, but never for an unidentified target.
+            (
+                "Gaia DR3 12345",
+                {"astrometry_priority": ("gaia", "simbad", "wmko")},
+                "Gaia and SIMBAD resolved no source for OBJECT 'tau Cet', "
+                "GAIAID 'Gaia DR3 12345'",
+            ),
+            (
+                None,
+                {},
+                "Gaia and SIMBAD resolved no source for OBJECT 'tau Cet', GAIAID blank",
+            ),
+            (
+                "Gaia DR3 12345",
+                {"do_gaia_query": False},
+                "SIMBAD resolved no source",
+            ),
+        ],
+    )
+    def test_unidentified_target_raises(self, gaiaid, config, expected):
+        aq = AstroQuery(_l0_for_query(GAIAID=gaiaid, OBJECT="tau Cet"), config or None)
+        with (
+            _patch_gaia(_gaia_job(Table())),
+            _patch_simbad(_simbad_instance(Table())),
+            pytest.raises(ValueError, match="target identity unresolved") as err,
+        ):
+            aq.perform()
+        assert expected in str(err.value)
+        assert "L0 header must be fixed:" in str(err.value)
+
+    def test_gaia_off_fills_gaiaid_without_query(self, caplog):
+        aq, run_sync = self._perform_simbad_gaiaid(
+            None, _gaia_table(), caplog, do_gaia_query=False
+        )
+        assert aq.l0_obj.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 2452378776434477184"
+        assert run_sync.call_count == 0
+
+
+def test_identity_tiers_cover_every_alias_catalog():
+    # The tiers, not the csv's row order, set the naming preference, so every
+    # catalog kpf_target_name can return must sit in exactly one tier.
+    with open(f"{REPO_ROOT}/reference/star_catalog_aliases.csv", newline="") as f:
+        catalogs = {row["catalog"] for row in csv.DictReader(f)}
+    tiers = AstroQuery._HIGH_TIER + AstroQuery._LOW_TIER
+    assert sorted(tiers) == sorted(catalogs)
+
+
+class TestResolveIdentity:
+    """perform() settles OBJECT/ALIASES by one rule: a high-tier header OBJECT is
+    kept; Unknown or a Gaia/TIC/KIC id takes the first catalogued high-tier alias
+    (catalog order, HD first); a contradicting SIMBAD match raises."""
+
+    # SIMBAD identifiers of TOI-2473 = HD 287319 (DR2 and DR3 source_ids differ).
+    _TOI_IDS = (
+        "TIC 399868187|Gaia DR3 3291551614399361152|BD+10   678|HD 287319|"
+        "Gaia DR2 3291551614397199360|TOI-2473"
+    )
+
+    @staticmethod
+    def _perform(obj, gaiaid, simbad_table, caplog=None):
+        aq = AstroQuery(_l0_for_query(OBJECT=obj, GAIAID=gaiaid))
+        inst = _simbad_instance(simbad_table)
+        with (
+            _patch_gaia(_gaia_job(_gaia_table())),
+            _patch_simbad(inst),
+            caplog.at_level(logging.INFO) if caplog else nullcontext(),
+        ):
+            aq.perform()
+        return aq.l0_obj.headers["PRIMARY"], inst
+
+    def test_unknown_resolved_via_gaiaid(self, caplog):
+        # Alias cards '201092'/'61 Cyg B': SIMBAD is asked for the GAIAID, and its
+        # identifiers name the star.
+        gaiaid = "Gaia DR3 1872046574983497216"
+        ids = (
+            "TIC 165602023|Gaia DR3 1872046574983497216|*  61 Cyg B|HD 201092|"
+            "HIP 104217|Gaia DR2 1872046574983497216"
+        )
+        table = _simbad_table({"main_id": "*  61 Cyg B", "ids": ids})
+        primary, inst = self._perform("Unknown", gaiaid, table, caplog)
+        assert inst.query_object.call_args.args[0] == gaiaid
+        assert primary["OBJECT"] == "HD 201092"
+        assert primary["ALIASES"] == (
+            "HD 201092; HIP 104217; Gaia DR3 1872046574983497216; "
+            "Gaia DR2 1872046574983497216; TIC 165602023; 61 Cyg B"
+        )
+        assert "OBJECT 'HD 201092' (resolved from 'Unknown'); ALIASES" in caplog.text
+
+    def test_high_tier_object_kept(self):
+        # TOI-2473 is not renamed HD 287319; the DR2 id differing from the DR3
+        # GAIAID is no conflict.
+        table = _simbad_table({"main_id": "HD 287319", "ids": self._TOI_IDS})
+        primary, _ = self._perform("TOI-2473", "Gaia DR3 3291551614399361152", table)
+        assert primary["OBJECT"] == "TOI-2473"
+        assert primary["ALIASES"].startswith("TOI-2473; HD 287319; Gaia DR3 ")
+
+    def test_low_tier_object_takes_high_tier_name(self):
+        table = _simbad_table({"main_id": "HD 287319", "ids": self._TOI_IDS})
+        primary, _ = self._perform(
+            "TIC 399868187", "Gaia DR3 3291551614399361152", table
+        )
+        assert primary["OBJECT"] == "HD 287319"
+
+    def test_object_missing_from_simbad_match_raises(self):
+        table = _simbad_table({"main_id": "HD 287319", "ids": self._TOI_IDS})
+        with pytest.raises(HeaderError, match="not an identifier") as err:
+            self._perform("HD 10700", "Gaia DR3 3291551614399361152", table)
+        assert "L0 header must be fixed:" in str(err.value)
+
+    def test_unknown_without_simbad_takes_gaia_designation(self, caplog):
+        gaiaid = "Gaia DR3 1872046574983497216"
+        primary, _ = self._perform("Unknown", gaiaid, Table(), caplog)
+        assert (primary["OBJECT"], primary["ALIASES"]) == (gaiaid, gaiaid)
+        assert "SIMBAD gave no identifiers" in caplog.text
+
+
+# One-row Horizons ephemeris; rates of 3600 / -1800 arcsec/hr make the arcsec/yr
+# conversion visible (x 8766 hr per Julian yr).
+_HORIZONS_VALUES = {
+    "RA": 180.0,
+    "DEC": 10.0,
+    "RA_rate": 3600.0,
+    "DEC_rate": -1800.0,
+    "delta": 5.0,
+}
+
+
+def _horizons_table(values=None, units=None):
+    vals = {**_HORIZONS_VALUES, **(values or {})}
+    return _units_table(AstroQuery._HORIZONS_UNITS, vals, units)
+
+
+def _patch_horizons(table_or_exc):
+    """Patch the Horizons client factory; its ephemerides() -> table (or raises)."""
+    client = MagicMock()
+    if isinstance(table_or_exc, Exception):
+        client.ephemerides.side_effect = table_or_exc
+    else:
+        client.ephemerides.return_value = table_or_exc
+    return patch("kpfpipe.modules.astro_query.horizons_client", return_value=client)
+
+
+def _l0_solar_system(obj="Jupiter", jd=2461000.5, exptime=600.0, **cards):
+    l0 = _l0_for_query(OBJECT=obj, **cards)
+    l0.headers["PRIMARY"]["JD_UTC"] = jd
+    l0.headers["PRIMARY"]["EXPTIME"] = exptime
+    return l0
+
+
+class TestHorizonsQuery:
+    """A solar-system OBJECT is resolved by JPL Horizons in place of Gaia/SIMBAD."""
+
+    def test_record_conversions(self):
+        aq = AstroQuery(_l0_solar_system())
+        with _patch_horizons(_horizons_table()) as factory:
+            record = aq.query_horizons()
+        # Looked up by Horizons ID from Mauna Kea at the exposure midpoint.
+        target_id, location, epoch, _ = factory.call_args.args
+        assert (target_id, location) == ("599", "568")
+        midpoint = Time(2461000.5, format="jd") + 300 * u.s
+        assert epoch == pytest.approx(midpoint.jd, abs=1e-9)
+        assert record["epoch"] == pytest.approx(midpoint.jyear)
+        assert (record["object"], record["catalog"]) == ("599", "JPL Horizons")
+        expected = AstroQuery._sexagesimal_radec(SkyCoord(180.0, 10.0, unit=u.deg))
+        assert (record["ra"], record["dec"]) == expected
+        assert record["pmra"] == pytest.approx(3600.0 * 8766.0)
+        assert record["pmdec"] == pytest.approx(-1800.0 * 8766.0)
+        # A 1 au baseline seen from 5 au: 206264.806 arcsec / 5, in mas.
+        assert record["parallax"] == pytest.approx(206264806.2 / 5.0)
+        assert record["rv"] is None and record["color"] is None
+
+    def test_perform_skips_gaia_and_simbad(self):
+        l0 = _l0_solar_system()
+        with (
+            _patch_horizons(_horizons_table()),
+            _patch_gaia(_gaia_job(_gaia_table())) as gaia,
+            _patch_simbad(_simbad_instance(_simbad_table())) as simbad,
+        ):
+            AstroQuery(l0).perform()
+        assert gaia.call_count == 0 and simbad.call_count == 0
+        row = _kpf_drp_row(l0.data["CATALOG_RECORD"])
+        assert row["radec_src"] == "horizons"
+        primary = l0.headers["PRIMARY"]
+        assert (primary["CID3"], primary["CSRC3"]) == ("599", "JPL Horizons")
+        assert primary["CRA3"] == _ra_str(180.0)
+        assert primary["OBJECT"] == "Jupiter"
+
+    def test_failed_query_is_fail_soft_then_unresolved(self, caplog):
+        aq = AstroQuery(_l0_solar_system())
+        with _patch_horizons(ValueError("Ambiguous target name")):
+            with caplog.at_level(logging.WARNING):
+                assert aq.query_horizons() is None
+            assert "JPL Horizons query failed" in caplog.text
+            with pytest.raises(ValueError, match="JPL Horizons resolved no source"):
+                aq.perform()
+
+    def test_unit_drift_raises(self):
+        aq = AstroQuery(_l0_solar_system())
+        with _patch_horizons(_horizons_table(units={"delta": u.km})):
+            with pytest.raises(ValueError, match="unexpected column units"):
+                aq.query_horizons()
+
+    def test_toggle_off_skips_query(self):
+        aq = AstroQuery(_l0_solar_system(), {"do_horizons_query": False})
+        with _patch_horizons(_horizons_table()) as factory:
+            with pytest.raises(ValueError, match="no complete astrometric solution"):
+                aq.perform()
+        assert factory.call_count == 0
+
+    def test_header_color_not_borrowed(self):
+        # A G-J color off the DCS cards is stellar; a planet's stays missing.
+        l0 = _l0_solar_system(
+            TARGRA="12:00:00.00",
+            TARGDEC="+10:00:00.0",
+            TARGFRAM="FK5",
+            TARGEPOC=2025.8,
+            GAIAMAG=5.0,
+            **{"2MASSMAG": 4.0},
+        )
+        with _patch_horizons(_horizons_table()):
+            AstroQuery(l0).perform()
+        table = l0.data["CATALOG_RECORD"]
+        assert table[table["source"] == "wmko"][0]["color"] == pytest.approx(1.0)
+        row = _kpf_drp_row(table)
+        assert np.isnan(row["color"]) and not str(row["color_name"]).strip()
+        assert "CCLR3" not in l0.headers["PRIMARY"]
+
+    def test_header_rv_not_borrowed(self, caplog):
+        # A planet needs no systemic rv: TARGRADV is not used, CRV3 stays blank,
+        # and the C*# cards are single-source (no mixed-sources warning).
+        l0 = _l0_solar_system(TARGRADV=0.0)
+        with _patch_horizons(_horizons_table()):
+            with caplog.at_level(logging.WARNING):
+                AstroQuery(l0).perform()
+        row = _kpf_drp_row(l0.data["CATALOG_RECORD"])
+        assert np.isnan(row["rv"]) and not str(row["rv_src"]).strip()
+        assert not str(l0.headers["PRIMARY"].get("CRV3", "")).strip()
+        assert "TARGRADV" not in caplog.text
+        assert "mixed sources" not in caplog.text
+
+    def test_no_simbad_identifier_warning(self, caplog):
+        l0 = _l0_solar_system()
+        with _patch_horizons(_horizons_table()):
+            with caplog.at_level(logging.WARNING):
+                AstroQuery(l0).perform()
+        assert "SIMBAD gave no identifiers" not in caplog.text
+        assert l0.headers["PRIMARY"]["ALIASES"] == "Jupiter"
+
+    def test_l0_qc_flags(self):
+        # A Jupiter-like Horizons row passes ASTROMOK; COLOROK does not apply.
+        from kpfpipe.quality_control.qc_flags.level0 import QCL0
+
+        l0 = _l0_solar_system()
+        with _patch_horizons(_horizons_table({"RA_rate": 20.0, "DEC_rate": -8.0})):
+            AstroQuery(l0).perform()
+        results = QCL0(l0).run()
+        assert results["ASTROMOK"][0] is True
+        assert "COLOROK" not in results
 
 
 class TestConstructor:
-    """The constructor's three guards. Every other AstroQuery(...) in the suite
+    """The constructor's guards. Every other AstroQuery(...) in the suite
     passes OBSTYPE='Target' and either None or a plain dict, so none of these is
     otherwise exercised."""
 

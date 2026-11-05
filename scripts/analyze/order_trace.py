@@ -34,6 +34,7 @@ import re
 import sys
 import warnings
 from collections import defaultdict
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -124,7 +125,9 @@ def load_traces(input_dir, start, end, eras):
                 logger.warning("skipping unrecognised filename %s", path)
                 continue
             night, seconds = match.groups()
-            obs_time = pd.Timestamp(night) + pd.Timedelta(seconds=float(seconds))
+            obs_time = datetime.strptime(night, "%Y%m%d") + timedelta(
+                seconds=float(seconds)
+            )
             era = era_of(obs_time, eras)
             if era is None:  # engineering / service-mission night
                 continue
@@ -233,7 +236,7 @@ def epoch_table(samples):
                     "Era": era,
                     "Epoch": epoch,
                     "Chip": chip,
-                    "Date": pd.Timestamp(epoch.split(".")[1]),
+                    "Date": datetime.strptime(epoch.split(".")[1], "%Y%m%d"),
                     "RMS": float(np.sqrt(np.mean(source["Square"][key]))),
                     "P95": float(np.quantile(worst, 0.95)),
                     "Max": float(worst.max()),
