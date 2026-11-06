@@ -284,7 +284,7 @@ def kpf_target_name(name):
     if lettered:
         catalog, host, _ = kpf_target_name(lettered[1])
         letter = lettered[2]
-        if catalog and catalog not in ("Gaia", "TIC", "KIC"):
+        if catalog and catalog not in ("Gaia", "TIC", "KIC", "EPIC"):
             if letter.isupper() or letter == "a":
                 return catalog, f"{host} {letter.upper()}", None
             return catalog, host, letter

@@ -143,7 +143,7 @@ class AstroQuery:
         "GJ",
         "HAT-P",
     )
-    _LOW_TIER = ("Gaia", "TIC", "KIC")
+    _LOW_TIER = ("Gaia", "TIC", "KIC", "EPIC")
 
     def _validate_priority(self):
         """Reject an astrometry_priority naming an unknown or no source.

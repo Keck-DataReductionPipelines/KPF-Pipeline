@@ -918,6 +918,7 @@ class TestKpfTargetName:
             ("TOI-04018", ("TOI", "TOI-4018", None)),
             ("T004018", ("TOI", "TOI-4018", None)),
             ("T4018", ("TOI", "TOI-4018", None)),
+            ("EPIC212036875", ("EPIC", "EPIC 212036875", None)),
             (
                 "Gaia DR3 2452378776434477184",
                 ("Gaia", "Gaia DR3 2452378776434477184", None),

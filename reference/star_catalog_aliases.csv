@@ -6,6 +6,7 @@ GJ,"(?:GJ|Gl|Gliese)\s*(\d+(?:\.\d+)?)",GJ {}
 HAT-P,HAT[\s-]*P[\s-]*(\d+),HAT-P-{}
 WASP,WASP[\s-]*(\d+),WASP-{}
 KIC,KIC[\s-]*(\d+),KIC {}
+EPIC,EPIC[\s-]*(\d+),EPIC {}
 KOI,KOI[\s-]*(\d+),KOI-{}
 Kepler,Kepler[\s-]*(\d+),Kepler-{}
 K2,K2[\s-]*(\d+),K2-{}
