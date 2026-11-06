@@ -273,6 +273,18 @@ class TestGetTimestamps:
         with pytest.raises(ValueError, match="strictly increasing"):
             bc._get_timestamps()
 
+    def test_bad_corrected_columns_fall_back_to_uncorrected(
+        self, synthetic_kpf2, caplog
+    ):
+        table = _make_expmeter_table()
+        table["Date-Beg-Corr"] = [f"{_T0}00:00:00.000"] * 3
+        synthetic_kpf2.set_data("EXPMETER_SCI", table)
+        bc = BarycentricCorrection(synthetic_kpf2)
+        t_beg, _, _, keep = bc._get_timestamps()
+        assert np.all(keep)
+        assert list(t_beg.isot) == list(table["Date-Beg"])
+        assert "falling back to uncorrected" in caplog.text
+
 
 class TestGetNormalizedFlux:
     def test_returns_wavelengths_and_flux(self, synthetic_kpf2):

@@ -128,37 +128,42 @@ class BarycentricCorrection:
         Read EXPMETER_SCI timestamps -> (t_beg, t_mid, t_end, keep).
 
         Prefers the corrected columns (Date-Beg-Corr / Date-End-Corr), falling
-        back to uncorrected; t_mid is the unweighted (t_beg + t_end) / 2. A
-        faulty first or last reading (non-finite or non-positive duration) is
-        dropped with a warning; any other faulty reading raises. ``keep`` is the
-        boolean row mask; the caller applies it to these arrays and the flux.
+        back to uncorrected if they are absent or fail validation; t_mid is the
+        unweighted (t_beg + t_end) / 2. A faulty first or last reading
+        (non-finite or non-positive duration) is dropped with a warning; any
+        other faulty reading, or non-increasing timestamps, raises. ``keep`` is
+        the boolean row mask; the caller applies it to these arrays and the flux.
         """
         expmeter = self.l2_obj.data["EXPMETER_SCI"]
 
+        def read(suffix):
+            return tuple(
+                Time(
+                    np.array(expmeter[f"Date-{edge}{suffix}"]).astype(str),
+                    format="isot",
+                    scale="utc",
+                )
+                for edge in ("Beg", "End")
+            )
+
         try:
-            t_beg = Time(
-                np.array(expmeter["Date-Beg-Corr"]).astype(str),
-                format="isot",
-                scale="utc",
-            )
-            t_end = Time(
-                np.array(expmeter["Date-End-Corr"]).astype(str),
-                format="isot",
-                scale="utc",
-            )
-        except KeyError:
-            t_beg = Time(
-                np.array(expmeter["Date-Beg"]).astype(str), format="isot", scale="utc"
-            )
-            t_end = Time(
-                np.array(expmeter["Date-End"]).astype(str), format="isot", scale="utc"
-            )
-
+            t_beg, t_end = read("-Corr")
+            keep = self._validate_timestamps(t_beg, t_end)
+        except (KeyError, ValueError) as err:
             logger.warning(
-                "Exposure meter has no corrected Beg/End dates; "
-                "falling back to uncorrected dates"
+                "Exposure meter corrected Beg/End dates unusable (%s); "
+                "falling back to uncorrected dates",
+                err,
             )
+            t_beg, t_end = read("")
+            keep = self._validate_timestamps(t_beg, t_end)
 
+        t_mid = Time((t_beg.jd + t_end.jd) / 2, format="jd", scale="utc")
+        return t_beg, t_mid, t_end, keep
+
+    @staticmethod
+    def _validate_timestamps(t_beg, t_end):
+        """Return the row mask ``keep`` for valid readings, or raise ValueError."""
         # A faulty first or last reading occurs in normal operations and is
         # dropped; any other is fatal.
         dt = (t_end - t_beg).sec
@@ -183,9 +188,7 @@ class BarycentricCorrection:
             raise ValueError(
                 "EXPMETER_SCI Date-End timestamps are not strictly increasing"
             )
-
-        t_mid = Time((t_beg.jd + t_end.jd) / 2, format="jd", scale="utc")
-        return t_beg, t_mid, t_end, keep
+        return keep
 
     def _get_normalized_flux(self):
         """
