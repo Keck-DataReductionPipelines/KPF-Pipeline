@@ -45,8 +45,9 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.kpf import get_datecode, get_obs_id, kpf_target_name
+from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
+from kpfpipe.utils.target import parse_target
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
@@ -109,7 +110,7 @@ def parse_args(argv=None):
     ap.add_argument(
         "--target",
         required=True,
-        help="target, canonicalized as HeaderParser does OBJECT (kpf_target_name): "
+        help="target, canonicalized as HeaderParser does OBJECT (parse_target): "
         "'10700', 'HD10700' and 'HD 10700' all name 'HD 10700'",
     )
     # Stage toggles (which *stage* to run) -- unrelated to reduce's
@@ -155,7 +156,8 @@ def parse_args(argv=None):
         "science stage's own default config)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-    _, target, planet = kpf_target_name(args.target.strip())
+    parsed = parse_target(args.target.strip())
+    target, planet = parsed.name, parsed.planet
     if planet:
         logger.warning(
             "--target %r names planet %r; host star %r", args.target, planet, target

@@ -2,7 +2,6 @@
 native L0 PRIMARY header."""
 
 import logging
-import re
 from pathlib import Path
 
 import pytest
@@ -11,7 +10,6 @@ from astropy.io import fits
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.utils import header as header_module
 from kpfpipe.utils.header import HeaderError, HeaderParser
-from kpfpipe.utils.kpf import kpf_target_name
 
 TESTDATA_L0 = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 
@@ -226,16 +224,20 @@ class TestFrameIdentity:
             ("TIC436314778", "TIC 436314778", "TIC 436314778"),
             ("KIC4736208", "KIC 4736208", "KIC 4736208"),
             ("WASP127", "WASP-127", "WASP-127"),
+            ("BD+04_4988", "BD+04 4988", "BD+04 4988"),
+            # Spelling variants of an uncatalogued name agree (same_target).
+            ("V1298Tau", "V1298 Tau", "V1298Tau"),
+            ("BL_Lac", "BL Lac", "BL Lac"),
             # A bare system name reconciles with one of its components.
-            ("WASP-173", "WASP-173B", "WASP-173 B"),
-            ("WASP-173B", "WASP-173", "WASP-173 B"),
+            ("WASP-173", "WASP-173B", "WASP-173B"),
+            ("WASP-173B", "WASP-173", "WASP-173B"),
             ("WASP-173A", "WASP-173B", "Unknown"),
-            ("115404A", "HD 115404 A", "HD 115404 A"),
-            ("hd21019A", "21019", "HD 21019 A"),
-            ("hd21019a", "21019", "HD 21019 A"),
-            ("WASP-173a", "WASP-173", "WASP-173 A"),
-            ("Kepler-444a", "Kepler-444 A", "Kepler-444 A"),
-            ("TOI-1338B", "TOI-1338", "TOI-1338 B"),
+            ("115404A", "HD 115404 A", "HD 115404A"),
+            ("hd21019A", "21019", "HD 21019A"),
+            ("hd21019a", "21019", "HD 21019A"),
+            ("WASP-173a", "WASP-173", "WASP-173A"),
+            ("Kepler-444a", "Kepler-444 A", "Kepler-444A"),
+            ("TOI-1338B", "TOI-1338", "TOI-1338B"),
             # A lowercase planet letter (b-z) is dropped for the host star.
             ("TOI-969b", "TOI-969", "TOI-969"),
             # Purely numeric catalogs take no letter.
@@ -257,6 +259,7 @@ class TestFrameIdentity:
             # Unreconcilable: other catalogs, other ids, unknown lengths.
             ("HD", "TOI-969", "Unknown"),
             ("HD 10700", "HD 10701", "Unknown"),
+            ("BD+03 2870", "BD-03 2870", "Unknown"),
             ("343600706696532", "Gaia 3436007066965322240", "Unknown"),
             ("343600706696532", "343600706696532", "Unknown"),
             ("Gaia 2077618037775709568", "Gaia DR3 2077618037775709568", "Unknown"),
@@ -421,7 +424,7 @@ class TestGaiaId:
 
     @pytest.mark.parametrize("obj", ["Gaia 12 b", "Gaia DR1 123456789012345678"])
     def test_gaia_like_object_not_copied(self, obj):
-        # Only an OBJECT kpf_target_name names a Gaia id lends it to GAIAID.
+        # Only an OBJECT parse_target names a Gaia id lends it to GAIAID.
         assert self._parse(None, obj=obj).DRP_KEYWORDS["GAIAID"] is None
 
     @pytest.mark.parametrize("native", [None, "", "None", "none"])
@@ -671,7 +674,7 @@ class TestUnknownTarget:
     HeaderError carrying the same diagnosis."""
 
     _CASES = [
-        # Legitimate aliases of one star, which kpf_target_name doesn't cross-identify.
+        # Legitimate aliases of one star, which parse_target doesn't cross-identify.
         ("201092", "61 Cyg B", "canonicalize to different names ('HD 201092'"),
         ("", "", "OBJECT and TARGNAME are both blank"),
         ("343600706696532", "343600706696532", "bare number in no known catalog"),
@@ -890,53 +893,3 @@ class TestRealData:
         for key, value in keywords.items():
             ext = "QUALITY_CONTROL" if key.startswith("READTIM") else "PRIMARY"
             assert l0.headers[ext].get(key) == value, key
-
-
-class TestKpfTargetName:
-    """kpf_target_name: the one apparatus for target identifiers."""
-
-    @pytest.mark.parametrize(
-        "name, expected",
-        [
-            ("57555", ("HD", "HD 57555", None)),
-            ("hd21019a", ("HD", "HD 21019 A", None)),
-            ("HD 189733b", ("HD", "HD 189733", "b")),
-            (
-                "Gaia_EDR3_2077618037775709568",
-                ("Gaia", "Gaia DR3 2077618037775709568", None),
-            ),
-            ("hr3662", ("HR", "HR 3662", None)),
-            ("GJ12", ("GJ", "GJ 12", None)),
-            ("GJ 105.5", ("GJ", "GJ 105.5", None)),
-            ("GL699", ("GJ", "GJ 699", None)),
-            ("Gliese12", ("GJ", "GJ 12", None)),
-            ("gliese 12", ("GJ", "GJ 12", None)),
-            ("Gl 15A", ("GJ", "GJ 15 A", None)),
-            ("G 32-5", (None, "G 32-5", None)),
-            ("HR 0001", ("HR", "HR 1", None)),
-            ("KOI-0984", ("KOI", "KOI-984", None)),
-            ("TOI-04018", ("TOI", "TOI-4018", None)),
-            ("T004018", ("TOI", "TOI-4018", None)),
-            ("T4018", ("TOI", "TOI-4018", None)),
-            ("EPIC212036875", ("EPIC", "EPIC 212036875", None)),
-            (
-                "Gaia DR3 2452378776434477184",
-                ("Gaia", "Gaia DR3 2452378776434477184", None),
-            ),
-            ("HAT-P-4B", ("HAT-P", "HAT-P-4 B", None)),
-            ("HATP7b", ("HAT-P", "HAT-P-7", "b")),
-            ("tau Cet", (None, "tau Cet", None)),
-        ],
-    )
-    def test_canonical(self, name, expected):
-        assert kpf_target_name(name) == expected
-
-    def test_name_matching_several_rows_raises(self, monkeypatch):
-        # Row order never picks a winner: overlapping patterns are a csv bug.
-        rows = [
-            ("HD", re.compile(r"(\d+)"), "HD {}"),
-            ("HIP", re.compile(r"(\d+)"), "HIP {}"),
-        ]
-        monkeypatch.setattr("kpfpipe.utils.kpf._STAR_CATALOG_ALIASES", rows)
-        with pytest.raises(ValueError, match="matches several"):
-            kpf_target_name("10700")

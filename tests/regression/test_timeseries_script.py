@@ -145,7 +145,7 @@ class TestParseArgs:
             ("10700", "HD 10700"),
             ("HD10700", "HD 10700"),
             (" HD 10700 ", "HD 10700"),
-            ("WASP-173B", "WASP-173 B"),
+            ("WASP-173B", "WASP-173B"),
             ("tau Cet", "tau Cet"),
         ],
     )
