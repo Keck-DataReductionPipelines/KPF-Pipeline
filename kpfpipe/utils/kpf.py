@@ -253,9 +253,10 @@ def kpf_target_name(name):
 
     The canonical name (per reference/star_catalog_aliases.csv) is what HeaderParser
     writes to OBJECT and AstroQuery sends to SIMBAD: 'HD57555' and '57555' ->
-    ('HD', 'HD 57555', None). A trailing letter on a known non-numeric id is a
-    stellar component if uppercase or 'a' ('hd21019a' -> 'HD 21019 A'), else a
-    planet, split off ('HD 189733b' -> ('HD', 'HD 189733', 'b')).
+    ('HD', 'HD 57555', None); leading zeros drop ('HR 0001' -> 'HR 1'). A trailing
+    letter on a known non-numeric id is a stellar component if uppercase or 'a'
+    ('hd21019a' -> 'HD 21019 A'), else a planet, split off
+    ('HD 189733b' -> ('HD', 'HD 189733', 'b')).
 
     Raises
     ------
@@ -263,7 +264,12 @@ def kpf_target_name(name):
         If ``name`` matches several csv rows (the patterns must be disjoint).
     """
     matches = {
-        (catalog, canonical.format(*(g.upper() for g in match.groups())))
+        (
+            catalog,
+            canonical.format(
+                *(re.sub(r"^0+(?=\d)", "", g).upper() for g in match.groups())
+            ),
+        )
         for catalog, pattern, canonical in _STAR_CATALOG_ALIASES
         if (match := pattern.fullmatch(name))
     }

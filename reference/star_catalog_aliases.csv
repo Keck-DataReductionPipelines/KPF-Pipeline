@@ -9,7 +9,7 @@ KIC,KIC[\s-]*(\d+),KIC {}
 KOI,KOI[\s-]*(\d+),KOI-{}
 Kepler,Kepler[\s-]*(\d+),Kepler-{}
 K2,K2[\s-]*(\d+),K2-{}
-TOI,(?:TOI[\s-]*|T0*)(\d+),TOI-{}
+TOI,(?:TOI[\s-]*|T)(\d+),TOI-{}
 TIC,TIC[\s-]*(\d+),TIC {}
 Gaia,"Gaia[\s_]*(\d{10,19})",Gaia {}
 Gaia,"(\d{17,19})",Gaia {}

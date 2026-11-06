@@ -913,6 +913,11 @@ class TestKpfTargetName:
             ("gliese 12", ("GJ", "GJ 12", None)),
             ("Gl 15A", ("GJ", "GJ 15 A", None)),
             ("G 32-5", (None, "G 32-5", None)),
+            ("HR 0001", ("HR", "HR 1", None)),
+            ("KOI-0984", ("KOI", "KOI-984", None)),
+            ("TOI-04018", ("TOI", "TOI-4018", None)),
+            ("T004018", ("TOI", "TOI-4018", None)),
+            ("T4018", ("TOI", "TOI-4018", None)),
             (
                 "Gaia DR3 2452378776434477184",
                 ("Gaia", "Gaia DR3 2452378776434477184", None),
