@@ -51,6 +51,9 @@ class HeaderError(ValueError):
     fixed:`` and the action needed. Other errors (e.g. ELAPSED, readout
     timestamps) likely reflect an operations fault, not a card to edit."""
 
+    # Tracebacks print 'HeaderError:' instead of 'kpfpipe.utils.header.HeaderError:'.
+    __module__ = "builtins"
+
 
 def _lower(value):
     """A header value as a stripped, lowercased string (None -> '')."""
@@ -225,8 +228,7 @@ class HeaderParser:
             ):
                 raise HeaderError(
                     f"{self._label}: {cal_object} frame with every fiber shutter "
-                    f"closed ({', '.join(_SHUTTERS)}): no lamp light reached the "
-                    "CCD, so the frame is no calibration"
+                    "closed; no lamp light reached the CCD"
                 )
             self._check_cal_object(cal_object)
             self.DRP_KEYWORDS["OBJECT"] = cal_object
@@ -273,12 +275,7 @@ class HeaderParser:
             if raw:
                 raise HeaderError(
                     f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 "
-                    "source_id. Accepted: '[Gaia] DR3 <id>', '[Gaia] DR2 <id>' "
-                    "(EDR3 = DR3) or 'Gaia <id>' with a 10-19 digit source_id, or a "
-                    "bare 17-19 digit id; a shorter bare number is refused, as it "
-                    "could be another catalog's (e.g. an HD number). L0 header must "
-                    "be fixed: correct GAIAID (a short id needs its release, e.g. "
-                    "'Gaia DR3 4295806720') or blank it."
+                    "source_id. L0 header must be fixed: correct GAIAID or blank it."
                 )
             gaiaid = None
 
@@ -292,17 +289,14 @@ class HeaderParser:
         if obj_id != gaia_id:
             raise HeaderError(
                 f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
-                f"different Gaia sources (source_id {obj_id} vs {gaia_id}). L0 "
-                "header must be fixed: make OBJECT and GAIAID name the same source."
+                "different Gaia sources. L0 header must be fixed: make OBJECT and "
+                "GAIAID match."
             )
         if obj_release and gaia_release and obj != gaiaid:
             raise HeaderError(
                 f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
-                f"different Gaia sources: one source_id under releases "
-                f"{obj_release[0]} and {gaia_release[0]}. DR2 and DR3 source_ids are "
-                "separate catalogs (a DR2 id can name another source, or none, in "
-                "DR3), so the pair is not taken as one star. L0 header must be "
-                "fixed: give OBJECT and GAIAID the same release, or blank one."
+                "different Gaia releases. L0 header must be fixed: give OBJECT and "
+                "GAIAID the same release, or blank one."
             )
         resolved = max(obj, gaiaid, key=len)
         if obj != resolved:
@@ -387,8 +381,8 @@ class HeaderParser:
             if obj_planet or targ_planet:
                 raise HeaderError(
                     f"{self._label}: OBJECT {obj!r} / TARGNAME {targname!r} "
-                    "pair a planet letter with a component letter; ambiguous. L0 "
-                    "header must be fixed: name the same star on both cards."
+                    "pair a planet letter with a component letter. L0 header must "
+                    "be fixed: name the same star on both cards."
                 )
             result = longer
             self._warn(
@@ -409,20 +403,16 @@ class HeaderParser:
             return self._unknown_target("OBJECT and TARGNAME are both blank")
         elif named:
             return self._unknown_target(
-                f"the cards disagree and name solar-system body {named} "
-                f"(canonical {obj_name!r} vs {targ_name!r})"
+                f"the cards disagree on solar-system body {named}"
             )
         else:
             return self._unknown_target(
                 f"the cards canonicalize to different names ({obj_name!r} vs "
-                f"{targ_name!r}): often legitimate aliases of one star (e.g. HD "
-                "number vs common name; kpf_target_name does not cross-identify "
-                "catalogs), else different stars or components, or a typo"
+                f"{targ_name!r})"
             )
         if result.isdigit():
             return self._unknown_target(
-                f"{result!r} is a bare number in no known catalog (e.g. a "
-                "truncated Gaia source_id)"
+                f"{result!r} is a bare number in no known catalog"
             )
         if result != obj or result != targname:
             logger.info(
@@ -454,9 +444,8 @@ class HeaderParser:
         raw = self._native_gaiaid()
         if not raw:
             raise HeaderError(
-                f"{self._label}: {context}; GAIAID is blank, so nothing "
-                "identifies the target for astrometry. L0 header must be fixed: "
-                "correct OBJECT/TARGNAME or set GAIAID."
+                f"{self._label}: {context}; GAIAID blank. L0 header must be "
+                "fixed: correct OBJECT/TARGNAME or set GAIAID."
             )
         catalog, gaiaid, _ = kpf_target_name(raw)
         if catalog == "Gaia":  # else _gaiaid raises on the malformed card

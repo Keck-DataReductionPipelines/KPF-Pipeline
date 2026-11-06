@@ -1115,7 +1115,7 @@ class TestBareGaiaIdResolution:
     def test_no_matching_release_raises(self):
         # Fail loud: a bare id matching nothing must not fall back to a guess.
         with pytest.raises(
-            HeaderError, match="no queryable Gaia release.*L0 header must be fixed:"
+            HeaderError, match="in no Gaia release.*L0 header must be fixed:"
         ):
             self._query()
 

@@ -247,11 +247,9 @@ class AstroQuery:
                 logger.info("resolved bare GAIAID %s to Gaia %s", source_id, release)
                 return release
         raise HeaderError(
-            f"{self.l0_obj.obs_id or 'unknown'}: GAIAID {source_id} carries no "
-            "data release and no queryable Gaia release "
-            f"({', '.join(sorted(self._GAIA_MIRRORS))}) contains that source_id. "
-            "L0 header must be fixed: correct GAIAID (with its DR2/DR3 release) "
-            "or blank it."
+            f"{self.l0_obj.obs_id or 'unknown'}: GAIAID {source_id} is in no "
+            f"Gaia release ({', '.join(sorted(self._GAIA_MIRRORS))}). L0 header "
+            "must be fixed: correct GAIAID or blank it."
         )
 
     @staticmethod
@@ -301,9 +299,9 @@ class AstroQuery:
             listed = {i.casefold() for i in simbad_ids}
             if obj != "Unknown" and obj.casefold() not in listed:
                 raise HeaderError(
-                    f"{label}: OBJECT {obj!r} is not an identifier of the star "
-                    f"SIMBAD matched ({self._common_name!r}); the cards name different "
-                    "stars. L0 header must be fixed: correct OBJECT/TARGNAME."
+                    f"{label}: OBJECT {obj!r} is not an identifier of SIMBAD's "
+                    f"match ({self._common_name!r}). L0 header must be fixed: "
+                    "correct OBJECT/TARGNAME."
                 )
             release = gaiaid.rsplit(" ", 1)[0] + " " if gaiaid else None
             same_release = {
@@ -314,9 +312,9 @@ class AstroQuery:
             if same_release and gaiaid.split()[-1] not in same_release:
                 raise HeaderError(
                     f"{label}: GAIAID {gaiaid!r} and OBJECT {obj!r} name different "
-                    f"stars: SIMBAD's match ({self._common_name!r}) has "
-                    f"{release.strip()} source_id {sorted(same_release)}. L0 header "
-                    "must be fixed: make OBJECT and GAIAID name the same source."
+                    f"stars: SIMBAD's match ({self._common_name!r}) is "
+                    f"{release}{', '.join(sorted(same_release))}. L0 header must be "
+                    "fixed: make OBJECT and GAIAID match."
                 )
         elif obj not in SOLAR_SYSTEM_OBJECTS:  # SIMBAD is not queried for these
             logger.warning(

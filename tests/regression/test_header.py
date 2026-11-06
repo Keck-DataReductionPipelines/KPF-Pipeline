@@ -473,20 +473,19 @@ class TestGaiaId:
         assert not self._gaia_warnings(parser)
 
     def test_short_bare_id_message_names_the_fix(self):
-        with pytest.raises(HeaderError, match="shorter bare number is refused"):
+        with pytest.raises(HeaderError, match="correct GAIAID or blank it"):
             self._parse("4295806720")
 
     @pytest.mark.parametrize(
         "obj, native, reason",
         [
-            (_G19, f"DR3 {_G18}0", f"source_id {_G19} vs {_G18}0"),
-            (f"Gaia DR2 {_G19}", f"DR3 {_G19}", "releases DR2 and DR3"),
+            (_G19, f"DR3 {_G18}0", "name different Gaia sources"),
+            (f"Gaia DR2 {_G19}", f"DR3 {_G19}", "name different Gaia releases"),
         ],
     )
     def test_disagreement_with_gaia_object_raises(self, obj, native, reason):
-        with pytest.raises(HeaderError, match="name different Gaia sources") as err:
+        with pytest.raises(HeaderError, match=reason):
             self._parse(native, obj=obj)
-        assert reason in str(err.value)
 
 
 def _traces(keywords, prefix):
@@ -677,7 +676,7 @@ class TestUnknownTarget:
         ("", "", "OBJECT and TARGNAME are both blank"),
         ("343600706696532", "343600706696532", "bare number in no known catalog"),
         ("Tethys & Enceladus", "Tethys", "more than one solar-system body"),
-        ("Io", "Where It Was 06:40", "name solar-system body ['Io']"),
+        ("Io", "Where It Was 06:40", "disagree on solar-system body ['Io']"),
     ]
 
     @pytest.mark.parametrize("obj, targname, reason", _CASES)
@@ -694,7 +693,7 @@ class TestUnknownTarget:
 
     @pytest.mark.parametrize("obj, targname, reason", _CASES)
     def test_blank_gaiaid_raises(self, obj, targname, reason):
-        with pytest.raises(HeaderError, match="GAIAID is blank") as err:
+        with pytest.raises(HeaderError, match="GAIAID blank") as err:
             HeaderParser(_hdr("Object", OBJECT=obj, TARGNAME=targname))
         assert reason in str(err.value)
 
