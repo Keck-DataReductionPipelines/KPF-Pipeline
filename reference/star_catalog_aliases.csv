@@ -2,27 +2,31 @@ catalog,pattern,canonical,numeric
 HD,"(?:HD ?)?(\d{1,6})",HD {},no
 HIP,HIP ?(\d+),HIP {},no
 HR,HR ?(\d+),HR {},no
-GJ,"(?:GJ|Gl|Gliese) ?(\d+(?:\.\d+)?)",GJ {},no
+GJ,"(?:GJ|Gl|Gliese) ?(\d+)((?:\.\d+)?)",GJ {}{},no
 HAT-P,HAT[ -]*P[ -]*(\d+),HAT-P-{},no
+HATS,"HATS[ -]*(\d+)",HATS-{},no
 WASP,WASP[ -]*(\d+),WASP-{},no
+KELT,"KELT[ -]*(\d+)",KELT-{},no
+TrES,"TrES[ -]*(\d+)",TrES-{},no
+XO,"XO[ -]*(\d+)",XO-{},no
+Qatar,"Qatar[ -]*(\d+)",Qatar {},no
+MASCARA,"MASCARA[ -]*(\d+)",MASCARA-{},no
+LHS,"LHS ?(\d+)",LHS {},no
 KIC,KIC[ -]*(\d+),KIC {},yes
-EPIC,EPIC[ -]*(\d+),EPIC {},yes
-KOI,KOI[ -]*(\d+),KOI-{},no
 Kepler,Kepler[ -]*(\d+),Kepler-{},no
+KOI,(?:KOI[ -]*|C?K0)(\d+),KOI-{},no
+EPIC,EPIC[ -]*(\d+),EPIC {},yes
 K2,K2[ -]*(\d+),K2-{},no
 TOI,(?:TOI[ -]*|T)(\d+),TOI-{},no
 TIC,TIC[ -]*(\d+),TIC {},yes
 Gaia,"Gaia ?(\d{10,19})",Gaia {},yes
 Gaia,"(\d{17,19})",Gaia {},yes
 Gaia,"(?:Gaia ?)?EDR3 ?(\d{10,19})",Gaia DR3 {},yes
-Gaia,"(?:Gaia ?)?(DR[23]) ?(\d{10,19})",Gaia {} {},yes
+Gaia,"(?:Gaia ?)?DR([23]) ?(\d{10,19})",Gaia DR{} {},yes
+ADS,ADS ?(\d+),ADS {},no
 BD,"BD ?([+-]\d{2}) ?(\d+)",BD{} {},no
 CD,"CD ?([+-]\d{2}) ?(\d+)",CD{} {},no
 CPD,"CPD ?([+-]\d{2}) ?(\d+)",CPD{} {},no
+GCVS,"V ?(\d{3,}) ?([A-Za-z]{3})",V{} {},no
 TYC,"TYC[ -]*(\d+)-(\d+)-(\d)",TYC {}-{}-{},no
-ADS,ADS ?(\d+),ADS {},no
 WD,"WD ?(\d{4}[+-]\d{3})",WD {},no
-Qatar,"Qatar[ -]*(\d+)",Qatar {},no
-KELT,"KELT[ -]*(\d+)",KELT-{},no
-XO,"XO[ -]*(\d+)",XO-{},no
-TrES,"TrES[ -]*(\d+)",TrES-{},no

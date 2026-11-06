@@ -14,24 +14,28 @@ from kpfpipe import REPO_ROOT, SOLAR_SYSTEM_OBJECTS
 
 # Known target-name aliases: (catalog, compiled pattern, canonical format), matched
 # against the normalized name. A name must fully (case-insensitively) match at most
-# one row, so row order is irrelevant; parse_target raises on a name matching several.
+# one row, so row order never decides a match; parse_target raises on a name matching
+# several. Row order is the catalog preference that orders ALIASES (resolve_identity).
 with open(REPO_ROOT / "reference/star_catalog_aliases.csv", newline="") as _f:
     _rows = list(csv.DictReader(_f))
 _ALIASES = [
     (row["catalog"], re.compile(row["pattern"], re.IGNORECASE), row["canonical"])
     for row in _rows
 ]
+_CATALOG_RANK = {
+    catalog: rank
+    for rank, catalog in enumerate(dict.fromkeys(row["catalog"] for row in _rows))
+}
 # Catalogs of purely numeric ids (Gaia, TIC, ...): they take no component or planet
 # letter, and name OBJECT only when no other catalog names the star.
 NUMERIC_CATALOGS = frozenset(r["catalog"] for r in _rows if r["numeric"] == "yes")
 
 # OBJECT for a header naming only a numeric id: its mission's own designation,
-# in preference order. An Unknown OBJECT is resolved from GAIAID, so takes Gaia's.
+# in preference order. Others (Gaia, Unknown) take the most preferred catalog.
 _SUCCESSORS = {
     "TIC": ("TOI",),
     "KIC": ("Kepler", "KOI"),
     "EPIC": ("K2",),
-    "Gaia": ("HD", "HIP"),
 }
 
 
@@ -72,7 +76,7 @@ def parse_target(raw):
         (
             catalog,
             canonical.format(
-                *(str(int(g)) if g.isdigit() else g.upper() for g in match.groups())
+                *(str(int(g)) if g.isdigit() else g for g in match.groups())
             ),
         )
         for catalog, pattern, canonical in _ALIASES
@@ -236,6 +240,17 @@ def _matching_name(obj_id, targ_id, obj, targname, warn):
         component on the other.
     """
     if same_target(obj_id.name, targ_id.name):
+        # same_target ignores case, so an uncatalogued name's trailing letter can be
+        # a planet ('b') on one card and a component ('B') on the other.
+        obj_letter, targ_letter = (
+            re.search(r"\d ?([A-Za-z])$", t.name) for t in (obj_id, targ_id)
+        )
+        if obj_letter and targ_letter and obj_letter[1] != targ_letter[1]:
+            warn(
+                f"OBJECT {obj!r} / TARGNAME {targname!r} differ in the case of a "
+                "trailing letter, which can denote a planet or a binary component; "
+                f"OBJECT is {obj_id.name!r}"
+            )
         return obj_id.name
     bare, lettered = sorted((obj_id, targ_id), key=lambda t: bool(t.component))
     if (
@@ -326,7 +341,8 @@ def resolve_identity(obj, gaiaid, gaia_designation, simbad_ids, common_name):
       TOI), else the first non-numeric alias, else stay.
     - ALIASES is OBJECT, the non-numeric aliases, the numeric ones, then the SIMBAD
       common name; the aliases are OBJECT, the Gaia designation and SIMBAD's
-      catalogued identifiers, in that order.
+      catalogued identifiers, each group ordered by catalog preference
+      (reference/star_catalog_aliases.csv row order), then name.
 
     Parameters
     ----------
@@ -360,12 +376,14 @@ def resolve_identity(obj, gaiaid, gaia_designation, simbad_ids, common_name):
     names += [gaia_designation] if gaia_designation else []
     names += [i.name for i in simbad_ids if i.catalog]
     catalogs = {n: parse_target(n).catalog for n in names}
+    # Catalog preference (csv row order), then name: independent of SIMBAD's id order.
+    names.sort(key=lambda n: (_CATALOG_RANK.get(catalogs[n], -1), n))
     numeric = [n for n in names if catalogs[n] in NUMERIC_CATALOGS]
     non_numeric = [n for n in names if n not in numeric]
 
     chosen = obj
     if obj == "Unknown" or catalogs[obj] in NUMERIC_CATALOGS:
-        successors = _SUCCESSORS.get(catalogs.get(obj, "Gaia"), ())
+        successors = _SUCCESSORS.get(catalogs.get(obj), ())
         chosen = next(
             (n for s in successors for n in non_numeric if catalogs[n] == s),
             (non_numeric or numeric or [obj])[0],

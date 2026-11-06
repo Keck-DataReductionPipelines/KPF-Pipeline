@@ -225,8 +225,9 @@ class TestFrameIdentity:
             ("KIC4736208", "KIC 4736208", "KIC 4736208"),
             ("WASP127", "WASP-127", "WASP-127"),
             ("BD+04_4988", "BD+04 4988", "BD+04 4988"),
+            ("V1298Tau", "V1298 Tau", "V1298 Tau"),
             # Spelling variants of an uncatalogued name agree (same_target).
-            ("V1298Tau", "V1298 Tau", "V1298Tau"),
+            ("HE1033+0059", "HE 1033+0059", "HE1033+0059"),
             ("BL_Lac", "BL Lac", "BL Lac"),
             # A bare system name reconciles with one of its components.
             ("WASP-173", "WASP-173B", "WASP-173B"),

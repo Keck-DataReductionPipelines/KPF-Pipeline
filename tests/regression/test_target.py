@@ -31,6 +31,12 @@ class TestParseTarget:
             ("hr3662", ("HR", "HR 3662", "")),
             ("GJ12", ("GJ", "GJ 12", "")),
             ("GJ 105.5", ("GJ", "GJ 105.5", "")),
+            ("GJ 0105.5", ("GJ", "GJ 105.5", "")),
+            ("GJ 0105", ("GJ", "GJ 105", "")),
+            ("GJ 9066.1", ("GJ", "GJ 9066.1", "")),
+            # Uncatalogued coordinate names keep every digit.
+            ("SDSS J123456.89-012345.6", ("", "SDSS J123456.89-012345.6", "")),
+            ("2MASS J18365633+3847012", ("", "2MASS J18365633+3847012", "")),
             ("GL699", ("GJ", "GJ 699", "")),
             ("Gliese12", ("GJ", "GJ 12", "")),
             ("gliese 12", ("GJ", "GJ 12", "")),
@@ -41,6 +47,14 @@ class TestParseTarget:
             ("TOI-04018", ("TOI", "TOI-4018", "")),
             ("T004018", ("TOI", "TOI-4018", "")),
             ("T4018", ("TOI", "TOI-4018", "")),
+            ("K00148", ("KOI", "KOI-148", "")),
+            ("CK01442", ("KOI", "KOI-1442", "")),
+            ("K218", ("K2", "K2-18", "")),
+            ("MASCARA1", ("MASCARA", "MASCARA-1", "")),
+            ("HATS-2", ("HATS", "HATS-2", "")),
+            ("LHS 1140 b", ("LHS", "LHS 1140", "b")),
+            ("V1298Tau", ("GCVS", "V1298 Tau", "")),
+            ("V* V488 Per", ("GCVS", "V488 Per", "")),
             ("EPIC212036875", ("EPIC", "EPIC 212036875", "")),
             ("BD+04_4988", ("BD", "BD+04 4988", "")),
             ("CD-38 13209", ("CD", "CD-38 13209", "")),
@@ -132,6 +146,7 @@ class TestSameTarget:
         [
             ("BD+03 2870", "BD-03 2870"),
             ("GJ 1055", "GJ 105 5"),
+            ("GJ 105.5", "GJ 1055"),
             ("HD 10700", "HD 10701"),
         ],
     )
@@ -162,6 +177,18 @@ class TestReconcileObject:
     def test_unknown_warns_reason(self):
         _, warnings = self._run("HD 10700", "HD 10701")
         assert any("canonicalize to different names" in w for w in warnings)
+
+    def test_uncatalogued_letter_case_mismatch_warns(self):
+        result, warnings = self._run("Ross 128 b", "Ross 128 B")
+        assert result == "Ross 128 b"
+        assert warnings == [
+            "OBJECT 'Ross 128 b' / TARGNAME 'Ross 128 B' differ in the case of a "
+            "trailing letter, which can denote a planet or a binary component; "
+            "OBJECT is 'Ross 128 b'"
+        ]
+
+    def test_uncatalogued_same_letter_case_silent(self):
+        assert self._run("Ross 128 B", "Ross128B") == ("Ross 128 B", [])
 
     def test_unknown_without_gaiaid_raises(self):
         with pytest.raises(ValueError, match="GAIAID blank"):
@@ -210,7 +237,14 @@ class TestResolveIdentity:
     def test_non_numeric_object_kept(self):
         obj, aliases = self._resolve("HD 287319")
         assert obj == "HD 287319"
-        assert aliases.startswith("HD 287319; BD+10 678; HIP 1; TOI-2473; Gaia DR3 ")
+        # Catalog preference (csv row order), not SIMBAD's order.
+        assert aliases == (
+            f"HD 287319; HIP 1; TOI-2473; BD+10 678; TIC 399868187; {self._GAIA}"
+        )
+
+    def test_independent_of_simbad_order(self):
+        for obj in ("HD 287319", "Unknown", "TIC 399868187"):
+            assert self._resolve(obj) == self._resolve(obj, self._IDS[::-1])
 
     @pytest.mark.parametrize(
         "obj, expected",
@@ -226,8 +260,9 @@ class TestResolveIdentity:
     def test_successor_fallbacks(self):
         no_hd = [i for i in self._IDS if i.catalog != "HD"]
         assert self._resolve("Unknown", no_hd)[0] == "HIP 1"
+        # No TOI: the most preferred catalog (HD), not SIMBAD's first (BD).
         no_toi = [i for i in self._IDS if i.catalog != "TOI"]
-        assert self._resolve("TIC 399868187", no_toi)[0] == "BD+10 678"
+        assert self._resolve("TIC 399868187", no_toi)[0] == "HD 287319"
 
     @pytest.mark.parametrize(
         "obj, name, expected",

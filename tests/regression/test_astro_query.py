@@ -1336,8 +1336,8 @@ class TestResolveIdentity:
         assert inst.query_object.call_args.args[0] == gaiaid
         assert primary["OBJECT"] == "HD 201092"
         assert primary["ALIASES"] == (
-            "HD 201092; HIP 104217; Gaia DR3 1872046574983497216; "
-            "TIC 165602023; Gaia DR2 1872046574983497216; 61 Cyg B"
+            "HD 201092; HIP 104217; TIC 165602023; Gaia DR2 1872046574983497216; "
+            "Gaia DR3 1872046574983497216; 61 Cyg B"
         )
         assert "OBJECT 'HD 201092' (resolved from 'Unknown'); ALIASES" in caplog.text
 
@@ -1348,7 +1348,7 @@ class TestResolveIdentity:
         primary, _ = self._perform("TOI-2473", "Gaia DR3 3291551614399361152", table)
         assert primary["OBJECT"] == "TOI-2473"
         assert primary["ALIASES"].startswith(
-            "TOI-2473; BD+10 678; HD 287319; Gaia DR3 "
+            "TOI-2473; HD 287319; BD+10 678; TIC 399868187; Gaia DR2 "
         )
 
     def test_low_tier_object_takes_high_tier_name(self):
