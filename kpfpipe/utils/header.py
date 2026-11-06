@@ -51,9 +51,6 @@ class HeaderError(ValueError):
     fixed:`` and the action needed. Other errors (e.g. ELAPSED, readout
     timestamps) likely reflect an operations fault, not a card to edit."""
 
-    # Tracebacks print 'HeaderError:' instead of 'kpfpipe.utils.header.HeaderError:'.
-    __module__ = "builtins"
-
 
 def _lower(value):
     """A header value as a stripped, lowercased string (None -> '')."""

@@ -5,7 +5,7 @@ import re
 import pytest
 
 from kpfpipe.utils.target import (
-    NUMERIC_CATALOGS,
+    _NUMERIC_CATALOGS,
     normalize_name,
     parse_target,
     reconcile_gaiaid,
@@ -15,6 +15,11 @@ from kpfpipe.utils.target import (
 )
 
 _G19 = "2452378776434477184"
+
+
+# ------------------------------------------------------------------
+# parse_target: catalog patterns, letters, Gaia fields
+# ------------------------------------------------------------------
 
 
 class TestParseTarget:
@@ -92,7 +97,8 @@ class TestParseTarget:
         assert (parsed.gaia_release, parsed.gaia_source_id) == (release, _G19)
 
     def test_numeric_catalogs(self):
-        assert NUMERIC_CATALOGS == {"Gaia", "TIC", "KIC", "EPIC"}
+        # Oracle: pins the csv "numeric" column.
+        assert _NUMERIC_CATALOGS == {"Gaia", "TIC", "KIC", "EPIC"}
 
     def test_name_matching_several_rows_raises(self, monkeypatch):
         # Row order never picks a winner: overlapping patterns are a csv bug.
@@ -103,6 +109,11 @@ class TestParseTarget:
         monkeypatch.setattr("kpfpipe.utils.target._ALIASES", rows)
         with pytest.raises(ValueError, match="matches several"):
             parse_target("10700")
+
+
+# ------------------------------------------------------------------
+# normalize_name: SIMBAD markers and separators
+# ------------------------------------------------------------------
 
 
 class TestNormalizeName:
@@ -118,6 +129,11 @@ class TestNormalizeName:
     )
     def test_normalize(self, raw, expected):
         assert normalize_name(raw) == expected
+
+
+# ------------------------------------------------------------------
+# same_target: name equivalence
+# ------------------------------------------------------------------
 
 
 class TestSameTarget:
@@ -152,6 +168,11 @@ class TestSameTarget:
     )
     def test_unequal(self, a, b):
         assert not same_target(a, b)
+
+
+# ------------------------------------------------------------------
+# reconcile_object: OBJECT from OBJECT and TARGNAME
+# ------------------------------------------------------------------
 
 
 class TestReconcileObject:
@@ -225,6 +246,11 @@ class TestReconcileObject:
             self._run("HD 189733b", "HD 189733B")
 
 
+# ------------------------------------------------------------------
+# reconcile_gaiaid: OBJECT vs GAIAID
+# ------------------------------------------------------------------
+
+
 class TestReconcileGaiaid:
     def test_release_lent_to_object(self):
         warnings = []
@@ -245,6 +271,11 @@ class TestReconcileGaiaid:
     def test_malformed_raises(self, gaiaid):
         with pytest.raises(ValueError, match="a shorter id needs its release"):
             reconcile_gaiaid("HD 10700", gaiaid, [].append)
+
+
+# ------------------------------------------------------------------
+# resolve_identity: OBJECT and ALIASES from SIMBAD
+# ------------------------------------------------------------------
 
 
 class TestResolveIdentity:

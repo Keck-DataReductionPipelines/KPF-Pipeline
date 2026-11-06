@@ -8,7 +8,7 @@ needs; the caller adds its file label. Warnings go to the caller's ``warn``.
 
 import csv
 import re
-from typing import NamedTuple
+from collections import namedtuple
 
 from kpfpipe import REPO_ROOT, SOLAR_SYSTEM_OBJECTS
 
@@ -28,7 +28,7 @@ _CATALOG_RANK = {
 }
 # Catalogs of purely numeric ids (Gaia, TIC, ...): they take no component or planet
 # letter, and name OBJECT only when no other catalog names the star.
-NUMERIC_CATALOGS = frozenset(r["catalog"] for r in _rows if r["numeric"] == "yes")
+_NUMERIC_CATALOGS = frozenset(r["catalog"] for r in _rows if r["numeric"] == "yes")
 
 # OBJECT for a header naming only a numeric id: its mission's own designation,
 # in preference order. Others (Gaia, Unknown) take the most preferred catalog.
@@ -39,15 +39,23 @@ _SUCCESSORS = {
 }
 
 
-class TargetName(NamedTuple):
-    """A target name parsed by ``parse_target``; absent fields are ''."""
+class TargetName(
+    namedtuple(
+        "TargetName",
+        "catalog name component planet gaia_release gaia_source_id",
+        defaults=("", "", "", ""),
+    )
+):
+    """A target name parsed by ``parse_target``; absent fields are ''.
 
-    catalog: str  # reference/star_catalog_aliases.csv catalog
-    name: str  # canonical name (SIMBAD's spelling); the planet letter dropped
-    component: str = ""  # stellar component letter, kept on ``name``
-    planet: str = ""  # planet letter, dropped from ``name``
-    gaia_release: str = ""  # 'DR2' or 'DR3' on a Gaia id
-    gaia_source_id: str = ""  # the digits of a Gaia id
+    Fields: ``catalog`` (reference/star_catalog_aliases.csv catalog), ``name``
+    (canonical, SIMBAD's spelling; the planet letter dropped), ``component``
+    (stellar component letter, kept on ``name``), ``planet`` (planet letter,
+    dropped from ``name``), ``gaia_release`` ('DR2' or 'DR3' on a Gaia id) and
+    ``gaia_source_id`` (the digits of a Gaia id).
+    """
+
+    __slots__ = ()
 
 
 def normalize_name(raw):
@@ -98,7 +106,7 @@ def parse_target(raw):
     lettered = re.fullmatch(r"(.*\d) ?([A-Za-z])", name)
     if lettered:
         host, letter = parse_target(lettered[1]), lettered[2]
-        if host.catalog and host.catalog not in NUMERIC_CATALOGS:
+        if host.catalog and host.catalog not in _NUMERIC_CATALOGS:
             if letter.isupper() or letter == "a":
                 letter = letter.upper()
                 return TargetName(host.catalog, host.name + letter, component=letter)
@@ -277,9 +285,10 @@ def _matching_name(obj_id, targ_id, obj, targname, warn):
 
 
 def reconcile_gaiaid(obj, gaiaid, warn):
-    """``(OBJECT, GAIAID)`` for a non-solar Target: GAIAID canonical (``Gaia DR3
-    <id>``, ``Gaia DR2 <id>`` or ``Gaia <id>``; '' if blank), and a Gaia-named
-    OBJECT made to name the same source: a blank GAIAID takes the OBJECT's, and
+    """``(OBJECT, GAIAID)`` for a non-solar Target, GAIAID made canonical.
+
+    GAIAID becomes ``Gaia DR3 <id>``, ``Gaia DR2 <id>`` or ``Gaia <id>`` ('' if
+    blank). For a Gaia-named OBJECT, a blank GAIAID takes the OBJECT's, and
     whichever card carries the release lends it to the other.
 
     Parameters
@@ -335,13 +344,13 @@ def resolve_identity(obj, gaiaid, gaia_designation, simbad_ids, common_name):
     - SIMBAD's identifiers must include OBJECT (``same_target``), whose spelling
       OBJECT then takes ('V1298Tau' -> 'V1298 Tau'), and must list no Gaia id of
       GAIAID's release other than GAIAID.
-    - OBJECT is kept unless ``Unknown`` or a numeric id (``NUMERIC_CATALOGS``);
+    - OBJECT is kept unless ``Unknown`` or a numeric id (``_NUMERIC_CATALOGS``);
       those take the catalogued alias of their mission (``_SUCCESSORS``: TIC ->
       TOI), else the first non-numeric alias, else stay.
-    - ALIASES is OBJECT, the non-numeric aliases, the numeric ones, then the SIMBAD
-      common name; the aliases are OBJECT, the Gaia designation and SIMBAD's
-      catalogued identifiers, each group ordered by catalog preference
-      (reference/star_catalog_aliases.csv row order), then name.
+    - ALIASES is OBJECT, then the non-numeric and numeric aliases (from OBJECT, the
+      Gaia designation and SIMBAD's catalogued ids), each ordered by catalog
+      preference (reference/star_catalog_aliases.csv row order) then name, then the
+      SIMBAD common name.
 
     Parameters
     ----------
@@ -375,13 +384,13 @@ def resolve_identity(obj, gaiaid, gaia_designation, simbad_ids, common_name):
     names += [gaia_designation] if gaia_designation else []
     names += [i.name for i in simbad_ids if i.catalog]
     catalogs = {n: parse_target(n).catalog for n in names}
-    # Catalog preference (csv row order), then name: independent of SIMBAD's id order.
+    # Sorted so ALIASES is independent of SIMBAD's id order.
     names.sort(key=lambda n: (_CATALOG_RANK.get(catalogs[n], -1), n))
-    numeric = [n for n in names if catalogs[n] in NUMERIC_CATALOGS]
+    numeric = [n for n in names if catalogs[n] in _NUMERIC_CATALOGS]
     non_numeric = [n for n in names if n not in numeric]
 
     chosen = obj
-    if obj == "Unknown" or catalogs[obj] in NUMERIC_CATALOGS:
+    if obj == "Unknown" or catalogs[obj] in _NUMERIC_CATALOGS:
         successors = _SUCCESSORS.get(catalogs.get(obj), ())
         chosen = next(
             (n for s in successors for n in non_numeric if catalogs[n] == s),

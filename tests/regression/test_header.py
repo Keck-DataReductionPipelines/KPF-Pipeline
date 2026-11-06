@@ -2,6 +2,7 @@
 native L0 PRIMARY header."""
 
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -499,9 +500,8 @@ class TestGaiaId:
     )
     def test_disagreement_with_gaia_object_raises(self, obj, native, reason):
         # The message names both conflicting ids.
-        with pytest.raises(HeaderError) as err:
+        with pytest.raises(HeaderError, match=re.escape(reason)):
             self._parse(native, obj=obj)
-        assert reason in str(err.value)
 
 
 def _traces(keywords, prefix):

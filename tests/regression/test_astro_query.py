@@ -1225,9 +1225,8 @@ class TestPerform:
 
     def test_each_query_lands_on_its_own_attribute(self):
         aq, _ = _perform()
-        assert (
-            aq._gaia["object"] == "Gaia DR3 1234567890"
-        )  # from GAIAID, via query_gaia
+        # From GAIAID, via query_gaia
+        assert aq._gaia["object"] == "Gaia DR3 1234567890"
         # Cited catalog's designation, via query_simbad
         assert aq._simbad["object"] == "Gaia DR3 1234567890"
         assert aq._gaia["ra"] == _ra_str(10.0)

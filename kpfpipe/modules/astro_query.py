@@ -443,9 +443,8 @@ class AstroQuery:
         ``_resolve_gaia_release`` and, once its source is found, recorded on GAIAID
         (a bare-Gaia OBJECT takes it in ``_resolve_identity``). Returns None (warned)
         when GAIAID is blank, a lookup fails on every mirror, or the source is not
-        found. Raises
-        HeaderError if a bare id matches no queryable release, or ValueError if the
-        result's column units differ from ``_GAIA_UNITS``.
+        found. Raises HeaderError if a bare id matches no queryable release, or
+        ValueError if the result's column units differ from ``_GAIA_UNITS``.
         """
         primary = self.l0_obj.headers["PRIMARY"]
         gaiaid = primary["GAIAID"]
@@ -584,7 +583,7 @@ class AstroQuery:
 
     def _fill_gaiaid(self):
         """Fill a blank PRIMARY GAIAID with SIMBAD's Gaia designation (DR3, else
-        DR2), warned; a SIMBAD Gaia id that does not parse as one is warned."""
+        DR2), warned; warns on a SIMBAD Gaia id that does not parse."""
         if self.l0_obj.headers["PRIMARY"]["GAIAID"]:
             return
         by_release = {
