@@ -226,7 +226,6 @@ class AstroQuery:
                 )
                 return None
             if len(found):
-                logger.info("resolved bare GAIAID %s to Gaia %s", source_id, release)
                 return release
         raise HeaderError(
             f"{self.l0_obj.obs_id or 'unknown'}: GAIAID {source_id} is in no "
@@ -246,10 +245,11 @@ class AstroQuery:
         """
         primary = self.l0_obj.headers["PRIMARY"]
         header_obj = primary["OBJECT"]
-        if not self._simbad and header_obj not in SOLAR_SYSTEM_OBJECTS:
+        # A failed SIMBAD query has already warned its identifiers unavailable.
+        if not self.do_simbad_query and header_obj not in SOLAR_SYSTEM_OBJECTS:
             logger.warning(
-                "SIMBAD gave no identifiers; OBJECT and ALIASES from the header "
-                "OBJECT and Gaia designation only"
+                "SIMBAD not queried; OBJECT and ALIASES from the header OBJECT and "
+                "Gaia designation only"
             )
         try:
             obj, aliases = resolve_identity(
@@ -626,7 +626,8 @@ class AstroQuery:
             target.catalog == "Gaia" and not target.gaia_release
         ):
             logger.warning(
-                "%r is not a SIMBAD name (OBJECT %r); SIMBAD astrometry unavailable",
+                "%r is not a SIMBAD name (OBJECT %r); SIMBAD astrometry and "
+                "identifiers unavailable",
                 query_name,
                 obj,
             )
@@ -645,14 +646,16 @@ class AstroQuery:
             )
         except Exception as e:
             logger.warning(
-                "SIMBAD query failed (%s: %s); SIMBAD astrometry unavailable",
+                "SIMBAD query failed (%s: %s); SIMBAD astrometry and identifiers "
+                "unavailable",
                 type(e).__name__,
                 e,
             )
             return None
         if result is None or len(result) == 0:
             logger.warning(
-                "SIMBAD returned no match for %r; SIMBAD astrometry unavailable",
+                "SIMBAD returned no match for %r; SIMBAD astrometry and "
+                "identifiers unavailable",
                 query_name,
             )
             return None
@@ -660,7 +663,8 @@ class AstroQuery:
         row = result[0]
         if str(row["otype"]).strip() in ("Pl", "Pl?"):
             logger.warning(
-                "SIMBAD resolved %r to planet %r; SIMBAD astrometry unavailable",
+                "SIMBAD resolved %r to planet %r; SIMBAD astrometry and "
+                "identifiers unavailable",
                 query_name,
                 str(row["main_id"]),
             )

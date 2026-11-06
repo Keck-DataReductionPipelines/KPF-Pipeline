@@ -277,13 +277,15 @@ class HeaderParser:
         (``target.reconcile_object``)."""
         obj = str(self.WMKO_HEADER.get("OBJECT") or "").strip()
         targname = str(self.WMKO_HEADER.get("TARGNAME") or "").strip()
+        n_warnings = len(self.warnings)
         try:
             resolved = reconcile_object(
                 obj, targname, self._native_gaiaid(), self._warn
             )
         except ValueError as e:
             raise HeaderError(f"{self._label}: {e}") from None
-        if resolved != "Unknown" and (obj, targname) != (resolved, resolved):
+        # A warning already names the resolution; log only a silent one.
+        if len(self.warnings) == n_warnings and (obj, targname) != (resolved, resolved):
             logger.info(
                 "%s: OBJECT %r / TARGNAME %r resolved to %r",
                 self._label,

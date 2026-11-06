@@ -1081,6 +1081,15 @@ class TestBareGaiaIdResolution:
         assert l0.headers["PRIMARY"]["GAIAID"] == "Gaia DR3 1234567890"
         assert l0.headers["PRIMARY"]["OBJECT"] == obj
 
+    def test_bare_gaia_object_takes_release_without_simbad(self):
+        l0 = _l0_for_query(GAIAID="Gaia 1234567890", OBJECT="Gaia 1234567890")
+        client = MagicMock()
+        client.run_sync.side_effect = _release_aware_run_sync(present={"DR3"})
+        with patch("kpfpipe.modules.astro_query.gaia_client", return_value=client):
+            AstroQuery(l0, {"do_simbad_query": False}).perform()
+        primary = l0.headers["PRIMARY"]
+        assert primary["OBJECT"] == primary["GAIAID"] == "Gaia DR3 1234567890"
+
     def test_unresolved_release_leaves_primary(self):
         l0 = _l0_for_query(GAIAID="Gaia 1234567890", OBJECT="Gaia 1234567890")
         with pytest.raises(ValueError):
@@ -1093,7 +1102,10 @@ class TestBareGaiaIdResolution:
         with caplog.at_level(logging.INFO):
             rec = self._query(present={"DR2", "DR3"})
         assert rec["object"] == "Gaia DR3 1234567890"
-        assert "resolved bare GAIAID 1234567890 to Gaia DR3" in caplog.text
+        assert caplog.text.count("resolved GAIAID") == 1
+        assert "resolved GAIAID 'Gaia 1234567890' to 'Gaia DR3 1234567890'" in (
+            caplog.text
+        )
 
     def test_older_release_used_when_newer_lacks_the_id(self):
         rec = self._query(present={"DR2"})
@@ -1351,7 +1363,7 @@ class TestResolveIdentity:
             "TOI-2473; HD 287319; BD+10 678; TIC 399868187; Gaia DR2 "
         )
 
-    def test_low_tier_object_takes_high_tier_name(self):
+    def test_numeric_object_takes_mission_successor(self):
         table = _simbad_table({"main_id": "HD 287319", "ids": self._TOI_IDS})
         primary, _ = self._perform(
             "TIC 399868187", "Gaia DR3 3291551614399361152", table
@@ -1376,7 +1388,17 @@ class TestResolveIdentity:
         gaiaid = "Gaia DR3 1872046574983497216"
         primary, _ = self._perform("Unknown", gaiaid, Table(), caplog)
         assert (primary["OBJECT"], primary["ALIASES"]) == (gaiaid, gaiaid)
-        assert "SIMBAD gave no identifiers" in caplog.text
+        # The failed query warns once; _resolve_identity adds no second warning.
+        assert caplog.text.count("identifiers unavailable") == 1
+        assert "SIMBAD not queried" not in caplog.text
+
+    def test_simbad_disabled_warned(self, caplog):
+        gaiaid = "Gaia DR3 1872046574983497216"
+        aq = AstroQuery(_l0_for_query(OBJECT="Unknown", GAIAID=gaiaid))
+        aq.do_simbad_query = False
+        with _patch_gaia(_gaia_job(_gaia_table())), caplog.at_level(logging.WARNING):
+            aq.perform()
+        assert "SIMBAD not queried; OBJECT and ALIASES from the header" in caplog.text
 
 
 # One-row Horizons ephemeris; rates of 3600 / -1800 arcsec/hr make the arcsec/yr
@@ -1508,7 +1530,7 @@ class TestHorizonsQuery:
         with _patch_horizons(_horizons_table()):
             with caplog.at_level(logging.WARNING):
                 AstroQuery(l0).perform()
-        assert "SIMBAD gave no identifiers" not in caplog.text
+        assert "SIMBAD not queried" not in caplog.text
         assert l0.headers["PRIMARY"]["ALIASES"] == "Jupiter"
 
     def test_l0_qc_flags(self):

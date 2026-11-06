@@ -160,9 +160,7 @@ def reconcile_object(obj, targname, gaiaid, warn):
     """
 
     def unknown(why):
-        context = (
-            f"OBJECT is Unknown: {why} [native OBJECT={obj!r}, TARGNAME={targname!r}]"
-        )
+        context = f"OBJECT {obj!r} / TARGNAME {targname!r}: {why}; OBJECT is Unknown"
         if not gaiaid:
             raise ValueError(
                 f"{context}; GAIAID blank. L0 header must be fixed: correct "
@@ -179,7 +177,8 @@ def reconcile_object(obj, targname, gaiaid, warn):
     if (obj, targname) == ("SoCal", "Sun"):
         return "SoCal"
     if not (obj or targname):
-        return unknown("OBJECT and TARGNAME are both blank")
+        return unknown("both cards blank")
+    blank = "" if obj and targname else ("TARGNAME" if obj else "OBJECT")
 
     card_bodies = [_solar_bodies(card) for card in (obj, targname) if card]
     all_bodies = sorted(set().union(*card_bodies))
@@ -187,47 +186,46 @@ def reconcile_object(obj, targname, gaiaid, warn):
         return unknown(f"the cards name more than one solar-system body {all_bodies}")
     if card_bodies[0] and all(b == card_bodies[0] for b in card_bodies):
         (body,) = card_bodies[0]
-        if not (obj and targname):
-            warn(
-                f"OBJECT {obj!r} / TARGNAME {targname!r} has a blank card; "
-                f"OBJECT is {body!r}"
-            )
+        if blank:
+            warn(f"{blank} blank; OBJECT is {body!r}")
         return body
 
     obj_id, targ_id = parse_target(obj), parse_target(targname)
-    _warn_letter("OBJECT", obj, obj_id, warn)
-    _warn_letter("TARGNAME", targname, targ_id, warn)
-    if not targname:
-        warn(f"TARGNAME blank; OBJECT is {obj!r}")
-        result = obj_id.name
-    elif not obj:
-        warn(f"OBJECT blank; OBJECT is TARGNAME {targname!r}")
-        result = targ_id.name
+    lettered = {}  # one warning per letter, naming every card that carries it
+    for card, raw, parsed in (("OBJECT", obj, obj_id), ("TARGNAME", targname, targ_id)):
+        if parsed.planet or parsed.component:
+            lettered.setdefault(parsed, []).append(f"{card} {raw!r}")
+    for parsed, cards in lettered.items():
+        _warn_letter(" / ".join(cards), parsed, warn)
+    if blank:
+        result = (obj_id if obj else targ_id).name
     else:
         result = _matching_name(obj_id, targ_id, obj, targname, warn)
         if result is None and all_bodies:
             return unknown(f"the cards disagree on solar-system body {all_bodies}")
         if result is None:
             return unknown(
-                f"the cards canonicalize to different names ({obj_id.name!r} vs "
+                f"the cards name different targets ({obj_id.name!r} vs "
                 f"{targ_id.name!r})"
             )
     if result.isdigit():
-        return unknown(f"{result!r} is a bare number in no known catalog")
+        return unknown("a bare number in no known catalog")
+    if blank:
+        warn(f"{blank} blank; OBJECT is {result!r}")
     return result
 
 
-def _warn_letter(card, raw, parsed, warn):
+def _warn_letter(cards, parsed, warn):
     """Warn a trailing letter: it can name a stellar component or a planet
     (``parse_target`` decides by case), and the two are easily confused."""
     ambiguity = "a trailing letter can denote a binary component or a planet"
     if parsed.planet:
         warn(
-            f"{card} {raw!r} names planet {parsed.planet!r}; host star "
+            f"{cards} names planet {parsed.planet!r}; host star "
             f"{parsed.name!r} ({ambiguity})"
         )
-    elif parsed.component:
-        warn(f"{card} {raw!r} names stellar component {parsed.name!r} ({ambiguity})")
+    else:
+        warn(f"{cards} names stellar component {parsed.name!r} ({ambiguity})")
 
 
 def _matching_name(obj_id, targ_id, obj, targname, warn):
@@ -301,8 +299,9 @@ def reconcile_gaiaid(obj, gaiaid, warn):
     gaia = parse_target(gaiaid)
     if gaia.catalog != "Gaia" and gaiaid:
         raise ValueError(
-            f"GAIAID {gaiaid!r} is not a Gaia DR2/DR3 source_id. L0 header must be "
-            "fixed: correct GAIAID or blank it."
+            f"GAIAID {gaiaid!r} is not a Gaia source_id ('Gaia DR3 <id>', 'DR2 <id>', "
+            "or 17-19 bare digits; a shorter id needs its release). L0 header must "
+            "be fixed: correct GAIAID or blank it."
         )
     target = parse_target(obj)
     if target.catalog != "Gaia":
@@ -422,14 +421,17 @@ def _check_simbad_gaiaid(obj, gaiaid, simbad_ids, common_name):
     """
     gaia = parse_target(gaiaid)
     listed = sorted(
-        i.gaia_source_id
+        i
         for i in simbad_ids
         if i.catalog == "Gaia" and gaia.gaia_release in ("", i.gaia_release)
     )
-    if gaia.catalog == "Gaia" and listed and gaia.gaia_source_id not in listed:
-        prefix = gaia.name.removesuffix(gaia.gaia_source_id)
+    if (
+        gaia.catalog == "Gaia"
+        and listed
+        and gaia.gaia_source_id not in {i.gaia_source_id for i in listed}
+    ):
         raise ValueError(
             f"GAIAID {gaiaid!r} and OBJECT {obj!r} name different stars: SIMBAD's "
-            f"match ({common_name!r}) is {prefix}{', '.join(listed)}. L0 header must "
-            "be fixed: make OBJECT and GAIAID match."
+            f"match ({common_name!r}) is {', '.join(i.name for i in listed)}. L0 "
+            "header must be fixed: make OBJECT and GAIAID match."
         )

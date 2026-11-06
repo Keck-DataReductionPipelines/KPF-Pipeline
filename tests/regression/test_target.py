@@ -176,7 +176,33 @@ class TestReconcileObject:
 
     def test_unknown_warns_reason(self):
         _, warnings = self._run("HD 10700", "HD 10701")
-        assert any("canonicalize to different names" in w for w in warnings)
+        assert warnings == [
+            "OBJECT 'HD 10700' / TARGNAME 'HD 10701': the cards name different "
+            "targets ('HD 10700' vs 'HD 10701'); OBJECT is Unknown; AstroQuery "
+            f"resolves OBJECT and astrometry from GAIAID 'Gaia DR3 {_G19}'"
+        ]
+
+    def test_blank_card_warns_written_name(self):
+        assert self._run("hd189733b", "") == (
+            "HD 189733",
+            [
+                "OBJECT 'hd189733b' names planet 'b'; host star 'HD 189733' (a "
+                "trailing letter can denote a binary component or a planet)",
+                "TARGNAME blank; OBJECT is 'HD 189733'",
+            ],
+        )
+
+    def test_blank_card_bare_number_warns_once(self):
+        _, warnings = self._run("343600706696532", "")
+        assert len(warnings) == 1
+        assert "a bare number in no known catalog; OBJECT is Unknown" in warnings[0]
+
+    def test_letter_on_both_cards_warns_once(self):
+        _, warnings = self._run("HD 189733b", "HD189733b")
+        assert warnings == [
+            "OBJECT 'HD 189733b' / TARGNAME 'HD189733b' names planet 'b'; host star "
+            "'HD 189733' (a trailing letter can denote a binary component or a planet)"
+        ]
 
     def test_uncatalogued_letter_case_mismatch_warns(self):
         result, warnings = self._run("Ross 128 b", "Ross 128 B")
@@ -204,15 +230,21 @@ class TestReconcileGaiaid:
         warnings = []
         result = reconcile_gaiaid(f"Gaia {_G19}", f"DR3 {_G19}", warnings.append)
         assert result == (f"Gaia DR3 {_G19}", f"Gaia DR3 {_G19}")
-        assert warnings
+        assert warnings == [
+            f"OBJECT 'Gaia {_G19}' takes the GAIAID release; OBJECT is "
+            f"'Gaia DR3 {_G19}'"
+        ]
 
     def test_non_gaia_object_keeps_gaiaid(self):
-        result = reconcile_gaiaid("HD 10700", f"DR3 {_G19}", print)
+        warnings = []
+        result = reconcile_gaiaid("HD 10700", f"DR3 {_G19}", warnings.append)
         assert result == ("HD 10700", f"Gaia DR3 {_G19}")
+        assert warnings == []
 
-    def test_malformed_raises(self):
-        with pytest.raises(ValueError, match="not a Gaia DR2/DR3 source_id"):
-            reconcile_gaiaid("HD 10700", "123", print)
+    @pytest.mark.parametrize("gaiaid", ["123", "1234567890123456"])
+    def test_malformed_raises(self, gaiaid):
+        with pytest.raises(ValueError, match="a shorter id needs its release"):
+            reconcile_gaiaid("HD 10700", gaiaid, [].append)
 
 
 class TestResolveIdentity:
@@ -265,14 +297,16 @@ class TestResolveIdentity:
         assert self._resolve("TIC 399868187", no_toi)[0] == "HD 287319"
 
     @pytest.mark.parametrize(
-        "obj, name, expected",
+        "obj, names, expected",
         [
-            ("KIC 1", "Kepler-1", "Kepler-1"),
-            ("EPIC 1", "K2-1", "K2-1"),
+            ("KIC 1", ["KOI-1", "Kepler-1"], "Kepler-1"),
+            ("KIC 1", ["KOI-1"], "KOI-1"),
+            ("EPIC 1", ["K2-1"], "K2-1"),
         ],
     )
-    def test_mission_successors(self, obj, name, expected):
-        ids = [parse_target(obj), parse_target(name), parse_target("HD 1")]
+    def test_mission_successors(self, obj, names, expected):
+        # HD 1 is the most preferred catalog: only the successor rule picks past it.
+        ids = [parse_target(n) for n in (obj, "HD 1", *names)]
         assert resolve_identity(obj, "", "", ids, "")[0] == expected
 
     def test_object_takes_simbad_spelling(self):
@@ -289,3 +323,11 @@ class TestResolveIdentity:
     def test_other_gaia_source_raises(self):
         with pytest.raises(ValueError, match="name different stars"):
             self._resolve("TOI-2473", gaiaid="Gaia DR3 1111111111111111111")
+
+    def test_bare_gaiaid_matches_simbad_any_release(self):
+        bare = f"Gaia {self._GAIA.split()[-1]}"
+        assert self._resolve("TOI-2473", gaiaid=bare)[0] == "TOI-2473"
+
+    def test_bare_gaiaid_other_source_raises_with_release(self):
+        with pytest.raises(ValueError, match=f"is {self._GAIA}\\. L0 header"):
+            self._resolve("TOI-2473", gaiaid="Gaia 1111111111111111111")

@@ -300,7 +300,7 @@ class TestFrameIdentity:
     def test_solar_system_blank_card_warned(self):
         parser = HeaderParser(_hdr("Object", OBJECT="Ganymede Penumbra", TARGNAME=""))
         assert parser.DRP_KEYWORDS["OBJECT"] == "Ganymede"
-        assert any("blank card" in w for w in parser.warnings)
+        assert "TARGNAME blank; OBJECT is 'Ganymede'" in parser.warnings
 
     def test_reconciliation_logged_at_info(self, caplog):
         with caplog.at_level(logging.INFO, logger="kpfpipe.utils.header"):
@@ -420,7 +420,7 @@ class TestGaiaId:
         ],
     )
     def test_malformed_raises(self, native):
-        with pytest.raises(HeaderError, match="is not a Gaia DR2/DR3 source_id"):
+        with pytest.raises(HeaderError, match="is not a Gaia source_id"):
             self._parse(native)
 
     @pytest.mark.parametrize("obj", ["Gaia 12 b", "Gaia DR1 123456789012345678"])
@@ -477,19 +477,31 @@ class TestGaiaId:
         assert not self._gaia_warnings(parser)
 
     def test_short_bare_id_message_names_the_fix(self):
-        with pytest.raises(HeaderError, match="correct GAIAID or blank it"):
+        with pytest.raises(HeaderError, match="a shorter id needs its release"):
             self._parse("4295806720")
 
     @pytest.mark.parametrize(
         "obj, native, reason",
         [
-            (_G19, f"DR3 {_G18}0", "name different Gaia sources"),
-            (f"Gaia DR2 {_G19}", f"DR3 {_G19}", "name different Gaia releases"),
+            (
+                _G19,
+                f"DR3 {_G18}0",
+                f"OBJECT 'Gaia {_G19}' and GAIAID 'Gaia DR3 {_G18}0' name different "
+                "Gaia sources",
+            ),
+            (
+                f"Gaia DR2 {_G19}",
+                f"DR3 {_G19}",
+                f"OBJECT 'Gaia DR2 {_G19}' and GAIAID 'Gaia DR3 {_G19}' name "
+                "different Gaia releases",
+            ),
         ],
     )
     def test_disagreement_with_gaia_object_raises(self, obj, native, reason):
-        with pytest.raises(HeaderError, match=reason):
+        # The message names both conflicting ids.
+        with pytest.raises(HeaderError) as err:
             self._parse(native, obj=obj)
+        assert reason in str(err.value)
 
 
 def _traces(keywords, prefix):
@@ -676,11 +688,20 @@ class TestUnknownTarget:
 
     _CASES = [
         # Legitimate aliases of one star, which parse_target doesn't cross-identify.
-        ("201092", "61 Cyg B", "canonicalize to different names ('HD 201092'"),
-        ("", "", "OBJECT and TARGNAME are both blank"),
-        ("343600706696532", "343600706696532", "bare number in no known catalog"),
-        ("Tethys & Enceladus", "Tethys", "more than one solar-system body"),
-        ("Io", "Where It Was 06:40", "disagree on solar-system body ['Io']"),
+        (
+            "201092",
+            "61 Cyg B",
+            "the cards name different targets ('HD 201092' vs '61 Cyg B')",
+        ),
+        ("", "", "both cards blank"),
+        ("343600706696532", "343600706696532", "a bare number in no known catalog"),
+        ("343600706696532", "", "a bare number in no known catalog"),
+        (
+            "Tethys & Enceladus",
+            "Tethys",
+            "the cards name more than one solar-system body ['Enceladus', 'Tethys']",
+        ),
+        ("Io", "Where It Was 06:40", "the cards disagree on solar-system body ['Io']"),
     ]
 
     @pytest.mark.parametrize("obj, targname, reason", _CASES)
@@ -690,9 +711,9 @@ class TestUnknownTarget:
         )
         assert parser.DRP_KEYWORDS["OBJECT"] == "Unknown"
         assert parser.DRP_KEYWORDS["GAIAID"] == f"Gaia DR3 {_G19}"
-        (warning,) = [w for w in parser.warnings if "OBJECT is Unknown" in w]
-        assert reason in warning
-        assert f"[native OBJECT={obj!r}, TARGNAME={targname!r}]" in warning
+        # The one OBJECT warning: no blank-card note on the same cards.
+        (warning,) = [w for w in parser.warnings if "OBJECT is" in w]
+        assert warning.startswith(f"OBJECT {obj!r} / TARGNAME {targname!r}: {reason}")
         assert f"astrometry from GAIAID 'Gaia DR3 {_G19}'" in warning
 
     @pytest.mark.parametrize("obj, targname, reason", _CASES)
@@ -739,8 +760,8 @@ class TestWarnings:
                     TARGNAME="HD 10701",
                     GAIAID="Gaia DR3 2452378776434477184",
                 ),
-                "OBJECT is Unknown: the cards canonicalize to different names "
-                "('HD 10700' vs 'HD 10701')",
+                "OBJECT '10700' / TARGNAME 'HD 10701': the cards name different "
+                "targets ('HD 10700' vs 'HD 10701'); OBJECT is Unknown",
             ),
             (
                 _hdr("Object", OBJECT="K2-157", TARGNAME=""),
@@ -748,7 +769,7 @@ class TestWarnings:
             ),
             (
                 _hdr("Object", OBJECT="", TARGNAME="K2-157"),
-                "OBJECT blank; OBJECT is TARGNAME 'K2-157'",
+                "OBJECT blank; OBJECT is 'K2-157'",
             ),
             (
                 _hdr(
