@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from astropy import units as u
-from astropy.coordinates import FK5, Angle, SkyCoord
+from astropy.coordinates import FK4, FK5, ICRS, Angle, SkyCoord
 from astropy.table import Column, Table
 from astropy.time import Time
 
@@ -450,13 +450,20 @@ class TestReadWmkoHeader:
         )
 
     def test_fk4_frame_rotated_with_besselian_equinox(self):
-        # FK4 at equinox 2000 (Keck planet targets) is Besselian B2000: under 1" from
-        # the FK5 J2000 reading, but a distinct rotation, not a relabel.
+        # FK4 TARGEQUI 1950.0 is Besselian B1950: the record is the FK4(B1950)
+        # rotation to ICRS (a Julian reading of 1950.0 lands ~8.5 mas away).
         rec = AstroQuery(
-            self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "FK4"})
+            self._l0_targ(**{**self._GOOD_TARG, "TARGFRAM": "FK4", "TARGEQUI": 1950.0})
         ).read_wmko_header()
         assert rec["frame"] == "icrs"
-        assert 0.1 < self._sep_from_fk5_reading(rec) < 1.5
+        ref = SkyCoord(
+            "12:00:00.00",
+            "+40:00:00.0",
+            unit=(u.hourangle, u.deg),
+            frame=FK4(equinox="B1950"),
+        ).transform_to(ICRS())
+        got = SkyCoord(rec["ra"], rec["dec"], unit=(u.hourangle, u.deg))
+        assert got.separation(ref).arcsec < 0.002
 
     def test_fk4_absent_equinox_defaults_to_b1950(self):
         # FK4 with no TARGEQUI is B1950: precession puts it arcmin from J2000.
@@ -465,6 +472,32 @@ class TestReadWmkoHeader:
             self._l0_targ(**{**targ, "TARGFRAM": "FK4"})
         ).read_wmko_header()
         assert self._sep_from_fk5_reading(rec) > 600
+
+    @pytest.mark.parametrize(
+        "frame, equinox, warns",
+        [
+            ("FK5", 2000.0, False),
+            ("FK5", None, False),
+            ("FK5", 2024.0, True),
+            ("FK4", 1950.0, False),
+            ("FK4", 2000.0, True),
+        ],
+    )
+    def test_nonstandard_equinox_warns(self, caplog, frame, equinox, warns):
+        # A TARGEQUI other than the frame's standard is honored (precessed from) but
+        # warned, so a mislabeled equinox is visible in the log.
+        targ = {**self._GOOD_TARG, "TARGFRAM": frame, "TARGEQUI": equinox}
+        if equinox is None:
+            del targ["TARGEQUI"]
+        with caplog.at_level(logging.WARNING):
+            AstroQuery(self._l0_targ(**targ)).read_wmko_header()
+        hits = [r.getMessage() for r in caplog.records if "TARGEQUI=" in r.getMessage()]
+        expected = (
+            f"TARGEQUI={equinox} (TARGEPOC=2000.0) is not the {frame} standard "
+            f"{2000.0 if frame == 'FK5' else 1950.0}; TARGRA/TARGDEC precessed from "
+            f"equinox {equinox}"
+        )
+        assert hits == ([expected] if warns else [])
 
     def test_unsupported_frame_raises(self):
         # KPF pointing is FK5 or FK4; another TARGFRAM must not be coerced onto a

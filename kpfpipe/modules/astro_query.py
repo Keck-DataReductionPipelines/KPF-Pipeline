@@ -799,7 +799,8 @@ class AstroQuery:
         frame to ICRS, so all three sources share one frame. KPF pointing is FK5
         (Julian TARGEQUI, default J2000) or, for some planet targets, FK4 (Besselian
         TARGEQUI, default B1950); any other or absent TARGFRAM raises rather than
-        being coerced -- a wrong frame would corrupt the barycentric correction.
+        being coerced -- a wrong frame would corrupt the barycentric correction. A
+        TARGEQUI other than the frame's standard (J2000/B1950) is honored but warned.
         Returns None (no row)
         when TARGRA is absent, or (warned) when the TARG* astrometry cannot be
         parsed. Always run: TCSOFF needs this row even when ``astrometry_priority``
@@ -824,6 +825,19 @@ class AstroQuery:
                 self._scalar(native.get("TARGPMDC")),
             )
             equinox = self._scalar(native.get("TARGEQUI"))
+            standard = (
+                2000.0 if targfram == "FK5" else 1950.0 if targfram == "FK4" else None
+            )
+            if standard is not None and equinox is not None and equinox != standard:
+                logger.warning(
+                    "TARGEQUI=%s (TARGEPOC=%s) is not the %s standard %s; "
+                    "TARGRA/TARGDEC precessed from equinox %s",
+                    equinox,
+                    native.get("TARGEPOC"),
+                    targfram,
+                    standard,
+                    equinox,
+                )
 
             # Rotate the native pointing to ICRS (no time propagation, so epoch is
             # unchanged); proper motion only when both components are present, since a
