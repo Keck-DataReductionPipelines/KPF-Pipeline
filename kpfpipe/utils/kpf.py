@@ -1,7 +1,6 @@
 """obs_id, datecode, and timestamp parsing, UTC/HST and KPF/EPRV conversions,
-per-era reference selection, and target-name canonicalization."""
+per-era reference selection."""
 
-import csv
 import glob
 import os
 import re
@@ -9,16 +8,7 @@ from datetime import datetime, timedelta
 
 from astropy.time import Time
 
-from kpfpipe import INSTRUMENT_ERAS, REPO_ROOT
-
-# Known target-name aliases: (catalog, compiled pattern, canonical format). A name
-# must fully (case-insensitively) match at most one row, so row order is irrelevant;
-# kpf_target_name raises on a name that matches several.
-with open(REPO_ROOT / "reference/star_catalog_aliases.csv", newline="") as _f:
-    _STAR_CATALOG_ALIASES = [
-        (row["catalog"], re.compile(row["pattern"], re.IGNORECASE), row["canonical"])
-        for row in csv.DictReader(_f)
-    ]
+from kpfpipe import INSTRUMENT_ERAS
 
 # The obs_id/KOAID shape, as a string so utils/io.py can embed it in the larger
 # filename patterns it builds, and compiled here for matching.
@@ -246,40 +236,3 @@ def select_era_reference(pattern, kind, primary, obs_id, eras):
             f"No {kind} measured before {obs_time} within KPF instrument era {instera}"
         )
     return in_era[max(in_era)]
-
-
-def kpf_target_name(name):
-    """``(catalog, canonical, planet)`` for a known alias, else ``(None, name, None)``.
-
-    The canonical name (per reference/star_catalog_aliases.csv) is what HeaderParser
-    writes to OBJECT and AstroQuery sends to SIMBAD: 'HD57555' and '57555' ->
-    ('HD', 'HD 57555', None). A trailing letter on a known non-numeric id is a
-    stellar component if uppercase or 'a' ('hd21019a' -> 'HD 21019 A'), else a
-    planet, split off ('HD 189733b' -> ('HD', 'HD 189733', 'b')).
-
-    Raises
-    ------
-    ValueError
-        If ``name`` matches several csv rows (the patterns must be disjoint).
-    """
-    matches = {
-        (catalog, canonical.format(*(g.upper() for g in match.groups())))
-        for catalog, pattern, canonical in _STAR_CATALOG_ALIASES
-        if (match := pattern.fullmatch(name))
-    }
-    if len(matches) > 1:
-        raise ValueError(
-            f"target name {name!r} matches several reference/star_catalog_aliases.csv "
-            f"rows {sorted(matches)}; the patterns must be disjoint"
-        )
-    if matches:
-        return *matches.pop(), None
-    lettered = re.fullmatch(r"(.*\d)\s*([A-Za-z])", name)
-    if lettered:
-        catalog, host, _ = kpf_target_name(lettered[1])
-        letter = lettered[2]
-        if catalog and catalog not in ("Gaia", "TIC", "KIC"):
-            if letter.isupper() or letter == "a":
-                return catalog, f"{host} {letter.upper()}", None
-            return catalog, host, letter
-    return None, name, None

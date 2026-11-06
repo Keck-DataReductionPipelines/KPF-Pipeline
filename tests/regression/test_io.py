@@ -1031,8 +1031,8 @@ class TestBuildMiniDatabaseComments:
         assert mini_db["COMMENTS"][2] == "WARNINGS: 1 fatal, 0 non-fatal"
         # The details are in the log, keyed by filename.
         assert (
-            "OBJECT is Unknown: the cards canonicalize to different names "
-            "('HD 10700' vs 'HD 10701')" in caplog.text
+            "OBJECT '10700' / TARGNAME 'HD 10701': the cards name different "
+            "targets ('HD 10700' vs 'HD 10701')" in caplog.text
         )
         assert "cannot classify frame (IMTYPE='Arclamp', OCTAGON='Home'" in caplog.text
 

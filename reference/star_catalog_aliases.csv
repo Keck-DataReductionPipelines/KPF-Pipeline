@@ -1,17 +1,32 @@
-catalog,pattern,canonical
-HD,"(?:HD\s*)?(\d{1,6})",HD {}
-HIP,HIP\s*(\d+),HIP {}
-HR,HR\s*(\d+),HR {}
-GJ,"GJ\s*(\d+(?:\.\d+)?)",GJ {}
-HAT-P,HAT[\s-]*P[\s-]*(\d+),HAT-P-{}
-WASP,WASP[\s-]*(\d+),WASP-{}
-KIC,KIC[\s-]*(\d+),KIC {}
-KOI,KOI[\s-]*(\d+),KOI-{}
-Kepler,Kepler[\s-]*(\d+),Kepler-{}
-K2,K2[\s-]*(\d+),K2-{}
-TOI,(?:TOI[\s-]*|T0*)(\d+),TOI-{}
-TIC,TIC[\s-]*(\d+),TIC {}
-Gaia,"Gaia[\s_]*(\d{10,19})",Gaia {}
-Gaia,"(\d{17,19})",Gaia {}
-Gaia,"(?:Gaia[\s_]*)?EDR3[\s_]*(\d{10,19})",Gaia DR3 {}
-Gaia,"(?:Gaia[\s_]*)?(DR[23])[\s_]*(\d{10,19})",Gaia {} {}
+catalog,pattern,canonical,numeric
+HD,"(?:HD ?)?(\d{1,6})",HD {},no
+HIP,HIP ?(\d+),HIP {},no
+HR,HR ?(\d+),HR {},no
+GJ,"(?:GJ|Gl|Gliese) ?(\d+)((?:\.\d+)?)",GJ {}{},no
+HAT-P,HAT[ -]*P[ -]*(\d+),HAT-P-{},no
+HATS,"HATS[ -]*(\d+)",HATS-{},no
+WASP,WASP[ -]*(\d+),WASP-{},no
+KELT,"KELT[ -]*(\d+)",KELT-{},no
+TrES,"TrES[ -]*(\d+)",TrES-{},no
+XO,"XO[ -]*(\d+)",XO-{},no
+Qatar,"Qatar[ -]*(\d+)",Qatar {},no
+MASCARA,"MASCARA[ -]*(\d+)",MASCARA-{},no
+LHS,"LHS ?(\d+)",LHS {},no
+KIC,KIC[ -]*(\d+),KIC {},yes
+Kepler,Kepler[ -]*(\d+),Kepler-{},no
+KOI,(?:KOI[ -]*|C?K0)(\d+),KOI-{},no
+EPIC,EPIC[ -]*(\d+),EPIC {},yes
+K2,K2[ -]*(\d+),K2-{},no
+TOI,(?:TOI[ -]*|T)(\d+),TOI-{},no
+TIC,TIC[ -]*(\d+),TIC {},yes
+Gaia,"Gaia ?(\d{10,19})",Gaia {},yes
+Gaia,"(\d{17,19})",Gaia {},yes
+Gaia,"(?:Gaia ?)?EDR3 ?(\d{10,19})",Gaia DR3 {},yes
+Gaia,"(?:Gaia ?)?DR([23]) ?(\d{10,19})",Gaia DR{} {},yes
+ADS,ADS ?(\d+),ADS {},no
+BD,"BD ?([+-]\d{2}) ?(\d+)",BD{} {},no
+CD,"CD ?([+-]\d{2}) ?(\d+)",CD{} {},no
+CPD,"CPD ?([+-]\d{2}) ?(\d+)",CPD{} {},no
+GCVS,"V ?(\d{3,}) ?([A-Za-z]{3})",V{} {},no
+TYC,"TYC[ -]*(\d+)-(\d+)-(\d)",TYC {}-{}-{},no
+WD,"WD ?(\d{4}[+-]\d{3})",WD {},no
