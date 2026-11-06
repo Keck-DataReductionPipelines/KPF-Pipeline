@@ -16,7 +16,7 @@ class CheckpointL0(Checkpoint):
     LEVEL = "L0"
     RAISE_FLAGS = {
         "none": (),
-        "default": ("DATAPRL0", "DATTIMOK", "TARGETOK", "READOK"),
+        "default": ("DATAPRL0", "DATTIMOK", "TARGETOK", "READOK", "EMSCIPR"),
         "engineering": ("DATAPRL0",),
     }
     DIAGNOSTICS = (DiagL0, Guider, ExposureMeter, Telemetry)

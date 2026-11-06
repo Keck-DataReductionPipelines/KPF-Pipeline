@@ -169,6 +169,12 @@ class TestQCLevels:
         with pytest.raises(ValueError, match="DATAPRL0 = 0"):
             chk.raise_on_fatal_qc_flag()
 
+    def test_default_l0_raises_on_missing_expmeter(self):
+        l0 = KPF0()
+        l0.headers["QUALITY_CONTROL"]["EMSCIPR"] = (0, "expmeter present")
+        with pytest.raises(ValueError, match="EMSCIPR = 0"):
+            CheckpointL0(l0).raise_on_fatal_qc_flag()
+
     def test_default_when_unset(self):
         chk = CheckpointL2(KPF2())
         assert chk.qc_level == "default"
