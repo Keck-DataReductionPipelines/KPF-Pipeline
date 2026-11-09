@@ -8,7 +8,7 @@ from pathlib import Path
 from astropy.io import fits
 
 from kpfpipe import SOLAR_SYSTEM_OBJECTS
-from kpfpipe.utils.kpf import kpf_target_name
+from kpfpipe.utils.target import reconcile_gaiaid, reconcile_object
 
 logger = logging.getLogger(__name__)
 
@@ -225,8 +225,7 @@ class HeaderParser:
             ):
                 raise HeaderError(
                     f"{self._label}: {cal_object} frame with every fiber shutter "
-                    f"closed ({', '.join(_SHUTTERS)}): no lamp light reached the "
-                    "CCD, so the frame is no calibration"
+                    "closed; no lamp light reached the CCD"
                 )
             self._check_cal_object(cal_object)
             self.DRP_KEYWORDS["OBJECT"] = cal_object
@@ -250,14 +249,9 @@ class HeaderParser:
         return "" if raw.lower() == "none" else raw
 
     def _gaiaid(self):
-        """The sanitized GAIAID (``Gaia DR3 <id>``, ``Gaia DR2 <id>`` or
-        ``Gaia <id>``); None for a blank card, a frame other than a non-solar
-        Target, or a solar-system OBJECT.
-
-        A non-blank card that is no Gaia id raises HeaderError. A Gaia-named
-        OBJECT must name the same source: a blank GAIAID takes the OBJECT's, and
-        whichever carries the release lends it to the other.
-        """
+        """The sanitized GAIAID (``target.reconcile_gaiaid``); None for a blank card,
+        a frame other than a non-solar Target, or a solar-system OBJECT. A Gaia-named
+        OBJECT is reconciled with it."""
         if self.DRP_KEYWORDS["OBSTYPE"] != "Target" or self.DRP_KEYWORDS["ISSOLAR"]:
             return None
         raw = self._native_gaiaid()
@@ -268,203 +262,35 @@ class HeaderParser:
                     f"GAIAID {raw!r} on solar-system target {obj!r}; GAIAID blank"
                 )
             return None
-        catalog, gaiaid, _ = kpf_target_name(raw)
-        if catalog != "Gaia":
-            if raw:
-                raise HeaderError(
-                    f"{self._label}: GAIAID {raw!r} is not a Gaia DR2/DR3 "
-                    "source_id. Accepted: '[Gaia] DR3 <id>', '[Gaia] DR2 <id>' "
-                    "(EDR3 = DR3) or 'Gaia <id>' with a 10-19 digit source_id, or a "
-                    "bare 17-19 digit id; a shorter bare number is refused, as it "
-                    "could be another catalog's (e.g. an HD number). L0 header must "
-                    "be fixed: correct GAIAID (a short id needs its release, e.g. "
-                    "'Gaia DR3 4295806720') or blank it."
-                )
-            gaiaid = None
-
-        if kpf_target_name(obj)[0] != "Gaia":
-            return gaiaid
-        if gaiaid is None:
-            self._warn(f"GAIAID blank; GAIAID is OBJECT {obj!r}")
-            return obj
-        *obj_release, obj_id = obj.split()[1:]
-        *gaia_release, gaia_id = gaiaid.split()[1:]
-        if obj_id != gaia_id:
-            raise HeaderError(
-                f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
-                f"different Gaia sources (source_id {obj_id} vs {gaia_id}). L0 "
-                "header must be fixed: make OBJECT and GAIAID name the same source."
-            )
-        if obj_release and gaia_release and obj != gaiaid:
-            raise HeaderError(
-                f"{self._label}: OBJECT {obj!r} and GAIAID {gaiaid!r} name "
-                f"different Gaia sources: one source_id under releases "
-                f"{obj_release[0]} and {gaia_release[0]}. DR2 and DR3 source_ids are "
-                "separate catalogs (a DR2 id can name another source, or none, in "
-                "DR3), so the pair is not taken as one star. L0 header must be "
-                "fixed: give OBJECT and GAIAID the same release, or blank one."
-            )
-        resolved = max(obj, gaiaid, key=len)
-        if obj != resolved:
-            self._warn(
-                f"OBJECT {obj!r} takes the GAIAID release; OBJECT is {resolved!r}"
-            )
-            self.DRP_KEYWORDS["OBJECT"] = resolved
-        if gaiaid != resolved:
-            self._warn(
-                f"GAIAID {raw!r} takes the OBJECT release; GAIAID is {resolved!r}"
-            )
-        return resolved
+        try:
+            obj, gaiaid = reconcile_gaiaid(obj, raw, self._warn)
+        except ValueError as e:
+            raise HeaderError(f"{self._label}: {e}") from None
+        self.DRP_KEYWORDS["OBJECT"] = obj
+        return gaiaid or None
 
     def _target_object(self):
-        """A Target frame's OBJECT, from the native OBJECT and TARGNAME:
-
-        - ``SoCal`` for the solar pair (OBJECT ``SoCal``, TARGNAME ``Sun``);
-        - the solar-system body (reference/solar_system_objects.csv) the cards
-          name as a whole word (``Io`` with ``Io Eclipse`` -> ``Io``);
-        - else the canonical target name (``kpf_target_name``, e.g. ``HD 10700``;
-          a planet letter is dropped for the host star). The cards must agree,
-          or one must be the other's bare catalog prefix (``TOI`` with
-          ``TOI-969``) or lack only its component letter (``WASP-173`` with
-          ``WASP-173B`` -> ``WASP-173 B``); a planet letter on the other card
-          then raises HeaderError.
-
-        A blank card yields the other; anything else is ``Unknown``
-        (``_unknown_target``).
-        """
+        """A Target frame's OBJECT, from the native OBJECT and TARGNAME
+        (``target.reconcile_object``)."""
         obj = str(self.WMKO_HEADER.get("OBJECT") or "").strip()
         targname = str(self.WMKO_HEADER.get("TARGNAME") or "").strip()
-        if (obj, targname) == ("SoCal", "Sun"):
-            return "SoCal"
-        # The solar-system bodies each non-blank card names.
-        bodies = [
-            {
-                body
-                for body in SOLAR_SYSTEM_OBJECTS
-                if re.search(rf"\b{body}\b", s, re.IGNORECASE)
-            }
-            for s in (obj, targname)
-            if s
-        ]
-        named = sorted(set().union(*bodies))
-        if any(len(b) > 1 for b in bodies):
-            return self._unknown_target(
-                f"the cards name more than one solar-system body {named}"
+        n_warnings = len(self.warnings)
+        try:
+            resolved = reconcile_object(
+                obj, targname, self._native_gaiaid(), self._warn
             )
-        obj_catalog, obj_name, obj_planet = kpf_target_name(obj)
-        targ_catalog, targ_name, targ_planet = kpf_target_name(targname)
-        for card, raw, catalog, planet, host in (
-            ("OBJECT", obj, obj_catalog, obj_planet, obj_name),
-            ("TARGNAME", targname, targ_catalog, targ_planet, targ_name),
-        ):
-            # A trailing letter can name a stellar component or a planet
-            # (kpf_target_name decides by case), and the two are easily confused.
-            ambiguity = "a trailing letter can denote a binary component or a planet"
-            if planet:
-                self._warn(
-                    f"{card} {raw!r} names planet {planet!r}; host star {host!r} "
-                    f"({ambiguity})"
-                )
-            elif catalog and re.search(r"\d [A-Z]$", host):
-                self._warn(
-                    f"{card} {raw!r} names stellar component {host!r} ({ambiguity})"
-                )
-        shorter, longer = sorted((obj_name, targ_name), key=len)
-        if bodies and bodies[0] and all(b == bodies[0] for b in bodies):
-            (result,) = bodies[0]
-            if not (obj and targname):
-                self._warn(
-                    f"OBJECT {obj!r} / TARGNAME {targname!r} has a blank card; "
-                    f"OBJECT is {result!r}"
-                )
-        elif obj and targname and obj_name == targ_name:
-            result = obj_name
-        elif (
-            obj_catalog
-            and obj_catalog == targ_catalog
-            and re.fullmatch(re.escape(shorter) + " ?[A-Z]", longer)
-        ):
-            if obj_planet or targ_planet:
-                raise HeaderError(
-                    f"{self._label}: OBJECT {obj!r} / TARGNAME {targname!r} "
-                    "pair a planet letter with a component letter; ambiguous. L0 "
-                    "header must be fixed: name the same star on both cards."
-                )
-            result = longer
-            self._warn(
-                f"OBJECT {obj!r} / TARGNAME {targname!r} differ only by a "
-                f"component letter; OBJECT is {result!r}"
-            )
-        elif targ_catalog and obj.lower() == targ_catalog.lower():
-            result = targ_name
-        elif obj_catalog and targname.lower() == obj_catalog.lower():
-            result = obj_name
-        elif not obj and targname:
-            self._warn(f"OBJECT blank; OBJECT is TARGNAME {targname!r}")
-            result = targ_name
-        elif obj and not targname:
-            self._warn(f"TARGNAME blank; OBJECT is {obj!r}")
-            result = obj_name
-        elif not (obj or targname):
-            return self._unknown_target("OBJECT and TARGNAME are both blank")
-        elif named:
-            return self._unknown_target(
-                f"the cards disagree and name solar-system body {named} "
-                f"(canonical {obj_name!r} vs {targ_name!r})"
-            )
-        else:
-            return self._unknown_target(
-                f"the cards canonicalize to different names ({obj_name!r} vs "
-                f"{targ_name!r}): often legitimate aliases of one star (e.g. HD "
-                "number vs common name; kpf_target_name does not cross-identify "
-                "catalogs), else different stars or components, or a typo"
-            )
-        if result.isdigit():
-            return self._unknown_target(
-                f"{result!r} is a bare number in no known catalog (e.g. a "
-                "truncated Gaia source_id)"
-            )
-        if result != obj or result != targname:
+        except ValueError as e:
+            raise HeaderError(f"{self._label}: {e}") from None
+        # A warning already names the resolution; log only a silent one.
+        if len(self.warnings) == n_warnings and (obj, targname) != (resolved, resolved):
             logger.info(
                 "%s: OBJECT %r / TARGNAME %r resolved to %r",
                 self._label,
                 obj,
                 targname,
-                result,
+                resolved,
             )
-        return result
-
-    def _unknown_target(self, why):
-        """Return ``Unknown`` for a Target whose cards name no single target,
-        warning ``why`` with the native cards; raise HeaderError if GAIAID is
-        blank too.
-
-        ``Unknown`` is common and usually not bad data: the cards often carry
-        legitimate aliases of one star (OBJECT ``201092`` / TARGNAME ``61 Cyg B``),
-        which ``kpf_target_name`` does not cross-identify. Most such frames carry
-        a GAIAID, from which AstroQuery resolves OBJECT
-        (``AstroQuery._resolve_identity``); with GAIAID blank nothing locates the
-        target, so fail here rather than in AstroQuery.
-        """
-        native = self.WMKO_HEADER
-        context = (
-            f"OBJECT is Unknown: {why} [native OBJECT={native.get('OBJECT')!r}, "
-            f"TARGNAME={native.get('TARGNAME')!r}]"
-        )
-        raw = self._native_gaiaid()
-        if not raw:
-            raise HeaderError(
-                f"{self._label}: {context}; GAIAID is blank, so nothing "
-                "identifies the target for astrometry. L0 header must be fixed: "
-                "correct OBJECT/TARGNAME or set GAIAID."
-            )
-        catalog, gaiaid, _ = kpf_target_name(raw)
-        if catalog == "Gaia":  # else _gaiaid raises on the malformed card
-            self._warn(
-                f"{context}; AstroQuery resolves OBJECT and astrometry from GAIAID "
-                f"{gaiaid!r}"
-            )
-        return "Unknown"
+        return resolved
 
     def _check_cal_object(self, cal_object):
         """Warn if the native OBJECT is no ``autocal-*`` label agreeing with

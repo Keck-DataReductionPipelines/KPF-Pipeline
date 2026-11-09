@@ -45,8 +45,9 @@ import sys
 
 import kpfpipe
 from kpfpipe.utils.config import ConfigHandler
-from kpfpipe.utils.kpf import get_datecode, get_obs_id, kpf_target_name
+from kpfpipe.utils.kpf import get_datecode, get_obs_id
 from kpfpipe.utils.logger import setup_batch_logging
+from kpfpipe.utils.target import parse_target, same_target
 from scripts._argparse import (
     cache_parser,
     data_dirs_parser,
@@ -109,7 +110,7 @@ def parse_args(argv=None):
     ap.add_argument(
         "--target",
         required=True,
-        help="target, canonicalized as HeaderParser does OBJECT (kpf_target_name): "
+        help="target, matched to OBJECT as one identifier (same_target): "
         "'10700', 'HD10700' and 'HD 10700' all name 'HD 10700'",
     )
     # Stage toggles (which *stage* to run) -- unrelated to reduce's
@@ -155,7 +156,8 @@ def parse_args(argv=None):
         "science stage's own default config)",
     )
     args = resolve_dates(ap, ap.parse_args(argv))
-    _, target, planet = kpf_target_name(args.target.strip())
+    parsed = parse_target(args.target.strip())
+    target, planet = parsed.name, parsed.planet
     if planet:
         logger.warning(
             "--target %r names planet %r; host star %r", args.target, planet, target
@@ -193,7 +195,7 @@ def discover_science_obs_ids(data_input, target, start, end, jobs, cache="rw"):
         # AstroQuery writes to the products, so an Unknown or low-tier (TIC/KIC/
         # Gaia) frame AstroQuery renames is missed or found only by its old name.
         # A convenience-script gap (see module docstring), not a pipeline defect.
-        is_target = df["DRP_OBJECT"].astype(str).str.strip() == str(target)
+        is_target = df["DRP_OBJECT"].astype(str).map(lambda o: same_target(o, target))
         matched = df.loc[is_object & is_target]
         is_junk = matched["ISJUNK"].astype(bool)
         hits = [get_obs_id(fn) for fn in matched.loc[~is_junk, "FILENAME"]]

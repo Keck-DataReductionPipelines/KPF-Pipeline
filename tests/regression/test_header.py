@@ -11,7 +11,6 @@ from astropy.io import fits
 from kpfpipe.data_models.level0 import KPF0
 from kpfpipe.utils import header as header_module
 from kpfpipe.utils.header import HeaderError, HeaderParser
-from kpfpipe.utils.kpf import kpf_target_name
 
 TESTDATA_L0 = Path(__file__).parent.parent / "testdata" / "L0" / "20240405"
 
@@ -226,16 +225,21 @@ class TestFrameIdentity:
             ("TIC436314778", "TIC 436314778", "TIC 436314778"),
             ("KIC4736208", "KIC 4736208", "KIC 4736208"),
             ("WASP127", "WASP-127", "WASP-127"),
+            ("BD+04_4988", "BD+04 4988", "BD+04 4988"),
+            ("V1298Tau", "V1298 Tau", "V1298 Tau"),
+            # Spelling variants of an uncatalogued name agree (same_target).
+            ("HE1033+0059", "HE 1033+0059", "HE1033+0059"),
+            ("BL_Lac", "BL Lac", "BL Lac"),
             # A bare system name reconciles with one of its components.
-            ("WASP-173", "WASP-173B", "WASP-173 B"),
-            ("WASP-173B", "WASP-173", "WASP-173 B"),
+            ("WASP-173", "WASP-173B", "WASP-173B"),
+            ("WASP-173B", "WASP-173", "WASP-173B"),
             ("WASP-173A", "WASP-173B", "Unknown"),
-            ("115404A", "HD 115404 A", "HD 115404 A"),
-            ("hd21019A", "21019", "HD 21019 A"),
-            ("hd21019a", "21019", "HD 21019 A"),
-            ("WASP-173a", "WASP-173", "WASP-173 A"),
-            ("Kepler-444a", "Kepler-444 A", "Kepler-444 A"),
-            ("TOI-1338B", "TOI-1338", "TOI-1338 B"),
+            ("115404A", "HD 115404 A", "HD 115404A"),
+            ("hd21019A", "21019", "HD 21019A"),
+            ("hd21019a", "21019", "HD 21019A"),
+            ("WASP-173a", "WASP-173", "WASP-173A"),
+            ("Kepler-444a", "Kepler-444 A", "Kepler-444A"),
+            ("TOI-1338B", "TOI-1338", "TOI-1338B"),
             # A lowercase planet letter (b-z) is dropped for the host star.
             ("TOI-969b", "TOI-969", "TOI-969"),
             # Purely numeric catalogs take no letter.
@@ -257,6 +261,7 @@ class TestFrameIdentity:
             # Unreconcilable: other catalogs, other ids, unknown lengths.
             ("HD", "TOI-969", "Unknown"),
             ("HD 10700", "HD 10701", "Unknown"),
+            ("BD+03 2870", "BD-03 2870", "Unknown"),
             ("343600706696532", "Gaia 3436007066965322240", "Unknown"),
             ("343600706696532", "343600706696532", "Unknown"),
             ("Gaia 2077618037775709568", "Gaia DR3 2077618037775709568", "Unknown"),
@@ -296,7 +301,7 @@ class TestFrameIdentity:
     def test_solar_system_blank_card_warned(self):
         parser = HeaderParser(_hdr("Object", OBJECT="Ganymede Penumbra", TARGNAME=""))
         assert parser.DRP_KEYWORDS["OBJECT"] == "Ganymede"
-        assert any("blank card" in w for w in parser.warnings)
+        assert "TARGNAME blank; OBJECT is 'Ganymede'" in parser.warnings
 
     def test_reconciliation_logged_at_info(self, caplog):
         with caplog.at_level(logging.INFO, logger="kpfpipe.utils.header"):
@@ -416,12 +421,12 @@ class TestGaiaId:
         ],
     )
     def test_malformed_raises(self, native):
-        with pytest.raises(HeaderError, match="is not a Gaia DR2/DR3 source_id"):
+        with pytest.raises(HeaderError, match="is not a Gaia source_id"):
             self._parse(native)
 
     @pytest.mark.parametrize("obj", ["Gaia 12 b", "Gaia DR1 123456789012345678"])
     def test_gaia_like_object_not_copied(self, obj):
-        # Only an OBJECT kpf_target_name names a Gaia id lends it to GAIAID.
+        # Only an OBJECT parse_target names a Gaia id lends it to GAIAID.
         assert self._parse(None, obj=obj).DRP_KEYWORDS["GAIAID"] is None
 
     @pytest.mark.parametrize("native", [None, "", "None", "none"])
@@ -473,20 +478,30 @@ class TestGaiaId:
         assert not self._gaia_warnings(parser)
 
     def test_short_bare_id_message_names_the_fix(self):
-        with pytest.raises(HeaderError, match="shorter bare number is refused"):
+        with pytest.raises(HeaderError, match="a shorter id needs its release"):
             self._parse("4295806720")
 
     @pytest.mark.parametrize(
         "obj, native, reason",
         [
-            (_G19, f"DR3 {_G18}0", f"source_id {_G19} vs {_G18}0"),
-            (f"Gaia DR2 {_G19}", f"DR3 {_G19}", "releases DR2 and DR3"),
+            (
+                _G19,
+                f"DR3 {_G18}0",
+                f"OBJECT 'Gaia {_G19}' and GAIAID 'Gaia DR3 {_G18}0' name different "
+                "Gaia sources",
+            ),
+            (
+                f"Gaia DR2 {_G19}",
+                f"DR3 {_G19}",
+                f"OBJECT 'Gaia DR2 {_G19}' and GAIAID 'Gaia DR3 {_G19}' name "
+                "different Gaia releases",
+            ),
         ],
     )
     def test_disagreement_with_gaia_object_raises(self, obj, native, reason):
-        with pytest.raises(HeaderError, match="name different Gaia sources") as err:
+        # The message names both conflicting ids.
+        with pytest.raises(HeaderError, match=re.escape(reason)):
             self._parse(native, obj=obj)
-        assert reason in str(err.value)
 
 
 def _traces(keywords, prefix):
@@ -672,12 +687,21 @@ class TestUnknownTarget:
     HeaderError carrying the same diagnosis."""
 
     _CASES = [
-        # Legitimate aliases of one star, which kpf_target_name doesn't cross-identify.
-        ("201092", "61 Cyg B", "canonicalize to different names ('HD 201092'"),
-        ("", "", "OBJECT and TARGNAME are both blank"),
-        ("343600706696532", "343600706696532", "bare number in no known catalog"),
-        ("Tethys & Enceladus", "Tethys", "more than one solar-system body"),
-        ("Io", "Where It Was 06:40", "name solar-system body ['Io']"),
+        # Legitimate aliases of one star, which parse_target doesn't cross-identify.
+        (
+            "201092",
+            "61 Cyg B",
+            "the cards name different targets ('HD 201092' vs '61 Cyg B')",
+        ),
+        ("", "", "both cards blank"),
+        ("343600706696532", "343600706696532", "a bare number in no known catalog"),
+        ("343600706696532", "", "a bare number in no known catalog"),
+        (
+            "Tethys & Enceladus",
+            "Tethys",
+            "the cards name more than one solar-system body ['Enceladus', 'Tethys']",
+        ),
+        ("Io", "Where It Was 06:40", "the cards disagree on solar-system body ['Io']"),
     ]
 
     @pytest.mark.parametrize("obj, targname, reason", _CASES)
@@ -687,14 +711,14 @@ class TestUnknownTarget:
         )
         assert parser.DRP_KEYWORDS["OBJECT"] == "Unknown"
         assert parser.DRP_KEYWORDS["GAIAID"] == f"Gaia DR3 {_G19}"
-        (warning,) = [w for w in parser.warnings if "OBJECT is Unknown" in w]
-        assert reason in warning
-        assert f"[native OBJECT={obj!r}, TARGNAME={targname!r}]" in warning
+        # The one OBJECT warning: no blank-card note on the same cards.
+        (warning,) = [w for w in parser.warnings if "OBJECT is" in w]
+        assert warning.startswith(f"OBJECT {obj!r} / TARGNAME {targname!r}: {reason}")
         assert f"astrometry from GAIAID 'Gaia DR3 {_G19}'" in warning
 
     @pytest.mark.parametrize("obj, targname, reason", _CASES)
     def test_blank_gaiaid_raises(self, obj, targname, reason):
-        with pytest.raises(HeaderError, match="GAIAID is blank") as err:
+        with pytest.raises(HeaderError, match="GAIAID blank") as err:
             HeaderParser(_hdr("Object", OBJECT=obj, TARGNAME=targname))
         assert reason in str(err.value)
 
@@ -736,8 +760,8 @@ class TestWarnings:
                     TARGNAME="HD 10701",
                     GAIAID="Gaia DR3 2452378776434477184",
                 ),
-                "OBJECT is Unknown: the cards canonicalize to different names "
-                "('HD 10700' vs 'HD 10701')",
+                "OBJECT '10700' / TARGNAME 'HD 10701': the cards name different "
+                "targets ('HD 10700' vs 'HD 10701'); OBJECT is Unknown",
             ),
             (
                 _hdr("Object", OBJECT="K2-157", TARGNAME=""),
@@ -745,7 +769,7 @@ class TestWarnings:
             ),
             (
                 _hdr("Object", OBJECT="", TARGNAME="K2-157"),
-                "OBJECT blank; OBJECT is TARGNAME 'K2-157'",
+                "OBJECT blank; OBJECT is 'K2-157'",
             ),
             (
                 _hdr(
@@ -891,38 +915,3 @@ class TestRealData:
         for key, value in keywords.items():
             ext = "QUALITY_CONTROL" if key.startswith("READTIM") else "PRIMARY"
             assert l0.headers[ext].get(key) == value, key
-
-
-class TestKpfTargetName:
-    """kpf_target_name: the one apparatus for target identifiers."""
-
-    @pytest.mark.parametrize(
-        "name, expected",
-        [
-            ("57555", ("HD", "HD 57555", None)),
-            ("hd21019a", ("HD", "HD 21019 A", None)),
-            ("HD 189733b", ("HD", "HD 189733", "b")),
-            (
-                "Gaia_EDR3_2077618037775709568",
-                ("Gaia", "Gaia DR3 2077618037775709568", None),
-            ),
-            ("hr3662", ("HR", "HR 3662", None)),
-            ("GJ12", ("GJ", "GJ 12", None)),
-            ("GJ 105.5", ("GJ", "GJ 105.5", None)),
-            ("HAT-P-4B", ("HAT-P", "HAT-P-4 B", None)),
-            ("HATP7b", ("HAT-P", "HAT-P-7", "b")),
-            ("tau Cet", (None, "tau Cet", None)),
-        ],
-    )
-    def test_canonical(self, name, expected):
-        assert kpf_target_name(name) == expected
-
-    def test_name_matching_several_rows_raises(self, monkeypatch):
-        # Row order never picks a winner: overlapping patterns are a csv bug.
-        rows = [
-            ("HD", re.compile(r"(\d+)"), "HD {}"),
-            ("HIP", re.compile(r"(\d+)"), "HIP {}"),
-        ]
-        monkeypatch.setattr("kpfpipe.utils.kpf._STAR_CATALOG_ALIASES", rows)
-        with pytest.raises(ValueError, match="matches several"):
-            kpf_target_name("10700")
