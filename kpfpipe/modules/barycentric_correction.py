@@ -302,6 +302,21 @@ class BarycentricCorrection:
         f_ext = rate * dt_gap
         return t_ext, f_ext
 
+    @staticmethod
+    def _bin_channels(w, f, n):
+        """
+        Sum flux over groups of ``n`` adjacent wavelength channels.
+
+        Channels are sorted by wavelength; the bluest bin absorbs any remainder.
+        Returns (w_bin, f_bin): mean wavelength per bin (ascending) and summed
+        flux, shapes (nbin,) and (nrow, nbin).
+        """
+        order = np.argsort(w)
+        starts = np.r_[0, np.arange(len(w) % n + n, len(w), n)]
+        f_bin = np.add.reduceat(f[:, order], starts, axis=1)
+        w_bin = np.add.reduceat(w[order], starts) / np.diff(np.r_[starts, len(w)])
+        return w_bin, f_bin
+
     def _compute_per_channel_flux_weighted_midpoint_time(
         self, interpolate=True, extrapolate=True, fix_outliers=True
     ):
@@ -311,7 +326,8 @@ class BarycentricCorrection:
         Optionally fills gaps between readings (``interpolate``), before/after the
         shutter window (``extrapolate``, using DATE-BEG/DATE-END), and replaces
         outlier readings (``fix_outliers``) before collapsing the time axis to a
-        flux-weighted mean per channel.
+        flux-weighted mean per channel. Channels are binned 2x, 4x, then 8x along
+        wavelength until no bin has SNR < 2 or non-positive flux; raises otherwise.
         """
         t_beg, t_mid, t_end, keep = self._get_timestamps()
         w_em, f = self._get_normalized_flux()
@@ -330,10 +346,10 @@ class BarycentricCorrection:
         if fix_outliers:
             f = self._fix_expmeter_outliers(f)
 
-        # Per-channel SNR from the measured readings only (gap rows are model
-        # estimates); per-pixel noise from successive-reading differences.
-        f_noise = mad_std(np.diff(f, axis=0)) / np.sqrt(2)
-        channel_snr = np.sum(f, axis=0) / (f_noise * np.sqrt(len(f)))
+        # SNR (below) uses the measured readings only, the first n_read rows of the
+        # stacked f (gap rows are model estimates); noise from successive-reading
+        # differences.
+        n_read = len(f)
 
         # Cache boundary readings; f[0] and f[-1] get clobbered by later vstacks.
         f_first_reading = f[0].copy()
@@ -365,38 +381,30 @@ class BarycentricCorrection:
                 t = Time(np.concatenate([t.jd, [t_ext.jd]]), format="jd", scale="utc")
                 f = np.vstack([f, f_ext])
 
-        channel_tot = np.sum(f, axis=0)
-        low_snr_channels = channel_snr < 2
-        negative_channels = channel_tot <= 0
-
-        if np.any(low_snr_channels):
+        # Bin channels 1x, 2x, 4x, 8x until no bin has SNR < 2 or non-positive flux.
+        for n in (1, 2, 4, 8):
+            w_bin, f_bin = self._bin_channels(w_em, f, n)
+            f_read = f_bin[:n_read]
+            f_noise = mad_std(np.diff(f_read, axis=0)) / np.sqrt(2)
+            channel_snr = np.sum(f_read, axis=0) / (f_noise * np.sqrt(n_read))
+            channel_tot = np.sum(f_bin, axis=0)
+            bad = (channel_snr < 2) | (channel_tot <= 0)
+            if not np.any(bad):
+                break
             logger.info(
-                "%d exposure meter channels with SNR < 2 identified, "
-                "interpolating over adjacent channels",
-                np.sum(low_snr_channels),
+                "%d of %d exposure meter bins (%dx) have SNR < 2 or non-positive flux",
+                np.sum(bad),
+                len(bad),
+                n,
             )
-
-        if np.any(negative_channels):
-            logger.info(
-                "%d exposure meter channels with negative flux counts identified, "
-                "interpolating over adjacent channels",
-                np.sum(negative_channels),
-            )
-
-        good = ~(low_snr_channels | negative_channels)
-        if np.sum(good) / len(good) < 0.9:
+        else:
             raise ValueError(
-                f"{np.sum(~good)} of {len(good)} exposure meter channels flagged "
-                "as bad; cannot reliably compute flux-weighted midpoint"
+                f"{np.sum(bad)} of {len(bad)} exposure meter bins bad after 8x "
+                "binning; cannot reliably compute flux-weighted midpoint"
             )
 
-        jd_good = np.sum(t.jd[:, None] * f[:, good], axis=0) / channel_tot[good]
-        order = np.argsort(w_em[good])
-        t_em = Time(
-            np.interp(w_em, w_em[good][order], jd_good[order]),
-            format="jd",
-            scale="utc",
-        )
+        jd_bin = np.sum(t.jd[:, None] * f_bin, axis=0) / channel_tot
+        t_em = Time(np.interp(w_em, w_bin, jd_bin), format="jd", scale="utc")
         return w_em, t_em
 
     # ------------------------------------------------------------------
