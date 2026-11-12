@@ -745,15 +745,15 @@ class TestExposureMeterChannels:
             for metric in ("SAT", "NEG", "INF"):
                 assert results[f"EM{fiber}{metric}"][0] == 0
 
-    def test_saturation_is_per_reading(self, tmp_path):
-        # 3 saturated elements over the 2 interior readings -> 1.5 per reading.
+    def test_saturation_is_max_per_reading(self, tmp_path):
+        # 2 and 1 saturated elements in the 2 interior readings -> max 2.
         flux = _EM_CLEAN_FLUX.copy()
         flux[1, :2] = 0.95 * 1.93e6
         flux[2, 0] = 0.95 * 1.93e6
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCISAT"] == 1.5
+        assert results["EMSCISAT"] == 2
 
     def test_saturation_drops_edge_readings(self, tmp_path):
         # The first and last readings are partial, so saturation there is dropped.
@@ -762,7 +762,7 @@ class TestExposureMeterChannels:
         results = ExposureMeter(
             self._make_l0_with_expmeter(tmp_path, flux)
         ).expmeter_channel_metrics()
-        assert results["EMSCISAT"] == 0.0
+        assert results["EMSCISAT"] == 0
 
     def test_negative_run_length(self, tmp_path):
         # A channel counts as negative when its time-summed flux is negative.

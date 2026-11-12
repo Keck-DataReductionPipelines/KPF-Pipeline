@@ -40,10 +40,10 @@ class ExposureMeter(Diagnostics):
     def expmeter_channel_metrics(self):
         """EM{SCI,SKY}{SAT,NEG,INF}: per-fiber exposure meter channel metrics.
 
-        Each fiber is judged on its own. SAT is saturated elements per reading --
-        elements above 90% of the 1.93e6 reduced-spectrum saturation level, over
-        the interior readings (the first and last are partial and are dropped
-        when there are 3+). NEG is the longest run of adjacent channels whose
+        Each fiber is judged on its own. SAT is the most saturated elements in any
+        one reading -- elements above 90% of the 1.93e6 reduced-spectrum saturation
+        level, over the interior readings (the first and last are partial and are
+        dropped when there are 3+). NEG is the longest run of adjacent channels whose
         time-summed flux is negative, the signature of bias over-subtraction in
         the raw EM images; INF is the same run length for channels holding a
         non-finite reading.
@@ -52,8 +52,8 @@ class ExposureMeter(Diagnostics):
         for ext, fiber in (("EXPMETER_SCI", "SCI"), ("EXPMETER_SKY", "SKY")):
             _, flux = self._expmeter_flux(ext)
             interior = flux[1:-1] if len(flux) >= 3 else flux
-            values[f"EM{fiber}SAT"] = round(
-                float(np.count_nonzero(interior > 0.9 * 1.93e6) / len(interior)), 6
+            values[f"EM{fiber}SAT"] = int(
+                np.count_nonzero(interior > 0.9 * 1.93e6, axis=1).max()
             )
             values[f"EM{fiber}NEG"] = self._longest_run(flux.sum(axis=0) < 0)
             values[f"EM{fiber}INF"] = self._longest_run(~np.isfinite(flux).all(axis=0))

@@ -496,13 +496,13 @@ class QCL0(QC):
         """EXPMETER flux is neither saturated, negative, nor non-finite.
 
         Fails on either fiber. DiagL0 measures each fiber; this applies the
-        limits: at most 1.5 saturated elements per reading, and no run of 20
+        limits: at most 1 saturated element in any reading, and no run of 20
         adjacent negative channels. Non-finite channels are gated the same way as
         negative.
         """
         hdr = self.kpf_obj.headers["QUALITY_CONTROL"]
         for fiber in ("SCI", "SKY"):
-            if float(hdr[f"EM{fiber}SAT"]) > 1.5:
+            if int(hdr[f"EM{fiber}SAT"]) > 1:
                 return False
             if int(hdr[f"EM{fiber}NEG"]) >= 20 or int(hdr[f"EM{fiber}INF"]) >= 20:
                 return False

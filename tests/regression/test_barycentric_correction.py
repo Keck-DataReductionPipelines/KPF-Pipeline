@@ -234,6 +234,23 @@ class TestFixExpmeterOutliers:
         assert BarycentricCorrection._fix_expmeter_outliers(f).shape == f.shape
 
 
+class TestBinChannels:
+    def test_bluest_bin_absorbs_remainder(self):
+        # 10 channels stored red -> blue; n=4 gives a 6-channel blue bin + 4.
+        w = np.arange(5900.0, 4999.0, -100.0)
+        f = np.tile(np.arange(10.0), (2, 1))
+        w_bin, f_bin = BarycentricCorrection._bin_channels(w, f, 4)
+        np.testing.assert_allclose(w_bin, [5250.0, 5750.0])
+        np.testing.assert_allclose(f_bin, [[39.0, 6.0]] * 2)
+
+    def test_unit_width_sorts_only(self):
+        w = np.array([5200.0, 5100.0, 5000.0])
+        f = np.array([[3.0, 2.0, 1.0]])
+        w_bin, f_bin = BarycentricCorrection._bin_channels(w, f, 1)
+        np.testing.assert_allclose(w_bin, [5000.0, 5100.0, 5200.0])
+        np.testing.assert_allclose(f_bin, [[1.0, 2.0, 3.0]])
+
+
 # ------------------------------------------------------------------
 # _get_timestamps / _get_normalized_flux
 # ------------------------------------------------------------------
@@ -272,6 +289,18 @@ class TestGetTimestamps:
         bc = BarycentricCorrection(synthetic_kpf2)
         with pytest.raises(ValueError, match="strictly increasing"):
             bc._get_timestamps()
+
+    def test_bad_corrected_columns_fall_back_to_uncorrected(
+        self, synthetic_kpf2, caplog
+    ):
+        table = _make_expmeter_table()
+        table["Date-Beg-Corr"] = [f"{_T0}00:00:00.000"] * 3
+        synthetic_kpf2.set_data("EXPMETER_SCI", table)
+        bc = BarycentricCorrection(synthetic_kpf2)
+        t_beg, _, _, keep = bc._get_timestamps()
+        assert np.all(keep)
+        assert list(t_beg.isot) == list(table["Date-Beg"])
+        assert "falling back to uncorrected" in caplog.text
 
 
 class TestGetNormalizedFlux:
@@ -459,25 +488,32 @@ class TestFluxWeightedMidpointExpmeter:
         # separates the actual result from the floored one unambiguously.
         assert abs(actual_s - floored_s) > 1.0
 
-    def test_too_many_bad_channels_raises(self, synthetic_kpf2):
-        # One zero-flux channel of two leaves 50% good, below the 90% floor.
+    @staticmethod
+    def _ten_channel_data(**overrides):
         data = {
             "Date-Beg": [
-                "2024-01-01T00:00:00.000",
-                "2024-01-01T00:02:00.000",
-                "2024-01-01T00:04:00.000",
+                f"{_T0}00:00:00.000",
+                f"{_T0}00:02:00.000",
+                f"{_T0}00:04:00.000",
             ],
             "Date-End": [
-                "2024-01-01T00:01:00.000",
-                "2024-01-01T00:03:00.000",
-                "2024-01-01T00:05:00.000",
+                f"{_T0}00:01:00.000",
+                f"{_T0}00:03:00.000",
+                f"{_T0}00:05:00.000",
             ],
-            "5000": _FLUX_VALUE + _FLUX_JITTER,
-            "5100": [0.0, 0.0, 0.0],
         }
+        for i in range(10):
+            data[str(5000 + 100 * i)] = [1000.0 - 50.0 * i, 500.0, 500.0 + 50.0 * i]
+        data.update(overrides)
+        return data
+
+    def test_irreducible_bad_channels_raise(self, synthetic_kpf2):
+        # Every channel non-positive: no binning up to 8x can rescue it.
+        neg = list(-(_FLUX_VALUE + _FLUX_JITTER))
+        data = self._ten_channel_data(**{str(5000 + 100 * i): neg for i in range(10)})
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         bc = BarycentricCorrection(synthetic_kpf2)
-        with pytest.raises(ValueError, match="1 of 2 exposure meter channels"):
+        with pytest.raises(ValueError, match="after 8x binning"):
             bc.compute_flux_weighted_midpoint_times(
                 output="expmeter",
                 interpolate=False,
@@ -485,35 +521,26 @@ class TestFluxWeightedMidpointExpmeter:
                 fix_outliers=False,
             )
 
-    def test_bad_channel_interpolated_from_neighbors(self, synthetic_kpf2):
-        # One zero-flux channel of ten (90% good) is filled from its wavelength
-        # neighbors instead of raising. Neighbors bracket it with distinct times.
-        data = {
-            "Date-Beg": [
-                "2024-01-01T00:00:00.000",
-                "2024-01-01T00:02:00.000",
-                "2024-01-01T00:04:00.000",
-            ],
-            "Date-End": [
-                "2024-01-01T00:01:00.000",
-                "2024-01-01T00:03:00.000",
-                "2024-01-01T00:05:00.000",
-            ],
-        }
-        for i in range(10):
-            data[str(5000 + 100 * i)] = [1000.0 - 50.0 * i, 500.0, 500.0 + 50.0 * i]
-        data["5500"] = [0.0, 0.0, 0.0]
+    def test_bad_channel_resolved_by_2x_binning(self, synthetic_kpf2, caplog):
+        # One zero-flux channel of ten merges with its neighbor at 2x.
+        data = self._ten_channel_data(**{"5500": [0.0, 0.0, 0.0]})
         synthetic_kpf2.set_data("EXPMETER_SCI", _expmeter_table(data))
         bc = BarycentricCorrection(synthetic_kpf2)
-        w, t = bc.compute_flux_weighted_midpoint_times(
-            output="expmeter",
-            interpolate=False,
-            extrapolate=False,
-            fix_outliers=False,
-        )
-        i = int(np.flatnonzero(w == 5500.0)[0])
-        neighbors = t.jd[(w == 5400.0) | (w == 5600.0)]
-        np.testing.assert_allclose(t.jd[i], neighbors.mean(), rtol=0, atol=1e-9)
+        with caplog.at_level(logging.INFO):
+            w, t = bc.compute_flux_weighted_midpoint_times(
+                output="expmeter",
+                interpolate=False,
+                extrapolate=False,
+                fix_outliers=False,
+            )
+        assert "(1x)" in caplog.text and "(2x)" not in caplog.text
+        assert w.shape == (10,) and np.all(np.isfinite(t.jd))
+        # Channel 5000 lies below the first bin center (5050), so it takes the
+        # flux-weighted time of the 5000+5100 bin.
+        _, t_mid, _, _ = bc._get_timestamps()
+        f_bin = np.array([1000.0 + 950.0, 1000.0, 500.0 + 550.0])
+        expected = np.sum(t_mid.jd * f_bin) / np.sum(f_bin)
+        np.testing.assert_allclose(t.jd[w == 5000.0], expected, rtol=0, atol=1e-9)
 
     def test_interpolate_shifts_midpoint_with_front_weighted_flux(self, synthetic_kpf2):
         # Front-weighted flux makes interpolation add a bright sample at the

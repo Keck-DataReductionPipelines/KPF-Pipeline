@@ -37,10 +37,10 @@ DEADPXFG,Fraction of raw GREEN pixels below 1.0e4 D.N.,,float,0.0021,DiagL0
 DEADPXFR,Fraction of raw RED pixels below 1.0e4 D.N.,,float,0.0018,DiagL0
 SATPXFG,Fraction of raw GREEN pixels above 5.0e8 D.N.,,float,0.0,DiagL0
 SATPXFR,Fraction of raw RED pixels above 5.0e8 D.N.,,float,0.0,DiagL0
-EMSCISAT,Saturated SCI exposure meter elements per reading,,float,0.0,ExposureMeter
+EMSCISAT,Max saturated SCI exposure meter elements in one reading,,int,0,ExposureMeter
 EMSCINEG,Longest run of negative SCI exposure meter channels,,int,0,ExposureMeter
 EMSCIINF,Longest run of non-finite SCI exposure meter channels,,int,0,ExposureMeter
-EMSKYSAT,Saturated SKY exposure meter elements per reading,,float,0.0,ExposureMeter
+EMSKYSAT,Max saturated SKY exposure meter elements in one reading,,int,0,ExposureMeter
 EMSKYNEG,Longest run of negative SKY exposure meter channels,,int,0,ExposureMeter
 EMSKYINF,Longest run of non-finite SKY exposure meter channels,,int,0,ExposureMeter
 SKYSCIMS,SKY/SCI flux ratio in main spectrometer scaled from EM data,,float,0.0013,ExposureMeter

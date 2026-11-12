@@ -1214,14 +1214,14 @@ class TestQCL0:
             QCL0(l0).expmeter_flux_sane()
 
     def test_expmeter_flux_pass_at_limits(self, tmp_path):
-        # 1.5 saturated elements per reading and a 19-channel run are the limits.
+        # 1 saturated element in a reading and a 19-channel run are the limits.
         l0 = self._make_kpf0_with_em_metrics(
-            tmp_path, EMSCISAT=1.5, EMSCINEG=19, EMSCIINF=19
+            tmp_path, EMSCISAT=1, EMSCINEG=19, EMSCIINF=19
         )
         assert QCL0(l0).expmeter_flux_sane() is True
 
     def test_expmeter_flux_saturated_fails(self, tmp_path):
-        l0 = self._make_kpf0_with_em_metrics(tmp_path, EMSCISAT=1.6)
+        l0 = self._make_kpf0_with_em_metrics(tmp_path, EMSCISAT=2)
         assert QCL0(l0).expmeter_flux_sane() is False
 
     def test_expmeter_flux_negative_run_fails(self, tmp_path):
